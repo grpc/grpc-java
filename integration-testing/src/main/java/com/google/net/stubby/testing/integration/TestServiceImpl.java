@@ -369,7 +369,6 @@ public class TestServiceImpl implements TestServiceGrpc.TestService {
    * Creates a buffer with data read from a file.
    */
   private ByteString createBufferFromFile(String fileClassPath) {
-    final int numBytes = 5242880; // 5MB
     ByteString buffer = ByteString.EMPTY;
     InputStream inputStream = getClass().getResourceAsStream(fileClassPath);
     if (inputStream == null) {
@@ -377,7 +376,7 @@ public class TestServiceImpl implements TestServiceGrpc.TestService {
     }
 
     try {
-      buffer = ByteString.readFrom(inputStream).substring(0, numBytes);
+      buffer = ByteString.readFrom(inputStream);
     } catch (IOException e) {
       throw new RuntimeException(e);
     } finally {
