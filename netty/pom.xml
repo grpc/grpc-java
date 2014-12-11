@@ -55,27 +55,6 @@
 
   <build>
     <plugins>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-install-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>install_okhttp</id>
-            <phase>validate</phase>
-            <goals>
-              <goal>install-file</goal>
-            </goals>
-            <configuration>
-              <file>../lib/netty.jar</file>
-              <groupId>io.netty</groupId>
-              <artifactId>netty-codec-http2</artifactId>
-              <version>${netty.version}</version>
-              <packaging>jar</packaging>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-
       <!-- Skip the sniffer plugin for Netty. -->
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
