@@ -46,7 +46,7 @@ import com.squareup.okhttp.internal.spdy.ErrorCode;
 import com.squareup.okhttp.internal.spdy.FrameReader;
 import com.squareup.okhttp.internal.spdy.Header;
 import com.squareup.okhttp.internal.spdy.HeadersMode;
-import com.squareup.okhttp.internal.spdy.Http20Draft15;
+import com.squareup.okhttp.internal.spdy.Http20Draft16;
 import com.squareup.okhttp.internal.spdy.Settings;
 import com.squareup.okhttp.internal.spdy.Variant;
 
@@ -196,7 +196,7 @@ public class OkHttpClientTransport extends AbstractClientTransport {
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
-      Variant variant = new Http20Draft15();
+      Variant variant = new Http20Draft16();
       frameReader = variant.newReader(source, true);
       frameWriter = new AsyncFrameWriter(variant.newWriter(sink, true), this, executor);
       outboundFlow = new OutboundFlowController(this, frameWriter);
