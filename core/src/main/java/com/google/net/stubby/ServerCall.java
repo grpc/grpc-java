@@ -31,9 +31,6 @@
 
 package com.google.net.stubby;
 
-import com.google.common.util.concurrent.ListenableFuture;
-
-import javax.annotation.Nullable;
 
 /**
  * Low-level method for communicating with a remote client during a single RPC. Unlike normal RPCs,
@@ -67,8 +64,7 @@ public abstract class ServerCall<ResponseT> {
      * A request payload has been received. For streaming calls, there may be zero payload
      * messages.
      */
-    @Nullable
-    public abstract ListenableFuture<Void> onPayload(RequestT payload);
+    public abstract void onPayload(RequestT payload);
 
     /**
      * The client completed all message sending. However, the call may still be cancelled.
@@ -92,6 +88,15 @@ public abstract class ServerCall<ResponseT> {
      */
     public abstract void onComplete();
   }
+
+  /**
+   * Requests up to the given number of messages from the call to be delivered to
+   * {@link Listener#onPayload(Object)}. It is guaranteed that no additional calls will be
+   * made above those requested.
+   *
+   * @param numMessages the requested number of messages to be delivered to the listener.
+   */
+  public abstract void request(int numMessages);
 
   /**
    * Send response header metadata prior to sending a response payload. This method may

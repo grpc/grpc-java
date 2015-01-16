@@ -33,8 +33,6 @@ package com.google.net.stubby.transport;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
 import com.google.net.stubby.Metadata;
 import com.google.net.stubby.Status;
 
@@ -53,7 +51,6 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
     implements ClientStream {
 
   private static final Logger log = Logger.getLogger(AbstractClientStream.class.getName());
-  private static final ListenableFuture<Void> COMPLETED_FUTURE = Futures.immediateFuture(null);
 
   private final ClientStreamListener listener;
   private boolean listenerClosed;
@@ -71,11 +68,10 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
   }
 
   @Override
-  protected ListenableFuture<Void> receiveMessage(InputStream is, int length) {
-    if (listenerClosed) {
-      return COMPLETED_FUTURE;
+  protected void receiveMessage(InputStream is, int length) {
+    if (!listenerClosed) {
+      listener.messageRead(is, length);
     }
-    return listener.messageRead(is, length);
   }
 
   @Override
@@ -114,7 +110,8 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
           new Object[]{id(), headers});
     }
     inboundPhase(Phase.MESSAGE);
-    delayDeframer(listener.headersRead(headers));
+    listener.headersRead(headers);
+    startDeframer();
   }
 
   /**
@@ -161,6 +158,7 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
     // remoteEndClosed
     this.status = status;
     this.trailers = trailers;
+    startDeframer();
     deframe(Buffers.empty(), true);
   }
 
@@ -208,7 +206,7 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
     closeListenerTask = null;
 
     // Determine if the deframer is stalled (i.e. currently has no complete messages to deliver).
-    boolean deliveryStalled = !deframer.isDeliveryOutstanding();
+    boolean deliveryStalled = deframer.isStalled();
 
     if (stopDelivery || deliveryStalled) {
       // Close the listener immediately.

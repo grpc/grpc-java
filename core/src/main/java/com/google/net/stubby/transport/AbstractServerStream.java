@@ -32,7 +32,6 @@
 package com.google.net.stubby.transport;
 
 import com.google.common.base.Preconditions;
-import com.google.common.util.concurrent.ListenableFuture;
 import com.google.net.stubby.Metadata;
 import com.google.net.stubby.Status;
 
@@ -70,12 +69,15 @@ public abstract class AbstractServerStream<IdT> extends AbstractStream<IdT>
 
   public final void setListener(ServerStreamListener listener) {
     this.listener = Preconditions.checkNotNull(listener, "listener");
+
+    // Start inbound message delivery from the deframer as soon as we have a listener.
+    startDeframer();
   }
 
   @Override
-  protected ListenableFuture<Void> receiveMessage(InputStream is, int length) {
+  protected void receiveMessage(InputStream is, int length) {
     inboundPhase(Phase.MESSAGE);
-    return listener.messageRead(is, length);
+    listener.messageRead(is, length);
   }
 
   @Override

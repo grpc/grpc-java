@@ -5,5 +5,13 @@ target
 .idea
 *.iml
 
+# Eclipse
+build/
+.gradle/
+.classpath
+.project
+.settings/
+.gitignore
+
 # OS X
 .DS_Store
