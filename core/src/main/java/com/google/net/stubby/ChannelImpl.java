@@ -339,7 +339,9 @@ public final class ChannelImpl implements Channel {
               try {
                 message.close();
               } catch (IOException e) {
-                throw new RuntimeException(e);
+                log.log(Level.WARNING, "Failed closing message", e);
+                // Cancel this call.
+                cancel();
               }
             }
           }

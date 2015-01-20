@@ -47,6 +47,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.concurrent.Executor;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Default implementation of {@link Server}, for creation by transports.
@@ -65,6 +67,7 @@ import java.util.concurrent.Executor;
  * server stops servicing new requests and waits for all connections to terminate.
  */
 public class ServerImpl extends AbstractService implements Server {
+  private static final Logger log = Logger.getLogger(ServerImpl.class.getName());
   private static final ServerStreamListener NOOP_LISTENER = new NoopListener();
 
   private final ServerListener serverListener = new ServerListenerImpl();
@@ -446,7 +449,9 @@ public class ServerImpl extends AbstractService implements Server {
           try {
             message.close();
           } catch (IOException e) {
-            throw new RuntimeException(e);
+            log.log(Level.WARNING, "Failed closing message", e);
+            // Close this call.
+            close(Status.fromThrowable(e), new Metadata.Trailers());
           }
         }
       }
