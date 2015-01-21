@@ -44,10 +44,8 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.io.ByteStreams;
 import com.google.common.primitives.Bytes;
-import com.google.common.util.concurrent.MoreExecutors;
 import com.google.net.stubby.transport.MessageDeframer.Listener;
 
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -66,13 +64,8 @@ import java.util.zip.GZIPOutputStream;
 public class MessageDeframerTest {
   private Listener listener = mock(Listener.class);
   private MessageDeframer deframer =
-      new MessageDeframer(listener, MoreExecutors.directExecutor());
+      new MessageDeframer(listener);
   private ArgumentCaptor<InputStream> messages = ArgumentCaptor.forClass(InputStream.class);
-
-  @Before
-  public void setup() {
-    deframer.startDelivery();
-  }
 
   @Test
   public void simplePayload() {
@@ -191,9 +184,7 @@ public class MessageDeframerTest {
 
   @Test
   public void compressed() {
-    deframer = new MessageDeframer(
-        listener, MoreExecutors.directExecutor(), MessageDeframer.Compression.GZIP);
-    deframer.startDelivery();
+    deframer = new MessageDeframer( listener, MessageDeframer.Compression.GZIP);
     deframer.request(1);
 
     byte[] payload = compress(new byte[1000]);

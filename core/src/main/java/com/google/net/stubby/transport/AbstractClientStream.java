@@ -38,7 +38,6 @@ import com.google.net.stubby.Status;
 
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -62,8 +61,7 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
   private Runnable closeListenerTask;
 
 
-  protected AbstractClientStream(ClientStreamListener listener, Executor deframerExecutor) {
-    super(deframerExecutor);
+  protected AbstractClientStream(ClientStreamListener listener) {
     this.listener = Preconditions.checkNotNull(listener);
   }
 
@@ -111,7 +109,6 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
     }
     inboundPhase(Phase.MESSAGE);
     listener.headersRead(headers);
-    startDeframer();
   }
 
   /**
@@ -158,7 +155,6 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
     // remoteEndClosed
     this.status = status;
     this.trailers = trailers;
-    startDeframer();
     deframe(Buffers.empty(), true);
   }
 

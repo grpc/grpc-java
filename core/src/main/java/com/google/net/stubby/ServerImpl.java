@@ -444,21 +444,35 @@ public class ServerImpl extends AbstractService implements Server {
       @Override
       public void messageRead(final InputStream message, int length) {
         try {
-          listener.onPayload(methodDef.parseRequest(message));
-        } finally {
-          try {
-            message.close();
-          } catch (IOException e) {
-            log.log(Level.WARNING, "Failed closing message", e);
-            // Close this call.
-            close(Status.fromThrowable(e), new Metadata.Trailers());
+          if (cancelled) {
+            log.info("Dropping message received after cancellation");
+            return;
           }
+
+          try {
+            listener.onPayload(methodDef.parseRequest(message));
+          } finally {
+            message.close();
+          }
+        } catch (Throwable t) {
+          log.log(Level.WARNING, t.getMessage(), t);
+          close(Status.fromThrowable(t), new Metadata.Trailers());
         }
       }
 
       @Override
       public void halfClosed() {
-        listener.onHalfClose();
+        try {
+          if (cancelled) {
+            log.info("Dropping halfClosed received after cancellation");
+            return;
+          }
+
+          listener.onHalfClose();
+        } catch (Throwable t) {
+          log.log(Level.WARNING, t.getMessage(), t);
+          close(Status.fromThrowable(t), new Metadata.Trailers());
+        }
       }
 
       @Override

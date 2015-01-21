@@ -37,7 +37,6 @@ import com.google.common.base.Preconditions;
 
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.util.concurrent.Executor;
 
 import javax.annotation.Nullable;
 
@@ -67,7 +66,7 @@ public abstract class AbstractStream<IdT> implements Stream {
    */
   private Phase outboundPhase = Phase.HEADERS;
 
-  AbstractStream(Executor deframerExecutor) {
+  AbstractStream() {
     MessageDeframer.Listener inboundMessageHandler = new MessageDeframer.Listener() {
       @Override
       public void bytesRead(int numBytes) {
@@ -102,7 +101,7 @@ public abstract class AbstractStream<IdT> implements Stream {
     };
 
     framer = new MessageFramer(outboundFrameHandler, 4096);
-    this.deframer = new MessageDeframer(inboundMessageHandler, deframerExecutor);
+    this.deframer = new MessageDeframer(inboundMessageHandler);
   }
 
   /**
@@ -121,11 +120,6 @@ public abstract class AbstractStream<IdT> implements Stream {
   public void id(IdT id) {
     Preconditions.checkState(id != null, "Can only set id once");
     this.id = id;
-  }
-
-  @Override
-  public void request(int numMessages) {
-    deframer.request(numMessages);
   }
 
   @Override
@@ -204,18 +198,19 @@ public abstract class AbstractStream<IdT> implements Stream {
   protected abstract void deframeFailed(Throwable cause);
 
   /**
-   * Called to begin delivery of inbound messages from the deframer.
-   */
-  protected final void startDeframer() {
-    deframer.startDelivery();
-  }
-
-  /**
    * Called to parse a received frame and attempt delivery of any completed
-   * messages.
+   * messages. Must be called from the transport thread.
    */
   protected final void deframe(Buffer frame, boolean endOfStream) {
     deframer.deframe(frame, endOfStream);
+  }
+
+  /**
+   * Called to request the given number of messages from the deframer. Must be called
+   * from the transport thread.
+   */
+  protected final void requestMessagesFromDeframer(int numMessages) {
+    deframer.request(numMessages);
   }
 
   final Phase inboundPhase() {

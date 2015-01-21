@@ -312,6 +312,7 @@ public final class ChannelImpl implements Channel {
 
     private class ClientStreamListenerImpl implements ClientStreamListener {
       private final Listener<RespT> observer;
+      private volatile boolean closed;
 
       public ClientStreamListenerImpl(Listener<RespT> observer) {
         Preconditions.checkNotNull(observer);
@@ -323,7 +324,19 @@ public final class ChannelImpl implements Channel {
         callExecutor.execute(new Runnable() {
           @Override
           public void run() {
-            observer.onHeaders(headers);
+            try {
+              if (closed) {
+                log.info("Dropping headers received after closing");
+                return;
+              }
+
+              if (!closed) {
+                observer.onHeaders(headers);
+              }
+            } catch (Throwable t) {
+              log.log(Level.WARNING, t.getMessage(), t);
+              cancel();
+            }
           }
         });
       }
@@ -334,15 +347,19 @@ public final class ChannelImpl implements Channel {
           @Override
           public void run() {
             try {
-              observer.onPayload(method.parseResponse(message));
-            } finally {
-              try {
-                message.close();
-              } catch (IOException e) {
-                log.log(Level.WARNING, "Failed closing message", e);
-                // Cancel this call.
-                cancel();
+              if (closed) {
+                log.info("Dropping message received after closing");
+                return;
               }
+
+              try {
+                observer.onPayload(method.parseResponse(message));
+              } finally {
+                message.close();
+              }
+            } catch (Throwable t) {
+              log.log(Level.WARNING, t.getMessage(), t);
+              cancel();
             }
           }
         });
@@ -353,6 +370,7 @@ public final class ChannelImpl implements Channel {
         callExecutor.execute(new Runnable() {
           @Override
           public void run() {
+            closed = true;
             observer.onClose(status, trailers);
           }
         });

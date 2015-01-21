@@ -37,7 +37,6 @@ import com.google.net.stubby.Status;
 
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -62,16 +61,12 @@ public abstract class AbstractServerStream<IdT> extends AbstractStream<IdT>
   /** Saved trailers from close() that need to be sent once the framer has sent all messages. */
   private Metadata.Trailers stashedTrailers;
 
-  protected AbstractServerStream(IdT id, Executor deframerExecutor) {
-    super(deframerExecutor);
+  protected AbstractServerStream(IdT id) {
     id(id);
   }
 
   public final void setListener(ServerStreamListener listener) {
     this.listener = Preconditions.checkNotNull(listener, "listener");
-
-    // Start inbound message delivery from the deframer as soon as we have a listener.
-    startDeframer();
   }
 
   @Override

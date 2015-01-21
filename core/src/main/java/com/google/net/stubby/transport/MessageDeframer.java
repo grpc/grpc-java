@@ -39,9 +39,6 @@ import java.io.ByteArrayInputStream;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.concurrent.Executor;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.GZIPInputStream;
 
 import javax.annotation.concurrent.NotThreadSafe;
@@ -49,8 +46,8 @@ import javax.annotation.concurrent.NotThreadSafe;
 /**
  * Deframer for GRPC frames.
  *
- * <p>This class is not thread-safe. All calls to this class must be made in the context of the
- * executor provided during creation. That executor must not allow concurrent execution of tasks.
+ * <p>This class is not thread-safe. All calls to public methods should be made in the transport
+ * thread.
  */
 @NotThreadSafe
 public class MessageDeframer implements Closeable {
@@ -104,61 +101,35 @@ public class MessageDeframer implements Closeable {
   }
 
   private final Listener listener;
-  private final Executor executor;
   private final Compression compression;
   private State state = State.HEADER;
   private int requiredLength = HEADER_LENGTH;
   private boolean compressedFlag;
   private boolean endOfStream;
-  private volatile boolean deliveryStarted;
   private CompositeBuffer nextFrame;
   private CompositeBuffer unprocessed = new CompositeBuffer();
-  private AtomicLong pendingDeliveries = new AtomicLong();
-  private AtomicBoolean deliveryStalled = new AtomicBoolean(true);
-
-  private final Runnable deliveryTask = new Runnable() {
-    @Override
-    public void run() {
-      deliver();
-    }
-  };
+  private long pendingDeliveries;
+  private boolean deliveryStalled = true;
 
   /**
-   * Create a deframer. All calls to this class must be made in the context of the provided
-   * executor, which also must not allow concurrent processing of Runnables. Compression will not be
-   * supported.
+   * Create a deframer. Compression will not be supported.
    *
    * @param listener listener for deframer events.
-   * @param executor used for internal event processing
    */
-  public MessageDeframer(Listener listener, Executor executor) {
-    this(listener, executor, Compression.NONE);
+  public MessageDeframer(Listener listener) {
+    this(listener, Compression.NONE);
   }
 
   /**
-   * Create a deframer. All calls to this class must be made in the context of the provided
-   * executor, which also must not allow concurrent processing of Runnables.
+   * Create a deframer.
    *
    * @param listener listener for deframer events.
-   * @param executor used for internal event processing
    * @param compression the compression used if a compressed frame is encountered, with NONE meaning
    *        unsupported
    */
-  public MessageDeframer(Listener listener, Executor executor, Compression compression) {
+  public MessageDeframer(Listener listener, Compression compression) {
     this.listener = Preconditions.checkNotNull(listener, "sink");
-    this.executor = Preconditions.checkNotNull(executor, "executor");
     this.compression = Preconditions.checkNotNull(compression, "compression");
-  }
-
-  /**
-   * Starts delivery of incoming messages. Until this is called, incoming messages may be queued
-   * but none will be delivered.
-   */
-  public void startDelivery() {
-    if (!deliveryStarted) {
-      deliveryStarted = true;
-      deliverOnExecutor();
-    }
   }
 
   /**
@@ -169,8 +140,8 @@ public class MessageDeframer implements Closeable {
    */
   public void request(int numMessages) {
     Preconditions.checkArgument(numMessages > 0, "numMessages must be > 0");
-    pendingDeliveries.addAndGet(numMessages);
-    deliverOnExecutor();
+    pendingDeliveries += numMessages;
+    deliver();
   }
 
   /**
@@ -190,7 +161,7 @@ public class MessageDeframer implements Closeable {
    * Indicates whether delivery is currently stalled, pending receipt of more data.
    */
   public boolean isStalled() {
-    return deliveryStalled.get();
+    return deliveryStalled;
   }
 
   @Override
@@ -202,27 +173,13 @@ public class MessageDeframer implements Closeable {
   }
 
   /**
-   * Runs {@link #deliver()} on the executor.
-   */
-  private void deliverOnExecutor() {
-    if (deliveryStarted) {
-      executor.execute(deliveryTask);
-    }
-  }
-
-  /**
    * Reads and delivers as many messages to the sink as possible.
    */
   private void deliver() {
     try {
-      if (!deliveryStarted) {
-        return;
-      }
-
       // Process the uncompressed bytes.
-      long requestedMessages = pendingDeliveries.get();
       boolean stalled = false;
-      while (requestedMessages > 0 && !(stalled = !readRequiredBytes())) {
+      while (pendingDeliveries > 0 && !(stalled = !readRequiredBytes())) {
         switch (state) {
           case HEADER:
             processHeader();
@@ -233,7 +190,7 @@ public class MessageDeframer implements Closeable {
 
             // Since we've delivered a message, decrement the number of pending
             // deliveries remaining.
-            requestedMessages = pendingDeliveries.decrementAndGet();
+            pendingDeliveries--;
             break;
           default:
             throw new AssertionError("Invalid state: " + state);
@@ -255,7 +212,9 @@ public class MessageDeframer implements Closeable {
       stalled &= !endOfStream;
 
       // If we're transitioning to the stalled state, notify the listener.
-      if (stalled && !deliveryStalled.getAndSet(stalled)) {
+      boolean previouslyStalled = deliveryStalled;
+      deliveryStalled = stalled;
+      if (stalled && !previouslyStalled) {
         listener.deliveryStalled();
       }
     } catch (Throwable t) {
@@ -323,34 +282,31 @@ public class MessageDeframer implements Closeable {
    * several GRPC messages within it.
    */
   private void processBody() {
-    try {
-      if (compressedFlag) {
-        if (compression == Compression.NONE) {
-          throw Status.INTERNAL.withDescription(
-              "Can't decode compressed frame as compression not configured.").asRuntimeException();
-        } else if (compression == Compression.GZIP) {
-          // Fully drain frame.
-          byte[] bytes;
-          try {
-            bytes =
-                ByteStreams.toByteArray(new GZIPInputStream(Buffers.openStream(nextFrame, false)));
-          } catch (IOException ex) {
-            throw new RuntimeException(ex);
-          }
-          listener.messageRead(new ByteArrayInputStream(bytes), bytes.length);
-        } else {
-          throw new AssertionError("Unknown compression type");
+    if (compressedFlag) {
+      if (compression == Compression.NONE) {
+        throw Status.INTERNAL.withDescription(
+            "Can't decode compressed frame as compression not configured.").asRuntimeException();
+      } else if (compression == Compression.GZIP) {
+        // Fully drain frame.
+        byte[] bytes;
+        try {
+          bytes =
+              ByteStreams.toByteArray(new GZIPInputStream(Buffers.openStream(nextFrame, false)));
+        } catch (IOException ex) {
+          throw new RuntimeException(ex);
         }
+        listener.messageRead(new ByteArrayInputStream(bytes), bytes.length);
       } else {
-        // Don't close the frame, since the sink is now responsible for the life-cycle.
-        listener.messageRead(Buffers.openStream(nextFrame, true), nextFrame.readableBytes());
+        throw new AssertionError("Unknown compression type");
       }
-
-      // Done with this frame, begin processing the next header.
-      state = State.HEADER;
-      requiredLength = HEADER_LENGTH;
-    } finally {
+    } else {
+      // Don't close the frame, since the sink is now responsible for the life-cycle.
+      listener.messageRead(Buffers.openStream(nextFrame, true), nextFrame.readableBytes());
       nextFrame = null;
     }
+
+    // Done with this frame, begin processing the next header.
+    state = State.HEADER;
+    requiredLength = HEADER_LENGTH;
   }
 }
