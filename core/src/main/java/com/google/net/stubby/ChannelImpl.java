@@ -312,7 +312,7 @@ public final class ChannelImpl implements Channel {
 
     private class ClientStreamListenerImpl implements ClientStreamListener {
       private final Listener<RespT> observer;
-      private volatile boolean closed;
+      private boolean closed;
 
       public ClientStreamListenerImpl(Listener<RespT> observer) {
         Preconditions.checkNotNull(observer);

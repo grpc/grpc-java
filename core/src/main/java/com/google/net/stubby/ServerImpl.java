@@ -47,7 +47,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.concurrent.Executor;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -353,7 +352,12 @@ public class ServerImpl extends AbstractService implements Server {
       callExecutor.execute(new Runnable() {
         @Override
         public void run() {
-          getListener().messageRead(message, length);
+          try {
+            getListener().messageRead(message, length);
+          } catch (Throwable t) {
+            internalClose(Status.fromThrowable(t), new Metadata.Trailers());
+            throw Throwables.propagate(t);
+          }
         }
       });
     }
@@ -443,36 +447,30 @@ public class ServerImpl extends AbstractService implements Server {
 
       @Override
       public void messageRead(final InputStream message, int length) {
-        try {
-          if (cancelled) {
-            log.info("Dropping message received after cancellation");
-            return;
-          }
+        if (cancelled) {
+          log.info("Dropping message received after cancellation");
+          return;
+        }
 
+        try {
+          listener.onPayload(methodDef.parseRequest(message));
+        } finally {
           try {
-            listener.onPayload(methodDef.parseRequest(message));
-          } finally {
             message.close();
+          } catch (IOException e) {
+            throw new RuntimeException(e);
           }
-        } catch (Throwable t) {
-          log.log(Level.WARNING, t.getMessage(), t);
-          close(Status.fromThrowable(t), new Metadata.Trailers());
         }
       }
 
       @Override
       public void halfClosed() {
-        try {
-          if (cancelled) {
-            log.info("Dropping halfClosed received after cancellation");
-            return;
-          }
-
-          listener.onHalfClose();
-        } catch (Throwable t) {
-          log.log(Level.WARNING, t.getMessage(), t);
-          close(Status.fromThrowable(t), new Metadata.Trailers());
+        if (cancelled) {
+          log.info("Dropping halfClosed received after cancellation");
+          return;
         }
+
+        listener.onHalfClose();
       }
 
       @Override
