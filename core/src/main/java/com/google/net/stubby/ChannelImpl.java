@@ -32,13 +32,9 @@
 package com.google.net.stubby;
 
 import com.google.common.base.Preconditions;
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.Service.Listener;
 import com.google.common.util.concurrent.Service.State;
-import com.google.common.util.concurrent.SettableFuture;
 import com.google.net.stubby.transport.ClientStream;
 import com.google.net.stubby.transport.ClientStreamListener;
 import com.google.net.stubby.transport.ClientTransport;
@@ -48,7 +44,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -68,6 +63,7 @@ public final class ChannelImpl implements Channel {
     @Override public void flush() {}
     @Override public void cancel() {}
     @Override public void halfClose() {}
+    @Override public void request(int numMessages) {}
   }
 
   private final ClientTransportFactory transportFactory;
@@ -271,6 +267,11 @@ public final class ChannelImpl implements Channel {
     }
 
     @Override
+    public void request(int numMessages) {
+      stream.request(numMessages);
+    }
+
+    @Override
     public void cancel() {
       // Cancel is called in exception handling cases, so it may be the case that the
       // stream was never successfully created.
@@ -311,58 +312,55 @@ public final class ChannelImpl implements Channel {
 
     private class ClientStreamListenerImpl implements ClientStreamListener {
       private final Listener<RespT> observer;
+      private boolean closed;
 
       public ClientStreamListenerImpl(Listener<RespT> observer) {
         Preconditions.checkNotNull(observer);
         this.observer = observer;
       }
 
-      private ListenableFuture<Void> dispatchCallable(
-          final Callable<ListenableFuture<Void>> callable) {
-        final SettableFuture<Void> ours = SettableFuture.create();
+      @Override
+      public void headersRead(final Metadata.Headers headers) {
         callExecutor.execute(new Runnable() {
           @Override
           public void run() {
             try {
-              ListenableFuture<Void> theirs = callable.call();
-              if (theirs == null) {
-                ours.set(null);
-              } else {
-                Futures.addCallback(theirs, new FutureCallback<Void>() {
-                  @Override
-                  public void onSuccess(Void result) {
-                    ours.set(null);
-                  }
-                  @Override
-                  public void onFailure(Throwable t) {
-                    ours.setException(t);
-                  }
-                }, MoreExecutors.directExecutor());
+              if (closed) {
+                log.info("Dropping headers received after closing");
+                return;
+              }
+
+              if (!closed) {
+                observer.onHeaders(headers);
               }
             } catch (Throwable t) {
-              ours.setException(t);
+              log.log(Level.WARNING, t.getMessage(), t);
+              cancel();
             }
           }
         });
-        return ours;
       }
 
       @Override
-      public ListenableFuture<Void> headersRead(final Metadata.Headers headers) {
-        return dispatchCallable(new Callable<ListenableFuture<Void>>() {
+      public void messageRead(final InputStream message, final int length) {
+        callExecutor.execute(new Runnable() {
           @Override
-          public ListenableFuture<Void> call() throws Exception {
-            return observer.onHeaders(headers);
-          }
-        });
-      }
+          public void run() {
+            try {
+              if (closed) {
+                log.info("Dropping message received after closing");
+                return;
+              }
 
-      @Override
-      public ListenableFuture<Void> messageRead(final InputStream message, final int length) {
-        return dispatchCallable(new Callable<ListenableFuture<Void>>() {
-          @Override
-          public ListenableFuture<Void> call() {
-            return observer.onPayload(method.parseResponse(message));
+              try {
+                observer.onPayload(method.parseResponse(message));
+              } finally {
+                message.close();
+              }
+            } catch (Throwable t) {
+              log.log(Level.WARNING, t.getMessage(), t);
+              cancel();
+            }
           }
         });
       }
@@ -372,6 +370,7 @@ public final class ChannelImpl implements Channel {
         callExecutor.execute(new Runnable() {
           @Override
           public void run() {
+            closed = true;
             observer.onClose(status, trailers);
           }
         });

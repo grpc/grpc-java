@@ -34,25 +34,20 @@ package com.google.net.stubby;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.AbstractService;
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.Service;
-import com.google.common.util.concurrent.SettableFuture;
 import com.google.net.stubby.transport.ServerListener;
 import com.google.net.stubby.transport.ServerStream;
 import com.google.net.stubby.transport.ServerStreamListener;
 import com.google.net.stubby.transport.ServerTransportListener;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
-
-import javax.annotation.Nullable;
+import java.util.logging.Logger;
 
 /**
  * Default implementation of {@link Server}, for creation by transports.
@@ -71,6 +66,7 @@ import javax.annotation.Nullable;
  * server stops servicing new requests and waits for all connections to terminate.
  */
 public class ServerImpl extends AbstractService implements Server {
+  private static final Logger log = Logger.getLogger(ServerImpl.class.getName());
   private static final ServerStreamListener NOOP_LISTENER = new NoopListener();
 
   private final ServerListener serverListener = new ServerListenerImpl();
@@ -299,9 +295,12 @@ public class ServerImpl extends AbstractService implements Server {
 
   private static class NoopListener implements ServerStreamListener {
     @Override
-    @Nullable
-    public ListenableFuture<Void> messageRead(InputStream value, int length) {
-      return null;
+    public void messageRead(InputStream value, int length) {
+      try {
+        value.close();
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
     }
 
     @Override
@@ -349,12 +348,16 @@ public class ServerImpl extends AbstractService implements Server {
     }
 
     @Override
-    @Nullable
-    public ListenableFuture<Void> messageRead(final InputStream message, final int length) {
-      return dispatchCallable(new Callable<ListenableFuture<Void>>() {
+    public void messageRead(final InputStream message, final int length) {
+      callExecutor.execute(new Runnable() {
         @Override
-        public ListenableFuture<Void> call() {
-          return getListener().messageRead(message, length);
+        public void run() {
+          try {
+            getListener().messageRead(message, length);
+          } catch (Throwable t) {
+            internalClose(Status.fromThrowable(t), new Metadata.Trailers());
+            throw Throwables.propagate(t);
+          }
         }
       });
     }
@@ -383,36 +386,6 @@ public class ServerImpl extends AbstractService implements Server {
         }
       });
     }
-
-    private ListenableFuture<Void> dispatchCallable(
-        final Callable<ListenableFuture<Void>> callable) {
-      final SettableFuture<Void> ours = SettableFuture.create();
-      callExecutor.execute(new Runnable() {
-        @Override
-        public void run() {
-          try {
-            ListenableFuture<Void> theirs = callable.call();
-            if (theirs == null) {
-              ours.set(null);
-            } else {
-              Futures.addCallback(theirs, new FutureCallback<Void>() {
-                @Override
-                public void onSuccess(Void result) {
-                  ours.set(null);
-                }
-                @Override
-                public void onFailure(Throwable t) {
-                  ours.setException(t);
-                }
-              }, MoreExecutors.directExecutor());
-            }
-          } catch (Throwable t) {
-            ours.setException(t);
-          }
-        }
-      });
-      return ours;
-    }
   }
 
   private class ServerCallImpl<ReqT, RespT> extends ServerCall<RespT> {
@@ -423,6 +396,11 @@ public class ServerImpl extends AbstractService implements Server {
     public ServerCallImpl(ServerStream stream, ServerMethodDefinition<ReqT, RespT> methodDef) {
       this.stream = stream;
       this.methodDef = methodDef;
+    }
+
+    @Override
+    public void request(int numMessages) {
+      stream.request(numMessages);
     }
 
     @Override
@@ -468,13 +446,30 @@ public class ServerImpl extends AbstractService implements Server {
       }
 
       @Override
-      @Nullable
-      public ListenableFuture<Void> messageRead(final InputStream message, int length) {
-        return listener.onPayload(methodDef.parseRequest(message));
+      public void messageRead(final InputStream message, int length) {
+        if (cancelled) {
+          log.info("Dropping message received after cancellation");
+          return;
+        }
+
+        try {
+          listener.onPayload(methodDef.parseRequest(message));
+        } finally {
+          try {
+            message.close();
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        }
       }
 
       @Override
       public void halfClosed() {
+        if (cancelled) {
+          log.info("Dropping halfClosed received after cancellation");
+          return;
+        }
+
         listener.onHalfClose();
       }
 
