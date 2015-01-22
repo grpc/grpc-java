@@ -103,7 +103,7 @@ public abstract class Call<RequestT, ResponseT> {
    * at a time.
    *
    * <p>If it is desired to bypass inbound flow control, a very large number of messages can be
-   * specified (e.g. {@link Integer#MAX_VALUE}.
+   * specified (e.g. {@link Integer#MAX_VALUE}).
    *
    * @param numMessages the requested number of messages to be delivered to the listener.
    */

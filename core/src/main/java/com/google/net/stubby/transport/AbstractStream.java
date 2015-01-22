@@ -209,7 +209,11 @@ public abstract class AbstractStream<IdT> implements Stream {
    * from the transport thread.
    */
   protected final void requestMessagesFromDeframer(int numMessages) {
-    deframer.request(numMessages);
+    try {
+      deframer.request(numMessages);
+    } catch (Throwable t) {
+      deframeFailed(t);
+    }
   }
 
   final Phase inboundPhase() {

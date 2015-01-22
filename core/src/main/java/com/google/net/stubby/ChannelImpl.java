@@ -332,7 +332,6 @@ public final class ChannelImpl implements Channel {
 
               observer.onHeaders(headers);
             } catch (Throwable t) {
-              log.log(Level.WARNING, t.getMessage(), t);
               cancel();
               throw Throwables.propagate(t);
             }
@@ -356,7 +355,6 @@ public final class ChannelImpl implements Channel {
                 message.close();
               }
             } catch (Throwable t) {
-              log.log(Level.WARNING, t.getMessage(), t);
               cancel();
               throw Throwables.propagate(t);
             }
