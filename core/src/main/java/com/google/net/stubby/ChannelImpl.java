@@ -32,6 +32,7 @@
 package com.google.net.stubby;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.Service.Listener;
 import com.google.common.util.concurrent.Service.State;
@@ -326,16 +327,14 @@ public final class ChannelImpl implements Channel {
           public void run() {
             try {
               if (closed) {
-                log.info("Dropping headers received after closing");
                 return;
               }
 
-              if (!closed) {
-                observer.onHeaders(headers);
-              }
+              observer.onHeaders(headers);
             } catch (Throwable t) {
               log.log(Level.WARNING, t.getMessage(), t);
               cancel();
+              throw Throwables.propagate(t);
             }
           }
         });
@@ -348,7 +347,6 @@ public final class ChannelImpl implements Channel {
           public void run() {
             try {
               if (closed) {
-                log.info("Dropping message received after closing");
                 return;
               }
 
@@ -360,6 +358,7 @@ public final class ChannelImpl implements Channel {
             } catch (Throwable t) {
               log.log(Level.WARNING, t.getMessage(), t);
               cancel();
+              throw Throwables.propagate(t);
             }
           }
         });

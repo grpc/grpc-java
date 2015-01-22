@@ -33,11 +33,9 @@ package com.google.net.stubby.transport;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -63,8 +61,7 @@ import java.util.zip.GZIPOutputStream;
 @RunWith(JUnit4.class)
 public class MessageDeframerTest {
   private Listener listener = mock(Listener.class);
-  private MessageDeframer deframer =
-      new MessageDeframer(listener);
+  private MessageDeframer deframer = new MessageDeframer(listener);
   private ArgumentCaptor<InputStream> messages = ArgumentCaptor.forClass(InputStream.class);
 
   @Test
@@ -169,22 +166,8 @@ public class MessageDeframerTest {
   }
 
   @Test
-  public void failureShouldBePropagated() {
-    Exception cause = new RuntimeException("Fake");
-    doThrow(cause).when(listener).messageRead(any(InputStream.class), eq(1));
-
-    deframer.request(1);
-    deframer.deframe(buffer(new byte[] {0, 0, 0, 0, 1, 3, 0, 0, 0, 0, 2, 14, 15}), false);
-    verify(listener).messageRead(messages.capture(), eq(1));
-    verify(listener).onFailure(cause);
-    assertEquals(Bytes.asList(new byte[] {3}), bytes(messages));
-    verify(listener, atLeastOnce()).bytesRead(anyInt());
-    verifyNoMoreInteractions(listener);
-  }
-
-  @Test
   public void compressed() {
-    deframer = new MessageDeframer( listener, MessageDeframer.Compression.GZIP);
+    deframer = new MessageDeframer(listener, MessageDeframer.Compression.GZIP);
     deframer.request(1);
 
     byte[] payload = compress(new byte[1000]);

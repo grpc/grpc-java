@@ -97,6 +97,14 @@ public abstract class Call<RequestT, ResponseT> {
    * Requests up to the given number of messages from the call to be delivered to
    * {@link Listener#onPayload(Object)}. No additional messages will be delivered.
    *
+   * <p>Message delivery is guaranteed to be sequential in the order received. In addition, the
+   * listener methods will not be accessed concurrently. While it is not guaranteed that the same
+   * thread will always be used, it is guaranteed that only a single thread will access the listener
+   * at a time.
+   *
+   * <p>If it is desired to bypass inbound flow control, a very large number of messages can be
+   * specified (e.g. {@link Integer#MAX_VALUE}.
+   *
    * @param numMessages the requested number of messages to be delivered to the listener.
    */
   public abstract void request(int numMessages);

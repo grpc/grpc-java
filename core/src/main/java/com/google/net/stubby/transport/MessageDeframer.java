@@ -89,11 +89,6 @@ public class MessageDeframer implements Closeable {
      * Called when the stream is complete and all messages have been successfully delivered.
      */
     void endOfStream();
-
-    /**
-     * Called when a an error occurs while attempting delivery.
-     */
-    void onFailure(Throwable cause);
   }
 
   private enum State {
@@ -176,49 +171,45 @@ public class MessageDeframer implements Closeable {
    * Reads and delivers as many messages to the sink as possible.
    */
   private void deliver() {
-    try {
-      // Process the uncompressed bytes.
-      boolean stalled = false;
-      while (pendingDeliveries > 0 && !(stalled = !readRequiredBytes())) {
-        switch (state) {
-          case HEADER:
-            processHeader();
-            break;
-          case BODY:
-            // Read the body and deliver the message.
-            processBody();
+    // Process the uncompressed bytes.
+    boolean stalled = false;
+    while (pendingDeliveries > 0 && !(stalled = !readRequiredBytes())) {
+      switch (state) {
+        case HEADER:
+          processHeader();
+          break;
+        case BODY:
+          // Read the body and deliver the message.
+          processBody();
 
-            // Since we've delivered a message, decrement the number of pending
-            // deliveries remaining.
-            pendingDeliveries--;
-            break;
-          default:
-            throw new AssertionError("Invalid state: " + state);
-        }
+          // Since we've delivered a message, decrement the number of pending
+          // deliveries remaining.
+          pendingDeliveries--;
+          break;
+        default:
+          throw new AssertionError("Invalid state: " + state);
       }
+    }
 
-      if (endOfStream) {
-        if (!isDataAvailable()) {
-          listener.endOfStream();
-        } else if (stalled) {
-          // We've received the entire stream and have data available but we don't have
-          // enough to read the next frame ... this is bad.
-          throw Status.INTERNAL.withDescription("Encountered end-of-stream mid-frame")
-              .asRuntimeException();
-        }
+    if (endOfStream) {
+      if (!isDataAvailable()) {
+        listener.endOfStream();
+      } else if (stalled) {
+        // We've received the entire stream and have data available but we don't have
+        // enough to read the next frame ... this is bad.
+        throw Status.INTERNAL.withDescription("Encountered end-of-stream mid-frame")
+            .asRuntimeException();
       }
+    }
 
-      // Never indicate that we're stalled if we've received all the data for the stream.
-      stalled &= !endOfStream;
+    // Never indicate that we're stalled if we've received all the data for the stream.
+    stalled &= !endOfStream;
 
-      // If we're transitioning to the stalled state, notify the listener.
-      boolean previouslyStalled = deliveryStalled;
-      deliveryStalled = stalled;
-      if (stalled && !previouslyStalled) {
-        listener.deliveryStalled();
-      }
-    } catch (Throwable t) {
-      listener.onFailure(t);
+    // If we're transitioning to the stalled state, notify the listener.
+    boolean previouslyStalled = deliveryStalled;
+    deliveryStalled = stalled;
+    if (stalled && !previouslyStalled) {
+      listener.deliveryStalled();
     }
   }
 

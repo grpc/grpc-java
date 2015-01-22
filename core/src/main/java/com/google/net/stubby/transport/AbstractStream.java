@@ -87,11 +87,6 @@ public abstract class AbstractStream<IdT> implements Stream {
       public void endOfStream() {
         remoteEndClosed();
       }
-
-      @Override
-      public void onFailure(Throwable cause) {
-        deframeFailed(cause);
-      }
     };
     MessageFramer.Sink<ByteBuffer> outboundFrameHandler = new MessageFramer.Sink<ByteBuffer>() {
       @Override
@@ -202,7 +197,11 @@ public abstract class AbstractStream<IdT> implements Stream {
    * messages. Must be called from the transport thread.
    */
   protected final void deframe(Buffer frame, boolean endOfStream) {
-    deframer.deframe(frame, endOfStream);
+    try {
+      deframer.deframe(frame, endOfStream);
+    } catch (Throwable t) {
+      deframeFailed(t);
+    }
   }
 
   /**
