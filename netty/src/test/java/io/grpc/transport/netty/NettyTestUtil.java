@@ -37,7 +37,6 @@ import static io.netty.util.CharsetUtil.UTF_8;
 import com.google.common.io.ByteStreams;
 
 import io.grpc.Status;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 

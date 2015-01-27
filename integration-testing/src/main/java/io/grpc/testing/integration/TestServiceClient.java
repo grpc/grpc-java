@@ -35,7 +35,6 @@ import io.grpc.ChannelImpl;
 import io.grpc.transport.netty.NegotiationType;
 import io.grpc.transport.netty.NettyChannelBuilder;
 import io.grpc.transport.okhttp.OkHttpChannelBuilder;
-
 import io.netty.handler.ssl.SslContext;
 
 import java.io.File;

@@ -43,7 +43,6 @@ import static org.mockito.Mockito.when;
 
 import io.grpc.transport.AbstractStream;
 import io.grpc.transport.StreamListener;
-
 import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;

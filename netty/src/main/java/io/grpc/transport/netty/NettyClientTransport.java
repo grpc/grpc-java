@@ -44,7 +44,6 @@ import io.grpc.transport.AbstractClientTransport;
 import io.grpc.transport.ClientStream;
 import io.grpc.transport.ClientStreamListener;
 import io.grpc.transport.ClientTransport;
-
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;

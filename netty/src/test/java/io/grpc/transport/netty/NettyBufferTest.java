@@ -36,7 +36,6 @@ import static org.junit.Assert.assertEquals;
 
 import io.grpc.transport.Buffer;
 import io.grpc.transport.BufferTestBase;
-
 import io.netty.buffer.Unpooled;
 
 import org.junit.Before;

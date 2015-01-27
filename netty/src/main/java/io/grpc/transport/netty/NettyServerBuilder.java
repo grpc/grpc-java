@@ -38,7 +38,6 @@ import io.grpc.AbstractServerBuilder;
 import io.grpc.HandlerRegistry;
 import io.grpc.SharedResourceHolder;
 import io.grpc.transport.ServerListener;
-
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.ssl.SslContext;
 

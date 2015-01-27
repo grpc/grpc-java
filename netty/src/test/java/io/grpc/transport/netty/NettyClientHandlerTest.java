@@ -51,7 +51,6 @@ import static org.mockito.Mockito.when;
 
 import io.grpc.Metadata;
 import io.grpc.Status;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;

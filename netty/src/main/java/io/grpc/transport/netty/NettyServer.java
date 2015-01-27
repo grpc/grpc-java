@@ -38,7 +38,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.AbstractService;
 
 import io.grpc.transport.ServerListener;
-
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;

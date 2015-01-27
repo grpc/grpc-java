@@ -34,7 +34,6 @@ package io.grpc.transport.netty;
 import io.grpc.AbstractChannelBuilder;
 import io.grpc.SharedResourceHolder;
 import io.grpc.transport.ClientTransportFactory;
-
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.ssl.SslContext;
 
