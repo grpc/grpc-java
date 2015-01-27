@@ -59,9 +59,7 @@ import io.grpc.transport.MessageFramer;
 import io.grpc.transport.ServerStream;
 import io.grpc.transport.ServerStreamListener;
 import io.grpc.transport.ServerTransportListener;
-import io.grpc.transport.netty.NettyServerHandler;
-import io.grpc.transport.netty.NettyServerStream;
-import io.grpc.transport.netty.SendGrpcFrameCommand;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.buffer.UnpooledByteBufAllocator;
@@ -75,7 +73,6 @@ import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
 import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2Error;
-import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2FrameReader;
 import io.netty.handler.codec.http2.Http2FrameWriter;
 import io.netty.handler.codec.http2.Http2Headers;

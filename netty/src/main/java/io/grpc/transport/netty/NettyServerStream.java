@@ -32,8 +32,10 @@
 package io.grpc.transport.netty;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+
 import io.grpc.Metadata;
 import io.grpc.transport.AbstractServerStream;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.handler.codec.http2.Http2Headers;

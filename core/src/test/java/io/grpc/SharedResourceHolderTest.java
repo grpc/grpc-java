@@ -38,11 +38,12 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyLong;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyLong;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.when;
+
+import io.grpc.SharedResourceHolder.Resource;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -50,9 +51,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
-
-import io.grpc.SharedResourceHolder;
-import io.grpc.SharedResourceHolder.Resource;
 
 import java.util.LinkedList;
 import java.util.concurrent.Delayed;

@@ -31,11 +31,11 @@
 
 package io.grpc.transport;
 
-import io.grpc.Metadata;
-import io.grpc.MethodDescriptor;
-
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.AbstractService;
+
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
 
 /**
  * Abstract base class for all {@link ClientTransport} implementations. Implements the

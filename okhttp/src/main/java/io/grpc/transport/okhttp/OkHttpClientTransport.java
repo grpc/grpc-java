@@ -33,6 +33,7 @@ package io.grpc.transport.okhttp;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+
 import com.squareup.okhttp.internal.spdy.ErrorCode;
 import com.squareup.okhttp.internal.spdy.FrameReader;
 import com.squareup.okhttp.internal.spdy.Header;
@@ -41,11 +42,6 @@ import com.squareup.okhttp.internal.spdy.Http20Draft16;
 import com.squareup.okhttp.internal.spdy.Settings;
 import com.squareup.okhttp.internal.spdy.Variant;
 
-import okio.Buffer;
-import okio.BufferedSink;
-import okio.BufferedSource;
-import okio.ByteString;
-import okio.Okio;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -53,6 +49,13 @@ import io.grpc.Status.Code;
 import io.grpc.transport.AbstractClientTransport;
 import io.grpc.transport.ClientStream;
 import io.grpc.transport.ClientStreamListener;
+import io.grpc.transport.ClientTransport;
+
+import okio.Buffer;
+import okio.BufferedSink;
+import okio.BufferedSource;
+import okio.ByteString;
+import okio.Okio;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;

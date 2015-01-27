@@ -43,15 +43,12 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import com.google.common.io.ByteStreams;
 import com.google.common.primitives.Bytes;
 
+import io.grpc.transport.MessageDeframer.Listener;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-
-import io.grpc.transport.Buffer;
-import io.grpc.transport.Buffers;
-import io.grpc.transport.MessageDeframer;
-import io.grpc.transport.MessageDeframer.Listener;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

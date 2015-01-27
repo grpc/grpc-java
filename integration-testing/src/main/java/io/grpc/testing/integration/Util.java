@@ -33,11 +33,10 @@ package io.grpc.testing.integration;
 
 import com.google.protobuf.MessageLite;
 
-import org.junit.Assert;
-
 import io.grpc.Metadata;
 import io.grpc.proto.ProtoUtils;
-import io.grpc.testing.integration.Messages;
+
+import org.junit.Assert;
 
 import java.io.IOException;
 import java.net.ServerSocket;

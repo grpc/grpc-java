@@ -33,7 +33,6 @@ package io.grpc.transport;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.when;
-import io.grpc.transport.AbstractBuffer;
 
 import org.junit.Before;
 import org.junit.Test;

@@ -37,9 +37,8 @@ import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.AbstractService;
 
-import java.net.SocketAddress;
-
 import io.grpc.transport.ServerListener;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -50,6 +49,8 @@ import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalServerChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.ssl.SslContext;
+
+import java.net.SocketAddress;
 
 import javax.annotation.Nullable;
 

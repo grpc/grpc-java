@@ -45,15 +45,12 @@ import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.transport.AbstractStream;
 import io.grpc.transport.ClientStreamListener;
-import io.grpc.transport.netty.CancelStreamCommand;
-import io.grpc.transport.netty.NettyClientHandler;
-import io.grpc.transport.netty.NettyClientStream;
-import io.grpc.transport.netty.SendGrpcFrameCommand;
-import io.grpc.transport.netty.Utils;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.AsciiString;

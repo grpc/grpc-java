@@ -40,15 +40,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
+
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.transport.AbstractStream;
 import io.grpc.transport.ServerStreamListener;
-import io.grpc.transport.netty.NettyServerHandler;
-import io.grpc.transport.netty.NettyServerStream;
-import io.grpc.transport.netty.SendGrpcFrameCommand;
-import io.grpc.transport.netty.SendResponseHeadersCommand;
-import io.grpc.transport.netty.Utils;
+
 import io.netty.buffer.EmptyByteBuf;
 import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.handler.codec.AsciiString;

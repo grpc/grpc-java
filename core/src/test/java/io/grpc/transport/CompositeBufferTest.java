@@ -42,10 +42,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-import io.grpc.transport.Buffer;
-import io.grpc.transport.Buffers;
-import io.grpc.transport.CompositeBuffer;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;

@@ -50,6 +50,10 @@ import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.AbstractService;
 import com.google.common.util.concurrent.Service;
 
+import io.grpc.transport.ServerStream;
+import io.grpc.transport.ServerStreamListener;
+import io.grpc.transport.ServerTransportListener;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -57,21 +61,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
-
-import io.grpc.Marshaller;
-import io.grpc.Metadata;
-import io.grpc.MutableHandlerRegistry;
-import io.grpc.MutableHandlerRegistryImpl;
-import io.grpc.ServerCall;
-import io.grpc.ServerCallHandler;
-import io.grpc.ServerImpl;
-import io.grpc.ServerServiceDefinition;
-import io.grpc.Status;
-import io.grpc.transport.ServerStream;
-import io.grpc.transport.ServerStreamListener;
-import io.grpc.transport.ServerTransportListener;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;

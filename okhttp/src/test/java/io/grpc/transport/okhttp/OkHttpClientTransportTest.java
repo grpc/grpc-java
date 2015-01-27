@@ -47,10 +47,17 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Service;
 import com.google.common.util.concurrent.Service.State;
+
 import com.squareup.okhttp.internal.spdy.ErrorCode;
 import com.squareup.okhttp.internal.spdy.FrameReader;
 import com.squareup.okhttp.internal.spdy.Header;
 import com.squareup.okhttp.internal.spdy.HeadersMode;
+
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
+import io.grpc.Status;
+import io.grpc.transport.ClientStreamListener;
+import io.grpc.transport.okhttp.OkHttpClientTransport.ClientFrameHandler;
 
 import okio.Buffer;
 
@@ -62,16 +69,6 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-
-import io.grpc.Metadata;
-import io.grpc.MethodDescriptor;
-import io.grpc.Status;
-import io.grpc.transport.ClientStreamListener;
-import io.grpc.transport.okhttp.AsyncFrameWriter;
-import io.grpc.transport.okhttp.Headers;
-import io.grpc.transport.okhttp.OkHttpClientStream;
-import io.grpc.transport.okhttp.OkHttpClientTransport;
-import io.grpc.transport.okhttp.OkHttpClientTransport.ClientFrameHandler;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;

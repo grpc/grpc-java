@@ -48,13 +48,10 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
 import io.grpc.Metadata;
 import io.grpc.Status;
-import io.grpc.transport.netty.CancelStreamCommand;
-import io.grpc.transport.netty.CreateStreamCommand;
-import io.grpc.transport.netty.NettyClientHandler;
-import io.grpc.transport.netty.NettyClientStream;
-import io.grpc.transport.netty.SendGrpcFrameCommand;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;

@@ -32,6 +32,7 @@
 package io.grpc.transport.okhttp;
 
 import com.google.common.base.Preconditions;
+
 import com.squareup.okhttp.internal.spdy.ErrorCode;
 import com.squareup.okhttp.internal.spdy.Header;
 

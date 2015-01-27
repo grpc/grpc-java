@@ -32,8 +32,6 @@
 package io.grpc.testing.integration;
 
 import io.grpc.ChannelImpl;
-import io.grpc.testing.integration.AbstractTransportTest;
-import io.grpc.testing.integration.Util;
 import io.grpc.transport.netty.NegotiationType;
 import io.grpc.transport.netty.NettyChannelBuilder;
 import io.grpc.transport.netty.NettyServerBuilder;

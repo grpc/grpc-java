@@ -34,15 +34,16 @@ package io.grpc.transport.netty;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.Service;
 
-import java.net.InetSocketAddress;
-import java.net.SocketAddress;
-
 import io.grpc.AbstractServerBuilder;
 import io.grpc.HandlerRegistry;
 import io.grpc.SharedResourceHolder;
 import io.grpc.transport.ServerListener;
+
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.ssl.SslContext;
+
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 
 /**
  * The convenient builder for a netty-based GRPC server.

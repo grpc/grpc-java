@@ -48,8 +48,6 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-import io.grpc.transport.MessageFramer;
-
 import java.io.ByteArrayInputStream;
 import java.nio.ByteBuffer;
 import java.util.List;

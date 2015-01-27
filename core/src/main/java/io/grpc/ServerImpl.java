@@ -44,7 +44,6 @@ import io.grpc.transport.ServerTransportListener;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;

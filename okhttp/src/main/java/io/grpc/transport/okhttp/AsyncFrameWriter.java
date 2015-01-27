@@ -32,13 +32,15 @@
 package io.grpc.transport.okhttp;
 
 import com.google.common.util.concurrent.SettableFuture;
+
 import com.squareup.okhttp.internal.spdy.ErrorCode;
 import com.squareup.okhttp.internal.spdy.FrameWriter;
 import com.squareup.okhttp.internal.spdy.Header;
 import com.squareup.okhttp.internal.spdy.Settings;
 
-import okio.Buffer;
 import io.grpc.SerializingExecutor;
+
+import okio.Buffer;
 
 import java.io.IOException;
 import java.util.List;

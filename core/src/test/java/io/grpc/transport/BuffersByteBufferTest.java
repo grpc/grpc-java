@@ -32,8 +32,6 @@
 package io.grpc.transport;
 
 import static com.google.common.base.Charsets.UTF_8;
-import io.grpc.transport.Buffer;
-import io.grpc.transport.Buffers;
 
 import java.nio.ByteBuffer;
 

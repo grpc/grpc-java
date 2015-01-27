@@ -33,14 +33,14 @@ package io.grpc.stub;
 
 import static org.junit.Assert.assertEquals;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
-
 import io.grpc.Call;
 import io.grpc.Channel;
 import io.grpc.MethodDescriptor;
 import io.grpc.testing.integration.TestServiceGrpc;
+
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
 import java.util.concurrent.TimeUnit;
 

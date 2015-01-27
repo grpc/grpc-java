@@ -33,15 +33,16 @@ package io.grpc;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
+import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.same;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.common.util.concurrent.ListenableFuture;
+import io.grpc.ClientInterceptors.ForwardingCall;
+import io.grpc.ClientInterceptors.ForwardingListener;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -51,15 +52,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
-
-import io.grpc.Call;
-import io.grpc.Channel;
-import io.grpc.ClientInterceptor;
-import io.grpc.ClientInterceptors;
-import io.grpc.Metadata;
-import io.grpc.MethodDescriptor;
-import io.grpc.ClientInterceptors.ForwardingCall;
-import io.grpc.ClientInterceptors.ForwardingListener;
 
 import java.util.ArrayList;
 import java.util.Arrays;

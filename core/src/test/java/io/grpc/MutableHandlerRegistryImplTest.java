@@ -37,12 +37,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
-import io.grpc.Marshaller;
-import io.grpc.MutableHandlerRegistry;
-import io.grpc.MutableHandlerRegistryImpl;
-import io.grpc.ServerCallHandler;
-import io.grpc.ServerMethodDefinition;
-import io.grpc.ServerServiceDefinition;
+
 import io.grpc.HandlerRegistry.Method;
 
 import org.junit.After;

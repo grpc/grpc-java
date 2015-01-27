@@ -31,10 +31,10 @@
 
 package io.grpc.transport;
 
+import com.google.common.util.concurrent.Service;
+
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-
-import com.google.common.util.concurrent.Service;
 
 /**
  * The client-side transport encapsulating a single connection to a remote server. Allows creation

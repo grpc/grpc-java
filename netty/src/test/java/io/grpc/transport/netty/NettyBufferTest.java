@@ -33,9 +33,10 @@ package io.grpc.transport.netty;
 
 import static com.google.common.base.Charsets.UTF_8;
 import static org.junit.Assert.assertEquals;
+
 import io.grpc.transport.Buffer;
 import io.grpc.transport.BufferTestBase;
-import io.grpc.transport.netty.NettyBuffer;
+
 import io.netty.buffer.Unpooled;
 
 import org.junit.Before;

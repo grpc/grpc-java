@@ -32,12 +32,14 @@
 package io.grpc.transport.okhttp;
 
 import com.google.common.base.Preconditions;
+
 import com.squareup.okhttp.internal.spdy.Header;
 
-import okio.ByteString;
 import io.grpc.Metadata;
 import io.grpc.transport.HttpUtil;
 import io.grpc.transport.TransportFrameUtil;
+
+import okio.ByteString;
 
 import java.util.ArrayList;
 import java.util.List;
