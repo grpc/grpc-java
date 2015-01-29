@@ -1,4 +1,13 @@
-description = "Stubby: Stub"
+plugins {
+    id "be.insaneprogramming.gradle.animalsniffer" version "1.4.0"
+}
+
+description = "gRPC: Stub"
 dependencies {
-    compile project(':stubby-core')
+    compile project(':grpc-core')
+}
+
+// Configure the animal sniffer plugin
+animalsniffer {
+    signature = "org.codehaus.mojo.signature:java16:+@signature"
 }
