@@ -14,6 +14,11 @@ subprojects {
         mavenLocal()
     }
 
+    def cBuildDir = "$projectDir/bin"
+    clean{
+        delete cBuildDir
+    }
+
     compileJava {
         options.compilerArgs << "-Xlint:unchecked" << "-Xlint:deprecation"
     }
