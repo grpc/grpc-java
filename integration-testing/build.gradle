@@ -1,5 +1,4 @@
 apply plugin: 'protobuf'
-apply plugin: 'idea'
 apply plugin:'application'
 
 description = "gRPC: Integration Testing"
@@ -57,7 +56,9 @@ idea {
         // The whole build dir is excluded by default, but we need build/generated-sources,
         // which contains the generated proto classes.
         excludeDirs = [file('.gradle')]
-        excludeDirs += files(file("$buildDir/").listFiles())
-        excludeDirs -= file("$buildDir/generated-sources")
+        if (buildDir.exists()) {
+          excludeDirs += files(buildDir.listFiles())
+          excludeDirs -= file("$buildDir/generated-sources")
+        }
     }
 }
