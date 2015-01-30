@@ -134,10 +134,10 @@ public class MessageDeframer implements Closeable {
    * @param numMessages the requested number of messages to be delivered to the listener.
    */
   public void request(int numMessages) {
+    Preconditions.checkArgument(numMessages > 0, "numMessages must be > 0");
     if (isClosed()) {
       return;
     }
-    Preconditions.checkArgument(numMessages > 0, "numMessages must be > 0");
     pendingDeliveries += numMessages;
     deliver();
   }
