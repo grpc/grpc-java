@@ -15,5 +15,8 @@ build
 .settings
 .gitignore
 
+# Compiler binaries
+bin
+
 # OS X
 .DS_Store
