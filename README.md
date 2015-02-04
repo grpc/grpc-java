@@ -31,8 +31,8 @@ If you are comfortable with C++ compilation and autotools, you can specify a
 and PATH to reference it. The environment variables will be used when building
 grpc-java.
 
-Alternatively if /usr/local/lib is not in your library search path you can add
-it by running:
+Protobuf installs to /usr/local by default.
+If /usr/local/lib is not in your library search path, you can add it by running:
 ```
 $ sudo sh -c 'echo /usr/local/lib >> /etc/ld.so.conf'
 $ sudo ldconfig
