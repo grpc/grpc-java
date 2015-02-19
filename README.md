@@ -43,6 +43,11 @@ Now to build grpc-java itself:
 $ ./gradlew install
 ```
 
+Documentation
+-------------
+
+You can find more detailed documentation and examples in the [grpc-common repository](http://github.com/grpc/grpc-common).
+
 Navigating Around the Source
 ----------------------------
 
