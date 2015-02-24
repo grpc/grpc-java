@@ -43,14 +43,25 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /**
- * Defines the status of an operation using the canonical error space.
+ * Defines the status of an operation using the canonical error space in conjunction with an
+ * optional descriptive message.
+ * <p>
+ * For clients every remote call will return a status on completion. In the case of errors this
+ * status may be propagated to blocking stubs as a {@link java.lang.RuntimeException} or to
+ * a listener as an explicit parameter.
+ * </p><p>
+ * Similarly servers can report a status by throwing
+ * {@link io.grpc.Status.OperationRuntimeException} or by passing the status to a callback.
+ * </p><p>
+ * Utility functions are provided to convert a status to an exception and to extract them back out.
+ * </p>
  */
 @Immutable
 public final class Status {
 
   /**
-   * The set of canonical error codes. If new codes are added over time they must choose
-   * a numerical value that does not collide with any previously defined code.
+   * The set of canonical status codes. If new codes are added over time they must choose
+   * a numerical value that does not collide with any previously used value.
    */
   public enum Code {
     OK(0),
@@ -169,6 +180,9 @@ public final class Status {
       this.valueAscii = Integer.toString(value);
     }
 
+    /**
+     * The numerical value of the code.
+     */
     public int value() {
       return value;
     }
@@ -302,15 +316,24 @@ public final class Status {
     }
   }
 
+  /**
+   * The canonical status code.
+   */
   public Code getCode() {
     return code;
   }
 
+  /**
+   * A description of this status for human consumption.
+   */
   @Nullable
   public String getDescription() {
     return description;
   }
 
+  /**
+   * The underlying cause of an error.
+   */
   @Nullable
   public Throwable getCause() {
     return cause;
