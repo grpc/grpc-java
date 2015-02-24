@@ -46,8 +46,9 @@ public class ServerInterceptors {
   private ServerInterceptors() {}
 
   /**
-   * Create a new {@code ServerServiceDefinition} whose {@link ServerCallHandler}s will call {@code
-   * interceptors} before calling the pre-existing {@code ServerCallHandler}.
+   * Create a new {@code ServerServiceDefinition} whose {@link ServerCallHandler}s will call
+   * {@code interceptors} before calling the pre-existing {@code ServerCallHandler}.
+   *
    * @param serviceDef the service definition for which to intercept all its methods.
    * @param interceptors array of interceptors to apply to the service.
    * @return a wrapped version of {@code serviceDef} with the interceptors applied.
@@ -58,8 +59,9 @@ public class ServerInterceptors {
   }
 
   /**
-   * Create a new {@code ServerServiceDefinition} whose {@link ServerCallHandler}s will call {@code
-   * interceptors} before calling the pre-existing {@code ServerCallHandler}.
+   * Create a new {@code ServerServiceDefinition} whose {@link ServerCallHandler}s will call
+   * {@code interceptors} before calling the pre-existing {@code ServerCallHandler}.
+   *
    * @param serviceDef the service definition for which to intercept all its methods.
    * @param interceptors list of interceptors to apply to the service.
    * @return a wrapped version of {@code serviceDef} with the interceptors applied.

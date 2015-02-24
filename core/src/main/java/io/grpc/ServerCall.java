@@ -64,6 +64,8 @@ public abstract class ServerCall<ResponseT> {
     /**
      * A request message has been received. For streaming calls, there may be zero or more request
      * messages.
+     *
+     * @param payload a received request message.
      */
     public abstract void onPayload(RequestT payload);
 
@@ -94,9 +96,8 @@ public abstract class ServerCall<ResponseT> {
    * Requests up to the given number of messages from the call to be delivered to
    * {@link Listener#onPayload(Object)}. Once {@code numMessages} have been delivered
    * no further calls will be made until more message are requested by calling this method again.
-   * <p>
-   * Servers use this mechanism to provide back-pressure to the client for flow-control.
-   * </p>
+   *
+   * <p>Servers use this mechanism to provide back-pressure to the client for flow-control.
    *
    * @param numMessages the requested number of messages to be delivered to the listener.
    */

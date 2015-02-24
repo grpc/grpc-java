@@ -38,12 +38,11 @@ import javax.annotation.concurrent.ThreadSafe;
  * by stub implementations. Channel and its associated types {@link io.grpc.Call} and
  * {@link io.grpc.Call.Listener} exchange parsed request and response objects whereas the
  * transport layer only works with serialized data.
- * <p>
- * Applications can add common cross-cutting behaviors to stubs by decorating Channel
+ *
+ * <p>Applications can add common cross-cutting behaviors to stubs by decorating Channel
  * implementations using {@link io.grpc.ClientInterceptor}. It is expected that most application
  * code will not use this interface directly but rather work with stubs that have been bound to a
  * Channel that was decorated during application initialization,
- * </p>
  */
 @ThreadSafe
 public interface Channel {
@@ -53,6 +52,7 @@ public interface Channel {
    * {@link io.grpc.MethodDescriptor}. The returned {@link Call} does not trigger any remote
    * behavior until {@link Call#start(io.grpc.Call.Listener, io.grpc.Metadata.Headers)} is
    * invoked.
+   *
    * @param methodDescriptor describes the name and parameter types of the operation to call.
    * @return a {@link io.grpc.Call} bound to the specified method.
    *

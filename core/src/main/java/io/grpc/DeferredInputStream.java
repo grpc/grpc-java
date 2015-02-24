@@ -45,7 +45,8 @@ import javax.annotation.Nullable;
 public abstract class DeferredInputStream<T> extends InputStream {
 
   /**
-   * Produce the entire contents of this stream to the specified target
+   * Produce the entire contents of this stream to the specified target.
+   *
    * @param target to write to.
    * @return number of bytes written.
    */

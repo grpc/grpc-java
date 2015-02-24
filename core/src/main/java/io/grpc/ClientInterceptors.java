@@ -49,6 +49,7 @@ public class ClientInterceptors {
   /**
    * Create a new {@link Channel} that will call {@code interceptors} before starting a call on the
    * given channel.
+   *
    * @param channel the underlying channel to intercept.
    * @param interceptors array of interceptors to bind to {@code channel}.
    * @return a new channel instance with the interceptors applied.
@@ -60,6 +61,7 @@ public class ClientInterceptors {
   /**
    * Create a new {@link Channel} that will call {@code interceptors} before starting a call on the
    * given channel.
+   *
    * @param channel the underlying channel to intercept.
    * @param interceptors a list of interceptors to bind to {@code channel}.
    * @return a new channel instance with the interceptors applied.

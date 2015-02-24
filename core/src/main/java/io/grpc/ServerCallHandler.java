@@ -47,7 +47,7 @@ public interface ServerCallHandler<RequestT, ResponseT> {
    * Implementations must not throw an exception if they started processing that may use {@code
    * call} on another thread.
    *
-   * @param fullMethodName full method name of call.
+   * @param fullMethodName full qualified method name of call.
    * @param call object for responding to the remote client.
    * @return listener for processing incoming request messages for {@code call}
    */

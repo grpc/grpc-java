@@ -35,15 +35,14 @@ import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Interface for intercepting outgoing calls before they are dispatched by a {@link Channel}.
- * <p/>
- * Implementers use this mechanism to add cross-cutting behavior to {@link Channel} and
+ *
+ * <p>Implementers use this mechanism to add cross-cutting behavior to {@link Channel} and
  * stub implementations. Common examples of such behavior include:
  * <ul>
  * <li>Adding credentials to header metadata</li>
  * <li>Logging and monitoring call behavior</li>
  * <li>Request and response rewriting</li>
  * </ul>
- * </p>
  */
 @ThreadSafe
 public interface ClientInterceptor {
@@ -54,7 +53,7 @@ public interface ClientInterceptor {
    * around the result of {@code next.newCall()}, whereas a simpler implementation may just augment
    * the header metadata prior to returning the result of {@code next.newCall()}.
    *
-   * @param method the remote method to be called
+   * @param method the remote method to be called.
    * @param next the underlying channel which is being intercepted.
    * @return the call object for the remote operation, never {@code null}.
    */

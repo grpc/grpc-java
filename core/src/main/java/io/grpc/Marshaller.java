@@ -35,15 +35,17 @@ import java.io.InputStream;
 
 /**
  * A typed abstraction over message parsing and serialization.
- * <p/>
- * Stub implementations will define implementations of this interface for each of the request and
+ *
+ * <p>Stub implementations will define implementations of this interface for each of the request and
  * response messages provided by a service.
+ *
  * @param <T> type of serializable message
  */
 public interface Marshaller<T> {
 
   /**
    * Given a message produce an {@link InputStream} for it so that it can be written to the wire.
+   *
    * @param value to serialize.
    * @return serialized value as stream of bytes.
    */
@@ -52,6 +54,7 @@ public interface Marshaller<T> {
   /**
    * Given an {@link InputStream} parse it into an instance of the declared type so that it can be
    * passed to application code.
+   *
    * @param stream of bytes for serialized value
    * @return parsed value
    */

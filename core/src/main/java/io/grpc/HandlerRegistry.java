@@ -43,6 +43,7 @@ public abstract class HandlerRegistry {
   /**
    * Lookup a {@link Method} by its fully-qualified name. All names are expected to be absolute
    * paths that start with '/'.
+   *
    * @param methodName to lookup {@link Method} for.
    * @return the resolved method or {@code null} if no method for that name exists.
    */

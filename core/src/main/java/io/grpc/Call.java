@@ -32,31 +32,32 @@
 package io.grpc;
 
 /**
- * A generic representation of a call to a remote operation. A call will send zero or more
+ * An instance of a call to to a remote method. A call will send zero or more
  * request messages to the server and receive zero or more response messages back.
- * <p/>
- * Instances are created
+ *
+ * <p>Instances are created
  * by a {@link Channel} and used by stubs to invoke their remote behavior.
- * <p/>
- * More advanced usages may consume this interface directly as opposed to using a stub. Common
+ *
+ * <p>More advanced usages may consume this interface directly as opposed to using a stub. Common
  * reasons for doing so would be the need to interact with flow-control or when acting as a generic
  * proxy for arbitrary operations.
- * <p/>
- * {@link #start} Must be called prior to calling any other methods.
- * <p/>
- * No generic method for determining message receipt or providing acknowledgement is provided.
+ *
+ * <p>{@link #start} must be called prior to calling any other methods.
+ *
+ * <p>No generic method for determining message receipt or providing acknowledgement is provided.
  * Applications are expected to utilize normal payload messages for such signals, as a response
  * naturally acknowledges its request.
- * <p/>
- * Methods are guaranteed to be non-blocking. Implementations are not required to be thread-safe.
- * @param <RequestT> type of message sent one or more times to the server,
+ *
+ * <p>Methods are guaranteed to be non-blocking. Implementations are not required to be thread-safe.
+ *
+ * @param <RequestT> type of message sent one or more times to the server.
  * @param <ResponseT> type of message received one or more times from the server.
  */
 public abstract class Call<RequestT, ResponseT> {
   /**
    * Callbacks for receiving metadata, response messages and completion status from the server.
-   * <p>
-   * Implementations are free to block for extended periods of time. Implementations are not
+   *
+   * <p>Implementations are free to block for extended periods of time. Implementations are not
    * required to be thread-safe.
    */
   public abstract static class Listener<T> {
@@ -65,6 +66,7 @@ public abstract class Call<RequestT, ResponseT> {
      * The response headers have been received. Headers always precede payloads.
      * This method is always called, if no headers were received then an empty {@link Metadata}
      * is passed.
+     *
      * @param headers containing metadata sent by the server at the start of the response.
      */
     public abstract void onHeaders(Metadata.Headers headers);
@@ -72,6 +74,7 @@ public abstract class Call<RequestT, ResponseT> {
     /**
      * A response payload has been received. May be called zero or more times depending on whether
      * the call response is empty, a single message or a stream of messages.
+     *
      * @param  payload returned by the server
      */
     public abstract void onPayload(T payload);
@@ -81,6 +84,9 @@ public abstract class Call<RequestT, ResponseT> {
      * not equal to {@link Status#OK}, then the call failed. An additional block of trailer metadata
      * may be received at the end of the call from the server. An empty {@link Metadata} object is
      * passed if no trailers are received.
+     *
+     * @param status the result of the remote call.
+     * @param trailers metadata provided at call completion.
      */
     public abstract void onClose(Status status, Metadata.Trailers trailers);
   }
