@@ -197,7 +197,7 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
    *        may already be queued up in the deframer. If {@code false}, the listener will be
    *        notified immediately after all currently completed messages in the deframer have been
    *        delivered to the application.
-   * @param trailers the trailers from the remote end if the remote end closed the stream
+   * @param trailers new instance of {@code Trailers}, either empty or those returned by the server
    */
   public void transportReportStatus(final Status newStatus, boolean stopDelivery,
       final Metadata.Trailers trailers) {
