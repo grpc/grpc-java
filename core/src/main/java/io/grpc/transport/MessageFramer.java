@@ -104,7 +104,7 @@ public class MessageFramer {
    *
    * @param message contains the message to be written out. It will be completely consumed.
    * @param messageLength the number of bytes in the message. It must match the actual number of
-   *        bytes available in the {@code InputStream}
+   *        bytes in the {@code InputStream}.
    */
   public void writePayload(InputStream message, int messageLength) {
     try {

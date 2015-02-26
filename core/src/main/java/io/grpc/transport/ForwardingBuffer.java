@@ -40,8 +40,8 @@ import java.nio.ByteBuffer;
 /**
  * Base class for a wrapper around another {@link Buffer}.
  *
- * <p>This class just pass every operation through to the underlying buffer. Subclasses may override
- * methods to intercept concertain operations.
+ * <p>This class just passes every operation through to the underlying buffer. Subclasses may
+ * override methods to intercept concertain operations.
  */
 public abstract class ForwardingBuffer implements Buffer {
 

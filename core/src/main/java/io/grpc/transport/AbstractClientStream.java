@@ -118,9 +118,9 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
   }
 
   /**
-   * Process the contents of a received data frame from the server.
+   * Processes the contents of a received data frame from the server.
    *
-   * @param frame the received data frame
+   * @param frame the received data frame. Its ownership is transferred to this method.
    */
   protected void inboundDataReceived(Buffer frame) {
     Preconditions.checkNotNull(frame, "frame");
@@ -151,7 +151,7 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
   }
 
   /**
-   * Implementations should call it when they receive trailers from the transport.
+   * Processes the trailers and status from the server.
    *
    * @param trailers the received trailers
    * @param status the status extracted from the trailers
@@ -197,8 +197,7 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
    *        may already be queued up in the deframer. If {@code false}, the listener will be
    *        notified immediately after all currently completed messages in the deframer have been
    *        delivered to the application.
-   * @param trailers the trailers from the remote end if the remote end closed the stream and sent
-   *        trailers
+   * @param trailers the trailers from the remote end if the remote end closed the stream
    */
   public void transportReportStatus(final Status newStatus, boolean stopDelivery,
       final Metadata.Trailers trailers) {

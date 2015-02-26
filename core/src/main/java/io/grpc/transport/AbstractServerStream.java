@@ -123,7 +123,7 @@ public abstract class AbstractServerStream<IdT> extends AbstractStream<IdT>
    *
    * @param frame the inbound HTTP/2 DATA frame. If this buffer is not used immediately, it must
    *              be retained.
-   * @param endOfStream {@code true} no more data will be received on the stream
+   * @param endOfStream {@code true} if no more data will be received on the stream
    */
   public void inboundDataReceived(Buffer frame, boolean endOfStream) {
     if (inboundPhase() == Phase.STATUS) {

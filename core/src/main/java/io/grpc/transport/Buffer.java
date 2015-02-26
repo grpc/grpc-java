@@ -142,7 +142,7 @@ public interface Buffer extends Closeable {
    * Gets the backing array for this buffer. This is an optional method, so callers should first
    * check {@link #hasArray}.
    *
-   * @throws UnsupportedOperationException the buffer does not supporting this method
+   * @throws UnsupportedOperationException the buffer does not support this method
    */
   byte[] array();
 
@@ -150,7 +150,7 @@ public interface Buffer extends Closeable {
    * Gets the offset in the backing array of the current read position. This is an optional method,
    * so callers should first check {@link #hasArray}
    *
-   * @throws UnsupportedOperationException the buffer does not supporting this method
+   * @throws UnsupportedOperationException the buffer does not support this method
    */
   int arrayOffset();
 
