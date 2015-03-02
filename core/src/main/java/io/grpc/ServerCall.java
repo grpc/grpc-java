@@ -35,7 +35,7 @@ package io.grpc;
 /**
  * Encapsulates a single call received from a remote client. Calls may not simply be unary
  * request-response even though this is the most common pattern. Calls may stream any number of
- * requests and responses. This API is generally intended for use by generated handlers,
+ * requests and responses, This API is generally intended for use by generated handlers,
  * but applications may use it directly if they need to.
  *
  * <p>Headers must be sent before any payloads, which must be sent before closing.
@@ -45,7 +45,6 @@ package io.grpc;
  * naturally acknowledges its request.
  *
  * <p>Methods are guaranteed to be non-blocking. Implementations are not required to be thread-safe.
- *
  * @param <ResponseT> parsed type of response message.
  */
 public abstract class ServerCall<ResponseT> {
@@ -78,7 +77,7 @@ public abstract class ServerCall<ResponseT> {
     /**
      * The call was cancelled and the server is encouraged to abort processing to save resources,
      * since the client will not process any further messages. Cancellations can be caused by
-     * timeouts, explicit cancellation by the client, network errors, etc.
+     * timeouts, explicit cancellation by the client, network errors etc.
      *
      * <p>There will be no further callbacks for the call.
      */
@@ -96,8 +95,7 @@ public abstract class ServerCall<ResponseT> {
   /**
    * Requests up to the given number of messages from the call to be delivered to
    * {@link Listener#onPayload(Object)}. Once {@code numMessages} have been delivered
-   * no further request messages will be delivered until more messages are requested by
-   * calling this method again.
+   * no further calls will be made until more message are requested by calling this method again.
    *
    * <p>Servers use this mechanism to provide back-pressure to the client for flow-control.
    *

@@ -44,7 +44,7 @@ import java.io.InputStream;
 public interface Marshaller<T> {
 
   /**
-   * Given a message, produce an {@link InputStream} for it so that it can be written to the wire.
+   * Given a message produce an {@link InputStream} for it so that it can be written to the wire.
    *
    * @param value to serialize.
    * @return serialized value as stream of bytes.

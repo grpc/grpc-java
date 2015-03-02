@@ -35,12 +35,12 @@ import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A Channel provides an abstraction over the transport layer that is designed to be consumed
- * by stub implementations. Channel and its associated types {@link Call} and
- * {@link Call.Listener} exchange parsed request and response objects whereas the
+ * by stub implementations. Channel and its associated types {@link io.grpc.Call} and
+ * {@link io.grpc.Call.Listener} exchange parsed request and response objects whereas the
  * transport layer only works with serialized data.
  *
  * <p>Applications can add common cross-cutting behaviors to stubs by decorating Channel
- * implementations using {@link ClientInterceptor}. It is expected that most application
+ * implementations using {@link io.grpc.ClientInterceptor}. It is expected that most application
  * code will not use this interface directly but rather work with stubs that have been bound to a
  * Channel that was decorated during application initialization,
  */
@@ -49,12 +49,12 @@ public interface Channel {
 
   /**
    * Create a {@link Call} to the remote operation specified by the given
-   * {@link MethodDescriptor}. The returned {@link Call} does not trigger any remote
-   * behavior until {@link Call#start(Call.Listener, Metadata.Headers)} is
+   * {@link io.grpc.MethodDescriptor}. The returned {@link Call} does not trigger any remote
+   * behavior until {@link Call#start(io.grpc.Call.Listener, io.grpc.Metadata.Headers)} is
    * invoked.
    *
    * @param methodDescriptor describes the name and parameter types of the operation to call.
-   * @return a {@link Call} bound to the specified method.
+   * @return a {@link io.grpc.Call} bound to the specified method.
    *
    */
   public <RequestT, ResponseT> Call<RequestT, ResponseT> newCall(

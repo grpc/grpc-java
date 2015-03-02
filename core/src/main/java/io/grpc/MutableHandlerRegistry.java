@@ -35,7 +35,7 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Mutable implementation of {@link HandlerRegistry}. Used by server implementations
+ * Mutable implementation of {@link io.grpc.HandlerRegistry}. Used by server implementations
  * that need to bind and unbind services that are exposed to remote clients.
  */
 @ThreadSafe

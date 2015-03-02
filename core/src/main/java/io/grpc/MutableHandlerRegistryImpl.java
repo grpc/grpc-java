@@ -38,10 +38,11 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Default implementation of {@link MutableHandlerRegistry}.
- *
- * <p>Uses {@link ConcurrentHashMap} to avoid service registration excessively
+ * Default implementation of {@link io.grpc.MutableHandlerRegistry}.
+ * <p>
+ * Uses {@link java.util.concurrent.ConcurrentHashMap} to avoid service registration excessively
  * blocking method lookup.
+ * </p>
  */
 @ThreadSafe
 public final class MutableHandlerRegistryImpl extends MutableHandlerRegistry {
