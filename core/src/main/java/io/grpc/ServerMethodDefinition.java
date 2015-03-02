@@ -76,7 +76,6 @@ public final class ServerMethodDefinition<RequestT, ResponseT> {
 
   /**
    * Parse an incoming request message.
-   *
    * @param input the serialized message as a byte stream.
    * @return a parsed instance of the message.
    */
@@ -86,7 +85,6 @@ public final class ServerMethodDefinition<RequestT, ResponseT> {
 
   /**
    * Serialize an outgoing response message.
-   *
    * @param response the response message to serialize.
    * @return the serialized message as a byte stream.
    */
@@ -101,7 +99,6 @@ public final class ServerMethodDefinition<RequestT, ResponseT> {
 
   /**
    * Create a new method definition with a different call handler.
-   *
    * @param handler to bind to a cloned instance of this.
    * @return a cloned instance of this with the new handler bound.
    */

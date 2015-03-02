@@ -43,15 +43,15 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /**
- * Defines the status of an operation by providing a standard {@link Code} in conjunction with an
+ * Defines the status of an operation using the canonical error space in conjunction with an
  * optional descriptive message.
  *
- * <p>For clients, every remote call will return a status on completion. In the case of errors this
+ * <p>For clients every remote call will return a status on completion. In the case of errors this
  * status may be propagated to blocking stubs as a {@link java.lang.RuntimeException} or to
  * a listener as an explicit parameter.
  *
- * <p>Similarly servers can report a status by throwing {@link OperationRuntimeException}
- * or by passing the status to a callback.
+ * <p>Similarly servers can report a status by throwing
+ * {@link io.grpc.Status.OperationRuntimeException} or by passing the status to a callback.
  *
  * <p>Utility functions are provided to convert a status to an exception and to extract them
  * back out.

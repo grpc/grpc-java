@@ -50,11 +50,11 @@ public interface ClientInterceptor {
    * Intercept {@link Call} creation by the {@code next} {@link Channel}.
    * <p/>
    * Many variations of interception are possible. Complex implementations may return a wrapper
-   * around the result of {@code next.newCall()}, whereas a simpler implementation may just modify
+   * around the result of {@code next.newCall()}, whereas a simpler implementation may just augment
    * the header metadata prior to returning the result of {@code next.newCall()}.
    *
    * @param method the remote method to be called.
-   * @param next the channel which is being intercepted.
+   * @param next the underlying channel which is being intercepted.
    * @return the call object for the remote operation, never {@code null}.
    */
   <RequestT, ResponseT> Call<RequestT, ResponseT> interceptCall(
