@@ -23,7 +23,7 @@ subprojects {
                 protobuf: 'com.google.protobuf:protobuf-java:3.0.0-pre',
                 guava: 'com.google.guava:guava:18.0',
                 jsr305: 'com.google.code.findbugs:jsr305:3.0.0',
-                oauth_client: 'com.google.oauth-client:google-oauth-client:1.18.0-rc',
+                oauth_client: 'com.google.auth:google-auth-library-oauth2-http:0.1.0',
                 javaee_api: 'javax:javaee-api:7.0',
                 hpack: 'com.twitter:hpack:0.9.1',
                 protobuf_plugin: 'ws.antonov.gradle.plugins:gradle-plugin-protobuf:0.9.1',

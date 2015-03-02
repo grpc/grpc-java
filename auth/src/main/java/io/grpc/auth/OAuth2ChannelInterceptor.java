@@ -31,7 +31,7 @@
 
 package io.grpc.auth;
 
-import com.google.api.client.auth.oauth2.Credential;
+import com.google.auth.Credentials;
 
 import io.grpc.Call;
 import io.grpc.Channel;
@@ -39,27 +39,26 @@ import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors.ForwardingCall;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.Status;
 
+import java.io.IOException;
 import java.util.concurrent.Executor;
 
-import javax.inject.Provider;
-
-/** Client interceptor that authenticates all calls with OAuth2. */
+/**
+ * Client interceptor that authenticates all calls with an OAuth2 credential.
+ * Uses the new and simplified Google auth library:
+ * https://github.com/google/google-auth-library-java
+ */
 public class OAuth2ChannelInterceptor implements ClientInterceptor {
   private static final Metadata.Key<String> AUTHORIZATION =
       Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER);
 
-  private final OAuth2AccessTokenProvider accessTokenProvider;
-  private final Provider<String> authorizationHeaderProvider
-      = new Provider<String>() {
-        @Override
-        public String get() {
-          return "Bearer " + accessTokenProvider.get();
-        }
-      };
+  private final Credentials credentials;
 
-  public OAuth2ChannelInterceptor(Credential credential, Executor executor) {
-    this.accessTokenProvider = new OAuth2AccessTokenProvider(credential, executor);
+  public OAuth2ChannelInterceptor(Credentials credentials, Executor executor) {
+    // TODO(louiscryan): Need executor for supporting async access-token refresh once
+    // library supports it.
+    this.credentials = credentials;
   }
 
   @Override
@@ -70,8 +69,12 @@ public class OAuth2ChannelInterceptor implements ClientInterceptor {
     return new ForwardingCall<ReqT, RespT>(next.newCall(method)) {
       @Override
       public void start(Listener<RespT> responseListener, Metadata.Headers headers) {
-        headers.put(AUTHORIZATION, authorizationHeaderProvider.get());
-        super.start(responseListener, headers);
+        try {
+          headers.put(AUTHORIZATION, credentials.getRequestMetadata().get("Authorization").get(0));
+          super.start(responseListener, headers);
+        } catch (IOException ioe) {
+          responseListener.onClose(Status.fromThrowable(ioe), new Metadata.Trailers());
+        }
       }
     };
   }
