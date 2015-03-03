@@ -4,6 +4,9 @@ grpc-java
 How to Build
 ------------
 
+grpc-java does not yet build completely on Windows. Please watch
+https://github.com/grpc/grpc-java/issues/87 for Windows build progress.
+
 grpc-java requires Netty 5, which is still in flux. The version we need can be
 found in the lib/netty submodule, which requires Maven 3.2 or higher to build:
 ```
