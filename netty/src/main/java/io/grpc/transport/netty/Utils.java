@@ -32,6 +32,7 @@
 package io.grpc.transport.netty;
 
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import io.grpc.Metadata;
 import io.grpc.SharedResourceHolder.Resource;
@@ -47,6 +48,7 @@ import io.netty.handler.codec.http2.Http2Headers;
 
 import java.nio.ByteBuffer;
 import java.util.Map;
+import java.util.concurrent.Executors;
 
 /**
  * Common utility methods.
@@ -173,8 +175,9 @@ class Utils {
 
     @Override
     public EventLoopGroup create() {
-      // Use the Netty's default for number of threads.
-      return new NioEventLoopGroup(0);
+      int numThreads = Runtime.getRuntime().availableProcessors() * 2;
+      return new NioEventLoopGroup(0, Executors.newFixedThreadPool(numThreads,
+          new ThreadFactoryBuilder().setNameFormat(name + "-%d").build()));
     }
 
     @Override
