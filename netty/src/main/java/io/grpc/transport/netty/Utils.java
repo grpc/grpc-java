@@ -48,10 +48,8 @@ import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 
-import java.lang.reflect.Constructor;
 import java.nio.ByteBuffer;
 import java.util.Map;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -180,6 +178,7 @@ class Utils {
 
     @Override
     public EventLoopGroup create() {
+      // Use the executor based constructor so we can work with both Netty4 & Netty5.
       ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat(name + "-%d").build();
       int parallelism = nEventLoops == 0 ?
           Runtime.getRuntime().availableProcessors() * 2 : nEventLoops;
