@@ -178,21 +178,10 @@ class Utils {
     @Override
     public EventLoopGroup create() {
       ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat(name + "-%d").build();
-      try {
-        Constructor<NioEventLoopGroup> constructor = NioEventLoopGroup.class.getConstructor(
-            Integer.TYPE, ThreadFactory.class);
-        if (constructor == null) {
-          // is netty 5
-          constructor = NioEventLoopGroup.class.getConstructor(Integer.TYPE, Executor.class);
-          return constructor.newInstance(nEventLoops,
-              Executors.newFixedThreadPool(nEventLoops, threadFactory));
-        } else {
-          // is netty 4
-          return constructor.newInstance(nEventLoops, threadFactory);
-        }
-      } catch (Exception e) {
-        throw new RuntimeException("Cannot adapt Netty 4 or 5", e);
-      }
+      int parallelism = nEventLoops == 0 ?
+          Runtime.getRuntime().availableProcessors() * 2 : nEventLoops;
+      return new NioEventLoopGroup(parallelism,
+          Executors.newFixedThreadPool(parallelism, threadFactory));
     }
 
     @Override
