@@ -32,7 +32,6 @@
 package io.grpc.transport.netty;
 
 import com.google.common.base.Preconditions;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import io.grpc.Metadata;
 import io.grpc.SharedResourceHolder.Resource;
@@ -48,6 +47,8 @@ import io.netty.handler.codec.http2.Http2Headers;
 
 import java.nio.ByteBuffer;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Common utility methods.
@@ -173,8 +174,24 @@ class Utils {
 
     @Override
     public EventLoopGroup create() {
-      return new NioEventLoopGroup(nEventLoops, new ThreadFactoryBuilder().setNameFormat(name + "-%d")
-          .build());
+      // This is a small hack to properly name threads that works with both Netty4 & Netty5
+      NioEventLoopGroup nioEventLoopGroup = new NioEventLoopGroup(nEventLoops);
+      final CountDownLatch latch = new CountDownLatch(nEventLoops);
+      for (int i = 0; i < nEventLoops; i++) {
+        nioEventLoopGroup.next().execute(new Runnable() {
+          @Override
+          public void run() {
+            Thread.currentThread().setName(name + "-" + Thread.currentThread().getId());
+            latch.countDown();
+          }
+        });
+      }
+      try {
+        latch.await(5, TimeUnit.SECONDS);
+      } catch (InterruptedException ie) {
+        throw new RuntimeException(ie);
+      }
+      return nioEventLoopGroup;
     }
 
     @Override
