@@ -142,7 +142,7 @@ class NettyServerHandler extends Http2ConnectionHandler {
       http2Stream.setProperty(NettyServerStream.class, stream);
       String method = determineMethod(streamId, headers);
       ServerStreamListener listener =
-          transportListener.streamCreated(stream, method, Utils.convertHeaders(headers));
+          transportListener.streamCreated(stream, method, Utils.convertHeaders(ctx.channel(), headers));
       stream.setListener(listener);
     } catch (Http2Exception e) {
       throw e;

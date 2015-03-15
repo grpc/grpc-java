@@ -31,6 +31,7 @@
 
 package io.grpc.examples.helloworld;
 
+import io.grpc.GrpcSession;
 import io.grpc.ServerImpl;
 import io.grpc.stub.StreamObserver;
 import io.grpc.transport.netty.NettyServerBuilder;
@@ -81,7 +82,11 @@ public class HelloWorldServer {
 
     @Override
     public void sayHello(HelloRequest req, StreamObserver<HelloResponse> responseObserver) {
-      HelloResponse reply = HelloResponse.newBuilder().setMessage("Hello " + req.getName()).build();
+      String message = "Hello " + req.getName();
+      GrpcSession grpcSession = GrpcSession.get();
+      message += "\nYour address is: " + grpcSession.getRemoteAddress();
+
+      HelloResponse reply = HelloResponse.newBuilder().setMessage(message).build();
       responseObserver.onValue(reply);
       responseObserver.onCompleted();
     }

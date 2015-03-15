@@ -68,7 +68,7 @@ class NettyClientStream extends Http2ClientStream {
     if (endOfStream) {
       transportTrailersReceived(Utils.convertTrailers(headers));
     } else {
-      transportHeadersReceived(Utils.convertHeaders(headers));
+      transportHeadersReceived(Utils.convertHeaders(channel, headers));
     }
   }
 

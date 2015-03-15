@@ -321,6 +321,8 @@ public class ServerImpl implements Server {
     /** Never returns {@code null}. */
     private <ReqT, RespT> ServerStreamListener startCall(ServerStream stream, String fullMethodName,
         ServerMethodDefinition<ReqT, RespT> methodDef, Metadata.Headers headers) {
+      GrpcSession session = headers.getSession();
+
       // TODO(ejona86): should we update fullMethodName to have the canonical path of the method?
       final ServerCallImpl<ReqT, RespT> call = new ServerCallImpl<ReqT, RespT>(stream, methodDef);
       ServerCall.Listener<ReqT> listener
@@ -329,7 +331,7 @@ public class ServerImpl implements Server {
         throw new NullPointerException(
             "startCall() returned a null listener for method " + fullMethodName);
       }
-      return call.newServerStreamListener(listener);
+      return call.newServerStreamListener(listener, session);
     }
   }
 
@@ -483,8 +485,8 @@ public class ServerImpl implements Server {
       return cancelled;
     }
 
-    private ServerStreamListenerImpl newServerStreamListener(ServerCall.Listener<ReqT> listener) {
-      return new ServerStreamListenerImpl(listener);
+    private ServerStreamListenerImpl newServerStreamListener(ServerCall.Listener<ReqT> listener, GrpcSession session) {
+      return new ServerStreamListenerImpl(listener, session);
     }
 
     /**
@@ -493,13 +495,19 @@ public class ServerImpl implements Server {
      */
     private class ServerStreamListenerImpl implements ServerStreamListener {
       private final ServerCall.Listener<ReqT> listener;
+      private final GrpcSession session;
 
-      public ServerStreamListenerImpl(ServerCall.Listener<ReqT> listener) {
+      public ServerStreamListenerImpl(ServerCall.Listener<ReqT> listener, GrpcSession session) {
         this.listener = Preconditions.checkNotNull(listener, "listener must not be null");
+        this.session = session;
       }
 
       @Override
       public void messageRead(final InputStream message) {
+        if (session != null) {
+          GrpcSession.enter(session);
+        }
+
         try {
           if (cancelled) {
             return;
@@ -526,11 +534,17 @@ public class ServerImpl implements Server {
 
       @Override
       public void closed(Status status) {
-        if (status.isOk()) {
-          listener.onComplete();
-        } else {
-          cancelled = true;
-          listener.onCancel();
+        try {
+          if (status.isOk()) {
+            listener.onComplete();
+          } else {
+            cancelled = true;
+            listener.onCancel();
+          }
+        } finally {
+          if (session != null) {
+            GrpcSession.exit();
+          }
         }
       }
 

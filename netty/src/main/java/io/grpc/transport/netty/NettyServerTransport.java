@@ -34,6 +34,7 @@ package io.grpc.transport.netty;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.AbstractService;
 
+import io.grpc.GrpcSession;
 import io.grpc.transport.ServerListener;
 import io.grpc.transport.ServerTransportListener;
 import io.netty.channel.Channel;
@@ -52,9 +53,14 @@ import io.netty.handler.codec.http2.Http2InboundFrameLogger;
 import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
 import io.netty.handler.codec.http2.Http2StreamRemovalPolicy;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslHandler;
+import io.netty.util.Attribute;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GenericFutureListener;
 import io.netty.util.internal.logging.InternalLogLevel;
 
 import javax.annotation.Nullable;
+import javax.security.cert.X509Certificate;
 
 /**
  * The Netty-based server transport.
@@ -101,9 +107,25 @@ class NettyServerTransport extends AbstractService {
       }
     });
 
+    Attribute<GrpcSession> attr = channel.attr(Utils.ATTRIBUTE_KEY_SESSION);
+    assert attr.get() == null;
+    final GrpcSession grpcSession = new GrpcSession(channel.remoteAddress());
+    attr.set(grpcSession);
+
     if (sslContext != null) {
-      channel.pipeline().addLast(Http2Negotiator.serverTls(sslContext.newEngine(channel.alloc())));
+      final SslHandler sslHandler = Http2Negotiator.serverTls(sslContext.newEngine(channel.alloc()));
+      sslHandler.handshakeFuture().addListener(new GenericFutureListener<Future<Channel>>() {
+        @Override
+        public void operationComplete(Future<Channel> future) throws Exception {
+          if (future.isSuccess()) {
+            X509Certificate[] peerCertificateChain = sslHandler.engine().getSession().getPeerCertificateChain();
+            grpcSession.setPeerCertificateChain(peerCertificateChain);
+          }
+        }
+      });
+      channel.pipeline().addLast(sslHandler);
     }
+
     channel.pipeline().addLast(streamRemovalPolicy);
     channel.pipeline().addLast(handler);
 
