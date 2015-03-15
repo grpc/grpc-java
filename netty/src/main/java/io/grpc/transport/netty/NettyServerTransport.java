@@ -117,6 +117,11 @@ class NettyServerTransport extends AbstractService {
     if (sslContext != null) {
       SSLEngine sslEngine = sslContext.newEngine(channel.alloc());
 
+      // Accept, but do not require, client auth
+      // TODO: How to control this (e.g. make mandatory)?
+      sslEngine.setUseClientMode(false);
+      sslEngine.setWantClientAuth(true);
+
       SSLSession sslSession = sslEngine.getSession();
       grpcSession.setSslSession(sslSession);
 

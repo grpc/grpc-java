@@ -47,8 +47,12 @@ import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 
-import java.io.InputStream;
+import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.net.ssl.SSLSession;
 import java.io.IOException;
+import java.io.InputStream;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateEncodingException;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Random;
@@ -106,6 +110,29 @@ public class TestServiceImpl implements TestServiceGrpc.TestService {
     if (req.getFillRemoteAddress()) {
       GrpcSession session = GrpcSession.get();
       responseBuilder.setRemoteAddress(session.getRemoteAddress().toString());
+    }
+    if (req.getFillTlsInfo()) {
+      GrpcSession session = GrpcSession.get();
+      SSLSession sslSession = session.getSslSession();
+      if (sslSession != null) {
+        responseBuilder.setTlsInfo(sslSession.getProtocol() + ":" + sslSession.getCipherSuite());
+      }
+    }
+    if (req.getFillClientCert()) {
+      GrpcSession session = GrpcSession.get();
+      SSLSession sslSession = session.getSslSession();
+      try {
+        Certificate[] peerCertificates = sslSession.getPeerCertificates();
+        for (Certificate peerCertificate : peerCertificates) {
+          responseBuilder.addClientCert(ByteString.copyFrom(peerCertificate.getEncoded()));
+        }
+      } catch (SSLPeerUnverifiedException e) {
+        // Leave it empty to indicate no cert
+        throw new RuntimeException(e);
+      } catch (CertificateEncodingException e) {
+        throw new RuntimeException(e);
+      }
+
     }
     responseObserver.onValue(responseBuilder.build());
     responseObserver.onCompleted();

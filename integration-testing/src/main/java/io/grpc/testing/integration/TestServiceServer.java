@@ -39,6 +39,8 @@ import io.grpc.testing.TestUtils;
 import io.grpc.transport.netty.NettyServerBuilder;
 import io.netty.handler.ssl.SslContext;
 
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.TrustManagerFactory;
 import java.io.File;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -134,9 +136,40 @@ public class TestServiceServer {
     executor = Executors.newSingleThreadScheduledExecutor();
     SslContext sslContext = null;
     if (useTls) {
-      sslContext = SslContext.newServerContext(Util.loadCert("server1.pem"),
-                                               Util.loadCert("server1.key"));
+      SslProvider provider = null;
+      File trustCertChainFile = null;
+      TrustManagerFactory trustManagerFactory = null;
+
+      File keyCertChainFile = null;
+      File keyFile = null;
+      String keyPassword = null;
+      KeyManagerFactory keyManagerFactory = null;
+
+      Iterable<String> ciphers = null;
+      CipherSuiteFilter cipherFilter = IdentityCipherSuiteFilter.INSTANCE;
+      ApplicationProtocolConfig apn = null;
+      long sessionCacheSize = 0;
+      long sessionTimeout = 0;
+
+      keyCertChainFile = Util.loadCert("server1.pem");
+      keyFile = Util.loadCert("server1.key");
+
+      ciphers = Util.reasonableCiphers();
+
+      // OpenSSL provider ignores trustCertChainFile?
+      provider = SslProvider.JDK;
+
+      trustCertChainFile = Util.loadCert("ca.pem");
+
+      sslContext = SslContext.newServerContext(provider,
+          trustCertChainFile, trustManagerFactory,
+          keyCertChainFile, keyFile, keyPassword, keyManagerFactory,
+          ciphers, cipherFilter,
+          apn,
+          sessionCacheSize,
+          sessionTimeout);
     }
+
     server = NettyServerBuilder.forPort(port)
         .sslContext(sslContext)
         .addService(ServerInterceptors.intercept(

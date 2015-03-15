@@ -42,6 +42,7 @@ import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import com.google.common.collect.Lists;
 import com.google.common.net.HostAndPort;
 import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.SettableFuture;
@@ -77,7 +78,11 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.io.ByteArrayInputStream;
 import java.net.InetSocketAddress;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -169,6 +174,42 @@ public abstract class AbstractTransportTest {
     HostAndPort remoteAddress = HostAndPort.fromString(response.getRemoteAddress());
     assertEquals("/127.0.0.1", remoteAddress.getHostText());
     assertNotEquals(0, remoteAddress.getPort());
+  }
+
+  @Test(timeout = 10000)
+  public void tlsInfo(boolean expectTls) throws Exception {
+    final SimpleRequest request = SimpleRequest.newBuilder()
+        .setFillTlsInfo(true)
+        .build();
+
+    SimpleResponse response = blockingStub.unaryCall(request);
+    if (!expectTls) {
+      assertEquals("", response.getTlsInfo());
+    } else {
+      assertEquals("??", response.getTlsInfo());
+    }
+  }
+
+  @Test(timeout = 10000)
+  public void clientCert(boolean expectCert) throws Exception {
+    final SimpleRequest request = SimpleRequest.newBuilder()
+        .setFillClientCert(true)
+        .build();
+
+    SimpleResponse response = blockingStub.unaryCall(request);
+    if (!expectCert) {
+      assertEquals(0, response.getClientCertCount());
+    } else {
+      List<X509Certificate> certificates = Lists.newArrayList();
+      for (ByteString certificateBytes : response.getClientCertList()) {
+        CertificateFactory cf = CertificateFactory.getInstance("X.509");
+        X509Certificate cert = (X509Certificate)cf.generateCertificate(certificateBytes.newInput());
+        certificates.add(cert);
+      }
+      assertEquals(2, certificates.size());
+      assertEquals("??", certificates.get(0).getSubjectDN().toString());
+      assertEquals("??", certificates.get(1).getSubjectDN().toString());
+    }
   }
 
   @Test(timeout = 10000)

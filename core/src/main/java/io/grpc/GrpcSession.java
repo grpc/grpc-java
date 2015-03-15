@@ -36,7 +36,9 @@ public class GrpcSession {
    * @return active GrpcSession
    */
   public static GrpcSession get() {
-    return THREAD_LOCAL.get();
+    GrpcSession session = THREAD_LOCAL.get();
+    assert session != null;
+    return session;
   }
 
   /**

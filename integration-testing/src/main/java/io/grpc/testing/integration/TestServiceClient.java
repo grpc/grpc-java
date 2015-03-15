@@ -38,11 +38,14 @@ import io.grpc.transport.okhttp.OkHttpChannelBuilder;
 import io.netty.handler.ssl.SslContext;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 
+import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLException;
+import javax.net.ssl.TrustManagerFactory;
 
 /**
  * Application that starts a client for the {@link TestServiceGrpc.TestService} and runs through a
@@ -82,6 +85,7 @@ public class TestServiceClient {
   private String testCase = "empty_unary";
   private boolean useTls = true;
   private boolean useTestCa;
+  private boolean useTestClientCert;
   private boolean useOkHttp;
 
   private Tester tester = new Tester();
@@ -118,6 +122,8 @@ public class TestServiceClient {
         useTls = Boolean.parseBoolean(value);
       } else if ("use_test_ca".equals(key)) {
         useTestCa = Boolean.parseBoolean(value);
+      } else if ("use_test_client_cert".equals(key)) {
+        useTestClientCert = Boolean.parseBoolean(value);
       } else if ("use_okhttp".equals(key)) {
         useOkHttp = Boolean.parseBoolean(value);
       } else if ("grpc_version".equals(key)) {
@@ -144,6 +150,7 @@ public class TestServiceClient {
           + "\n  --test_case=TESTCASE        Test case to run. Default " + c.testCase
           + "\n  --use_tls=true|false        Whether to use TLS. Default " + c.useTls
           + "\n  --use_test_ca=true|false    Whether to trust our fake CA. Default " + c.useTestCa
+          + "\n  --use_test_client_cert=true|false    Whether to use the fake CA. Default " + c.useTestClientCert
           + "\n  --use_okhttp=true|false     Whether to use OkHttp instead of Netty. Default "
             + c.useOkHttp
       );
@@ -190,6 +197,10 @@ public class TestServiceClient {
       tester.pingPong();
     } else if ("remote_address".equals(testCase)) {
       tester.remoteAddress();
+    } else if ("client_cert".equals(testCase)) {
+      tester.clientCert(useTestClientCert);
+    } else if ("tls_info".equals(testCase)) {
+      tester.tlsInfo(useTls);
     } else if ("empty_stream".equals(testCase)) {
       tester.emptyStream();
     } else if ("cancel_after_begin".equals(testCase)) {
@@ -216,13 +227,46 @@ public class TestServiceClient {
           throw new RuntimeException(ex);
         }
         SslContext sslContext = null;
-        if (useTestCa) {
+        if (useTls) {
           try {
-            sslContext = SslContext.newClientContext(Util.loadCert("ca.pem"));
+            SslProvider provider = null;
+            File trustCertChainFile = null;
+            TrustManagerFactory trustManagerFactory = null;
+            File keyCertChainFile = null;
+            File keyFile = null;
+            String keyPassword = null;
+            KeyManagerFactory keyManagerFactory = null;
+            Iterable<String> ciphers = null;
+            CipherSuiteFilter cipherFilter = IdentityCipherSuiteFilter.INSTANCE;
+            ApplicationProtocolConfig apn = null;
+            long sessionCacheSize = 0;
+            long sessionTimeout = 0;
+
+            if (useTestCa) {
+              trustCertChainFile = Util.loadCert("ca.pem");
+            }
+
+            if (useTestClientCert) {
+              // OpenSSL provider does not support client keys??
+              provider = SslProvider.JDK;
+
+              keyCertChainFile = Util.loadCert("client.pem");
+              keyFile = Util.loadCert("client.key");
+              keyPassword = null;
+            }
+
+            ciphers = Util.reasonableCiphers();
+
+            sslContext = SslContext.newClientContext(provider, trustCertChainFile, trustManagerFactory,
+                keyCertChainFile, keyFile, keyPassword, keyManagerFactory,
+                ciphers, cipherFilter,
+                apn,
+                sessionCacheSize, sessionTimeout);
           } catch (Exception ex) {
             throw new RuntimeException(ex);
           }
         }
+
         return NettyChannelBuilder.forAddress(new InetSocketAddress(address, serverPort))
             .negotiationType(useTls ? NegotiationType.TLS : NegotiationType.PLAINTEXT)
             .sslContext(sslContext)
