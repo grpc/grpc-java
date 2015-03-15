@@ -35,11 +35,17 @@ import static io.grpc.testing.integration.Messages.PayloadType.COMPRESSABLE;
 import static io.grpc.testing.integration.Util.assertEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import com.google.common.net.HostAndPort;
+import com.google.common.net.InetAddresses;
+import com.google.common.util.concurrent.SettableFuture;
+import com.google.common.util.concurrent.Uninterruptibles;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.EmptyProtos.Empty;
 
@@ -71,6 +77,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -150,6 +157,18 @@ public abstract class AbstractTransportTest {
         .build();
 
     assertEquals(goldenResponse, blockingStub.unaryCall(request));
+  }
+
+  @Test(timeout = 10000)
+  public void remoteAddress() throws Exception {
+    final SimpleRequest request = SimpleRequest.newBuilder()
+        .setFillRemoteAddress(true)
+        .build();
+
+    SimpleResponse response = blockingStub.unaryCall(request);
+    HostAndPort remoteAddress = HostAndPort.fromString(response.getRemoteAddress());
+    assertEquals("/127.0.0.1", remoteAddress.getHostText());
+    assertNotEquals(0, remoteAddress.getPort());
   }
 
   @Test(timeout = 10000)

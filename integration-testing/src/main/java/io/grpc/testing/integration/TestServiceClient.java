@@ -188,6 +188,8 @@ public class TestServiceClient {
       tester.serverStreaming();
     } else if ("ping_pong".equals(testCase)) {
       tester.pingPong();
+    } else if ("remote_address".equals(testCase)) {
+      tester.remoteAddress();
     } else if ("empty_stream".equals(testCase)) {
       tester.emptyStream();
     } else if ("cancel_after_begin".equals(testCase)) {
