@@ -122,8 +122,7 @@ class NettyServerTransport extends AbstractService {
       sslEngine.setUseClientMode(false);
       sslEngine.setWantClientAuth(true);
 
-      SSLSession sslSession = sslEngine.getSession();
-      grpcSession.setSslSession(sslSession);
+      grpcSession.setSslEngine(sslEngine);
 
       channel.pipeline().addLast(Http2Negotiator.serverTls(sslEngine));
     }

@@ -186,7 +186,7 @@ public abstract class AbstractTransportTest {
     if (!expectTls) {
       assertEquals("", response.getTlsInfo());
     } else {
-      assertEquals("??", response.getTlsInfo());
+      assertEquals("TLSv1.2:TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA", response.getTlsInfo());
     }
   }
 
@@ -206,9 +206,8 @@ public abstract class AbstractTransportTest {
         X509Certificate cert = (X509Certificate)cf.generateCertificate(certificateBytes.newInput());
         certificates.add(cert);
       }
-      assertEquals(2, certificates.size());
-      assertEquals("??", certificates.get(0).getSubjectDN().toString());
-      assertEquals("??", certificates.get(1).getSubjectDN().toString());
+      assertEquals(1, certificates.size());
+      assertEquals("CN=testclient, O=Internet Widgits Pty Ltd, ST=Some-State, C=AU", certificates.get(0).getSubjectDN().toString());
     }
   }
 

@@ -1,5 +1,6 @@
 package io.grpc;
 
+import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLSession;
 import javax.security.cert.X509Certificate;
 import java.net.SocketAddress;
@@ -10,7 +11,7 @@ import java.net.SocketAddress;
 public class GrpcSession {
 
   private final SocketAddress remoteAddress;
-  private SSLSession sslSession;
+  private SSLEngine sslEngine;
 
   public GrpcSession(SocketAddress remoteAddress) {
     this.remoteAddress = remoteAddress;
@@ -20,12 +21,8 @@ public class GrpcSession {
     return remoteAddress;
   }
 
-  public void setSslSession(SSLSession sslSession) {
-    this.sslSession = sslSession;
-  }
-
   public SSLSession getSslSession() {
-    return sslSession;
+    return sslEngine.getSession();
   }
 
   static final ThreadLocal<GrpcSession> THREAD_LOCAL = new ThreadLocal<GrpcSession>();
@@ -61,5 +58,9 @@ public class GrpcSession {
   static void exit() {
     assert THREAD_LOCAL.get() != null;
     THREAD_LOCAL.set(null);
+  }
+
+  public void setSslEngine(SSLEngine sslEngine) {
+    this.sslEngine = sslEngine;
   }
 }

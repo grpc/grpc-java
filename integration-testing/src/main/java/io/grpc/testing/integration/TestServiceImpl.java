@@ -128,7 +128,6 @@ public class TestServiceImpl implements TestServiceGrpc.TestService {
         }
       } catch (SSLPeerUnverifiedException e) {
         // Leave it empty to indicate no cert
-        throw new RuntimeException(e);
       } catch (CertificateEncodingException e) {
         throw new RuntimeException(e);
       }
