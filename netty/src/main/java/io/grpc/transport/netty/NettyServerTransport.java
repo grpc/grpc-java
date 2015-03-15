@@ -60,6 +60,8 @@ import io.netty.util.concurrent.GenericFutureListener;
 import io.netty.util.internal.logging.InternalLogLevel;
 
 import javax.annotation.Nullable;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLSession;
 import javax.security.cert.X509Certificate;
 
 /**
@@ -113,17 +115,12 @@ class NettyServerTransport extends AbstractService {
     attr.set(grpcSession);
 
     if (sslContext != null) {
-      final SslHandler sslHandler = Http2Negotiator.serverTls(sslContext.newEngine(channel.alloc()));
-      sslHandler.handshakeFuture().addListener(new GenericFutureListener<Future<Channel>>() {
-        @Override
-        public void operationComplete(Future<Channel> future) throws Exception {
-          if (future.isSuccess()) {
-            X509Certificate[] peerCertificateChain = sslHandler.engine().getSession().getPeerCertificateChain();
-            grpcSession.setPeerCertificateChain(peerCertificateChain);
-          }
-        }
-      });
-      channel.pipeline().addLast(sslHandler);
+      SSLEngine sslEngine = sslContext.newEngine(channel.alloc());
+
+      SSLSession sslSession = sslEngine.getSession();
+      grpcSession.setSslSession(sslSession);
+
+      channel.pipeline().addLast(Http2Negotiator.serverTls(sslEngine));
     }
 
     channel.pipeline().addLast(streamRemovalPolicy);

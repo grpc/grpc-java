@@ -100,7 +100,7 @@ public class Http2Negotiator {
   /**
    * Create a TLS handler for HTTP/2 capable of using ALPN/NPN.
    */
-  public static SslHandler serverTls(SSLEngine sslEngine) {
+  public static ChannelHandler serverTls(SSLEngine sslEngine) {
     Preconditions.checkNotNull(sslEngine, "sslEngine");
     if (!installJettyTlsProtocolSelection(sslEngine, SettableFuture.<Void>create(), true)) {
       throw new IllegalStateException("NPN/ALPN extensions not installed");

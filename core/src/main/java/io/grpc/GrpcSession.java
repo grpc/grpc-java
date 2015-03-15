@@ -1,5 +1,6 @@
 package io.grpc;
 
+import javax.net.ssl.SSLSession;
 import javax.security.cert.X509Certificate;
 import java.net.SocketAddress;
 
@@ -9,18 +10,22 @@ import java.net.SocketAddress;
 public class GrpcSession {
 
   private final SocketAddress remoteAddress;
-  private X509Certificate[] peerCertificateChain;
+  private SSLSession sslSession;
 
   public GrpcSession(SocketAddress remoteAddress) {
     this.remoteAddress = remoteAddress;
   }
 
-  public void setPeerCertificateChain(X509Certificate[] peerCertificateChain) {
-    this.peerCertificateChain = peerCertificateChain;
+  public SocketAddress getRemoteAddress() {
+    return remoteAddress;
   }
 
-  public X509Certificate[] getPeerCertificateChain() {
-    return peerCertificateChain;
+  public void setSslSession(SSLSession sslSession) {
+    this.sslSession = sslSession;
+  }
+
+  public SSLSession getSslSession() {
+    return sslSession;
   }
 
   static final ThreadLocal<GrpcSession> THREAD_LOCAL = new ThreadLocal<GrpcSession>();
@@ -54,9 +59,5 @@ public class GrpcSession {
   static void exit() {
     assert THREAD_LOCAL.get() != null;
     THREAD_LOCAL.set(null);
-  }
-
-  public SocketAddress getRemoteAddress() {
-    return remoteAddress;
   }
 }
