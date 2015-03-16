@@ -91,6 +91,17 @@ public abstract class ServerCall<ResponseT> {
      * <p>There will be no further callbacks for the call.
      */
     public abstract void onComplete();
+
+    /**
+     * This indicates that the call is now capable of sending the given number of messages (via
+     * {@link #sendPayload}) without requiring additional buffering internally. This event is
+     * just a suggestion and the application is free to ignore it, however doing so may
+     * result in excessive buffering within the call.
+     *
+     * @param numMessages the number of messages that can be sent without requiring additional
+     *        buffering.
+     */
+    public void onReady(int numMessages){}
   }
 
   /**
