@@ -89,6 +89,17 @@ public abstract class Call<RequestT, ResponseT> {
      * @param trailers metadata provided at call completion.
      */
     public abstract void onClose(Status status, Metadata.Trailers trailers);
+
+    /**
+     * This indicates that the Call is now capable of sending the given number of messages (via
+     * {@link #sendPayload}) without requiring additional buffering internally. This event is
+     * just a suggestion and the application is free to ignore it, however doing so may
+     * result in excessive buffering within the Call.
+     *
+     * @param numMessages the number of messages that can be sent without requiring additional
+     *        buffering.
+     */
+    public void onReady(int numMessages){}
   }
 
   /**
