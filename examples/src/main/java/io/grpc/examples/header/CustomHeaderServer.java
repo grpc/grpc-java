@@ -14,8 +14,8 @@ import java.util.logging.Logger;
  * A simple server that like {@link io.grpc.examples.helloworld.HelloWorldServer}.
  * You can get and response any header in {@link io.grpc.examples.header.HeaderServerInterceptor}
  */
-public class HelloWorldServer {
-  private static final Logger logger = Logger.getLogger(HelloWorldServer.class.getName());
+public class CustomHeaderServer {
+  private static final Logger logger = Logger.getLogger(CustomHeaderServer.class.getName());
 
   /* The port on which the server should run */
   private static final int port = 50051;
@@ -31,7 +31,7 @@ public class HelloWorldServer {
       public void run() {
         // Use stderr here since the logger may have been reset by its JVM shutdown hook.
         System.err.println("*** shutting down gRPC server since JVM is shutting down");
-        HelloWorldServer.this.stop();
+        CustomHeaderServer.this.stop();
         System.err.println("*** server shut down");
       }
     });
@@ -47,7 +47,7 @@ public class HelloWorldServer {
    * Main launches the server from the command line.
    */
   public static void main(String[] args) throws Exception {
-    final HelloWorldServer server = new HelloWorldServer();
+    final CustomHeaderServer server = new CustomHeaderServer();
     server.start();
   }
 

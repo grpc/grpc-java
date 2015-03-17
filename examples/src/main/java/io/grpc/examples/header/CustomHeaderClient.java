@@ -1,9 +1,6 @@
 package io.grpc.examples.header;
 
-import io.grpc.Channel;
-import io.grpc.ChannelImpl;
-import io.grpc.ClientInterceptor;
-import io.grpc.ClientInterceptors;
+import io.grpc.*;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.examples.helloworld.HelloResponse;
@@ -18,13 +15,13 @@ import java.util.logging.Logger;
  * A simple client that like {@link io.grpc.examples.helloworld.HelloWorldClient}.
  * This client can help you create custom headers.
  */
-public class HelloWorldClient {
-  private static final Logger logger = Logger.getLogger(HelloWorldClient.class.getName());
+public class CustomHeaderClient {
+  private static final Logger logger = Logger.getLogger(CustomHeaderClient.class.getName());
 
   private final ChannelImpl originChannel;
   private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
-  public HelloWorldClient(String host, int port) {
+  public CustomHeaderClient(String host, int port) {
     originChannel =
             NettyChannelBuilder.forAddress(host, port).negotiationType(NegotiationType.PLAINTEXT)
                     .build();
@@ -49,7 +46,7 @@ public class HelloWorldClient {
   }
 
   public static void main(String[] args) throws Exception {
-    HelloWorldClient client = new HelloWorldClient("localhost", 50051);
+    CustomHeaderClient client = new CustomHeaderClient("localhost", 50051);
     try {
       /* Access a service running on the local machine on port 50051 */
       String user = "world";
