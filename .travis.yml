@@ -1,0 +1,20 @@
+language: java
+
+sudo: false
+
+install: .buildscript/make_dependencies.sh
+
+script: ./gradlew install
+
+jdk:
+  - openjdk8
+
+os:
+  - linux
+
+branches:
+  only:
+    - master
+
+notifications:
+  email: false
