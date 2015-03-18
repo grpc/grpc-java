@@ -1,7 +1,5 @@
 language: java
 
-sudo: false
-
 install: .buildscript/make_dependencies.sh
 
 script: ./gradlew install
