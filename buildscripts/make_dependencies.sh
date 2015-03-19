@@ -13,7 +13,6 @@ set -ev
 #find . -name '*.deb' -exec dpkg --extract {} . \;
 #export CXX="/tmp/gcc/usr/bin/g++-4.8"
 #export CC="/tmp/gcc/usr/bin/gcc-4.8"
-#export ACLOCAL="/usr/bin/aclocal"
 #popd
 
 export CXXFLAGS="--std=c++0x"
@@ -25,8 +24,8 @@ cd protobuf-3.0.0-alpha-2
 ./autogen.sh
 # install here so we don't need sudo
 ./configure --prefix=/tmp/grpc-deps
-make -j12
-make check -j12
+make -j2
+# make check -j2
 make install
 cd java
 mvn install

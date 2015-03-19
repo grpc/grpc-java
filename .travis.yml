@@ -7,9 +7,8 @@ env:
 install:
   - buildscripts/make_dependencies.sh # build protoc into /tmp/grpc-deps
 
-script:
+before_script:
   - export PATH=/tmp/grpc-deps/bin:$PATH
-  - ./gradlew install
 
 jdk:
   - oraclejdk8
