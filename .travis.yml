@@ -2,10 +2,10 @@ language: java
 
 env:
   global:
-    - CXXFLAGS=--std=c++0x
+    - CXXFLAGS="--std=c++0x"
 
 install:
-  - buildscripts/make_dependencies.sh
+  - buildscripts/make_dependencies.sh # build protoc into /tmp/grpc-deps
 
 script:
   - export PATH=/tmp/grpc-deps/bin:$PATH
