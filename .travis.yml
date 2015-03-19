@@ -1,10 +1,13 @@
 language: java
 
+env: CXX=/tmp/gcc/usr/bin/g++-4.8 CC=/tmp/gcc/usr/bin/gcc-4.8
+
 install:
-  - export PATH=/tmp/grpc-deps/bin:$PATH
   - buildscripts/make_dependencies.sh
 
-script: ./gradlew install
+script:
+  - export PATH=/tmp/grpc-deps/bin:$PATH
+  - ./gradlew install
 
 jdk:
   - oraclejdk8
