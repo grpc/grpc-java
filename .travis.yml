@@ -1,6 +1,8 @@
 language: java
 
-env: CXX=/tmp/gcc/usr/bin/g++-4.8 CC=/tmp/gcc/usr/bin/gcc-4.8
+env:
+  global:
+    - CXXFLAGS=--std=c++0x
 
 install:
   - buildscripts/make_dependencies.sh
