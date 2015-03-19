@@ -10,10 +10,11 @@ git clone https://github.com/google/protobuf.git
 cd protobuf
 git checkout v3.0.0-alpha-2
 ./autogen.sh
-./configure
+# install here so we don't need sudo
+./configure --prefix=/tmp/grpc-deps
 make
 make check
-sudo make install
+make install
 cd java
 mvn install
 cd ../javanano

@@ -1,11 +1,13 @@
 language: java
 
-install: .buildscript/make_dependencies.sh
+install:
+  - export PATH=/tmp/grpc-deps/bin:$PATH
+  - buildscripts/make_dependencies.sh
 
 script: ./gradlew install
 
 jdk:
-  - openjdk8
+  - oraclejdk8
 
 os:
   - linux
