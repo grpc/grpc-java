@@ -35,7 +35,11 @@ import io.grpc.ChannelImpl;
 import io.grpc.transport.netty.NegotiationType;
 import io.grpc.transport.netty.NettyChannelBuilder;
 import io.grpc.transport.okhttp.OkHttpChannelBuilder;
+import io.netty.handler.ssl.ApplicationProtocolConfig;
+import io.netty.handler.ssl.CipherSuiteFilter;
+import io.netty.handler.ssl.IdentityCipherSuiteFilter;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslProvider;
 
 import java.io.File;
 import java.io.IOException;
@@ -196,7 +200,7 @@ public class TestServiceClient {
     } else if ("ping_pong".equals(testCase)) {
       tester.pingPong();
     } else if ("remote_address".equals(testCase)) {
-      tester.remoteAddress();
+      tester.testRemoteAddress("/127.0.0.1");
     } else if ("client_cert".equals(testCase)) {
       tester.clientCert(useTestClientCert);
     } else if ("tls_info".equals(testCase)) {
@@ -254,8 +258,6 @@ public class TestServiceClient {
               keyFile = Util.loadCert("client.key");
               keyPassword = null;
             }
-
-            ciphers = Util.reasonableCiphers();
 
             sslContext = SslContext.newClientContext(provider, trustCertChainFile, trustManagerFactory,
                 keyCertChainFile, keyFile, keyPassword, keyManagerFactory,

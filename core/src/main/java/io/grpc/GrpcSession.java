@@ -22,6 +22,9 @@ public class GrpcSession {
   }
 
   public SSLSession getSslSession() {
+    if (sslEngine == null) {
+      return null;
+    }
     return sslEngine.getSession();
   }
 

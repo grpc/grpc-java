@@ -504,10 +504,6 @@ public class ServerImpl implements Server {
 
       @Override
       public void messageRead(final InputStream message) {
-        if (session != null) {
-          GrpcSession.enter(session);
-        }
-
         try {
           if (cancelled) {
             return;
@@ -529,22 +525,26 @@ public class ServerImpl implements Server {
           return;
         }
 
-        listener.onHalfClose();
-      }
+        if (session != null) {
+          GrpcSession.enter(session);
+        }
 
-      @Override
-      public void closed(Status status) {
         try {
-          if (status.isOk()) {
-            listener.onComplete();
-          } else {
-            cancelled = true;
-            listener.onCancel();
-          }
+          listener.onHalfClose();
         } finally {
           if (session != null) {
             GrpcSession.exit();
           }
+        }
+      }
+
+      @Override
+      public void closed(Status status) {
+        if (status.isOk()) {
+          listener.onComplete();
+        } else {
+          cancelled = true;
+          listener.onCancel();
         }
       }
 

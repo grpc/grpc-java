@@ -122,6 +122,9 @@ public abstract class AbstractTransportTest {
   protected TestServiceGrpc.TestServiceBlockingStub blockingStub;
   protected TestServiceGrpc.TestService asyncStub;
 
+  protected boolean useTls = false;
+  protected boolean useTestClientCert = false;
+
   /**
    * Must be called by the subclass setup method if overriden.
    */
@@ -164,8 +167,7 @@ public abstract class AbstractTransportTest {
     assertEquals(goldenResponse, blockingStub.unaryCall(request));
   }
 
-  @Test(timeout = 10000)
-  public void remoteAddress() throws Exception {
+  public void testRemoteAddress(String expectRemoteAddress) throws Exception {
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setFillRemoteAddress(true)
         .build();
@@ -177,7 +179,11 @@ public abstract class AbstractTransportTest {
   }
 
   @Test(timeout = 10000)
-  public void tlsInfo(boolean expectTls) throws Exception {
+  public void tlsInfo() throws Exception {
+    tlsInfo(useTls);
+  }
+
+  protected void tlsInfo(boolean expectTls) {
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setFillTlsInfo(true)
         .build();
@@ -191,6 +197,10 @@ public abstract class AbstractTransportTest {
   }
 
   @Test(timeout = 10000)
+  public void clientCert() throws Exception {
+    clientCert(useTestClientCert);
+  }
+
   public void clientCert(boolean expectCert) throws Exception {
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setFillClientCert(true)

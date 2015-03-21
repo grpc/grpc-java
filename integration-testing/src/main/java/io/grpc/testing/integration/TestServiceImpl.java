@@ -121,17 +121,18 @@ public class TestServiceImpl implements TestServiceGrpc.TestService {
     if (req.getFillClientCert()) {
       GrpcSession session = GrpcSession.get();
       SSLSession sslSession = session.getSslSession();
-      try {
-        Certificate[] peerCertificates = sslSession.getPeerCertificates();
-        for (Certificate peerCertificate : peerCertificates) {
-          responseBuilder.addClientCert(ByteString.copyFrom(peerCertificate.getEncoded()));
+      if (sslSession != null) {
+        try {
+          Certificate[] peerCertificates = sslSession.getPeerCertificates();
+          for (Certificate peerCertificate : peerCertificates) {
+            responseBuilder.addClientCert(ByteString.copyFrom(peerCertificate.getEncoded()));
+          }
+        } catch (SSLPeerUnverifiedException e) {
+          // Leave it empty to indicate no cert
+        } catch (CertificateEncodingException e) {
+          throw new RuntimeException(e);
         }
-      } catch (SSLPeerUnverifiedException e) {
-        // Leave it empty to indicate no cert
-      } catch (CertificateEncodingException e) {
-        throw new RuntimeException(e);
       }
-
     }
     responseObserver.onValue(responseBuilder.build());
     responseObserver.onCompleted();

@@ -37,7 +37,11 @@ import io.grpc.ServerImpl;
 import io.grpc.ServerInterceptors;
 import io.grpc.testing.TestUtils;
 import io.grpc.transport.netty.NettyServerBuilder;
+import io.netty.handler.ssl.ApplicationProtocolConfig;
+import io.netty.handler.ssl.CipherSuiteFilter;
+import io.netty.handler.ssl.IdentityCipherSuiteFilter;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslProvider;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.TrustManagerFactory;
@@ -153,8 +157,6 @@ public class TestServiceServer {
 
       keyCertChainFile = Util.loadCert("server1.pem");
       keyFile = Util.loadCert("server1.key");
-
-      ciphers = Util.reasonableCiphers();
 
       // OpenSSL provider ignores trustCertChainFile?
       provider = SslProvider.JDK;

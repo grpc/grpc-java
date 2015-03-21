@@ -100,8 +100,7 @@ class Utils {
       headers.setPath(http2Headers.path().toString());
     }
     Attribute<GrpcSession> attr = channel.attr(ATTRIBUTE_KEY_SESSION);
-    assert attr != null;
-    if (attr.get() != null) {
+    if (attr != null && attr.get() != null) {
       headers.setSession(attr.get());
     }
     return headers;

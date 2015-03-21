@@ -122,18 +122,4 @@ public class Util {
     }
   }
 
-  public static List<String> reasonableCiphers() {
-    List<String> ciphers = Lists.newArrayList();
-    ciphers.add("TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA");
-    ciphers.add("TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA");
-
-    ciphers.add("TLS_DHE_RSA_WITH_AES_128_CBC_SHA");
-    ciphers.add("SSL_DHE_RSA_WITH_3DES_EDE_CBC_SHA");
-    ciphers.add("TLS_RSA_WITH_AES_128_CBC_SHA");
-    ciphers.add("SSL_RSA_WITH_3DES_EDE_CBC_SHA");
-
-    ciphers.add("TLS_DHE_DSS_WITH_AES_128_CBC_SHA");
-    ciphers.add("SSL_DHE_DSS_WITH_3DES_EDE_CBC_SHA");
-    return ciphers;
-  }
 }
