@@ -93,6 +93,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import javax.net.ssl.SSLException;
+
 /**
  * Abstract base class for all GRPC transport tests.
  */
@@ -123,13 +125,14 @@ public abstract class AbstractTransportTest {
   protected TestServiceGrpc.TestService asyncStub;
 
   protected boolean useTls = false;
+  protected boolean useTestCa = true;
   protected boolean useTestClientCert = false;
 
   /**
    * Must be called by the subclass setup method if overriden.
    */
   @Before
-  public void setUp() {
+  public void setUp() throws Exception {
     channel = createChannel();
     blockingStub = TestServiceGrpc.newBlockingStub(channel);
     asyncStub = TestServiceGrpc.newStub(channel);
@@ -143,7 +146,7 @@ public abstract class AbstractTransportTest {
     }
   }
 
-  protected abstract ChannelImpl createChannel();
+  protected abstract ChannelImpl createChannel() throws Exception;
 
   @Test(timeout = 10000)
   public void emptyUnary() throws Exception {

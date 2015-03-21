@@ -31,11 +31,16 @@
 
 package io.grpc.testing.integration;
 
-import com.google.common.collect.Lists;
+import com.google.common.base.Throwables;
 import com.google.protobuf.MessageLite;
 
 import io.grpc.Metadata;
 import io.grpc.proto.ProtoUtils;
+import io.netty.handler.ssl.ApplicationProtocolConfig;
+import io.netty.handler.ssl.CipherSuiteFilter;
+import io.netty.handler.ssl.IdentityCipherSuiteFilter;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslProvider;
 
 import org.junit.Assert;
 
@@ -47,6 +52,10 @@ import java.io.InputStream;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.List;
+
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLException;
+import javax.net.ssl.TrustManagerFactory;
 
 /**
  * Utility methods to support integration testing.
@@ -122,4 +131,82 @@ public class Util {
     }
   }
 
+  public static SslContext buildServerSslContext() throws SSLException {
+    SslProvider provider = null;
+    File trustCertChainFile = null;
+    TrustManagerFactory trustManagerFactory = null;
+
+    File keyCertChainFile = null;
+    File keyFile = null;
+    String keyPassword = null;
+    KeyManagerFactory keyManagerFactory = null;
+
+    Iterable<String> ciphers = null;
+    CipherSuiteFilter cipherFilter = IdentityCipherSuiteFilter.INSTANCE;
+    ApplicationProtocolConfig apn = null;
+    long sessionCacheSize = 0;
+    long sessionTimeout = 0;
+
+    try {
+      keyCertChainFile = Util.loadCert("server1.pem");
+      keyFile = Util.loadCert("server1.key");
+
+      // OpenSSL provider ignores trustCertChainFile?
+      provider = SslProvider.JDK;
+
+      trustCertChainFile = Util.loadCert("ca.pem");
+    } catch (IOException e) {
+      throw new RuntimeException("Error building SSL configuration", e);
+    }
+
+    SslContext sslContext = SslContext.newServerContext(provider,
+                                                        trustCertChainFile, trustManagerFactory,
+                                                        keyCertChainFile, keyFile, keyPassword,
+                                                        keyManagerFactory,
+                                                        ciphers, cipherFilter,
+                                                        apn,
+                                                        sessionCacheSize,
+                                                        sessionTimeout);
+
+    return sslContext;
+  }
+
+  public static SslContext buildClientSslContext(boolean useTestCa, boolean useTestClientCert)
+      throws SSLException {
+    SslProvider provider = null;
+    File trustCertChainFile = null;
+    TrustManagerFactory trustManagerFactory = null;
+    File keyCertChainFile = null;
+    File keyFile = null;
+    String keyPassword = null;
+    KeyManagerFactory keyManagerFactory = null;
+    Iterable<String> ciphers = null;
+    CipherSuiteFilter cipherFilter = IdentityCipherSuiteFilter.INSTANCE;
+    ApplicationProtocolConfig apn = null;
+    long sessionCacheSize = 0;
+    long sessionTimeout = 0;
+
+    try {
+      if (useTestCa) {
+        trustCertChainFile = Util.loadCert("ca.pem");
+      }
+
+      if (useTestClientCert) {
+        // OpenSSL provider does not support client keys??
+        provider = SslProvider.JDK;
+
+        keyCertChainFile = Util.loadCert("client.pem");
+        keyFile = Util.loadCert("client.key");
+        keyPassword = null;
+      }
+    } catch (IOException e) {
+      throw new RuntimeException("Error building SSL configuration", e);
+    }
+
+    return SslContext.newClientContext(provider, trustCertChainFile, trustManagerFactory,
+                                       keyCertChainFile, keyFile, keyPassword, keyManagerFactory,
+                                       ciphers, cipherFilter,
+                                       apn,
+                                       sessionCacheSize, sessionTimeout);
+  }
 }

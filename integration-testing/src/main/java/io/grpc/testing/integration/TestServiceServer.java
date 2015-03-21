@@ -140,36 +140,7 @@ public class TestServiceServer {
     executor = Executors.newSingleThreadScheduledExecutor();
     SslContext sslContext = null;
     if (useTls) {
-      SslProvider provider = null;
-      File trustCertChainFile = null;
-      TrustManagerFactory trustManagerFactory = null;
-
-      File keyCertChainFile = null;
-      File keyFile = null;
-      String keyPassword = null;
-      KeyManagerFactory keyManagerFactory = null;
-
-      Iterable<String> ciphers = null;
-      CipherSuiteFilter cipherFilter = IdentityCipherSuiteFilter.INSTANCE;
-      ApplicationProtocolConfig apn = null;
-      long sessionCacheSize = 0;
-      long sessionTimeout = 0;
-
-      keyCertChainFile = Util.loadCert("server1.pem");
-      keyFile = Util.loadCert("server1.key");
-
-      // OpenSSL provider ignores trustCertChainFile?
-      provider = SslProvider.JDK;
-
-      trustCertChainFile = Util.loadCert("ca.pem");
-
-      sslContext = SslContext.newServerContext(provider,
-          trustCertChainFile, trustManagerFactory,
-          keyCertChainFile, keyFile, keyPassword, keyManagerFactory,
-          ciphers, cipherFilter,
-          apn,
-          sessionCacheSize,
-          sessionTimeout);
+      sslContext = Util.buildServerSslContext();
     }
 
     server = NettyServerBuilder.forPort(port)
