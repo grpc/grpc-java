@@ -331,7 +331,8 @@ public class ServerImpl implements Server {
         throw new NullPointerException(
             "startCall() returned a null listener for method " + fullMethodName);
       }
-      return call.newServerStreamListener(listener, session);
+      GrpcCallContext context = new GrpcCallContext(fullMethodName, headers, session);
+      return call.newServerStreamListener(listener, context);
     }
   }
 
@@ -485,8 +486,8 @@ public class ServerImpl implements Server {
       return cancelled;
     }
 
-    private ServerStreamListenerImpl newServerStreamListener(ServerCall.Listener<ReqT> listener, GrpcSession session) {
-      return new ServerStreamListenerImpl(listener, session);
+    private ServerStreamListenerImpl newServerStreamListener(ServerCall.Listener<ReqT> listener, GrpcCallContext context) {
+      return new ServerStreamListenerImpl(listener, context);
     }
 
     /**
@@ -495,11 +496,11 @@ public class ServerImpl implements Server {
      */
     private class ServerStreamListenerImpl implements ServerStreamListener {
       private final ServerCall.Listener<ReqT> listener;
-      private final GrpcSession session;
+      private final GrpcCallContext callContext;
 
-      public ServerStreamListenerImpl(ServerCall.Listener<ReqT> listener, GrpcSession session) {
+      public ServerStreamListenerImpl(ServerCall.Listener<ReqT> listener, GrpcCallContext callContext) {
         this.listener = Preconditions.checkNotNull(listener, "listener must not be null");
-        this.session = session;
+        this.callContext = callContext;
       }
 
       @Override
@@ -525,16 +526,12 @@ public class ServerImpl implements Server {
           return;
         }
 
-        if (session != null) {
-          GrpcSession.enter(session);
-        }
+        GrpcCallContext.enter(callContext);
 
         try {
           listener.onHalfClose();
         } finally {
-          if (session != null) {
-            GrpcSession.exit();
-          }
+          GrpcCallContext.exit();
         }
       }
 

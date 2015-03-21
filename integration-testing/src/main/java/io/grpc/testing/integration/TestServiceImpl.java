@@ -35,6 +35,7 @@ import com.google.common.collect.Queues;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.EmptyProtos;
 
+import io.grpc.GrpcCallContext;
 import io.grpc.GrpcSession;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.Payload;
@@ -108,18 +109,18 @@ public class TestServiceImpl implements TestServiceGrpc.TestService {
           .setBody(payload);
     }
     if (req.getFillRemoteAddress()) {
-      GrpcSession session = GrpcSession.get();
+      GrpcSession session = GrpcCallContext.get().getSession();
       responseBuilder.setRemoteAddress(session.getRemoteAddress().toString());
     }
     if (req.getFillTlsInfo()) {
-      GrpcSession session = GrpcSession.get();
+      GrpcSession session = GrpcCallContext.get().getSession();
       SSLSession sslSession = session.getSslSession();
       if (sslSession != null) {
         responseBuilder.setTlsInfo(sslSession.getProtocol() + ":" + sslSession.getCipherSuite());
       }
     }
     if (req.getFillClientCert()) {
-      GrpcSession session = GrpcSession.get();
+      GrpcSession session = GrpcCallContext.get().getSession();
       SSLSession sslSession = session.getSslSession();
       if (sslSession != null) {
         try {
