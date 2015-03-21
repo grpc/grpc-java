@@ -11,10 +11,11 @@ import java.net.SocketAddress;
 public class GrpcSession {
 
   private final SocketAddress remoteAddress;
-  private SSLEngine sslEngine;
+  private final SSLEngine sslEngine;
 
-  public GrpcSession(SocketAddress remoteAddress) {
+  public GrpcSession(SocketAddress remoteAddress, SSLEngine sslEngine) {
     this.remoteAddress = remoteAddress;
+    this.sslEngine = sslEngine;
   }
 
   public SocketAddress getRemoteAddress() {
@@ -22,10 +23,11 @@ public class GrpcSession {
   }
 
   public SSLSession getSslSession() {
-    if (sslEngine == null) {
-      return null;
+    SSLSession session = null;
+    if (sslEngine != null) {
+      session = sslEngine.getSession();
     }
-    return sslEngine.getSession();
+    return session;
   }
 
   static final ThreadLocal<GrpcSession> THREAD_LOCAL = new ThreadLocal<GrpcSession>();
@@ -63,7 +65,4 @@ public class GrpcSession {
     THREAD_LOCAL.set(null);
   }
 
-  public void setSslEngine(SSLEngine sslEngine) {
-    this.sslEngine = sslEngine;
-  }
 }

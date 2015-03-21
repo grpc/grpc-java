@@ -150,7 +150,7 @@ public class TestServiceClient {
           + "\n  --test_case=TESTCASE        Test case to run. Default " + c.testCase
           + "\n  --use_tls=true|false        Whether to use TLS. Default " + c.tester.useTls
           + "\n  --use_test_ca=true|false    Whether to trust our fake CA. Default " + c.tester.useTestCa
-          + "\n  --use_test_client_cert=true|false    Whether to use the fake CA. Default " + c.tester.useTestClientCert
+          + "\n  --use_test_client_cert=true|false    Whether to use the fake client cert. Default " + c.tester.useTestClientCert
           + "\n  --use_okhttp=true|false     Whether to use OkHttp instead of Netty. Default "
             + c.useOkHttp
       );

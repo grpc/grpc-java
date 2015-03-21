@@ -109,23 +109,22 @@ class NettyServerTransport extends AbstractService {
       }
     });
 
-    Attribute<GrpcSession> attr = channel.attr(Utils.ATTRIBUTE_KEY_SESSION);
-    assert attr.get() == null;
-    final GrpcSession grpcSession = new GrpcSession(channel.remoteAddress());
-    attr.set(grpcSession);
-
+    SSLEngine sslEngine = null;
     if (sslContext != null) {
-      SSLEngine sslEngine = sslContext.newEngine(channel.alloc());
+      sslEngine = sslContext.newEngine(channel.alloc());
 
       // Accept, but do not require, client auth
       // TODO: How to control this (e.g. make mandatory)?
       sslEngine.setUseClientMode(false);
       sslEngine.setWantClientAuth(true);
 
-      grpcSession.setSslEngine(sslEngine);
-
       channel.pipeline().addLast(Http2Negotiator.serverTls(sslEngine));
     }
+
+    final GrpcSession grpcSession = new GrpcSession(channel.remoteAddress(), sslEngine);
+    Attribute<GrpcSession> attr = channel.attr(Utils.ATTRIBUTE_KEY_SESSION);
+    assert attr.get() == null;
+    attr.set(grpcSession);
 
     channel.pipeline().addLast(streamRemovalPolicy);
     channel.pipeline().addLast(handler);
