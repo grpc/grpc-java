@@ -52,6 +52,7 @@ import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
 import java.io.IOException;
 import java.io.InputStream;
+import java.security.Principal;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
 import java.util.LinkedList;
@@ -114,17 +115,15 @@ public class TestServiceImpl implements TestServiceGrpc.TestService {
     }
     if (req.getFillTlsInfo()) {
       GrpcSession session = GrpcCallContext.get().getSession();
-      SSLSession sslSession = session.getSslSession();
-      if (sslSession != null) {
-        responseBuilder.setTlsInfo(sslSession.getProtocol() + ":" + sslSession.getCipherSuite());
+      if (session.isSsl()) {
+        responseBuilder.setTlsInfo(session.getSslProtocol() + ":" + session.getSslCipherSuite());
       }
     }
     if (req.getFillClientCert()) {
       GrpcSession session = GrpcCallContext.get().getSession();
-      SSLSession sslSession = session.getSslSession();
-      if (sslSession != null) {
+      if (session.isSsl()) {
         try {
-          Certificate[] peerCertificates = sslSession.getPeerCertificates();
+          Certificate[] peerCertificates = session.getSslPeerCertificates();
           for (Certificate peerCertificate : peerCertificates) {
             responseBuilder.addClientCert(ByteString.copyFrom(peerCertificate.getEncoded()));
           }
