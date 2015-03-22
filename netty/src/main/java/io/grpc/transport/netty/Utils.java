@@ -80,7 +80,8 @@ class Utils {
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP =
       new DefaultEventLoopGroupResource(0, "grpc-default-worker-ELG");
 
-  public static final AttributeKey<GrpcSession> ATTRIBUTE_KEY_SESSION = AttributeKey.valueOf(GrpcSession.class, "session");
+  public static final AttributeKey<GrpcSession> ATTRIBUTE_KEY_SESSION =
+      AttributeKey.valueOf(GrpcSession.class, "session");
 
   /**
    * Copies the content of the given {@link ByteBuffer} to a new {@link ByteBuf} instance.

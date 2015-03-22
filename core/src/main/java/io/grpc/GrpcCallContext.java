@@ -1,7 +1,7 @@
 package io.grpc;
 
 /**
- * Holds state pertaining to a single Grpc call
+ * Holds state pertaining to a single Grpc call.
  */
 public class GrpcCallContext {
 
@@ -9,6 +9,13 @@ public class GrpcCallContext {
   private final String methodName;
   private final Metadata.Headers headers;
 
+  /**
+   * Constructor.
+   *
+   * @param methodName name of method being called
+   * @param headers    headers for current call
+   * @param session    session associated with the current call
+   */
   public GrpcCallContext(String methodName, Metadata.Headers headers,
                          GrpcSession session) {
     this.methodName = methodName;
@@ -16,10 +23,30 @@ public class GrpcCallContext {
     this.session = session;
   }
 
-  public String getMethodName() { return methodName; }
+  /**
+   * Get the methodName for the current call.
+   *
+   * @return method name for the current call
+   */
+  public String getMethodName() {
+    return methodName;
+  }
 
-  public Metadata.Headers getHeaders() { return headers; }
+  /**
+   * Get the headers for the current call.
+   *
+   * @return headers for the current call
+   */
+  public Metadata.Headers getHeaders() {
+    return headers;
+  }
 
+  /**
+   * Gets the current GrpcSession, which lasts across multiple method calls on a single
+   * transport-defined session (likely a TCP connection).
+   *
+   * @return current session
+   */
   public GrpcSession getSession() {
     return session;
   }
@@ -27,7 +54,7 @@ public class GrpcCallContext {
   static final ThreadLocal<GrpcCallContext> THREAD_LOCAL = new ThreadLocal<GrpcCallContext>();
 
   /**
-   * Gets the active GrpcCallContext (from the ThreadLocal)
+   * Gets the active GrpcCallContext (from the ThreadLocal).
    *
    * @return active GrpcCallContext
    */
@@ -38,8 +65,7 @@ public class GrpcCallContext {
   }
 
   /**
-   * Sets the active GrpcCallContext (sets the ThreadLocal)
-   *
+   * Sets the active GrpcCallContext (sets the ThreadLocal).
    * Should only be called when no GrpcCallContext is active.
    *
    * @param session GrpcCallContext to set as active
@@ -50,8 +76,7 @@ public class GrpcCallContext {
   }
 
   /**
-   * Gets the active GrpcCallContext (clears the ThreadLocal)
-   *
+   * Gets the active GrpcCallContext (clears the ThreadLocal).
    * Should only be called when a GrpcCallContext is active.
    */
   static void exit() {

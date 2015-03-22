@@ -131,6 +131,13 @@ public class Util {
     }
   }
 
+  /**
+   * Builds the SslContext for use by servers
+   *
+   * @return context
+   *
+   * @throws SSLException
+   */
   public static SslContext buildServerSslContext() throws SSLException {
     SslProvider provider = null;
     File trustCertChainFile = null;
@@ -171,6 +178,13 @@ public class Util {
     return sslContext;
   }
 
+  /**
+   * Builds an SslContext for use by clients
+   * @param useTestCa if we should use our test CA
+   * @param useTestClientCert if we should use our test client certificate
+   * @return client SSLContext
+   * @throws SSLException
+   */
   public static SslContext buildClientSslContext(boolean useTestCa, boolean useTestClientCert)
       throws SSLException {
     SslProvider provider = null;

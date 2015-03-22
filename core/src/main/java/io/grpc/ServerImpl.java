@@ -486,7 +486,8 @@ public class ServerImpl implements Server {
       return cancelled;
     }
 
-    private ServerStreamListenerImpl newServerStreamListener(ServerCall.Listener<ReqT> listener, GrpcCallContext context) {
+    private ServerStreamListenerImpl newServerStreamListener(ServerCall.Listener<ReqT> listener,
+                                                             GrpcCallContext context) {
       return new ServerStreamListenerImpl(listener, context);
     }
 
@@ -498,7 +499,8 @@ public class ServerImpl implements Server {
       private final ServerCall.Listener<ReqT> listener;
       private final GrpcCallContext callContext;
 
-      public ServerStreamListenerImpl(ServerCall.Listener<ReqT> listener, GrpcCallContext callContext) {
+      public ServerStreamListenerImpl(ServerCall.Listener<ReqT> listener,
+                                      GrpcCallContext callContext) {
         this.listener = Preconditions.checkNotNull(listener, "listener must not be null");
         this.callContext = callContext;
       }

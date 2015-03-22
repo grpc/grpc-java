@@ -1,34 +1,42 @@
 package io.grpc;
 
+import java.net.SocketAddress;
+import java.security.cert.Certificate;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
-import javax.security.cert.X509Certificate;
-
-import java.net.SocketAddress;
-import java.security.cert.Certificate;
 
 /**
- * Holds state pertaining to a single transport connection
+ * Holds state pertaining to a single transport connection.
  */
 public class GrpcSession {
 
   private final SocketAddress remoteAddress;
   private final SSLEngine sslEngine;
 
+  /**
+   * Constructor.
+   *
+   * @param remoteAddress address of the remote peer
+   * @param sslEngine     the SSLEngine used for this connection, or null if SSL not used
+   */
   public GrpcSession(SocketAddress remoteAddress, SSLEngine sslEngine) {
     this.remoteAddress = remoteAddress;
     this.sslEngine = sslEngine;
   }
 
+  /**
+   * Gets the address of the remote peer of this connection.
+   *
+   * @return address of remote peer
+   */
   public SocketAddress getRemoteAddress() {
     return remoteAddress;
   }
 
   /**
    * Gets the SSLSession, throwing if not available.
-   *
-   * Clients should call isSsl first.
+   * Clients should call isSsl first, to check that we are using SSL.
    */
   protected SSLSession getSslSession() {
     SSLSession session = null;
@@ -42,7 +50,7 @@ public class GrpcSession {
   }
 
   /**
-   * Check if we are using SSL/TLS
+   * Check if we are using SSL/TLS.
    *
    * @return true if this connection is using TLS/SSL
    */
@@ -56,7 +64,6 @@ public class GrpcSession {
 
   /**
    * Gets the peer's SSL certificate chain.
-   *
    * Clients should call isSsl first, to check that we are using SSL.
    *
    * @return peer SSL certificate chain
@@ -67,8 +74,7 @@ public class GrpcSession {
   }
 
   /**
-   * Returns the SSL protocol in use
-   *
+   * Returns the SSL protocol in use.
    * Clients should call isSsl first, to check that we are using SSL.
    */
   public String getSslProtocol() {
@@ -76,8 +82,7 @@ public class GrpcSession {
   }
 
   /**
-   * Returns the SSL cipher suite in use
-   *
+   * Returns the SSL cipher suite in use.
    * Clients should call isSsl first, to check that we are using SSL.
    */
   public String getSslCipherSuite() {
