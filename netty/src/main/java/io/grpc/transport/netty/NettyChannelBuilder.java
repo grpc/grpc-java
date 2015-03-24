@@ -56,7 +56,7 @@ public final class NettyChannelBuilder extends AbstractChannelBuilder<NettyChann
   private Class<? extends Channel> channelType = NioSocketChannel.class;
   private EventLoopGroup userEventLoopGroup;
   private SslContext sslContext;
-  private int connectionWindowSize = Http2CodecUtil.DEFAULT_WINDOW_SIZE;
+  private int connectionWindowSize = 1048576; // 1MiB
   private int streamWindowSize = Http2CodecUtil.DEFAULT_WINDOW_SIZE;
 
   /**
