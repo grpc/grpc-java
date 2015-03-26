@@ -37,6 +37,7 @@ import com.google.common.base.Preconditions;
 import io.grpc.Call;
 import io.grpc.Channel;
 import io.grpc.ClientInterceptor;
+import io.grpc.ClientInterceptors;
 import io.grpc.ClientInterceptors.ForwardingCall;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -70,7 +71,19 @@ public class ClientAuthInterceptor implements ClientInterceptor {
                                                        Channel next) {
     // TODO(ejona86): If the call fails for Auth reasons, this does not properly propagate info that
     // would be in WWW-Authenticate, because it does not yet have access to the header.
-    return new ForwardingCall<ReqT, RespT>(next.newCall(method)) {
+    final Call<ReqT, RespT> realCall = next.newCall(method);
+    return new ForwardingCall<ReqT, RespT>() {
+      private boolean startFailed;
+
+      @Override
+      protected Call<ReqT, RespT> delegate() {
+        if (startFailed) {
+          return ClientInterceptors.noopCall(realCall);
+        } else {
+          return realCall;
+        }
+      }
+
       @Override
       public void start(Listener<RespT> responseListener, Metadata.Headers headers) {
         try {
@@ -89,6 +102,7 @@ public class ClientAuthInterceptor implements ClientInterceptor {
           headers.merge(cachedSaved);
           super.start(responseListener, headers);
         } catch (IOException ioe) {
+          startFailed = true;
           responseListener.onClose(Status.fromThrowable(ioe), new Metadata.Trailers());
         }
       }

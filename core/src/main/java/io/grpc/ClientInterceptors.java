@@ -115,38 +115,71 @@ public class ClientInterceptors {
   /**
    * A {@link Call} which forwards all of it's methods to another {@link Call}.
    */
-  public static class ForwardingCall<ReqT, RespT> extends Call<ReqT, RespT> {
+  public static abstract class ForwardingCall<ReqT, RespT> extends Call<ReqT, RespT> {
 
-    private final Call<ReqT, RespT> delegate;
-
-    public ForwardingCall(Call<ReqT, RespT> delegate) {
-      this.delegate = delegate;
-    }
+    /**
+     * Returns the delegated {@code Call}
+     */
+    protected abstract Call<ReqT, RespT> delegate();
 
     @Override
     public void start(Listener<RespT> responseListener, Metadata.Headers headers) {
-      this.delegate.start(responseListener, headers);
+      this.delegate().start(responseListener, headers);
     }
 
     @Override
     public void request(int numMessages) {
-      this.delegate.request(numMessages);
+      this.delegate().request(numMessages);
     }
 
     @Override
     public void cancel() {
-      this.delegate.cancel();
+      this.delegate().cancel();
     }
 
     @Override
     public void halfClose() {
-      this.delegate.halfClose();
+      this.delegate().halfClose();
     }
 
     @Override
     public void sendPayload(ReqT payload) {
-      this.delegate.sendPayload(payload);
+      this.delegate().sendPayload(payload);
     }
+  }
+
+  private static final Call<Object, Object> NOOP_CALL = new Call<Object, Object>() {
+    @Override
+    public void start(Listener<Object> responseListener, Metadata.Headers headers) { }
+
+    @Override
+    public void request(int numMessages) { }
+
+    @Override
+    public void cancel() { }
+
+    @Override
+    public void halfClose() { }
+
+    @Override
+    public void sendPayload(Object payload) { }
+  };
+
+  /**
+   * Returns a {@code Call} that does absolutely nothing to be used by {@link ForwardingCall} that
+   * has failed to start.
+   *
+   * <p>If a {@code ForwardingCall} fails in {@code start()} and won't start the real delegate
+   * {@code Call}, the caller may still try to use the {@code ForwardingCall} and may get {@code
+   * IllegalStateException}, before it's notified of the error through the listener.  {@link
+   * ForwardingCall#delegate()} should return {@code noopCall()} in this case to prevent the {@code
+   * IllegalStateException}.
+   *
+   * @param delegate the real delegate of the {@code ForwardingCall}
+   */
+  @SuppressWarnings("unchecked")
+  public static <ReqT, RespT> Call<ReqT, RespT> noopCall(Call<ReqT, RespT> delegate) {
+    return (Call<ReqT, RespT>) NOOP_CALL;
   }
 
   /**
