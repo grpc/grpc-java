@@ -118,34 +118,65 @@ public class ClientInterceptors {
   public static class ForwardingCall<ReqT, RespT> extends Call<ReqT, RespT> {
 
     private final Call<ReqT, RespT> delegate;
+    private boolean startFailed;
 
     public ForwardingCall(Call<ReqT, RespT> delegate) {
       this.delegate = delegate;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Note for overriders: overriders must call {@code super.start()}. If an overrider cannot do
+     * so due to an error, it must call {@code super.startFailed()} instead.
+     */
     @Override
     public void start(Listener<RespT> responseListener, Metadata.Headers headers) {
       this.delegate.start(responseListener, headers);
     }
 
+    /**
+     * Indicates that the subclass's {@code start()} has failed and it won't call {@code
+     * super.start()}.
+     *
+     * <p>It will deliver the given error to the listener. It will also stop delegating other
+     * methods, because otherwise the user will get {@code IllegalStateException} from the underling
+     * {@code Call} when calling those methods since the underlying {@code Call} won't be started.
+     *
+     * @param responseListener the listener provided by the caller of the subclass
+     * @param error the error from the subclass's {@code start()}
+     */
+    public final void startFailed(Listener<RespT> responseListener, Throwable error) {
+      startFailed = true;
+      responseListener.onClose(Status.fromThrowable(error), new Metadata.Trailers());
+    }
+
     @Override
     public void request(int numMessages) {
-      this.delegate.request(numMessages);
+      if (!startFailed) {
+        this.delegate.request(numMessages);
+      }
     }
 
     @Override
     public void cancel() {
-      this.delegate.cancel();
+      if (!startFailed) {
+        this.delegate.cancel();
+      }
     }
 
     @Override
     public void halfClose() {
-      this.delegate.halfClose();
+      if (!startFailed) {
+        this.delegate.halfClose();
+      }
     }
 
     @Override
     public void sendPayload(ReqT payload) {
-      this.delegate.sendPayload(payload);
+      if (!startFailed) {
+        this.delegate.sendPayload(payload);
+      }
     }
   }
 

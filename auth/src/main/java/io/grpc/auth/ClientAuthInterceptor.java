@@ -89,7 +89,7 @@ public class ClientAuthInterceptor implements ClientInterceptor {
           headers.merge(cachedSaved);
           super.start(responseListener, headers);
         } catch (IOException ioe) {
-          responseListener.onClose(Status.fromThrowable(ioe), new Metadata.Trailers());
+          super.startFailed(responseListener, ioe);
         }
       }
     };
