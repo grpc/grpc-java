@@ -34,6 +34,7 @@ package io.grpc.transport.netty;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.AbstractService;
 
+import io.grpc.GrpcSession;
 import io.grpc.transport.ServerListener;
 import io.grpc.transport.ServerTransportListener;
 import io.netty.channel.Channel;
@@ -52,9 +53,16 @@ import io.netty.handler.codec.http2.Http2InboundFrameLogger;
 import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
 import io.netty.handler.codec.http2.Http2StreamRemovalPolicy;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslHandler;
+import io.netty.util.Attribute;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GenericFutureListener;
 import io.netty.util.internal.logging.InternalLogLevel;
 
 import javax.annotation.Nullable;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLSession;
+import javax.security.cert.X509Certificate;
 
 /**
  * The Netty-based server transport.
@@ -101,9 +109,23 @@ class NettyServerTransport extends AbstractService {
       }
     });
 
+    SSLEngine sslEngine = null;
     if (sslContext != null) {
-      channel.pipeline().addLast(Http2Negotiator.serverTls(sslContext.newEngine(channel.alloc())));
+      sslEngine = sslContext.newEngine(channel.alloc());
+
+      // Accept, but do not require, client auth
+      // TODO: How to control this (e.g. make mandatory)?
+      sslEngine.setUseClientMode(false);
+      sslEngine.setWantClientAuth(true);
+
+      channel.pipeline().addLast(Http2Negotiator.serverTls(sslEngine));
     }
+
+    final GrpcSession grpcSession = new GrpcSession(channel.remoteAddress(), sslEngine);
+    Attribute<GrpcSession> attr = channel.attr(Utils.ATTRIBUTE_KEY_SESSION);
+    assert attr.get() == null;
+    attr.set(grpcSession);
+
     channel.pipeline().addLast(streamRemovalPolicy);
     channel.pipeline().addLast(handler);
 

@@ -321,6 +321,8 @@ public class ServerImpl implements Server {
     /** Never returns {@code null}. */
     private <ReqT, RespT> ServerStreamListener startCall(ServerStream stream, String fullMethodName,
         ServerMethodDefinition<ReqT, RespT> methodDef, Metadata.Headers headers) {
+      GrpcSession session = headers.getSession();
+
       // TODO(ejona86): should we update fullMethodName to have the canonical path of the method?
       final ServerCallImpl<ReqT, RespT> call = new ServerCallImpl<ReqT, RespT>(stream, methodDef);
       ServerCall.Listener<ReqT> listener
@@ -329,7 +331,8 @@ public class ServerImpl implements Server {
         throw new NullPointerException(
             "startCall() returned a null listener for method " + fullMethodName);
       }
-      return call.newServerStreamListener(listener);
+      GrpcCallContext context = new GrpcCallContext(fullMethodName, headers, session);
+      return call.newServerStreamListener(listener, context);
     }
   }
 
@@ -483,8 +486,9 @@ public class ServerImpl implements Server {
       return cancelled;
     }
 
-    private ServerStreamListenerImpl newServerStreamListener(ServerCall.Listener<ReqT> listener) {
-      return new ServerStreamListenerImpl(listener);
+    private ServerStreamListenerImpl newServerStreamListener(ServerCall.Listener<ReqT> listener,
+                                                             GrpcCallContext context) {
+      return new ServerStreamListenerImpl(listener, context);
     }
 
     /**
@@ -493,9 +497,12 @@ public class ServerImpl implements Server {
      */
     private class ServerStreamListenerImpl implements ServerStreamListener {
       private final ServerCall.Listener<ReqT> listener;
+      private final GrpcCallContext callContext;
 
-      public ServerStreamListenerImpl(ServerCall.Listener<ReqT> listener) {
+      public ServerStreamListenerImpl(ServerCall.Listener<ReqT> listener,
+                                      GrpcCallContext callContext) {
         this.listener = Preconditions.checkNotNull(listener, "listener must not be null");
+        this.callContext = callContext;
       }
 
       @Override
@@ -521,7 +528,13 @@ public class ServerImpl implements Server {
           return;
         }
 
-        listener.onHalfClose();
+        GrpcCallContext.enter(callContext);
+
+        try {
+          listener.onHalfClose();
+        } finally {
+          GrpcCallContext.exit();
+        }
       }
 
       @Override

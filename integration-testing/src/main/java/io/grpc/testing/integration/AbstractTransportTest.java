@@ -35,11 +35,18 @@ import static io.grpc.testing.integration.Messages.PayloadType.COMPRESSABLE;
 import static io.grpc.testing.integration.Util.assertEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import com.google.common.collect.Lists;
+import com.google.common.net.HostAndPort;
+import com.google.common.net.InetAddresses;
+import com.google.common.util.concurrent.SettableFuture;
+import com.google.common.util.concurrent.Uninterruptibles;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.EmptyProtos.Empty;
 
@@ -71,6 +78,11 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.io.ByteArrayInputStream;
+import java.net.InetSocketAddress;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -80,6 +92,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+
+import javax.net.ssl.SSLException;
 
 /**
  * Abstract base class for all GRPC transport tests.
@@ -110,11 +124,15 @@ public abstract class AbstractTransportTest {
   protected TestServiceGrpc.TestServiceBlockingStub blockingStub;
   protected TestServiceGrpc.TestService asyncStub;
 
+  protected boolean useTls = false;
+  protected boolean useTestCa = true;
+  protected boolean useTestClientCert = false;
+
   /**
    * Must be called by the subclass setup method if overriden.
    */
   @Before
-  public void setUp() {
+  public void setUp() throws Exception {
     channel = createChannel();
     blockingStub = TestServiceGrpc.newBlockingStub(channel);
     asyncStub = TestServiceGrpc.newStub(channel);
@@ -128,7 +146,7 @@ public abstract class AbstractTransportTest {
     }
   }
 
-  protected abstract ChannelImpl createChannel();
+  protected abstract ChannelImpl createChannel() throws Exception;
 
   @Test(timeout = 10000)
   public void emptyUnary() throws Exception {
@@ -150,6 +168,60 @@ public abstract class AbstractTransportTest {
         .build();
 
     assertEquals(goldenResponse, blockingStub.unaryCall(request));
+  }
+
+  public void testRemoteAddress(String expectRemoteAddress) throws Exception {
+    final SimpleRequest request = SimpleRequest.newBuilder()
+        .setFillRemoteAddress(true)
+        .build();
+
+    SimpleResponse response = blockingStub.unaryCall(request);
+    HostAndPort remoteAddress = HostAndPort.fromString(response.getRemoteAddress());
+    assertEquals("/127.0.0.1", remoteAddress.getHostText());
+    assertNotEquals(0, remoteAddress.getPort());
+  }
+
+  @Test(timeout = 10000)
+  public void tlsInfo() throws Exception {
+    tlsInfo(useTls);
+  }
+
+  protected void tlsInfo(boolean expectTls) {
+    final SimpleRequest request = SimpleRequest.newBuilder()
+        .setFillTlsInfo(true)
+        .build();
+
+    SimpleResponse response = blockingStub.unaryCall(request);
+    if (!expectTls) {
+      assertEquals("", response.getTlsInfo());
+    } else {
+      assertEquals("TLSv1.2:TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA", response.getTlsInfo());
+    }
+  }
+
+  @Test(timeout = 10000)
+  public void clientCert() throws Exception {
+    clientCert(useTestClientCert);
+  }
+
+  public void clientCert(boolean expectCert) throws Exception {
+    final SimpleRequest request = SimpleRequest.newBuilder()
+        .setFillClientCert(true)
+        .build();
+
+    SimpleResponse response = blockingStub.unaryCall(request);
+    if (!expectCert) {
+      assertEquals(0, response.getClientCertCount());
+    } else {
+      List<X509Certificate> certificates = Lists.newArrayList();
+      for (ByteString certificateBytes : response.getClientCertList()) {
+        CertificateFactory cf = CertificateFactory.getInstance("X.509");
+        X509Certificate cert = (X509Certificate)cf.generateCertificate(certificateBytes.newInput());
+        certificates.add(cert);
+      }
+      assertEquals(1, certificates.size());
+      assertEquals("CN=testclient, O=Internet Widgits Pty Ltd, ST=Some-State, C=AU", certificates.get(0).getSubjectDN().toString());
+    }
   }
 
   @Test(timeout = 10000)

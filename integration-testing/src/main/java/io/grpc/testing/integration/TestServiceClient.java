@@ -31,13 +31,14 @@
 
 package io.grpc.testing.integration;
 
+import com.google.common.base.Throwables;
+
 import io.grpc.ChannelImpl;
 import io.grpc.transport.netty.NegotiationType;
 import io.grpc.transport.netty.NettyChannelBuilder;
 import io.grpc.transport.okhttp.OkHttpChannelBuilder;
 import io.netty.handler.ssl.SslContext;
 
-import java.io.File;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
@@ -80,11 +81,14 @@ public class TestServiceClient {
   private String serverHostOverride;
   private int serverPort = 8080;
   private String testCase = "empty_unary";
-  private boolean useTls = true;
-  private boolean useTestCa;
   private boolean useOkHttp;
 
-  private Tester tester = new Tester();
+  private final Tester tester;
+
+  public TestServiceClient() {
+    tester = new Tester();
+    tester.useTls = true;
+  }
 
   private void parseArgs(String[] args) {
     boolean usage = false;
@@ -115,9 +119,11 @@ public class TestServiceClient {
       } else if ("test_case".equals(key)) {
         testCase = value;
       } else if ("use_tls".equals(key)) {
-        useTls = Boolean.parseBoolean(value);
+        tester.useTls = Boolean.parseBoolean(value);
       } else if ("use_test_ca".equals(key)) {
-        useTestCa = Boolean.parseBoolean(value);
+        tester.useTestCa = Boolean.parseBoolean(value);
+      } else if ("use_test_client_cert".equals(key)) {
+        tester.useTestClientCert = Boolean.parseBoolean(value);
       } else if ("use_okhttp".equals(key)) {
         useOkHttp = Boolean.parseBoolean(value);
       } else if ("grpc_version".equals(key)) {
@@ -142,8 +148,9 @@ public class TestServiceClient {
           + "\n                              Defaults to server host"
           + "\n  --server_port=PORT          Port to connect to. Default " + c.serverPort
           + "\n  --test_case=TESTCASE        Test case to run. Default " + c.testCase
-          + "\n  --use_tls=true|false        Whether to use TLS. Default " + c.useTls
-          + "\n  --use_test_ca=true|false    Whether to trust our fake CA. Default " + c.useTestCa
+          + "\n  --use_tls=true|false        Whether to use TLS. Default " + c.tester.useTls
+          + "\n  --use_test_ca=true|false    Whether to trust our fake CA. Default " + c.tester.useTestCa
+          + "\n  --use_test_client_cert=true|false    Whether to use the fake client cert. Default " + c.tester.useTestClientCert
           + "\n  --use_okhttp=true|false     Whether to use OkHttp instead of Netty. Default "
             + c.useOkHttp
       );
@@ -151,7 +158,7 @@ public class TestServiceClient {
     }
   }
 
-  private void setUp() {
+  private void setUp() throws Exception {
     tester.setUp();
   }
 
@@ -188,6 +195,12 @@ public class TestServiceClient {
       tester.serverStreaming();
     } else if ("ping_pong".equals(testCase)) {
       tester.pingPong();
+    } else if ("remote_address".equals(testCase)) {
+      tester.testRemoteAddress("/127.0.0.1");
+    } else if ("client_cert".equals(testCase)) {
+      tester.clientCert(tester.useTestClientCert);
+    } else if ("tls_info".equals(testCase)) {
+      tester.tlsInfo(tester.useTls);
     } else if ("empty_stream".equals(testCase)) {
       tester.emptyStream();
     } else if ("cancel_after_begin".equals(testCase)) {
@@ -214,13 +227,14 @@ public class TestServiceClient {
           throw new RuntimeException(ex);
         }
         SslContext sslContext = null;
-        if (useTestCa) {
+        if (useTls) {
           try {
-            sslContext = SslContext.newClientContext(Util.loadCert("ca.pem"));
-          } catch (Exception ex) {
-            throw new RuntimeException(ex);
+            sslContext = Util.buildClientSslContext(useTestCa, useTestClientCert);
+          } catch (SSLException e) {
+            throw Throwables.propagate(e);
           }
         }
+
         return NettyChannelBuilder.forAddress(new InetSocketAddress(address, serverPort))
             .negotiationType(useTls ? NegotiationType.TLS : NegotiationType.PLAINTEXT)
             .sslContext(sslContext)

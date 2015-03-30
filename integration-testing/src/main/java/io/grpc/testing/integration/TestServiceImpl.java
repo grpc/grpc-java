@@ -35,6 +35,8 @@ import com.google.common.collect.Queues;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.EmptyProtos;
 
+import io.grpc.GrpcCallContext;
+import io.grpc.GrpcSession;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.PayloadType;
@@ -46,8 +48,13 @@ import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 
-import java.io.InputStream;
+import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.net.ssl.SSLSession;
 import java.io.IOException;
+import java.io.InputStream;
+import java.security.Principal;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateEncodingException;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Random;
@@ -101,6 +108,31 @@ public class TestServiceImpl implements TestServiceGrpc.TestService {
       responseBuilder.getPayloadBuilder()
           .setType(compressable ? PayloadType.COMPRESSABLE : PayloadType.UNCOMPRESSABLE)
           .setBody(payload);
+    }
+    if (req.getFillRemoteAddress()) {
+      GrpcSession session = GrpcCallContext.get().getSession();
+      responseBuilder.setRemoteAddress(session.getRemoteAddress().toString());
+    }
+    if (req.getFillTlsInfo()) {
+      GrpcSession session = GrpcCallContext.get().getSession();
+      if (session.isSsl()) {
+        responseBuilder.setTlsInfo(session.getSslProtocol() + ":" + session.getSslCipherSuite());
+      }
+    }
+    if (req.getFillClientCert()) {
+      GrpcSession session = GrpcCallContext.get().getSession();
+      if (session.isSsl()) {
+        try {
+          Certificate[] peerCertificates = session.getSslPeerCertificates();
+          for (Certificate peerCertificate : peerCertificates) {
+            responseBuilder.addClientCert(ByteString.copyFrom(peerCertificate.getEncoded()));
+          }
+        } catch (SSLPeerUnverifiedException e) {
+          // Leave it empty to indicate no cert
+        } catch (CertificateEncodingException e) {
+          throw new RuntimeException(e);
+        }
+      }
     }
     responseObserver.onValue(responseBuilder.build());
     responseObserver.onCompleted();

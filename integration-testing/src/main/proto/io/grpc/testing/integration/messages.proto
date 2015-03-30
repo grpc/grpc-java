@@ -74,6 +74,15 @@ message SimpleRequest {
 
   // Whether SimpleResponse should include OAuth scope.
   optional bool fill_oauth_scope = 5;
+
+  // Whether SimpleResponse should include remote_address (the client address)
+  optional bool fill_remote_address = 6;
+
+  // Whether SimpleResponse should include the client cert
+  optional bool fill_client_cert = 7;
+
+  // Whether SimpleResponse should include information about the TLS encryption in use
+  optional bool fill_tls_info = 8;
 }
 
 // Unary response, as configured by the request.
@@ -85,6 +94,12 @@ message SimpleResponse {
   optional string username = 2;
   // OAuth scope.
   optional string oauth_scope = 3;
+  // Remote Address (i.e. the client address)
+  optional string remote_address = 4;
+  // The client cert
+  repeated bytes client_cert = 5;
+  // TLS information, or empty if TLS not in use
+  optional string tls_info = 6;
 }
 
 message SimpleContext {

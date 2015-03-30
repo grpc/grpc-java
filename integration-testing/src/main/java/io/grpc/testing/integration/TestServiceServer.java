@@ -37,8 +37,14 @@ import io.grpc.ServerImpl;
 import io.grpc.ServerInterceptors;
 import io.grpc.testing.TestUtils;
 import io.grpc.transport.netty.NettyServerBuilder;
+import io.netty.handler.ssl.ApplicationProtocolConfig;
+import io.netty.handler.ssl.CipherSuiteFilter;
+import io.netty.handler.ssl.IdentityCipherSuiteFilter;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslProvider;
 
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.TrustManagerFactory;
 import java.io.File;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -134,9 +140,9 @@ public class TestServiceServer {
     executor = Executors.newSingleThreadScheduledExecutor();
     SslContext sslContext = null;
     if (useTls) {
-      sslContext = SslContext.newServerContext(Util.loadCert("server1.pem"),
-                                               Util.loadCert("server1.key"));
+      sslContext = Util.buildServerSslContext();
     }
+
     server = NettyServerBuilder.forPort(port)
         .sslContext(sslContext)
         .addService(ServerInterceptors.intercept(
