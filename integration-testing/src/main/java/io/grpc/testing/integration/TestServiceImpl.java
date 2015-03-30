@@ -35,6 +35,8 @@ import com.google.common.collect.Queues;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.EmptyProtos;
 
+import io.grpc.GrpcCallContext;
+import io.grpc.GrpcSession;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.PayloadType;
@@ -101,6 +103,10 @@ public class TestServiceImpl implements TestServiceGrpc.TestService {
       responseBuilder.getPayloadBuilder()
           .setType(compressable ? PayloadType.COMPRESSABLE : PayloadType.UNCOMPRESSABLE)
           .setBody(payload);
+    }
+    if (req.getFillRemoteAddress()) {
+      GrpcSession session = GrpcCallContext.get().getSession();
+      responseBuilder.setRemoteAddress(session.getRemoteAddress().toString());
     }
     responseObserver.onValue(responseBuilder.build());
     responseObserver.onCompleted();

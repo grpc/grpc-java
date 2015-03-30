@@ -34,6 +34,7 @@ package io.grpc.transport.netty;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.AbstractService;
 
+import io.grpc.GrpcSession;
 import io.grpc.transport.ServerListener;
 import io.grpc.transport.ServerTransportListener;
 import io.netty.channel.Channel;
@@ -52,6 +53,7 @@ import io.netty.handler.codec.http2.Http2InboundFrameLogger;
 import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
 import io.netty.handler.codec.http2.Http2StreamRemovalPolicy;
 import io.netty.handler.ssl.SslContext;
+import io.netty.util.Attribute;
 import io.netty.util.internal.logging.InternalLogLevel;
 
 import javax.annotation.Nullable;
@@ -106,6 +108,11 @@ class NettyServerTransport extends AbstractService {
     }
     channel.pipeline().addLast(streamRemovalPolicy);
     channel.pipeline().addLast(handler);
+
+    GrpcSession session = new GrpcSession(channel.remoteAddress());
+    Attribute<GrpcSession> attr = channel.attr(Utils.ATTRIBUTE_KEY_SESSION);
+    assert attr.get() == null;
+    attr.set(session);
 
     notifyStarted();
   }

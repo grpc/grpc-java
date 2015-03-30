@@ -42,6 +42,8 @@ import static io.netty.handler.codec.http2.Http2Error.NO_ERROR;
 
 import com.google.common.base.Preconditions;
 
+import io.grpc.GrpcSession;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.transport.ServerStreamListener;
 import io.grpc.transport.ServerTransportListener;
@@ -63,6 +65,7 @@ import io.netty.handler.codec.http2.Http2FrameWriter;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2LocalFlowController;
 import io.netty.handler.codec.http2.Http2Stream;
+import io.netty.util.Attribute;
 import io.netty.util.ReferenceCountUtil;
 
 import java.util.logging.Level;
@@ -141,8 +144,13 @@ class NettyServerHandler extends Http2ConnectionHandler {
       Http2Stream http2Stream = connection().requireStream(streamId);
       http2Stream.setProperty(NettyServerStream.class, stream);
       String method = determineMethod(streamId, headers);
+      Metadata.Headers metadata = Utils.convertHeaders(headers);
+      Attribute<GrpcSession> attr = ctx.channel().attr(Utils.ATTRIBUTE_KEY_SESSION);
+      if (attr != null && attr.get() != null) {
+        metadata.setSession(attr.get());
+      }
       ServerStreamListener listener =
-          transportListener.streamCreated(stream, method, Utils.convertHeaders(headers));
+          transportListener.streamCreated(stream, method, metadata);
       stream.setListener(listener);
     } catch (Http2Exception e) {
       throw e;

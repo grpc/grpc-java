@@ -34,6 +34,7 @@ package io.grpc.transport.netty;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
+import io.grpc.GrpcSession;
 import io.grpc.Metadata;
 import io.grpc.SharedResourceHolder.Resource;
 import io.grpc.transport.HttpUtil;
@@ -45,6 +46,7 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.handler.codec.AsciiString;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2Headers;
+import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 
@@ -75,6 +77,9 @@ class Utils {
 
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP =
       new DefaultEventLoopGroupResource(0, "grpc-default-worker-ELG");
+
+  public static final AttributeKey<GrpcSession> ATTRIBUTE_KEY_SESSION =
+      AttributeKey.valueOf(GrpcSession.class, "GrpcSession");
 
   /**
    * Copies the content of the given {@link ByteBuffer} to a new {@link ByteBuf} instance.

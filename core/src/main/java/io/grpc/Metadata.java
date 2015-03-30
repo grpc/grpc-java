@@ -254,6 +254,7 @@ public abstract class Metadata {
   public static class Headers extends Metadata {
     private String path;
     private String authority;
+    private GrpcSession session;
 
     /**
      * Called by the transport layer to create headers from their binary serialized values.
@@ -278,6 +279,17 @@ public abstract class Metadata {
 
     public void setPath(String path) {
       this.path = path;
+    }
+
+    /**
+     * The session which this request is part of.
+     */
+    public GrpcSession getSession() {
+      return session;
+    }
+
+    public void setSession(GrpcSession session) {
+      this.session = session;
     }
 
     /**

@@ -34,12 +34,14 @@ package io.grpc.testing.integration;
 import static io.grpc.testing.integration.Messages.PayloadType.COMPRESSABLE;
 import static io.grpc.testing.integration.Util.assertEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import com.google.common.net.HostAndPort;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.EmptyProtos.Empty;
 
@@ -563,6 +565,19 @@ public abstract class AbstractTransportTest {
     Assert.assertEquals(contextValue, trailersCapture.get().get(METADATA_KEY));
   }
 
+  /**
+   * Helper method called by derived tests, to test that the server sees the remote address.
+   */
+  public void testRemoteAddress(String expectRemoteAddress) throws Exception {
+    final SimpleRequest request = SimpleRequest.newBuilder()
+        .setFillRemoteAddress(true)
+        .build();
+
+    SimpleResponse response = blockingStub.unaryCall(request);
+    HostAndPort remoteAddress = HostAndPort.fromString(response.getRemoteAddress());
+    assertEquals("/127.0.0.1", remoteAddress.getHostText());
+    assertNotEquals(0, remoteAddress.getPort());
+  }
 
   protected int unaryPayloadLength() {
     // 10MiB.
