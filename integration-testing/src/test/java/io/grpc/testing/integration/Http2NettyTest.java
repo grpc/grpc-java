@@ -39,6 +39,7 @@ import io.netty.handler.ssl.SslContext;
 
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -68,6 +69,11 @@ public class Http2NettyTest extends AbstractTransportTest {
   @AfterClass
   public static void stopServer() {
     stopStaticServer();
+  }
+
+  @Test(timeout = 10000)
+  public void remoteAddress() throws Exception {
+    testRemoteAddress("/127.0.0.1");
   }
 
   @Override
