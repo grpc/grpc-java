@@ -186,32 +186,31 @@ public class ClientInterceptors {
    * A {@link Call.Listener} which forwards all of its methods to another
    * {@link Call.Listener}.
    */
-  public static class ForwardingListener<T> extends Call.Listener<T> {
+  public static abstract class ForwardingListener<T> extends Call.Listener<T> {
 
-    private final Call.Listener<T> delegate;
-
-    public ForwardingListener(Call.Listener<T> delegate) {
-      this.delegate = delegate;
-    }
+    /**
+     * Returns the delegated {@code Call.Listener}
+     */
+    protected abstract Call.Listener<T> delegate();
 
     @Override
     public void onHeaders(Metadata.Headers headers) {
-      delegate.onHeaders(headers);
+      delegate().onHeaders(headers);
     }
 
     @Override
     public void onPayload(T payload) {
-      delegate.onPayload(payload);
+      delegate().onPayload(payload);
     }
 
     @Override
     public void onClose(Status status, Metadata.Trailers trailers) {
-      delegate.onClose(status, trailers);
+      delegate().onClose(status, trailers);
     }
 
     @Override
     public void onReady(int numMessages) {
-      delegate.onReady(numMessages);
+      delegate().onReady(numMessages);
     }
   }
 }

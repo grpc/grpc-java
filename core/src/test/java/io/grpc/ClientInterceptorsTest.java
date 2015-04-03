@@ -226,8 +226,13 @@ public class ClientInterceptorsTest {
           }
 
           @Override
-          public void start(Call.Listener<RespT> responseListener, Metadata.Headers headers) {
-            super.start(new ForwardingListener<RespT>(responseListener) {
+          public void start(final Call.Listener<RespT> responseListener, Metadata.Headers headers) {
+            super.start(new ForwardingListener<RespT>() {
+              @Override
+              protected Listener<RespT> delegate() {
+                return responseListener;
+              }
+
               @Override
               public void onHeaders(Metadata.Headers headers) {
                 examinedHeaders.add(headers);

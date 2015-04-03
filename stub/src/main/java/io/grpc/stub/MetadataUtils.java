@@ -130,10 +130,15 @@ public class MetadataUtils {
           }
 
           @Override
-          public void start(Listener<RespT> responseListener, Metadata.Headers headers) {
+          public void start(final Listener<RespT> responseListener, Metadata.Headers headers) {
             headersCapture.set(null);
             trailersCapture.set(null);
-            super.start(new ForwardingListener<RespT>(responseListener) {
+            super.start(new ForwardingListener<RespT>() {
+              @Override
+              protected Listener<RespT> delegate() {
+                return responseListener;
+              }
+
               @Override
               public void onHeaders(Metadata.Headers headers) {
                 headersCapture.set(headers);
