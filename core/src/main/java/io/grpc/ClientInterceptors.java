@@ -115,7 +115,7 @@ public class ClientInterceptors {
   /**
    * A {@link Call} which forwards all of it's methods to another {@link Call}.
    */
-  public static abstract class ForwardingCall<ReqT, RespT> extends Call<ReqT, RespT> {
+  public abstract static class ForwardingCall<ReqT, RespT> extends Call<ReqT, RespT> {
 
     /**
      * Returns the delegated {@code Call}
@@ -186,7 +186,7 @@ public class ClientInterceptors {
    * A {@link Call.Listener} which forwards all of its methods to another
    * {@link Call.Listener}.
    */
-  public static abstract class ForwardingListener<T> extends Call.Listener<T> {
+  public abstract static class ForwardingListener<T> extends Call.Listener<T> {
 
     /**
      * Returns the delegated {@code Call.Listener}
