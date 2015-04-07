@@ -78,7 +78,7 @@ public class ClientAuthInterceptor implements ClientInterceptor {
       @Override
       protected Call<ReqT, RespT> delegate() {
         if (startFailed) {
-          return ClientInterceptors.noopCall(realCall);
+          return ClientInterceptors.noopCall();
         } else {
           return realCall;
         }

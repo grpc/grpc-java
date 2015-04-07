@@ -302,7 +302,7 @@ public class ClientInterceptorsTest {
           @Override
           protected Call<ReqT, RespT> delegate() {
             if (startFailed) {
-              return ClientInterceptors.noopCall(call);
+              return ClientInterceptors.noopCall();
             } else {
               return call;
             }

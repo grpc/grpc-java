@@ -174,11 +174,9 @@ public class ClientInterceptors {
    * IllegalStateException}, before it's notified of the error through the listener.  {@link
    * ForwardingCall#delegate()} should return {@code noopCall()} in this case to prevent the {@code
    * IllegalStateException}.
-   *
-   * @param delegate the real delegate of the {@code ForwardingCall}
    */
   @SuppressWarnings("unchecked")
-  public static <ReqT, RespT> Call<ReqT, RespT> noopCall(Call<ReqT, RespT> delegate) {
+  public static <ReqT, RespT> Call<ReqT, RespT> noopCall() {
     return (Call<ReqT, RespT>) NOOP_CALL;
   }
 
