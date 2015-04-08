@@ -51,7 +51,6 @@ import com.squareup.okhttp.internal.spdy.Variant;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
-import io.grpc.Status.Code;
 import io.grpc.transport.ClientStreamListener;
 import io.grpc.transport.ClientTransport;
 
@@ -257,14 +256,20 @@ public class OkHttpClientTransport implements ClientTransport {
     }
   }
 
-  private void startPendingStreams() {
+  /**
+   * Starts pending streams, returns true if at least one pending stream is started.
+   */
+  private boolean startPendingStreams() {
+    boolean hasStreamStarted = false;
     synchronized (lock) {
       while (!pendingStreams.isEmpty() && streams.size() < maxConcurrentStreams) {
         PendingStream pendingStream = pendingStreams.poll();
         startStream(pendingStream.clientStream, pendingStream.requestHeaders);
         pendingStream.createdFuture.set(null);
+        hasStreamStarted = true;
       }
     }
+    return hasStreamStarted;
   }
 
   private void failPendingStreams(Status status) {
@@ -384,21 +389,13 @@ public class OkHttpClientTransport implements ClientTransport {
 
   /**
    * Called when a stream is closed.
-   *
-   * <p> Return false if the stream has already finished.
    */
-  boolean finishStream(int streamId, @Nullable Status status) {
-    OkHttpClientStream stream;
-    stream = streams.remove(streamId);
-    if (stream != null) {
-      if (status != null) {
-        boolean isCancelled = status.getCode() == Code.CANCELLED;
-        stream.transportReportStatus(status, isCancelled, new Metadata.Trailers());
+  void removeStream(int streamId) {
+    if (streams.remove(streamId) != null) {
+      if (!startPendingStreams()) {
+        stopIfNecessary();
       }
-      startPendingStreams();
-      return true;
     }
-    return false;
   }
 
   /**
@@ -517,8 +514,11 @@ public class OkHttpClientTransport implements ClientTransport {
 
     @Override
     public void rstStream(int streamId, ErrorCode errorCode) {
-      if (finishStream(streamId, toGrpcStatus(errorCode))) {
-        stopIfNecessary();
+      OkHttpClientStream stream = streams.get(streamId);
+      if (stream != null) {
+        stream.transportReportStatus(toGrpcStatus(errorCode), false, new Metadata.Trailers());
+      } else {
+        log.log(Level.INFO, "Receive reset for unknown/closed stream");
       }
     }
 
@@ -570,7 +570,8 @@ public class OkHttpClientTransport implements ClientTransport {
     @Override
     public void priority(int streamId, int streamDependency, int weight, boolean exclusive) {
       // Ignore priority change.
-      // TODO(madongfly): log
+      log.log(Level.INFO,
+          "Receive priority frame, but we currently don't support priority, just ignore it.");
     }
 
     @Override
