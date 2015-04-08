@@ -31,7 +31,10 @@
 
 package io.grpc.examples.header;
 
-import io.grpc.*;
+import io.grpc.Channel;
+import io.grpc.ChannelImpl;
+import io.grpc.ClientInterceptor;
+import io.grpc.ClientInterceptors;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.examples.helloworld.HelloResponse;
@@ -52,7 +55,10 @@ public class CustomHeaderClient {
   private final ChannelImpl originChannel;
   private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
-  public CustomHeaderClient(String host, int port) {
+  /**
+   * A custom client.
+   */
+  private CustomHeaderClient(String host, int port) {
     originChannel =
             NettyChannelBuilder.forAddress(host, port).negotiationType(NegotiationType.PLAINTEXT)
                     .build();
@@ -61,11 +67,14 @@ public class CustomHeaderClient {
     blockingStub = GreeterGrpc.newBlockingStub(channel);
   }
 
-  public void shutdown() throws InterruptedException {
+  private void shutdown() throws InterruptedException {
     originChannel.shutdown().awaitTerminated(5, TimeUnit.SECONDS);
   }
 
-  public void greet(String name) {
+  /**
+   * A simple client method that like {@link io.grpc.examples.helloworld.HelloWorldClient}.
+   */
+  private void greet(String name) {
     try {
       logger.info("Will try to greet " + name + " ...");
       HelloRequest request = HelloRequest.newBuilder().setName(name).build();
@@ -76,6 +85,9 @@ public class CustomHeaderClient {
     }
   }
 
+  /**
+   * Main start the client from the command line.
+   */
   public static void main(String[] args) throws Exception {
     CustomHeaderClient client = new CustomHeaderClient("localhost", 50051);
     try {

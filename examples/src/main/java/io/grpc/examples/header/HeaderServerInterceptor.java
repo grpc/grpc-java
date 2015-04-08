@@ -31,12 +31,17 @@
 
 package io.grpc.examples.header;
 
-import io.grpc.*;
+import io.grpc.Metadata;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
+import io.grpc.ServerInterceptors;
+import io.grpc.Status;
 
 import java.util.logging.Logger;
 
 /**
- * interceptor to handle server header
+ * A interceptor to handle server header.
  */
 public class HeaderServerInterceptor implements ServerInterceptor {
 
@@ -47,17 +52,18 @@ public class HeaderServerInterceptor implements ServerInterceptor {
 
 
   @Override
-  public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(String method,
-                                                               ServerCall<RespT> call,
-                                                               final Metadata.Headers requestHeaders,
-                                                               ServerCallHandler<ReqT, RespT> next) {
+  public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+      String method,
+      ServerCall<RespT> call,
+      final Metadata.Headers requestHeaders,
+      ServerCallHandler<ReqT, RespT> next) {
     logger.info("header received from client:" + requestHeaders.toString());
     return next.startCall(method, new ServerInterceptors.ForwardingServerCall<RespT>(call) {
-      boolean sentHeaders=false;
+      boolean sentHeaders = false;
 
       @Override
       public void sendHeaders(Metadata.Headers responseHeaders) {
-        responseHeaders.put(customHeadKey,"customRespondValue");
+        responseHeaders.put(customHeadKey, "customRespondValue");
         super.sendHeaders(responseHeaders);
         sentHeaders = true;
       }

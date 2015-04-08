@@ -43,7 +43,7 @@ import java.util.logging.Logger;
 
 /**
  * A simple server that like {@link io.grpc.examples.helloworld.HelloWorldServer}.
- * You can get and response any header in {@link io.grpc.examples.header.HeaderServerInterceptor}
+ * You can get and response any header in {@link io.grpc.examples.header.HeaderServerInterceptor}.
  */
 public class CustomHeaderServer {
   private static final Logger logger = Logger.getLogger(CustomHeaderServer.class.getName());
