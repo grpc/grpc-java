@@ -253,8 +253,14 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
       listenerClosed = true;
       closeDeframer();
       listener.closed(newStatus, trailers);
+      onListenerClosed();
     }
   }
+
+  /**
+   * Be called right after the listener is closed.
+   */
+  protected abstract void onListenerClosed();
 
   /**
    * Executes the pending listener close task, if one exists.

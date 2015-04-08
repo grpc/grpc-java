@@ -133,6 +133,7 @@ public class OkHttpClientTransportTest {
   @After
   public void tearDown() {
     clientTransport.shutdown();
+    assertEquals(0, streams.size());
     verify(frameWriter).close();
     frameReader.assertClosed();
     executor.shutdown();
@@ -576,6 +577,21 @@ public class OkHttpClientTransportTest {
     OkHttpClientStream stream2 = streams.get(startId + 2); 
     assertNotNull(stream2);
     stream2.cancel();
+  }
+
+  @Test
+  public void receiveDataWithoutHeaderShouldFail() throws Exception {
+    MockStreamListener listener = new MockStreamListener();
+    clientTransport.newStream(method,new Metadata.Headers(), listener).request(1);
+
+    Buffer buffer = createMessageFrame(new byte[1]);
+    int messageFrameLength = (int) buffer.size();
+    frameHandler.data(true, 3, buffer, messageFrameLength);
+
+    listener.waitUntilStreamClosed();
+    assertEquals(Status.INTERNAL.getCode(), listener.status.getCode());
+    assertTrue(listener.status.getDescription().startsWith("no headers received prior to data"));
+    assertEquals(0, listener.messages.size());
   }
 
   private void waitForStreamPending(int expected) throws Exception {

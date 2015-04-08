@@ -148,18 +148,8 @@ class OkHttpClientStream extends Http2ClientStream {
 
   @Override
   protected void sendCancel() {
-    if (transport.finishStream(id(), Status.CANCELLED)) {
-      frameWriter.rstStream(id(), ErrorCode.CANCEL);
-      transport.stopIfNecessary();
-    }
-  }
-
-  @Override
-  public void remoteEndClosed() {
-    super.remoteEndClosed();
-    if (transport.finishStream(id(), null)) {
-      transport.stopIfNecessary();
-    }
+    frameWriter.rstStream(id(), ErrorCode.CANCEL);
+    transportReportStatus(Status.CANCELLED, true, new Metadata.Trailers());
   }
 
   void setOutboundFlowState(Object outboundFlowState) {
@@ -168,5 +158,12 @@ class OkHttpClientStream extends Http2ClientStream {
 
   Object getOutboundFlowState() {
     return outboundFlowState;
+  }
+
+  @Override
+  protected void onListenerClosed() {
+    if (id() != null) {
+      transport.removeStream(id());
+    }
   }
 }

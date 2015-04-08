@@ -92,4 +92,9 @@ class NettyClientStream extends Http2ClientStream {
   protected void returnProcessedBytes(int processedBytes) {
     handler.returnProcessedBytes(id(), processedBytes);
   }
+
+  @Override
+  protected void onListenerClosed() {
+    // Do nothing.
+  }
 }
