@@ -56,12 +56,17 @@ public class TestUtils {
     return new ServerInterceptor() {
       @Override
       public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(String method,
-           ServerCall<RespT> call,
+           final ServerCall<RespT> call,
            final Metadata.Headers requestHeaders,
            ServerCallHandler<ReqT, RespT> next) {
         ServerCall.Listener<ReqT> listener = next.startCall(method,
-            new ServerInterceptors.ForwardingServerCall<RespT>(call) {
+            new ServerInterceptors.ForwardingServerCall<RespT>() {
               boolean sentHeaders;
+
+              @Override
+              protected ServerCall<RespT> delegate() {
+                return call;
+              }
 
               @Override
               public void sendHeaders(Metadata.Headers responseHeaders) {

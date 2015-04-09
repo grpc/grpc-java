@@ -73,7 +73,13 @@ public class MetadataUtils {
       @Override
       public <ReqT, RespT> Call<ReqT, RespT> interceptCall(MethodDescriptor<ReqT, RespT> method,
           Channel next) {
-        return new ForwardingCall<ReqT, RespT>(next.newCall(method)) {
+        final Call<ReqT, RespT> realCall = next.newCall(method);
+        return new ForwardingCall<ReqT, RespT>() {
+          @Override
+          protected Call<ReqT, RespT> delegate() {
+            return realCall;
+          }
+
           @Override
           public void start(Listener<RespT> responseListener, Metadata.Headers headers) {
             headers.merge(extraHeaders);
@@ -116,12 +122,23 @@ public class MetadataUtils {
       @Override
       public <ReqT, RespT> Call<ReqT, RespT> interceptCall(MethodDescriptor<ReqT, RespT> method,
           Channel next) {
-        return new ForwardingCall<ReqT, RespT>(next.newCall(method)) {
+        final Call<ReqT, RespT> realCall = next.newCall(method);
+        return new ForwardingCall<ReqT, RespT>() {
           @Override
-          public void start(Listener<RespT> responseListener, Metadata.Headers headers) {
+          protected Call<ReqT, RespT> delegate() {
+            return realCall;
+          }
+
+          @Override
+          public void start(final Listener<RespT> responseListener, Metadata.Headers headers) {
             headersCapture.set(null);
             trailersCapture.set(null);
-            super.start(new ForwardingListener<RespT>(responseListener) {
+            super.start(new ForwardingListener<RespT>() {
+              @Override
+              protected Listener<RespT> delegate() {
+                return responseListener;
+              }
+
               @Override
               public void onHeaders(Metadata.Headers headers) {
                 headersCapture.set(headers);

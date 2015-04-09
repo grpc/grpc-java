@@ -146,74 +146,72 @@ public class ServerInterceptors {
   /**
    * Utility base class for decorating {@link ServerCall} instances.
    */
-  public static class ForwardingServerCall<RespT> extends ServerCall<RespT> {
+  public abstract static class ForwardingServerCall<RespT> extends ServerCall<RespT> {
 
-    private final ServerCall<RespT> delegate;
-
-    public ForwardingServerCall(ServerCall<RespT> delegate) {
-      this.delegate = delegate;
-    }
+    /**
+     * Returns the delegated {@code ServerCall}
+     */
+    protected abstract ServerCall<RespT> delegate();
 
     @Override
     public void request(int numMessages) {
-      delegate.request(numMessages);
+      delegate().request(numMessages);
     }
 
     @Override
     public void sendHeaders(Metadata.Headers headers) {
-      delegate.sendHeaders(headers);
+      delegate().sendHeaders(headers);
     }
 
     @Override
     public void sendPayload(RespT payload) {
-      delegate.sendPayload(payload);
+      delegate().sendPayload(payload);
     }
 
     @Override
     public void close(Status status, Metadata.Trailers trailers) {
-      delegate.close(status, trailers);
+      delegate().close(status, trailers);
     }
 
     @Override
     public boolean isCancelled() {
-      return delegate.isCancelled();
+      return delegate().isCancelled();
     }
   }
 
   /**
    * Utility base class for decorating {@link ServerCall.Listener} instances.
    */
-  public static class ForwardingListener<RespT> extends ServerCall.Listener<RespT> {
+  public abstract static class ForwardingListener<RespT> extends ServerCall.Listener<RespT> {
 
-    private final ServerCall.Listener<RespT> delegate;
-
-    public ForwardingListener(ServerCall.Listener<RespT> delegate) {
-      this.delegate = delegate;
-    }
+    /**
+     * Returns the delegated {@code ServerCall.Listener}
+     */
+    protected abstract ServerCall.Listener<RespT> delegate();
 
     @Override
     public void onPayload(RespT payload) {
-      delegate.onPayload(payload);
+      delegate().onPayload(payload);
     }
 
     @Override
     public void onHalfClose() {
-      delegate.onHalfClose();
+      delegate().onHalfClose();
     }
 
     @Override
     public void onCancel() {
-      delegate.onCancel();
+      delegate().onCancel();
     }
 
     @Override
     public void onComplete() {
-      delegate.onComplete();
+      delegate().onComplete();
     }
 
     @Override
     public void onReady(int numMessages) {
-      delegate.onReady(numMessages);
+      delegate().onReady(numMessages);
     }
   }
 }
