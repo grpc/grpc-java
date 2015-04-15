@@ -42,9 +42,9 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.handler.codec.AsciiString;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2Headers;
+import io.netty.util.ByteString;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 
@@ -59,16 +59,16 @@ import java.util.concurrent.ThreadFactory;
  */
 class Utils {
 
-  public static final AsciiString STATUS_OK = new AsciiString("200");
-  public static final AsciiString HTTP_METHOD = new AsciiString(HttpUtil.HTTP_METHOD);
-  public static final AsciiString HTTPS = new AsciiString("https");
-  public static final AsciiString HTTP = new AsciiString("http");
-  public static final AsciiString CONTENT_TYPE_HEADER =
-      new AsciiString(HttpUtil.CONTENT_TYPE.name());
-  public static final AsciiString CONTENT_TYPE_GRPC =
-      new AsciiString(HttpUtil.CONTENT_TYPE_GRPC);
-  public static final AsciiString TE_HEADER = new AsciiString(HttpUtil.TE.name());
-  public static final AsciiString TE_TRAILERS = new AsciiString(HttpUtil.TE_TRAILERS);
+  public static final ByteString STATUS_OK = new ByteString("200".getBytes());
+  public static final ByteString HTTP_METHOD = new ByteString(HttpUtil.HTTP_METHOD.getBytes());
+  public static final ByteString HTTPS = new ByteString("https".getBytes());
+  public static final ByteString HTTP = new ByteString("http".getBytes());
+  public static final ByteString CONTENT_TYPE_HEADER =
+      new ByteString(HttpUtil.CONTENT_TYPE.name().getBytes());
+  public static final ByteString CONTENT_TYPE_GRPC =
+      new ByteString(HttpUtil.CONTENT_TYPE_GRPC.getBytes());
+  public static final ByteString TE_HEADER = new ByteString(HttpUtil.TE.name().getBytes());
+  public static final ByteString TE_TRAILERS = new ByteString(HttpUtil.TE_TRAILERS.getBytes());
 
   public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP =
       new DefaultEventLoopGroupResource(1, "grpc-default-boss-ELG");
@@ -101,7 +101,7 @@ class Utils {
     // arbitrary binary data, not just ASCII.
     byte[][] headerValues = new byte[http2Headers.size() * 2][];
     int i = 0;
-    for (Map.Entry<AsciiString, AsciiString> entry : http2Headers) {
+    for (Map.Entry<ByteString, ByteString> entry : http2Headers) {
       headerValues[i++] = entry.getKey().array();
       headerValues[i++] = entry.getValue().array();
     }
@@ -110,8 +110,8 @@ class Utils {
 
   public static Http2Headers convertClientHeaders(Metadata.Headers headers,
       boolean ssl,
-      AsciiString defaultPath,
-      AsciiString defaultAuthority) {
+      ByteString defaultPath,
+      ByteString defaultAuthority) {
     Preconditions.checkNotNull(defaultPath, "defaultPath");
     Preconditions.checkNotNull(defaultAuthority, "defaultAuthority");
     // Add any application-provided headers first.
@@ -127,10 +127,10 @@ class Utils {
 
     // Override the default authority and path if provided by the headers.
     if (headers.getAuthority() != null) {
-      http2Headers.authority(new AsciiString(headers.getAuthority()));
+      http2Headers.authority(new ByteString(headers.getAuthority().getBytes()));
     }
     if (headers.getPath() != null) {
-      http2Headers.path(new AsciiString(headers.getPath()));
+      http2Headers.path(new ByteString(headers.getPath().getBytes()));
     }
 
     return http2Headers;
@@ -161,8 +161,8 @@ class Utils {
     Http2Headers http2Headers = new DefaultHttp2Headers();
     byte[][] serializedHeaders = TransportFrameUtil.toHttp2Headers(headers);
     for (int i = 0; i < serializedHeaders.length; i += 2) {
-      http2Headers.add(new AsciiString(serializedHeaders[i], false),
-          new AsciiString(serializedHeaders[i + 1], false));
+      http2Headers.add(new ByteString(serializedHeaders[i], false),
+          new ByteString(serializedHeaders[i + 1], false));
     }
     return http2Headers;
   }
