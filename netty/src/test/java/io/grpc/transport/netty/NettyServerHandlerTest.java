@@ -79,7 +79,7 @@ import io.netty.handler.codec.http2.Http2FrameReader;
 import io.netty.handler.codec.http2.Http2FrameWriter;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2Settings;
-import io.netty.util.ByteString;
+import io.netty.util.AsciiString;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -298,7 +298,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase {
         .method(HTTP_METHOD)
         .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
         .set(TE_HEADER, TE_TRAILERS)
-        .path(new ByteString("/foo.bar".getBytes()));
+        .path(new AsciiString("/foo.bar"));
     ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
     handler.channelRead(ctx, headersFrame);
 

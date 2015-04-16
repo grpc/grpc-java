@@ -191,15 +191,9 @@ class NettyClientHandler extends Http2ConnectionHandler {
     stream.transportReportStatus(Status.UNKNOWN, false, new Metadata.Trailers());
   }
 
-  private void onGoAwayRead(long errorCode, ByteBuf debugData) throws Http2Exception {
-    goAwayStatus(statusFromGoAway(errorCode, debugData));
-    goingAway();
-  }
-
   @Override
   public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
     goAwayStatus(Status.UNAVAILABLE.withDescription("Network channel closed by the client"));
-    
     super.close(ctx, promise);
   }
 
@@ -306,29 +300,26 @@ class NettyClientHandler extends Http2ConnectionHandler {
   }
 
   /**
-   * Handler for a GOAWAY being either sent or received.
+   * Handler for a GOAWAY being either sent or received. Fails any streams created after the
+   * last known stream.
    */
   private void goingAway() {
     final Status goAwayStatus = goAwayStatus();
-    if (connection().goAwayReceived()) {
-      // Received a GOAWAY from the remote endpoint. Fail any streams that were created after the
-      // last known stream.
-      final int lastKnownStream = connection().local().lastKnownStream();
-      try {
-        connection().forEachActiveStream(new Http2StreamVisitor() {
-          @Override
-          public boolean visit(Http2Stream stream) throws Http2Exception {
-            if (lastKnownStream < stream.id()) {
-              clientStream(stream).transportReportStatus(goAwayStatus, false,
-                  new Metadata.Trailers());
-              stream.close();
-            }
-            return true;
+    final int lastKnownStream = connection().local().lastKnownStream();
+    try {
+      connection().forEachActiveStream(new Http2StreamVisitor() {
+        @Override
+        public boolean visit(Http2Stream stream) throws Http2Exception {
+          if (stream.id() > lastKnownStream) {
+            clientStream(stream)
+                .transportReportStatus(goAwayStatus, false, new Metadata.Trailers());
+            stream.close();
           }
-        });
-      } catch (Http2Exception e) {
-        throw new RuntimeException(e);
-      }
+          return true;
+        }
+      });
+    } catch (Http2Exception e) {
+      throw new RuntimeException(e);
     }
   }
 
@@ -412,12 +403,6 @@ class NettyClientHandler extends Http2ConnectionHandler {
     public void onRstStreamRead(ChannelHandlerContext ctx, int streamId, long errorCode)
         throws Http2Exception {
       handler.onRstStreamRead(streamId);
-    }
-
-    @Override
-    public void onGoAwayRead(ChannelHandlerContext ctx, int lastStreamId, long errorCode,
-        ByteBuf debugData) throws Http2Exception {
-      handler.onGoAwayRead(errorCode, debugData);
     }
   }
 }

@@ -319,7 +319,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
   }
 
   @Test
-  public void cancelStreamShouldFailBufferedStream() throws Exception {
+  public void cancelStreamShouldCreateAndThenFailBufferedStream() throws Exception {
     receiveMaxConcurrentStreams(0);
     handler.write(ctx, new CreateStreamCommand(grpcHeaders, stream), promise);
     verify(stream).id(3);

@@ -31,6 +31,8 @@
 
 package io.grpc.transport.netty;
 
+import static io.netty.util.CharsetUtil.UTF_8;
+
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -59,16 +61,16 @@ import java.util.concurrent.ThreadFactory;
  */
 class Utils {
 
-  public static final ByteString STATUS_OK = new ByteString("200".getBytes());
-  public static final ByteString HTTP_METHOD = new ByteString(HttpUtil.HTTP_METHOD.getBytes());
-  public static final ByteString HTTPS = new ByteString("https".getBytes());
-  public static final ByteString HTTP = new ByteString("http".getBytes());
-  public static final ByteString CONTENT_TYPE_HEADER =
-      new ByteString(HttpUtil.CONTENT_TYPE.name().getBytes());
-  public static final ByteString CONTENT_TYPE_GRPC =
-      new ByteString(HttpUtil.CONTENT_TYPE_GRPC.getBytes());
-  public static final ByteString TE_HEADER = new ByteString(HttpUtil.TE.name().getBytes());
-  public static final ByteString TE_TRAILERS = new ByteString(HttpUtil.TE_TRAILERS.getBytes());
+  public static final ByteString STATUS_OK = new ByteString("200".getBytes(UTF_8));
+  public static final ByteString HTTP_METHOD = new ByteString(HttpUtil.HTTP_METHOD.getBytes(UTF_8));
+  public static final ByteString HTTPS = new ByteString("https".getBytes(UTF_8));
+  public static final ByteString HTTP = new ByteString("http".getBytes(UTF_8));
+  public static final ByteString CONTENT_TYPE_HEADER = new ByteString(HttpUtil.CONTENT_TYPE.name()
+      .getBytes(UTF_8));
+  public static final ByteString CONTENT_TYPE_GRPC = new ByteString(
+      HttpUtil.CONTENT_TYPE_GRPC.getBytes(UTF_8));
+  public static final ByteString TE_HEADER = new ByteString(HttpUtil.TE.name().getBytes(UTF_8));
+  public static final ByteString TE_TRAILERS = new ByteString(HttpUtil.TE_TRAILERS.getBytes(UTF_8));
 
   public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP =
       new DefaultEventLoopGroupResource(1, "grpc-default-boss-ELG");
@@ -127,10 +129,10 @@ class Utils {
 
     // Override the default authority and path if provided by the headers.
     if (headers.getAuthority() != null) {
-      http2Headers.authority(new ByteString(headers.getAuthority().getBytes()));
+      http2Headers.authority(new ByteString(headers.getAuthority().getBytes(UTF_8)));
     }
     if (headers.getPath() != null) {
-      http2Headers.path(new ByteString(headers.getPath().getBytes()));
+      http2Headers.path(new ByteString(headers.getPath().getBytes(UTF_8)));
     }
 
     return http2Headers;
