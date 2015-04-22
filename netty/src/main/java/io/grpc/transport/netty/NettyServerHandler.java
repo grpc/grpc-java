@@ -136,15 +136,13 @@ class NettyServerHandler extends Http2ConnectionHandler {
     try {
       // The Http2Stream object was put by AbstractHttp2ConnectionHandler before calling this
       // method.
-      Http2Stream http2Stream = connection().stream(streamId);
-      if (http2Stream != null) {
-        NettyServerStream stream = new NettyServerStream(ctx.channel(), http2Stream, this);
-        http2Stream.setProperty(NettyServerStream.class, stream);
-        String method = determineMethod(streamId, headers);
-        ServerStreamListener listener =
-            transportListener.streamCreated(stream, method, Utils.convertHeaders(headers));
-        stream.setListener(listener);
-      }
+      Http2Stream http2Stream = requireHttp2Stream(streamId);
+      NettyServerStream stream = new NettyServerStream(ctx.channel(), http2Stream, this);
+      http2Stream.setProperty(NettyServerStream.class, stream);
+      String method = determineMethod(streamId, headers);
+      ServerStreamListener listener =
+          transportListener.streamCreated(stream, method, Utils.convertHeaders(headers));
+      stream.setListener(listener);
     } catch (Http2Exception e) {
       throw e;
     } catch (Throwable e) {
