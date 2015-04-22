@@ -155,8 +155,6 @@ class NettyServerHandler extends Http2ConnectionHandler {
     try {
       NettyServerStream stream = serverStream(requireHttp2Stream(streamId));
       stream.inboundDataReceived(data, endOfStream);
-    } catch (Http2Exception e) {
-      throw e;
     } catch (Throwable e) {
       logger.log(Level.WARNING, "Exception in onDataRead()", e);
       throw newStreamException(streamId, e);
@@ -167,8 +165,6 @@ class NettyServerHandler extends Http2ConnectionHandler {
     try {
       NettyServerStream stream = serverStream(requireHttp2Stream(streamId));
       stream.abortStream(Status.CANCELLED, false);
-    } catch (Http2Exception e) {
-      throw e;
     } catch (Throwable e) {
       logger.log(Level.WARNING, "Exception in onRstStreamRead()", e);
       throw newStreamException(streamId, e);
@@ -307,11 +303,11 @@ class NettyServerHandler extends Http2ConnectionHandler {
     });
   }
 
-  private Http2Stream requireHttp2Stream(int streamId) throws Http2Exception {
+  private Http2Stream requireHttp2Stream(int streamId) {
     Http2Stream stream = connection().stream(streamId);
     if (stream == null) {
-      throw Http2Exception.connectionError(Http2Error.PROTOCOL_ERROR, "Stream does not exist: "
-          + streamId);
+      // This should never happen.
+      throw new AssertionError("Stream does not exist: " + streamId);
     }
     return stream;
   }

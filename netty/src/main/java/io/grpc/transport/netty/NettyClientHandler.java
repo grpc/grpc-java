@@ -358,11 +358,11 @@ class NettyClientHandler extends Http2ConnectionHandler {
     return id;
   }
 
-  private Http2Stream requireHttp2Stream(int streamId) throws Http2Exception {
+  private Http2Stream requireHttp2Stream(int streamId) {
     Http2Stream stream = connection().stream(streamId);
     if (stream == null) {
-      throw Http2Exception.connectionError(Http2Error.PROTOCOL_ERROR, "Stream does not exist: "
-          + streamId);
+      // This should never happen.
+      throw new AssertionError("Stream does not exist: " + streamId);
     }
     return stream;
   }
