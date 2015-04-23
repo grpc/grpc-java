@@ -358,8 +358,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
     handler = newHandler(connectionWindow, DEFAULT_WINDOW_SIZE);
     handler.handlerAdded(ctx);
     Http2Connection connection = handler.connection();
-    assertEquals(connectionWindow,
-        connection.local().flowController().windowSize(connection.connectionStream()));
+    assertEquals(connectionWindow, handler.connection().connectionStream().localFlowState()
+        .windowSize());
   }
 
   @Test
