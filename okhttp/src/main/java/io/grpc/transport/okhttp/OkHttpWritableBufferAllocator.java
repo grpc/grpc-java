@@ -48,7 +48,7 @@ class OkHttpWritableBufferAllocator implements WritableBufferAllocator {
   private static final int MAX_BUFFER = 1024 * 1024;
 
   /**
-   * Construct a new instance
+   * Construct a new instance.
    */
   OkHttpWritableBufferAllocator() {
   }
