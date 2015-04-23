@@ -16,7 +16,7 @@ The codegen plugin requires protobuf 3.0.0-alpha-2:
 ```
 $ git clone https://github.com/google/protobuf.git
 $ cd protobuf
-$ git checkout v3.0.0-alpha-2
+$ git checkout alpha-2-fix
 $ ./autogen.sh
 $ ./configure
 $ make
