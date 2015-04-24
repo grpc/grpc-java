@@ -190,6 +190,7 @@ public class EndToEnd {
 
   @Test
   @Benchmark
+  // Use JUnit annotations to allow for easy execution as a single-pass test.
   public void blockingUnary() throws Exception {
     Call call = channel.newCall(unaryMethod);
     ByteBuf slice = request.slice();
