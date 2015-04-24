@@ -64,82 +64,72 @@ class ClientConfiguration {
   }
 
   static ClientConfiguration parseArgs(String[] args) {
-    try {
-      ClientConfiguration c = new ClientConfiguration();
-      boolean hasPort = false;
+    ClientConfiguration c = new ClientConfiguration();
+    boolean hasPort = false;
 
-      for (String arg : args) {
-        if (!arg.startsWith("--")) {
-          System.out.println("All arguments must start with '--': " + arg);
-          printUsage();
-          return null;
-        }
-
-        String[] pair = arg.substring(2).split("=", 2);
-        String key = pair[0];
-        String value = "";
-        if (pair.length == 2) {
-          value = pair[1];
-        }
-
-        if ("help".equals(key)) {
-          printUsage();
-          return null;
-        } else if ("port".equals(key)) {
-          c.port = Integer.parseInt(value);
-          hasPort = true;
-        } else if ("host".equals(key)) {
-          c.host = value;
-        } else if ("channels".equals(key)) {
-          c.channels = max(Integer.parseInt(value), 1);
-        } else if ("outstanding_rpcs_per_channel".equals(key)) {
-          c.outstandingRpcsPerChannel = max(Integer.parseInt(value), 1);
-        } else if ("client_payload".equals(key)) {
-          c.clientPayload = max(Integer.parseInt(value), 0);
-        } else if ("server_payload".equals(key)) {
-          c.serverPayload = max(Integer.parseInt(value), 0);
-        } else if ("tls".equals(key)) {
-          c.tls = true;
-        } else if ("testca".equals(key)) {
-          c.testca = true;
-        } else if ("okhttp".equals(key)) {
-          c.okhttp = true;
-        } else if ("duration".equals(key)) {
-          c.duration = parseDuration(value);
-        } else if ("warmup_duration".equals(key)) {
-          c.warmupDuration = parseDuration(value);
-        } else if ("directexecutor".equals(key)) {
-          c.directExecutor = true;
-        } else if ("dump_histogram".equals(key)) {
-          c.dumpHistogram = true;
-          if (!value.isEmpty()) {
-            c.histogramFile = value;
-          }
-        } else if ("streaming_rpcs".equals(key)) {
-          c.rpcType = RpcType.STREAMING;
-        } else if ("connection_window".equals(key)) {
-          c.connectionWindow = Integer.parseInt(value);
-        } else if ("stream_window".equals(key)) {
-          c.streamWindow = Integer.parseInt(value);
-        } else {
-          System.out.println("Unrecognized argument '" + key + "'.");
-        }
+    for (String arg : args) {
+      if (!arg.startsWith("--")) {
+        throw new IllegalArgumentException("All arguments must start with '--': " + arg);
       }
 
-      if (!hasPort) {
-        System.out.println("'--port' was not specified.");
+      String[] pair = arg.substring(2).split("=", 2);
+      String key = pair[0];
+      String value = "";
+      if (pair.length == 2) {
+        value = pair[1];
+      }
+
+      if ("help".equals(key)) {
         printUsage();
         return null;
+      } else if ("port".equals(key)) {
+        c.port = Integer.parseInt(value);
+        hasPort = true;
+      } else if ("host".equals(key)) {
+        c.host = value;
+      } else if ("channels".equals(key)) {
+        c.channels = max(Integer.parseInt(value), 1);
+      } else if ("outstanding_rpcs_per_channel".equals(key)) {
+        c.outstandingRpcsPerChannel = max(Integer.parseInt(value), 1);
+      } else if ("client_payload".equals(key)) {
+        c.clientPayload = max(Integer.parseInt(value), 0);
+      } else if ("server_payload".equals(key)) {
+        c.serverPayload = max(Integer.parseInt(value), 0);
+      } else if ("tls".equals(key)) {
+        c.tls = true;
+      } else if ("testca".equals(key)) {
+        c.testca = true;
+      } else if ("okhttp".equals(key)) {
+        c.okhttp = true;
+      } else if ("duration".equals(key)) {
+        c.duration = parseDuration(value);
+      } else if ("warmup_duration".equals(key)) {
+        c.warmupDuration = parseDuration(value);
+      } else if ("directexecutor".equals(key)) {
+        c.directExecutor = true;
+      } else if ("dump_histogram".equals(key)) {
+        c.dumpHistogram = true;
+        if (!value.isEmpty()) {
+          c.histogramFile = value;
+        }
+      } else if ("streaming_rpcs".equals(key)) {
+        c.rpcType = RpcType.STREAMING;
+      } else if ("connection_window".equals(key)) {
+        c.connectionWindow = Integer.parseInt(value);
+      } else if ("stream_window".equals(key)) {
+        c.streamWindow = Integer.parseInt(value);
+      } else {
+        throw new IllegalArgumentException("Unrecognized argument '" + key + "'.");
       }
-      return c;
-    } catch (Exception e) {
-      e.printStackTrace();
-      printUsage();
     }
-    return null;
+
+    if (!hasPort) {
+      throw new IllegalStateException("'--port' was not specified.");
+    }
+    return c;
   }
 
-  private static void printUsage() {
+  static void printUsage() {
     ClientConfiguration c = new ClientConfiguration();
     System.out.println(
         "Usage: [ARGS...]"

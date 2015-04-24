@@ -40,6 +40,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.ByteString;
 
+import grpc.testing.Qpstest;
 import grpc.testing.Qpstest.Payload;
 import grpc.testing.TestServiceGrpc;
 import io.grpc.Channel;
@@ -75,8 +76,8 @@ public class QpsAsyncClient {
 
   private final ClientConfiguration config;
 
-  public QpsAsyncClient(String[] args) {
-    config = ClientConfiguration.parseArgs(args);
+  public QpsAsyncClient(ClientConfiguration config) {
+    this.config = config;
   }
 
   public void run() throws Exception {
@@ -355,7 +356,14 @@ public class QpsAsyncClient {
   }
 
   public static void main(String... args) throws Exception {
-    new QpsAsyncClient(args).run();
+    try {
+      ClientConfiguration config = ClientConfiguration.parseArgs(args);
+      QpsAsyncClient client = new QpsAsyncClient(config);
+      client.run();
+    } catch (RuntimeException e) {
+      System.out.println(e.getMessage());
+      ClientConfiguration.printUsage();
+    }
   }
 
   private static class HistogramFuture implements Future<Histogram> {

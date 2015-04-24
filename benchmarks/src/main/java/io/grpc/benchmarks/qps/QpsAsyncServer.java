@@ -54,7 +54,7 @@ import java.util.concurrent.TimeUnit;
 public class QpsAsyncServer {
 
   private boolean tls;
-  private int port = 0;
+  private int port;
   private int connectionWindow = NettyServerBuilder.DEFAULT_CONNECTION_WINDOW_SIZE;
   private int streamWindow = NettyServerBuilder.DEFAULT_STREAM_WINDOW_SIZE;
   private boolean directExecutor;
