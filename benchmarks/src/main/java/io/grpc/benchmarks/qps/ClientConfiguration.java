@@ -124,7 +124,7 @@ class ClientConfiguration {
     }
 
     if (!hasPort) {
-      throw new IllegalStateException("'--port' was not specified.");
+      throw new IllegalArgumentException("'--port' was not specified.");
     }
     return c;
   }

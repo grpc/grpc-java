@@ -356,14 +356,16 @@ public class QpsAsyncClient {
   }
 
   public static void main(String... args) throws Exception {
+    ClientConfiguration config;
     try {
-      ClientConfiguration config = ClientConfiguration.parseArgs(args);
-      QpsAsyncClient client = new QpsAsyncClient(config);
-      client.run();
+      config = ClientConfiguration.parseArgs(args);
     } catch (RuntimeException e) {
       System.out.println(e.getMessage());
       ClientConfiguration.printUsage();
+      return;
     }
+    QpsAsyncClient client = new QpsAsyncClient(config);
+    client.run();
   }
 
   private static class HistogramFuture implements Future<Histogram> {
