@@ -62,6 +62,9 @@ public class QpsAsyncServer {
   private int streamWindow = NettyServerBuilder.DEFAULT_STREAM_WINDOW_SIZE;
   private boolean directExecutor;
 
+  /**
+   * checkstyle complains if there is no javadoc comment here.
+   */
   public static void main(String... args) throws Exception {
     new QpsAsyncServer().run(args);
   }

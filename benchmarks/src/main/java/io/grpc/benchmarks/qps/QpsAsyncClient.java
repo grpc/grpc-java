@@ -82,6 +82,9 @@ public class QpsAsyncClient {
     this.config = config;
   }
 
+  /**
+   * Start the QPS Client.
+   */
   public void run() throws Exception {
     if (config == null) {
       return;
@@ -357,6 +360,9 @@ public class QpsAsyncClient {
     }
   }
 
+  /**
+   * checkstyle complains if there is no javadoc comment here.
+   */
   public static void main(String... args) throws Exception {
     ClientConfiguration config;
     try {
