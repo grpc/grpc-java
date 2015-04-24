@@ -40,7 +40,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.ByteString;
 
-import grpc.testing.Qpstest;
 import grpc.testing.Qpstest.Payload;
 import grpc.testing.TestServiceGrpc;
 import io.grpc.Channel;
@@ -68,6 +67,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+/**
+ * QPS Client using the non-blocking API.
+ */
 public class QpsAsyncClient {
   // The histogram can record values between 1 microsecond and 1 min.
   private static final long HISTOGRAM_MAX_VALUE = 60000000L;

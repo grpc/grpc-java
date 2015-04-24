@@ -51,6 +51,9 @@ import io.netty.handler.ssl.SslContext;
 import java.io.File;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * QPS server using the non-blocking API.
+ */
 public class QpsAsyncServer {
 
   private boolean tls;
