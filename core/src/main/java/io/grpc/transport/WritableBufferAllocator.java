@@ -42,4 +42,9 @@ public interface WritableBufferAllocator {
    * free to return a buffer with a greater or lesser capacity.
    */
   WritableBuffer allocate(int capacityHint);
+
+  /**
+   * Return an empty buffer that cannot be written to or increase in capacity.
+   */
+  WritableBuffer empty();
 }
