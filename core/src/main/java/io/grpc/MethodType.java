@@ -62,16 +62,18 @@ public enum MethodType {
   UNKNOWN;
 
   /**
-   * Return {@code true} if the client is known to immediately send one and only one message
-   * immediately at the start of a call, otherwise {@code false}.
+   * Returns {@code true} if the client will immediately send one request message to the server
+   * after calling {@link Call#start(io.grpc.Call.Listener, io.grpc.Metadata.Headers)} and then
+   * immediately half-close the stream by calling {@link io.grpc.Call#halfClose()}.
    */
   public final boolean clientSendsOneMessage() {
     return this == UNARY || this == SERVER_STREAMING;
   }
 
   /**
-   * Return {@code true} if the server is know to immediately respond with one and only one message
-   * immediately after the last message is received from the client, otherwise {@code false}.
+   * Returns {@code true} if the server will immediately send one response message to the client
+   * upon receipt of {@link io.grpc.ServerCall.Listener#onHalfClose()} and then immediately
+   * close the stream by calling {@link ServerCall#close(Status, io.grpc.Metadata.Trailers)}.
    */
   public final boolean serverSendsOneMessage() {
     return this == UNARY || this == CLIENT_STREAMING;
