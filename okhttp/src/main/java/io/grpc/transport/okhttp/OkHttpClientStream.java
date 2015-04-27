@@ -114,7 +114,9 @@ class OkHttpClientStream extends Http2ClientStream {
   public void transportHeadersReceived(List<Header> headers, boolean endOfStream) {
     synchronized (lock) {
       if (endOfStream) {
-        transportTrailersReceived(Utils.convertTrailers(headers));
+        if (checkHalfClose()) {
+          transportTrailersReceived(Utils.convertTrailers(headers));
+        }
       } else {
         transportHeadersReceived(Utils.convertHeaders(headers));
       }
@@ -138,8 +140,28 @@ class OkHttpClientStream extends Http2ClientStream {
         }
         return;
       }
+      if (endOfStream && !checkHalfClose()) {
+        return;
+      }
       super.transportDataReceived(new OkHttpReadableBuffer(frame), endOfStream);
     }
+  }
+
+  /**
+   * Called when we receive half-close from server, if we haven't sent half-close yet, resets the
+   * stream and returns false, otherwise just returns true.
+   */
+  private boolean checkHalfClose() {
+    if (canSend()) {
+      frameWriter.rstStream(id(), ErrorCode.INTERNAL_ERROR);
+      Status status = Status.INTERNAL.withDescription(
+          "Received half-close from server before client sends half-close");
+      if (transport.finishStream(id(), status)) {
+        transport.stopIfNecessary();
+      }
+      return false;
+    }
+    return true;
   }
 
   @Override

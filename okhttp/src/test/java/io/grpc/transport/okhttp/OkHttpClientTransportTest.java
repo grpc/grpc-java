@@ -167,7 +167,9 @@ public class OkHttpClientTransportTest {
     final int numMessages = 10;
     final String message = "Hello Client";
     MockStreamListener listener = new MockStreamListener();
-    clientTransport.newStream(method, new Metadata.Headers(), listener).request(numMessages);
+    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata.Headers(), listener);
+    stream.request(numMessages);
+    stream.halfClose();
     assertTrue(streams.containsKey(3));
     frameHandler.headers(false, false, 3, 0, grpcResponseHeaders(), HeadersMode.HTTP_20_HEADERS);
     assertNotNull(listener.headers);
@@ -219,8 +221,9 @@ public class OkHttpClientTransportTest {
   @Test
   public void readStatus() throws Exception {
     MockStreamListener listener = new MockStreamListener();
-    clientTransport.newStream(method,new Metadata.Headers(), listener);
+    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata.Headers(), listener);
     assertTrue(streams.containsKey(3));
+    stream.halfClose();
     frameHandler.headers(true, true, 3, 0, grpcResponseTrailers(), HeadersMode.HTTP_20_HEADERS);
     listener.waitUntilStreamClosed();
     assertEquals(Status.Code.OK, listener.status.getCode());
@@ -596,6 +599,20 @@ public class OkHttpClientTransportTest {
     assertEquals("Received data size exceeded our receiving window size",
         listener.status.getDescription());
     verify(frameWriter).rstStream(eq(3), eq(ErrorCode.FLOW_CONTROL_ERROR));
+  }
+
+  @Test
+  public void serverHalfCloseFirst() throws Exception {
+    MockStreamListener listener = new MockStreamListener();
+    clientTransport.newStream(method,new Metadata.Headers(), listener).request(1);
+
+    frameHandler.headers(false, true, 3, 0, grpcResponseHeaders(), HeadersMode.HTTP_20_HEADERS);
+
+    listener.waitUntilStreamClosed();
+    assertEquals(Status.INTERNAL.getCode(), listener.status.getCode());
+    assertEquals("Received half-close from server before client sends half-close",
+        listener.status.getDescription());
+    verify(frameWriter).rstStream(eq(3), eq(ErrorCode.INTERNAL_ERROR));
   }
 
   private void waitForStreamPending(int expected) throws Exception {
