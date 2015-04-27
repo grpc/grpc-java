@@ -57,7 +57,7 @@ public final class ChannelImpl implements Channel {
   private static final Logger log = Logger.getLogger(ChannelImpl.class.getName());
 
   private static class NoopClientStream implements ClientStream {
-    @Override public void writeMessage(InputStream message, int length, Runnable accepted) {}
+    @Override public void writeMessage(InputStream message, int length) {}
 
     @Override public void flush() {}
 
@@ -66,6 +66,10 @@ public final class ChannelImpl implements Channel {
     @Override public void halfClose() {}
 
     @Override public void request(int numMessages) {}
+
+    @Override public boolean isReady() {
+      return true;
+    }
   }
 
   private final ClientTransportFactory transportFactory;
@@ -298,7 +302,7 @@ public final class ChannelImpl implements Channel {
       boolean failed = true;
       try {
         InputStream payloadIs = method.streamRequest(payload);
-        stream.writeMessage(payloadIs, available(payloadIs), null);
+        stream.writeMessage(payloadIs, available(payloadIs));
         failed = false;
       } finally {
         if (failed) {
@@ -311,6 +315,11 @@ public final class ChannelImpl implements Channel {
       if (!unaryRequest) {
         stream.flush();
       }
+    }
+
+    @Override
+    public boolean isReady() {
+      return stream.isReady();
     }
 
     private class ClientStreamListenerImpl implements ClientStreamListener {
@@ -376,11 +385,11 @@ public final class ChannelImpl implements Channel {
       }
 
       @Override
-      public void onReady(final int numMessages) {
+      public void onReady() {
         callExecutor.execute(new Runnable() {
           @Override
           public void run() {
-            observer.onReady(numMessages);
+            observer.onReady();
           }
         });
       }
