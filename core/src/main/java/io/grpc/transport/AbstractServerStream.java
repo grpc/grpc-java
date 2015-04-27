@@ -144,6 +144,8 @@ public abstract class AbstractServerStream<IdT> extends AbstractStream<IdT>
   protected final void internalSendFrame(WritableBuffer frame, boolean endOfStream, boolean flush) {
     if (frame.readableBytes() > 0) {
       sendFrame(frame, false, endOfStream ? false : flush);
+    } else {
+      frame.release();
     }
     if (endOfStream) {
       sendTrailers(stashedTrailers, headersSent);
