@@ -68,6 +68,7 @@ import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
+import io.netty.channel.nio.NioEventLoopGroup;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -85,7 +86,7 @@ import javax.annotation.Nullable;
  * payload to avoid noise from object serialization.
  */
 @State(Scope.Group)
-@Fork(0)
+@Fork(1)
 public class EndToEnd {
 
   public static enum PayloadSize {
@@ -180,6 +181,8 @@ public class EndToEnd {
     if (clientExecutor == ExecutorType.DIRECT) {
       channelBuilder.executor(MoreExecutors.newDirectExecutorService());
     }
+    // Always use a different worker group from the client.
+    serverBuilder.workerEventLoopGroup(new NioEventLoopGroup());
     serverBuilder.connectionWindowSize(windowSize.bytes());
     channelBuilder.negotiationType(NegotiationType.PLAINTEXT);
     serverBuilder.maxConcurrentCallsPerConnection(maxConcurrentStreams);
@@ -261,8 +264,8 @@ public class EndToEnd {
 
   @TearDown(Level.Trial)
   public void teardown() throws Exception {
-    server.shutdown();
-    channel.shutdown();
+    channel.shutdown().awaitTerminated(5, TimeUnit.SECONDS);
+    server.shutdown().awaitTerminated(5, TimeUnit.SECONDS);
   }
 
   @TearDown(Level.Iteration)
@@ -273,8 +276,7 @@ public class EndToEnd {
 
   @Benchmark
   @Group("unary")
-  @GroupThreads(2)
-  // Use JUnit annotations to allow for easy execution as a single-pass test.
+  @GroupThreads(1)
   public void sendUnary(Control ctrl) throws Exception {
     while (!requestSemaphore.tryAcquire(1, TimeUnit.SECONDS) && !ctrl.stopMeasurement) {
     }
@@ -286,7 +288,6 @@ public class EndToEnd {
   @Benchmark
   @Group("unary")
   @GroupThreads(1)
-  // Use JUnit annotations to allow for easy execution as a single-pass test.
   public void receiveUnary(Control ctrl) throws Exception {
     while (!responseSemaphore.tryAcquire(1, TimeUnit.SECONDS) && !ctrl.stopMeasurement) {
     }
