@@ -59,5 +59,21 @@ public enum MethodType {
    * Cardinality and temporal relationships are not known. Implementations should not make
    * buffering assumptions and should largely treat the same as {@link #DUPLEX_STREAMING}.
    */
-  UNKNOWN
+  UNKNOWN;
+
+  /**
+   * Return {@code true} if the client is known to immediately send one and only one message
+   * immediately at the start of a call, otherwise {@code false}.
+   */
+  public final boolean clientSendsOneMessage() {
+    return this == UNARY || this == SERVER_STREAMING;
+  }
+
+  /**
+   * Return {@code true} if the server is know to immediately respond with one and only one message
+   * immediately after the last message is received from the client, otherwise {@code false}.
+   */
+  public final boolean serverSendsOneMessage() {
+    return this == UNARY || this == CLIENT_STREAMING;
+  }
 }
