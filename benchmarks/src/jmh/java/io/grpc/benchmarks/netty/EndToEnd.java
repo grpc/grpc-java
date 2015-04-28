@@ -33,15 +33,16 @@ package io.grpc.benchmarks.netty;
 
 import com.google.common.util.concurrent.MoreExecutors;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.SocketAddress;
-import java.util.concurrent.TimeUnit;
-
-import javax.annotation.Nullable;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.Level;
+import org.openjdk.jmh.annotations.Param;
+import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.Setup;
+import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.annotations.TearDown;
 
 import io.grpc.Call;
 import io.grpc.ChannelImpl;
@@ -66,16 +67,15 @@ import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import org.openjdk.jmh.annotations.Benchmark;
-import org.openjdk.jmh.annotations.Level;
-import org.openjdk.jmh.annotations.Param;
-import org.openjdk.jmh.annotations.Scope;
-import org.openjdk.jmh.annotations.Setup;
-import org.openjdk.jmh.annotations.State;
-import org.openjdk.jmh.annotations.TearDown;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.SocketAddress;
+import java.util.concurrent.TimeUnit;
+
+import javax.annotation.Nullable;
 
 /**
  * Benchmark the Netty Channel and Server implementation end-to-end. Uses ByteBuf as the
