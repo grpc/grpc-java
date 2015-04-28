@@ -34,7 +34,6 @@ package io.grpc.transport.netty;
 import io.grpc.transport.WritableBuffer;
 import io.grpc.transport.WritableBufferAllocator;
 import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.EmptyByteBuf;
 
 /**
  * The default allocator for {@link NettyWritableBuffer}s used by the Netty transport. We set a
@@ -56,21 +55,14 @@ class NettyWritableBufferAllocator implements WritableBufferAllocator {
   private static final int MAX_BUFFER = 1024 * 1024;
 
   private final ByteBufAllocator allocator;
-  private final NettyWritableBuffer emptyBuffer;
 
   NettyWritableBufferAllocator(ByteBufAllocator allocator) {
     this.allocator = allocator;
-    emptyBuffer = new NettyWritableBuffer(new EmptyByteBuf(allocator));
   }
 
   @Override
   public WritableBuffer allocate(int capacityHint) {
     capacityHint = Math.min(MAX_BUFFER, Math.max(MIN_BUFFER, capacityHint));
     return new NettyWritableBuffer(allocator.buffer(capacityHint, capacityHint));
-  }
-
-  @Override
-  public WritableBuffer empty() {
-    return emptyBuffer;
   }
 }

@@ -48,13 +48,10 @@ class OkHttpWritableBufferAllocator implements WritableBufferAllocator {
   // Set the maximum buffer size to 1MB
   private static final int MAX_BUFFER = 1024 * 1024;
 
-  private final EmptyOkHttpWriteableBuffer emptyBuffer;
-
   /**
    * Construct a new instance.
    */
   OkHttpWritableBufferAllocator() {
-    emptyBuffer = new EmptyOkHttpWriteableBuffer();
   }
 
   /**
@@ -65,27 +62,5 @@ class OkHttpWritableBufferAllocator implements WritableBufferAllocator {
   public WritableBuffer allocate(int capacityHint) {
     capacityHint = Math.min(MAX_BUFFER, Math.max(MIN_BUFFER, capacityHint));
     return new OkHttpWritableBuffer(new Buffer(), capacityHint);
-  }
-
-  @Override
-  public WritableBuffer empty() {
-    return emptyBuffer;
-  }
-
-  /**
-   * Implementation of {@link OkHttpWritableBuffer} that is always empty.
-   */
-  private static class EmptyOkHttpWriteableBuffer extends OkHttpWritableBuffer {
-
-    private static Buffer EMPTY_BUFFER = new Buffer();
-
-    private EmptyOkHttpWriteableBuffer() {
-      super(EMPTY_BUFFER, 0);
-    }
-
-    @Override
-    public void write(byte[] src, int srcIndex, int length) {
-      throw new UnsupportedOperationException();
-    }
   }
 }
