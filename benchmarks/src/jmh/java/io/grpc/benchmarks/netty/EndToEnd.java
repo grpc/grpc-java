@@ -33,16 +33,17 @@ package io.grpc.benchmarks.netty;
 
 import com.google.common.util.concurrent.MoreExecutors;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
 import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.Fork;
+import org.openjdk.jmh.annotations.Group;
+import org.openjdk.jmh.annotations.GroupThreads;
 import org.openjdk.jmh.annotations.Level;
 import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.TearDown;
+import org.openjdk.jmh.infra.Control;
 
 import io.grpc.Call;
 import io.grpc.ChannelImpl;
@@ -57,6 +58,7 @@ import io.grpc.ServerImpl;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.stub.Calls;
+import io.grpc.stub.StreamObserver;
 import io.grpc.transport.netty.NegotiationType;
 import io.grpc.transport.netty.NettyChannelBuilder;
 import io.grpc.transport.netty.NettyServerBuilder;
@@ -73,6 +75,7 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.SocketAddress;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nullable;
@@ -81,7 +84,8 @@ import javax.annotation.Nullable;
  * Benchmark the Netty Channel and Server implementation end-to-end. Uses ByteBuf as the
  * payload to avoid noise from object serialization.
  */
-@State(Scope.Benchmark)
+@State(Scope.Group)
+@Fork(0)
 public class EndToEnd {
 
   public static enum PayloadSize {
@@ -89,6 +93,19 @@ public class EndToEnd {
 
     final int bytes;
     PayloadSize(int bytes) {
+      this.bytes = bytes;
+    }
+
+    public int bytes() {
+      return bytes;
+    }
+  }
+
+  public static enum FlowWindowSize {
+    SMALL(16384), MEDIUM(65536), LARGE(1048576), JUMBO(16777216);
+
+    final int bytes;
+    FlowWindowSize(int bytes) {
       this.bytes = bytes;
     }
 
@@ -118,7 +135,13 @@ public class EndToEnd {
   public PayloadSize responseSize = PayloadSize.SMALL;
 
   @Param
+  public FlowWindowSize windowSize = FlowWindowSize.SMALL;
+
+  @Param
   public ChannelType channelType = ChannelType.NIO;
+
+  @Param({"10", "100", "1000"})
+  public int maxConcurrentStreams = 10;
 
   private ServerImpl server;
   private ChannelImpl channel;
@@ -126,7 +149,10 @@ public class EndToEnd {
   private ByteBuf response;
   private MethodDescriptor unaryMethod;
 
-  @Before
+  private Semaphore requestSemaphore;
+  private Semaphore responseSemaphore;
+  private StreamObserver observer;
+
   @Setup(Level.Trial)
   public void setup() throws Exception {
 
@@ -154,7 +180,11 @@ public class EndToEnd {
     if (clientExecutor == ExecutorType.DIRECT) {
       channelBuilder.executor(MoreExecutors.newDirectExecutorService());
     }
+    serverBuilder.connectionWindowSize(windowSize.bytes());
     channelBuilder.negotiationType(NegotiationType.PLAINTEXT);
+    serverBuilder.maxConcurrentCallsPerConnection(maxConcurrentStreams);
+    requestSemaphore = new Semaphore(maxConcurrentStreams);
+    responseSemaphore = new Semaphore(0);
 
     PooledByteBufAllocator alloc = PooledByteBufAllocator.DEFAULT;
     request = alloc.buffer(requestSize.bytes());
@@ -210,22 +240,57 @@ public class EndToEnd {
     server = serverBuilder.build();
     server.start();
     channel = channelBuilder.build();
+
+    observer = new StreamObserver() {
+      @Override
+      public void onValue(Object value) {
+
+      }
+
+      @Override
+      public void onError(Throwable t) {
+
+      }
+
+      @Override
+      public void onCompleted() {
+        responseSemaphore.release();
+      }
+    };
   }
 
-  @After
   @TearDown(Level.Trial)
   public void teardown() throws Exception {
-    server.shutdownNow();
-    channel.shutdownNow();
+    server.shutdown();
+    channel.shutdown();
   }
 
-  @Test
+  @TearDown(Level.Iteration)
+  public void teardownIteration() throws Exception {
+    requestSemaphore = new Semaphore(maxConcurrentStreams);
+    responseSemaphore = new Semaphore(0);
+  }
+
   @Benchmark
+  @Group("unary")
+  @GroupThreads(2)
   // Use JUnit annotations to allow for easy execution as a single-pass test.
-  public void blockingUnary() throws Exception {
+  public void sendUnary(Control ctrl) throws Exception {
+    while (!requestSemaphore.tryAcquire(1, TimeUnit.SECONDS) && !ctrl.stopMeasurement) {
+    }
     Call call = channel.newCall(unaryMethod);
     ByteBuf slice = request.slice();
-    Calls.blockingUnaryCall(call, slice);
+    Calls.asyncUnaryCall(call, slice, observer);
+  }
+
+  @Benchmark
+  @Group("unary")
+  @GroupThreads(1)
+  // Use JUnit annotations to allow for easy execution as a single-pass test.
+  public void receiveUnary(Control ctrl) throws Exception {
+    while (!responseSemaphore.tryAcquire(1, TimeUnit.SECONDS) && !ctrl.stopMeasurement) {
+    }
+    requestSemaphore.release();
   }
 
   /**
