@@ -46,10 +46,10 @@ public abstract class AbstractBenchmark {
   /**
    * Standard payload sizes.
    */
-  public static enum PayloadSize {
+  public enum PayloadSize {
     SMALL(10), MEDIUM(1024), LARGE(65536), JUMBO(16777216);
 
-    final int bytes;
+    private final int bytes;
     PayloadSize(int bytes) {
       this.bytes = bytes;
     }
@@ -62,10 +62,10 @@ public abstract class AbstractBenchmark {
   /**
    * Standard flow-control window sizes.
    */
-  public static enum FlowWindowSize {
+  public enum FlowWindowSize {
     SMALL(16384), MEDIUM(65536), LARGE(1048576), JUMBO(16777216);
 
-    final int bytes;
+    private final int bytes;
     FlowWindowSize(int bytes) {
       this.bytes = bytes;
     }
@@ -78,14 +78,14 @@ public abstract class AbstractBenchmark {
   /**
    * Executor types used by Channel & Server.
    */
-  public static enum ExecutorType {
+  public enum ExecutorType {
     DEFAULT, DIRECT;
   }
 
   /**
    * Support channel types.
    */
-  public static enum ChannelType {
+  public enum ChannelType {
     NIO, LOCAL;
   }
 
