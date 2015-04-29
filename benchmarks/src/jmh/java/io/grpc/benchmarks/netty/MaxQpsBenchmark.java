@@ -31,6 +31,7 @@
 
 package io.grpc.benchmarks.netty;
 
+import org.openjdk.jmh.annotations.AuxCounters;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.Fork;
 import org.openjdk.jmh.annotations.Level;
@@ -56,9 +57,26 @@ public class MaxQpsBenchmark extends AbstractBenchmark {
   @Param({"10", "100", "1000"})
   public int maxConcurrentStreams = 100;
 
-  private AtomicLong callCounter;
-  private long localCount;
+  private static AtomicLong callCounter;
   private AtomicBoolean completed;
+
+  /**
+   * Use an AuxCounter so we can measure that calls as they occur without consuming CPU
+   * in the benchmark method.
+   */
+  @AuxCounters
+  @State(Scope.Thread)
+  public static class AdditionalCounters {
+
+    @Setup(Level.Iteration)
+    public void clean() {
+      callCounter.set(0);
+    }
+
+    public long callsPerSecond() {
+      return callCounter.get();
+    }
+  }
 
   /**
    * Setup with direct executors, small payloads and a large flow control window.
@@ -93,12 +111,9 @@ public class MaxQpsBenchmark extends AbstractBenchmark {
    * of received responses.
    */
   @Benchmark
-  public void measureUnary() throws Exception {
-    while (localCount == 0) {
-      Thread.sleep(10);
-      localCount = callCounter.getAndSet(0);
-    }
-    localCount--;
+  public void measureUnary(AdditionalCounters counters) throws Exception {
+    // No need to do anything, just sleep here.
+    Thread.sleep(1001);
   }
 
   /**
