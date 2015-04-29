@@ -43,6 +43,9 @@ import javax.annotation.Nullable;
  */
 public abstract class AbstractBenchmark {
 
+  /**
+   * Standard payload sizes.
+   */
   public static enum PayloadSize {
     SMALL(10), MEDIUM(1024), LARGE(65536), JUMBO(16777216);
 
@@ -56,6 +59,9 @@ public abstract class AbstractBenchmark {
     }
   }
 
+  /**
+   * Standard flow-control window sizes.
+   */
   public static enum FlowWindowSize {
     SMALL(16384), MEDIUM(65536), LARGE(1048576), JUMBO(16777216);
 
@@ -69,10 +75,16 @@ public abstract class AbstractBenchmark {
     }
   }
 
+  /**
+   * Executor types used by Channel & Server.
+   */
   public static enum ExecutorType {
     DEFAULT, DIRECT;
   }
 
+  /**
+   * Support channel types.
+   */
   public static enum ChannelType {
     NIO, LOCAL;
   }
@@ -87,6 +99,9 @@ public abstract class AbstractBenchmark {
   public AbstractBenchmark() {
   }
 
+  /**
+   * Initialize the environment for the executor.
+   */
   public void setup(ExecutorType clientExecutor,
       ExecutorType serverExecutor,
       PayloadSize requestSize,
@@ -119,12 +134,14 @@ public abstract class AbstractBenchmark {
     if (clientExecutor == ExecutorType.DIRECT) {
       channelBuilder.executor(MoreExecutors.newDirectExecutorService());
     }
+
     // Always use a different worker group from the client.
     serverBuilder.workerEventLoopGroup(new NioEventLoopGroup());
     serverBuilder.connectionWindowSize(windowSize.bytes());
     channelBuilder.negotiationType(NegotiationType.PLAINTEXT);
     serverBuilder.maxConcurrentCallsPerConnection(maxConcurrentStreams);
 
+    // Create buffers of the desired size for requests and responses.
     PooledByteBufAllocator alloc = PooledByteBufAllocator.DEFAULT;
     request = alloc.buffer(requestSize.bytes());
     request.writerIndex(request.capacity() - 1);
@@ -176,10 +193,12 @@ public abstract class AbstractBenchmark {
                   }
                 }).build());
 
+    // Build and start the clients and servers
     server = serverBuilder.build();
     server.start();
     channels = new ChannelImpl[channelCount];
     for (int i = 0; i < channelCount; i++) {
+      // Use a dedicated event-loop for each channel
       channels[i] = channelBuilder
           .eventLoopGroup(new NioEventLoopGroup(1))
           .build();
@@ -191,7 +210,7 @@ public abstract class AbstractBenchmark {
    * {@code done.get()} is true. Each completed call will increment the counter
    * which benchmarks can check for progress.
    */
-  public void startUnaryCalls(int callsPerChannel,
+  protected void startUnaryCalls(int callsPerChannel,
                               final AtomicLong counter,
                               final AtomicBoolean done) {
     for (final ChannelImpl channel : channels) {
@@ -220,7 +239,7 @@ public abstract class AbstractBenchmark {
     }
   }
 
-  public void stopChannelsAndServers() throws Exception {
+  protected void stopChannelsAndServers() throws Exception {
     for (ChannelImpl channel : channels) {
       channel.shutdown();
     }
@@ -228,7 +247,7 @@ public abstract class AbstractBenchmark {
   }
 
   /**
-   * Simple marshaller for Netty ByteBuf.
+   * Simple {@link io.grpc.Marshaller} for Netty ByteBuf.
    */
   protected static class ByteBufOutputMarshaller implements Marshaller<ByteBuf> {
 

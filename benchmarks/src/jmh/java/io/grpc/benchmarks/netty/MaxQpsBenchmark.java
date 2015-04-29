@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Benchmark demonstrating
+ * Benchmark using configuration intended to allow maximum QPS.
  */
 @State(Scope.Benchmark)
 @Fork(1)
@@ -90,6 +90,9 @@ public class MaxQpsBenchmark extends AbstractBenchmark {
     localCount--;
   }
 
+  /**
+   * Useful for triggering a subset of the benchmark in a profiler.
+   */
   public static void main(String[] argv) throws Exception {
     MaxQpsBenchmark bench = new MaxQpsBenchmark();
     bench.setup();
