@@ -267,8 +267,8 @@ public abstract class AbstractBenchmark {
       try {
         // We don't do anything with the payload and it's already been read into buffers
         // so just skip copying it.
-         stream.skip(stream.available());
-         return EMPTY_BYTE_BUF;
+        stream.skip(stream.available());
+        return EMPTY_BYTE_BUF;
       } catch (IOException ioe) {
         throw new RuntimeException(ioe);
       }

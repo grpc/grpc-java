@@ -28,6 +28,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
 package io.grpc.benchmarks.netty;
 
 import org.openjdk.jmh.annotations.Benchmark;
@@ -59,6 +60,9 @@ public class MaxQpsBenchmark extends AbstractBenchmark {
   private long localCount;
   private AtomicBoolean completed;
 
+  /**
+   * Setup with direct executors, small payloads and a large flow control window.
+   */
   @Setup(Level.Trial)
   public void setup() throws Exception {
     super.setup(ExecutorType.DIRECT,
@@ -74,6 +78,9 @@ public class MaxQpsBenchmark extends AbstractBenchmark {
     startUnaryCalls(maxConcurrentStreams, callCounter, completed);
   }
 
+  /**
+   * Stop the running calls then stop the server and client channels.
+   */
   @TearDown(Level.Trial)
   public void stopChannelsAndServers() throws Exception {
     completed.set(true);
@@ -81,6 +88,10 @@ public class MaxQpsBenchmark extends AbstractBenchmark {
     super.stopChannelsAndServers();
   }
 
+  /**
+   * Measure throughput of unary calls. The calls are already running, we just observe a counter
+   * of received responses.
+   */
   @Benchmark
   public void measureUnary() throws Exception {
     while (localCount == 0) {
