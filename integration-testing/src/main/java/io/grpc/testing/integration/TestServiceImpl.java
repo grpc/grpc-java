@@ -50,6 +50,7 @@ import java.io.InputStream;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Random;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -62,14 +63,14 @@ public class TestServiceImpl implements TestServiceGrpc.TestService {
       "/io/grpc/testing/integration/testdata/uncompressable.bin";
   private final Random random = new Random();
 
-  private final ScheduledExecutorService executor;
+  private final ExecutorService executor;
   private final ByteString uncompressableBuffer;
   private final ByteString compressableBuffer;
 
   /**
    * Constructs a controller using the given executor for scheduling response stream chunks.
    */
-  public TestServiceImpl(ScheduledExecutorService executor) {
+  public TestServiceImpl(ExecutorService executor) {
     this.executor = executor;
     this.compressableBuffer = ByteString.copyFrom(new byte[1024]);
     this.uncompressableBuffer = createBufferFromFile(UNCOMPRESSABLE_FILE);
@@ -293,7 +294,14 @@ public class TestServiceImpl implements TestServiceGrpc.TestService {
         Chunk nextChunk = chunks.peek();
         if (nextChunk != null) {
           scheduled = true;
-          executor.schedule(dispatchTask, nextChunk.delayMicroseconds, TimeUnit.MICROSECONDS);
+          if (executor instanceof ScheduledExecutorService) {
+            ((ScheduledExecutorService) executor).schedule(dispatchTask,
+                nextChunk.delayMicroseconds, TimeUnit.MICROSECONDS);
+          } else {
+            // Allow a direct executor to do the work immediately. Useful when testing flush
+            // coalescing when direct executor is used on the server transport.
+            executor.execute(dispatchTask);
+          }
           return;
         }
       }

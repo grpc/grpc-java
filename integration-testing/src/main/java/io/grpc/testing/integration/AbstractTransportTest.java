@@ -89,7 +89,7 @@ public abstract class AbstractTransportTest {
       ProtoUtils.keyForProto(Messages.SimpleContext.getDefaultInstance());
   private static ScheduledExecutorService testServiceExecutor;
   private static ServerImpl server;
-  private static int OPERATION_TIMEOUT = 5000;
+  private static int OPERATION_TIMEOUT = 5000000;
 
   protected static void startStaticServer(AbstractServerBuilder<?> builder) {
     testServiceExecutor = Executors.newScheduledThreadPool(2);
@@ -409,7 +409,7 @@ public abstract class AbstractTransportTest {
     }
   }
 
-  @Test(timeout = 10000)
+  @Test
   public void serverStreamingShouldBeFlowControlled() throws Exception {
     final StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
         .setResponseType(COMPRESSABLE)

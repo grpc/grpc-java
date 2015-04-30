@@ -38,12 +38,14 @@ import io.netty.handler.codec.http2.Http2Headers;
 /**
  * Command sent from the transport to the Netty channel to send response headers to the client.
  */
-class SendResponseHeadersCommand {
+class SendResponseHeadersCommand extends AbstractNettyCommand {
   private final int streamId;
   private final Http2Headers headers;
   private final boolean endOfStream;
 
-  SendResponseHeadersCommand(int streamId, Http2Headers headers, boolean endOfStream) {
+  SendResponseHeadersCommand(boolean flush, int streamId, Http2Headers headers,
+                             boolean endOfStream) {
+    super(flush);
     this.streamId = streamId;
     this.headers = Preconditions.checkNotNull(headers);
     this.endOfStream = endOfStream;
@@ -63,7 +65,7 @@ class SendResponseHeadersCommand {
 
   @Override
   public boolean equals(Object that) {
-    if (that == null || !that.getClass().equals(SendResponseHeadersCommand.class)) {
+    if (that == null || !super.equals(that)) {
       return false;
     }
     SendResponseHeadersCommand thatCmd = (SendResponseHeadersCommand) that;
@@ -75,7 +77,7 @@ class SendResponseHeadersCommand {
   @Override
   public String toString() {
     return getClass().getSimpleName() + "(streamId=" + streamId + ", headers=" + headers
-        + ", endOfStream=" + endOfStream + ")";
+        + ", endOfStream=" + endOfStream + ", flush=" + flush +")";
   }
 
   @Override

@@ -29,39 +29,41 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.transport;
+package io.grpc.transport.netty;
 
-import io.grpc.MethodType;
-import io.grpc.Status;
+import com.google.common.base.Preconditions;
 
-/** An observer of server-side stream events. */
-public interface ServerStreamListener extends StreamListener {
+/**
+ * Command sent from a Netty client stream to the handler to cancel the stream.
+ */
+class CancelStreamNettyCommand extends AbstractNettyCommand {
+  private final NettyClientStream stream;
 
-  /**
-   * The {@link MethodType} for the call.
-   */
-  MethodType getMethodType();
+  CancelStreamNettyCommand(boolean flush, NettyClientStream stream) {
+    super(flush);
+    this.stream = Preconditions.checkNotNull(stream, "stream");
+  }
 
-  /**
-   * Called when the remote side of the transport gracefully closed, indicating the client had no
-   * more data to send. No further messages will be received on the stream.
-   *
-   * <p>This method should return quickly, as the same thread may be used to process other streams.
-   */
-  void halfClosed();
+  NettyClientStream stream() {
+    return stream;
+  }
 
-  /**
-   * Called when the stream is fully closed. A status code of {@link
-   * io.grpc.Status.Code#OK} implies normal termination of the stream.
-   * Any other value implies abnormal termination. Since clients cannot send status, the passed
-   * status is always library-generated and only is concerned with transport-level stream shutdown
-   * (the call itself may have had a failing status, but if the stream terminated cleanly with the
-   * status appearing to have been sent, then the passed status here would be {@code OK}). This is
-   * guaranteed to always be the final call on a listener. No further callbacks will be issued.
-   *
-   * <p>This method should return quickly, as the same thread may be used to process other streams.
-   *
-   * @param status details about the remote closure
-   */
-  void closed(Status status);
+  @Override
+  public boolean equals(Object that) {
+    if (that == null || !super.equals(that)) {
+      return false;
+    }
+    CancelStreamNettyCommand thatCmd = (CancelStreamNettyCommand) that;
+    return thatCmd.stream == stream;
+  }
+
+  @Override
+  public String toString() {
+    return getClass().getSimpleName() + "(streamId=" + stream.id() + ", flush=" + flush +")";
+  }
+
+  @Override
+  public int hashCode() {
+    return stream != null ? stream.id() : 0;
+  }
 }

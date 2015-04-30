@@ -38,12 +38,17 @@ import static io.grpc.transport.netty.Utils.STATUS_OK;
 import static io.netty.util.CharsetUtil.UTF_8;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.same;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -93,24 +98,35 @@ public class NettyClientStreamTest extends NettyStreamTestBase {
     // Set stream id to indicate it has been created
     stream().id(STREAM_ID);
     stream().cancel();
-    verify(channel).writeAndFlush(any(CancelStreamCommand.class));
+    verify(channel).write(new CancelStreamNettyCommand(false, stream()));
+  }
+
+  @Test
+  public void cancelOutsideEventLoopShouldSendCommandWithFlush() {
+    reset(eventLoop);
+    when(eventLoop.inEventLoop()).thenReturn(false);
+    // Set stream id to indicate it has been created
+    stream().id(STREAM_ID);
+    stream().cancel();
+    verify(channel).write(new CancelStreamNettyCommand(true, stream()));
   }
 
   @Test
   public void cancelShouldStillSendCommandIfStreamNotCreatedToCancelCreation() {
     stream().cancel();
-    verify(channel).writeAndFlush(any(CancelStreamCommand.class));
+    verify(channel).write(new CancelStreamNettyCommand(false, stream()));
   }
 
   @Test
-  public void writeMessageShouldSendRequest() throws Exception {
+  public void writeMessageOutsideEventLoopShouldSendRequestWithFlush() throws Exception {
+    reset(eventLoop);
+    when(eventLoop.inEventLoop()).thenReturn(false);
     // Force stream creation.
     stream().id(STREAM_ID);
     byte[] msg = smallMessage();
     stream.writeMessage(new ByteArrayInputStream(msg), msg.length);
     stream.flush();
-    verify(channel).write(new SendGrpcFrameCommand(stream, messageFrame(MESSAGE), false));
-    verify(channel).flush();
+    verify(channel).write(new SendGrpcFrameCommand(true, stream, messageFrame(MESSAGE), false));
   }
 
   @Test
@@ -199,13 +215,13 @@ public class NettyClientStreamTest extends NettyStreamTestBase {
 
     // We are now waiting for 100 bytes of error context on the stream, cancel has not yet been
     // sent
-    verify(channel, never()).writeAndFlush(any(CancelStreamCommand.class));
+    verify(channel, never()).write(any(CancelStreamNettyCommand.class));
     stream().transportDataReceived(Unpooled.buffer(100).writeZero(100), false);
-    verify(channel, never()).writeAndFlush(any(CancelStreamCommand.class));
+    verify(channel, never()).write(any(CancelStreamNettyCommand.class));
     stream().transportDataReceived(Unpooled.buffer(1000).writeZero(1000), false);
 
     // Now verify that cancel is sent and an error is reported to the listener
-    verify(channel).writeAndFlush(any(CancelStreamCommand.class));
+    verify(channel).write(any(CancelStreamNettyCommand.class));
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     verify(listener).closed(captor.capture(), any(Metadata.Trailers.class));
     assertEquals(Status.INTERNAL.getCode(), captor.getValue().getCode());
@@ -219,6 +235,58 @@ public class NettyClientStreamTest extends NettyStreamTestBase {
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     verify(listener).closed(captor.capture(), any(Metadata.Trailers.class));
     assertEquals(Status.Code.INTERNAL, captor.getValue().getCode());
+  }
+
+  @Test
+  public void deframerTriggeredWindowUpdateIsFlushedWhenNotInEventLoop() throws Exception {
+    reset(eventLoop);
+    when(eventLoop.inEventLoop()).thenReturn(false);
+    when(handler.returnProcessedBytes(stream().http2Stream(), 10)).thenReturn(true);
+    stream().returnProcessedBytes(10);
+    verify(channel, times(1)).flush();
+  }
+
+  @Test
+  public void deframerTriggeredWindowUpdateIsNotFlushedWhenInEventLoop() throws Exception {
+    when(handler.returnProcessedBytes(stream().http2Stream(), 10)).thenReturn(true);
+    stream().returnProcessedBytes(10);
+    verify(channel, never()).flush();
+  }
+
+  @Test
+  public void requestMessagesInsideEventLoopIsImmediate() throws Exception {
+    stream().id(1);
+    // Receive headers first so that it's a valid GRPC response.
+    stream().transportHeadersReceived(grpcResponseHeaders(), false);
+    stream().transportDataReceived(simpleGrpcFrame(), false);
+
+    // Only allow the first to be delivered.
+    stream().request(1);
+
+    verify(listener).messageRead(any(InputStream.class));
+  }
+
+  @Test
+  public void requestMessagesOutsideEventLoopIsScheduledOnEventLoop() throws Exception {
+    reset(eventLoop);
+    when(eventLoop.inEventLoop()).thenReturn(false);
+
+    stream().id(1);
+    // Receive headers first so that it's a valid GRPC response.
+    stream().transportHeadersReceived(grpcResponseHeaders(), false);
+    stream().transportDataReceived(simpleGrpcFrame(), false);
+
+    ArgumentCaptor<Runnable> captor = ArgumentCaptor.forClass(Runnable.class);
+    doNothing().when(eventLoop).execute(captor.capture());
+
+    // Only allow the first to be delivered.
+    stream().request(1);
+    verify(listener, times(0)).messageRead(any(InputStream.class));
+    assertNotNull(captor.getValue());
+
+    // trigger the deframer
+    captor.getValue().run();
+    verify(listener).messageRead(any(InputStream.class));
   }
 
   @Test

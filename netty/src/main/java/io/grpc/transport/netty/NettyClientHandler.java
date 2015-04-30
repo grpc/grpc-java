@@ -137,15 +137,16 @@ class NettyClientHandler extends Http2ConnectionHandler {
   @Override
   public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
     try {
-      if (msg instanceof CreateStreamCommand) {
-        createStream((CreateStreamCommand) msg, promise);
+      if (msg instanceof CreateStreamNettyCommand) {
+        createStream((CreateStreamNettyCommand) msg, promise);
       } else if (msg instanceof SendGrpcFrameCommand) {
         sendGrpcFrame(ctx, (SendGrpcFrameCommand) msg, promise);
-      } else if (msg instanceof CancelStreamCommand) {
-        cancelStream(ctx, (CancelStreamCommand) msg, promise);
+      } else if (msg instanceof CancelStreamNettyCommand) {
+        cancelStream(ctx, (CancelStreamNettyCommand) msg, promise);
       } else {
         throw new AssertionError("Write called for unexpected type: " + msg.getClass().getName());
       }
+      ((AbstractNettyCommand) msg).flushIfNecessary(ctx);
     } catch (Throwable t) {
       promise.setFailure(t);
     }
@@ -154,9 +155,9 @@ class NettyClientHandler extends Http2ConnectionHandler {
   /**
    * Returns the given processed bytes back to inbound flow control.
    */
-  void returnProcessedBytes(Http2Stream stream, int bytes) {
+  boolean returnProcessedBytes(Http2Stream stream, int bytes) {
     try {
-      decoder().flowController().consumeBytes(ctx, stream, bytes);
+      return decoder().flowController().consumeBytes(ctx, stream, bytes);
     } catch (Http2Exception e) {
       throw new RuntimeException(e);
     }
@@ -255,7 +256,7 @@ class NettyClientHandler extends Http2ConnectionHandler {
    * Attempts to create a new stream from the given command. If there are too many active streams,
    * the creation request is queued.
    */
-  private void createStream(CreateStreamCommand command, final ChannelPromise promise) {
+  private void createStream(CreateStreamNettyCommand command, final ChannelPromise promise) {
     final int streamId = getAndIncrementNextStreamId();
     final NettyClientStream stream = command.stream();
     final Http2Headers headers = command.headers();
@@ -291,7 +292,7 @@ class NettyClientHandler extends Http2ConnectionHandler {
   /**
    * Cancels this stream.
    */
-  private void cancelStream(ChannelHandlerContext ctx, CancelStreamCommand cmd,
+  private void cancelStream(ChannelHandlerContext ctx, CancelStreamNettyCommand cmd,
       ChannelPromise promise) throws Http2Exception {
     NettyClientStream stream = cmd.stream();
     stream.transportReportStatus(Status.CANCELLED, true, new Metadata.Trailers());
@@ -304,7 +305,6 @@ class NettyClientHandler extends Http2ConnectionHandler {
   private void sendGrpcFrame(ChannelHandlerContext ctx, SendGrpcFrameCommand cmd,
       ChannelPromise promise) {
     // Call the base class to write the HTTP/2 DATA frame.
-    // Note: no need to flush since this is handled by the outbound flow controller.
     encoder().writeData(ctx, cmd.streamId(), cmd.content(), 0, cmd.endStream(), promise);
   }
 

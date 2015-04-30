@@ -152,7 +152,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase {
     ByteBuf content = Unpooled.copiedBuffer(CONTENT);
 
     // Send a frame and verify that it was written.
-    handler.write(ctx, new SendGrpcFrameCommand(stream, content, false), promise);
+    handler.write(ctx, new SendGrpcFrameCommand(true, stream, content, false), promise);
     verify(promise, never()).setFailure(any(Throwable.class));
     ByteBuf bufWritten = captureWrite(ctx);
     verify(ctx, atLeastOnce()).flush();

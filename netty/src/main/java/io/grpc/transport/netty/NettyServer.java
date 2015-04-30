@@ -101,6 +101,7 @@ public class NettyServer implements Server {
     if (NioServerSocketChannel.class.isAssignableFrom(channelType)) {
       b.option(SO_BACKLOG, 128);
       b.childOption(SO_KEEPALIVE, true);
+      // b.childOption(ChannelOption.TCP_NODELAY, false);
     }
     b.childHandler(new ChannelInitializer<Channel>() {
       @Override

@@ -42,6 +42,7 @@ import io.grpc.transport.HttpUtil;
 import io.grpc.transport.TransportFrameUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.channel.Channel;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
@@ -167,6 +168,18 @@ class Utils {
           new ByteString(serializedHeaders[i + 1], false));
     }
     return http2Headers;
+  }
+
+  /**
+   * Should the channel be asked to flush this write. Checks if the calling thread is the event
+   * loop and assumes that a flush is following if that is the case. This is true for all event
+   * loop work following a read as onReadComplete triggers a flush. For other work scheduled
+   * onto the event loop outside of a read the caller (or event) must schedule a flush.
+   */
+  static boolean shouldFlush(Channel channel, boolean isLastWriteInSequence) {
+    // Don't flush is we are in the event loop as we have been triggered by a read event and
+    // a flush will occur on channel read completion.
+    return !channel.eventLoop().inEventLoop() && isLastWriteInSequence;
   }
 
   private static class DefaultEventLoopGroupResource implements Resource<EventLoopGroup> {

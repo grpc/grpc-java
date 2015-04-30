@@ -42,7 +42,6 @@ import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.notNull;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.timeout;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
@@ -168,7 +167,7 @@ public class ServerImplTest {
     final AtomicReference<ServerCall<Integer>> callReference
         = new AtomicReference<ServerCall<Integer>>();
     registry.addService(ServerServiceDefinition.builder("Waiter")
-        .addMethod("serve", STRING_MARSHALLER, INTEGER_MARSHALLER,
+        .addMethod("serve", MethodType.UNARY, STRING_MARSHALLER, INTEGER_MARSHALLER,
           new ServerCallHandler<String, Integer>() {
             @Override
             public ServerCall.Listener<String> startCall(String fullMethodName,
@@ -201,7 +200,6 @@ public class ServerImplTest {
     call.sendPayload(314);
     ArgumentCaptor<InputStream> inputCaptor = ArgumentCaptor.forClass(InputStream.class);
     verify(stream).writeMessage(inputCaptor.capture(), eq(3));
-    verify(stream).flush();
     assertEquals(314, INTEGER_MARSHALLER.parse(inputCaptor.getValue()).intValue());
 
     streamListener.halfClosed(); // All full; no dessert.
@@ -210,7 +208,6 @@ public class ServerImplTest {
 
     call.sendPayload(50);
     verify(stream).writeMessage(inputCaptor.capture(), eq(2));
-    verify(stream, times(2)).flush();
     assertEquals(50, INTEGER_MARSHALLER.parse(inputCaptor.getValue()).intValue());
 
     Metadata.Trailers trailers = new Metadata.Trailers();
@@ -232,7 +229,7 @@ public class ServerImplTest {
     CyclicBarrier barrier = executeBarrier(executor);
     final Status status = Status.ABORTED.withDescription("Oh, no!");
     registry.addService(ServerServiceDefinition.builder("Waiter")
-        .addMethod("serve", STRING_MARSHALLER, INTEGER_MARSHALLER,
+        .addMethod("serve", MethodType.UNARY, STRING_MARSHALLER, INTEGER_MARSHALLER,
           new ServerCallHandler<String, Integer>() {
             @Override
             public ServerCall.Listener<String> startCall(String fullMethodName,

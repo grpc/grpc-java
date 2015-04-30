@@ -51,8 +51,8 @@ public class ServerCalls {
    */
   public static <ReqT, RespT> ServerMethodDefinition<ReqT, RespT> createMethodDefinition(
       Method<ReqT, RespT> method, ServerCallHandler<ReqT, RespT> handler) {
-    return ServerMethodDefinition.create(method.getName(), method.getRequestMarshaller(),
-        method.getResponseMarshaller(), handler);
+    return ServerMethodDefinition.create(method.getName(), method.getType(),
+        method.getRequestMarshaller(), method.getResponseMarshaller(), handler);
   }
 
   /**
@@ -66,7 +66,7 @@ public class ServerCalls {
       @Override
       public ServerCall.Listener<ReqT> startCall(
           String fullMethodName, final ServerCall<RespT> call, Metadata.Headers headers) {
-        final ResponseObserver<RespT> responseObserver = new ResponseObserver<RespT>(call);
+        final ResponseObserver<RespT> responseObserver = new ResponseObserver<RespT>(call, false);
         call.request(1);
         return new EmptyServerCallListener<ReqT>() {
           ReqT request;
@@ -76,9 +76,6 @@ public class ServerCalls {
               // We delay calling method.invoke() until onHalfClose(), because application may call
               // close(OK) inside invoke(), while close(OK) is not allowed before onHalfClose().
               this.request = request;
-
-              // Request delivery of the next inbound message.
-              call.request(1);
             } else {
               call.close(
                   Status.INVALID_ARGUMENT.withDescription(
@@ -118,7 +115,11 @@ public class ServerCalls {
       public ServerCall.Listener<ReqT> startCall(String fullMethodName,
           final ServerCall<RespT> call, Metadata.Headers headers) {
         call.request(1);
-        final ResponseObserver<RespT> responseObserver = new ResponseObserver<RespT>(call);
+        // DISCUSSION POINT: Lack of differentiation between client streaming and server streaming
+        // makes the decision to always request(1) for a received payload sub-optimal
+        // If the client will only send one payload we do not need to request another. Requires
+        // changing the code generator and adding extra methods to this class to resolve.
+        final ResponseObserver<RespT> responseObserver = new ResponseObserver<RespT>(call, true);
         final StreamObserver<ReqT> requestObserver = method.invoke(responseObserver);
         return new EmptyServerCallListener<ReqT>() {
           boolean halfClosed = false;
@@ -157,7 +158,7 @@ public class ServerCalls {
   }
 
   /**
-   * Adaptor to a client stremaing or bi-directional stremaing method.
+   * Adaptor to a client streaming or bi-directional streaming method.
    */
   public static interface StreamingRequestMethod<ReqT, RespT> {
     StreamObserver<ReqT> invoke(StreamObserver<RespT> responseObserver);
@@ -165,10 +166,12 @@ public class ServerCalls {
 
   private static class ResponseObserver<RespT> implements StreamObserver<RespT> {
     final ServerCall<RespT> call;
+    final boolean streaming;
     volatile boolean cancelled;
 
-    ResponseObserver(ServerCall<RespT> call) {
+    ResponseObserver(ServerCall<RespT> call, boolean streaming) {
       this.call = call;
+      this.streaming = streaming;
     }
 
     @Override
@@ -178,8 +181,10 @@ public class ServerCalls {
       }
       call.sendPayload(response);
 
-      // Request delivery of the next inbound message.
-      call.request(1);
+      // Request delivery of the next inbound message if streaming.
+      if (streaming) {
+        call.request(1);
+      }
     }
 
     @Override

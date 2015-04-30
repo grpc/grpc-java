@@ -33,17 +33,48 @@ package io.grpc.transport.netty;
 
 import com.google.common.base.Preconditions;
 
+import io.netty.handler.codec.http2.Http2Headers;
+
 /**
- * Command sent from a Netty client stream to the handler to cancel the stream.
+ * A command to create a new stream. This is created by {@link NettyClientStream} and passed to the
+ * {@link NettyClientHandler} for processing in the Channel thread.
  */
-class CancelStreamCommand {
+class CreateStreamNettyCommand extends AbstractNettyCommand {
+  private final Http2Headers headers;
   private final NettyClientStream stream;
 
-  CancelStreamCommand(NettyClientStream stream) {
+  CreateStreamNettyCommand(boolean flush,
+                           Http2Headers headers,
+                           NettyClientStream stream) {
+    super(flush);
     this.stream = Preconditions.checkNotNull(stream, "stream");
+    this.headers = Preconditions.checkNotNull(headers, "headers");
   }
 
   NettyClientStream stream() {
     return stream;
+  }
+
+  Http2Headers headers() {
+    return headers;
+  }
+
+  @Override
+  public boolean equals(Object that) {
+    if (that == null || !super.equals(that)) {
+      return false;
+    }
+    CreateStreamNettyCommand thatCmd = (CreateStreamNettyCommand) that;
+    return thatCmd.headers.equals(headers);
+  }
+
+  @Override
+  public String toString() {
+    return getClass().getSimpleName() + "(headers=" + headers + ", flush=" + flush +")";
+  }
+
+  @Override
+  public int hashCode() {
+    return headers.hashCode();
   }
 }

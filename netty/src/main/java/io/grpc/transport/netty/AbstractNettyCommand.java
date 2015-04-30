@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Google Inc. All rights reserved.
+ * Copyright 2015, Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -28,32 +28,35 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
 package io.grpc.transport.netty;
 
-import com.google.common.base.Preconditions;
-
-import io.netty.handler.codec.http2.Http2Headers;
+import io.netty.channel.ChannelHandlerContext;
 
 /**
- * A command to create a new stream. This is created by {@link NettyClientStream} and passed to the
- * {@link NettyClientHandler} for processing in the Channel thread.
+ * Common base class for commands executed on the Netty event loop.
  */
-class CreateStreamCommand {
-  private final Http2Headers headers;
-  private final NettyClientStream stream;
+public class AbstractNettyCommand {
 
-  CreateStreamCommand(Http2Headers headers,
-                      NettyClientStream stream) {
-    this.stream = Preconditions.checkNotNull(stream, "stream");
-    this.headers = Preconditions.checkNotNull(headers, "headers");
+  protected final boolean flush;
+
+  public AbstractNettyCommand(boolean flush) {
+    this.flush = flush;
   }
 
-  NettyClientStream stream() {
-    return stream;
+  public void flushIfNecessary(ChannelHandlerContext ctx) {
+    if (flush) {
+      ctx.flush();
+    }
   }
 
-  Http2Headers headers() {
-    return headers;
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+
+    AbstractNettyCommand that = (AbstractNettyCommand) o;
+
+    return flush == that.flush;
+
   }
 }

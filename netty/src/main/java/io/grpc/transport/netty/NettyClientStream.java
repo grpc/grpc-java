@@ -64,12 +64,20 @@ class NettyClientStream extends Http2ClientStream {
 
   @Override
   public void request(final int numMessages) {
-    channel.eventLoop().execute(new Runnable() {
-      @Override
-      public void run() {
-        requestMessagesFromDeframer(numMessages);
-      }
-    });
+    if (channel.eventLoop().inEventLoop()) {
+      // Processing data read in the event loop so can call into the deframer immediately.
+      requestMessagesFromDeframer(numMessages);
+    } else {
+      channel.eventLoop().execute(new Runnable() {
+        @Override
+        public void run() {
+          requestMessagesFromDeframer(numMessages);
+          // We need this as there is no guarantee that a flush is coming later as this
+          // work is not being scheduled after a read.
+          channel.flush();
+        }
+      });
+    }
   }
 
   @Override
@@ -118,7 +126,7 @@ class NettyClientStream extends Http2ClientStream {
   @Override
   protected void sendCancel() {
     // Send the cancel command to the handler.
-    channel.writeAndFlush(new CancelStreamCommand(this));
+    channel.write(new CancelStreamNettyCommand(Utils.shouldFlush(channel, true), this));
   }
 
   @Override
@@ -128,7 +136,8 @@ class NettyClientStream extends Http2ClientStream {
     if (numBytes > 0) {
       // Add the bytes to outbound flow control.
       onSendingBytes(numBytes);
-      channel.write(new SendGrpcFrameCommand(this, bytebuf, endOfStream)).addListener(
+      channel.write(new SendGrpcFrameCommand(Utils.shouldFlush(channel, flush),
+            this, bytebuf, endOfStream)).addListener(
           new ChannelFutureListener() {
             @Override
             public void operationComplete(ChannelFuture future) throws Exception {
@@ -139,18 +148,18 @@ class NettyClientStream extends Http2ClientStream {
           });
     } else {
       // The frame is empty and will not impact outbound flow control. Just send it.
-      channel.write(new SendGrpcFrameCommand(this, bytebuf, endOfStream));
-    }
-
-    if (flush) {
-      channel.flush();
+      channel.write(new SendGrpcFrameCommand(Utils.shouldFlush(channel, flush),
+          this, bytebuf, endOfStream));
     }
   }
 
   @Override
   protected void returnProcessedBytes(int processedBytes) {
-    handler.returnProcessedBytes(http2Stream, processedBytes);
-    // Need to flush as window update may have been written
-    channel.flush();
+    boolean windowUpdateWritten = handler.returnProcessedBytes(http2Stream, processedBytes);
+    if (Utils.shouldFlush(channel, windowUpdateWritten)) {
+      // Need to flush as window update may have been written
+      channel.flush();
+    }
   }
+
 }

@@ -236,14 +236,15 @@ class NettyServerHandler extends Http2ConnectionHandler {
       promise.setFailure(e);
       throw e;
     }
+    ((AbstractNettyCommand) msg).flushIfNecessary(ctx);
   }
 
   /**
    * Returns the given processed bytes back to inbound flow control.
    */
-  void returnProcessedBytes(Http2Stream http2Stream, int bytes) {
+  boolean returnProcessedBytes(Http2Stream http2Stream, int bytes) {
     try {
-      decoder().flowController().consumeBytes(ctx, http2Stream, bytes);
+      return decoder().flowController().consumeBytes(ctx, http2Stream, bytes);
     } catch (Http2Exception e) {
       throw new RuntimeException(e);
     }
@@ -269,7 +270,6 @@ class NettyServerHandler extends Http2ConnectionHandler {
     }
     // Call the base class to write the HTTP/2 DATA frame.
     encoder().writeData(ctx, cmd.streamId(), cmd.content(), 0, cmd.endStream(), promise);
-    ctx.flush();
   }
 
   /**
@@ -281,7 +281,6 @@ class NettyServerHandler extends Http2ConnectionHandler {
       closeStreamWhenDone(promise, cmd.streamId());
     }
     encoder().writeHeaders(ctx, cmd.streamId(), cmd.headers(), 0, cmd.endOfStream(), promise);
-    ctx.flush();
   }
 
   private Http2Stream requireHttp2Stream(int streamId) {

@@ -33,19 +33,20 @@ package io.grpc.transport.netty;
 
 import io.grpc.transport.AbstractStream;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufHolder;
-import io.netty.buffer.DefaultByteBufHolder;
+import io.netty.util.IllegalReferenceCountException;
 
 /**
  * Command sent from the transport to the Netty channel to send a GRPC frame to the remote endpoint.
  */
-class SendGrpcFrameCommand extends DefaultByteBufHolder {
+class SendGrpcFrameCommand extends AbstractNettyCommand {
+  private final ByteBuf content;
   private final AbstractStream<Integer> stream;
   private final boolean endStream;
 
-  SendGrpcFrameCommand(AbstractStream<Integer> stream, ByteBuf content,
-      boolean endStream) {
-    super(content);
+  SendGrpcFrameCommand(boolean flush, AbstractStream<Integer> stream, ByteBuf content,
+                       boolean endStream) {
+    super(flush);
+    this.content = content;
     this.stream = stream;
     this.endStream = endStream;
   }
@@ -58,43 +59,16 @@ class SendGrpcFrameCommand extends DefaultByteBufHolder {
     return endStream;
   }
 
-  @Override
-  public ByteBufHolder copy() {
-    return new SendGrpcFrameCommand(stream, content().copy(), endStream);
-  }
-
-  @Override
-  public ByteBufHolder duplicate() {
-    return new SendGrpcFrameCommand(stream, content().duplicate(), endStream);
-  }
-
-  @Override
-  public SendGrpcFrameCommand retain() {
-    super.retain();
-    return this;
-  }
-
-  @Override
-  public SendGrpcFrameCommand retain(int increment) {
-    super.retain(increment);
-    return this;
-  }
-
-  @Override
-  public SendGrpcFrameCommand touch() {
-    super.touch();
-    return this;
-  }
-
-  @Override
-  public SendGrpcFrameCommand touch(Object hint) {
-    super.touch(hint);
-    return this;
+  public ByteBuf content() {
+    if (content.refCnt() <= 0) {
+      throw new IllegalReferenceCountException(content.refCnt());
+    }
+    return content;
   }
 
   @Override
   public boolean equals(Object that) {
-    if (that == null || !that.getClass().equals(SendGrpcFrameCommand.class)) {
+    if (that == null || !super.equals(that)) {
       return false;
     }
     SendGrpcFrameCommand thatCmd = (SendGrpcFrameCommand) that;
@@ -106,7 +80,7 @@ class SendGrpcFrameCommand extends DefaultByteBufHolder {
   public String toString() {
     return getClass().getSimpleName() + "(streamId=" + streamId()
         + ", endStream=" + endStream + ", content=" + content()
-        + ")";
+        + ", flush=" + flush + ")";
   }
 
   @Override

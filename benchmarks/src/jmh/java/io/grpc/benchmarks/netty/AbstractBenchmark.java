@@ -160,6 +160,7 @@ public abstract class AbstractBenchmark {
     serverBuilder.addService(
         ServerServiceDefinition.builder("benchmark")
             .addMethod("unary",
+                MethodType.UNARY,
                 new ByteBufOutputMarshaller(),
                 new ByteBufOutputMarshaller(),
                 new ServerCallHandler<ByteBuf, ByteBuf>() {

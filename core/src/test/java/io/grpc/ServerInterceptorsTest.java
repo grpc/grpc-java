@@ -68,7 +68,7 @@ public class ServerInterceptorsTest {
   private String methodName = "/someRandom.Name";
   @Mock private ServerCall<Integer> call;
   private ServerServiceDefinition serviceDefinition = ServerServiceDefinition.builder("basic")
-      .addMethod("flow", requestMarshaller, responseMarshaller, handler).build();
+      .addMethod("flow", MethodType.UNARY, requestMarshaller, responseMarshaller, handler).build();
   private Headers headers = new Headers();
 
   /** Set up for test. */
@@ -134,8 +134,9 @@ public class ServerInterceptorsTest {
     @SuppressWarnings("unchecked")
     ServerCallHandler<String, Integer> handler2 = mock(ServerCallHandler.class);
     serviceDefinition = ServerServiceDefinition.builder("basic")
-        .addMethod("flow", requestMarshaller, responseMarshaller, handler)
-        .addMethod("flow2", requestMarshaller, responseMarshaller, handler2).build();
+        .addMethod("flow", MethodType.UNARY, requestMarshaller, responseMarshaller, handler)
+        .addMethod("flow2", MethodType.UNARY, requestMarshaller, responseMarshaller, handler2)
+        .build();
     ServerServiceDefinition intercepted = ServerInterceptors.intercept(
         serviceDefinition, Arrays.<ServerInterceptor>asList(new NoopInterceptor()));
     getMethod(intercepted, "flow").getServerCallHandler().startCall(methodName, call, headers);
@@ -192,7 +193,8 @@ public class ServerInterceptorsTest {
           }
         };
     ServerServiceDefinition serviceDefinition = ServerServiceDefinition.builder("basic")
-        .addMethod("flow", requestMarshaller, responseMarshaller, handler).build();
+        .addMethod("flow", MethodType.UNARY, requestMarshaller, responseMarshaller, handler)
+        .build();
     ServerServiceDefinition intercepted = ServerInterceptors.intercept(
         serviceDefinition, Arrays.asList(interceptor1, interceptor2));
     assertSame(listener,

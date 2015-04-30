@@ -34,6 +34,7 @@ package io.grpc.transport;
 import com.google.common.base.Preconditions;
 
 import io.grpc.Metadata;
+import io.grpc.MethodType;
 import io.grpc.Status;
 
 import java.io.InputStream;
@@ -78,6 +79,13 @@ public abstract class AbstractServerStream<IdT> extends AbstractStream<IdT>
   @Override
   protected ServerStreamListener listener() {
     return this.listener;
+  }
+
+  /**
+   * The method type of the call.
+   */
+  protected MethodType getMethodType() {
+    return listener.getMethodType();
   }
 
   @Override

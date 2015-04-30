@@ -290,6 +290,12 @@ public final class ServerImpl extends Server {
   }
 
   private static class NoopListener implements ServerStreamListener {
+
+    @Override
+    public MethodType getMethodType() {
+      return MethodType.DUPLEX_STREAMING;
+    }
+
     @Override
     public void messageRead(InputStream value) {
       try {
@@ -323,6 +329,11 @@ public final class ServerImpl extends Server {
         ServerStream stream) {
       this.callExecutor = executor;
       this.stream = stream;
+    }
+
+    @Override
+    public MethodType getMethodType() {
+      return listener.getMethodType();
     }
 
     private ServerStreamListener getListener() {
@@ -422,7 +433,10 @@ public final class ServerImpl extends Server {
       try {
         InputStream message = methodDef.streamResponse(payload);
         stream.writeMessage(message, message.available());
-        stream.flush();
+        // Flush if we are streaming responses.
+        if (!methodDef.getMethodType().serverSendsOneMessage()) {
+          stream.flush();
+        }
       } catch (Throwable t) {
         close(Status.fromThrowable(t), new Metadata.Trailers());
         throw Throwables.propagate(t);
@@ -457,6 +471,11 @@ public final class ServerImpl extends Server {
 
       public ServerStreamListenerImpl(ServerCall.Listener<ReqT> listener) {
         this.listener = Preconditions.checkNotNull(listener, "listener must not be null");
+      }
+
+      @Override
+      public MethodType getMethodType() {
+        return methodDef.getMethodType();
       }
 
       @Override
