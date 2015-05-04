@@ -296,8 +296,10 @@ public abstract class AbstractStream<IdT> implements Stream {
    */
   protected final void onSendingBytes(int numBytes) {
     synchronized (onReadyLock) {
-      shouldNotifyOnReady = true;
       numSentBytesQueued += numBytes;
+      if (!isReady()) {
+        shouldNotifyOnReady = true;
+      }
     }
   }
 

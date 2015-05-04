@@ -67,8 +67,12 @@ public final class ChannelImpl implements Channel {
 
     @Override public void request(int numMessages) {}
 
+    /**
+     * Always returns {@code false}, since this is only used when the startup of the {@link Call}
+     * fails (i.e. the {@link Call} is closed).
+     */
     @Override public boolean isReady() {
-      return true;
+      return false;
     }
   }
 
