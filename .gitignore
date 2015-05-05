@@ -11,7 +11,7 @@ build
 .project
 .settings
 .gitignore
+bin
 
 # OS X
 .DS_Store
-bin
