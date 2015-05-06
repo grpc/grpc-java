@@ -95,8 +95,7 @@ class NettyClientHandler extends Http2ConnectionHandler {
     connection.addListener(new Http2ConnectionAdapter() {
       @Override
       public void onGoAwayReceived(int lastStreamId, long errorCode, ByteBuf debugData) {
-        goAwayStatus(statusFromGoAway(errorCode, debugData));
-        goingAway();
+        goAwayReceived(lastStreamId, errorCode, debugData);
       }
     });
   }
@@ -184,6 +183,12 @@ class NettyClientHandler extends Http2ConnectionHandler {
     // TODO(nmittler): do something with errorCode?
     NettyClientStream stream = clientStream(requireHttp2Stream(streamId));
     stream.transportReportStatus(Status.UNKNOWN, false, new Metadata.Trailers());
+  }
+
+  @Override
+  public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+    goAwayStatus(Status.UNAVAILABLE.withDescription("Network channel closed by the client"));
+    super.close(ctx, promise);
   }
 
   /**
@@ -289,11 +294,11 @@ class NettyClientHandler extends Http2ConnectionHandler {
   }
 
   /**
-   * Handler for a GOAWAY being either sent or received. Fails any streams created after the
+   * Handler for a GOAWAY being received. Fails any streams created after the
    * last known stream.
    */
-  private void goingAway() {
-    final Status goAwayStatus = goAwayStatus();
+  private void goAwayReceived(int lastStreamId, long errorCode, ByteBuf debugData) {
+    final Status goAwayStatus = goAwayStatus(statusFromGoAway(errorCode, debugData));
     final int lastKnownStream = connection().local().lastStreamKnownByPeer();
     try {
       connection().forEachActiveStream(new Http2StreamVisitor() {
@@ -322,8 +327,10 @@ class NettyClientHandler extends Http2ConnectionHandler {
     return Status.UNAVAILABLE.withDescription("Connection going away, but for unknown reason");
   }
 
-  private void goAwayStatus(Status status) {
-    goAwayStatus = goAwayStatus == null ? status : goAwayStatus;
+  private Status goAwayStatus(Status status) {
+    goAwayStatus =
+        goAwayStatus == null ? status : goAwayStatus.augmentDescription(status.getDescription());
+    return status;
   }
 
   private Status statusFromGoAway(long errorCode, ByteBuf debugData) {
