@@ -136,8 +136,9 @@ public abstract class ServerCall<ResponseT> {
    * If {@code true}, indicates that the call is capable of sending additional messages
    * without requiring excessive buffering internally. This event is
    * just a suggestion and the application is free to ignore it, however doing so may
-   * result in excessive buffering within the call. This version of the method always returns
-   * {@code true}.
+   * result in excessive buffering within the call.
+   *
+   * <p>This implementation always returns {@code true}.
    */
   public boolean isReady() {
     return true;
