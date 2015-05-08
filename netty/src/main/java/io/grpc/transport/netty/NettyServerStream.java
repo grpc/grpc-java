@@ -107,8 +107,9 @@ class NettyServerStream extends AbstractServerStream<Integer> {
     final int numBytes = bytebuf.readableBytes();
     // Add the bytes to outbound flow control.
     onSendingBytes(numBytes);
-    channel.write(new SendGrpcFrameCommand(Utils.shouldFlush(channel, flush),
-          this, bytebuf, endOfStream)).addListener(
+    SendGrpcFrameCommand command = new SendGrpcFrameCommand(Utils.shouldFlush(channel, flush),
+        this, bytebuf, endOfStream);
+    channel.write(command).addListener(
         new ChannelFutureListener() {
           @Override
           public void operationComplete(ChannelFuture future) throws Exception {
@@ -117,7 +118,6 @@ class NettyServerStream extends AbstractServerStream<Integer> {
             onSentBytes(numBytes);
           }
         });
-
   }
 
   @Override

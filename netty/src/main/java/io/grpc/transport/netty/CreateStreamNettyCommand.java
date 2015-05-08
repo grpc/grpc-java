@@ -70,7 +70,7 @@ class CreateStreamNettyCommand extends AbstractNettyCommand {
 
   @Override
   public String toString() {
-    return getClass().getSimpleName() + "(headers=" + headers + ", flush=" + flush +")";
+    return getClass().getSimpleName() + "(headers=" + headers + ", flush=" + flush + ")";
   }
 
   @Override

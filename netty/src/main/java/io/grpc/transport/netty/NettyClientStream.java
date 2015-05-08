@@ -133,11 +133,12 @@ class NettyClientStream extends Http2ClientStream {
   protected void sendFrame(WritableBuffer frame, boolean endOfStream, boolean flush) {
     ByteBuf bytebuf = frame == null ? EMPTY_BUFFER : ((NettyWritableBuffer) frame).bytebuf();
     final int numBytes = bytebuf.readableBytes();
+    SendGrpcFrameCommand command = new SendGrpcFrameCommand(Utils.shouldFlush(channel, flush),
+        this, bytebuf, endOfStream);
     if (numBytes > 0) {
       // Add the bytes to outbound flow control.
       onSendingBytes(numBytes);
-      channel.write(new SendGrpcFrameCommand(Utils.shouldFlush(channel, flush),
-            this, bytebuf, endOfStream)).addListener(
+      channel.write(command).addListener(
           new ChannelFutureListener() {
             @Override
             public void operationComplete(ChannelFuture future) throws Exception {
@@ -148,8 +149,7 @@ class NettyClientStream extends Http2ClientStream {
           });
     } else {
       // The frame is empty and will not impact outbound flow control. Just send it.
-      channel.write(new SendGrpcFrameCommand(Utils.shouldFlush(channel, flush),
-          this, bytebuf, endOfStream));
+      channel.write(command);
     }
   }
 
@@ -161,5 +161,4 @@ class NettyClientStream extends Http2ClientStream {
       channel.flush();
     }
   }
-
 }

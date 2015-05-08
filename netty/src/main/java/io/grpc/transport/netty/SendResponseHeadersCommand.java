@@ -77,7 +77,7 @@ class SendResponseHeadersCommand extends AbstractNettyCommand {
   @Override
   public String toString() {
     return getClass().getSimpleName() + "(streamId=" + streamId + ", headers=" + headers
-        + ", endOfStream=" + endOfStream + ", flush=" + flush +")";
+        + ", endOfStream=" + endOfStream + ", flush=" + flush + ")";
   }
 
   @Override

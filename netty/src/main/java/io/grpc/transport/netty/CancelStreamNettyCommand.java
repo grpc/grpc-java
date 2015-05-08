@@ -59,7 +59,7 @@ class CancelStreamNettyCommand extends AbstractNettyCommand {
 
   @Override
   public String toString() {
-    return getClass().getSimpleName() + "(streamId=" + stream.id() + ", flush=" + flush +")";
+    return getClass().getSimpleName() + "(streamId=" + stream.id() + ", flush=" + flush + ")";
   }
 
   @Override

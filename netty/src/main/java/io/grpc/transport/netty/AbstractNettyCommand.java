@@ -28,6 +28,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
 package io.grpc.transport.netty;
 
 import io.netty.channel.ChannelHandlerContext;
@@ -39,10 +40,17 @@ public class AbstractNettyCommand {
 
   protected final boolean flush;
 
+  /**
+   * Construct a new command.
+   * @param flush true if command should trigger a flush after write.
+   */
   public AbstractNettyCommand(boolean flush) {
     this.flush = flush;
   }
 
+  /**
+   * Called after writing the command to trigger a flush if necessary.
+   */
   public void flushIfNecessary(ChannelHandlerContext ctx) {
     if (flush) {
       ctx.flush();
@@ -51,12 +59,15 @@ public class AbstractNettyCommand {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
 
     AbstractNettyCommand that = (AbstractNettyCommand) o;
 
     return flush == that.flush;
-
   }
 }
