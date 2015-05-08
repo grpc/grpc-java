@@ -65,7 +65,9 @@ class NettyClientStream extends Http2ClientStream {
   @Override
   public void request(final int numMessages) {
     if (channel.eventLoop().inEventLoop()) {
-      // Processing data read in the event loop so can call into the deframer immediately.
+      // Processing data read in the event loop so can call into the deframer immediately and since
+      // we are in an event triggered by a read all writes caused by this will be flushed on
+      // completion.
       requestMessagesFromDeframer(numMessages);
     } else {
       channel.eventLoop().execute(new Runnable() {

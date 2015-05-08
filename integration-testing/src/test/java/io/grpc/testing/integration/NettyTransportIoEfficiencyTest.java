@@ -308,7 +308,6 @@ public class NettyTransportIoEfficiencyTest {
     protected void doWrite(ChannelOutboundBuffer in) throws Exception {
       flushCount++;
       super.doWrite(in);
-      Thread.dumpStack();
     }
   }
 

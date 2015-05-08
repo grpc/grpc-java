@@ -166,7 +166,8 @@ class NettyClientTransport implements ClientTransport {
     AsciiString defaultPath = new AsciiString("/" + method.getName());
     Http2Headers http2Headers = Utils.convertClientHeaders(headers, ssl, defaultPath, authority);
 
-    // Write the command requesting the creation of the stream.
+    // Write the command requesting the creation of the stream. No need to flush if the
+    // client is required to send at least one message.
     CreateStreamNettyCommand msg = new CreateStreamNettyCommand(
         Utils.shouldFlush(channel, !method.getType().clientSendsOneMessage()),
         http2Headers, stream);

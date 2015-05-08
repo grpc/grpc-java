@@ -71,7 +71,9 @@ class NettyServerStream extends AbstractServerStream<Integer> {
   @Override
   public void request(final int numMessages) {
     if (channel.eventLoop().inEventLoop()) {
-      // Processing data read in the event loop so can call into the deframer immediately.
+      // Processing data read in the event loop so can call into the deframer immediately and since
+      // we are in an event triggered by a read all writes caused by this will be flushed on
+      // completion.
       requestMessagesFromDeframer(numMessages);
     } else {
       channel.eventLoop().execute(new Runnable() {
@@ -93,6 +95,7 @@ class NettyServerStream extends AbstractServerStream<Integer> {
 
   @Override
   protected void internalSendHeaders(Metadata.Headers headers) {
+    // No need to flush headers yet if the server is required to respond with one message.
     SendResponseHeadersCommand headersCommand =
         new SendResponseHeadersCommand(
             Utils.shouldFlush(channel, !getMethodType().serverSendsOneMessage()),
