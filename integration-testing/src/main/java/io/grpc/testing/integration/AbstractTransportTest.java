@@ -409,7 +409,7 @@ public abstract class AbstractTransportTest {
     }
   }
 
-  @Test
+  @Test(timeout = 30000)
   public void serverStreamingShouldBeFlowControlled() throws Exception {
     final StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
         .setResponseType(COMPRESSABLE)
