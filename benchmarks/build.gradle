@@ -14,13 +14,13 @@ buildscript {
     }
     dependencies {
         classpath libraries.protobuf_plugin
-        classpath "me.champeau.gradle:jmh-gradle-plugin:0.2.0"
+        classpath libraries.jmh_gradle_plugin
     }
 }
-apply plugin: 'me.champeau.gradle.jmh'
+apply plugin: jmh_plugin_name
 
 jmh {
-    jmhVersion = '1.7.1'
+    jmhVersion = jmh_version
     warmupIterations = 10
     iterations = 10
     fork = 1
@@ -39,7 +39,8 @@ dependencies {
             project(':grpc-integration-testing'),
             libraries.junit,
             libraries.mockito,
-            libraries.hdrhistogram
+            libraries.hdrhistogram,
+            libraries.jmh_core
 
     alpnboot alpnboot_package_name
 }
