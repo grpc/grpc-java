@@ -44,6 +44,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -91,6 +92,8 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -111,6 +114,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase {
   private NettyServerStream stream;
 
   private NettyServerHandler handler;
+  private WriteQueue writeQueue;
 
   /** Set up for test. */
   @Before
@@ -128,11 +132,28 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase {
     when(channel.isActive()).thenReturn(true);
     mockContext();
     mockFuture(true);
+    // Delegate writes on the channel to the handler
+    doAnswer(new Answer() {
+      @Override
+      public Object answer(InvocationOnMock invocation) throws Throwable {
+        handler.write(ctx, invocation.getArguments()[0], promise);
+        return future;
+      }
+    }).when(channel).write(any());
+    doAnswer(new Answer() {
+      @Override
+      public Object answer(InvocationOnMock invocation) throws Throwable {
+        handler.write(ctx, invocation.getArguments()[0],
+            (ChannelPromise) invocation.getArguments()[1]);
+        return future;
+      }
+    }).when(channel).write(any(), any(ChannelPromise.class));
 
     when(channel.alloc()).thenReturn(UnpooledByteBufAllocator.DEFAULT);
 
     // Simulate activation of the handler to force writing of the initial settings
     handler.handlerAdded(ctx);
+    writeQueue = handler.getWriteQueue();
 
     // Simulate receipt of the connection preface
     handler.channelRead(ctx, Http2CodecUtil.connectionPrefaceBuf());
@@ -152,7 +173,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase {
     ByteBuf content = Unpooled.copiedBuffer(CONTENT);
 
     // Send a frame and verify that it was written.
-    handler.write(ctx, new SendGrpcFrameCommand(stream, content, false), promise);
+    writeQueue.enqueue(new SendGrpcFrameCommand(stream, content, false), true);
+    handler.write(ctx, writeQueue, promise);
     verify(promise, never()).setFailure(any(Throwable.class));
     ByteBuf bufWritten = captureWrite(ctx);
     verify(ctx, atLeastOnce()).flush();
