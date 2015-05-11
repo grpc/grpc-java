@@ -148,7 +148,8 @@ class NettyClientStream extends Http2ClientStream {
 
   @Override
   protected void returnProcessedBytes(int processedBytes) {
-    handler.returnProcessedBytes(http2Stream, processedBytes);
-    writeQueue.scheduleFlush();
+    if (handler.returnProcessedBytes(http2Stream, processedBytes)) {
+      writeQueue.scheduleFlush();
+    }
   }
 }

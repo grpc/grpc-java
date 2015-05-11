@@ -86,10 +86,9 @@ class NettyServerStream extends AbstractServerStream<Integer> {
   }
 
   @Override
-  protected void internalSendHeaders(Metadata.Headers headers) {
+  protected void internalSendHeaders(Metadata.Headers headers, boolean flush) {
     writeQueue.enqueue(new SendResponseHeadersCommand(id(),
-        Utils.convertServerHeaders(headers), false),
-        true);
+        Utils.convertServerHeaders(headers), false), flush);
   }
 
   @Override
@@ -118,7 +117,8 @@ class NettyServerStream extends AbstractServerStream<Integer> {
 
   @Override
   protected void returnProcessedBytes(int processedBytes) {
-    handler.returnProcessedBytes(http2Stream, processedBytes);
-    writeQueue.scheduleFlush();
+    if (handler.returnProcessedBytes(http2Stream, processedBytes)) {
+      writeQueue.scheduleFlush();
+    }
   }
 }

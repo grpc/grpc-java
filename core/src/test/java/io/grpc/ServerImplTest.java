@@ -168,7 +168,7 @@ public class ServerImplTest {
     final AtomicReference<ServerCall<Integer>> callReference
         = new AtomicReference<ServerCall<Integer>>();
     registry.addService(ServerServiceDefinition.builder("Waiter")
-        .addMethod("serve", STRING_MARSHALLER, INTEGER_MARSHALLER,
+        .addMethod("serve", MethodType.DUPLEX_STREAMING, STRING_MARSHALLER, INTEGER_MARSHALLER,
           new ServerCallHandler<String, Integer>() {
             @Override
             public ServerCall.Listener<String> startCall(String fullMethodName,
@@ -232,7 +232,7 @@ public class ServerImplTest {
     CyclicBarrier barrier = executeBarrier(executor);
     final Status status = Status.ABORTED.withDescription("Oh, no!");
     registry.addService(ServerServiceDefinition.builder("Waiter")
-        .addMethod("serve", STRING_MARSHALLER, INTEGER_MARSHALLER,
+        .addMethod("serve", MethodType.UNARY, STRING_MARSHALLER, INTEGER_MARSHALLER,
           new ServerCallHandler<String, Integer>() {
             @Override
             public ServerCall.Listener<String> startCall(String fullMethodName,

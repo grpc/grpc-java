@@ -172,10 +172,11 @@ public class Calls {
       ReqT param,
       Call.Listener<RespT> responseListener) {
     call.start(responseListener, new Metadata.Headers());
-    call.request(1);
     try {
       call.sendPayload(param);
       call.halfClose();
+      // Request after sending the payload otherwise we prematurely trigger a flush.
+      call.request(1);
     } catch (Throwable t) {
       call.cancel();
       throw Throwables.propagate(t);

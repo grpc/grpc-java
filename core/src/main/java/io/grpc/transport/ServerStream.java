@@ -45,8 +45,9 @@ public interface ServerStream extends Stream {
    * or {@code #close}.
    *
    * @param headers to send to client.
+   * @param flush true if the headers should be sent immediately, false otherwise.
    */
-  void writeHeaders(Metadata.Headers headers);
+  void writeHeaders(Metadata.Headers headers, boolean flush);
 
   /**
    * Closes the stream for both reading and writing. A status code of

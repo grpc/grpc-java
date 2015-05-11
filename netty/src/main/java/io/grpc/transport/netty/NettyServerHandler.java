@@ -249,9 +249,9 @@ class NettyServerHandler extends Http2ConnectionHandler {
   /**
    * Returns the given processed bytes back to inbound flow control.
    */
-  void returnProcessedBytes(Http2Stream http2Stream, int bytes) {
+  boolean returnProcessedBytes(Http2Stream http2Stream, int bytes) {
     try {
-      decoder().flowController().consumeBytes(ctx, http2Stream, bytes);
+      return decoder().flowController().consumeBytes(ctx, http2Stream, bytes);
     } catch (Http2Exception e) {
       throw new RuntimeException(e);
     }

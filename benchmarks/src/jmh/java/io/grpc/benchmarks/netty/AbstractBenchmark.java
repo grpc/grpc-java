@@ -176,6 +176,7 @@ public abstract class AbstractBenchmark {
     serverBuilder.addService(
         ServerServiceDefinition.builder("benchmark")
             .addMethod("unary",
+                MethodType.UNARY,
                 new ByteBufOutputMarshaller(),
                 new ByteBufOutputMarshaller(),
                 new ServerCallHandler<ByteBuf, ByteBuf>() {
@@ -209,6 +210,7 @@ public abstract class AbstractBenchmark {
                   }
                 })
             .addMethod("pingPong",
+                MethodType.DUPLEX_STREAMING,
                 new ByteBufOutputMarshaller(),
                 new ByteBufOutputMarshaller(),
                 new ServerCallHandler<ByteBuf, ByteBuf>() {
@@ -244,6 +246,7 @@ public abstract class AbstractBenchmark {
                   }
                 })
             .addMethod("flowControlledStreaming",
+                MethodType.DUPLEX_STREAMING,
                 new ByteBufOutputMarshaller(),
                 new ByteBufOutputMarshaller(),
                 new ServerCallHandler<ByteBuf, ByteBuf>() {

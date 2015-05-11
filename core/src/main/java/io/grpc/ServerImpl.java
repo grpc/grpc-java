@@ -290,6 +290,7 @@ public final class ServerImpl extends Server {
   }
 
   private static class NoopListener implements ServerStreamListener {
+
     @Override
     public void messageRead(InputStream value) {
       try {
@@ -414,7 +415,7 @@ public final class ServerImpl extends Server {
 
     @Override
     public void sendHeaders(Metadata.Headers headers) {
-      stream.writeHeaders(headers);
+      stream.writeHeaders(headers, !methodDef.getMethodType().serverSendsOneMessage());
     }
 
     @Override
@@ -422,7 +423,9 @@ public final class ServerImpl extends Server {
       try {
         InputStream message = methodDef.streamResponse(payload);
         stream.writeMessage(message, message.available());
-        stream.flush();
+        if (!methodDef.getMethodType().serverSendsOneMessage()) {
+          stream.flush();
+        }
       } catch (Throwable t) {
         close(Status.fromThrowable(t), new Metadata.Trailers());
         throw Throwables.propagate(t);
