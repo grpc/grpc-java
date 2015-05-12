@@ -62,6 +62,7 @@ class ClientConfiguration {
   boolean tls;
   boolean testca;
   boolean directExecutor;
+  boolean nettyNativeTransport;
   int port;
   int channels = 4;
   int outstandingRpcsPerChannel = 10;
@@ -205,19 +206,31 @@ class ClientConfiguration {
       TLS("", "Enable TLS.", new Action() {
         @Override
         public void applyNew(ClientConfiguration config, String value) {
-          config.tls = true;
+          Boolean tls = Boolean.TRUE;
+          if (!value.isEmpty()) {
+            tls = Boolean.parseBoolean(value);
+          }
+          config.tls = tls;
         }
       }),
       TESTCA("", "Use the provided Test Certificate for TLS.", new Action() {
         @Override
         public void applyNew(ClientConfiguration config, String value) {
-          config.testca = true;
+          Boolean testca = Boolean.TRUE;
+          if (!value.isEmpty()) {
+            testca = Boolean.parseBoolean(value);
+          }
+          config.testca = testca;
         }
       }),
       OKHTTP("", "Use OkHttp as the Transport.", new Action() {
         @Override
         public void applyNew(ClientConfiguration config, String value) {
-          config.okhttp = true;
+          Boolean okhttp = Boolean.TRUE;
+          if (!value.isEmpty()) {
+            okhttp = Boolean.parseBoolean(value);
+          }
+          config.okhttp = okhttp;
         }
       }),
       DURATION("SECONDS", "Duration of the benchmark.", new Action() {
@@ -238,7 +251,23 @@ class ClientConfiguration {
           new Action() {
             @Override
             public void applyNew(ClientConfiguration config, String value) {
-              config.directExecutor = true;
+              Boolean directExecutor = Boolean.TRUE;
+              if (!value.isEmpty()) {
+                directExecutor = Boolean.parseBoolean(value);
+              }
+              config.directExecutor = directExecutor;
+            }
+          }),
+      NETTY_NATIVE_TRANSPORT("", "Whether to use Netty's native transport. Only supported when "
+          + "using the Netty transport on linux.",
+          new Action() {
+            @Override
+            public void applyNew(ClientConfiguration config, String value) {
+              Boolean nettyNativeTransport = Boolean.TRUE;
+              if (!value.isEmpty()) {
+                nettyNativeTransport = Boolean.parseBoolean(value);
+              }
+              config.nettyNativeTransport = nettyNativeTransport;
             }
           }),
       SAVE_HISTOGRAM("FILE", "Write the histogram with the latency recordings to file.",
