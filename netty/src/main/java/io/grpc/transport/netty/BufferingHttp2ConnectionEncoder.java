@@ -75,6 +75,7 @@ class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
           new TreeMap<Integer, PendingStream>();
   // Smallest stream id whose corresponding frames do not get buffered.
   private int largestCreatedStreamId;
+  private boolean receivedSettings;
 
   protected BufferingHttp2ConnectionEncoder(Http2ConnectionEncoder delegate) {
     super(delegate);
@@ -114,7 +115,7 @@ class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
       return super.writeHeaders(ctx, streamId, headers, streamDependency, weight,
               exclusive, padding, endOfStream, promise);
     }
-    if (connection().local().canCreateStream()) {
+    if (receivedSettings && connection().local().canCreateStream()) {
       assert streamId > largestCreatedStreamId;
       largestCreatedStreamId = streamId;
       return super.writeHeaders(ctx, streamId, headers, streamDependency, weight,
@@ -170,6 +171,7 @@ class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
 
   @Override
   public ChannelFuture writeSettingsAck(ChannelHandlerContext ctx, ChannelPromise promise) {
+    receivedSettings = true;
     ChannelFuture future = super.writeSettingsAck(ctx, promise);
     // After having received a SETTINGS frame, the maximum number of concurrent streams
     // might have changed. So try to create some buffered streams.
@@ -184,6 +186,12 @@ class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
   }
 
   private void tryCreatePendingStreams() {
+    if (!receivedSettings) {
+      // Don't create any streams until we've received the initial settings from from the
+      // remote endpoint.
+      return;
+    }
+
     while (!pendingStreams.isEmpty() && connection().local().canCreateStream()) {
       Map.Entry<Integer, PendingStream> entry = pendingStreams.pollFirstEntry();
       PendingStream pendingStream = entry.getValue();
