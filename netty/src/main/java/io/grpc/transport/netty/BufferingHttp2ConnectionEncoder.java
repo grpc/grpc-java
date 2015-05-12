@@ -225,8 +225,8 @@ class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
    */
   private boolean canCreateStream() {
     Http2Connection.Endpoint local = connection().local();
-    return (receivedSettings || local.numActiveStreams() < NUM_STREAMS_INITIALLY_ALLOWED) &&
-            local.canCreateStream();
+    return (receivedSettings || local.numActiveStreams() < NUM_STREAMS_INITIALLY_ALLOWED)
+            && local.canCreateStream();
   }
 
   private boolean existingStream(int streamId) {
