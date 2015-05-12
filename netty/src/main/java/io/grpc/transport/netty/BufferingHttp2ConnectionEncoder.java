@@ -40,6 +40,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.DecoratingHttp2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2CodecUtil;
+import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2ConnectionAdapter;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2Headers;
@@ -66,6 +67,11 @@ import java.util.TreeMap;
  * in replacement for {@link io.netty.handler.codec.http2.DefaultHttp2ConnectionEncoder}.
  */
 class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
+  /**
+   * The number of new streams we allow to be created before receiving the first {@code SETTINGS}
+   * frame from the server.
+   */
+  private static final int NUM_STREAMS_INITIALLY_ALLOWED = 10;
 
   /**
    * Buffer for any streams and corresponding frames that could not be created
@@ -104,7 +110,7 @@ class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
   public ChannelFuture writeHeaders(ChannelHandlerContext ctx, int streamId, Http2Headers headers,
                                     int padding, boolean endStream, ChannelPromise promise) {
     return writeHeaders(ctx, streamId, headers, 0, Http2CodecUtil.DEFAULT_PRIORITY_WEIGHT, false,
-                        padding, endStream, promise);
+            padding, endStream, promise);
   }
 
   @Override
@@ -115,7 +121,7 @@ class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
       return super.writeHeaders(ctx, streamId, headers, streamDependency, weight,
               exclusive, padding, endOfStream, promise);
     }
-    if (receivedSettings && connection().local().canCreateStream()) {
+    if (canCreateStream()) {
       assert streamId > largestCreatedStreamId;
       largestCreatedStreamId = streamId;
       return super.writeHeaders(ctx, streamId, headers, streamDependency, weight,
@@ -186,13 +192,7 @@ class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
   }
 
   private void tryCreatePendingStreams() {
-    if (!receivedSettings) {
-      // Don't create any streams until we've received the initial settings from from the
-      // remote endpoint.
-      return;
-    }
-
-    while (!pendingStreams.isEmpty() && connection().local().canCreateStream()) {
+    while (!pendingStreams.isEmpty() && canCreateStream()) {
       Map.Entry<Integer, PendingStream> entry = pendingStreams.pollFirstEntry();
       PendingStream pendingStream = entry.getValue();
       pendingStream.sendFrames();
@@ -218,6 +218,15 @@ class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
         stream.close(e);
       }
     }
+  }
+
+  /**
+   * Determines whether or not we're allowed to create a new stream right now.
+   */
+  private boolean canCreateStream() {
+    Http2Connection.Endpoint local = connection().local();
+    return (receivedSettings || local.numActiveStreams() < NUM_STREAMS_INITIALLY_ALLOWED) &&
+            local.canCreateStream();
   }
 
   private boolean existingStream(int streamId) {

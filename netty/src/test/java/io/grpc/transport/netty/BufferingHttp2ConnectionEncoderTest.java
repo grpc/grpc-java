@@ -71,6 +71,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -348,23 +349,34 @@ public class BufferingHttp2ConnectionEncoderTest {
     encoderWriteHeaders(5, promise);
     encoderWriteHeaders(7, promise);
     encoderWriteHeaders(9, promise);
-    assertEquals(4, encoder.numBufferedStreams());
+    encoderWriteHeaders(11, promise);
+    encoderWriteHeaders(13, promise);
+    encoderWriteHeaders(15, promise);
+    encoderWriteHeaders(17, promise);
+    encoderWriteHeaders(19, promise);
+    encoderWriteHeaders(21, promise);
+    encoderWriteHeaders(23, promise);
+    assertEquals(1, encoder.numBufferedStreams());
 
-    writeVerifyWriteHeaders(never(), 3, promise);
-    writeVerifyWriteHeaders(never(), 5, promise);
-    writeVerifyWriteHeaders(never(), 7, promise);
-    writeVerifyWriteHeaders(never(), 9, promise);
+    writeVerifyWriteHeaders(times(1), 3, promise);
+    writeVerifyWriteHeaders(times(1), 5, promise);
+    writeVerifyWriteHeaders(times(1), 7, promise);
+    writeVerifyWriteHeaders(times(1), 9, promise);
+    writeVerifyWriteHeaders(times(1), 11, promise);
+    writeVerifyWriteHeaders(times(1), 13, promise);
+    writeVerifyWriteHeaders(times(1), 15, promise);
+    writeVerifyWriteHeaders(times(1), 17, promise);
+    writeVerifyWriteHeaders(times(1), 19, promise);
+    writeVerifyWriteHeaders(times(1), 21, promise);
+    writeVerifyWriteHeaders(never(), 23, promise);
 
     // Simulate that we received a SETTINGS frame.
     encoder.writeSettingsAck(ctx, promise);
 
     assertEquals(0, encoder.numBufferedStreams());
-    writeVerifyWriteHeaders(times(1), 3, promise);
-    writeVerifyWriteHeaders(times(1), 5, promise);
-    writeVerifyWriteHeaders(times(1), 7, promise);
-    writeVerifyWriteHeaders(times(1), 9, promise);
+    writeVerifyWriteHeaders(times(1), 23, promise);
 
-    assertEquals(4, connection.local().numActiveStreams());
+    assertEquals(11, connection.local().numActiveStreams());
   }
 
   @Test
