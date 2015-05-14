@@ -116,7 +116,7 @@ public final class Http2Negotiator {
     Preconditions.checkNotNull(sslContext, "sslContext");
     Preconditions.checkNotNull(inetAddress, "inetAddress");
 
-    return new ChannelHandlerAdapter() {
+    ChannelHandler sslBootstrapHandler = new ChannelHandlerAdapter() {
       @Override
       public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
         SSLEngine sslEngine;
@@ -151,10 +151,10 @@ public final class Http2Negotiator {
                 }
               }
             });
-        ChannelHandler tlsHandler = new BufferUntilTlsNegotiatedHandler(sslHandler, handler);
-        ctx.pipeline().replace(this, "tlsHandler", tlsHandler);
+        ctx.pipeline().replace(this, "sslHandler", sslHandler);
       }
     };
+    return new BufferUntilTlsNegotiatedHandler(sslBootstrapHandler, handler);
   }
 
   /**
