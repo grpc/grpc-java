@@ -123,21 +123,19 @@ public final class Http2Negotiator {
         final SettableFuture<Void> completeFuture = SettableFuture.create();
         if (isOpenSsl(sslContext.getClass())) {
           sslEngine = sslContext.newEngine(ctx.alloc());
-          SSLParameters sslParams = new SSLParameters();
-          sslParams.setEndpointIdentificationAlgorithm("HTTPS");
-          sslEngine.setSSLParameters(sslParams);
           completeFuture.set(null);
         } else {
           // Using JDK SSL
           sslEngine
               = sslContext.newEngine(ctx.alloc(), inetAddress.getHostName(), inetAddress.getPort());
-          SSLParameters sslParams = new SSLParameters();
-          sslParams.setEndpointIdentificationAlgorithm("HTTPS");
-          sslEngine.setSSLParameters(sslParams);
           if (!installJettyTlsProtocolSelection(sslEngine, completeFuture, false)) {
             throw new IllegalStateException("NPN/ALPN extensions not installed");
           }
         }
+        SSLParameters sslParams = new SSLParameters();
+        sslParams.setEndpointIdentificationAlgorithm("HTTPS");
+        sslEngine.setSSLParameters(sslParams);
+
         SslHandler sslHandler = new SslHandler(sslEngine, false);
         sslHandler.handshakeFuture().addListener(
             new GenericFutureListener<Future<? super Channel>>() {
