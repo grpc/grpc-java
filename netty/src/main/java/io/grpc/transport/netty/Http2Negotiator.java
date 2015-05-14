@@ -119,22 +119,22 @@ public final class Http2Negotiator {
     ChannelHandler sslBootstrapHandler = new ChannelHandlerAdapter() {
       @Override
       public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-        SSLEngine sslEngine;
+        // TODO(nmittler): This method is currently unsupported for OpenSSL. Need to fix in Netty.
+        SSLEngine sslEngine = sslEngine = sslContext.newEngine(ctx.alloc(),
+                inetAddress.getHostName(), inetAddress.getPort());
+        SSLParameters sslParams = new SSLParameters();
+        sslParams.setEndpointIdentificationAlgorithm("HTTPS");
+        sslEngine.setSSLParameters(sslParams);
+
         final SettableFuture<Void> completeFuture = SettableFuture.create();
         if (isOpenSsl(sslContext.getClass())) {
-          sslEngine = sslContext.newEngine(ctx.alloc());
           completeFuture.set(null);
         } else {
           // Using JDK SSL
-          sslEngine
-              = sslContext.newEngine(ctx.alloc(), inetAddress.getHostName(), inetAddress.getPort());
           if (!installJettyTlsProtocolSelection(sslEngine, completeFuture, false)) {
             throw new IllegalStateException("NPN/ALPN extensions not installed");
           }
         }
-        SSLParameters sslParams = new SSLParameters();
-        sslParams.setEndpointIdentificationAlgorithm("HTTPS");
-        sslEngine.setSSLParameters(sslParams);
 
         SslHandler sslHandler = new SslHandler(sslEngine, false);
         sslHandler.handshakeFuture().addListener(
