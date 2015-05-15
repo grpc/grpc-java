@@ -115,7 +115,7 @@ class WriteQueue {
    * Process the queue of commands and dispatch them to the stream. This method is only
    * called in the event loop
    */
-  void flush() {
+  private void flush() {
     try {
       boolean flushed = false;
       while (queue.drainTo(writeChunk, DEQUE_CHUNK_SIZE) > 0) {
