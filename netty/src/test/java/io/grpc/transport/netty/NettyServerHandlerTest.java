@@ -48,6 +48,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -174,10 +175,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase {
 
     // Send a frame and verify that it was written.
     writeQueue.enqueue(new SendGrpcFrameCommand(stream, content, false), true);
-    handler.write(ctx, writeQueue, promise);
     verify(promise, never()).setFailure(any(Throwable.class));
     ByteBuf bufWritten = captureWrite(ctx);
-    verify(ctx, atLeastOnce()).flush();
+    verify(channel, times(1)).flush();
     int startIndex = bufWritten.readerIndex() + Http2CodecUtil.FRAME_HEADER_LENGTH;
     int length = bufWritten.writerIndex() - startIndex;
     ByteBuf writtenContent = bufWritten.slice(startIndex, length);

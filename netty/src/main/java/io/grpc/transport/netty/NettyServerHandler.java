@@ -231,10 +231,7 @@ class NettyServerHandler extends Http2ConnectionHandler {
   @Override
   public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
       throws Http2Exception {
-    if (msg instanceof WriteQueue) {
-      ((WriteQueue) msg).flush(ctx);
-      promise.setSuccess();
-    } else if (msg instanceof SendGrpcFrameCommand) {
+    if (msg instanceof SendGrpcFrameCommand) {
       sendGrpcFrame(ctx, (SendGrpcFrameCommand) msg, promise);
     } else if (msg instanceof SendResponseHeadersCommand) {
       sendResponseHeaders(ctx, (SendResponseHeadersCommand) msg, promise);

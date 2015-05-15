@@ -34,7 +34,6 @@ package io.grpc.transport.netty;
 import com.google.common.base.Preconditions;
 
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 
 import java.util.ArrayDeque;
@@ -55,7 +54,7 @@ class WriteQueue {
   private final Runnable later = new Runnable() {
     @Override
     public void run() {
-      channel.write(WriteQueue.this);
+      flush();
     }
   };
 
@@ -116,7 +115,7 @@ class WriteQueue {
    * Process the queue of commands and dispatch them to the stream. This method is only
    * called in the event loop
    */
-  void flush(ChannelHandlerContext ctx) {
+  void flush() {
     try {
       boolean flushed = false;
       while (queue.drainTo(writeChunk, DEQUE_CHUNK_SIZE) > 0) {
@@ -127,11 +126,11 @@ class WriteQueue {
         // might never end as new events are continuously added to the queue, if we never
         // flushed in that case we would be guaranteed to OOM.
         flushed = true;
-        ctx.flush();
+        channel.flush();
       }
       if (!flushed) {
         // Must flush at least once
-        ctx.flush();
+        channel.flush();
       }
     } finally {
       // Mark the write as done, if the queue is non-empty after marking trigger a new write.

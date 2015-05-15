@@ -138,13 +138,6 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
     doAnswer(new Answer() {
       @Override
       public Object answer(InvocationOnMock invocation) throws Throwable {
-        handler.write(ctx, invocation.getArguments()[0], promise);
-        return future;
-      }
-    }).when(channel).write(any());
-    doAnswer(new Answer() {
-      @Override
-      public Object answer(InvocationOnMock invocation) throws Throwable {
         handler.write(ctx, invocation.getArguments()[0],
             (ChannelPromise) invocation.getArguments()[1]);
         return future;
@@ -183,7 +176,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
   @Test
   public void createStreamShouldSucceed() throws Exception {
     writeQueue.enqueue(new CreateStreamCommand(grpcHeaders, stream), true);
-    verify(ctx, times(1)).flush();
+    verify(channel, times(1)).flush();
     when(promise.isSuccess()).thenReturn(true);
     verify(stream).id(eq(3));
 
@@ -207,18 +200,19 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
   @Test
   public void cancelShouldSucceed() throws Exception {
     createStream();
+    verify(channel, times(1)).flush();
     writeQueue.enqueue(new CancelStreamCommand(stream), true);
 
     ByteBuf expected = rstStreamFrame(3, (int) Http2Error.CANCEL.code());
     verify(ctx).write(eq(expected), eq(promise));
-    verify(ctx, times(1)).flush();
+    verify(channel, times(2)).flush();
   }
 
   @Test
   public void cancelWhileBufferedShouldSucceed() throws Exception {
     handler.connection().local().maxActiveStreams(0);
     writeQueue.enqueue(new CreateStreamCommand(grpcHeaders, stream), true);
-    verify(ctx, times(1)).flush();
+    verify(channel, times(1)).flush();
     mockContext();
     ArgumentCaptor<Integer> idCaptor = ArgumentCaptor.forClass(Integer.class);
     verify(stream).id(idCaptor.capture());
@@ -226,7 +220,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
     ChannelPromise cancelPromise = mock(ChannelPromise.class);
     writeQueue.enqueue(new CancelStreamCommand(stream), cancelPromise, true);
     verify(cancelPromise).setSuccess();
-    verify(ctx, times(1)).flush();
+    verify(channel, times(2)).flush();
     verifyNoMoreInteractions(ctx);
   }
 
@@ -239,23 +233,24 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
   public void cancelTwiceShouldSucceed() throws Exception {
     createStream();
 
-    writeQueue.enqueue(new CancelStreamCommand(stream), true);
+    writeQueue.enqueue(new CancelStreamCommand(stream), promise, true);
 
     ByteBuf expected = rstStreamFrame(3, (int) Http2Error.CANCEL.code());
     verify(ctx).write(eq(expected), any(ChannelPromise.class));
 
     promise = mock(ChannelPromise.class);
 
-    writeQueue.enqueue(new CancelStreamCommand(stream), true);
+    writeQueue.enqueue(new CancelStreamCommand(stream), promise, true);
     verify(promise).setSuccess();
   }
 
   @Test
   public void sendFrameShouldSucceed() throws Exception {
     createStream();
+    verify(channel, times(1)).flush();
     // Send a frame and verify that it was written.
     writeQueue.enqueue(new SendGrpcFrameCommand(stream, content, true), true);
-    verify(ctx, times(1)).flush();
+    verify(channel, times(2)).flush();
     verify(promise, never()).setFailure(any(Throwable.class));
     ByteBuf bufWritten = captureWrite(ctx);
     int startIndex = bufWritten.readerIndex() + Http2CodecUtil.FRAME_HEADER_LENGTH;
@@ -268,7 +263,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
   public void sendForUnknownStreamShouldFail() throws Exception {
     when(stream.id()).thenReturn(3);
     writeQueue.enqueue(new SendGrpcFrameCommand(stream, content, true), true);
-    verify(ctx, times(1)).flush();
+    verify(channel, times(1)).flush();
     verify(promise).setFailure(any(Throwable.class));
   }
 
