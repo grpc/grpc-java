@@ -31,52 +31,25 @@
 
 package io.grpc.benchmarks.qps;
 
-import static io.grpc.benchmarks.qps.Utils.newServer;
-
-import io.grpc.ServerImpl;
-
-import java.util.concurrent.TimeUnit;
-
 /**
- * QPS server using the non-blocking API.
+ * Configuration for a benchmark application.
  */
-public class AsyncServer {
-
+public interface Configuration {
   /**
-   * checkstyle complains if there is no javadoc comment here.
+   * Builder for the {@link Configuration}.
+   * @param <T> The type of {@link Configuration} that this builder creates.
    */
-  public static void main(String... args) throws Exception {
-    new AsyncServer().run(args);
-  }
+  interface Builder<T extends Configuration> {
+    /**
+     * Builds the {@link Configuration} from the given command-line arguments.
+     * @throws IllegalArgumentException if unable to build the configuration for any reason.
+     */
+    T build(String[] args);
 
-  /** Equivalent of "main", but non-static. */
-  public void run(String[] args) throws Exception {
-    ServerConfiguration.Builder configBuilder = ServerConfiguration.newBuilder();
-    ServerConfiguration config;
-    try {
-      config = configBuilder.build(args);
-    } catch (Exception e) {
-      System.out.println(e.getMessage());
-      configBuilder.printUsage();
-      return;
-    }
-
-    final ServerImpl server = newServer(config);
-    server.start();
-
-    System.out.println("QPS Server started on " + config.address);
-
-    Runtime.getRuntime().addShutdownHook(new Thread() {
-      @Override
-      public void run() {
-        try {
-          System.out.println("QPS Server shutting down");
-          server.shutdown();
-          server.awaitTerminated(5, TimeUnit.SECONDS);
-        } catch (Exception e) {
-          e.printStackTrace();
-        }
-      }
-    });
+    /**
+     * Prints the command-line usage for the application based on the options supported by this
+     * builder.
+     */
+    void printUsage();
   }
 }

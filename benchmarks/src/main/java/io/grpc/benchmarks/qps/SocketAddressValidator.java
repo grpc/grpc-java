@@ -31,52 +31,35 @@
 
 package io.grpc.benchmarks.qps;
 
-import static io.grpc.benchmarks.qps.Utils.newServer;
-
-import io.grpc.ServerImpl;
-
-import java.util.concurrent.TimeUnit;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 
 /**
- * QPS server using the non-blocking API.
+ * Verifies whether or not the given {@link SocketAddress} is valid.
  */
-public class AsyncServer {
+interface SocketAddressValidator {
+  /**
+   * Verifier for {@link InetSocketAddress}es.
+   */
+  SocketAddressValidator INET = new SocketAddressValidator() {
+    @Override
+    public boolean isValidSocketAddress(SocketAddress address) {
+      return address instanceof InetSocketAddress;
+    }
+  };
 
   /**
-   * checkstyle complains if there is no javadoc comment here.
+   * Verifier for Netty Unix Domain Socket addresses.
    */
-  public static void main(String... args) throws Exception {
-    new AsyncServer().run(args);
-  }
-
-  /** Equivalent of "main", but non-static. */
-  public void run(String[] args) throws Exception {
-    ServerConfiguration.Builder configBuilder = ServerConfiguration.newBuilder();
-    ServerConfiguration config;
-    try {
-      config = configBuilder.build(args);
-    } catch (Exception e) {
-      System.out.println(e.getMessage());
-      configBuilder.printUsage();
-      return;
+  SocketAddressValidator UDS = new SocketAddressValidator() {
+    @Override
+    public boolean isValidSocketAddress(SocketAddress address) {
+      return "DomainSocketAddress".equals(address.getClass().getSimpleName());
     }
+  };
 
-    final ServerImpl server = newServer(config);
-    server.start();
-
-    System.out.println("QPS Server started on " + config.address);
-
-    Runtime.getRuntime().addShutdownHook(new Thread() {
-      @Override
-      public void run() {
-        try {
-          System.out.println("QPS Server shutting down");
-          server.shutdown();
-          server.awaitTerminated(5, TimeUnit.SECONDS);
-        } catch (Exception e) {
-          e.printStackTrace();
-        }
-      }
-    });
-  }
+  /**
+   * Returns {@code true} if the given address is valid.
+   */
+  boolean isValidSocketAddress(SocketAddress address);
 }
