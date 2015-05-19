@@ -39,15 +39,17 @@ import java.io.InputStream;
  */
 public final class ServerMethodDefinition<RequestT, ResponseT> {
   private final String name;
+  private final MethodType type;
   private final Marshaller<RequestT> requestMarshaller;
   private final Marshaller<ResponseT> responseMarshaller;
   private final ServerCallHandler<RequestT, ResponseT> handler;
 
   // ServerMethodDefinition has no form of public construction. It is only created within the
   // context of a ServerServiceDefinition.Builder.
-  ServerMethodDefinition(String name, Marshaller<RequestT> requestMarshaller,
+  ServerMethodDefinition(String name, MethodType type, Marshaller<RequestT> requestMarshaller,
       Marshaller<ResponseT> responseMarshaller, ServerCallHandler<RequestT, ResponseT> handler) {
     this.name = name;
+    this.type = type;
     this.requestMarshaller = requestMarshaller;
     this.responseMarshaller = responseMarshaller;
     this.handler = handler;
@@ -57,21 +59,27 @@ public final class ServerMethodDefinition<RequestT, ResponseT> {
    * Create a new instance.
    *
    * @param name the simple name of a method.
+   * @param type the type of the method.
    * @param requestMarshaller marshaller for request messages.
    * @param responseMarshaller marshaller for response messages.
    * @param handler to dispatch calls to.
    * @return a new instance.
    */
   public static <RequestT, ResponseT> ServerMethodDefinition<RequestT, ResponseT> create(
-      String name, Marshaller<RequestT> requestMarshaller,
+      String name, MethodType type, Marshaller<RequestT> requestMarshaller,
       Marshaller<ResponseT> responseMarshaller, ServerCallHandler<RequestT, ResponseT> handler) {
-    return new ServerMethodDefinition<RequestT, ResponseT>(name, requestMarshaller,
+    return new ServerMethodDefinition<RequestT, ResponseT>(name, type, requestMarshaller,
         responseMarshaller, handler);
   }
 
   /** The simple name of the method. It is not an absolute path. */
   public String getName() {
     return name;
+  }
+
+  /** The type of the method. */
+  public MethodType getMethodType() {
+    return type;
   }
 
   /**
@@ -108,6 +116,6 @@ public final class ServerMethodDefinition<RequestT, ResponseT> {
   public ServerMethodDefinition<RequestT, ResponseT> withServerCallHandler(
       ServerCallHandler<RequestT, ResponseT> handler) {
     return new ServerMethodDefinition<RequestT, ResponseT>(
-        name, requestMarshaller, responseMarshaller, handler);
+        name, type, requestMarshaller, responseMarshaller, handler);
   }
 }

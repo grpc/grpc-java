@@ -247,14 +247,11 @@ public final class ChannelImpl extends Channel {
   private class CallImpl<ReqT, RespT> extends Call<ReqT, RespT> {
     private final MethodDescriptor<ReqT, RespT> method;
     private final SerializingExecutor callExecutor;
-    private final boolean unaryRequest;
     private ClientStream stream;
 
     public CallImpl(MethodDescriptor<ReqT, RespT> method, SerializingExecutor executor) {
       this.method = method;
       this.callExecutor = executor;
-      this.unaryRequest = method.getType() == MethodType.UNARY
-          || method.getType() == MethodType.SERVER_STREAMING;
     }
 
     @Override
@@ -332,7 +329,7 @@ public final class ChannelImpl extends Channel {
       // For unary requests, we don't flush since we know that halfClose should be coming soon. This
       // allows us to piggy-back the END_STREAM=true on the last payload frame without opening the
       // possibility of broken applications forgetting to call halfClose without noticing.
-      if (!unaryRequest) {
+      if (!method.getType().clientSendsOneMessage()) {
         stream.flush();
       }
     }

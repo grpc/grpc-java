@@ -35,6 +35,7 @@ import io.grpc.Status;
 
 /** An observer of server-side stream events. */
 public interface ServerStreamListener extends StreamListener {
+
   /**
    * Called when the remote side of the transport gracefully closed, indicating the client had no
    * more data to send. No further messages will be received on the stream.

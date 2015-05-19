@@ -293,7 +293,14 @@ public class TestServiceImpl implements TestServiceGrpc.TestService {
         Chunk nextChunk = chunks.peek();
         if (nextChunk != null) {
           scheduled = true;
-          executor.schedule(dispatchTask, nextChunk.delayMicroseconds, TimeUnit.MICROSECONDS);
+          if (nextChunk.delayMicroseconds == 0) {
+            // Allow for immediate execution, useful when testing flush
+            // coalescing in the transport thread.
+            dispatchTask.run();
+          } else {
+            ((ScheduledExecutorService) executor).schedule(
+                dispatchTask, nextChunk.delayMicroseconds, TimeUnit.MICROSECONDS);
+          }
           return;
         }
       }

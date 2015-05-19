@@ -88,10 +88,12 @@ public final class ServerServiceDefinition {
      * @param responseMarshaller marshaller for serializing outgoing responses
      * @param handler handler for incoming calls
      */
-    public <ReqT, RespT> Builder addMethod(String name, Marshaller<ReqT> requestMarshaller,
-        Marshaller<RespT> responseMarshaller, ServerCallHandler<ReqT, RespT> handler) {
+    public <ReqT, RespT> Builder addMethod(String name, MethodType type,
+        Marshaller<ReqT> requestMarshaller, Marshaller<RespT> responseMarshaller,
+        ServerCallHandler<ReqT, RespT> handler) {
       return addMethod(new ServerMethodDefinition<ReqT, RespT>(
           Preconditions.checkNotNull(name, "name must not be null"),
+          Preconditions.checkNotNull(type, "type must not be null"),
           Preconditions.checkNotNull(requestMarshaller, "requestMarshaller must not be null"),
           Preconditions.checkNotNull(responseMarshaller, "responseMarshaller must not be null"),
           Preconditions.checkNotNull(handler, "handler must not be null")));

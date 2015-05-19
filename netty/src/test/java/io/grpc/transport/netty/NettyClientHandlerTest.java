@@ -234,7 +234,6 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
     createStream();
 
     writeQueue.enqueue(new CancelStreamCommand(stream), promise, true);
-
     ByteBuf expected = rstStreamFrame(3, (int) Http2Error.CANCEL.code());
     verify(ctx).write(eq(expected), any(ChannelPromise.class));
 

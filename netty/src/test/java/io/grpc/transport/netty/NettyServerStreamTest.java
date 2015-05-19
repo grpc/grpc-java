@@ -97,7 +97,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase {
     Http2Headers headers = new DefaultHttp2Headers()
         .status(Utils.STATUS_OK)
         .set(Utils.CONTENT_TYPE_HEADER, Utils.CONTENT_TYPE_GRPC);
-    verify(writeQueue).enqueue(new SendResponseHeadersCommand(STREAM_ID, headers, false), true);
+    verify(writeQueue).enqueue(new SendResponseHeadersCommand(STREAM_ID, headers, false), false);
     verify(writeQueue).enqueue(eq(new SendGrpcFrameCommand(stream, messageFrame(MESSAGE), false)),
         any(ChannelPromise.class),
         eq(true));
@@ -106,7 +106,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase {
   @Test
   public void writeHeadersShouldSendHeaders() throws Exception {
     Metadata.Headers headers = new Metadata.Headers();
-    stream().writeHeaders(headers);
+    stream().writeHeaders(headers, true);
     verify(writeQueue).enqueue(new SendResponseHeadersCommand(STREAM_ID,
         Utils.convertServerHeaders(headers), false), true);
   }
@@ -114,11 +114,11 @@ public class NettyServerStreamTest extends NettyStreamTestBase {
   @Test
   public void duplicateWriteHeadersShouldFail() throws Exception {
     Metadata.Headers headers = new Metadata.Headers();
-    stream().writeHeaders(headers);
+    stream().writeHeaders(headers, false);
     verify(writeQueue).enqueue(new SendResponseHeadersCommand(STREAM_ID,
-        Utils.convertServerHeaders(headers), false), true);
+        Utils.convertServerHeaders(headers), false), false);
     try {
-      stream().writeHeaders(headers);
+      stream().writeHeaders(headers, true);
       fail("Can only write response headers once");
     } catch (IllegalStateException ise) {
       // Success

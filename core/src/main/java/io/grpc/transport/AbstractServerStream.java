@@ -87,18 +87,18 @@ public abstract class AbstractServerStream<IdT> extends AbstractStream<IdT>
   }
 
   @Override
-  public void writeHeaders(Metadata.Headers headers) {
+  public void writeHeaders(Metadata.Headers headers, boolean flush) {
     Preconditions.checkNotNull(headers, "headers");
     outboundPhase(Phase.HEADERS);
     headersSent = true;
-    internalSendHeaders(headers);
+    internalSendHeaders(headers, flush);
     outboundPhase(Phase.MESSAGE);
   }
 
   @Override
   public final void writeMessage(InputStream message, int length) {
     if (!headersSent) {
-      writeHeaders(new Metadata.Headers());
+      writeHeaders(new Metadata.Headers(), false);
       headersSent = true;
     }
     super.writeMessage(message, length);
@@ -164,8 +164,9 @@ public abstract class AbstractServerStream<IdT> extends AbstractStream<IdT>
    * Sends response headers to the remote end points.
    *
    * @param headers the headers to be sent to client.
+   * @param flush true if the headers should be sent immediately, false otherwise.
    */
-  protected abstract void internalSendHeaders(Metadata.Headers headers);
+  protected abstract void internalSendHeaders(Metadata.Headers headers, boolean flush);
 
   /**
    * Sends an outbound frame to the remote end point.

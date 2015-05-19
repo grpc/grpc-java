@@ -51,8 +51,8 @@ public class ServerCalls {
    */
   public static <ReqT, RespT> ServerMethodDefinition<ReqT, RespT> createMethodDefinition(
       Method<ReqT, RespT> method, ServerCallHandler<ReqT, RespT> handler) {
-    return ServerMethodDefinition.create(method.getName(), method.getRequestMarshaller(),
-        method.getResponseMarshaller(), handler);
+    return ServerMethodDefinition.create(method.getName(), method.getType(),
+        method.getRequestMarshaller(), method.getResponseMarshaller(), handler);
   }
 
   /**
@@ -77,7 +77,8 @@ public class ServerCalls {
               // close(OK) inside invoke(), while close(OK) is not allowed before onHalfClose().
               this.request = request;
 
-              // Request delivery of the next inbound message.
+              // Request delivery of the next inbound message so we can detect mismatch between
+              // the servers expectation of a unary call and the client behavior.
               call.request(1);
             } else {
               call.close(
