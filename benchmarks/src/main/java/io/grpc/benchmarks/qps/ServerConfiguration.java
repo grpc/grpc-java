@@ -152,82 +152,69 @@ class ServerConfiguration implements Configuration {
     }
   }
 
-  private interface ParamApplicator {
-    void applyParam(ServerConfiguration config, String value);
-  }
-
   enum ServerParam implements AbstractConfigurationBuilder.Param {
     ADDRESS("STR", "Socket address (host:port) or Unix Domain Socket file name "
-        + "(unix:///path/to/file), depending on the transport selected.", null, true,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ServerConfiguration config, String value) {
-            SocketAddress address = Utils.parseSocketAddress(value);
-            if (address instanceof InetSocketAddress) {
-              InetSocketAddress addr = (InetSocketAddress) address;
-              int port = addr.getPort() == 0 ? pickUnusedPort() : addr.getPort();
-              // Re-create the address so that the server is available on all local addresses.
-              address = new InetSocketAddress(port);
-            }
-            config.address = address;
-          }
-        }),
-    TLS("", "Enable TLS.", "" + DEFAULT.tls,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ServerConfiguration config, String value) {
-            config.tls = parseBoolean(value);
-          }
-        }),
-    TRANSPORT("STR", Transport.getDescriptionString(), DEFAULT.transport.name().toLowerCase(),
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ServerConfiguration config, String value) {
-            config.transport = Transport.valueOf(value.toUpperCase());
-          }
-        }),
+        + "(unix:///path/to/file), depending on the transport selected.", null, true) {
+      @Override
+      protected void setServerValue(ServerConfiguration config, String value) {
+        SocketAddress address = Utils.parseSocketAddress(value);
+        if (address instanceof InetSocketAddress) {
+          InetSocketAddress addr = (InetSocketAddress) address;
+          int port = addr.getPort() == 0 ? pickUnusedPort() : addr.getPort();
+          // Re-create the address so that the server is available on all local addresses.
+          address = new InetSocketAddress(port);
+        }
+        config.address = address;
+      }
+    },
+    TLS("", "Enable TLS.", "" + DEFAULT.tls) {
+      @Override
+      protected void setServerValue(ServerConfiguration config, String value) {
+        config.tls = parseBoolean(value);
+      }
+    },
+    TRANSPORT("STR", Transport.getDescriptionString(), DEFAULT.transport.name().toLowerCase()) {
+      @Override
+      protected void setServerValue(ServerConfiguration config, String value) {
+        config.transport = Transport.valueOf(value.toUpperCase());
+      }
+    },
     DIRECTEXECUTOR("", "Don't use a threadpool for RPC calls, instead execute calls directly "
-        + "in the transport thread.", "" + DEFAULT.directExecutor,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ServerConfiguration config, String value) {
-            config.directExecutor = parseBoolean(value);
-          }
-        }),
+        + "in the transport thread.", "" + DEFAULT.directExecutor) {
+      @Override
+      protected void setServerValue(ServerConfiguration config, String value) {
+        config.directExecutor = parseBoolean(value);
+      }
+    },
     CONNECTION_WINDOW("BYTES", "The HTTP/2 connection flow control window.",
-        "" + DEFAULT.connectionWindow,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ServerConfiguration config, String value) {
-            config.connectionWindow = parseInt(value);
-          }
-        }),
+        "" + DEFAULT.connectionWindow) {
+      @Override
+      protected void setServerValue(ServerConfiguration config, String value) {
+        config.connectionWindow = parseInt(value);
+      }
+    },
     STREAM_WINDOW("BYTES", "The HTTP/2 per-stream flow control window.",
-        "" + DEFAULT.streamWindow,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ServerConfiguration config, String value) {
-            config.streamWindow = parseInt(value);
-          }
-        });
+        "" + DEFAULT.streamWindow) {
+      @Override
+      protected void setServerValue(ServerConfiguration config, String value) {
+        config.streamWindow = parseInt(value);
+      }
+    };
 
     private final String type;
     private final String description;
     private final String defaultValue;
     private final boolean required;
-    private final ParamApplicator applicator;
 
-    ServerParam(String type, String description, String defaultValue, ParamApplicator applicator) {
-      this(type, description, defaultValue, false, applicator);
+    ServerParam(String type, String description, String defaultValue) {
+      this(type, description, defaultValue, false);
     }
 
-    ServerParam(String type, String description, String defaultValue, boolean required,
-                ParamApplicator applicator) {
+    ServerParam(String type, String description, String defaultValue, boolean required) {
       this.type = type;
       this.description = description;
       this.defaultValue = defaultValue;
       this.required = required;
-      this.applicator = applicator;
     }
 
     @Override
@@ -257,7 +244,9 @@ class ServerConfiguration implements Configuration {
 
     @Override
     public void setValue(Configuration config, String value) {
-      applicator.applyParam((ServerConfiguration) config, value);
+      setServerValue((ServerConfiguration) config, value);
     }
+
+    protected abstract void setServerValue(ServerConfiguration config, String value);
   }
 }

@@ -143,10 +143,6 @@ class ClientConfiguration implements Configuration {
     }
   }
 
-  private interface ParamApplicator {
-    void applyParam(ClientConfiguration config, String value);
-  }
-
   /**
    * All of the supported transports.
    */
@@ -201,141 +197,122 @@ class ClientConfiguration implements Configuration {
 
   enum ClientParam implements AbstractConfigurationBuilder.Param {
     ADDRESS("STR", "Socket address (host:port) or Unix Domain Socket file name "
-        + "(unix:///path/to/file), depending on the transport selected.", null, true,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ClientConfiguration config, String value) {
-            config.address = Utils.parseSocketAddress(value);
-          }
-        }),
-    CHANNELS("INT", "Number of Channels.", "" + DEFAULT.channels,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ClientConfiguration config, String value) {
-            config.channels = parseInt(value);
-          }
-        }),
+        + "(unix:///path/to/file), depending on the transport selected.", null, true) {
+      @Override
+      protected void setClientValue(ClientConfiguration config, String value) {
+        config.address = Utils.parseSocketAddress(value);
+      }
+    },
+    CHANNELS("INT", "Number of Channels.", "" + DEFAULT.channels) {
+      @Override
+      protected void setClientValue(ClientConfiguration config, String value) {
+        config.channels = parseInt(value);
+      }
+    },
     OUTSTANDING_RPCS("INT", "Number of outstanding RPCs per Channel.",
-        "" + DEFAULT.outstandingRpcsPerChannel,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ClientConfiguration config, String value) {
-            config.outstandingRpcsPerChannel = parseInt(value);
-          }
-        }),
-    CLIENT_PAYLOAD("BYTES", "Payload Size of the Request.", "" + DEFAULT.clientPayload,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ClientConfiguration config, String value) {
-            config.clientPayload = parseInt(value);
-          }
-        }),
-    SERVER_PAYLOAD("BYTES", "Payload Size of the Response.", "" + DEFAULT.serverPayload,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ClientConfiguration config, String value) {
-            config.serverPayload = parseInt(value);
-          }
-        }),
-    TLS("", "Enable TLS.", "" + DEFAULT.tls,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ClientConfiguration config, String value) {
-            config.tls = parseBoolean(value);
-          }
-        }),
-    TESTCA("", "Use the provided Test Certificate for TLS.", "" + DEFAULT.testca,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ClientConfiguration config, String value) {
-            config.testca = parseBoolean(value);
-          }
-        }),
-    TRANSPORT("STR", Transport.getDescriptionString(), DEFAULT.transport.name().toLowerCase(),
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ClientConfiguration config, String value) {
-            config.transport = Transport.valueOf(value.toUpperCase());
-          }
-        }),
-    DURATION("SECONDS", "Duration of the benchmark.", "" + DEFAULT.duration,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ClientConfiguration config, String value) {
-            config.duration = parseInt(value);
-          }
-        }),
-    WARMUP_DURATION("SECONDS", "Warmup Duration of the benchmark.", "" + DEFAULT.warmupDuration,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ClientConfiguration config, String value) {
-            config.warmupDuration = parseInt(value);
-          }
-        }),
+        "" + DEFAULT.outstandingRpcsPerChannel) {
+      @Override
+      protected void setClientValue(ClientConfiguration config, String value) {
+        config.outstandingRpcsPerChannel = parseInt(value);
+      }
+    },
+    CLIENT_PAYLOAD("BYTES", "Payload Size of the Request.", "" + DEFAULT.clientPayload) {
+      @Override
+      protected void setClientValue(ClientConfiguration config, String value) {
+        config.clientPayload = parseInt(value);
+      }
+    },
+    SERVER_PAYLOAD("BYTES", "Payload Size of the Response.", "" + DEFAULT.serverPayload) {
+      @Override
+      protected void setClientValue(ClientConfiguration config, String value) {
+        config.serverPayload = parseInt(value);
+      }
+    },
+    TLS("", "Enable TLS.", "" + DEFAULT.tls) {
+      @Override
+      protected void setClientValue(ClientConfiguration config, String value) {
+        config.tls = parseBoolean(value);
+      }
+    },
+    TESTCA("", "Use the provided Test Certificate for TLS.", "" + DEFAULT.testca) {
+      @Override
+      protected void setClientValue(ClientConfiguration config, String value) {
+        config.testca = parseBoolean(value);
+      }
+    },
+    TRANSPORT("STR", Transport.getDescriptionString(), DEFAULT.transport.name().toLowerCase()) {
+      @Override
+      protected void setClientValue(ClientConfiguration config, String value) {
+        config.transport = Transport.valueOf(value.toUpperCase());
+      }
+    },
+    DURATION("SECONDS", "Duration of the benchmark.", "" + DEFAULT.duration) {
+      @Override
+      protected void setClientValue(ClientConfiguration config, String value) {
+        config.duration = parseInt(value);
+      }
+    },
+    WARMUP_DURATION("SECONDS", "Warmup Duration of the benchmark.", "" + DEFAULT.warmupDuration) {
+      @Override
+      protected void setClientValue(ClientConfiguration config, String value) {
+        config.warmupDuration = parseInt(value);
+      }
+    },
     DIRECTEXECUTOR("",
         "Don't use a threadpool for RPC calls, instead execute calls directly "
-            + "in the transport thread.", "" + DEFAULT.directExecutor,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ClientConfiguration config, String value) {
-            config.directExecutor = parseBoolean(value);
-          }
-        }),
-    SAVE_HISTOGRAM("FILE", "Write the histogram with the latency recordings to file.", null,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ClientConfiguration config, String value) {
-            config.histogramFile = value;
-          }
-        }),
-    STREAMING_RPCS("", "Use Streaming RPCs.", "false",
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ClientConfiguration config, String value) {
-            config.rpcType = STREAMING;
-          }
-        }),
+            + "in the transport thread.", "" + DEFAULT.directExecutor) {
+      @Override
+      protected void setClientValue(ClientConfiguration config, String value) {
+        config.directExecutor = parseBoolean(value);
+      }
+    },
+    SAVE_HISTOGRAM("FILE", "Write the histogram with the latency recordings to file.", null) {
+      @Override
+      protected void setClientValue(ClientConfiguration config, String value) {
+        config.histogramFile = value;
+      }
+    },
+    STREAMING_RPCS("", "Use Streaming RPCs.", "false") {
+      @Override
+      protected void setClientValue(ClientConfiguration config, String value) {
+        config.rpcType = STREAMING;
+      }
+    },
     CONNECTION_WINDOW("BYTES", "The HTTP/2 connection flow control window.",
-        "" + DEFAULT.connectionWindow,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ClientConfiguration config, String value) {
-            config.connectionWindow = parseInt(value);
-          }
-        }),
+        "" + DEFAULT.connectionWindow) {
+      @Override
+      protected void setClientValue(ClientConfiguration config, String value) {
+        config.connectionWindow = parseInt(value);
+      }
+    },
     STREAM_WINDOW("BYTES", "The HTTP/2 per-stream flow control window.",
-        "" + DEFAULT.streamWindow,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ClientConfiguration config, String value) {
-            config.streamWindow = parseInt(value);
-          }
-        }),
-    TARGET_QPS("INT", "Average number of QPS to shoot for.", "" + DEFAULT.targetQps, true,
-        new ParamApplicator() {
-          @Override
-          public void applyParam(ClientConfiguration config, String value) {
-            config.targetQps = parseInt(value);
-          }
-        });
+        "" + DEFAULT.streamWindow) {
+      @Override
+      protected void setClientValue(ClientConfiguration config, String value) {
+        config.streamWindow = parseInt(value);
+      }
+    },
+    TARGET_QPS("INT", "Average number of QPS to shoot for.", "" + DEFAULT.targetQps, true) {
+      @Override
+      protected void setClientValue(ClientConfiguration config, String value) {
+        config.targetQps = parseInt(value);
+      }
+    };
 
     private final String type;
     private final String description;
     private final String defaultValue;
     private final boolean required;
-    private final ParamApplicator applicator;
 
-    ClientParam(String type, String description, String defaultValue, ParamApplicator applicator) {
-      this(type, description, defaultValue, false, applicator);
+    ClientParam(String type, String description, String defaultValue) {
+      this(type, description, defaultValue, false);
     }
 
-    ClientParam(String type, String description, String defaultValue, boolean required,
-                ParamApplicator applicator) {
+    ClientParam(String type, String description, String defaultValue, boolean required) {
       this.type = type;
       this.description = description;
       this.defaultValue = defaultValue;
       this.required = required;
-      this.applicator = applicator;
     }
 
     @Override
@@ -365,7 +342,9 @@ class ClientConfiguration implements Configuration {
 
     @Override
     public void setValue(Configuration config, String value) {
-      applicator.applyParam((ClientConfiguration) config, value);
+      setClientValue((ClientConfiguration) config, value);
     }
+
+    protected abstract void setClientValue(ClientConfiguration config, String value);
   }
 }
