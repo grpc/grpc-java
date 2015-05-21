@@ -37,6 +37,7 @@ import static io.grpc.benchmarks.qps.Utils.parseBoolean;
 import static io.grpc.testing.integration.Util.pickUnusedPort;
 import static java.lang.Integer.parseInt;
 
+import io.grpc.transport.netty.NativeUtil;
 import io.grpc.transport.netty.NettyChannelBuilder;
 
 import java.net.InetSocketAddress;
@@ -157,7 +158,7 @@ class ServerConfiguration implements Configuration {
         + "(unix:///path/to/file), depending on the transport selected.", null, true) {
       @Override
       protected void setServerValue(ServerConfiguration config, String value) {
-        SocketAddress address = Utils.parseSocketAddress(value);
+        SocketAddress address = NativeUtil.parseSocketAddress(value);
         if (address instanceof InetSocketAddress) {
           InetSocketAddress addr = (InetSocketAddress) address;
           int port = addr.getPort() == 0 ? pickUnusedPort() : addr.getPort();

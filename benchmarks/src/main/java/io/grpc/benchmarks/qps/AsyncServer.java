@@ -45,11 +45,8 @@ import io.grpc.testing.SimpleRequest;
 import io.grpc.testing.SimpleResponse;
 import io.grpc.testing.TestServiceGrpc;
 import io.grpc.transport.netty.GrpcSslContexts;
+import io.grpc.transport.netty.NativeUtil;
 import io.grpc.transport.netty.NettyServerBuilder;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.ServerChannel;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslProvider;
 
@@ -114,63 +111,29 @@ public class AsyncServer {
           .build();
     }
 
-    final EventLoopGroup boss;
-    final EventLoopGroup worker;
-    final Class<? extends ServerChannel> channelType;
-    switch (config.transport) {
-      case NETTY_NIO: {
-        boss = new NioEventLoopGroup();
-        worker = new NioEventLoopGroup();
-        channelType = NioServerSocketChannel.class;
-        break;
-      }
-      case NETTY_EPOLL: {
-        try {
-          // These classes are only available on linux.
-          Class<?> groupClass = Class.forName("io.netty.channel.epoll.EpollEventLoopGroup");
-          @SuppressWarnings("unchecked")
-          Class<? extends ServerChannel> channelClass = (Class<? extends ServerChannel>)
-              Class.forName("io.netty.channel.epoll.EpollServerSocketChannel");
-          boss = (EventLoopGroup) groupClass.newInstance();
-          worker = (EventLoopGroup) groupClass.newInstance();
-          channelType = channelClass;
-          break;
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      }
-      case NETTY_UNIX_DOMAIN_SOCKET: {
-        try {
-          // These classes are only available on linux.
-          Class<?> groupClass = Class.forName("io.netty.channel.epoll.EpollEventLoopGroup");
-          @SuppressWarnings("unchecked")
-          Class<? extends ServerChannel> channelClass = (Class<? extends ServerChannel>)
-              Class.forName("io.netty.channel.epoll.EpollServerDomainSocketChannel");
-          boss = (EventLoopGroup) groupClass.newInstance();
-          worker = (EventLoopGroup) groupClass.newInstance();
-          channelType = channelClass;
-          break;
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      }
-      default: {
-        // Should never get here.
-        throw new IllegalArgumentException("Unsupported transport: " + config.transport);
-      }
-    }
-
-    return NettyServerBuilder
-        .forAddress(config.address)
-        .bossEventLoopGroup(boss)
-        .workerEventLoopGroup(worker)
-        .channelType(channelType)
+    NettyServerBuilder builder = NettyServerBuilder.forAddress(config.address)
         .addService(TestServiceGrpc.bindService(new TestServiceImpl()))
         .sslContext(sslContext)
         .executor(config.directExecutor ? MoreExecutors.newDirectExecutorService() : null)
         .connectionWindowSize(config.connectionWindow)
-        .streamWindowSize(config.streamWindow)
-        .build();
+        .streamWindowSize(config.streamWindow);
+
+    switch (config.transport) {
+      case NETTY_NIO:
+        // Do nothing ... this is the default.
+        break;
+      case NETTY_EPOLL:
+        NativeUtil.Transport.EPOLL.configure(builder);
+        break;
+      case NETTY_UNIX_DOMAIN_SOCKET:
+        NativeUtil.Transport.UNIX_DOMAIN_SOCKET.configure(builder);
+        break;
+      default:
+        // Should never get here.
+        throw new IllegalArgumentException("Unsupported transport: " + config.transport);
+    }
+
+    return builder.build();
   }
 
   private static class TestServiceImpl implements TestServiceGrpc.TestService {

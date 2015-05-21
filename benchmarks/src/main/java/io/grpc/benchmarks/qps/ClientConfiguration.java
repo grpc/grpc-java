@@ -41,6 +41,7 @@ import static java.util.Arrays.asList;
 
 import io.grpc.testing.PayloadType;
 import io.grpc.testing.RpcType;
+import io.grpc.transport.netty.NativeUtil;
 import io.grpc.transport.netty.NettyChannelBuilder;
 
 import java.net.InetAddress;
@@ -200,7 +201,7 @@ class ClientConfiguration implements Configuration {
         + "(unix:///path/to/file), depending on the transport selected.", null, true) {
       @Override
       protected void setClientValue(ClientConfiguration config, String value) {
-        config.address = Utils.parseSocketAddress(value);
+        config.address = NativeUtil.parseSocketAddress(value);
       }
     },
     CHANNELS("INT", "Number of Channels.", "" + DEFAULT.channels) {
