@@ -40,12 +40,10 @@ import io.grpc.Channel;
 import io.grpc.testing.Payload;
 import io.grpc.testing.SimpleRequest;
 import io.grpc.transport.netty.GrpcSslContexts;
+import io.grpc.transport.netty.NativeUtil;
 import io.grpc.transport.netty.NegotiationType;
 import io.grpc.transport.netty.NettyChannelBuilder;
 import io.grpc.transport.okhttp.OkHttpChannelBuilder;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslProvider;
 
@@ -56,13 +54,11 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 
 /**
  * Utility methods to support benchmarking classes.
  */
 final class Utils {
-  private static final String UNIX_DOMAIN_SOCKET_PREFIX = "unix://";
 
   // The histogram can record values between 1 microsecond and 1 min.
   static final long HISTOGRAM_MAX_VALUE = 60000000L;
@@ -74,36 +70,6 @@ final class Utils {
 
   static boolean parseBoolean(String value) {
     return value.isEmpty() || Boolean.parseBoolean(value);
-  }
-
-  static SocketAddress parseSocketAddress(String value) {
-    if (value.startsWith(UNIX_DOMAIN_SOCKET_PREFIX)) {
-      // Unix Domain Socket address.
-      try {
-        // Create the underlying file for the Unix Domain Socket.
-        String filePath = value.substring(UNIX_DOMAIN_SOCKET_PREFIX.length());
-        File file = new File(filePath);
-        if (!file.isAbsolute()) {
-          throw new IllegalArgumentException("File path must be absolute: " + filePath);
-        }
-        if (file.createNewFile()) {
-          // If this application created the file, delete it when the application exits.
-          file.deleteOnExit();
-        }
-        // Create the SocketAddress referencing the file.
-        Class<?> addressClass = Class.forName("io.netty.channel.unix.DomainSocketAddress");
-        return (SocketAddress) addressClass.getDeclaredConstructor(File.class)
-            .newInstance(file);
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-    } else {
-      // Standard TCP/IP address.
-      String[] parts = value.split(":");
-      String host = parts[0];
-      int port = Integer.parseInt(parts[1]);
-      return new InetSocketAddress(host, port);
-    }
   }
 
   static SimpleRequest newRequest(ClientConfiguration config) {
@@ -139,59 +105,29 @@ final class Utils {
           .sslProvider(useJdkSsl ? SslProvider.JDK : SslProvider.OPENSSL)
           .build();
     }
-    final EventLoopGroup group;
-    final Class<? extends io.netty.channel.Channel> channelType;
-    switch (config.transport) {
-      case NETTY_NIO: {
-        group = new NioEventLoopGroup();
-        channelType = NioSocketChannel.class;
-        break;
-      }
-      case NETTY_EPOLL: {
-        try {
-          // These classes are only available on linux.
-          Class<?> groupClass = Class.forName("io.netty.channel.epoll.EpollEventLoopGroup");
-          @SuppressWarnings("unchecked")
-          Class<? extends io.netty.channel.Channel> channelClass =
-              (Class<? extends io.netty.channel.Channel>) Class.forName(
-                  "io.netty.channel.epoll.EpollSocketChannel");
-          group = (EventLoopGroup) groupClass.newInstance();
-          channelType = channelClass;
-          break;
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      }
-      case NETTY_UNIX_DOMAIN_SOCKET: {
-        try {
-          // These classes are only available on linux.
-          Class<?> groupClass = Class.forName("io.netty.channel.epoll.EpollEventLoopGroup");
-          @SuppressWarnings("unchecked")
-          Class<? extends io.netty.channel.Channel> channelClass =
-              (Class<? extends io.netty.channel.Channel>) Class.forName(
-                  "io.netty.channel.epoll.EpollDomainSocketChannel");
-          group = (EventLoopGroup) groupClass.newInstance();
-          channelType = channelClass;
-          break;
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      }
-      default: {
-        // Should never get here.
-        throw new IllegalArgumentException("Unsupported transport: " + config.transport);
-      }
-    }
-    return NettyChannelBuilder
-        .forAddress(config.address)
-        .eventLoopGroup(group)
-        .channelType(channelType)
+
+    NettyChannelBuilder builder = NettyChannelBuilder.forAddress(config.address)
         .negotiationType(negotiationType)
         .executor(config.directExecutor ? MoreExecutors.newDirectExecutorService() : null)
         .sslContext(context)
         .connectionWindowSize(config.connectionWindow)
-        .streamWindowSize(config.streamWindow)
-        .build();
+        .streamWindowSize(config.streamWindow);
+
+    switch (config.transport) {
+      case NETTY_NIO:
+        // Do nothing ... this is the default.
+        break;
+      case NETTY_EPOLL:
+        NativeUtil.Transport.EPOLL.configure(builder);
+        break;
+      case NETTY_UNIX_DOMAIN_SOCKET:
+        NativeUtil.Transport.UNIX_DOMAIN_SOCKET.configure(builder);
+        break;
+      default:
+        // Should never get here.
+        throw new IllegalArgumentException("Unsupported transport: " + config.transport);
+    }
+    return builder.build();
   }
 
   static void saveHistogram(Histogram histogram, String filename) throws IOException {
