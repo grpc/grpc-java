@@ -32,7 +32,10 @@
 package io.grpc.transport.netty;
 
 import static com.google.common.base.Charsets.UTF_8;
+import static io.grpc.transport.HttpUtil.USER_AGENT_KEY;
+import static io.grpc.transport.netty.Utils.GRPC_USER_AGENT;
 import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 import com.google.common.io.ByteStreams;
@@ -74,6 +77,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -113,6 +117,40 @@ public class NettyClientTransportTest {
     }
 
     group.shutdownGracefully(0, 10, TimeUnit.SECONDS);
+  }
+
+  @Test
+  public void headersShouldAddDefaultUserAgent() throws Exception {
+    startServer();
+    NettyClientTransport transport = newTransport(newNegotiator());
+    transport.start(clientTransportListener);
+
+    // Send a single RPC and wait for the response.
+    new Rpc(transport).halfClose().waitForResponse();
+
+    // Verify that the received headers contained the User-Agent.
+    assertEquals(1, serverListener.streamListeners.size());
+
+    Metadata.Headers headers = serverListener.streamListeners.get(0).headers;
+    assertEquals(GRPC_USER_AGENT, headers.get(USER_AGENT_KEY));
+  }
+
+  @Test
+  public void headersShouldOverrideDefaultUserAgent() throws Exception {
+    startServer();
+    NettyClientTransport transport = newTransport(newNegotiator());
+    transport.start(clientTransportListener);
+
+    // Send a single RPC and wait for the response.
+    String userAgent = "testUserAgent";
+    Metadata.Headers sentHeaders = new Metadata.Headers();
+    sentHeaders.put(USER_AGENT_KEY, userAgent);
+    new Rpc(transport, sentHeaders).halfClose().waitForResponse();
+
+    // Verify that the received headers contained the User-Agent.
+    assertEquals(1, serverListener.streamListeners.size());
+    Metadata.Headers receivedHeaders = serverListener.streamListeners.get(0).headers;
+    assertEquals(userAgent + " " + GRPC_USER_AGENT, receivedHeaders.get(USER_AGENT_KEY));
   }
 
   /**
@@ -265,8 +303,44 @@ public class NettyClientTransportTest {
     }
   }
 
+  private static final class EchoServerStreamListener implements ServerStreamListener {
+    final ServerStream stream;
+    final String method;
+    final Metadata.Headers headers;
+
+    EchoServerStreamListener(ServerStream stream, String method, Metadata.Headers headers) {
+      this.stream = stream;
+      this.method = method;
+      this.headers = headers;
+      stream.request(1);
+    }
+
+    @Override
+    public void messageRead(InputStream message) {
+      // Just echo back the message.
+      stream.writeMessage(message);
+      stream.flush();
+    }
+
+    @Override
+    public void onReady() {
+    }
+
+    @Override
+    public void halfClosed() {
+      // Just close when the client closes.
+      stream.close(Status.OK, new Metadata.Trailers());
+    }
+
+    @Override
+    public void closed(Status status) {
+    }
+  }
+
   private static class EchoServerListener implements ServerListener {
     final List<NettyServerTransport> transports = new ArrayList<NettyServerTransport>();
+    final List<EchoServerStreamListener> streamListeners =
+            Collections.synchronizedList(new ArrayList<EchoServerStreamListener>());
 
     @Override
     public ServerTransportListener transportCreated(final ServerTransport transport) {
@@ -276,30 +350,9 @@ public class NettyClientTransportTest {
         @Override
         public ServerStreamListener streamCreated(final ServerStream stream, String method,
                                                   Metadata.Headers headers) {
-          stream.request(1);
-          return new ServerStreamListener() {
-
-            @Override
-            public void messageRead(InputStream message) {
-              // Just echo back the message.
-              stream.writeMessage(message);
-              stream.flush();
-            }
-
-            @Override
-            public void onReady() {
-            }
-
-            @Override
-            public void halfClosed() {
-              // Just close when the client closes.
-              stream.close(Status.OK, new Metadata.Trailers());
-            }
-
-            @Override
-            public void closed(Status status) {
-            }
-          };
+          EchoServerStreamListener listener = new EchoServerStreamListener(stream, method, headers);
+          streamListeners.add(listener);
+          return listener;
         }
 
         @Override

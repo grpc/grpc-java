@@ -71,7 +71,7 @@ public class ChannelImplTest {
       new StringMarshaller(), new IntegerMarshaller());
   private ExecutorService executor = Executors.newSingleThreadExecutor();
   private ClientTransportFactory mockTransportFactory = mock(ClientTransportFactory.class);
-  private ChannelImpl channel = new ChannelImpl(mockTransportFactory, executor);
+  private ChannelImpl channel = new ChannelImpl(mockTransportFactory, executor, null);
   @SuppressWarnings("unchecked")
   private ClientCall.Listener<Integer> mockCallListener = mock(ClientCall.Listener.class);
   @SuppressWarnings("unchecked")

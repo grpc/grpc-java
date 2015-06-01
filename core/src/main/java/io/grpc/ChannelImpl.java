@@ -50,6 +50,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -81,6 +82,7 @@ public final class ChannelImpl extends Channel {
 
   private final ClientTransportFactory transportFactory;
   private final ExecutorService executor;
+  private final String userAgent;
   /**
    * All transports that are not stopped. At the very least {@link #activeTransport} will be
    * present, but previously used transports that still have streams or are stopping may also be
@@ -99,9 +101,11 @@ public final class ChannelImpl extends Channel {
   private boolean terminated;
   private Runnable terminationRunnable;
 
-  public ChannelImpl(ClientTransportFactory transportFactory, ExecutorService executor) {
+  ChannelImpl(ClientTransportFactory transportFactory, ExecutorService executor,
+                     @Nullable String userAgent) {
     this.transportFactory = transportFactory;
     this.executor = executor;
+    this.userAgent = userAgent;
   }
 
   /** Hack to allow executors to auto-shutdown. Not for general use. */
@@ -384,6 +388,10 @@ public final class ChannelImpl extends Channel {
     private void completeHeaders(Metadata.Headers headers) {
       headers.removeAll(TIMEOUT_KEY);
       headers.put(TIMEOUT_KEY, method.getTimeout());
+      headers.removeAll(HttpUtil.USER_AGENT_KEY);
+      if (userAgent != null) {
+        headers.put(HttpUtil.USER_AGENT_KEY, userAgent);
+      }
     }
 
     private class ClientStreamListenerImpl implements ClientStreamListener {
