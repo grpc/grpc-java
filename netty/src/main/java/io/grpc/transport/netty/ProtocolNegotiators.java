@@ -36,6 +36,7 @@ import com.google.common.base.Preconditions;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
@@ -86,34 +87,44 @@ public final class ProtocolNegotiators {
     Preconditions.checkNotNull(sslContext, "sslContext");
     Preconditions.checkNotNull(inetAddress, "inetAddress");
 
-    final ChannelHandler sslBootstrapHandler = new ChannelHandlerAdapter() {
-      @Override
-      public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-        // TODO(nmittler): This method is currently unsupported for OpenSSL. Need to fix in Netty.
-        SSLEngine sslEngine = sslContext.newEngine(ctx.alloc(),
-            inetAddress.getHostName(), inetAddress.getPort());
-        SSLParameters sslParams = new SSLParameters();
-        sslParams.setEndpointIdentificationAlgorithm("HTTPS");
-        sslEngine.setSSLParameters(sslParams);
-
-        SslHandler sslHandler = new SslHandler(sslEngine, false);
-        sslHandler.handshakeFuture().addListener(
-            new GenericFutureListener<Future<? super Channel>>() {
-              @Override
-              public void operationComplete(Future<? super Channel> future) throws Exception {
-                // If an error occurred during the handshake, throw it to the pipeline.
-                future.get();
-              }
-            });
-        ctx.pipeline().replace(this, "sslHandler", sslHandler);
-      }
-    };
+    final SslBootstrapHandler sslBootstrap = new SslBootstrapHandler(sslContext, inetAddress);
     return new ProtocolNegotiator() {
       @Override
-      public Handler newHandler(Http2ConnectionHandler handler) {
-        return new BufferUntilTlsNegotiatedHandler(sslBootstrapHandler, handler);
+      public Handler newHandler(FailureListener failureListener, Http2ConnectionHandler handler) {
+        return new BufferUntilTlsNegotiatedHandler(failureListener, sslBootstrap, handler);
       }
     };
+  }
+
+  @Sharable
+  private static class SslBootstrapHandler extends ChannelHandlerAdapter {
+    private final SslContext sslContext;
+    private final InetSocketAddress address;
+
+    SslBootstrapHandler(SslContext sslContext, InetSocketAddress address) {
+      this.sslContext = sslContext;
+      this.address = address;
+    }
+
+    @Override
+    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+      // TODO(nmittler): This method is currently unsupported for OpenSSL in Netty < 4.1.Beta6.
+      SSLEngine sslEngine = sslContext.newEngine(ctx.alloc(),
+              address.getHostName(), address.getPort());
+      SSLParameters sslParams = new SSLParameters();
+      sslParams.setEndpointIdentificationAlgorithm("HTTPS");
+      sslEngine.setSSLParameters(sslParams);
+
+      SslHandler sslHandler = new SslHandler(sslEngine, false);
+      sslHandler.handshakeFuture().addListener(new GenericFutureListener<Future<Channel>>() {
+        @Override
+        public void operationComplete(Future<Channel> future) throws Exception {
+          // If an error occurred during the handshake, throw it to the pipeline.
+          future.get();
+        }
+      });
+      ctx.pipeline().replace(this, null, sslHandler);
+    }
   }
 
   /**
@@ -122,13 +133,13 @@ public final class ProtocolNegotiators {
   public static ProtocolNegotiator plaintextUpgrade() {
     return new ProtocolNegotiator() {
       @Override
-      public Handler newHandler(Http2ConnectionHandler handler) {
+      public Handler newHandler(FailureListener listener, Http2ConnectionHandler handler) {
         // Register the plaintext upgrader
         Http2ClientUpgradeCodec upgradeCodec = new Http2ClientUpgradeCodec(handler);
         HttpClientCodec httpClientCodec = new HttpClientCodec();
         final HttpClientUpgradeHandler upgrader =
             new HttpClientUpgradeHandler(httpClientCodec, upgradeCodec, 1000);
-        return new BufferingHttp2UpgradeHandler(upgrader);
+        return new BufferingHttp2UpgradeHandler(listener, upgrader);
       }
     };
   }
@@ -140,30 +151,35 @@ public final class ProtocolNegotiators {
   public static ProtocolNegotiator plaintext() {
     return new ProtocolNegotiator() {
       @Override
-      public Handler newHandler(Http2ConnectionHandler handler) {
-        return new BufferUntilChannelActiveHandler(handler);
+      public Handler newHandler(ProtocolNegotiator.FailureListener listener,
+                                Http2ConnectionHandler handler) {
+        return new BufferUntilChannelActiveHandler(listener, handler);
       }
     };
   }
 
   /**
    * Buffers all writes until either {@link #writeBufferedAndRemove(ChannelHandlerContext)} or
-   * {@link #failBufferedAndClose(ChannelHandlerContext)} is called. This handler allows us to
+   * {@link #fail(ChannelHandlerContext, Throwable)} is called. This handler allows us to
    * write to a {@link Channel} before we are allowed to write to it officially i.e.
    * before it's active or the TLS Handshake is complete.
    */
   private abstract static class AbstractBufferingHandler extends ChannelDuplexHandler {
 
+    private final ProtocolNegotiator.FailureListener listener;
     private ChannelHandler[] handlers;
     private Queue<ChannelWrite> bufferedWrites = new ArrayDeque<ChannelWrite>();
     private boolean writing;
     private boolean flushRequested;
+    private boolean failed;
 
     /**
      * @param handlers the ChannelHandlers are added to the pipeline on channelRegistered and
      *                 before this handler.
      */
-    AbstractBufferingHandler(ChannelHandler... handlers) {
+    AbstractBufferingHandler(ProtocolNegotiator.FailureListener listener,
+                             ChannelHandler... handlers) {
+      this.listener = listener;
       this.handlers = handlers;
     }
 
@@ -181,8 +197,13 @@ public final class ProtocolNegotiators {
     }
 
     @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+      fail(ctx, cause);
+    }
+
+    @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-      failBufferedAndClose(ctx);
+      fail(ctx, new Exception("Connection broken while performing protocol negotiation"));
       super.channelInactive(ctx);
     }
 
@@ -224,10 +245,13 @@ public final class ProtocolNegotiators {
 
     @Override
     public void close(ChannelHandlerContext ctx, ChannelPromise future) throws Exception {
-      failBufferedAndClose(ctx);
+      fail(ctx, new Exception("Channel closed while performing protocol negotiation"));
     }
 
-    protected void failBufferedAndClose(ChannelHandlerContext ctx) {
+    protected void fail(ChannelHandlerContext ctx, Throwable cause) {
+      boolean previouslyFailed = failed;
+      failed = true;
+
       if (bufferedWrites != null) {
         Exception e = new Exception("Buffered write failed.");
         while (!bufferedWrites.isEmpty()) {
@@ -236,15 +260,15 @@ public final class ProtocolNegotiators {
         }
         bufferedWrites = null;
       }
-      /**
-       * In case something goes wrong ensure that the channel gets closed as the
-       * NettyClientTransport relies on the channel's close future to get completed.
-       */
-      ctx.close();
+
+      // Notify the application that the protocol negotiation has failed.
+      if (!previouslyFailed) {
+        listener.negotiationFailed(ctx, cause);
+      }
     }
 
     protected void writeBufferedAndRemove(ChannelHandlerContext ctx) {
-      if (!ctx.channel().isActive() || writing) {
+      if (!ctx.channel().isActive() || writing || failed) {
         return;
       }
       // Make sure that method can't be reentered, so that the ordering
@@ -282,8 +306,9 @@ public final class ProtocolNegotiators {
   private static class BufferUntilTlsNegotiatedHandler extends AbstractBufferingHandler
       implements ProtocolNegotiator.Handler {
 
-    BufferUntilTlsNegotiatedHandler(ChannelHandler... handlers) {
-      super(handlers);
+    BufferUntilTlsNegotiatedHandler(ProtocolNegotiator.FailureListener failureListener,
+                                    ChannelHandler... handlers) {
+      super(failureListener, handlers);
     }
 
     @Override
@@ -298,7 +323,7 @@ public final class ProtocolNegotiators {
         if (handshakeEvent.isSuccess()) {
           writeBufferedAndRemove(ctx);
         } else {
-          failBufferedAndClose(ctx);
+          fail(ctx, handshakeEvent.cause());
         }
       }
       super.userEventTriggered(ctx, evt);
@@ -311,8 +336,9 @@ public final class ProtocolNegotiators {
   private static class BufferUntilChannelActiveHandler extends AbstractBufferingHandler
       implements ProtocolNegotiator.Handler {
 
-    BufferUntilChannelActiveHandler(ChannelHandler... handlers) {
-      super(handlers);
+    BufferUntilChannelActiveHandler(ProtocolNegotiator.FailureListener failureListener,
+                                    ChannelHandler... handlers) {
+      super(failureListener, handlers);
     }
 
     @Override
@@ -338,8 +364,9 @@ public final class ProtocolNegotiators {
   private static class BufferingHttp2UpgradeHandler extends AbstractBufferingHandler
       implements ProtocolNegotiator.Handler {
 
-    BufferingHttp2UpgradeHandler(ChannelHandler... handlers) {
-      super(handlers);
+    BufferingHttp2UpgradeHandler(ProtocolNegotiator.FailureListener failureListener,
+                                 ChannelHandler... handlers) {
+      super(failureListener, handlers);
     }
 
     @Override
@@ -362,8 +389,7 @@ public final class ProtocolNegotiators {
       if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_SUCCESSFUL) {
         writeBufferedAndRemove(ctx);
       } else if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_REJECTED) {
-        failBufferedAndClose(ctx);
-        ctx.pipeline().fireExceptionCaught(new Exception("HTTP/2 upgrade rejected"));
+        fail(ctx, new Exception("HTTP/2 upgrade rejected"));
       }
       super.userEventTriggered(ctx, evt);
     }

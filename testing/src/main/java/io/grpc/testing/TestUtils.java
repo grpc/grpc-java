@@ -45,7 +45,10 @@ import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.UnknownHostException;
 import java.security.KeyStore;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
@@ -62,6 +65,7 @@ import javax.security.auth.x500.X500Principal;
  * Common utility functions useful for writing tests.
  */
 public class TestUtils {
+  public static final String TEST_SERVER_HOST = "foo.test.google.fr";
 
   /**
    * Echo the request headers from a client into response headers and trailers. Useful for
@@ -115,6 +119,19 @@ public class TestUtils {
       serverSocket.close();
       return port;
     } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  /**
+   * Creates a new {@link InetSocketAddress} that overrides the host with {@link #TEST_SERVER_HOST}.
+   */
+  public static InetSocketAddress overrideHostFromTestCa(String host, int port) {
+    try {
+      InetAddress inetAddress = InetAddress.getByName(host);
+      inetAddress = InetAddress.getByAddress(TEST_SERVER_HOST, inetAddress.getAddress());
+      return new InetSocketAddress(inetAddress, port);
+    } catch (UnknownHostException e) {
       throw new RuntimeException(e);
     }
   }

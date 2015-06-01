@@ -74,7 +74,7 @@ public class Http2NettyTest extends AbstractTransportTest {
   protected ChannelImpl createChannel() {
     try {
       InetAddress address
-          = InetAddress.getByAddress("foo.test.google.fr", new byte[] {127, 0, 0, 1});
+          = InetAddress.getByAddress(TestUtils.TEST_SERVER_HOST, new byte[] {127, 0, 0, 1});
       return NettyChannelBuilder
           .forAddress(new InetSocketAddress(address, serverPort))
           .sslContext(GrpcSslContexts.forClient().trustManager(

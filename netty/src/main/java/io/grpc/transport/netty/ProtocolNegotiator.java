@@ -32,6 +32,7 @@
 package io.grpc.transport.netty;
 
 import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http2.Http2ConnectionHandler;
 import io.netty.util.ByteString;
 
@@ -51,8 +52,19 @@ public interface ProtocolNegotiator {
   }
 
   /**
+   * Listener for negotiation failure event.
+   */
+  interface FailureListener {
+
+    /**
+     * Called when the negotiation fails.
+     */
+    void negotiationFailed(ChannelHandlerContext ctx, Throwable cause);
+  }
+
+  /**
    * Creates a new handler to control the protocol negotiation. Once the negotiation
    * has completed successfully, the provided handler is installed.
    */
-  Handler newHandler(Http2ConnectionHandler handler);
+  Handler newHandler(FailureListener listener, Http2ConnectionHandler handler);
 }
