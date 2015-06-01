@@ -40,7 +40,6 @@ import com.google.common.base.Preconditions;
 import io.grpc.Metadata;
 import io.grpc.Status;
 
-import java.io.InputStream;
 import java.util.EnumSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -80,9 +79,9 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
   }
 
   @Override
-  protected void receiveMessage(InputStream is) {
+  protected void receiveMessage(StreamListener.MessageProducer producer) {
     if (!listenerClosed) {
-      listener.messageRead(is);
+      listener.messagesAvailable(producer);
     }
   }
 

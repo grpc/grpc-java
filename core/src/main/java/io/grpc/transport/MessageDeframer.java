@@ -38,6 +38,9 @@ import io.grpc.Status;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayDeque;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.GZIPInputStream;
 
 import javax.annotation.concurrent.NotThreadSafe;
@@ -45,14 +48,17 @@ import javax.annotation.concurrent.NotThreadSafe;
 /**
  * Deframer for GRPC frames.
  *
- * <p>This class is not thread-safe. All calls to public methods should be made in the transport
- * thread.
+ * <p>This class is partially thread-safe. The transport thread may call any method except
+ * {@link #request(int)} which is reserved for the application thread.
+ *
  */
 @NotThreadSafe
-public class MessageDeframer implements Closeable {
+public class MessageDeframer implements Closeable, StreamListener.MessageProducer {
   private static final int HEADER_LENGTH = 5;
   private static final int COMPRESSED_FLAG_MASK = 1;
   private static final int RESERVED_MASK = 0xFE;
+
+  private static final Frame END_OF_STREAM = new Frame(0);
 
   public enum Compression {
     NONE, GZIP
@@ -71,11 +77,9 @@ public class MessageDeframer implements Closeable {
     void bytesRead(int numBytes);
 
     /**
-     * Called to deliver the next complete message.
-     *
-     * @param is stream containing the message.
+     * Called to indicate that more messages may be available for read.
      */
-    void messageRead(InputStream is);
+    void messagesAvailable(StreamListener.MessageProducer messages);
 
     /**
      * Called when end-of-stream has not yet been reached but there are no complete messages
@@ -99,11 +103,28 @@ public class MessageDeframer implements Closeable {
   private int requiredLength = HEADER_LENGTH;
   private boolean compressedFlag;
   private boolean endOfStream;
-  private CompositeReadableBuffer nextFrame;
   private CompositeReadableBuffer unprocessed = new CompositeReadableBuffer();
-  private long pendingDeliveries;
+  private final AtomicReference<ArrayDeque<Frame>> queueRef =
+      new AtomicReference<ArrayDeque<Frame>>();
+
   private boolean deliveryStalled = true;
-  private boolean inDelivery = false;
+
+  // The number of undelivered messages requested by the application.
+  private long requestedMessageCount;
+  private boolean messagesAvailable;
+  // Used to track whether the application is making re-entrant calls to request.
+  private boolean appInRequest;
+  // The number of messages requested by the application observed by the transport thread
+  // used to optimize return of flow-control.
+  private AtomicLong transportCount = new AtomicLong(0);
+
+  // Number of bytes received from the transport
+  private long bytesReceived;
+  // Number of bytes received from the transport that have been consumed.
+  private long bytesConsumed;
+  // Number of flow-control bytes that have been returned to the transport either immediately
+  // or via the queue of events processed by the application.
+  private long bytesReturned;
 
   /**
    * Creates a deframer. Compression will not be supported.
@@ -124,27 +145,136 @@ public class MessageDeframer implements Closeable {
   public MessageDeframer(Listener listener, Compression compression) {
     this.listener = Preconditions.checkNotNull(listener, "sink");
     this.compression = Preconditions.checkNotNull(compression, "compression");
+    queueRef.set(new ArrayDeque<Frame>(4));
   }
 
   /**
    * Requests up to the given number of messages from the call to be delivered to
-   * {@link Listener#messageRead(InputStream)}. No additional messages will be delivered.
+   * {@link Listener#messagesAvailable}. No additional messages will be delivered.
+   * Only called by the application thread.
    *
    * <p>If {@link #close()} has been called, this method will have no effect.
    *
    * @param numMessages the requested number of messages to be delivered to the listener.
    */
-  public void request(int numMessages) {
+  void request(int numMessages) {
     Preconditions.checkArgument(numMessages > 0, "numMessages must be > 0");
     if (isClosed()) {
       return;
     }
-    pendingDeliveries += numMessages;
-    deliver();
+    // Make the number of requested messages visible to the transport thread.
+    transportCount.addAndGet(numMessages);
+    requestedMessageCount += numMessages;
+    if (messagesAvailable && !appInRequest) {
+      appInRequest = true;
+      try {
+        listener.messagesAvailable(this);
+      } finally {
+        appInRequest = false;
+      }
+    }
   }
 
   /**
-   * Adds the given data to this deframer and attempts delivery to the sink.
+   * Called in the application thread to consume the available messages provided by the transport.
+   * @param consumer which receives all available messages.
+   */
+  @Override
+  public int drainTo(StreamListener.MessageConsumer consumer) {
+    int count = 0;
+    ArrayDeque<Frame> current;
+    do {
+      // Get the queue set by the transport, guaranteed to eventually be non-null
+      while ((current = queueRef.getAndSet(null)) == null) {
+        // Consider yielding if we are waiting too long for the transport to set a queue.
+      }
+      // Consume the queue
+      count += drainTo(consumer, current);
+      messagesAvailable = !current.isEmpty();
+
+      if (messagesAvailable) {
+        // We can't fully consume the queue yet so we have to accumulate anything produced
+        // by the transport thread while we were executing and return the merged version.
+        ArrayDeque<Frame> next = null;
+        while (!queueRef.compareAndSet(next, current)) {
+          next = queueRef.get();
+          if (next != null) {
+            for (Frame f = next.poll(); f != null; f = next.poll()) {
+              current.add(f);
+            }
+          }
+        }
+        break;
+      }
+
+      // If we can return the queue to the transport thread we are done, if not then
+      // we have another queue to try and consume.
+    } while (!queueRef.compareAndSet(null, current));
+    return count;
+  }
+
+  private int drainTo(StreamListener.MessageConsumer consumer, ArrayDeque<Frame> queue) {
+    int count = 0;
+    int consumedBytes = 0;
+    boolean endOfStream = false;
+    try {
+      Frame frame;
+      do {
+        frame = queue.peek();
+        if (frame == null) {
+          // Nothing to read
+          break;
+        }
+        if (frame == END_OF_STREAM) {
+          // Transport enqueued EOS, so empty queue and report to the listener
+          queue.clear();
+          endOfStream = true;
+          break;
+        }
+        // Can't deliver messages to the consumer or return flow control
+        if (requestedMessageCount == 0) {
+          break;
+        }
+        // Consume the message from the queue
+        queue.poll();
+        consumedBytes += frame.consumedBytes;
+        if (frame.stream != null) {
+          try {
+            // Calls to consumer may trigger a call to request in the same thread, we prevent
+            // the unnecessary call to notify again as this loop will pick up the additional
+            // count.
+            appInRequest = true;
+            count++;
+            consumer.accept(frame.stream);
+          } catch (Throwable t) {
+            // Decision point: Log / exit / drain the available messages
+          } finally {
+            try {
+              frame.stream.close();
+            } catch (IOException ioe) {
+              // Decision point: Worth logging?
+            }
+            appInRequest = false;
+            requestedMessageCount--;
+          }
+        }
+      } while (true);
+    } finally {
+      if (consumedBytes > 0) {
+        // Decision point: Returning flow-control bytes after all the messages rather than after
+        // each one. This could be head-of-line blocking
+        listener.bytesRead(consumedBytes);
+      }
+      if (endOfStream) {
+        listener.endOfStream();
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Adds the given data to this deframer and attempts delivery to the sink. Only called by
+   * the transport thread.
    *
    * @param data the raw data read from the remote endpoint. Must be non-null.
    * @param endOfStream if {@code true}, indicates that {@code data} is the end of the stream from
@@ -154,6 +284,7 @@ public class MessageDeframer implements Closeable {
    *         {@code endOfStream=true}.
    */
   public void deframe(ReadableBuffer data, boolean endOfStream) {
+    bytesReceived += data.readableBytes();
     Preconditions.checkNotNull(data, "data");
     boolean needToCloseData = true;
     try {
@@ -165,12 +296,134 @@ public class MessageDeframer implements Closeable {
 
       // Indicate that all of the data for this stream has been received.
       this.endOfStream = endOfStream;
-      deliver();
+      enqueueFrames();
     } finally {
       if (needToCloseData) {
         data.close();
       }
     }
+  }
+
+  /**
+   * Add messages to the delivery queue. This is only called by the transport thread.
+   */
+  private void enqueueFrames() {
+    ArrayDeque<Frame> queue = queueRef.getAndSet(null);
+    if (queue == null) {
+      // Application thread has the queue so create a new one and accumulate into it so we don't
+      // block on the application thread.
+      queue = new ArrayDeque<Frame>();
+    }
+
+    boolean readBody = false;
+    boolean queuedEos = false;
+    long unreturnedBytes = bytesReceived - bytesReturned;
+    long bytesToReturnImmediate = 0;
+    try {
+      // Process the uncompressed bytes.
+      CompositeReadableBuffer buffer = readRequiredBytes();
+      while (buffer != null) {
+        bytesConsumed += buffer.readableBytes();
+        bytesToReturnImmediate += returnBytes(true, queue);
+        switch (state) {
+          case HEADER:
+            processHeader(buffer);
+            break;
+          case BODY:
+            // Read the body and enqueue the message.
+            processBody(buffer, queue);
+            readBody = true;
+            break;
+          default:
+            throw new AssertionError("Invalid state: " + state);
+        }
+        buffer = readRequiredBytes();
+      }
+      if (endOfStream) {
+        if (state == State.BODY || unprocessed.readableBytes() > 0) {
+          // We've received the entire stream and have data available but we don't have
+          // enough to read the next frame ... this is bad.
+          throw Status.INTERNAL.withDescription("Encountered end-of-stream mid-frame")
+              .asRuntimeException();
+        } else {
+          // Can't notify stream yet as there were not enough message requests available
+          // to consume all the messages. Instead we have to enqueue signalling EOS on the
+          // stream.
+          if (transportCount.get() < 0) {
+            queuedEos = true;
+            queue.add(END_OF_STREAM);
+          }
+        }
+      }
+      // Can immediately return all bytes that have not been returned via the queue at this point.
+      bytesToReturnImmediate += returnBytes(false, queue);
+      if (bytesToReturnImmediate > 0) {
+        listener.bytesRead((int) bytesToReturnImmediate);
+      }
+    } finally {
+      ArrayDeque<Frame> prev = null;
+      // Make the queue visible to the application thread.
+      while (!queueRef.compareAndSet(prev, queue)) {
+        // Can only be not null if the application thread is returning a queue that it
+        // was processing when this method stared.
+        prev = queueRef.get();
+        if (prev != null && !prev.isEmpty()) {
+          for (Frame f = prev.pollLast(); f != null; f = prev.pollLast()) {
+            queue.addFirst(f);
+          }
+        }
+      }
+    }
+
+    // We are stalled when there is insufficient data to read another frame.
+    // This allows delivering errors as soon as the buffered input has been consumed,
+    // independent of whether the application has requested another message.
+    boolean stalled = unprocessed.readableBytes() == 0 || readBody;
+
+    // Must notify if we've read a body or we had to return flow-control via the queue.
+    if (readBody || unreturnedBytes > bytesToReturnImmediate) {
+      // Notify the listener that messages may be available. It's possible that the messages are
+      // already being consumed in another thread that is racing with this one and that the
+      // listener will have nothing to process as a result of this call but we must do
+      // it to guarantee that all payloads are consumed.
+      listener.messagesAvailable(this);
+    }
+
+    // Can notify the listener immediately instead of via the queue as there we enough
+    // request tokens visible to the transport when it enqueued messages to know that
+    // the queue can be fully drained by the application.
+    if (endOfStream && !queuedEos) {
+      listener.endOfStream();
+    }
+
+    // Never indicate that we're stalled if we've received all the data for the stream.
+    stalled &= !endOfStream;
+
+    // If we're transitioning to the stalled state, notify the listener.
+    boolean previouslyStalled = deliveryStalled;
+    deliveryStalled = stalled;
+    if (stalled && !previouslyStalled) {
+      listener.deliveryStalled();
+    }
+  }
+
+  private long returnBytes(boolean consumed, ArrayDeque<Frame> queue) {
+    // Check if we need to return bytes that have been received but not consumed.
+    long toReturn = (consumed ? bytesConsumed : bytesReceived) - bytesReturned;
+    if (toReturn > 0) {
+      bytesReturned += toReturn;
+      // Have consumed bytes that need to be returned
+      if (transportCount.get() <= 0) {
+        Frame tail = queue.peekLast();
+        if (tail != null && tail.stream == null) {
+          tail.consumedBytes += toReturn;
+        } else {
+          queue.add(new Frame(toReturn));
+        }
+        return 0;
+      }
+    }
+    return toReturn;
   }
 
   /**
@@ -190,12 +443,8 @@ public class MessageDeframer implements Closeable {
       if (unprocessed != null) {
         unprocessed.close();
       }
-      if (nextFrame != null) {
-        nextFrame.close();
-      }
     } finally {
       unprocessed = null;
-      nextFrame = null;
     }
   }
 
@@ -214,97 +463,23 @@ public class MessageDeframer implements Closeable {
   }
 
   /**
-   * Reads and delivers as many messages to the sink as possible.
-   */
-  private void deliver() {
-    // We can have reentrancy here when using a direct executor, triggered by calls to
-    // request more messages. This is safe as we simply loop until pendingDelivers = 0
-    if (inDelivery) {
-      return;
-    }
-    inDelivery = true;
-    try {
-      // Process the uncompressed bytes.
-      boolean stalled = false;
-      while (pendingDeliveries > 0 && readRequiredBytes()) {
-        switch (state) {
-          case HEADER:
-            processHeader();
-            break;
-          case BODY:
-            // Read the body and deliver the message.
-            processBody();
-
-            // Since we've delivered a message, decrement the number of pending
-            // deliveries remaining.
-            pendingDeliveries--;
-            break;
-          default:
-            throw new AssertionError("Invalid state: " + state);
-        }
-      }
-      // We are stalled when there are no more bytes to process. This allows delivering errors as
-      // soon as the buffered input has been consumed, independent of whether the application
-      // has requested another message.
-      stalled = !isDataAvailable();
-
-      if (endOfStream) {
-        if (!isDataAvailable()) {
-          listener.endOfStream();
-        } else if (stalled) {
-          // We've received the entire stream and have data available but we don't have
-          // enough to read the next frame ... this is bad.
-          throw Status.INTERNAL.withDescription("Encountered end-of-stream mid-frame")
-              .asRuntimeException();
-        }
-      }
-
-      // Never indicate that we're stalled if we've received all the data for the stream.
-      stalled &= !endOfStream;
-
-      // If we're transitioning to the stalled state, notify the listener.
-      boolean previouslyStalled = deliveryStalled;
-      deliveryStalled = stalled;
-      if (stalled && !previouslyStalled) {
-        listener.deliveryStalled();
-      }
-    } finally {
-      inDelivery = false;
-    }
-  }
-
-  private boolean isDataAvailable() {
-    return unprocessed.readableBytes() > 0 || (nextFrame != null && nextFrame.readableBytes() > 0);
-  }
-
-  /**
    * Attempts to read the required bytes into nextFrame.
    *
-   * @return {@code true} if all of the required bytes have been read.
+   * @return a buffer with the required length of bytes or {@code null} if insufficient bytes are
+   *     available.
    */
-  private boolean readRequiredBytes() {
-    int totalBytesRead = 0;
-    try {
-      if (nextFrame == null) {
-        nextFrame = new CompositeReadableBuffer();
-      }
-
-      // Read until the buffer contains all the required bytes.
-      int missingBytes;
-      while ((missingBytes = requiredLength - nextFrame.readableBytes()) > 0) {
-        if (unprocessed.readableBytes() == 0) {
-          // No more data is available.
-          return false;
-        }
-        int toRead = Math.min(missingBytes, unprocessed.readableBytes());
-        totalBytesRead += toRead;
-        nextFrame.addBuffer(unprocessed.readBytes(toRead));
-      }
-      return true;
-    } finally {
-      if (totalBytesRead > 0) {
-        listener.bytesRead(totalBytesRead);
-      }
+  private CompositeReadableBuffer readRequiredBytes() {
+    if (requiredLength == 0) {
+      // Occurs when body is 0 length
+      return unprocessed.readBytes(0);
+    }
+    if (unprocessed.readableBytes() == 0) {
+      return null;
+    }
+    if (unprocessed.readableBytes() < requiredLength) {
+      return null;
+    } else {
+      return unprocessed.readBytes(requiredLength);
     }
   }
 
@@ -312,8 +487,8 @@ public class MessageDeframer implements Closeable {
    * Processes the GRPC compression header which is composed of the compression flag and the outer
    * frame length.
    */
-  private void processHeader() {
-    int type = nextFrame.readUnsignedByte();
+  private void processHeader(CompositeReadableBuffer header) {
+    int type = header.readUnsignedByte();
     if ((type & RESERVED_MASK) != 0) {
       throw Status.INTERNAL.withDescription("Frame header malformed: reserved bits not zero")
           .asRuntimeException();
@@ -321,31 +496,37 @@ public class MessageDeframer implements Closeable {
     compressedFlag = (type & COMPRESSED_FLAG_MASK) != 0;
 
     // Update the required length to include the length of the frame.
-    requiredLength = nextFrame.readInt();
+    requiredLength = header.readInt();
 
     // Continue reading the frame body.
     state = State.BODY;
   }
 
   /**
-   * Processes the body of the GRPC compression frame. A single compression frame may contain
-   * several GRPC messages within it.
+   * Processes the body of the GRPC frame.
    */
-  private void processBody() {
-    InputStream stream = compressedFlag ? getCompressedBody() : getUncompressedBody();
-    nextFrame = null;
-    listener.messageRead(stream);
+  private void processBody(CompositeReadableBuffer body, ArrayDeque<Frame> queue) {
+    InputStream stream = compressedFlag ? getCompressedBody(body) : getUncompressedBody(body);
+    // Add the body to the queue and consume a flow-control token
+    transportCount.getAndDecrement();
+    Frame last = queue.peekLast();
+    if (last != null && last.stream == null) {
+      // Can re-use the tail entry
+      last.stream = stream;
+    } else {
+      queue.add(new Frame(stream, 0));
+    }
 
     // Done with this frame, begin processing the next header.
     state = State.HEADER;
     requiredLength = HEADER_LENGTH;
   }
 
-  private InputStream getUncompressedBody() {
-    return ReadableBuffers.openStream(nextFrame, true);
+  private InputStream getUncompressedBody(CompositeReadableBuffer body) {
+    return ReadableBuffers.openStream(body, true);
   }
 
-  private InputStream getCompressedBody() {
+  private InputStream getCompressedBody(CompositeReadableBuffer body) {
     if (compression == Compression.NONE) {
       throw Status.INTERNAL.withDescription(
           "Can't decode compressed frame as compression not configured.").asRuntimeException();
@@ -356,9 +537,31 @@ public class MessageDeframer implements Closeable {
     }
 
     try {
-      return new GZIPInputStream(ReadableBuffers.openStream(nextFrame, true));
+      return new GZIPInputStream(ReadableBuffers.openStream(body, true));
     } catch (IOException e) {
       throw new RuntimeException(e);
+    }
+  }
+
+  private static class Frame {
+    private InputStream stream;
+    private long consumedBytes;
+
+    /**
+     * Construct a frame that is designed to simply return bytes to flow control and contains
+     * no payload.
+     */
+    private Frame(long consumedBytes) {
+      this.consumedBytes = consumedBytes;
+    }
+
+    /**
+     * Construct a frame that delivers a message to the application layer and optionally asks
+     * the application layer to return consumed bytes.
+     */
+    private Frame(InputStream stream, int consumedBytes) {
+      this.stream = stream;
+      this.consumedBytes = consumedBytes;
     }
   }
 }

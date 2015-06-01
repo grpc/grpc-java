@@ -73,12 +73,7 @@ class NettyServerStream extends AbstractServerStream<Integer> {
 
   @Override
   public void request(final int numMessages) {
-    if (channel.eventLoop().inEventLoop()) {
-      // Processing data read in the event loop so can call into the deframer immediately
-      requestMessagesFromDeframer(numMessages);
-    } else {
-      writeQueue.enqueue(new RequestMessagesCommand(this, numMessages), true);
-    }
+    requestMessagesFromDeframer(numMessages);
   }
 
   @Override
@@ -118,9 +113,32 @@ class NettyServerStream extends AbstractServerStream<Integer> {
   }
 
   @Override
-  protected void returnProcessedBytes(int processedBytes) {
-    handler.returnProcessedBytes(http2Stream, processedBytes);
-    writeQueue.scheduleFlush();
+  protected void remoteEndClosed() {
+    if (channel.eventLoop().inEventLoop()) {
+      super.remoteEndClosed();
+    } else {
+      channel.eventLoop().execute(new Runnable() {
+        @Override
+        public void run() {
+          NettyServerStream.this.remoteEndClosed();
+        }
+      });
+    }
+  }
+
+  @Override
+  protected void returnProcessedBytes(final int processedBytes) {
+    if (channel.eventLoop().inEventLoop()) {
+      handler.returnProcessedBytes(http2Stream, processedBytes);
+      writeQueue.scheduleFlush();
+    } else {
+      channel.eventLoop().execute(new Runnable() {
+        @Override
+        public void run() {
+          returnProcessedBytes(processedBytes);
+        }
+      });
+    }
   }
 
   @Override

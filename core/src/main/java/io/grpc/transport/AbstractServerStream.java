@@ -85,9 +85,19 @@ public abstract class AbstractServerStream<IdT> extends AbstractStream<IdT>
   }
 
   @Override
-  protected void receiveMessage(InputStream is) {
+  protected void receiveMessage(StreamListener.MessageProducer messageProducer) {
+    // Discussion point. If a stream is closed but someone calls 'request' on it what should the
+    // behavior be. No more messages will come from the transport so throwing seems unnecessarily
+    // aggressive
+    if (inboundPhase() == Phase.STATUS) {
+      return;
+    }
     inboundPhase(Phase.MESSAGE);
-    listener.messageRead(is);
+    if (listener != null) {
+      // This is a hack as early calls to request messages from the deframer can trigger
+      // notifications. Can fix by defaulting Deframer requested messages to 1 on construction.
+      listener.messagesAvailable(messageProducer);
+    }
   }
 
   @Override
@@ -208,7 +218,7 @@ public abstract class AbstractServerStream<IdT> extends AbstractStream<IdT>
    * Called when the remote end half-closes the stream.
    */
   @Override
-  protected final void remoteEndClosed() {
+  protected void remoteEndClosed() {
     halfCloseListener();
   }
 

@@ -56,6 +56,7 @@ import io.grpc.transport.ServerStreamListener;
 import io.grpc.transport.ServerTransport;
 import io.grpc.transport.ServerTransportListener;
 
+import io.grpc.transport.StreamListener;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -274,7 +275,8 @@ public class NettyClientTransportTest {
     }
   }
 
-  private static class TestClientStreamListener implements ClientStreamListener {
+  private static class TestClientStreamListener implements ClientStreamListener,
+      StreamListener.MessageConsumer {
     private final SettableFuture<Void> closedFuture = SettableFuture.create();
     private final SettableFuture<Void> responseFuture = SettableFuture.create();
 
@@ -294,7 +296,14 @@ public class NettyClientTransportTest {
     }
 
     @Override
-    public void messageRead(InputStream message) {
+    public void messagesAvailable(MessageProducer messageProducer) {
+      // Discussion point, side-effect of request(1) being called in app thread before transport
+      // has received any messages
+      messageProducer.drainTo(this);
+    }
+
+    @Override
+    public void accept(InputStream message) throws Exception {
       responseFuture.set(null);
     }
 
@@ -303,7 +312,8 @@ public class NettyClientTransportTest {
     }
   }
 
-  private static final class EchoServerStreamListener implements ServerStreamListener {
+  private static final class EchoServerStreamListener implements ServerStreamListener,
+      StreamListener.MessageConsumer {
     final ServerStream stream;
     final String method;
     final Metadata.Headers headers;
@@ -316,10 +326,15 @@ public class NettyClientTransportTest {
     }
 
     @Override
-    public void messageRead(InputStream message) {
-      // Just echo back the message.
+    public void messagesAvailable(MessageProducer messageProducer) {
+      if (messageProducer.drainTo(this) > 0) {
+        stream.flush();
+      }
+    }
+
+    @Override
+    public void accept(InputStream message) throws Exception {
       stream.writeMessage(message);
-      stream.flush();
     }
 
     @Override

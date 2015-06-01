@@ -40,6 +40,7 @@ import static org.mockito.Matchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -58,6 +59,7 @@ import io.netty.handler.codec.http2.Http2Stream;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
@@ -99,6 +101,9 @@ public abstract class NettyStreamTestBase {
   @Mock
   protected WriteQueue writeQueue;
 
+  @Captor
+  private ArgumentCaptor<StreamListener.MessageProducer> captor;
+
   protected AbstractStream<Integer> stream;
 
   /** Set up for test. */
@@ -139,11 +144,15 @@ public abstract class NettyStreamTestBase {
     } else {
       ((NettyClientStream) stream).transportDataReceived(messageFrame(MESSAGE), false);
     }
-    ArgumentCaptor<InputStream> captor = ArgumentCaptor.forClass(InputStream.class);
-    verify(listener()).messageRead(captor.capture());
+    verify(listener(), times(1)).messagesAvailable(captor.capture());
 
-    // Verify that inbound flow control window update has been disabled for the stream.
-    assertEquals(MESSAGE, NettyTestUtil.toString(captor.getValue()));
+    assertEquals(1, captor.getValue().drainTo(new StreamListener.MessageConsumer() {
+      @Override
+      public void accept(InputStream message) throws Exception {
+        // Verify that inbound flow control window update has been disabled for the stream.
+        assertEquals(MESSAGE, NettyTestUtil.toString(message));
+      }
+    }));
   }
 
   @Test

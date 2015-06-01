@@ -21,14 +21,14 @@ import java.util.concurrent.atomic.AtomicLong;
 @Fork(1)
 public class FlowControlledMessagesPerSecondBenchmark extends AbstractBenchmark {
 
-  @Param({"1", "2", "4"})
+  @Param({/*"1", "2", */"4"})
   public int channelCount = 1;
 
-  @Param({"1", "2", "10", "100"})
+  @Param({"1"/*, "2", "10", "100"*/})
   public int maxConcurrentStreams = 1;
 
-  @Param
-  public ExecutorType clientExecutor = ExecutorType.DIRECT;
+  @Param({"DEFAULT"})
+  public ExecutorType clientExecutor = ExecutorType.DEFAULT;
 
   @Param({"SMALL"})
   public PayloadSize responseSize = PayloadSize.SMALL;
@@ -99,7 +99,7 @@ public class FlowControlledMessagesPerSecondBenchmark extends AbstractBenchmark 
   public static void main(String[] argv) throws Exception {
     FlowControlledMessagesPerSecondBenchmark bench = new FlowControlledMessagesPerSecondBenchmark();
     bench.setup();
-    Thread.sleep(30000);
+    Thread.sleep(5000);
     bench.teardown();
     System.exit(0);
   }

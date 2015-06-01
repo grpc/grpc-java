@@ -48,6 +48,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -55,6 +56,7 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.transport.ClientStreamListener;
 
+import io.grpc.transport.StreamListener;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelPromise;
@@ -66,13 +68,13 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
-import java.io.InputStream;
 
 /**
  * Tests for {@link NettyClientStream}.
@@ -84,6 +86,9 @@ public class NettyClientStreamTest extends NettyStreamTestBase {
 
   @Mock
   protected NettyClientHandler handler;
+
+  @Captor
+  private ArgumentCaptor<StreamListener.MessageProducer> captor;
 
   @Override
   protected ClientStreamListener listener() {
@@ -286,7 +291,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase {
     stream().transportHeadersReceived(grpcResponseTrailers(Status.INTERNAL), true);
 
     // Verify that the first was delivered.
-    verify(listener).messageRead(any(InputStream.class));
+    verify(listener, times(2)).messagesAvailable(captor.capture());
 
     // Now set the error status.
     Metadata.Trailers trailers = Utils.convertTrailers(grpcResponseTrailers(Status.CANCELLED));
@@ -296,7 +301,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase {
     stream().request(1);
 
     // Verify that the listener was only notified of the first message, not the second.
-    verify(listener).messageRead(any(InputStream.class));
+    verify(listener, times(2)).messagesAvailable(captor.capture());
     verify(listener).closed(eq(Status.CANCELLED), eq(trailers));
   }
 
@@ -312,7 +317,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase {
     stream().transportDataReceived(simpleGrpcFrame(), true);
 
     // Verify that the message was delivered.
-    verify(listener).messageRead(any(InputStream.class));
+    verify(listener, times(1)).messagesAvailable(captor.capture());
 
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     verify(listener).closed(captor.capture(), any(Metadata.Trailers.class));

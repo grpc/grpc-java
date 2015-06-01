@@ -46,11 +46,12 @@ import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.base.Ticker;
@@ -76,6 +77,7 @@ import io.grpc.transport.AbstractStream;
 import io.grpc.transport.ClientStreamListener;
 import io.grpc.transport.ClientTransport;
 import io.grpc.transport.HttpUtil;
+import io.grpc.transport.StreamListener;
 import io.grpc.transport.okhttp.OkHttpClientTransport.ClientFrameHandler;
 
 import okio.Buffer;
@@ -100,6 +102,7 @@ import java.io.InputStreamReader;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -1248,7 +1251,8 @@ public class OkHttpClientTransportTest {
     }
   }
 
-  private static class MockStreamListener implements ClientStreamListener {
+  private static class MockStreamListener implements ClientStreamListener,
+      StreamListener.MessageConsumer {
     Status status;
     Metadata.Headers headers;
     Metadata.Trailers trailers;
@@ -1265,7 +1269,12 @@ public class OkHttpClientTransportTest {
     }
 
     @Override
-    public void messageRead(InputStream message) {
+    public void messagesAvailable(MessageProducer messageProducer) {
+      messageProducer.drainTo(this);
+    }
+
+    @Override
+    public void accept(InputStream message) {
       String msg = getContent(message);
       if (msg != null) {
         messages.add(msg);

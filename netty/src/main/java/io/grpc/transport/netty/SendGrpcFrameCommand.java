@@ -50,6 +50,17 @@ class SendGrpcFrameCommand extends DefaultByteBufHolder {
     this.endStream = endStream;
   }
 
+  boolean merge(SendGrpcFrameCommand next) {
+    if (next.stream == stream) {
+      if (this.content().writableBytes() > next.content().readableBytes()) {
+        this.content().writeBytes(next.content());
+        next.content().release();
+        return true;
+      }
+    }
+    return false;
+  }
+
   int streamId() {
     return stream.id();
   }

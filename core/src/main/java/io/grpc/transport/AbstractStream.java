@@ -103,8 +103,8 @@ public abstract class AbstractStream<IdT> implements Stream {
       }
 
       @Override
-      public void messageRead(InputStream input) {
-        receiveMessage(input);
+      public void messagesAvailable(StreamListener.MessageProducer producer) {
+        receiveMessage(producer);
       }
 
       @Override
@@ -213,10 +213,8 @@ public abstract class AbstractStream<IdT> implements Stream {
 
   /**
    * Handles a message that was just deframed.
-   *
-   * @param is the stream containing the message
    */
-  protected abstract void receiveMessage(InputStream is);
+  protected abstract void receiveMessage(StreamListener.MessageProducer producer);
 
   /**
    * Handles the event that the deframer has no pending deliveries.

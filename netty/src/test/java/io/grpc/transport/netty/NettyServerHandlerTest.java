@@ -62,6 +62,7 @@ import io.grpc.transport.MessageFramer;
 import io.grpc.transport.ServerStream;
 import io.grpc.transport.ServerStreamListener;
 import io.grpc.transport.ServerTransportListener;
+import io.grpc.transport.StreamListener;
 import io.grpc.transport.WritableBuffer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -91,6 +92,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
@@ -112,6 +114,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase {
 
   @Mock
   private ServerStreamListener streamListener;
+
+  @Captor
+  private ArgumentCaptor<StreamListener.MessageProducer> captor;
 
   private NettyServerStream stream;
 
@@ -202,9 +207,13 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase {
     // Create a data frame and then trigger the handler to read it.
     ByteBuf frame = dataFrame(STREAM_ID, endStream);
     handler.channelRead(ctx, frame);
-    ArgumentCaptor<InputStream> captor = ArgumentCaptor.forClass(InputStream.class);
-    verify(streamListener).messageRead(captor.capture());
-    assertArrayEquals(CONTENT, ByteStreams.toByteArray(captor.getValue()));
+    verify(streamListener, times(1)).messagesAvailable(captor.capture());
+    assertEquals(1, captor.getValue().drainTo(new StreamListener.MessageConsumer() {
+      @Override
+      public void accept(InputStream message) throws Exception {
+        assertArrayEquals(CONTENT, ByteStreams.toByteArray(message));
+      }
+    }));
 
     if (endStream) {
       verify(streamListener).halfClosed();
@@ -219,9 +228,14 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase {
     stream.request(1);
 
     handler.channelRead(ctx, emptyGrpcFrame(STREAM_ID, true));
-    ArgumentCaptor<InputStream> captor = ArgumentCaptor.forClass(InputStream.class);
-    verify(streamListener).messageRead(captor.capture());
-    assertArrayEquals(new byte[0], ByteStreams.toByteArray(captor.getValue()));
+    verify(streamListener, times(1)).messagesAvailable(captor.capture());
+    assertEquals(1, captor.getValue().drainTo(new StreamListener.MessageConsumer() {
+      @Override
+      public void accept(InputStream message) throws Exception {
+        assertArrayEquals(new byte[0], ByteStreams.toByteArray(message));
+      }
+    }));
+
     verify(streamListener).halfClosed();
     verify(streamListener, atLeastOnce()).onReady();
     verifyNoMoreInteractions(streamListener);
@@ -232,7 +246,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase {
     createStream();
 
     handler.channelRead(ctx, rstStreamFrame(STREAM_ID, (int) Http2Error.CANCEL.code()));
-    verify(streamListener, never()).messageRead(any(InputStream.class));
+    verify(streamListener, never()).messagesAvailable(captor.capture());
     verify(streamListener).closed(Status.CANCELLED);
     verify(streamListener, atLeastOnce()).onReady();
     verifyNoMoreInteractions(streamListener);
@@ -246,7 +260,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase {
     // When a DATA frame is read, throw an exception. It will be converted into an
     // Http2StreamException.
     RuntimeException e = new RuntimeException("Fake Exception");
-    doThrow(e).when(streamListener).messageRead(any(InputStream.class));
+    doThrow(e).when(streamListener).messagesAvailable(captor.capture());
 
     // Read a DATA frame to trigger the exception.
     handler.channelRead(ctx, emptyGrpcFrame(STREAM_ID, true));

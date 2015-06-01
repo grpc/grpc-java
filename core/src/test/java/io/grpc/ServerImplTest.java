@@ -50,6 +50,7 @@ import io.grpc.transport.ServerStream;
 import io.grpc.transport.ServerStreamListener;
 import io.grpc.transport.ServerTransport;
 import io.grpc.transport.ServerTransportListener;
+import io.grpc.transport.StreamListener;
 
 import org.junit.After;
 import org.junit.Before;
@@ -192,8 +193,18 @@ public class ServerImplTest {
     ServerCall<Integer> call = callReference.get();
     assertNotNull(call);
 
-    String order = "Lots of pizza, please";
-    streamListener.messageRead(STRING_MARSHALLER.stream(order));
+    final String order = "Lots of pizza, please";
+    streamListener.messagesAvailable(new StreamListener.MessageProducer() {
+      @Override
+      public int drainTo(StreamListener.MessageConsumer consumer) {
+        try {
+          consumer.accept(STRING_MARSHALLER.stream(order));
+          return 1;
+        } catch (Exception e) {
+          throw new RuntimeException(e);
+        }
+      }
+    });
     verify(callListener, timeout(2000)).onPayload(order);
 
     call.sendPayload(314);
