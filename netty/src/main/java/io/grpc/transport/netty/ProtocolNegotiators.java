@@ -34,6 +34,8 @@ package io.grpc.transport.netty;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.SettableFuture;
 
+import io.grpc.Status;
+
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler;
@@ -116,31 +118,33 @@ public final class ProtocolNegotiators {
     Preconditions.checkNotNull(sslContext, "sslContext");
     Preconditions.checkNotNull(inetAddress, "inetAddress");
 
-    final ChannelHandler sslBootstrapHandler = new ChannelHandlerAdapter() {
+    return new ProtocolNegotiator() {
       @Override
-      public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-        // TODO(nmittler): This method is currently unsupported for OpenSSL. Need to fix in Netty.
-        SSLEngine sslEngine = sslContext.newEngine(ctx.alloc(),
-            inetAddress.getHostName(), inetAddress.getPort());
-        SSLParameters sslParams = new SSLParameters();
-        sslParams.setEndpointIdentificationAlgorithm("HTTPS");
-        sslEngine.setSSLParameters(sslParams);
+      public Handler newHandler(Http2ConnectionHandler handler) {
+        ChannelHandler sslBootstrap = new ChannelHandlerAdapter() {
+          @Override
+          public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+            // TODO(nmittler): Unsupported for OpenSSL in Netty < 4.1.Beta6.
+            SSLEngine sslEngine = sslContext.newEngine(ctx.alloc(),
+                    inetAddress.getHostName(), inetAddress.getPort());
+            SSLParameters sslParams = new SSLParameters();
+            sslParams.setEndpointIdentificationAlgorithm("HTTPS");
+            sslEngine.setSSLParameters(sslParams);
 
-        final SettableFuture<Void> completeFuture = SettableFuture.create();
-        if (isOpenSsl(sslContext.getClass())) {
-          completeFuture.set(null);
-        } else {
-          // Using JDK SSL
-          if (!installJettyTlsProtocolSelection(sslEngine, completeFuture, false)) {
-            throw new IllegalStateException("NPN/ALPN extensions not installed");
-          }
-        }
+            final SettableFuture<Void> completeFuture = SettableFuture.create();
+            if (isOpenSsl(sslContext.getClass())) {
+              completeFuture.set(null);
+            } else {
+              // Using JDK SSL
+              if (!installJettyTlsProtocolSelection(sslEngine, completeFuture, false)) {
+                throw new IllegalStateException("NPN/ALPN extensions not installed");
+              }
+            }
 
-        SslHandler sslHandler = new SslHandler(sslEngine, false);
-        sslHandler.handshakeFuture().addListener(
-            new GenericFutureListener<Future<? super Channel>>() {
+            SslHandler sslHandler = new SslHandler(sslEngine, false);
+            sslHandler.handshakeFuture().addListener(new GenericFutureListener<Future<Channel>>() {
               @Override
-              public void operationComplete(Future<? super Channel> future) throws Exception {
+              public void operationComplete(Future<Channel> future) throws Exception {
                 // If an error occurred during the handshake, throw it to the pipeline.
                 if (future.isSuccess()) {
                   completeFuture.get();
@@ -149,13 +153,10 @@ public final class ProtocolNegotiators {
                 }
               }
             });
-        ctx.pipeline().replace(this, "sslHandler", sslHandler);
-      }
-    };
-    return new ProtocolNegotiator() {
-      @Override
-      public Handler newHandler(Http2ConnectionHandler handler) {
-        return new BufferUntilTlsNegotiatedHandler(sslBootstrapHandler, handler);
+            ctx.pipeline().replace(this, null, sslHandler);
+          }
+        };
+        return new BufferUntilTlsNegotiatedHandler(sslBootstrap, handler);
       }
     };
   }
@@ -190,6 +191,10 @@ public final class ProtocolNegotiators {
     };
   }
 
+  private static RuntimeException unavailableException(String msg) {
+    return Status.UNAVAILABLE.withDescription(msg).asRuntimeException();
+  }
+
   /**
    * Returns {@code true} if the given class is for use with Netty OpenSsl.
    */
@@ -199,7 +204,7 @@ public final class ProtocolNegotiators {
 
   /**
    * Buffers all writes until either {@link #writeBufferedAndRemove(ChannelHandlerContext)} or
-   * {@link #failBufferedAndClose(ChannelHandlerContext)} is called. This handler allows us to
+   * {@link #fail(ChannelHandlerContext, Throwable)} is called. This handler allows us to
    * write to a {@link Channel} before we are allowed to write to it officially i.e.
    * before it's active or the TLS Handshake is complete.
    */
@@ -232,8 +237,13 @@ public final class ProtocolNegotiators {
     }
 
     @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+      fail(ctx, cause);
+    }
+
+    @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-      failBufferedAndClose(ctx);
+      fail(ctx, unavailableException("Connection broken while performing protocol negotiation"));
       super.channelInactive(ctx);
     }
 
@@ -275,18 +285,20 @@ public final class ProtocolNegotiators {
 
     @Override
     public void close(ChannelHandlerContext ctx, ChannelPromise future) throws Exception {
-      failBufferedAndClose(ctx);
+      fail(ctx, unavailableException("Channel closed while performing protocol negotiation"));
     }
 
-    protected void failBufferedAndClose(ChannelHandlerContext ctx) {
+    protected final void fail(ChannelHandlerContext ctx, Throwable cause) {
       if (bufferedWrites != null) {
-        Exception e = new Exception("Buffered write failed.");
         while (!bufferedWrites.isEmpty()) {
           ChannelWrite write = bufferedWrites.poll();
-          write.promise.setFailure(e);
+          write.promise.setFailure(cause);
         }
         bufferedWrites = null;
       }
+
+      log.log(Level.SEVERE, "Transport failed during protocol negotiation", cause);
+
       /**
        * In case something goes wrong ensure that the channel gets closed as the
        * NettyClientTransport relies on the channel's close future to get completed.
@@ -294,7 +306,7 @@ public final class ProtocolNegotiators {
       ctx.close();
     }
 
-    protected void writeBufferedAndRemove(ChannelHandlerContext ctx) {
+    protected final void writeBufferedAndRemove(ChannelHandlerContext ctx) {
       if (!ctx.channel().isActive() || writing) {
         return;
       }
@@ -349,7 +361,7 @@ public final class ProtocolNegotiators {
         if (handshakeEvent.isSuccess()) {
           writeBufferedAndRemove(ctx);
         } else {
-          failBufferedAndClose(ctx);
+          fail(ctx, handshakeEvent.cause());
         }
       }
       super.userEventTriggered(ctx, evt);
@@ -413,8 +425,7 @@ public final class ProtocolNegotiators {
       if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_SUCCESSFUL) {
         writeBufferedAndRemove(ctx);
       } else if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_REJECTED) {
-        failBufferedAndClose(ctx);
-        ctx.pipeline().fireExceptionCaught(new Exception("HTTP/2 upgrade rejected"));
+        fail(ctx, unavailableException("HTTP/2 upgrade rejected"));
       }
       super.userEventTriggered(ctx, evt);
     }
