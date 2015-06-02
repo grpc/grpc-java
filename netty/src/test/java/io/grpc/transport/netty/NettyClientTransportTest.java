@@ -57,6 +57,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.ssl.SslContext;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -69,6 +70,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -81,9 +84,42 @@ public class NettyClientTransportTest {
   @Mock
   private ClientTransport.Listener clientTransportListener;
 
+  private InetSocketAddress address;
+  private NettyServer server;
+  private NettyClientTransport[] transports;
+  private List<NioEventLoopGroup> groups;
+
   @Before
-  public void setup() {
+  public void setup() throws Exception {
     MockitoAnnotations.initMocks(this);
+    groups = new ArrayList<NioEventLoopGroup>();
+    transports = new NettyClientTransport[2];
+
+    // Start the server.
+    address = TestUtils.overrideHostFromTestCa("localhost", TestUtils.pickUnusedPort());
+    File serverCert = TestUtils.loadCert("server1.pem");
+    File key = TestUtils.loadCert("server1.key");
+    SslContext serverContext = GrpcSslContexts.forServer(serverCert, key).build();
+    server = new NettyServer(address, NioServerSocketChannel.class,
+            newGroup(), newGroup(), serverContext, 100, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_SIZE);
+    server.start(new TestServerListener());
+  }
+
+  @After
+  public void teardown() throws Exception {
+    for (NettyClientTransport transport : transports) {
+      if (transport != null) {
+        transport.shutdown();
+      }
+    }
+
+    if (server != null) {
+      server.shutdown();
+    }
+
+    for (NioEventLoopGroup group : groups) {
+      group.shutdownGracefully(0, 10, TimeUnit.SECONDS);
+    }
   }
 
   /**
@@ -91,54 +127,43 @@ public class NettyClientTransportTest {
    */
   @Test
   public void creatingMultipleTlsTransportsShouldSucceed() throws Exception {
-    // Start the server.
-    int port = TestUtils.pickUnusedPort();
-    InetSocketAddress address = TestUtils.overrideHostFromTestCa("localhost", port);
-    File serverCert = TestUtils.loadCert("server1.pem");
-    File key = TestUtils.loadCert("server1.key");
-    SslContext serverContext = GrpcSslContexts.forServer(serverCert, key).build();
-    NettyServer server = new NettyServer(address, NioServerSocketChannel.class,
-            new NioEventLoopGroup(),new NioEventLoopGroup(), serverContext, 100,
-            DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_SIZE);
-    server.start(new TestServerListener());
+    // Create the protocol negotiator.
+    File clientCert = TestUtils.loadCert("ca.pem");
+    SslContext clientContext = GrpcSslContexts.forClient().trustManager(clientCert).build();
+    ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext, address);
 
-    try {
-      // Create the protocol negotiator.
-      File clientCert = TestUtils.loadCert("ca.pem");
-      SslContext clientContext = GrpcSslContexts.forClient().trustManager(clientCert).build();
-      ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext, address);
-
-      // Create the client transports.
-      int numTransports = 2;
-      final NettyClientTransport[] transports = new NettyClientTransport[numTransports];
-      for (int index = 0; index < transports.length; ++index) {
-        transports[index] = new NettyClientTransport(address, NioSocketChannel.class,
-                new NioEventLoopGroup(), negotiator, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_SIZE);
-        transports[index].start(clientTransportListener);
-      }
-
-      // Send a single RPC on each transport.
-      final SettableFuture[] futures = new SettableFuture[numTransports];
-      MethodDescriptor<String, String> method = MethodDescriptor.create(MethodType.UNARY,
-              "/testService/test", 10, TimeUnit.SECONDS, StringMarshaller.INSTANCE,
-              StringMarshaller.INSTANCE);
-      for (int index = 0; index < transports.length; ++index) {
-        futures[index] = SettableFuture.create();
-        NettyClientTransport transport = transports[index];
-        ClientStream stream = transport.newStream(method, new Metadata.Headers(),
-                new TestClientStreamListener(futures[index]));
-        stream.request(1);
-        stream.writeMessage(messageStream());
-        stream.halfClose();
-      }
-
-      // Wait for the RPCs to complete.
-      for (SettableFuture future : futures) {
-        future.get(10, TimeUnit.SECONDS);
-      }
-    } finally {
-      server.shutdown();
+    // Create the client transports.
+    for (int index = 0; index < transports.length; ++index) {
+      transports[index] = new NettyClientTransport(address, NioSocketChannel.class,
+              newGroup(), negotiator, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_SIZE);
+      transports[index].start(clientTransportListener);
     }
+
+    // Send a single RPC on each transport.
+    final SettableFuture[] futures = new SettableFuture[transports.length];
+    MethodDescriptor<String, String> method = MethodDescriptor.create(MethodType.UNARY,
+            "/testService/test", 10, TimeUnit.SECONDS, StringMarshaller.INSTANCE,
+            StringMarshaller.INSTANCE);
+    for (int index = 0; index < transports.length; ++index) {
+      futures[index] = SettableFuture.create();
+      NettyClientTransport transport = transports[index];
+      ClientStream stream = transport.newStream(method, new Metadata.Headers(),
+              new TestClientStreamListener(futures[index]));
+      stream.request(1);
+      stream.writeMessage(messageStream());
+      stream.halfClose();
+    }
+
+    // Wait for the RPCs to complete.
+    for (SettableFuture future : futures) {
+      future.get(10, TimeUnit.SECONDS);
+    }
+  }
+
+  private NioEventLoopGroup newGroup() {
+    NioEventLoopGroup group = new NioEventLoopGroup(1);
+    groups.add(group);
+    return group;
   }
 
   private static InputStream messageStream() {
