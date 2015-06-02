@@ -57,6 +57,8 @@ import io.netty.util.concurrent.GenericFutureListener;
 import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
 import java.util.Queue;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLParameters;
@@ -65,6 +67,7 @@ import javax.net.ssl.SSLParameters;
  * Common {@link ProtocolNegotiator}s used by gRPC.
  */
 public final class ProtocolNegotiators {
+  private static final Logger log = Logger.getLogger(ProtocolNegotiators.class.getName());
 
   private ProtocolNegotiators() {
   }
@@ -90,8 +93,8 @@ public final class ProtocolNegotiators {
     final SslBootstrapHandler sslBootstrap = new SslBootstrapHandler(sslContext, inetAddress);
     return new ProtocolNegotiator() {
       @Override
-      public Handler newHandler(FailureListener failureListener, Http2ConnectionHandler handler) {
-        return new BufferUntilTlsNegotiatedHandler(failureListener, sslBootstrap, handler);
+      public Handler newHandler(Http2ConnectionHandler handler) {
+        return new BufferUntilTlsNegotiatedHandler(sslBootstrap, handler);
       }
     };
   }
@@ -133,13 +136,13 @@ public final class ProtocolNegotiators {
   public static ProtocolNegotiator plaintextUpgrade() {
     return new ProtocolNegotiator() {
       @Override
-      public Handler newHandler(FailureListener listener, Http2ConnectionHandler handler) {
+      public Handler newHandler(Http2ConnectionHandler handler) {
         // Register the plaintext upgrader
         Http2ClientUpgradeCodec upgradeCodec = new Http2ClientUpgradeCodec(handler);
         HttpClientCodec httpClientCodec = new HttpClientCodec();
         final HttpClientUpgradeHandler upgrader =
             new HttpClientUpgradeHandler(httpClientCodec, upgradeCodec, 1000);
-        return new BufferingHttp2UpgradeHandler(listener, upgrader);
+        return new BufferingHttp2UpgradeHandler(upgrader);
       }
     };
   }
@@ -151,9 +154,8 @@ public final class ProtocolNegotiators {
   public static ProtocolNegotiator plaintext() {
     return new ProtocolNegotiator() {
       @Override
-      public Handler newHandler(ProtocolNegotiator.FailureListener listener,
-                                Http2ConnectionHandler handler) {
-        return new BufferUntilChannelActiveHandler(listener, handler);
+      public Handler newHandler(Http2ConnectionHandler handler) {
+        return new BufferUntilChannelActiveHandler(handler);
       }
     };
   }
@@ -166,20 +168,17 @@ public final class ProtocolNegotiators {
    */
   private abstract static class AbstractBufferingHandler extends ChannelDuplexHandler {
 
-    private final ProtocolNegotiator.FailureListener listener;
     private ChannelHandler[] handlers;
     private Queue<ChannelWrite> bufferedWrites = new ArrayDeque<ChannelWrite>();
     private boolean writing;
     private boolean flushRequested;
-    private boolean failed;
+    private Throwable failureCause;
 
     /**
      * @param handlers the ChannelHandlers are added to the pipeline on channelRegistered and
      *                 before this handler.
      */
-    AbstractBufferingHandler(ProtocolNegotiator.FailureListener listener,
-                             ChannelHandler... handlers) {
-      this.listener = listener;
+    AbstractBufferingHandler(ChannelHandler... handlers) {
       this.handlers = handlers;
     }
 
@@ -248,27 +247,30 @@ public final class ProtocolNegotiators {
       fail(ctx, new Exception("Channel closed while performing protocol negotiation"));
     }
 
-    protected void fail(ChannelHandlerContext ctx, Throwable cause) {
-      boolean previouslyFailed = failed;
-      failed = true;
-
-      if (bufferedWrites != null) {
-        Exception e = new Exception("Buffered write failed.");
-        while (!bufferedWrites.isEmpty()) {
-          ChannelWrite write = bufferedWrites.poll();
-          write.promise.setFailure(e);
+    protected final void fail(ChannelHandlerContext ctx, Throwable cause) {
+      if (failureCause == null) {
+        failureCause = cause;
+        if (bufferedWrites != null) {
+          Exception e = new Exception("Buffered write failed.");
+          while (!bufferedWrites.isEmpty()) {
+            ChannelWrite write = bufferedWrites.poll();
+            write.promise.setFailure(e);
+          }
+          bufferedWrites = null;
         }
-        bufferedWrites = null;
+
+        log.log(Level.SEVERE, "Transport failed during protocol negotiation", cause);
       }
 
-      // Notify the application that the protocol negotiation has failed.
-      if (!previouslyFailed) {
-        listener.negotiationFailed(ctx, cause);
-      }
+      /**
+       * In case something goes wrong ensure that the channel gets closed as the
+       * NettyClientTransport relies on the channel's close future to get completed.
+       */
+      ctx.close();
     }
 
-    protected void writeBufferedAndRemove(ChannelHandlerContext ctx) {
-      if (!ctx.channel().isActive() || writing || failed) {
+    protected final void writeBufferedAndRemove(ChannelHandlerContext ctx) {
+      if (!ctx.channel().isActive() || writing) {
         return;
       }
       // Make sure that method can't be reentered, so that the ordering
@@ -306,9 +308,8 @@ public final class ProtocolNegotiators {
   private static class BufferUntilTlsNegotiatedHandler extends AbstractBufferingHandler
       implements ProtocolNegotiator.Handler {
 
-    BufferUntilTlsNegotiatedHandler(ProtocolNegotiator.FailureListener failureListener,
-                                    ChannelHandler... handlers) {
-      super(failureListener, handlers);
+    BufferUntilTlsNegotiatedHandler(ChannelHandler... handlers) {
+      super(handlers);
     }
 
     @Override
@@ -336,9 +337,8 @@ public final class ProtocolNegotiators {
   private static class BufferUntilChannelActiveHandler extends AbstractBufferingHandler
       implements ProtocolNegotiator.Handler {
 
-    BufferUntilChannelActiveHandler(ProtocolNegotiator.FailureListener failureListener,
-                                    ChannelHandler... handlers) {
-      super(failureListener, handlers);
+    BufferUntilChannelActiveHandler(ChannelHandler... handlers) {
+      super(handlers);
     }
 
     @Override
@@ -364,9 +364,8 @@ public final class ProtocolNegotiators {
   private static class BufferingHttp2UpgradeHandler extends AbstractBufferingHandler
       implements ProtocolNegotiator.Handler {
 
-    BufferingHttp2UpgradeHandler(ProtocolNegotiator.FailureListener failureListener,
-                                 ChannelHandler... handlers) {
-      super(failureListener, handlers);
+    BufferingHttp2UpgradeHandler(ChannelHandler... handlers) {
+      super(handlers);
     }
 
     @Override

@@ -11,12 +11,6 @@ dependencies {
 
 test {
     jvmArgs "-Xbootclasspath/p:" + configurations.alpnboot.asPath
-    testLogging {
-        exceptionFormat "full"
-        showExceptions true
-        showCauses true
-        showStackTraces true
-    }
 }
 
 javadoc.options.links 'https://netty.io/4.1/api/'

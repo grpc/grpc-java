@@ -37,16 +37,15 @@ import com.google.common.base.Preconditions;
 
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.Status;
 import io.grpc.transport.ClientStream;
 import io.grpc.transport.ClientStreamListener;
 import io.grpc.transport.ClientTransport;
-import io.grpc.transport.netty.ProtocolNegotiator.FailureListener;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
@@ -94,7 +93,6 @@ class NettyClientTransport implements ClientTransport {
   /** Whether the transport completed shutting down. */
   @GuardedBy("this")
   private boolean terminated;
-  private Throwable failureCause;
 
   NettyClientTransport(SocketAddress address, Class<? extends Channel> channelType,
                        EventLoopGroup group, ProtocolNegotiator negotiator,
@@ -116,19 +114,7 @@ class NettyClientTransport implements ClientTransport {
     }
 
     handler = newHandler();
-    FailureListener closeOnNegotiationFailure = new FailureListener() {
-      @Override
-      public void negotiationFailed(ChannelHandlerContext ctx, Throwable cause) {
-        failureCause = cause;
-        ctx.close().addListener(new ChannelFutureListener() {
-          @Override
-          public void operationComplete(ChannelFuture future) throws Exception {
-            notifyClosed(future);
-          }
-        });
-      }
-    };
-    negotiationHandler = negotiator.newHandler(closeOnNegotiationFailure, handler);
+    negotiationHandler = negotiator.newHandler(handler);
   }
 
   @Override
@@ -139,16 +125,27 @@ class NettyClientTransport implements ClientTransport {
     Preconditions.checkNotNull(listener, "listener");
 
     // Create the stream.
-    NettyClientStream stream = new NettyClientStream(listener, channel, handler);
+    final NettyClientStream stream = new NettyClientStream(listener, channel, handler);
 
     // Convert the headers into Netty HTTP/2 headers.
     AsciiString defaultPath = new AsciiString("/" + method.getName());
     Http2Headers http2Headers = Utils.convertClientHeaders(headers, negotiationHandler.scheme(),
         defaultPath, authority);
 
+    ChannelFutureListener failureListener = new ChannelFutureListener() {
+      @Override
+      public void operationComplete(ChannelFuture future) throws Exception {
+        if (!future.isSuccess()) {
+          // Stream creation failed. Close the stream if not already closed.
+          stream.transportReportStatus(Status.fromThrowable(future.cause()), true,
+                  new Metadata.Trailers());
+        }
+      }
+    };
+
     // Write the command requesting the creation of the stream.
     handler.getWriteQueue().enqueue(new CreateStreamCommand(http2Headers, stream),
-            !method.getType().clientSendsOneMessage());
+            !method.getType().clientSendsOneMessage()).addListener(failureListener);
     return stream;
   }
 
@@ -175,25 +172,9 @@ class NettyClientTransport implements ClientTransport {
     channel.closeFuture().addListener(new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
-        notifyClosed(future);
+        notifyTerminated(handler.connectionError());
       }
     });
-  }
-
-  /**
-   * Called after the channel has been closed to notify the application that the transport
-   * has been terminated.
-   */
-  private void notifyClosed(ChannelFuture closeFuture) {
-    if (!closeFuture.isSuccess()) {
-      // The close failed, just use the result of the future.
-      failureCause = closeFuture.cause();
-    } else if (failureCause == null) {
-      // The cause hasn't been previously set, use the error from the handler if it has one.
-      failureCause = handler.connectionError();
-    }
-
-    notifyTerminated(failureCause);
   }
 
   @Override
@@ -203,10 +184,6 @@ class NettyClientTransport implements ClientTransport {
     if (channel != null && channel.isOpen()) {
       channel.close();
     }
-  }
-
-  public Throwable failureCause() {
-    return failureCause;
   }
 
   private void notifyShutdown(Throwable t) {

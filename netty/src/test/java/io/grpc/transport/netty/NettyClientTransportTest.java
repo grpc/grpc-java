@@ -31,17 +31,20 @@
 
 package io.grpc.transport.netty;
 
+import static com.google.common.base.Charsets.UTF_8;
 import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
-import static org.junit.Assert.assertNull;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Mockito.when;
 
+import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
-import com.google.common.util.concurrent.Uninterruptibles;
 
+import io.grpc.Marshaller;
 import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
+import io.grpc.MethodType;
+import io.grpc.Status;
 import io.grpc.testing.TestUtils;
+import io.grpc.transport.ClientStream;
+import io.grpc.transport.ClientStreamListener;
 import io.grpc.transport.ClientTransport;
 import io.grpc.transport.ServerListener;
 import io.grpc.transport.ServerStream;
@@ -61,7 +64,10 @@ import org.junit.runners.JUnit4;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.util.concurrent.TimeUnit;
 
@@ -70,23 +76,14 @@ import java.util.concurrent.TimeUnit;
  */
 @RunWith(JUnit4.class)
 public class NettyClientTransportTest {
+  private static final String MESSAGE = "hello";
 
   @Mock
-  private ServerListener serverListener;
-
-  @Mock
-  private ServerTransportListener serverTransportListener;
-
-  @Mock
-  private ServerStreamListener serverStreamListener;
+  private ClientTransport.Listener clientTransportListener;
 
   @Before
   public void setup() {
     MockitoAnnotations.initMocks(this);
-    when(serverListener.transportCreated(any(ServerTransport.class))).thenReturn(
-            serverTransportListener);
-    when(serverTransportListener.streamCreated(any(ServerStream.class), anyString(),
-            any(Metadata.Headers.class))).thenReturn(serverStreamListener);
   }
 
   /**
@@ -94,54 +91,149 @@ public class NettyClientTransportTest {
    */
   @Test
   public void creatingMultipleTlsTransportsShouldSucceed() throws Exception {
+    // Start the server.
     int port = TestUtils.pickUnusedPort();
     InetSocketAddress address = TestUtils.overrideHostFromTestCa("localhost", port);
-
     File serverCert = TestUtils.loadCert("server1.pem");
     File key = TestUtils.loadCert("server1.key");
     SslContext serverContext = GrpcSslContexts.forServer(serverCert, key).build();
     NettyServer server = new NettyServer(address, NioServerSocketChannel.class,
             new NioEventLoopGroup(),new NioEventLoopGroup(), serverContext, 100,
             DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_SIZE);
-    server.start(serverListener);
+    server.start(new TestServerListener());
 
     try {
+      // Create the protocol negotiator.
       File clientCert = TestUtils.loadCert("ca.pem");
       SslContext clientContext = GrpcSslContexts.forClient().trustManager(clientCert).build();
       ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext, address);
 
+      // Create the client transports.
       int numTransports = 2;
-      final SettableFuture[] futures = new SettableFuture[numTransports];
       final NettyClientTransport[] transports = new NettyClientTransport[numTransports];
       for (int index = 0; index < transports.length; ++index) {
         transports[index] = new NettyClientTransport(address, NioSocketChannel.class,
                 new NioEventLoopGroup(), negotiator, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_SIZE);
-        futures[index] = SettableFuture.create();
-        final int ix = index;
-        transports[index].start(new ClientTransport.Listener() {
-          @Override
-          public void transportShutdown() {
-          }
-
-          @Override
-          @SuppressWarnings("unchecked")
-          public void transportTerminated() {
-            futures[ix].set(null);
-          }
-        });
+        transports[index].start(clientTransportListener);
       }
 
-      // Give the transports a moment to complete negotiation before we tear them down. If we
-      // try closing the transports during negotiation, the failureCause will be non-null.
-      Uninterruptibles.sleepUninterruptibly(1, TimeUnit.SECONDS);
-
+      // Send a single RPC on each transport.
+      final SettableFuture[] futures = new SettableFuture[numTransports];
+      MethodDescriptor<String, String> method = MethodDescriptor.create(MethodType.UNARY,
+              "/testService/test", 10, TimeUnit.SECONDS, StringMarshaller.INSTANCE,
+              StringMarshaller.INSTANCE);
       for (int index = 0; index < transports.length; ++index) {
-        transports[index].shutdown();
-        futures[index].get(1, TimeUnit.SECONDS);
-        assertNull(transports[index].failureCause());
+        futures[index] = SettableFuture.create();
+        NettyClientTransport transport = transports[index];
+        ClientStream stream = transport.newStream(method, new Metadata.Headers(),
+                new TestClientStreamListener(futures[index]));
+        stream.request(1);
+        stream.writeMessage(messageStream());
+        stream.halfClose();
+      }
+
+      // Wait for the RPCs to complete.
+      for (SettableFuture future : futures) {
+        future.get(10, TimeUnit.SECONDS);
       }
     } finally {
       server.shutdown();
+    }
+  }
+
+  private static InputStream messageStream() {
+    return new ByteArrayInputStream(MESSAGE.getBytes());
+  }
+
+  private static class TestClientStreamListener implements ClientStreamListener {
+    private final SettableFuture<?> future;
+
+    TestClientStreamListener(SettableFuture<?> future) {
+      this.future = future;
+    }
+
+    @Override
+    public void headersRead(Metadata.Headers headers) {
+    }
+
+    @Override
+    public void closed(Status status, Metadata.Trailers trailers) {
+      if (status.isOk()) {
+        future.set(null);
+      } else {
+        future.setException(status.asException());
+      }
+    }
+
+    @Override
+    public void messageRead(InputStream message) {
+    }
+
+    @Override
+    public void onReady() {
+    }
+  }
+
+  private static class TestServerListener implements ServerListener {
+
+    @Override
+    public ServerTransportListener transportCreated(final ServerTransport transport) {
+      return new ServerTransportListener() {
+
+        @Override
+        public ServerStreamListener streamCreated(final ServerStream stream, String method,
+                                                  Metadata.Headers headers) {
+          stream.request(1);
+          return new ServerStreamListener() {
+
+            @Override
+            public void messageRead(InputStream message) {
+              // Just echo back the message.
+              stream.writeMessage(messageStream());
+            }
+
+            @Override
+            public void onReady() {
+            }
+
+            @Override
+            public void halfClosed() {
+              // Just close when the client closes.
+              stream.close(Status.OK, new Metadata.Trailers());
+            }
+
+            @Override
+            public void closed(Status status) {
+            }
+          };
+        }
+
+        @Override
+        public void transportTerminated() {
+        }
+      };
+    }
+
+    @Override
+    public void serverShutdown() {
+    }
+  }
+
+  private static class StringMarshaller implements Marshaller<String> {
+    static final StringMarshaller INSTANCE = new StringMarshaller();
+
+    @Override
+    public InputStream stream(String value) {
+      return new ByteArrayInputStream(value.getBytes(UTF_8));
+    }
+
+    @Override
+    public String parse(InputStream stream) {
+      try {
+        return new String(ByteStreams.toByteArray(stream), UTF_8);
+      } catch (IOException ex) {
+        throw new RuntimeException(ex);
+      }
     }
   }
 }
