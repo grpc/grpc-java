@@ -33,6 +33,8 @@ package io.grpc.transport.netty;
 
 import com.google.common.base.Preconditions;
 
+import io.grpc.Status;
+
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler;
@@ -148,6 +150,10 @@ public final class ProtocolNegotiators {
     };
   }
 
+  private static RuntimeException unavailableException(String msg) {
+    return Status.UNAVAILABLE.withDescription(msg).asRuntimeException();
+  }
+
   /**
    * Buffers all writes until either {@link #writeBufferedAndRemove(ChannelHandlerContext)} or
    * {@link #fail(ChannelHandlerContext, Throwable)} is called. This handler allows us to
@@ -189,7 +195,7 @@ public final class ProtocolNegotiators {
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-      fail(ctx, new Exception("Connection broken while performing protocol negotiation"));
+      fail(ctx, unavailableException("Connection broken while performing protocol negotiation"));
       super.channelInactive(ctx);
     }
 
@@ -231,7 +237,7 @@ public final class ProtocolNegotiators {
 
     @Override
     public void close(ChannelHandlerContext ctx, ChannelPromise future) throws Exception {
-      fail(ctx, new Exception("Channel closed while performing protocol negotiation"));
+      fail(ctx, unavailableException("Channel closed while performing protocol negotiation"));
     }
 
     protected final void fail(ChannelHandlerContext ctx, Throwable cause) {
@@ -371,7 +377,7 @@ public final class ProtocolNegotiators {
       if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_SUCCESSFUL) {
         writeBufferedAndRemove(ctx);
       } else if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_REJECTED) {
-        fail(ctx, new Exception("HTTP/2 upgrade rejected"));
+        fail(ctx, unavailableException("HTTP/2 upgrade rejected"));
       }
       super.userEventTriggered(ctx, evt);
     }
