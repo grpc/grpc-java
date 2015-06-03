@@ -96,7 +96,7 @@ public class NettyClientTransportTest {
     transports = new NettyClientTransport[2];
 
     // Start the server.
-    address = TestUtils.overrideHostFromTestCa("localhost", TestUtils.pickUnusedPort());
+    address = TestUtils.testServerAddress(TestUtils.pickUnusedPort());
     File serverCert = TestUtils.loadCert("server1.pem");
     File key = TestUtils.loadCert("server1.key");
     SslContext serverContext = GrpcSslContexts.forServer(serverCert, key).build();

@@ -116,7 +116,7 @@ class ClientConfiguration implements Configuration {
         if (config.testca && config.address instanceof InetSocketAddress) {
           // Override the socket address with the host from the testca.
           InetSocketAddress address = (InetSocketAddress) config.address;
-          config.address = TestUtils.overrideHostFromTestCa(address.getHostName(),
+          config.address = TestUtils.testServerAddress(address.getHostName(),
                   address.getPort());
         }
       }
