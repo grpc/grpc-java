@@ -86,14 +86,14 @@ public class NettyClientTransportTest {
 
   private InetSocketAddress address;
   private NettyServer server;
-  private NettyClientTransport[] transports;
+  private List<NettyClientTransport> transports;
   private List<NioEventLoopGroup> groups;
 
   @Before
   public void setup() throws Exception {
     MockitoAnnotations.initMocks(this);
     groups = new ArrayList<NioEventLoopGroup>();
-    transports = new NettyClientTransport[2];
+    transports = new ArrayList<NettyClientTransport>();
 
     // Start the server.
     address = TestUtils.testServerAddress(TestUtils.pickUnusedPort());
@@ -108,9 +108,7 @@ public class NettyClientTransportTest {
   @After
   public void teardown() throws Exception {
     for (NettyClientTransport transport : transports) {
-      if (transport != null) {
-        transport.shutdown();
-      }
+      transport.shutdown();
     }
 
     if (server != null) {
@@ -132,31 +130,32 @@ public class NettyClientTransportTest {
     SslContext clientContext = GrpcSslContexts.forClient().trustManager(clientCert).build();
     ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext, address);
 
-    // Create the client transports.
-    for (int index = 0; index < transports.length; ++index) {
-      transports[index] = new NettyClientTransport(address, NioSocketChannel.class,
+    // Create a couple client transports.
+    for (int index = 0; index < 2; ++index) {
+      NettyClientTransport transport = new NettyClientTransport(address, NioSocketChannel.class,
               newGroup(), negotiator, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_SIZE);
-      transports[index].start(clientTransportListener);
+      transports.add(transport);
+      transport.start(clientTransportListener);
     }
 
     // Send a single RPC on each transport.
-    final SettableFuture[] futures = new SettableFuture[transports.length];
+    final List<SettableFuture> rpcFutures = new ArrayList<SettableFuture>(transports.size());
     MethodDescriptor<String, String> method = MethodDescriptor.create(MethodType.UNARY,
             "/testService/test", 10, TimeUnit.SECONDS, StringMarshaller.INSTANCE,
             StringMarshaller.INSTANCE);
-    for (int index = 0; index < transports.length; ++index) {
-      futures[index] = SettableFuture.create();
-      NettyClientTransport transport = transports[index];
+    for (NettyClientTransport transport : transports) {
+      SettableFuture rpcFuture = SettableFuture.create();
+      rpcFutures.add(rpcFuture);
       ClientStream stream = transport.newStream(method, new Metadata.Headers(),
-              new TestClientStreamListener(futures[index]));
+              new TestClientStreamListener(rpcFuture));
       stream.request(1);
       stream.writeMessage(messageStream());
       stream.halfClose();
     }
 
     // Wait for the RPCs to complete.
-    for (SettableFuture future : futures) {
-      future.get(10, TimeUnit.SECONDS);
+    for (SettableFuture rpcFuture : rpcFutures) {
+      rpcFuture.get(10, TimeUnit.SECONDS);
     }
   }
 
