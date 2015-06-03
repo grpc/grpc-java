@@ -36,7 +36,6 @@ import com.google.common.base.Preconditions;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
@@ -90,44 +89,33 @@ public final class ProtocolNegotiators {
     Preconditions.checkNotNull(sslContext, "sslContext");
     Preconditions.checkNotNull(inetAddress, "inetAddress");
 
-    final SslBootstrapHandler sslBootstrap = new SslBootstrapHandler(sslContext, inetAddress);
     return new ProtocolNegotiator() {
       @Override
       public Handler newHandler(Http2ConnectionHandler handler) {
+        ChannelHandler sslBootstrap = new ChannelHandlerAdapter() {
+          @Override
+          public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+            // TODO(nmittler): Unsupported for OpenSSL in Netty < 4.1.Beta6.
+            SSLEngine sslEngine = sslContext.newEngine(ctx.alloc(),
+                    inetAddress.getHostName(), inetAddress.getPort());
+            SSLParameters sslParams = new SSLParameters();
+            sslParams.setEndpointIdentificationAlgorithm("HTTPS");
+            sslEngine.setSSLParameters(sslParams);
+
+            SslHandler sslHandler = new SslHandler(sslEngine, false);
+            sslHandler.handshakeFuture().addListener(new GenericFutureListener<Future<Channel>>() {
+              @Override
+              public void operationComplete(Future<Channel> future) throws Exception {
+                // If an error occurred during the handshake, throw it to the pipeline.
+                future.get();
+              }
+            });
+            ctx.pipeline().replace(this, null, sslHandler);
+          }
+        };
         return new BufferUntilTlsNegotiatedHandler(sslBootstrap, handler);
       }
     };
-  }
-
-  @Sharable
-  private static class SslBootstrapHandler extends ChannelHandlerAdapter {
-    private final SslContext sslContext;
-    private final InetSocketAddress address;
-
-    SslBootstrapHandler(SslContext sslContext, InetSocketAddress address) {
-      this.sslContext = sslContext;
-      this.address = address;
-    }
-
-    @Override
-    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-      // TODO(nmittler): This method is currently unsupported for OpenSSL in Netty < 4.1.Beta6.
-      SSLEngine sslEngine = sslContext.newEngine(ctx.alloc(),
-              address.getHostName(), address.getPort());
-      SSLParameters sslParams = new SSLParameters();
-      sslParams.setEndpointIdentificationAlgorithm("HTTPS");
-      sslEngine.setSSLParameters(sslParams);
-
-      SslHandler sslHandler = new SslHandler(sslEngine, false);
-      sslHandler.handshakeFuture().addListener(new GenericFutureListener<Future<Channel>>() {
-        @Override
-        public void operationComplete(Future<Channel> future) throws Exception {
-          // If an error occurred during the handshake, throw it to the pipeline.
-          future.get();
-        }
-      });
-      ctx.pipeline().replace(this, null, sslHandler);
-    }
   }
 
   /**
@@ -172,7 +160,6 @@ public final class ProtocolNegotiators {
     private Queue<ChannelWrite> bufferedWrites = new ArrayDeque<ChannelWrite>();
     private boolean writing;
     private boolean flushRequested;
-    private Throwable failureCause;
 
     /**
      * @param handlers the ChannelHandlers are added to the pipeline on channelRegistered and
@@ -248,19 +235,15 @@ public final class ProtocolNegotiators {
     }
 
     protected final void fail(ChannelHandlerContext ctx, Throwable cause) {
-      if (failureCause == null) {
-        failureCause = cause;
-        if (bufferedWrites != null) {
-          Exception e = new Exception("Buffered write failed.");
-          while (!bufferedWrites.isEmpty()) {
-            ChannelWrite write = bufferedWrites.poll();
-            write.promise.setFailure(e);
-          }
-          bufferedWrites = null;
+      if (bufferedWrites != null) {
+        while (!bufferedWrites.isEmpty()) {
+          ChannelWrite write = bufferedWrites.poll();
+          write.promise.setFailure(cause);
         }
-
-        log.log(Level.SEVERE, "Transport failed during protocol negotiation", cause);
+        bufferedWrites = null;
       }
+
+      log.log(Level.SEVERE, "Transport failed during protocol negotiation", cause);
 
       /**
        * In case something goes wrong ensure that the channel gets closed as the

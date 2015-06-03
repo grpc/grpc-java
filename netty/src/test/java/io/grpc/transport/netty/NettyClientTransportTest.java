@@ -75,7 +75,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Tsests for {@link NettyClientTransport}.
+ * Tests for {@link NettyClientTransport}.
  */
 @RunWith(JUnit4.class)
 public class NettyClientTransportTest {
@@ -84,16 +84,18 @@ public class NettyClientTransportTest {
   @Mock
   private ClientTransport.Listener clientTransportListener;
 
+  private final List<NettyClientTransport> transports = new ArrayList<NettyClientTransport>();
+  private NioEventLoopGroup group;
   private InetSocketAddress address;
   private NettyServer server;
-  private List<NettyClientTransport> transports;
-  private List<NioEventLoopGroup> groups;
 
   @Before
   public void setup() throws Exception {
     MockitoAnnotations.initMocks(this);
-    groups = new ArrayList<NioEventLoopGroup>();
-    transports = new ArrayList<NettyClientTransport>();
+
+    transports.clear();
+
+    group = new NioEventLoopGroup(1);
 
     // Start the server.
     address = TestUtils.testServerAddress(TestUtils.pickUnusedPort());
@@ -101,7 +103,7 @@ public class NettyClientTransportTest {
     File key = TestUtils.loadCert("server1.key");
     SslContext serverContext = GrpcSslContexts.forServer(serverCert, key).build();
     server = new NettyServer(address, NioServerSocketChannel.class,
-            newGroup(), newGroup(), serverContext, 100, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_SIZE);
+            group, group, serverContext, 100, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_SIZE);
     server.start(new TestServerListener());
   }
 
@@ -115,9 +117,7 @@ public class NettyClientTransportTest {
       server.shutdown();
     }
 
-    for (NioEventLoopGroup group : groups) {
-      group.shutdownGracefully(0, 10, TimeUnit.SECONDS);
-    }
+    group.shutdownGracefully(0, 10, TimeUnit.SECONDS);
   }
 
   /**
@@ -133,7 +133,7 @@ public class NettyClientTransportTest {
     // Create a couple client transports.
     for (int index = 0; index < 2; ++index) {
       NettyClientTransport transport = new NettyClientTransport(address, NioSocketChannel.class,
-              newGroup(), negotiator, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_SIZE);
+              group, negotiator, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_SIZE);
       transports.add(transport);
       transport.start(clientTransportListener);
     }
@@ -157,12 +157,6 @@ public class NettyClientTransportTest {
     for (SettableFuture rpcFuture : rpcFutures) {
       rpcFuture.get(10, TimeUnit.SECONDS);
     }
-  }
-
-  private NioEventLoopGroup newGroup() {
-    NioEventLoopGroup group = new NioEventLoopGroup(1);
-    groups.add(group);
-    return group;
   }
 
   private static InputStream messageStream() {
