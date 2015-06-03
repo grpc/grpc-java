@@ -93,8 +93,6 @@ public class NettyClientTransportTest {
   public void setup() throws Exception {
     MockitoAnnotations.initMocks(this);
 
-    transports.clear();
-
     group = new NioEventLoopGroup(1);
 
     // Start the server.
@@ -112,6 +110,7 @@ public class NettyClientTransportTest {
     for (NettyClientTransport transport : transports) {
       transport.shutdown();
     }
+    transports.clear();
 
     if (server != null) {
       server.shutdown();
