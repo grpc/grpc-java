@@ -176,6 +176,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase {
 
     // Send a frame and verify that it was written.
     writeQueue.enqueue(new SendGrpcFrameCommand(stream, content, false), true);
+    handler.flush(ctx);
     verify(promise, never()).setFailure(any(Throwable.class));
     ByteBuf bufWritten = captureWrite(ctx);
     verify(channel, times(1)).flush();

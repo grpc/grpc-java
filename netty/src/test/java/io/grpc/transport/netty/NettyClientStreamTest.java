@@ -319,17 +319,22 @@ public class NettyClientStreamTest extends NettyStreamTestBase {
   @Override
   protected NettyClientStream createStream() {
     when(handler.getWriteQueue()).thenReturn(writeQueue);
+    when(writeQueue.enqueue(any(), anyBoolean())).thenReturn(future);
+    final NettyClientStream stream = new NettyClientStream(listener, channel, handler);
     doAnswer(new Answer() {
       @Override
       public Object answer(InvocationOnMock invocation) throws Throwable {
         if (future.isDone()) {
           ((ChannelPromise) invocation.getArguments()[1]).trySuccess();
+          if (invocation.getArguments()[0] instanceof SendGrpcFrameCommand) {
+            stream.onSentBytes(
+                ((SendGrpcFrameCommand) invocation.getArguments()[0]).content().readableBytes());
+          }
         }
         return null;
       }
     }).when(writeQueue).enqueue(any(), any(ChannelPromise.class), anyBoolean());
-    when(writeQueue.enqueue(any(), anyBoolean())).thenReturn(future);
-    NettyClientStream stream = new NettyClientStream(listener, channel, handler);
+
     assertTrue(stream.canSend());
     assertTrue(stream.canReceive());
     stream.id(STREAM_ID);

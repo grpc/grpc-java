@@ -58,6 +58,7 @@ import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2FrameAdapter;
 import io.netty.handler.codec.http2.Http2FrameReader;
 import io.netty.handler.codec.http2.Http2Headers;
+import io.netty.handler.codec.http2.Http2RemoteFlowController;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.handler.codec.http2.Http2StreamVisitor;
@@ -73,7 +74,8 @@ import javax.annotation.Nullable;
  * Client-side Netty handler for GRPC processing. All event handlers are executed entirely within
  * the context of the Netty Channel thread.
  */
-class NettyClientHandler extends Http2ConnectionHandler {
+class NettyClientHandler extends Http2ConnectionHandler implements
+    Http2RemoteFlowController.Listener {
   private static final Logger logger = Logger.getLogger(NettyClientHandler.class.getName());
 
   private final Http2Connection.PropertyKey streamKey;
@@ -108,6 +110,7 @@ class NettyClientHandler extends Http2ConnectionHandler {
 
     streamKey = connection.newKey();
 
+    connection.remote().flowController().listener(this);
     nextStreamId = connection.local().nextStreamId();
     connection.addListener(new Http2ConnectionAdapter() {
       @Override
@@ -145,6 +148,14 @@ class NettyClientHandler extends Http2ConnectionHandler {
     sendInitialSettings();
   }
 
+  @Override
+  public void streamWritten(Http2Stream stream, int writtenBytes) {
+    NettyClientStream clientStream = clientStream(stream);
+    if (clientStream != null) {
+      clientStream.onSentBytes(writtenBytes);
+    }
+  }
+
   /**
    * Handler for commands sent from the stream.
    */
@@ -178,7 +189,9 @@ class NettyClientHandler extends Http2ConnectionHandler {
    */
   void returnProcessedBytes(Http2Stream stream, int bytes) {
     try {
-      decoder().flowController().consumeBytes(ctx, stream, bytes);
+      if (decoder().flowController().consumeBytes(ctx, stream, bytes)) {
+        clientWriteQueue.scheduleFlush();
+      }
     } catch (Http2Exception e) {
       throw new RuntimeException(e);
     }

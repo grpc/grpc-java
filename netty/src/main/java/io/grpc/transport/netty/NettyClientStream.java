@@ -40,8 +40,6 @@ import io.grpc.transport.Http2ClientStream;
 import io.grpc.transport.WritableBuffer;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2Stream;
 
@@ -132,14 +130,8 @@ class NettyClientStream extends Http2ClientStream {
       onSendingBytes(numBytes);
       writeQueue.enqueue(
           new SendGrpcFrameCommand(this, bytebuf, endOfStream),
-          channel.newPromise().addListener(new ChannelFutureListener() {
-            @Override
-            public void operationComplete(ChannelFuture future) throws Exception {
-              // Remove the bytes from outbound flow control, optionally notifying
-              // the client that they can send more bytes.
-              onSentBytes(numBytes);
-            }
-          }), flush);
+          channel.voidPromise(),
+          flush);
     } else {
       // The frame is empty and will not impact outbound flow control. Just send it.
       writeQueue.enqueue(new SendGrpcFrameCommand(this, bytebuf, endOfStream), flush);
@@ -149,6 +141,5 @@ class NettyClientStream extends Http2ClientStream {
   @Override
   protected void returnProcessedBytes(int processedBytes) {
     handler.returnProcessedBytes(http2Stream, processedBytes);
-    writeQueue.scheduleFlush();
   }
 }

@@ -23,13 +23,13 @@ import java.util.concurrent.atomic.AtomicLong;
 public class StreamingResponseBandwidthBenchmark extends AbstractBenchmark {
 
   @Param({"1", "10"})
-  public int maxConcurrentStreams = 1;
+  public int maxConcurrentStreams = 10;
 
   @Param({"LARGE", "JUMBO"})
   public PayloadSize responseSize = PayloadSize.JUMBO;
 
   @Param({"MEDIUM", "LARGE", "JUMBO"})
-  public FlowWindowSize clientInboundFlowWindow = FlowWindowSize.MEDIUM;
+  public FlowWindowSize clientInboundFlowWindow = FlowWindowSize.JUMBO;
 
   private static AtomicLong callCounter;
   private AtomicBoolean completed;

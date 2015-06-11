@@ -237,17 +237,21 @@ public class NettyServerStreamTest extends NettyStreamTestBase {
   @Override
   protected NettyServerStream createStream() {
     when(handler.getWriteQueue()).thenReturn(writeQueue);
+    when(writeQueue.enqueue(any(), anyBoolean())).thenReturn(future);
+    final NettyServerStream stream = new NettyServerStream(channel, http2Stream, handler);
     doAnswer(new Answer() {
       @Override
       public Object answer(InvocationOnMock invocation) throws Throwable {
         if (future.isDone()) {
-          ((ChannelPromise) invocation.getArguments()[1]).setSuccess();
+          ((ChannelPromise) invocation.getArguments()[1]).trySuccess();
+          if (invocation.getArguments()[0] instanceof SendGrpcFrameCommand) {
+            stream.onSentBytes(
+                ((SendGrpcFrameCommand) invocation.getArguments()[0]).content().readableBytes());
+          }
         }
         return null;
       }
     }).when(writeQueue).enqueue(any(), any(ChannelPromise.class), anyBoolean());
-    when(writeQueue.enqueue(any(), anyBoolean())).thenReturn(future);
-    NettyServerStream stream = new NettyServerStream(channel, http2Stream, handler);
     stream.setListener(serverListener);
     assertTrue(stream.canReceive());
     assertTrue(stream.canSend());

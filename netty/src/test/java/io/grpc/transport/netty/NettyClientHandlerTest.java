@@ -69,6 +69,7 @@ import io.grpc.transport.ClientTransport;
 import io.grpc.transport.ClientTransport.PingCallback;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
@@ -191,6 +192,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
   @Test
   public void createStreamShouldSucceed() throws Exception {
     writeQueue.enqueue(new CreateStreamCommand(grpcHeaders, stream), true);
+    handler.flush(ctx);
     verify(channel, times(1)).flush();
     when(promise.isSuccess()).thenReturn(true);
     verify(stream).id(eq(3));
@@ -267,10 +269,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
     writeQueue.enqueue(new SendGrpcFrameCommand(stream, content, true), true);
     verify(channel, times(2)).flush();
     verify(promise, never()).setFailure(any(Throwable.class));
-    ByteBuf bufWritten = captureWrite(ctx);
-    int startIndex = bufWritten.readerIndex() + Http2CodecUtil.FRAME_HEADER_LENGTH;
-    int length = bufWritten.writerIndex() - startIndex;
-    ByteBuf writtenContent = bufWritten.slice(startIndex, length);
+    handler.flush(ctx);
+    ByteBuf writtenContent = ((CompositeByteBuf) captureWrite(ctx)).component(3);
     assertEquals(content, writtenContent);
   }
 
@@ -321,6 +321,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
   @Test
   public void receivedGoAwayShouldFailUnknownStreams() throws Exception {
     writeQueue.enqueue(new CreateStreamCommand(grpcHeaders, stream), true);
+    handler.flush(ctx);
 
     // Read a GOAWAY that indicates our stream was never processed by the server.
     handler.channelRead(ctx,

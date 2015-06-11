@@ -56,6 +56,7 @@ import io.netty.handler.codec.http2.Http2FrameAdapter;
 import io.netty.handler.codec.http2.Http2FrameReader;
 import io.netty.handler.codec.http2.Http2FrameWriter;
 import io.netty.handler.codec.http2.Http2Headers;
+import io.netty.handler.codec.http2.Http2RemoteFlowController;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.handler.codec.http2.Http2StreamVisitor;
@@ -71,7 +72,8 @@ import javax.annotation.Nullable;
  * Server-side Netty handler for GRPC processing. All event handlers are executed entirely within
  * the context of the Netty Channel thread.
  */
-class NettyServerHandler extends Http2ConnectionHandler {
+class NettyServerHandler extends Http2ConnectionHandler implements
+    Http2RemoteFlowController.Listener {
 
   private static Logger logger = Logger.getLogger(NettyServerHandler.class.getName());
 
@@ -105,6 +107,7 @@ class NettyServerHandler extends Http2ConnectionHandler {
     // to the super class constructor.
     initialSettings.initialWindowSize(flowControlWindow);
     initialSettings.maxConcurrentStreams(maxStreams);
+    connection.remote().flowController().listener(this);
   }
 
   @Nullable
@@ -129,6 +132,14 @@ class NettyServerHandler extends Http2ConnectionHandler {
     // Sends connection preface if we haven't already.
     super.channelActive(ctx);
     sendInitialSettings();
+  }
+
+  @Override
+  public void streamWritten(Http2Stream stream, int writtenBytes) {
+    NettyServerStream serverStream = serverStream(stream);
+    if (serverStream != null) {
+      serverStream.onSentBytes(writtenBytes);
+    }
   }
 
   private void onHeadersRead(ChannelHandlerContext ctx, int streamId, Http2Headers headers)
@@ -248,7 +259,9 @@ class NettyServerHandler extends Http2ConnectionHandler {
    */
   void returnProcessedBytes(Http2Stream http2Stream, int bytes) {
     try {
-      decoder().flowController().consumeBytes(ctx, http2Stream, bytes);
+      if (decoder().flowController().consumeBytes(ctx, http2Stream, bytes)) {
+        serverWriteQueue.scheduleFlush();
+      }
     } catch (Http2Exception e) {
       throw new RuntimeException(e);
     }
