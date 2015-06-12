@@ -198,7 +198,10 @@ public final class ServerImpl extends Server {
 
   /** Notify of complete shutdown if necessary. */
   private synchronized void checkForTermination() {
-    if (!terminated && shutdown && transports.isEmpty() && transportServerTerminated) {
+    if (shutdown && transports.isEmpty() && transportServerTerminated) {
+      if (terminated) {
+        throw new AssertionError("Server already terminated");
+      }
       terminated = true;
       notifyAll();
       if (terminationRunnable != null) {
@@ -221,11 +224,11 @@ public final class ServerImpl extends Server {
       synchronized (ServerImpl.this) {
         // transports collection can be modified during shutdown(), even if we hold the lock, due
         // to reentrancy.
-        transportServerTerminated = true;
         for (ServerTransport transport
             : transports.toArray(new ServerTransport[transports.size()])) {
           transport.shutdown();
         }
+        transportServerTerminated = true;
         checkForTermination();
       }
     }
