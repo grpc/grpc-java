@@ -73,6 +73,7 @@ public final class ServerImpl extends Server {
   private Runnable terminationRunnable;
   /** Service encapsulating something similar to an accept() socket. */
   private final io.grpc.transport.Server transportServer;
+  private boolean transportServerTerminated;
   /** {@code transportServer} and services encapsulating something similar to a TCP connection. */
   private final Collection<ServerTransport> transports = new HashSet<ServerTransport>();
 
@@ -197,7 +198,7 @@ public final class ServerImpl extends Server {
 
   /** Notify of complete shutdown if necessary. */
   private synchronized void checkForTermination() {
-    if (shutdown && transports.isEmpty()) {
+    if (!terminated && shutdown && transports.isEmpty() && transportServerTerminated) {
       terminated = true;
       notifyAll();
       if (terminationRunnable != null) {
@@ -220,6 +221,7 @@ public final class ServerImpl extends Server {
       synchronized (ServerImpl.this) {
         // transports collection can be modified during shutdown(), even if we hold the lock, due
         // to reentrancy.
+        transportServerTerminated = true;
         for (ServerTransport transport
             : transports.toArray(new ServerTransport[transports.size()])) {
           transport.shutdown();
