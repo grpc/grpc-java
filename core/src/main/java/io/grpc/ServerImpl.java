@@ -197,7 +197,7 @@ public final class ServerImpl extends Server {
 
   /** Notify of complete shutdown if necessary. */
   private synchronized void checkForTermination() {
-    if (!terminated && shutdown && transports.isEmpty()) {
+    if (shutdown && transports.isEmpty()) {
       terminated = true;
       notifyAll();
       if (terminationRunnable != null) {
