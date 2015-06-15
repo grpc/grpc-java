@@ -173,6 +173,7 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
     this.status = status;
     this.trailers = trailers;
     deframe(ReadableBuffers.empty(), true);
+    inboundPhase(Phase.STATUS);
   }
 
   @Override

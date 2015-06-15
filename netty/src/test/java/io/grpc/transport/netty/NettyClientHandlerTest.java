@@ -132,6 +132,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
     handler = newHandler(DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_SIZE);
     content = Unpooled.copiedBuffer("hello world", UTF_8);
 
+    when(stream.canReceive()).thenReturn(true);
     when(channel.isActive()).thenReturn(true);
     mockContext();
     mockFuture(true);
@@ -182,9 +183,9 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
     // Cancel the stream.
     writeQueue.enqueue(new CancelStreamCommand(stream), true);
 
-    assertTrue(createPromise.isSuccess());
+    assertFalse(createPromise.isSuccess());
     verify(stream).transportReportStatus(eq(Status.CANCELLED), eq(true),
-        any(Metadata.Trailers.class));
+            any(Metadata.Trailers.class));
   }
 
   @Test
@@ -308,13 +309,12 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
   public void receivedGoAwayShouldCancelBufferedStream() throws Exception {
     // Force the stream to be buffered.
     receiveMaxConcurrentStreams(0);
-    ChannelPromise promise = new DefaultChannelPromise(channel, ImmediateEventExecutor.INSTANCE);
+    when(ctx.newPromise()).thenReturn(newPromise());
+    ChannelPromise promise = newPromise();
     writeQueue.enqueue(new CreateStreamCommand(grpcHeaders, stream), promise, true);
     handler.channelRead(ctx, goAwayFrame(0));
     assertTrue(promise.isDone());
     assertFalse(promise.isSuccess());
-    verify(stream).transportReportStatus(any(Status.class), eq(false),
-        notNull(Metadata.Trailers.class));
   }
 
   @Test
@@ -326,28 +326,28 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
         goAwayFrame(0, 8 /* Cancel */, Unpooled.copiedBuffer("this is a test", UTF_8)));
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     verify(stream).transportReportStatus(captor.capture(), eq(false),
-        notNull(Metadata.Trailers.class));
+            notNull(Metadata.Trailers.class));
     assertEquals(Status.CANCELLED.getCode(), captor.getValue().getCode());
     assertEquals("HTTP/2 error code: CANCEL\nthis is a test",
-        captor.getValue().getDescription());
+            captor.getValue().getDescription());
   }
 
   @Test
   public void receivedGoAwayShouldFailUnknownBufferedStreams() throws Exception {
     receiveMaxConcurrentStreams(0);
 
-    ChannelPromise promise1 = new DefaultChannelPromise(channel, ImmediateEventExecutor.INSTANCE);
-    writeQueue.enqueue(new CreateStreamCommand(grpcHeaders, stream), promise1, true);
+    when(ctx.newPromise()).thenReturn(newPromise());
+    ChannelPromise promise = newPromise();
+    writeQueue.enqueue(new CreateStreamCommand(grpcHeaders, stream), promise, true);
 
     // Read a GOAWAY that indicates our stream was never processed by the server.
     handler.channelRead(ctx,
-        goAwayFrame(0, 8 /* Cancel */, Unpooled.copiedBuffer("this is a test", UTF_8)));
-    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(stream).transportReportStatus(captor.capture(), eq(false),
-        notNull(Metadata.Trailers.class));
-    assertEquals(Status.CANCELLED.getCode(), captor.getValue().getCode());
-    assertEquals("HTTP/2 error code: CANCEL\nthis is a test",
-        captor.getValue().getDescription());
+            goAwayFrame(0, 8 /* Cancel */, Unpooled.copiedBuffer("this is a test", UTF_8)));
+    assertTrue(promise.isDone());
+    assertFalse(promise.isSuccess());
+    Status failureStatus = Status.fromThrowable(promise.cause());
+    assertEquals(Status.CANCELLED.getCode(), failureStatus.getCode());
+    assertEquals("HTTP/2 error code: CANCEL\nthis is a test", failureStatus.getDescription());
   }
 
   @Test
@@ -358,7 +358,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
     when(stream.id()).thenReturn(3);
     writeQueue.enqueue(new CancelStreamCommand(stream), true);
     verify(stream).transportReportStatus(eq(Status.CANCELLED), eq(true),
-        any(Metadata.Trailers.class));
+            any(Metadata.Trailers.class));
   }
 
   @Test
@@ -379,7 +379,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     InOrder inOrder = inOrder(stream);
     inOrder.verify(stream, calls(1)).transportReportStatus(captor.capture(), eq(false),
-        notNull(Metadata.Trailers.class));
+            notNull(Metadata.Trailers.class));
     assertEquals(Status.UNAVAILABLE.getCode(), captor.getValue().getCode());
   }
 
@@ -482,7 +482,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
     assertEquals(1, callback.invocationCount);
     assertTrue(callback.failureCause instanceof StatusException);
     assertEquals(Status.Code.UNAVAILABLE,
-        ((StatusException) callback.failureCause).getStatus().getCode());
+            ((StatusException) callback.failureCause).getStatus().getCode());
   }
 
   @Test
@@ -552,18 +552,6 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase {
 
   private AsciiString as(String string) {
     return new AsciiString(string);
-  }
-
-  private void mockContextForPing() {
-    mockContext();
-    /*when(ctx.write(any(SendPingCommand.class))).then(new Answer<ChannelFuture>() {
-      @Override
-      public ChannelFuture answer(InvocationOnMock invocation) throws Throwable {
-        SendPingCommand command = (SendPingCommand) invocation.getArguments()[0];
-        handler.write(ctx, command, promise);
-        return future;
-      }
-    });*/
   }
 
   private static class PingCallbackImpl implements ClientTransport.PingCallback {
