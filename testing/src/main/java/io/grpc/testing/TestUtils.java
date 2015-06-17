@@ -55,6 +55,7 @@ import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
@@ -108,6 +109,24 @@ public class TestUtils {
     };
   }
 
+  /**
+   * Capture the request headers from a client. Useful for testing metadata propagation without
+   * requiring that it be symmetric on client and server, as with
+   * {@link #echoRequestHeadersInterceptor}.
+   */
+  public static ServerInterceptor recordRequestHeadersInterceptor(
+      final AtomicReference<Metadata.Headers> headersCapture) {
+    return new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(String method,
+           ServerCall<RespT> call,
+           Metadata.Headers requestHeaders,
+           ServerCallHandler<ReqT, RespT> next) {
+        headersCapture.set(requestHeaders);
+        return next.startCall(method, call, requestHeaders);
+      }
+    };
+  }
 
   /**
    * Picks an unused port.
