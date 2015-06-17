@@ -34,14 +34,14 @@ package io.grpc.transport.netty;
 /**
  * Utility class that verifies that Jetty ALPN is properly configured for the system.
  */
-public final class JettyAlpnVerifier {
+final class JettyAlpnVerifier {
   private JettyAlpnVerifier() {
   }
 
   /**
    * Exception thrown when Jetty ALPN was not found in the boot classloader.
    */
-  public static final class NotFoundException extends Exception {
+  static final class NotFoundException extends Exception {
     public NotFoundException(Throwable cause) {
       super("Jetty ALPN not found in boot classloader.", cause);
     }
@@ -51,7 +51,7 @@ public final class JettyAlpnVerifier {
    * Verifies that Jetty ALPN is configured properly on this system.
    * @throws NotFoundException thrown if Jetty ALPN is missing from the boot classloader.
    */
-  public static void verifyJettyAlpn() throws NotFoundException {
+  static void verifyJettyAlpn() throws NotFoundException {
     try {
       // Check the boot classloader for the ALPN class.
       Class.forName("org.eclipse.jetty.alpn.ALPN", true, null);
