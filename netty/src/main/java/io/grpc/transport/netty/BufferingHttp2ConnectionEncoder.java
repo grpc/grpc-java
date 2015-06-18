@@ -75,7 +75,7 @@ class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
    */
   public static final class ChannelClosedException extends Http2Exception {
     public ChannelClosedException() {
-      super(Http2Error.STREAM_CLOSED, "Connection closed");
+      super(Http2Error.REFUSED_STREAM, "Connection closed");
     }
   }
 
@@ -246,12 +246,13 @@ class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
       closed = true;
 
       // Fail all buffered streams.
-      ChannelClosedException e = new ChannelClosedException();
-      PendingStream[] streams = pendingStreams.values().toArray(
-              new PendingStream[pendingStreams.size()]);
-      pendingStreams.clear();
-      for (PendingStream stream : streams) {
-        stream.close(e);
+      try {
+        ChannelClosedException e = new ChannelClosedException();
+        for (PendingStream pendingStream : pendingStreams.values()) {
+          pendingStream.close(e);
+        }
+      } finally {
+        pendingStreams.clear();
       }
     }
   }
