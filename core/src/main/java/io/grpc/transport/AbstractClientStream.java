@@ -170,6 +170,7 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
     }
     // Stash the status & trailers so they can be delivered by the deframer calls
     // remoteEndClosed
+    inboundPhase(Phase.STATUS);
     this.status = status;
     this.trailers = trailers;
     deframe(ReadableBuffers.empty(), true);
