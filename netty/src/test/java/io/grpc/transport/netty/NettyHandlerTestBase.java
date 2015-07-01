@@ -47,12 +47,14 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
+import io.netty.channel.DefaultChannelPromise;
 import io.netty.channel.EventLoop;
 import io.netty.handler.codec.http2.Http2FrameListener;
 import io.netty.handler.codec.http2.Http2FrameReader;
 import io.netty.handler.codec.http2.Http2FrameWriter;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2Settings;
+import io.netty.util.concurrent.ImmediateEventExecutor;
 
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -129,7 +131,7 @@ public abstract class NettyHandlerTestBase {
   }
 
   protected final ChannelPromise newPromise() {
-    return Mockito.mock(ChannelPromise.class);
+    return new DefaultChannelPromise(channel, ImmediateEventExecutor.INSTANCE);
   }
 
   protected final ByteBuf captureWrite(ChannelHandlerContext ctx) {

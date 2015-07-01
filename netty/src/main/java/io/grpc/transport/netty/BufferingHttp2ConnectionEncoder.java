@@ -43,6 +43,8 @@ import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2ConnectionAdapter;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
+import io.netty.handler.codec.http2.Http2Error;
+import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.ReferenceCountUtil;
@@ -67,6 +69,44 @@ import java.util.TreeMap;
  * in replacement for {@link io.netty.handler.codec.http2.DefaultHttp2ConnectionEncoder}.
  */
 class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
+
+  /**
+   * Thrown if buffered streams are terminated due to this encoder being closed.
+   */
+  public static final class ChannelClosedException extends Http2Exception {
+    public ChannelClosedException() {
+      super(Http2Error.REFUSED_STREAM, "Connection closed");
+    }
+  }
+
+  /**
+   * Thrown if buffered streams are terminated due to receipt of a {@code GOAWAY}.
+   */
+  public static final class GoAwayException extends Http2Exception {
+    private final int lastStreamId;
+    private final long errorCode;
+    private final ByteBuf debugData;
+
+    public GoAwayException(int lastStreamId, long errorCode, ByteBuf debugData) {
+      super(Http2Error.STREAM_CLOSED);
+      this.lastStreamId = lastStreamId;
+      this.errorCode = errorCode;
+      this.debugData = debugData;
+    }
+
+    public int lastStreamId() {
+      return lastStreamId;
+    }
+
+    public long errorCode() {
+      return errorCode;
+    }
+
+    public ByteBuf debugData() {
+      return debugData;
+    }
+  }
+
   /**
    * The assumed minimum value for {@code SETTINGS_MAX_CONCURRENT_STREAMS} as
    * recommended by the HTTP/2 spec.
@@ -83,6 +123,7 @@ class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
   // Smallest stream id whose corresponding frames do not get buffered.
   private int largestCreatedStreamId;
   private boolean receivedSettings;
+  private boolean closed;
 
   protected BufferingHttp2ConnectionEncoder(Http2ConnectionEncoder delegate) {
     this(delegate, SMALLEST_MAX_CONCURRENT_STREAMS);
@@ -124,6 +165,11 @@ class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
   public ChannelFuture writeHeaders(ChannelHandlerContext ctx, int streamId, Http2Headers headers,
                                     int streamDependency, short weight, boolean exclusive,
                                     int padding, boolean endOfStream, ChannelPromise promise) {
+    if (closed) {
+      promise.setFailure(new ChannelClosedException());
+      return promise;
+    }
+
     if (existingStream(streamId) || connection().goAwayReceived()) {
       return super.writeHeaders(ctx, streamId, headers, streamDependency, weight,
               exclusive, padding, endOfStream, promise);
@@ -195,7 +241,20 @@ class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
   @Override
   public void close() {
     super.close();
-    cancelPendingStreams();
+
+    if (!closed) {
+      closed = true;
+
+      // Fail all buffered streams.
+      try {
+        ChannelClosedException e = new ChannelClosedException();
+        for (PendingStream pendingStream : pendingStreams.values()) {
+          pendingStream.close(e);
+        }
+      } finally {
+        pendingStreams.clear();
+      }
+    }
   }
 
   private void tryCreatePendingStreams() {
@@ -207,17 +266,9 @@ class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
     }
   }
 
-  private void cancelPendingStreams() {
-    Exception e = new Exception("Connection closed.");
-    while (!pendingStreams.isEmpty()) {
-      PendingStream stream = pendingStreams.pollFirstEntry().getValue();
-      stream.close(e);
-    }
-  }
-
   private void cancelGoAwayStreams(int lastStreamId, long errorCode, ByteBuf debugData) {
     Iterator<PendingStream> iter = pendingStreams.values().iterator();
-    Exception e = new GoAwayClosedStreamException(lastStreamId, errorCode, debugData);
+    Exception e = new GoAwayException(lastStreamId, errorCode, debugData);
     while (iter.hasNext()) {
       PendingStream stream = iter.next();
       if (stream.streamId > lastStreamId) {

@@ -240,7 +240,7 @@ public class BufferingHttp2ConnectionEncoderTest {
 
     assertEquals(1, connection.numActiveStreams());
     assertEquals(2, encoder.numBufferedStreams());
-    verify(promise, never()).setFailure(any(GoAwayClosedStreamException.class));
+    verify(promise, never()).setFailure(any(BufferingHttp2ConnectionEncoder.GoAwayException.class));
   }
 
   @Test
