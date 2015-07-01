@@ -43,7 +43,10 @@ import io.grpc.Status;
 import io.grpc.transport.ClientTransport.PingCallback;
 import io.grpc.transport.Http2Ping;
 import io.grpc.transport.HttpUtil;
+import io.grpc.transport.netty.BufferingHttp2ConnectionEncoder.GoAwayException;
+
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -61,6 +64,7 @@ import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.handler.codec.http2.Http2StreamVisitor;
+import io.netty.util.ByteString;
 
 import java.util.Random;
 import java.util.concurrent.Executor;
@@ -112,7 +116,8 @@ class NettyClientHandler extends Http2ConnectionHandler {
     connection.addListener(new Http2ConnectionAdapter() {
       @Override
       public void onGoAwayReceived(int lastStreamId, long errorCode, ByteBuf debugData) {
-        goAwayStatus(statusFromGoAway(errorCode, debugData));
+        goAwayStatus(statusFromGoAway(errorCode,
+                new ByteString(ByteBufUtil.getBytes(debugData), false)));
         goingAway();
       }
     });
@@ -227,6 +232,8 @@ class NettyClientHandler extends Http2ConnectionHandler {
       logger.fine("Network channel is closed");
       goAwayStatus(goAwayStatus().augmentDescription("Network channel closed"));
       cancelPing();
+      // Close the encoder now to cancel any buffered streams.
+      encoder().close();
       // Report status to the application layer for any open streams
       connection().forEachActiveStream(new Http2StreamVisitor() {
         @Override
@@ -299,8 +306,8 @@ class NettyClientHandler extends Http2ConnectionHandler {
                   // Attach the client stream to the HTTP/2 stream object as user data.
                   stream.setHttp2Stream(http2Stream);
                 } else {
-                  if (future.cause() instanceof GoAwayClosedStreamException) {
-                    GoAwayClosedStreamException e = (GoAwayClosedStreamException) future.cause();
+                  if (future.cause() instanceof GoAwayException) {
+                    GoAwayException e = (GoAwayException) future.cause();
                     goAwayStatus(statusFromGoAway(e.errorCode(), e.debugData()));
                     stream.transportReportStatus(goAwayStatus, false, new Metadata.Trailers());
                   } else {
@@ -431,9 +438,9 @@ class NettyClientHandler extends Http2ConnectionHandler {
     }
   }
 
-  private Status statusFromGoAway(long errorCode, ByteBuf debugData) {
+  private Status statusFromGoAway(long errorCode, ByteString debugData) {
     Status status = HttpUtil.Http2Error.statusForCode((int) errorCode);
-    if (debugData.isReadable()) {
+    if (!debugData.isEmpty()) {
       // If a debug message was provided, use it.
       String msg = debugData.toString(UTF_8);
       status = status.augmentDescription(msg);

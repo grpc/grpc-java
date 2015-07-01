@@ -46,6 +46,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.grpc.transport.netty.BufferingHttp2ConnectionEncoder.ChannelClosedException;
+import io.grpc.transport.netty.BufferingHttp2ConnectionEncoder.GoAwayException;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -215,7 +218,7 @@ public class BufferingHttp2ConnectionEncoderTest {
     }
     assertEquals(4, encoder.numBufferedStreams());
 
-    connection.goAwayReceived(11, 8, null);
+    connection.goAwayReceived(11, 8, Unpooled.EMPTY_BUFFER);
 
     assertEquals(5, connection.numActiveStreams());
     // The 4 buffered streams must have been failed.
@@ -240,7 +243,7 @@ public class BufferingHttp2ConnectionEncoderTest {
 
     assertEquals(1, connection.numActiveStreams());
     assertEquals(2, encoder.numBufferedStreams());
-    verify(promise, never()).setFailure(any(GoAwayClosedStreamException.class));
+    verify(promise, never()).setFailure(any(GoAwayException.class));
   }
 
   @Test
@@ -379,6 +382,19 @@ public class BufferingHttp2ConnectionEncoderTest {
     verify(rstPromise).setSuccess();
     verify(promise, times(2)).setSuccess();
     verify(data).release();
+  }
+
+  @Test
+  public void closeShouldCancelAllBufferedStreams() {
+    encoder.writeSettingsAck(ctx, promise);
+    connection.local().maxActiveStreams(0);
+
+    encoderWriteHeaders(3, promise);
+    encoderWriteHeaders(5, promise);
+    encoderWriteHeaders(7, promise);
+
+    encoder.close();
+    verify(promise, times(3)).setFailure(any(ChannelClosedException.class));
   }
 
   private void encoderWriteHeaders(int streamId, ChannelPromise promise) {
