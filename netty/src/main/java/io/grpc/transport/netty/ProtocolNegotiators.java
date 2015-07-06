@@ -32,6 +32,7 @@
 package io.grpc.transport.netty;
 
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 
 import io.grpc.Status;
@@ -58,9 +59,11 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 
 import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.net.InetSocketAddress;
+import java.nio.channels.ClosedChannelException;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Collections;
@@ -99,13 +102,34 @@ public final class ProtocolNegotiators {
    */
   public static ChannelHandler serverTls(SSLEngine sslEngine) {
     Preconditions.checkNotNull(sslEngine, "sslEngine");
+    final SettableFuture negotiationFuture = SettableFuture.<Void>create();
     if (!isOpenSsl(sslEngine.getClass())) {
       // Using JDK SSL
-      if (!installJettyTlsProtocolSelection(sslEngine, SettableFuture.<Void>create(), true)) {
+      if (!installJettyTlsProtocolSelection(sslEngine, negotiationFuture, true)) {
         throw new IllegalStateException("NPN/ALPN extensions not installed");
       }
     }
-    return new SslHandler(sslEngine, false);
+
+    // Create the Netty SSL handler for the engine.
+    return new SslHandler(sslEngine, false) {
+      @Override
+      public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        super.channelInactive(ctx);
+        failTlsNegoFuture();
+      }
+
+      /**
+       * This method helps protect against leaking the SSLEngine (i.e. not removing it
+       * from the Jetty ALPN/NPN). This can happen if a client connects using TLS but not
+       * ALPN. When the handler goes inactive, we force the {@code negotiationFuture} to
+       * complete, which removes the SSLEngine appropriately.
+       */
+      private void failTlsNegoFuture() {
+        if (!negotiationFuture.isDone()) {
+          negotiationFuture.setException(new ClosedChannelException());
+        }
+      }
+    };
   }
 
   /**
@@ -454,7 +478,22 @@ public final class ProtocolNegotiators {
         Class<?> serverProviderClass
             = Class.forName(protocolNegoClassName + "$ServerProvider", true, null);
         Method putMethod = negoClass.getMethod("put", SSLEngine.class, providerClass);
+
+        // When the negotiation completes, remove the extension.
         final Method removeMethod = negoClass.getMethod("remove", SSLEngine.class);
+        protocolNegotiated.addListener(new Runnable() {
+          @Override
+          public void run() {
+            try {
+              removeMethod.invoke(null, engine);
+            } catch (IllegalAccessException e) {
+              throw new RuntimeException(e);
+            } catch (InvocationTargetException e) {
+              throw new RuntimeException(e);
+            }
+          }
+        }, MoreExecutors.directExecutor());
+
         putMethod.invoke(null, engine, Proxy.newProxyInstance(
             null,
             new Class[] {server ? serverProviderClass : clientProviderClass},
@@ -468,7 +507,6 @@ public final class ProtocolNegotiators {
                 }
                 if ("unsupported".equals(methodName)) {
                   // all
-                  removeMethod.invoke(null, engine);
                   protocolNegotiated.setException(new RuntimeException(
                       "Endpoint does not support any of " + SUPPORTED_PROTOCOLS
                           + " in ALPN/NPN negotiation"));
@@ -480,7 +518,6 @@ public final class ProtocolNegotiators {
                 }
                 if ("selected".equals(methodName) || "protocolSelected".equals(methodName)) {
                   // ALPN client, NPN server
-                  removeMethod.invoke(null, engine);
                   String protocol = (String) args[0];
                   if (!SUPPORTED_PROTOCOLS.contains(protocol)) {
                     RuntimeException e = new RuntimeException(
@@ -499,7 +536,6 @@ public final class ProtocolNegotiators {
                 }
                 if ("select".equals(methodName) || "selectProtocol".equals(methodName)) {
                   // ALPN server, NPN client
-                  removeMethod.invoke(null, engine);
                   @SuppressWarnings("unchecked")
                   List<String> names = (List<String>) args[0];
                   for (String name : names) {
