@@ -59,7 +59,6 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 
 import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.net.InetSocketAddress;
@@ -102,7 +101,7 @@ public final class ProtocolNegotiators {
    */
   public static ChannelHandler serverTls(SSLEngine sslEngine) {
     Preconditions.checkNotNull(sslEngine, "sslEngine");
-    final SettableFuture negotiationFuture = SettableFuture.<Void>create();
+    final SettableFuture<Void> negotiationFuture = SettableFuture.create();
     if (!isOpenSsl(sslEngine.getClass())) {
       // Using JDK SSL
       if (!installJettyTlsProtocolSelection(sslEngine, negotiationFuture, true)) {
