@@ -33,7 +33,6 @@ package io.grpc.transport.netty;
 
 import static com.google.common.base.Charsets.UTF_8;
 import static io.grpc.transport.HttpUtil.USER_AGENT_KEY;
-import static io.grpc.transport.netty.Utils.GRPC_USER_AGENT;
 import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
@@ -51,6 +50,7 @@ import io.grpc.testing.TestUtils;
 import io.grpc.transport.ClientStream;
 import io.grpc.transport.ClientStreamListener;
 import io.grpc.transport.ClientTransport;
+import io.grpc.transport.HttpUtil;
 import io.grpc.transport.ServerListener;
 import io.grpc.transport.ServerStream;
 import io.grpc.transport.ServerStreamListener;
@@ -132,7 +132,7 @@ public class NettyClientTransportTest {
     assertEquals(1, serverListener.streamListeners.size());
 
     Metadata.Headers headers = serverListener.streamListeners.get(0).headers;
-    assertEquals(GRPC_USER_AGENT, headers.get(USER_AGENT_KEY));
+    assertEquals(HttpUtil.getGrpcUserAgent("netty", null), headers.get(USER_AGENT_KEY));
   }
 
   @Test
@@ -150,7 +150,8 @@ public class NettyClientTransportTest {
     // Verify that the received headers contained the User-Agent.
     assertEquals(1, serverListener.streamListeners.size());
     Metadata.Headers receivedHeaders = serverListener.streamListeners.get(0).headers;
-    assertEquals(userAgent + " " + GRPC_USER_AGENT, receivedHeaders.get(USER_AGENT_KEY));
+    assertEquals(HttpUtil.getGrpcUserAgent("netty", userAgent),
+            receivedHeaders.get(USER_AGENT_KEY));
   }
 
   /**

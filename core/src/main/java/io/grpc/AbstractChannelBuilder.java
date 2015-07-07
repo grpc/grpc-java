@@ -92,8 +92,8 @@ public abstract class AbstractChannelBuilder<BuilderT extends AbstractChannelBui
   /**
    * Provides a custom {@code User-Agent} for the application.
    *
-   * <p>It's an optional parameter. If not provided, a default grpc-specific user agent will be
-   * used. If provided, the grpc {@code User-Agent} will be appended to the end.
+   * <p>It's an optional parameter. If provided, the given agent will be prepended by the
+   * grpc {@code User-Agent}.
    */
   @SuppressWarnings("unchecked")
   public final BuilderT userAgent(String userAgent) {

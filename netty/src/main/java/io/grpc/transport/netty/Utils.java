@@ -73,7 +73,6 @@ class Utils {
   public static final ByteString TE_HEADER = new ByteString("te".getBytes(UTF_8));
   public static final ByteString TE_TRAILERS = new ByteString(HttpUtil.TE_TRAILERS.getBytes(UTF_8));
   public static final ByteString USER_AGENT = new ByteString(USER_AGENT_KEY.name().getBytes(UTF_8));
-  public static final String GRPC_USER_AGENT = HttpUtil.getGrpcUserAgent("netty");
 
   public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP =
       new DefaultEventLoopGroupResource(1, "grpc-default-boss-ELG");
@@ -131,11 +130,7 @@ class Utils {
     }
 
     // Set the User-Agent header.
-    String userAgent = GRPC_USER_AGENT;
-    String applicationUserAgent = headers.get(USER_AGENT_KEY);
-    if (applicationUserAgent != null) {
-      userAgent = applicationUserAgent + " " + GRPC_USER_AGENT;
-    }
+    String userAgent = HttpUtil.getGrpcUserAgent("netty", headers.get(USER_AGENT_KEY));
     http2Headers.set(USER_AGENT, new ByteString(userAgent.getBytes(UTF_8)));
 
     return http2Headers;

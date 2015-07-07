@@ -33,7 +33,6 @@ package io.grpc.transport.okhttp;
 
 import static com.google.common.base.Charsets.UTF_8;
 import static io.grpc.transport.okhttp.Headers.CONTENT_TYPE_HEADER;
-import static io.grpc.transport.okhttp.Headers.GRPC_USER_AGENT;
 import static io.grpc.transport.okhttp.Headers.METHOD_HEADER;
 import static io.grpc.transport.okhttp.Headers.SCHEME_HEADER;
 import static io.grpc.transport.okhttp.Headers.TE_HEADER;
@@ -280,7 +279,8 @@ public class OkHttpClientTransportTest {
   public void headersShouldAddDefaultUserAgent() throws Exception {
     MockStreamListener listener = new MockStreamListener();
     clientTransport.newStream(method, new Metadata.Headers(), listener);
-    Header userAgentHeader = new Header(HttpUtil.USER_AGENT_KEY.name(), GRPC_USER_AGENT);
+    Header userAgentHeader = new Header(HttpUtil.USER_AGENT_KEY.name(),
+            HttpUtil.getGrpcUserAgent("okhttp", null));
     List<Header> expectedHeaders = Arrays.asList(SCHEME_HEADER, METHOD_HEADER,
             new Header(Header.TARGET_AUTHORITY, "notarealauthority:80"),
             new Header(Header.TARGET_PATH, "/fakemethod"),
@@ -299,7 +299,8 @@ public class OkHttpClientTransportTest {
     List<Header> expectedHeaders = Arrays.asList(SCHEME_HEADER, METHOD_HEADER,
             new Header(Header.TARGET_AUTHORITY, "notarealauthority:80"),
             new Header(Header.TARGET_PATH, "/fakemethod"),
-            new Header(HttpUtil.USER_AGENT_KEY.name(), userAgent + " " + GRPC_USER_AGENT),
+            new Header(HttpUtil.USER_AGENT_KEY.name(),
+                    HttpUtil.getGrpcUserAgent("okhttp", userAgent)),
             CONTENT_TYPE_HEADER, TE_HEADER);
     verify(frameWriter).synStream(eq(false), eq(false), eq(3), eq(0), eq(expectedHeaders));
     streams.get(3).cancel();

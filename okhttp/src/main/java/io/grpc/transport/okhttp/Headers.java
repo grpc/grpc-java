@@ -57,7 +57,6 @@ public class Headers {
   public static final Header CONTENT_TYPE_HEADER =
       new Header(CONTENT_TYPE_KEY.name(), HttpUtil.CONTENT_TYPE_GRPC);
   public static final Header TE_HEADER = new Header("te", HttpUtil.TE_TRAILERS);
-  public static final String GRPC_USER_AGENT = HttpUtil.getGrpcUserAgent("okhttp");
 
   /**
    * Serializes the given headers and creates a list of OkHttp {@link Header}s to be used when
@@ -80,11 +79,7 @@ public class Headers {
     String path = headers.getPath() != null ? headers.getPath() : defaultPath;
     okhttpHeaders.add(new Header(Header.TARGET_PATH, path));
 
-    String userAgent = GRPC_USER_AGENT;
-    String applicationUserAgent = headers.get(USER_AGENT_KEY);
-    if (applicationUserAgent != null) {
-      userAgent = applicationUserAgent + " " + userAgent;
-    }
+    String userAgent = HttpUtil.getGrpcUserAgent("okhttp", headers.get(USER_AGENT_KEY));
     okhttpHeaders.add(new Header(HttpUtil.USER_AGENT_KEY.name(), userAgent));
 
     // All non-pseudo headers must come after pseudo headers.
