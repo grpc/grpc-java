@@ -31,11 +31,13 @@
 
 package io.grpc.transport;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.Status.Code.CANCELLED;
 import static io.grpc.Status.Code.DEADLINE_EXCEEDED;
 
 import com.google.common.base.Objects;
-import com.google.common.base.Preconditions;
 
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -45,9 +47,12 @@ import java.util.EnumSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.annotation.concurrent.NotThreadSafe;
+
 /**
  * The abstract base class for {@link ClientStream} implementations.
  */
+@NotThreadSafe
 public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
     implements ClientStream {
 
@@ -71,16 +76,16 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
   protected AbstractClientStream(WritableBufferAllocator bufferAllocator,
                                  ClientStreamListener listener) {
     super(bufferAllocator);
-    this.listener = Preconditions.checkNotNull(listener);
+    this.listener = checkNotNull(listener);
   }
 
   @Override
-  protected final ClientStreamListener listener() {
+  protected final StreamListener listener() {
     return listener;
   }
 
   @Override
-  protected void receiveMessage(InputStream is) {
+  protected final void receiveMessage(InputStream is) {
     if (!listenerClosed) {
       listener.messageRead(is);
     }
@@ -92,7 +97,7 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
    *
    * @param errorStatus the error to report
    */
-  protected void inboundTransportError(Status errorStatus) {
+  protected final void inboundTransportError(Status errorStatus) {
     if (inboundPhase() == Phase.STATUS) {
       log.log(Level.INFO, "Received transport error on closed stream {0} {1}",
           new Object[]{id(), errorStatus});
@@ -111,7 +116,7 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
    *
    * @param headers the parsed headers
    */
-  protected void inboundHeadersReceived(Metadata.Headers headers) {
+  protected final void inboundHeadersReceived(Metadata.Headers headers) {
     if (inboundPhase() == Phase.STATUS) {
       log.log(Level.INFO, "Received headers on closed stream {0} {1}",
           new Object[]{id(), headers});
@@ -125,8 +130,8 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
    *
    * @param frame the received data frame. Its ownership is transferred to this method.
    */
-  protected void inboundDataReceived(ReadableBuffer frame) {
-    Preconditions.checkNotNull(frame, "frame");
+  protected final void inboundDataReceived(ReadableBuffer frame) {
+    checkNotNull(frame, "No frame provided");
     boolean needToCloseFrame = true;
     try {
       if (inboundPhase() == Phase.STATUS) {
@@ -150,14 +155,14 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
   }
 
   @Override
-  protected void inboundDeliveryPaused() {
+  protected final void inboundDeliveryPaused() {
     runCloseListenerTask();
   }
 
   @Override
   protected final void deframeFailed(Throwable cause) {
     log.log(Level.WARNING, "Exception processing message", cause);
-    cancel(Status.CANCELLED);
+    cancel(Status.INTERNAL);
   }
 
   /**
@@ -166,12 +171,15 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
    * @param trailers the received trailers
    * @param status the status extracted from the trailers
    */
-  protected void inboundTrailersReceived(Metadata.Trailers trailers, Status status) {
-    Preconditions.checkNotNull(trailers, "trailers");
+  protected final void inboundTrailersReceived(Metadata.Trailers trailers, Status status) {
+    checkNotNull(status, "No status provided");
+    checkNotNull(trailers, "No trailers provided");
     if (inboundPhase() == Phase.STATUS) {
-      log.log(Level.INFO, "Received trailers on closed stream {0}\n {1}\n {3}",
+      log.log(Level.INFO, "Received trailers on closed stream {0}\n {1}\n {2}",
           new Object[]{id(), status, trailers});
     }
+    checkState(this.status == null, "status has already been set");
+    checkState(this.trailers == null, "trailers have already been set");
     // Stash the status & trailers so they can be delivered by the deframer calls
     // remoteEndClosed
     this.status = status;
@@ -186,7 +194,7 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
 
   @Override
   protected final void internalSendFrame(WritableBuffer frame, boolean endOfStream, boolean flush) {
-    Preconditions.checkArgument(frame != null || endOfStream, "null frame before EOS");
+    checkArgument(frame != null || endOfStream, "null frame before EOS");
     sendFrame(frame, endOfStream, flush);
   }
 
@@ -214,7 +222,7 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
    */
   public void transportReportStatus(final Status newStatus, boolean stopDelivery,
       final Metadata.Trailers trailers) {
-    Preconditions.checkNotNull(newStatus, "newStatus");
+    checkNotNull(newStatus, "No status provided");
 
     boolean closingLater = closeListenerTask != null && !stopDelivery;
     if (listenerClosed || closingLater) {
@@ -282,8 +290,8 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
    * Cancel the stream. Called by the application layer, never called by the transport.
    */
   @Override
-  public void cancel(Status reason) {
-    Preconditions.checkArgument(EnumSet.of(CANCELLED, DEADLINE_EXCEEDED).contains(reason.getCode()),
+  public final void cancel(Status reason) {
+    checkArgument(EnumSet.of(CANCELLED, DEADLINE_EXCEEDED).contains(reason.getCode()),
         "Invalid cancellation reason");
     outboundPhase(Phase.STATUS);
     sendCancel(reason);

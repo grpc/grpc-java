@@ -31,8 +31,9 @@
 
 package io.grpc.transport;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.base.Charsets;
-import com.google.common.base.Preconditions;
 
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -80,8 +81,8 @@ public abstract class Http2ClientStream extends AbstractClientStream<Integer> {
    *
    * @param headers the received headers
    */
-  protected void transportHeadersReceived(Metadata.Headers headers) {
-    Preconditions.checkNotNull(headers);
+  protected final void transportHeadersReceived(Metadata.Headers headers) {
+    checkNotNull(headers);
     if (transportError != null) {
       // Already received a transport error so just augment it.
       transportError = transportError.augmentDescription(headers.toString());
@@ -113,30 +114,31 @@ public abstract class Http2ClientStream extends AbstractClientStream<Integer> {
    * @param frame the received data frame
    * @param endOfStream {@code true} if there will be no more data received for this stream
    */
-  protected void transportDataReceived(ReadableBuffer frame, boolean endOfStream) {
+  protected final void transportDataReceived(ReadableBuffer frame, boolean endOfStream) {
     if (transportError == null && inboundPhase() == Phase.HEADERS) {
       // Must receive headers prior to receiving any payload as we use headers to check for
       // protocol correctness.
       transportError = Status.INTERNAL.withDescription("no headers received prior to data");
     }
-    if (transportError != null) {
-      // We've already detected a transport error and now we're just accumulating more detail
-      // for it.
-      transportError = transportError.augmentDescription("DATA-----------------------------\n"
-          + ReadableBuffers.readAsString(frame, errorCharset));
-      frame.close();
-      if (transportError.getDescription().length() > 1000 || endOfStream) {
-        inboundTransportError(transportError);
-        // We have enough error detail so lets cancel.
-        sendCancel(Status.CANCELLED);
-      }
-    } else {
+
+    if (transportError == null) {
       inboundDataReceived(frame);
       if (endOfStream) {
         // This is a protocol violation as we expect to receive trailers.
         transportError = Status.INTERNAL.withDescription("Recevied EOS on DATA frame");
         inboundTransportError(transportError);
       }
+      return;
+    }
+    // We've already detected a transport error and now we're just accumulating more detail
+    // for it.
+    transportError = transportError.augmentDescription("DATA-----------------------------\n"
+        + ReadableBuffers.readAsString(frame, errorCharset));
+    frame.close();
+    if (transportError.getDescription().length() > 1000 || endOfStream) {
+      inboundTransportError(transportError);
+      // We have enough error detail so lets cancel.
+      sendCancel(Status.CANCELLED);
     }
   }
 
@@ -145,8 +147,8 @@ public abstract class Http2ClientStream extends AbstractClientStream<Integer> {
    *
    * @param trailers the received terminal trailer metadata
    */
-  protected void transportTrailersReceived(Metadata.Trailers trailers) {
-    Preconditions.checkNotNull(trailers);
+  protected final void transportTrailersReceived(Metadata.Trailers trailers) {
+    checkNotNull(trailers);
     if (transportError != null) {
       // Already received a transport error so just augment it.
       transportError = transportError.augmentDescription(trailers.toString());
