@@ -40,9 +40,14 @@ import java.io.InputStream;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.annotation.concurrent.NotThreadSafe;
+
 /**
  * Abstract base class for {@link ServerStream} implementations.
+ *
+ * @param <IdT> the type of the stream identifier
  */
+@NotThreadSafe
 public abstract class AbstractServerStream<IdT> extends AbstractStream<IdT>
     implements ServerStream {
   private static final Logger log = Logger.getLogger(AbstractServerStream.class.getName());
@@ -76,7 +81,7 @@ public abstract class AbstractServerStream<IdT> extends AbstractStream<IdT>
   }
 
   @Override
-  protected ServerStreamListener listener() {
+  protected final ServerStreamListener listener() {
     return this.listener;
   }
 
@@ -87,7 +92,7 @@ public abstract class AbstractServerStream<IdT> extends AbstractStream<IdT>
   }
 
   @Override
-  public void writeHeaders(Metadata.Headers headers) {
+  public final void writeHeaders(Metadata.Headers headers) {
     Preconditions.checkNotNull(headers, "headers");
     outboundPhase(Phase.HEADERS);
     headersSent = true;
@@ -238,7 +243,7 @@ public abstract class AbstractServerStream<IdT> extends AbstractStream<IdT>
   }
 
   @Override
-  public boolean isClosed() {
+  public final boolean isClosed() {
     return super.isClosed() || listenerClosed;
   }
 
