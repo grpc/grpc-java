@@ -52,6 +52,10 @@ public abstract class AbstractBenchmark {
 
   /**
    * Standard payload sizes.
+   * <p>
+   * Note using a payload size larger than 1MB can cause misses in Netty's pooled allocator
+   * which can severely degrade performance.
+   * </p>
    */
   public enum PayloadSize {
     // Max out at 1MB to avoid creating payloads larger than Netty's buffer pool can handle

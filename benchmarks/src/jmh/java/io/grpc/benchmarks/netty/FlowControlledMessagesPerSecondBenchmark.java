@@ -27,10 +27,10 @@ public class FlowControlledMessagesPerSecondBenchmark extends AbstractBenchmark 
   @Param({"1", "2", "10", "100"})
   public int maxConcurrentStreams = 1;
 
-  @Param
+  @Param({"DIRECT"})
   public ExecutorType clientExecutor = ExecutorType.DIRECT;
 
-  @Param({"SMALL"})
+  @Param({"SMALL", "MEDIUM", "LARGE"})
   public PayloadSize responseSize = PayloadSize.SMALL;
 
   private static AtomicLong callCounter;

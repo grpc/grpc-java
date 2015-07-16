@@ -348,7 +348,7 @@ public abstract class AbstractStream<IdT> implements Stream {
    *
    * @param numBytes the number of bytes that were sent.
    */
-  protected final void onSentBytes(int numBytes) {
+  public void onSentBytes(int numBytes) {
     boolean doNotify;
     synchronized (onReadyLock) {
       numSentBytesQueued -= numBytes;
