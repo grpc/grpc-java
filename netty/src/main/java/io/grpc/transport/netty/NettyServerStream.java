@@ -47,12 +47,12 @@ import io.netty.handler.codec.http2.Http2Stream;
 /**
  * Server stream for a Netty HTTP2 transport.
  */
-class NettyServerStream extends AbstractServerStream<Integer> {
+final class NettyServerStream extends AbstractServerStream<Integer> {
 
   private final Channel channel;
   private final NettyServerHandler handler;
   private final Http2Stream http2Stream;
-  private WriteQueue writeQueue;
+  private final WriteQueue writeQueue;
 
   NettyServerStream(Channel channel, Http2Stream http2Stream, NettyServerHandler handler) {
     super(new NettyWritableBufferAllocator(channel.alloc()));
@@ -108,7 +108,8 @@ class NettyServerStream extends AbstractServerStream<Integer> {
             // the client that they can send more bytes.
             onSentBytes(numBytes);
           }
-        }), flush);
+        }),
+        flush);
   }
 
   @Override
