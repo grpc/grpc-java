@@ -121,24 +121,24 @@ public abstract class Http2ClientStream extends AbstractClientStream<Integer> {
       transportError = Status.INTERNAL.withDescription("no headers received prior to data");
     }
 
-    if (transportError == null) {
+    if (transportError != null) {
+      // We've already detected a transport error and now we're just accumulating more detail
+      // for it.
+      transportError = transportError.augmentDescription("DATA-----------------------------\n"
+          + ReadableBuffers.readAsString(frame, errorCharset));
+      frame.close();
+      if (transportError.getDescription().length() > 1000 || endOfStream) {
+        inboundTransportError(transportError);
+        // We have enough error detail so lets cancel.
+        sendCancel(Status.CANCELLED);
+      }
+    } else {
       inboundDataReceived(frame);
       if (endOfStream) {
         // This is a protocol violation as we expect to receive trailers.
         transportError = Status.INTERNAL.withDescription("Recevied EOS on DATA frame");
         inboundTransportError(transportError);
       }
-      return;
-    }
-    // We've already detected a transport error and now we're just accumulating more detail
-    // for it.
-    transportError = transportError.augmentDescription("DATA-----------------------------\n"
-        + ReadableBuffers.readAsString(frame, errorCharset));
-    frame.close();
-    if (transportError.getDescription().length() > 1000 || endOfStream) {
-      inboundTransportError(transportError);
-      // We have enough error detail so lets cancel.
-      sendCancel(Status.CANCELLED);
     }
   }
 
