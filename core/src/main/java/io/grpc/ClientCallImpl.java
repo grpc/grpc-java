@@ -31,11 +31,15 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ChannelImpl.TIMEOUT_KEY;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 
+import io.grpc.Metadata.Trailers;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.transport.ClientStream;
 import io.grpc.transport.ClientStreamListener;
@@ -43,25 +47,44 @@ import io.grpc.transport.ClientTransport;
 import io.grpc.transport.HttpUtil;
 
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+
+import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Implementation of {@link ClientCall}.
  */
 final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
+  /**
+   * Parameters from https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md
+   */
+  private static final double INITIAL_BACKOFF_MILLIS = 1 * 1000;
+  private static final double MULTIPLIER = 1.6;
+  private static final double MAX_BACKOFF_MILLIS = 2 * 60 * 1000;
+  private static final double MIN_CONNECT_TIMEOUT_MILLIS = 20 * 1000;
+  private static final double JITTER = .2;
+
   private final MethodDescriptor<ReqT, RespT> method;
   private final SerializingExecutor callExecutor;
   private final boolean unaryRequest;
   private final CallOptions callOptions;
+  private ClientCall.Listener<?> callListener;
+  @GuardedBy("this")
   private ClientStream stream;
   private volatile ScheduledFuture<?> deadlineCancellationFuture;
-  private boolean cancelCalled;
-  private boolean halfCloseCalled;
+  private volatile ScheduledFuture<?> retryFuture;
   private ClientTransportProvider clientTransportProvider;
   private String userAgent;
-  private ScheduledExecutorService deadlineCancellationExecutor;
+  private ScheduledExecutorService scheduledExecutor;
+  private boolean initialBackoffComplete;
+  private double previousDelayMillis = INITIAL_BACKOFF_MILLIS;
+  private State state = State.INIT;
+  private final List<Runnable> queuedCalls = new ArrayList<Runnable>();
 
   ClientCallImpl(MethodDescriptor<ReqT, RespT> method, SerializingExecutor executor,
       CallOptions callOptions, ClientTransportProvider clientTransportProvider,
@@ -72,7 +95,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         || method.getType() == MethodType.SERVER_STREAMING;
     this.callOptions = callOptions;
     this.clientTransportProvider = clientTransportProvider;
-    this.deadlineCancellationExecutor = deadlineCancellationExecutor;
+    this.scheduledExecutor = deadlineCancellationExecutor;
   }
 
    /**
@@ -85,27 +108,21 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     ClientTransport get();
   }
 
+  private enum State {INIT, STARTED, HALF_CLOSED, CANCELED}
+
   ClientCallImpl<ReqT, RespT> setUserAgent(String userAgent) {
     this.userAgent = userAgent;
     return this;
   }
 
   @Override
-  public void start(Listener<RespT> observer, Metadata.Headers headers) {
-    Preconditions.checkState(stream == null, "Already started");
+  public void start(ClientCall.Listener<RespT> observer, Metadata.Headers headers) {
+    callListener = checkNotNull(observer, "No call listener provided");
+
+    checkState(state == State.INIT, "Already Started");
+    state = State.STARTED;
     Long deadlineNanoTime = callOptions.getDeadlineNanoTime();
     ClientStreamListener listener = new ClientStreamListenerImpl(observer, deadlineNanoTime);
-    ClientTransport transport;
-    try {
-      transport = clientTransportProvider.get();
-    } catch (RuntimeException ex) {
-      closeCallPrematurely(listener, Status.fromThrowable(ex));
-      return;
-    }
-    if (transport == null) {
-      closeCallPrematurely(listener, Status.UNAVAILABLE.withDescription("Channel is shutdown"));
-      return;
-    }
 
     // Fill out timeout on the headers
     headers.removeAll(TIMEOUT_KEY);
@@ -127,49 +144,122 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       headers.put(HttpUtil.USER_AGENT_KEY, userAgent);
     }
 
-    try {
-      stream = transport.newStream(method, headers, listener);
-    } catch (IllegalStateException ex) {
-      // We can race with the transport and end up trying to use a terminated transport.
-      // TODO(ejona86): Improve the API to remove the possibility of the race.
-      closeCallPrematurely(listener, Status.fromThrowable(ex));
-    }
+    boolean started = startInternal(listener, headers);
     // Start the deadline timer after stream creation because it will close the stream
-    if (deadlineNanoTime != null) {
+    if (started && deadlineNanoTime != null) {
       deadlineCancellationFuture = startDeadlineTimer(timeoutMicros);
     }
   }
 
+  private boolean startInternal(
+      final ClientStreamListener listener, final Metadata.Headers headers) {
+    ClientTransport transport;
+    try {
+      transport = clientTransportProvider.get();
+    } catch (RuntimeException ex) {
+      closeCallPrematurely(listener, Status.fromThrowable(ex));
+      return false;
+    }
+    if (transport == null) {
+      closeCallPrematurely(listener, Status.UNAVAILABLE.withDescription("Channel is shutdown"));
+      return false;
+    }
+
+    try {
+      synchronized (this) {
+        stream = transport.newStream(method, headers, listener);
+      }
+      // This will typically be empty, and no calls will be added to it once stream is not null.
+      for (Runnable queuedCall : queuedCalls) {
+        queuedCall.run();
+      }
+    } catch (IllegalStateException ex) {
+      // We can race with the transport and end up trying to use a terminated transport.
+      // TODO(ejona86): Improve the API to remove the possibility of the race.
+      retryFuture = scheduledExecutor.schedule(new Runnable() {
+        @Override
+        public void run() {
+          startInternal(listener, headers);
+        }
+      }, (long) getNextDelayMillis(), TimeUnit.MILLISECONDS);
+
+      closeCallPrematurely(listener, Status.fromThrowable(ex));
+    }
+
+    return true;
+  }
+
   @Override
-  public void request(int numMessages) {
-    Preconditions.checkState(stream != null, "Not started");
+  public void request(final int numMessages) {
+    checkState(state == State.STARTED || state == State.HALF_CLOSED,
+        "Call was either not started or canceled");
+    synchronized (this) {
+      if (stream == null) {
+        queuedCalls.add(new Runnable() {
+          @Override
+          public void run() {
+            request(numMessages);
+          }
+        });
+        return;
+      }
+    }
     stream.request(numMessages);
   }
 
   @Override
   public void cancel() {
-    cancelCalled = true;
-    // Cancel is called in exception handling cases, so it may be the case that the
-    // stream was never successfully created.
-    if (stream != null) {
-      stream.cancel(Status.CANCELLED);
+    // It is always okay to cancel a stream, so don't bother checking state transitions.
+    if (state != State.CANCELED) {
+      state = State.CANCELED;
+      synchronized (this) {
+        queuedCalls.clear();
+        // Cancel is called in exception handling cases, so it may be the case that the
+        // stream was never successfully created.
+        if (stream != null) {
+          stream.cancel(Status.CANCELLED);
+        } else {
+          // If start was never called, the listener might not be present.
+          if (callListener != null) {
+            callListener.onClose(Status.CANCELLED, new Trailers());
+          }
+        }
+      }
     }
   }
 
   @Override
   public void halfClose() {
-    Preconditions.checkState(stream != null, "Not started");
-    Preconditions.checkState(!cancelCalled, "call was cancelled");
-    Preconditions.checkState(!halfCloseCalled, "call already half-closed");
-    halfCloseCalled = true;
+    checkState(state == State.STARTED, "Call was either not started or already closing: %s", state);
+    state = State.HALF_CLOSED;
+    synchronized (this) {
+      if (stream == null) {
+        queuedCalls.add(new Runnable() {
+          @Override
+          public void run() {
+            halfClose();
+          }
+        });
+        return;
+      }
+    }
     stream.halfClose();
   }
 
   @Override
-  public void sendPayload(ReqT payload) {
-    Preconditions.checkState(stream != null, "Not started");
-    Preconditions.checkState(!cancelCalled, "call was cancelled");
-    Preconditions.checkState(!halfCloseCalled, "call was half-closed");
+  public void sendPayload(final ReqT payload) {
+    checkState(state == State.STARTED, "Call was either not started or already closing: %s", state);
+    synchronized (this) {
+      if (stream == null) {
+        queuedCalls.add(new Runnable() {
+          @Override
+          public void run() {
+            sendPayload(payload);
+          }
+        });
+        return;
+      }
+    }
     boolean failed = true;
     try {
       InputStream payloadIs = method.streamRequest(payload);
@@ -191,6 +281,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   @Override
   public boolean isReady() {
+    synchronized (this) {
+      if (stream == null) {
+        return false;
+      }
+    }
     return stream.isReady();
   }
 
@@ -204,12 +299,38 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   }
 
   private ScheduledFuture<?> startDeadlineTimer(long timeoutMicros) {
-    return deadlineCancellationExecutor.schedule(new Runnable() {
+    return scheduledExecutor.schedule(new Runnable() {
       @Override
       public void run() {
-        stream.cancel(Status.DEADLINE_EXCEEDED);
+        // races with the future returned by this method, but should be okay as long as the
+        // scheduler is single threaded.
+        retryFuture.cancel(true);
+        synchronized (ClientCallImpl.this) {
+          if (stream != null) {
+            stream.cancel(Status.DEADLINE_EXCEEDED);
+          } else {
+            callListener.onClose(Status.DEADLINE_EXCEEDED, new Metadata.Trailers());
+          }
+        }
       }
     }, timeoutMicros, TimeUnit.MICROSECONDS);
+  }
+
+  private double getNextDelayMillis() {
+    if (!initialBackoffComplete) {
+      initialBackoffComplete = true;
+      return MIN_CONNECT_TIMEOUT_MILLIS;
+    }
+    double currentDelayMillis = previousDelayMillis;
+    previousDelayMillis =  Math.min(currentDelayMillis * MULTIPLIER, MAX_BACKOFF_MILLIS);
+    return currentDelayMillis
+        + uniformRandom(-JITTER * currentDelayMillis, JITTER * currentDelayMillis);
+  }
+
+  private double uniformRandom(double low, double high) {
+    checkArgument(high >= low);
+    double mag = high - low;
+    return new Random().nextDouble() * mag + low;
   }
 
   private class ClientStreamListenerImpl implements ClientStreamListener {
@@ -305,7 +426,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
   }
 
-  private static class NoopClientStream implements ClientStream {
+  private static final class NoopClientStream implements ClientStream {
     @Override public void writeMessage(InputStream message) {}
 
     @Override public void flush() {}
