@@ -182,8 +182,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
           startInternal(listener, headers);
         }
       }, (long) getNextDelayMillis(), TimeUnit.MILLISECONDS);
-
-      closeCallPrematurely(listener, Status.fromThrowable(ex));
     }
 
     return true;
