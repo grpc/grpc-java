@@ -31,6 +31,9 @@
 
 package io.grpc.testing;
 
+
+import com.google.common.util.concurrent.Uninterruptibles;
+
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -59,6 +62,8 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.net.ssl.SSLContext;
@@ -133,6 +138,34 @@ public class TestUtils {
   }
 
   /**
+<<<<<<< 0550794e13b595a492f0c24fce9055a04ec63aac
+=======
+   * Delay each payload by the given number of milliseconds. Useful for simulating slow server
+   * responses.
+   * @param delayMillis the delay applied to each payload, in milliseconds.
+   */
+  public static ServerInterceptor delayServerResponseInterceptor(final AtomicLong delayMillis) {
+    return new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(String method,
+          ServerCall<RespT> call,
+          Metadata.Headers headers,
+          ServerCallHandler<ReqT, RespT> next) {
+        return next.startCall(method, new SimpleForwardingServerCall<RespT>(call) {
+          @Override
+          public void sendPayload(RespT payload) {
+            if (delayMillis.get() != 0) {
+              Uninterruptibles.sleepUninterruptibly(delayMillis.get(), TimeUnit.MILLISECONDS);
+            }
+            super.sendPayload(payload);
+          }
+        }, headers);
+      }
+    };
+  }
+
+  /**
+>>>>>>> Fixed deadline test
    * Picks an unused port.
    */
   public static int pickUnusedPort() {

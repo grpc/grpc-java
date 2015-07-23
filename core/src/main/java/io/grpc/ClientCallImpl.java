@@ -304,7 +304,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       public void run() {
         // races with the future returned by this method, but should be okay as long as the
         // scheduler is single threaded.
-        retryFuture.cancel(true);
+        if (retryFuture != null) {
+          retryFuture.cancel(true);
+        }
         synchronized (ClientCallImpl.this) {
           if (stream != null) {
             stream.cancel(Status.DEADLINE_EXCEEDED);
