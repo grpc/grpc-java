@@ -53,6 +53,8 @@ import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -60,6 +62,7 @@ import javax.annotation.concurrent.GuardedBy;
  * Implementation of {@link ClientCall}.
  */
 final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
+  private static final Logger log = Logger.getLogger(ClientCallImpl.class.getName());
   /**
    * Parameters from https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md
    */
@@ -169,21 +172,27 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     synchronized (lock) {
       try {
         stream = transport.newStream(method, headers, listener);
-        // This will typically be empty, and no calls will be added to it once stream is not null.
-        for (Runnable queuedCall : queuedOperations) {
-          queuedCall.run();
-        }
-      } catch (IllegalStateException ex) {
+      } catch (IllegalStateException e) {
         // We can race with the transport and end up trying to use a terminated transport.
         // TODO(ejona86): Improve the API to remove the possibility of the race.
+        log.log(Level.INFO, "Attempted to use a closed transport, retrying.", e);
         retryFuture = scheduledExecutor.schedule(new Runnable() {
           @Override
           public void run() {
-            startInternal(listener, headers);
+            try {
+              startInternal(listener, headers);
+            } catch (Exception e) {
+              log.log(Level.WARNING, "Uncaught exception attempting to start transport", e);
+            }
           }
         }, (long) getNextDelayMillis(), TimeUnit.MILLISECONDS);
+        return true;
       }
-  }
+      // This will typically be empty, and no calls will be added to it once stream is not null.
+      for (Runnable queuedCall : queuedOperations) {
+        queuedCall.run();
+      }
+    }
 
     return true;
   }
