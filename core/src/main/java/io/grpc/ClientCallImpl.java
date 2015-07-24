@@ -196,7 +196,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         queuedOperations.add(new Runnable() {
           @Override
           public void run() {
-            request(numMessages);
+            stream.request(numMessages);
           }
         });
         return;
@@ -235,7 +235,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         queuedOperations.add(new Runnable() {
           @Override
           public void run() {
-            halfClose();
+            stream.halfClose();
           }
         });
         return;
@@ -247,34 +247,36 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   @Override
   public void sendPayload(final ReqT payload) {
     checkState(state == State.STARTED, "Call was either not started or already closing: %s", state);
+    Runnable operation = new Runnable() {
+      @Override
+      public void run() {
+        boolean failed = true;
+        try {
+          InputStream payloadIs = method.streamRequest(payload);
+          stream.writeMessage(payloadIs);
+          failed = false;
+        } finally {
+          // TODO(notcarl): Find out if payloadIs needs to be closed.
+          if (failed) {
+            cancel();
+          }
+        }
+        // For unary requests, we don't flush since we know that halfClose should be coming soon.
+        // This allows us to piggy-back the END_STREAM=true on the last payload frame without
+        // opening the possibility of broken applications forgetting to call halfClose without
+        // noticing.
+        if (!unaryRequest) {
+          stream.flush();
+        }
+      }
+    };
     synchronized (this) {
       if (stream == null) {
-        queuedOperations.add(new Runnable() {
-          @Override
-          public void run() {
-            sendPayload(payload);
-          }
-        });
+        queuedOperations.add(operation);
         return;
       }
     }
-    boolean failed = true;
-    try {
-      InputStream payloadIs = method.streamRequest(payload);
-      stream.writeMessage(payloadIs);
-      failed = false;
-    } finally {
-      // TODO(notcarl): Find out if payloadIs needs to be closed.
-      if (failed) {
-        cancel();
-      }
-    }
-    // For unary requests, we don't flush since we know that halfClose should be coming soon. This
-    // allows us to piggy-back the END_STREAM=true on the last payload frame without opening the
-    // possibility of broken applications forgetting to call halfClose without noticing.
-    if (!unaryRequest) {
-      stream.flush();
-    }
+    operation.run();
   }
 
   @Override
