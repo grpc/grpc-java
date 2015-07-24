@@ -168,10 +168,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     try {
       synchronized (this) {
         stream = transport.newStream(method, headers, listener);
-      }
-      // This will typically be empty, and no calls will be added to it once stream is not null.
-      for (Runnable queuedCall : queuedOperations) {
-        queuedCall.run();
+        // This will typically be empty, and no calls will be added to it once stream is not null.
+        for (Runnable queuedCall : queuedOperations) {
+          queuedCall.run();
+        }
       }
     } catch (IllegalStateException ex) {
       // We can race with the transport and end up trying to use a terminated transport.
