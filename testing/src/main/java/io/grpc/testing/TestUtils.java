@@ -31,8 +31,7 @@
 
 package io.grpc.testing;
 
-
-import com.google.common.util.concurrent.Uninterruptibles;
+import com.google.common.base.Throwables;
 
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
@@ -62,7 +61,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -155,7 +153,11 @@ public class TestUtils {
           @Override
           public void sendPayload(RespT payload) {
             if (delayMillis.get() != 0) {
-              Uninterruptibles.sleepUninterruptibly(delayMillis.get(), TimeUnit.MILLISECONDS);
+              try {
+                Thread.sleep(delayMillis.get());
+              } catch (InterruptedException e) {
+                Throwables.propagate(e);
+              }
             }
             super.sendPayload(payload);
           }
