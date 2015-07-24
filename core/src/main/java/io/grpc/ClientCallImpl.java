@@ -69,15 +69,16 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private static final double MIN_CONNECT_TIMEOUT_MILLIS = 20 * 1000;
   private static final double JITTER = .2;
 
+  private final Object lock = new Object();
   private final MethodDescriptor<ReqT, RespT> method;
   private final SerializingExecutor callExecutor;
   private final boolean unaryRequest;
   private final CallOptions callOptions;
   private ClientCall.Listener<?> callListener;
-  @GuardedBy("this")
+  @GuardedBy("lock")
   private ClientStream stream;
   private volatile ScheduledFuture<?> deadlineCancellationFuture;
-  private volatile ScheduledFuture<?> retryFuture;
+  private ScheduledFuture<?> retryFuture;
   private ClientTransportProvider clientTransportProvider;
   private String userAgent;
   private ScheduledExecutorService scheduledExecutor;
@@ -165,24 +166,24 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       return false;
     }
 
-    try {
-      synchronized (this) {
+    synchronized (lock) {
+      try {
         stream = transport.newStream(method, headers, listener);
         // This will typically be empty, and no calls will be added to it once stream is not null.
         for (Runnable queuedCall : queuedOperations) {
           queuedCall.run();
         }
+      } catch (IllegalStateException ex) {
+        // We can race with the transport and end up trying to use a terminated transport.
+        // TODO(ejona86): Improve the API to remove the possibility of the race.
+        retryFuture = scheduledExecutor.schedule(new Runnable() {
+          @Override
+          public void run() {
+            startInternal(listener, headers);
+          }
+        }, (long) getNextDelayMillis(), TimeUnit.MILLISECONDS);
       }
-    } catch (IllegalStateException ex) {
-      // We can race with the transport and end up trying to use a terminated transport.
-      // TODO(ejona86): Improve the API to remove the possibility of the race.
-      retryFuture = scheduledExecutor.schedule(new Runnable() {
-        @Override
-        public void run() {
-          startInternal(listener, headers);
-        }
-      }, (long) getNextDelayMillis(), TimeUnit.MILLISECONDS);
-    }
+  }
 
     return true;
   }
@@ -191,7 +192,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   public void request(final int numMessages) {
     checkState(state == State.STARTED || state == State.HALF_CLOSED,
         "Call was either not started or canceled");
-    synchronized (this) {
+    synchronized (lock) {
       if (stream == null) {
         queuedOperations.add(new Runnable() {
           @Override
@@ -210,7 +211,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     // It is always okay to cancel a stream, so don't bother checking state transitions.
     if (state != State.CANCELED) {
       state = State.CANCELED;
-      synchronized (this) {
+      synchronized (lock) {
         queuedOperations.clear();
         // Cancel is called in exception handling cases, so it may be the case that the
         // stream was never successfully created.
@@ -230,7 +231,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   public void halfClose() {
     checkState(state == State.STARTED, "Call was either not started or already closing: %s", state);
     state = State.HALF_CLOSED;
-    synchronized (this) {
+    synchronized (lock) {
       if (stream == null) {
         queuedOperations.add(new Runnable() {
           @Override
@@ -270,7 +271,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         }
       }
     };
-    synchronized (this) {
+    synchronized (lock) {
       if (stream == null) {
         queuedOperations.add(operation);
         return;
@@ -281,7 +282,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   @Override
   public boolean isReady() {
-    synchronized (this) {
+    synchronized (lock) {
       if (stream == null) {
         return false;
       }
@@ -302,12 +303,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     return scheduledExecutor.schedule(new Runnable() {
       @Override
       public void run() {
-        // races with the future returned by this method, but should be okay as long as the
-        // scheduler is single threaded.
-        if (retryFuture != null) {
-          retryFuture.cancel(true);
-        }
-        synchronized (ClientCallImpl.this) {
+        synchronized (lock) {
+          if (retryFuture != null) {
+            retryFuture.cancel(true);
+          }
           if (stream != null) {
             stream.cancel(Status.DEADLINE_EXCEEDED);
           } else {
