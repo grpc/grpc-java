@@ -109,7 +109,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     ClientTransport get();
   }
 
-  private enum State {INIT, STARTED, HALF_CLOSED, CANCELED}
+  private enum State {INIT, STARTED, HALF_CLOSED, CANCELLED}
 
   ClientCallImpl<ReqT, RespT> setUserAgent(String userAgent) {
     this.userAgent = userAgent;
@@ -209,8 +209,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   @Override
   public void cancel() {
     // It is always okay to cancel a stream, so don't bother checking state transitions.
-    if (state != State.CANCELED) {
-      state = State.CANCELED;
+    if (state != State.CANCELLED) {
+      state = State.CANCELLED;
       synchronized (lock) {
         queuedOperations.clear();
         // Cancel is called in exception handling cases, so it may be the case that the
