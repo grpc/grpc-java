@@ -124,6 +124,7 @@ public abstract class ClientCall<RequestT, ResponseT> {
    * specified (e.g. {@link Integer#MAX_VALUE}).
    *
    * @param numMessages the requested number of messages to be delivered to the listener.
+   * @throws IllegalStateException if call is explicitly {@link #cancel}ed
    */
   public abstract void request(int numMessages);
 
