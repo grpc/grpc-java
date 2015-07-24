@@ -47,8 +47,6 @@ import org.junit.runners.JUnit4;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-import java.io.InputStream;
-
 import javax.annotation.Nullable;
 
 @RunWith(JUnit4.class)
@@ -127,7 +125,7 @@ public class AbstractStreamTest {
     }
 
     @Override
-    protected void receiveMessage(InputStream is) {
+    protected void receiveMessage(StreamListener.MessageProducer producer) {
       throw new UnsupportedOperationException();
     }
 

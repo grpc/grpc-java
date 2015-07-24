@@ -105,9 +105,7 @@ class OkHttpClientStream extends Http2ClientStream {
 
   @Override
   public void request(final int numMessages) {
-    synchronized (lock) {
-      requestMessagesFromDeframer(numMessages);
-    }
+    requestMessagesFromDeframer(numMessages);
   }
 
   @Override
@@ -214,13 +212,15 @@ class OkHttpClientStream extends Http2ClientStream {
 
   @Override
   public void remoteEndClosed() {
-    super.remoteEndClosed();
-    if (canSend()) {
-      // If server's end-of-stream is received before client sends end-of-stream, we just send a
-      // reset to server to fully close the server side stream.
-      frameWriter.rstStream(id(), ErrorCode.CANCEL);
+    synchronized (lock) {
+      super.remoteEndClosed();
+      if (canSend()) {
+        // If server's end-of-stream is received before client sends end-of-stream, we just send a
+        // reset to server to fully close the server side stream.
+        frameWriter.rstStream(id(), ErrorCode.CANCEL);
+      }
+      transport.finishStream(id(), null, null);
     }
-    transport.finishStream(id(), null, null);
   }
 
   void setOutboundFlowState(Object outboundFlowState) {

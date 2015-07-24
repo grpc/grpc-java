@@ -41,7 +41,9 @@ import io.grpc.transport.ServerStream;
 import io.grpc.transport.ServerStreamListener;
 import io.grpc.transport.ServerTransport;
 import io.grpc.transport.ServerTransportListener;
+import io.grpc.transport.StreamListener;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.HashSet;
@@ -56,6 +58,13 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 class InProcessTransport implements ServerTransport, ClientTransport {
   private static final Logger log = Logger.getLogger(InProcessTransport.class.getName());
+
+  public static final StreamListener.MessageConsumer NOOP_CONSUMER =
+      new StreamListener.MessageConsumer() {
+    @Override
+    public void accept(InputStream message) throws Exception {
+    }
+  };
 
   private final String name;
   private ServerTransportListener serverTransportListener;
@@ -182,7 +191,8 @@ class InProcessTransport implements ServerTransport, ClientTransport {
       @GuardedBy("this")
       private int clientRequested;
       @GuardedBy("this")
-      private ArrayDeque<InputStream> clientReceiveQueue = new ArrayDeque<InputStream>();
+      private ArrayDeque<StreamListener.MessageProducer> clientReceiveQueue =
+          new ArrayDeque<StreamListener.MessageProducer>();
       @GuardedBy("this")
       private Status clientNotifyStatus;
       @GuardedBy("this")
@@ -208,7 +218,7 @@ class InProcessTransport implements ServerTransport, ClientTransport {
         clientRequested += numMessages;
         while (clientRequested > 0 && !clientReceiveQueue.isEmpty()) {
           clientRequested--;
-          clientStreamListener.messageRead(clientReceiveQueue.poll());
+          clientStreamListener.messagesAvailable(clientReceiveQueue.poll());
         }
         // Attempt being reentrant-safe
         if (closed) {
@@ -225,15 +235,16 @@ class InProcessTransport implements ServerTransport, ClientTransport {
       }
 
       @Override
-      public synchronized void writeMessage(InputStream message) {
+      public synchronized void writeMessage(final InputStream message) {
         if (closed) {
           return;
         }
+        StreamListener.MessageProducer producer = new SingleMessageProducer(message);
         if (clientRequested > 0) {
           clientRequested--;
-          clientStreamListener.messageRead(message);
+          clientStreamListener.messagesAvailable(producer);
         } else {
-          clientReceiveQueue.add(message);
+          clientReceiveQueue.add(producer);
         }
       }
 
@@ -289,13 +300,14 @@ class InProcessTransport implements ServerTransport, ClientTransport {
           return false;
         }
         closed = true;
-        InputStream stream;
-        while ((stream = clientReceiveQueue.poll()) != null) {
-          try {
-            stream.close();
-          } catch (Throwable t) {
-            log.log(Level.WARNING, "Exception closing stream", t);
-          }
+        StreamListener.MessageProducer producer;
+        while ((producer = clientReceiveQueue.poll()) != null) {
+          producer.drainTo(new StreamListener.MessageConsumer() {
+            @Override
+            public void accept(InputStream message) throws Exception {
+              // No-op
+            }
+          });
         }
         clientStreamListener.closed(status, new Metadata.Trailers());
         return true;
@@ -308,7 +320,8 @@ class InProcessTransport implements ServerTransport, ClientTransport {
       @GuardedBy("this")
       private int serverRequested;
       @GuardedBy("this")
-      private ArrayDeque<InputStream> serverReceiveQueue = new ArrayDeque<InputStream>();
+      private ArrayDeque<StreamListener.MessageProducer> serverReceiveQueue =
+          new ArrayDeque<StreamListener.MessageProducer>();
       @GuardedBy("this")
       private boolean serverNotifyHalfClose;
       // Only is intended to prevent double-close when server closes.
@@ -332,7 +345,7 @@ class InProcessTransport implements ServerTransport, ClientTransport {
         serverRequested += numMessages;
         while (serverRequested > 0 && !serverReceiveQueue.isEmpty()) {
           serverRequested--;
-          serverStreamListener.messageRead(serverReceiveQueue.poll());
+          serverStreamListener.messagesAvailable(serverReceiveQueue.poll());
         }
         if (serverReceiveQueue.isEmpty() && serverNotifyHalfClose) {
           serverNotifyHalfClose = false;
@@ -349,11 +362,12 @@ class InProcessTransport implements ServerTransport, ClientTransport {
         if (closed) {
           return;
         }
+        SingleMessageProducer messageProducer = new SingleMessageProducer(message);
         if (serverRequested > 0) {
           serverRequested--;
-          serverStreamListener.messageRead(message);
+          serverStreamListener.messagesAvailable(messageProducer);
         } else {
-          serverReceiveQueue.add(message);
+          serverReceiveQueue.add(messageProducer);
         }
       }
 
@@ -382,13 +396,9 @@ class InProcessTransport implements ServerTransport, ClientTransport {
           return false;
         }
         closed = true;
-        InputStream stream;
-        while ((stream = serverReceiveQueue.poll()) != null) {
-          try {
-            stream.close();
-          } catch (Throwable t) {
-            log.log(Level.WARNING, "Exception closing stream", t);
-          }
+        StreamListener.MessageProducer messageProducer;
+        while ((messageProducer = serverReceiveQueue.poll()) != null) {
+          messageProducer.drainTo(NOOP_CONSUMER);
         }
         serverStreamListener.closed(reason);
         return true;
@@ -422,5 +432,29 @@ class InProcessTransport implements ServerTransport, ClientTransport {
     public void cancel(Status status) {}
 
     public void halfClose() {}
+  }
+
+  private static class SingleMessageProducer implements StreamListener.MessageProducer {
+    private final InputStream message;
+
+    public SingleMessageProducer(InputStream message) {
+      this.message = message;
+    }
+
+    @Override
+    public int drainTo(StreamListener.MessageConsumer consumer) {
+      try {
+        consumer.accept(message);
+      } catch (Exception e) {
+        log.log(Level.WARNING, "Error receiving message", e);
+      } finally {
+        try {
+          message.close();
+        } catch (IOException ioe) {
+          log.log(Level.WARNING, "Error closing stream", ioe);
+        }
+      }
+      return 1;
+    }
   }
 }

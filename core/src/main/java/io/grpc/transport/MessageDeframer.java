@@ -104,6 +104,9 @@ public class MessageDeframer implements Closeable, StreamListener.MessageProduce
   private boolean compressedFlag;
   private boolean endOfStream;
   private CompositeReadableBuffer unprocessed = new CompositeReadableBuffer();
+  private ArrayDeque<Frame> appQueue;
+
+  // TODO: Need to fix false sharing issues
   private final AtomicReference<ArrayDeque<Frame>> queueRef =
       new AtomicReference<ArrayDeque<Frame>>();
 
@@ -182,34 +185,27 @@ public class MessageDeframer implements Closeable, StreamListener.MessageProduce
   @Override
   public int drainTo(StreamListener.MessageConsumer consumer) {
     int count = 0;
-    ArrayDeque<Frame> current;
     do {
-      // Get the queue set by the transport, guaranteed to eventually be non-null
-      while ((current = queueRef.getAndSet(null)) == null) {
-        // Consider yielding if we are waiting too long for the transport to set a queue.
+      if (appQueue == null) {
+        appQueue = new ArrayDeque<Frame>();
       }
-      // Consume the queue
-      count += drainTo(consumer, current);
-      messagesAvailable = !current.isEmpty();
-
-      if (messagesAvailable) {
-        // We can't fully consume the queue yet so we have to accumulate anything produced
-        // by the transport thread while we were executing and return the merged version.
-        ArrayDeque<Frame> next = null;
-        while (!queueRef.compareAndSet(next, current)) {
-          next = queueRef.get();
-          if (next != null) {
-            for (Frame f = next.poll(); f != null; f = next.poll()) {
-              current.add(f);
-            }
+      if (appQueue.isEmpty()) {
+        // Get the queue from the transport and copy it into the appQueue
+        ArrayDeque<Frame> transportQueue;
+        do {
+          transportQueue = queueRef.getAndSet(null);
+          if (transportQueue != null) {
+            appQueue.addAll(transportQueue);
+            transportQueue.clear();
           }
-        }
-        break;
+          // Return it to the transport thread
+        } while (!queueRef.compareAndSet(null, transportQueue));
+        messagesAvailable = !appQueue.isEmpty();
+      } else {
+        // Consume the messages we already have. Will check for messagesAvailable
+        count += drainTo(consumer, appQueue);
       }
-
-      // If we can return the queue to the transport thread we are done, if not then
-      // we have another queue to try and consume.
-    } while (!queueRef.compareAndSet(null, current));
+    } while (requestedMessageCount > 0 && messagesAvailable);
     return count;
   }
 
@@ -247,11 +243,13 @@ public class MessageDeframer implements Closeable, StreamListener.MessageProduce
             count++;
             consumer.accept(frame.stream);
           } catch (Throwable t) {
+            t.printStackTrace();
             // Decision point: Log / exit / drain the available messages
           } finally {
             try {
               frame.stream.close();
             } catch (IOException ioe) {
+              ioe.printStackTrace();
               // Decision point: Worth logging?
             }
             appInRequest = false;
@@ -361,18 +359,7 @@ public class MessageDeframer implements Closeable, StreamListener.MessageProduce
         listener.bytesRead((int) bytesToReturnImmediate);
       }
     } finally {
-      ArrayDeque<Frame> prev = null;
-      // Make the queue visible to the application thread.
-      while (!queueRef.compareAndSet(prev, queue)) {
-        // Can only be not null if the application thread is returning a queue that it
-        // was processing when this method stared.
-        prev = queueRef.get();
-        if (prev != null && !prev.isEmpty()) {
-          for (Frame f = prev.pollLast(); f != null; f = prev.pollLast()) {
-            queue.addFirst(f);
-          }
-        }
-      }
+      queueRef.getAndSet(queue);
     }
 
     // We are stalled when there is insufficient data to read another frame.

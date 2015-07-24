@@ -40,6 +40,7 @@ import io.grpc.transport.ServerStream;
 import io.grpc.transport.ServerStreamListener;
 import io.grpc.transport.ServerTransport;
 import io.grpc.transport.ServerTransportListener;
+import io.grpc.transport.StreamListener;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -328,14 +329,17 @@ public final class ServerImpl extends Server {
     }
   }
 
-  private static class NoopListener implements ServerStreamListener {
+  private static class NoopListener implements ServerStreamListener,
+      StreamListener.MessageConsumer {
+
     @Override
-    public void messageRead(InputStream value) {
-      try {
-        value.close();
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
+    public void messagesAvailable(MessageProducer producer) {
+      producer.drainTo(this);
+    }
+
+    @Override
+    public void accept(InputStream inputStream) {
+      // No-op
     }
 
     @Override
@@ -386,12 +390,12 @@ public final class ServerImpl extends Server {
     }
 
     @Override
-    public void messageRead(final InputStream message) {
+    public void messagesAvailable(final MessageProducer producer) {
       callExecutor.execute(new Runnable() {
         @Override
         public void run() {
           try {
-            getListener().messageRead(message);
+            getListener().messagesAvailable(producer);
           } catch (Throwable t) {
             internalClose(Status.fromThrowable(t), new Metadata.Trailers());
             throw Throwables.propagate(t);
@@ -443,6 +447,7 @@ public final class ServerImpl extends Server {
     private boolean sendHeadersCalled;
     private boolean closeCalled;
     private boolean sendPayloadCalled;
+    private volatile boolean inOnReady;
 
     public ServerCallImpl(ServerStream stream, MethodDescriptor<ReqT, RespT> method) {
       this.stream = stream;
@@ -470,7 +475,9 @@ public final class ServerImpl extends Server {
       try {
         InputStream message = method.streamResponse(payload);
         stream.writeMessage(message);
-        stream.flush();
+        if (!inOnReady) {
+          stream.flush();
+        }
       } catch (Throwable t) {
         close(Status.fromThrowable(t), new Metadata.Trailers());
         throw Throwables.propagate(t);
@@ -503,7 +510,8 @@ public final class ServerImpl extends Server {
      * All of these callbacks are assumed to called on an application thread, and the caller is
      * responsible for handling thrown exceptions.
      */
-    private class ServerStreamListenerImpl implements ServerStreamListener {
+    private class ServerStreamListenerImpl implements ServerStreamListener,
+        StreamListener.MessageConsumer {
       private final ServerCall.Listener<ReqT> listener;
       private final Future<?> timeout;
 
@@ -513,19 +521,14 @@ public final class ServerImpl extends Server {
       }
 
       @Override
-      public void messageRead(final InputStream message) {
-        try {
-          if (cancelled) {
-            return;
-          }
+      public void messagesAvailable(MessageProducer producer) {
+        producer.drainTo(this);
+      }
 
+      @Override
+      public void accept(InputStream message) {
+        if (!cancelled) {
           listener.onPayload(method.parseRequest(message));
-        } finally {
-          try {
-            message.close();
-          } catch (IOException e) {
-            throw new RuntimeException(e);
-          }
         }
       }
 
@@ -554,7 +557,16 @@ public final class ServerImpl extends Server {
         if (cancelled) {
           return;
         }
-        listener.onReady();
+        if (inOnReady) {
+          throw new IllegalStateException("Re-entrant call to onReady not allowed");
+        }
+        try {
+          inOnReady = true;
+          listener.onReady();
+          stream.flush();
+        } finally {
+          inOnReady = false;
+        }
       }
     }
   }

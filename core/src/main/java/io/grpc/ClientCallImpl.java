@@ -41,6 +41,7 @@ import io.grpc.transport.ClientStream;
 import io.grpc.transport.ClientStreamListener;
 import io.grpc.transport.ClientTransport;
 import io.grpc.transport.HttpUtil;
+import io.grpc.transport.StreamListener;
 
 import java.io.InputStream;
 import java.util.concurrent.ScheduledExecutorService;
@@ -57,6 +58,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private final CallOptions callOptions;
   private ClientStream stream;
   private volatile ScheduledFuture<?> deadlineCancellationFuture;
+  private volatile boolean inOnReady;
   private boolean cancelCalled;
   private boolean halfCloseCalled;
   private ClientTransportProvider clientTransportProvider;
@@ -184,7 +186,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     // For unary requests, we don't flush since we know that halfClose should be coming soon. This
     // allows us to piggy-back the END_STREAM=true on the last payload frame without opening the
     // possibility of broken applications forgetting to call halfClose without noticing.
-    if (!unaryRequest) {
+    if (!unaryRequest && !inOnReady) {
       stream.flush();
     }
   }
@@ -212,7 +214,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }, timeoutMicros, TimeUnit.MICROSECONDS);
   }
 
-  private class ClientStreamListenerImpl implements ClientStreamListener {
+  private class ClientStreamListenerImpl implements ClientStreamListener,
+      StreamListener.MessageConsumer {
     private final Listener<RespT> observer;
     private final Long deadlineNanoTime;
     private boolean closed;
@@ -243,7 +246,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
 
     @Override
-    public void messageRead(final InputStream message) {
+    public void messagesAvailable(final MessageProducer messageProducer) {
       callExecutor.execute(new Runnable() {
         @Override
         public void run() {
@@ -251,18 +254,18 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
             if (closed) {
               return;
             }
-
-            try {
-              observer.onPayload(method.parseResponse(message));
-            } finally {
-              message.close();
-            }
+            messageProducer.drainTo(ClientStreamListenerImpl.this);
           } catch (Throwable t) {
             cancel();
             throw Throwables.propagate(t);
           }
         }
       });
+    }
+
+    @Override
+    public void accept(InputStream message) throws Exception {
+      observer.onPayload(method.parseResponse(message));
     }
 
     @Override
@@ -299,7 +302,13 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       callExecutor.execute(new Runnable() {
         @Override
         public void run() {
-          observer.onReady();
+          try {
+            inOnReady = true;
+            observer.onReady();
+            stream.flush();
+          } finally {
+            inOnReady = false;
+          }
         }
       });
     }
