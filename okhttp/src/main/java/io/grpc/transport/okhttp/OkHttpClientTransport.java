@@ -135,6 +135,8 @@ class OkHttpClientTransport implements ClientTransport {
   private FrameReader testFrameReader;
   private AsyncFrameWriter frameWriter;
   private OutboundFlowController outboundFlow;
+  // NOTE: should not call stream method under this lock, since some stream methods will call back
+  // to transport with holding stream lock.
   private final Object lock = new Object();
   @GuardedBy("lock")
   private int nextStreamId;
@@ -253,9 +255,10 @@ class OkHttpClientTransport implements ClientTransport {
         Headers.createRequestHeaders(headers, defaultPath, defaultAuthority);
 
     SettableFuture<Void> pendingFuture = null;
+    boolean shouldGoAway = false;
     synchronized (lock) {
       if (goAway) {
-        clientStream.transportReportStatus(goAwayStatus, true, new Metadata.Trailers());
+        shouldGoAway = true;
       } else if (streams.size() >= maxConcurrentStreams) {
         pendingFuture = SettableFuture.create();
         pendingStreams.add(new PendingStream(clientStream, pendingFuture, requestHeaders));
@@ -264,7 +267,9 @@ class OkHttpClientTransport implements ClientTransport {
       }
     }
 
-    if (pendingFuture != null) {
+    if (shouldGoAway) {
+      clientStream.transportReportStatus(goAwayStatus, true, new Metadata.Trailers());
+    } else if (pendingFuture != null) {
       try {
         pendingFuture.get();
       } catch (InterruptedException e) {
@@ -294,7 +299,12 @@ class OkHttpClientTransport implements ClientTransport {
       frameWriter.flush();
     }
     if (nextStreamId >= Integer.MAX_VALUE - 2) {
-      onGoAway(Integer.MAX_VALUE, Status.INTERNAL.withDescription("Stream ids exhausted"));
+      executor.execute(new Runnable() {
+        @Override
+        public void run() {
+          onGoAway(Integer.MAX_VALUE, Status.INTERNAL.withDescription("Stream ids exhausted"));
+        }
+      });
     } else {
       nextStreamId += 2;
     }
@@ -436,6 +446,7 @@ class OkHttpClientTransport implements ClientTransport {
     onGoAway(0, toGrpcStatus(errorCode).augmentDescription(moreDetail));
   }
 
+  // Should not be called while "lock" is held.
   private void onGoAway(int lastKnownStreamId, Status status) {
     boolean notifyShutdown;
     ArrayList<OkHttpClientStream> goAwayStreams = new ArrayList<OkHttpClientStream>();
