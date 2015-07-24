@@ -182,6 +182,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
             try {
               startInternal(listener, headers);
             } catch (Exception e) {
+              // TODO(carl-mastrangelo): Cancel the RPC ~somehow~
               log.log(Level.WARNING, "Uncaught exception attempting to start transport", e);
             }
           }
