@@ -87,8 +87,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private ScheduledExecutorService scheduledExecutor;
   private boolean initialBackoffComplete;
   private double previousDelayMillis = INITIAL_BACKOFF_MILLIS;
-  private State state = State.INIT;
   private final List<Runnable> queuedOperations = new ArrayList<Runnable>();
+  private boolean startCalled;
+  private boolean halfCloseCalled;
+  private boolean cancelCalled;
 
   ClientCallImpl(MethodDescriptor<ReqT, RespT> method, SerializingExecutor executor,
       CallOptions callOptions, ClientTransportProvider clientTransportProvider,
@@ -112,8 +114,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     ClientTransport get();
   }
 
-  private enum State {INIT, STARTED, HALF_CLOSED, CANCELLED}
-
   ClientCallImpl<ReqT, RespT> setUserAgent(String userAgent) {
     this.userAgent = userAgent;
     return this;
@@ -122,9 +122,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   @Override
   public void start(ClientCall.Listener<RespT> observer, Metadata.Headers headers) {
     callListener = checkNotNull(observer, "No call listener provided");
+    checkState(!startCalled, "Already started");
+    checkState(!cancelCalled, "Already cancelled");
+    startCalled = true;
 
-    checkState(state == State.INIT, "Already Started");
-    state = State.STARTED;
     Long deadlineNanoTime = callOptions.getDeadlineNanoTime();
     ClientStreamListener listener = new ClientStreamListenerImpl(observer, deadlineNanoTime);
 
@@ -200,8 +201,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   @Override
   public void request(final int numMessages) {
-    checkState(state == State.STARTED || state == State.HALF_CLOSED,
-        "Call was either not started or canceled");
+    checkState(startCalled, "Call was not started");
+    checkState(!cancelCalled, "Call was cancelled");
     synchronized (lock) {
       if (stream == null) {
         queuedOperations.add(new Runnable() {
@@ -219,8 +220,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   @Override
   public void cancel() {
     // It is always okay to cancel a stream, so don't bother checking state transitions.
-    if (state != State.CANCELLED) {
-      state = State.CANCELLED;
+    if (!cancelCalled) {
+      cancelCalled = true;
       synchronized (lock) {
         queuedOperations.clear();
         // Cancel is called in exception handling cases, so it may be the case that the
@@ -239,8 +240,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   @Override
   public void halfClose() {
-    checkState(state == State.STARTED, "Call was either not started or already closing: %s", state);
-    state = State.HALF_CLOSED;
+    checkState(startCalled, "Call was not started");
+    checkState(!halfCloseCalled, "Call already half closed");
+    halfCloseCalled = true;
     synchronized (lock) {
       if (stream == null) {
         queuedOperations.add(new Runnable() {
@@ -257,7 +259,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   @Override
   public void sendPayload(final ReqT payload) {
-    checkState(state == State.STARTED, "Call was either not started or already closing: %s", state);
+    checkState(startCalled, "Call was not started");
+    checkState(!halfCloseCalled, "Call already half closed");
+    checkState(!cancelCalled, "Call already cancelled");
     Runnable operation = new Runnable() {
       @Override
       public void run() {
