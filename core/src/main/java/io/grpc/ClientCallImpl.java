@@ -120,14 +120,15 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   }
 
   @Override
-  public void start(ClientCall.Listener<RespT> observer, Metadata.Headers headers) {
-    callListener = checkNotNull(observer, "No call listener provided");
+  public void start(ClientCall.Listener<RespT> callListener, Metadata.Headers headers) {
+    this.callListener = checkNotNull(callListener, "No call listener provided");
     checkState(!startCalled, "Already started");
     checkState(!cancelCalled, "Already cancelled");
     startCalled = true;
 
     Long deadlineNanoTime = callOptions.getDeadlineNanoTime();
-    ClientStreamListener listener = new ClientStreamListenerImpl(observer, deadlineNanoTime);
+    ClientStreamListener streamListener =
+        new ClientStreamListenerImpl(callListener, deadlineNanoTime);
 
     // Fill out timeout on the headers
     headers.removeAll(TIMEOUT_KEY);
@@ -137,7 +138,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     if (deadlineNanoTime != null) {
       timeoutMicros = TimeUnit.NANOSECONDS.toMicros(deadlineNanoTime - System.nanoTime());
       if (timeoutMicros <= 0) {
-        closeCallPrematurely(listener, Status.DEADLINE_EXCEEDED);
+        closeCallPrematurely(streamListener, Status.DEADLINE_EXCEEDED);
         return;
       }
       headers.put(TIMEOUT_KEY, timeoutMicros);
@@ -149,7 +150,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       headers.put(HttpUtil.USER_AGENT_KEY, userAgent);
     }
 
-    boolean started = startInternal(listener, headers);
+    boolean started = startInternal(streamListener, headers);
     // Start the deadline timer after stream creation because it will close the stream
     if (started && deadlineNanoTime != null) {
       deadlineCancellationFuture = startDeadlineTimer(timeoutMicros);
