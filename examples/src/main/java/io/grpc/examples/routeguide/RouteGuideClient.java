@@ -62,8 +62,8 @@ public class RouteGuideClient {
     channel = NettyChannelBuilder.forAddress(host, port)
         .negotiationType(NegotiationType.PLAINTEXT)
         .build();
-    blockingStub = RouteGuideGrpc.newBlockingStub(channel);
-    asyncStub = RouteGuideGrpc.newStub(channel);
+    blockingStub = RouteGuideGrpc.newBlockingStub(channel.callFactory());
+    asyncStub = RouteGuideGrpc.newStub(channel.callFactory());
   }
 
   public void shutdown() throws InterruptedException {

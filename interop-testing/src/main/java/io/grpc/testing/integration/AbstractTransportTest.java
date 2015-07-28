@@ -131,8 +131,8 @@ public abstract class AbstractTransportTest {
   @Before
   public void setUp() {
     channel = createChannel();
-    blockingStub = TestServiceGrpc.newBlockingStub(channel);
-    asyncStub = TestServiceGrpc.newStub(channel);
+    blockingStub = TestServiceGrpc.newBlockingStub(channel.callFactory());
+    asyncStub = TestServiceGrpc.newStub(channel.callFactory());
     requestHeadersCapture.set(null);
   }
 
@@ -332,7 +332,7 @@ public abstract class AbstractTransportTest {
   public void cancelAfterFirstResponse() throws Exception {
     final StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
         .addResponseParameters(ResponseParameters.newBuilder()
-            .setSize(31415))
+                .setSize(31415))
         .setPayload(Payload.newBuilder()
             .setBody(ByteString.copyFrom(new byte[27182])))
         .build();
@@ -443,7 +443,8 @@ public abstract class AbstractTransportTest {
 
     final ArrayBlockingQueue<Object> queue = new ArrayBlockingQueue<Object>(10);
     ClientCall<StreamingOutputCallRequest, StreamingOutputCallResponse> call =
-        channel.newCall(TestServiceGrpc.METHOD_STREAMING_OUTPUT_CALL, CallOptions.DEFAULT);
+        channel.callFactory().newCall(TestServiceGrpc.METHOD_STREAMING_OUTPUT_CALL,
+                CallOptions.DEFAULT);
     call.start(new ClientCall.Listener<StreamingOutputCallResponse>() {
       @Override
       public void onHeaders(Metadata.Headers headers) {}
@@ -515,7 +516,7 @@ public abstract class AbstractTransportTest {
   @Test(timeout = 10000)
   public void exchangeContextUnaryCall() throws Exception {
     TestServiceGrpc.TestServiceBlockingStub stub =
-        TestServiceGrpc.newBlockingStub(channel);
+        TestServiceGrpc.newBlockingStub(channel.callFactory());
 
     // Capture the context exchange
     Metadata.Headers fixedHeaders = new Metadata.Headers();
@@ -538,7 +539,7 @@ public abstract class AbstractTransportTest {
 
   @Test(timeout = 10000)
   public void exchangeContextStreamingCall() throws Exception {
-    TestServiceGrpc.TestServiceStub stub = TestServiceGrpc.newStub(channel);
+    TestServiceGrpc.TestServiceStub stub = TestServiceGrpc.newStub(channel.callFactory());
 
     // Capture the context exchange
     Metadata.Headers fixedHeaders = new Metadata.Headers();
@@ -582,27 +583,28 @@ public abstract class AbstractTransportTest {
   @Test(timeout = 10000)
   public void sendsTimeoutHeader() {
     long configuredTimeoutMinutes = 100;
-    TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(channel)
-        .withDeadlineAfter(configuredTimeoutMinutes, TimeUnit.MINUTES);
+    TestServiceGrpc.TestServiceBlockingStub stub =
+            TestServiceGrpc.newBlockingStub(channel.callFactory())
+                    .withDeadlineAfter(configuredTimeoutMinutes, TimeUnit.MINUTES);
     stub.emptyCall(Empty.getDefaultInstance());
     long transferredTimeoutMinutes = TimeUnit.MICROSECONDS.toMinutes(
         requestHeadersCapture.get().get(ChannelImpl.TIMEOUT_KEY));
     Assert.assertTrue(
-        "configuredTimeoutMinutes=" + configuredTimeoutMinutes
-        + ", transferredTimeoutMinutes=" + transferredTimeoutMinutes,
-        configuredTimeoutMinutes - transferredTimeoutMinutes >= 0
-        && configuredTimeoutMinutes - transferredTimeoutMinutes <= 1);
+            "configuredTimeoutMinutes=" + configuredTimeoutMinutes
+                    + ", transferredTimeoutMinutes=" + transferredTimeoutMinutes,
+            configuredTimeoutMinutes - transferredTimeoutMinutes >= 0
+                    && configuredTimeoutMinutes - transferredTimeoutMinutes <= 1);
   }
 
   @Test
   public void deadlineNotExceeded() {
     // warm up the channel and JVM
     blockingStub.emptyCall(Empty.getDefaultInstance());
-    TestServiceGrpc.newBlockingStub(channel)
+    TestServiceGrpc.newBlockingStub(channel.callFactory())
         .withDeadlineAfter(10, TimeUnit.SECONDS)
         .streamingOutputCall(StreamingOutputCallRequest.newBuilder()
-            .addResponseParameters(ResponseParameters.newBuilder()
-                .setIntervalUs(0))
+                .addResponseParameters(ResponseParameters.newBuilder()
+                        .setIntervalUs(0))
                 .build()).next();
   }
 
@@ -610,8 +612,9 @@ public abstract class AbstractTransportTest {
   public void deadlineExceeded() {
     // warm up the channel and JVM
     blockingStub.emptyCall(Empty.getDefaultInstance());
-    TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(channel)
-        .withDeadlineAfter(10, TimeUnit.MILLISECONDS);
+    TestServiceGrpc.TestServiceBlockingStub stub =
+            TestServiceGrpc.newBlockingStub(channel.callFactory())
+                    .withDeadlineAfter(10, TimeUnit.MILLISECONDS);
     try {
       stub.streamingOutputCall(StreamingOutputCallRequest.newBuilder()
            .addResponseParameters(ResponseParameters.newBuilder()
@@ -638,7 +641,7 @@ public abstract class AbstractTransportTest {
         .addResponseParameters(responseParameters)
         .build();
     StreamRecorder<StreamingOutputCallResponse> recorder = StreamRecorder.create();
-    TestServiceGrpc.newStub(channel)
+    TestServiceGrpc.newStub(channel.callFactory())
         .withDeadlineAfter(30, TimeUnit.MILLISECONDS)
         .streamingOutputCall(request, recorder);
     recorder.awaitCompletion();
@@ -762,7 +765,7 @@ public abstract class AbstractTransportTest {
     assertEquals(serviceAccount, response.getUsername());
     assertFalse(response.getOauthScope().isEmpty());
     assertTrue("Received oauth scope: " + response.getOauthScope(),
-        oauthScope.contains(response.getOauthScope()));
+            oauthScope.contains(response.getOauthScope()));
 
     final SimpleResponse goldenResponse = SimpleResponse.newBuilder()
         .setOauthScope(response.getOauthScope())

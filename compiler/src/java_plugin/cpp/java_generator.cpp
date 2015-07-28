@@ -223,28 +223,28 @@ static void PrintStub(const google::protobuf::ServiceDescriptor* service,
   if (impl) {
     p->Print(
         *vars,
-        "private $impl_name$($Channel$ channel) {\n");
+        "private $impl_name$($CallFactory$ callFactory) {\n");
     p->Indent();
-    p->Print("super(channel);\n");
+    p->Print("super(callFactory);\n");
     p->Outdent();
     p->Print("}\n\n");
     p->Print(
         *vars,
-        "private $impl_name$($Channel$ channel,\n"
+        "private $impl_name$($CallFactory$ callFactory,\n"
         "    $CallOptions$ callOptions) {\n");
     p->Indent();
-    p->Print("super(channel, callOptions);\n");
+    p->Print("super(callFactory, callOptions);\n");
     p->Outdent();
     p->Print("}\n\n");
     p->Print(
         *vars,
         "@$Override$\n"
-        "protected $impl_name$ build($Channel$ channel,\n"
+        "protected $impl_name$ build($CallFactory$ callFactory,\n"
         "    $CallOptions$ callOptions) {\n");
     p->Indent();
     p->Print(
         *vars,
-        "return new $impl_name$(channel, callOptions);\n");
+        "return new $impl_name$(callFactory, callOptions);\n");
     p->Outdent();
     p->Print("}\n");
   }
@@ -341,7 +341,7 @@ static void PrintStub(const google::protobuf::ServiceDescriptor* service,
           p->Print(
               *vars,
               "return $calls_method$(\n"
-              "    channel.newCall($method_field_name$, callOptions), $params$);\n");
+              "    callFactory.newCall($method_field_name$, callOptions), $params$);\n");
           break;
         case ASYNC_CALL:
           if (server_streaming) {
@@ -365,7 +365,7 @@ static void PrintStub(const google::protobuf::ServiceDescriptor* service,
           p->Print(
               *vars,
               "$last_line_prefix$$calls_method$(\n"
-              "    channel.newCall($method_field_name$, callOptions), $params$);\n");
+              "    callFactory.newCall($method_field_name$, callOptions), $params$);\n");
           break;
         case FUTURE_CALL:
           CHECK(!client_streaming && !server_streaming)
@@ -376,7 +376,7 @@ static void PrintStub(const google::protobuf::ServiceDescriptor* service,
           p->Print(
               *vars,
               "return $calls_method$(\n"
-              "    channel.newCall($method_field_name$, callOptions), request);\n");
+              "    callFactory.newCall($method_field_name$, callOptions), request);\n");
           break;
       }
       p->Outdent();
@@ -495,31 +495,31 @@ static void PrintService(const ServiceDescriptor* service,
 
   p->Print(
       *vars,
-      "public static $service_name$Stub newStub($Channel$ channel) {\n");
+      "public static $service_name$Stub newStub($CallFactory$ callFactory) {\n");
   p->Indent();
   p->Print(
       *vars,
-      "return new $service_name$Stub(channel);\n");
+      "return new $service_name$Stub(callFactory);\n");
   p->Outdent();
   p->Print("}\n\n");
   p->Print(
       *vars,
       "public static $service_name$BlockingStub newBlockingStub(\n"
-      "    $Channel$ channel) {\n");
+      "    $CallFactory$ callFactory) {\n");
   p->Indent();
   p->Print(
       *vars,
-      "return new $service_name$BlockingStub(channel);\n");
+      "return new $service_name$BlockingStub(callFactory);\n");
   p->Outdent();
   p->Print("}\n\n");
   p->Print(
       *vars,
       "public static $service_name$FutureStub newFutureStub(\n"
-      "    $Channel$ channel) {\n");
+      "    $CallFactory$ callFactory) {\n");
   p->Indent();
   p->Print(
       *vars,
-      "return new $service_name$FutureStub(channel);\n");
+      "return new $service_name$FutureStub(callFactory);\n");
   p->Outdent();
   p->Print("}\n\n");
 
@@ -571,7 +571,7 @@ void GenerateService(const ServiceDescriptor* service,
   map<string, string> vars;
   vars["String"] = "java.lang.String";
   vars["Override"] = "java.lang.Override";
-  vars["Channel"] = "io.grpc.Channel";
+  vars["CallFactory"] = "io.grpc.ClientCallFactory";
   vars["CallOptions"] = "io.grpc.CallOptions";
   vars["MethodType"] = "io.grpc.MethodDescriptor.MethodType";
   vars["ServerMethodDefinition"] =

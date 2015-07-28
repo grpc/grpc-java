@@ -63,7 +63,7 @@ import javax.annotation.concurrent.ThreadSafe;
 
 /** A communication channel for making outgoing RPCs. */
 @ThreadSafe
-public final class ChannelImpl extends Channel {
+public final class ChannelImpl implements Channel {
   private static final Logger log = Logger.getLogger(ChannelImpl.class.getName());
   private final ClientTransportFactory transportFactory;
   private final ExecutorService executor;
@@ -79,10 +79,10 @@ public final class ChannelImpl extends Channel {
   private final BackoffPolicy.Provider backoffPolicyProvider =
       new ExponentialBackoffPolicy.Provider();
   /**
-   * We delegate to this channel, so that we can have interceptors as necessary. If there aren't
-   * any interceptors this will just be {@link RealChannel}.
+   * We delegate to this {@link ClientCallFactory}, so that we can have interceptors as necessary.
+   * If there aren't any interceptors this will just be {@link RealCallFactory}.
    */
-  private final Channel interceptorChannel;
+  private final ClientCallFactory callFactory;
   /**
    * All transports that are not stopped. At the very least {@link #activeTransport} will be
    * present, but previously used transports that still have streams or are stopping may also be
@@ -116,8 +116,13 @@ public final class ChannelImpl extends Channel {
     this.transportFactory = transportFactory;
     this.executor = executor;
     this.userAgent = userAgent;
-    this.interceptorChannel = ClientInterceptors.intercept(new RealChannel(), interceptors);
+    this.callFactory = ClientInterceptors.intercept(new RealCallFactory(), interceptors);
     scheduledExecutor = SharedResourceHolder.get(TIMER_SERVICE);
+  }
+
+  @Override
+  public ClientCallFactory callFactory() {
+    return callFactory;
   }
 
   /** Hack to allow executors to auto-shutdown. Not for general use. */
@@ -126,10 +131,7 @@ public final class ChannelImpl extends Channel {
     this.terminationRunnable = runnable;
   }
 
-  /**
-   * Initiates an orderly shutdown in which preexisting calls continue but new calls are immediately
-   * cancelled.
-   */
+  @Override
   public ChannelImpl shutdown() {
     ClientTransport savedActiveTransport;
     synchronized (lock) {
@@ -156,37 +158,21 @@ public final class ChannelImpl extends Channel {
     return this;
   }
 
-  /**
-   * Initiates a forceful shutdown in which preexisting and new calls are cancelled. Although
-   * forceful, the shutdown process is still not instantaneous; {@link #isTerminated()} will likely
-   * return {@code false} immediately after this method returns.
-   *
-   * <p>NOT YET IMPLEMENTED. This method currently behaves identically to shutdown().
-   */
   // TODO(ejona86): cancel preexisting calls.
+  @Override
   public ChannelImpl shutdownNow() {
     shutdown();
     return this;
   }
 
-  /**
-   * Returns whether the channel is shutdown. Shutdown channels immediately cancel any new calls,
-   * but may still have some calls being processed.
-   *
-   * @see #shutdown()
-   * @see #isTerminated()
-   */
+  @Override
   public boolean isShutdown() {
     synchronized (lock) {
       return shutdown;
     }
   }
 
-  /**
-   * Waits for the channel to become terminated, giving up if the timeout is reached.
-   *
-   * @return whether the channel is terminated, as would be done by {@link #isTerminated()}.
-   */
+  @Override
   public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
     synchronized (lock) {
       long timeoutNanos = unit.toNanos(timeout);
@@ -198,12 +184,7 @@ public final class ChannelImpl extends Channel {
     }
   }
 
-  /**
-   * Returns whether the channel is terminated. Terminated channels have no running calls and
-   * relevant resources released (like TCP connections).
-   *
-   * @see #isShutdown()
-   */
+  @Override
   public boolean isTerminated() {
     synchronized (lock) {
       return terminated;
@@ -233,15 +214,6 @@ public final class ChannelImpl extends Channel {
         }
       });
     }
-  }
-
-  /*
-   * Creates a new outgoing call on the channel.
-   */
-  @Override
-  public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(MethodDescriptor<ReqT, RespT> method,
-      CallOptions callOptions) {
-    return interceptorChannel.newCall(method, callOptions);
   }
 
   private ClientTransport obtainActiveTransport() {
@@ -293,7 +265,7 @@ public final class ChannelImpl extends Channel {
     }
   }
 
-  private class RealChannel extends Channel {
+  private class RealCallFactory extends ClientCallFactory {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions) {

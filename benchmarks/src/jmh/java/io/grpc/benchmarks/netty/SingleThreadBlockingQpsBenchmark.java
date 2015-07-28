@@ -52,7 +52,7 @@ public class SingleThreadBlockingQpsBenchmark extends AbstractBenchmark {
   @Benchmark
   public void blockingUnary() throws Exception {
     ClientCalls.blockingUnaryCall(
-        channels[0].newCall(unaryMethod, CallOptions.DEFAULT), Unpooled.EMPTY_BUFFER);
+        channels[0].callFactory().newCall(unaryMethod, CallOptions.DEFAULT), Unpooled.EMPTY_BUFFER);
   }
 
   /**

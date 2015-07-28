@@ -75,7 +75,8 @@ public abstract class AbstractChannelBuilder<BuilderT extends AbstractChannelBui
 
   @Nullable
   private ExecutorService userExecutor;
-  private final List<ClientInterceptor> interceptors = new ArrayList<ClientInterceptor>();
+  private final List<ClientInterceptor> interceptors =
+          new ArrayList<ClientInterceptor>();
 
   @Nullable
   private String userAgent;
@@ -96,8 +97,8 @@ public abstract class AbstractChannelBuilder<BuilderT extends AbstractChannelBui
 
   /**
    * Adds interceptors that will be called before the channel performs its real work. This is
-   * functionally equivalent to using {@link ClientInterceptors#intercept(Channel, List)}, but while
-   * still having access to the original {@code ChannelImpl}.
+   * functionally equivalent to using {@link ClientInterceptors#intercept(ClientCallFactory, List)},
+   * but while still having access to the original {@code ChannelImpl}.
    */
   public final BuilderT intercept(List<ClientInterceptor> interceptors) {
     this.interceptors.addAll(interceptors);
@@ -106,8 +107,9 @@ public abstract class AbstractChannelBuilder<BuilderT extends AbstractChannelBui
 
   /**
    * Adds interceptors that will be called before the channel performs its real work. This is
-   * functionally equivalent to using {@link ClientInterceptors#intercept(Channel,
-   * ClientInterceptor...)}, but while still having access to the original {@code ChannelImpl}.
+   * functionally equivalent to using {@link ClientInterceptors#intercept(ClientCallFactory,
+   * ClientInterceptor...)}, but while still having access to the original
+   * {@code ChannelImpl}.
    */
   public final BuilderT intercept(ClientInterceptor... interceptors) {
     return intercept(Arrays.asList(interceptors));

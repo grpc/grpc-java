@@ -54,7 +54,7 @@ import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
 
 import io.grpc.Channel;
-import io.grpc.ChannelImpl;
+import io.grpc.ClientCallFactory;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.Payload;
@@ -139,14 +139,15 @@ public class AsyncClient {
   }
 
   private List<Histogram> doBenchmark(SimpleRequest req,
-                                      List<Channel> channels, long endTime) throws Exception {
+                                      List<Channel> channels,
+                                      long endTime) throws Exception {
     // Initiate the concurrent calls
     List<Future<Histogram>> futures =
         new ArrayList<Future<Histogram>>(config.outstandingRpcsPerChannel);
     for (int i = 0; i < config.channels; i++) {
       for (int j = 0; j < config.outstandingRpcsPerChannel; j++) {
-        Channel channel = channels.get(i);
-        futures.add(doRpcs(channel, req, endTime));
+        ClientCallFactory callFactory = channels.get(i).callFactory();
+        futures.add(doRpcs(callFactory, req, endTime));
       }
     }
     // Wait for completion
@@ -157,20 +158,21 @@ public class AsyncClient {
     return histograms;
   }
 
-  private Future<Histogram> doRpcs(Channel channel, SimpleRequest request, long endTime) {
+  private Future<Histogram> doRpcs(ClientCallFactory callFactory, SimpleRequest request,
+                                   long endTime) {
     switch (config.rpcType) {
       case UNARY:
-        return doUnaryCalls(channel, request, endTime);
+        return doUnaryCalls(callFactory, request, endTime);
       case STREAMING:
-        return doStreamingCalls(channel, request, endTime);
+        return doStreamingCalls(callFactory, request, endTime);
       default:
         throw new IllegalStateException("unsupported rpc type");
     }
   }
 
-  private Future<Histogram> doUnaryCalls(Channel channel, final SimpleRequest request,
+  private Future<Histogram> doUnaryCalls(ClientCallFactory callFactory, final SimpleRequest request,
                                          final long endTime) {
-    final TestServiceStub stub = TestServiceGrpc.newStub(channel);
+    final TestServiceStub stub = TestServiceGrpc.newStub(callFactory);
     final Histogram histogram = new Histogram(HISTOGRAM_MAX_VALUE, HISTOGRAM_PRECISION);
     final HistogramFuture future = new HistogramFuture(histogram);
 
@@ -208,9 +210,10 @@ public class AsyncClient {
     return future;
   }
 
-  private static Future<Histogram> doStreamingCalls(Channel channel, final SimpleRequest request,
-                                             final long endTime) {
-    final TestServiceStub stub = TestServiceGrpc.newStub(channel);
+  private static Future<Histogram> doStreamingCalls(ClientCallFactory callFactory,
+                                                    final SimpleRequest request,
+                                                    final long endTime) {
+    final TestServiceStub stub = TestServiceGrpc.newStub(callFactory);
     final Histogram histogram = new Histogram(HISTOGRAM_MAX_VALUE, HISTOGRAM_PRECISION);
     final HistogramFuture future = new HistogramFuture(histogram);
 
@@ -315,7 +318,7 @@ public class AsyncClient {
 
   private static void shutdown(List<Channel> channels) {
     for (Channel channel : channels) {
-      ((ChannelImpl) channel).shutdown();
+      channel.shutdown();
     }
   }
 

@@ -47,8 +47,8 @@ import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Multimaps;
 
 import io.grpc.CallOptions;
-import io.grpc.Channel;
 import io.grpc.ClientCall;
+import io.grpc.ClientCallFactory;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -71,7 +71,7 @@ import java.util.concurrent.Executors;
  * Tests for {@link ClientAuthInterceptor}.
  */
 @RunWith(JUnit4.class)
-public class ClientAuthInterceptorTests {
+public class ClientAuthInterceptorTest {
 
   public static final Metadata.Key<String> AUTHORIZATION = Metadata.Key.of("Authorization",
       Metadata.ASCII_STRING_MARSHALLER);
@@ -88,7 +88,7 @@ public class ClientAuthInterceptorTests {
   ClientCall.Listener<Integer> listener;
 
   @Mock
-  Channel channel;
+  ClientCallFactory callFactory;
 
   @Mock
   ClientCall<String, Integer> call;
@@ -99,7 +99,7 @@ public class ClientAuthInterceptorTests {
   @Before
   public void startUp() throws IOException {
     MockitoAnnotations.initMocks(this);
-    when(channel.newCall(same(descriptor), any(CallOptions.class))).thenReturn(call);
+    when(callFactory.newCall(same(descriptor), any(CallOptions.class))).thenReturn(call);
     interceptor = new ClientAuthInterceptor(credentials,
         Executors.newSingleThreadExecutor());
   }
@@ -113,7 +113,7 @@ public class ClientAuthInterceptorTests {
     values.put("Extra-Authorization", "token4");
     when(credentials.getRequestMetadata()).thenReturn(Multimaps.asMap(values));
     ClientCall<String, Integer> interceptedCall =
-        interceptor.interceptCall(descriptor, CallOptions.DEFAULT, channel);
+        interceptor.intercept(callFactory).newCall(descriptor, CallOptions.DEFAULT);
     Metadata.Headers headers = new Metadata.Headers();
     interceptedCall.start(listener, headers);
     verify(call).start(listener, headers);
@@ -130,7 +130,7 @@ public class ClientAuthInterceptorTests {
   public void testCredentialsThrows() throws IOException {
     when(credentials.getRequestMetadata()).thenThrow(new IOException("Broken"));
     ClientCall<String, Integer> interceptedCall =
-        interceptor.interceptCall(descriptor, CallOptions.DEFAULT, channel);
+        interceptor.intercept(callFactory).newCall(descriptor, CallOptions.DEFAULT);
     Metadata.Headers headers = new Metadata.Headers();
     interceptedCall.start(listener, headers);
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
@@ -150,9 +150,10 @@ public class ClientAuthInterceptorTests {
         return token;
       }
     };
-    interceptor = new ClientAuthInterceptor(oAuth2Credentials, Executors.newSingleThreadExecutor());
+    interceptor = new ClientAuthInterceptor(oAuth2Credentials,
+            Executors.newSingleThreadExecutor());
     ClientCall<String, Integer> interceptedCall =
-        interceptor.interceptCall(descriptor, CallOptions.DEFAULT, channel);
+        interceptor.intercept(callFactory).newCall(descriptor, CallOptions.DEFAULT);
     Metadata.Headers headers = new Metadata.Headers();
     interceptedCall.start(listener, headers);
     verify(call).start(listener, headers);

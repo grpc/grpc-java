@@ -36,7 +36,7 @@ package io.grpc;
  * request messages to the server and receive zero or more response messages back.
  *
  * <p>Instances are created
- * by a {@link Channel} and used by stubs to invoke their remote behavior.
+ * by a {@link ClientCallFactory} and used by stubs to invoke their remote behavior.
  *
  * <p>More advanced usages may consume this interface directly as opposed to using a stub. Common
  * reasons for doing so would be the need to interact with flow-control or when acting as a generic
