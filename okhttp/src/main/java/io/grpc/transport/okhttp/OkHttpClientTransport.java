@@ -50,6 +50,8 @@ import com.squareup.okhttp.internal.spdy.OkHttpSettingsUtil;
 import com.squareup.okhttp.internal.spdy.Settings;
 import com.squareup.okhttp.internal.spdy.Variant;
 
+import io.grpc.CoreThread;
+import io.grpc.CoreThread.CoreRunnable;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -310,9 +312,9 @@ class OkHttpClientTransport implements ClientTransport {
 
     // Connecting in the serializingExecutor, so that some stream operations like synStream
     // will be executed after connected.
-    serializingExecutor.execute(new Runnable() {
+    serializingExecutor.execute(new CoreThread.CoreRunnable() {
       @Override
-      public void run() {
+      public void coreRun() {
         if (isForTest()) {
           clientFrameHandler = new ClientFrameHandler(testFrameReader);
           executor.execute(clientFrameHandler);
@@ -389,6 +391,7 @@ class OkHttpClientTransport implements ClientTransport {
     frameWriter.goAway(0, ErrorCode.NO_ERROR, new byte[0]);
 
     onGoAway(Integer.MAX_VALUE, Status.UNAVAILABLE.withDescription("Transport stopped"));
+    CoreThread.exit();
   }
 
   /**
@@ -547,7 +550,7 @@ class OkHttpClientTransport implements ClientTransport {
    * Runnable which reads frames and dispatches them to in flight calls.
    */
   @VisibleForTesting
-  class ClientFrameHandler implements FrameReader.Handler, Runnable {
+  class ClientFrameHandler extends CoreRunnable implements FrameReader.Handler, Runnable {
     FrameReader frameReader;
 
     ClientFrameHandler(FrameReader frameReader) {
@@ -555,7 +558,7 @@ class OkHttpClientTransport implements ClientTransport {
     }
 
     @Override
-    public void run() {
+    public void coreRun() {
       String threadName = Thread.currentThread().getName();
       Thread.currentThread().setName("OkHttpClientTransport");
       try {
