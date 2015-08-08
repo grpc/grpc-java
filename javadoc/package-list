@@ -1,0 +1,8 @@
+io.grpc
+io.grpc.auth
+io.grpc.protobuf
+io.grpc.protobuf.nano
+io.grpc.stub
+io.grpc.transport
+io.grpc.transport.netty
+io.grpc.transport.okhttp
