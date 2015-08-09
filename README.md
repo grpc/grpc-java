@@ -282,7 +282,7 @@ codify their differing semantics for cancellation and error reporting.
 Note the transport layer API is considered internal to gRPC and has weaker API
 guarantees than the core API under package `io.grpc`.
 
-gRPC comes with tree Transport implementations:
+gRPC comes with three Transport implementations:
 
 1. The [Netty-based](https://github.com/google/grpc-java/blob/master/netty)
    transport is the main transport implementation based on
@@ -290,7 +290,7 @@ gRPC comes with tree Transport implementations:
 2. The [OkHttp-based](https://github.com/google/grpc-java/blob/master/okhttp)
    transport is a lightweight transport based on
    [OkHttp](http://square.github.io/okhttp/). It is mainly for use on Android
-   and is for clinet only.
+   and is for client only.
 3. The
    [inprocess](https://github.com/google/grpc-java/blob/master/core/src/main/java/io/grpc/transport/inprocess)
    transport is for when a server is in the same process as the client. It is
