@@ -594,7 +594,7 @@ public abstract class AbstractTransportTest {
         && configuredTimeoutMinutes - transferredTimeoutMinutes <= 1);
   }
 
-  @Test
+  @Test(timeout = 10000)
   public void deadlineNotExceeded() {
     // warm up the channel and JVM
     blockingStub.emptyCall(Empty.getDefaultInstance());

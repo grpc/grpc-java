@@ -131,7 +131,9 @@ public class OkHttpClientTransportTest {
   private ClientFrameHandler frameHandler;
   private ExecutorService executor;
   private long nanoTime; // backs a ticker, for testing ping round-trip time measurement
-  private ConnectedCallback connectedCallback;
+  private ConnectingCallback connectingCallback;
+  private SettableFuture<Void> connectedFuture;
+
 
   /** Set up for test. */
   @Before
@@ -144,12 +146,14 @@ public class OkHttpClientTransportTest {
     frameReader = new MockFrameReader();
   }
 
-  private void initTransport() {
-    initTransport(3, new ConnectedCallback(false));
+  private void initTransport() throws Exception {
+    initTransport(3, new ConnectingCallback(false));
+    waitUntilConnected();
   }
 
-  private void initTransport(int startId, ConnectedCallback connectedCallback) {
-    this.connectedCallback = connectedCallback;
+  private void initTransport(int startId, ConnectingCallback connectingCallback) {
+    this.connectingCallback = connectingCallback;
+    connectedFuture = SettableFuture.create();
     Ticker ticker = new Ticker() {
       @Override
       public long read() {
@@ -158,7 +162,7 @@ public class OkHttpClientTransportTest {
     };
     clientTransport = new OkHttpClientTransport(
         executor, frameReader, frameWriter, startId,
-        new MockSocket(frameReader), ticker, connectedCallback);
+        new MockSocket(frameReader), ticker, connectingCallback, connectedFuture);
     clientTransport.start(transportListener);
   }
 
@@ -166,7 +170,7 @@ public class OkHttpClientTransportTest {
   @After
   public void tearDown() throws Exception {
     clientTransport.shutdown();
-    assertEquals(0, activeStreamCount());
+    assertEquals(0, clientTransport.getActiveStreams().length);
     verify(frameWriter, timeout(TIME_OUT_MS)).close();
     frameReader.assertClosed();
     executor.shutdown();
@@ -601,7 +605,7 @@ public class OkHttpClientTransportTest {
   @Test
   public void streamIdExhausted() throws Exception {
     int startId = Integer.MAX_VALUE - 2;
-    initTransport(startId, new ConnectedCallback(false));
+    initTransport(startId, new ConnectingCallback(false));
 
     MockStreamListener listener1 = new MockStreamListener();
     clientTransport.newStream(method, new Metadata.Headers(), listener1);
@@ -696,7 +700,7 @@ public class OkHttpClientTransportTest {
   @Test
   public void pendingStreamFailedByIdExhausted() throws Exception {
     int startId = Integer.MAX_VALUE - 4;
-    initTransport(startId, new ConnectedCallback(false));
+    initTransport(startId, new ConnectingCallback(false));
     setMaxConcurrentStreams(1);
 
     final MockStreamListener listener1 = new MockStreamListener();
@@ -1025,7 +1029,7 @@ public class OkHttpClientTransportTest {
 
   @Test
   public void writeBeforeConnected() throws Exception {
-    initTransport(3, new ConnectedCallback(true));
+    initTransport(3, new ConnectingCallback(true));
     final String message = "Hello Server";
     MockStreamListener listener = new MockStreamListener();
     OkHttpClientStream stream = clientTransport.newStream(method, new Metadata.Headers(), listener);
@@ -1035,7 +1039,8 @@ public class OkHttpClientTransportTest {
     // The message should be queued.
     verifyNoMoreInteractions(frameWriter);
 
-    connectedCallback.allowConnected();
+    connectingCallback.allowConnected();
+    waitUntilConnected();
 
     // The queued message should be sent out.
     ArgumentCaptor<Buffer> captor = ArgumentCaptor.forClass(Buffer.class);
@@ -1048,7 +1053,7 @@ public class OkHttpClientTransportTest {
 
   @Test
   public void cancelBeforeConnected() throws Exception {
-    initTransport(3, new ConnectedCallback(true));
+    initTransport(3, new ConnectingCallback(true));
     final String message = "Hello Server";
     MockStreamListener listener = new MockStreamListener();
     OkHttpClientStream stream = clientTransport.newStream(method, new Metadata.Headers(), listener);
@@ -1058,41 +1063,34 @@ public class OkHttpClientTransportTest {
     stream.cancel(Status.CANCELLED);
     verifyNoMoreInteractions(frameWriter);
 
-    connectedCallback.allowConnected();
+    connectingCallback.allowConnected();
 
-    // There should be 4 pending operations
-    verify(frameWriter, timeout(TIME_OUT_MS)).synStream(
-        eq(false), eq(false), eq(3), eq(0), Matchers.<List<Header>>any());
-    verify(frameWriter, timeout(TIME_OUT_MS)).flush();
-    verify(frameWriter, timeout(TIME_OUT_MS)).rstStream(eq(3), eq(ErrorCode.CANCEL));
+    listener.waitUntilStreamClosed();
+    verifyNoMoreInteractions(frameWriter);
 
-    // TODO(madongfly): Is this really what we want, we may just throw away the messages of
-    // a cancelled stream.
-    verify(frameWriter, timeout(TIME_OUT_MS))
-        .data(eq(false), eq(3), any(Buffer.class), eq(12 + HEADER_LENGTH));
+    // Manually close the frameWriter and frameReader to satisfy the checks in tearDown().
+    frameWriter.close();
+    frameReader.close();
   }
 
   @Test
   public void shutdownDuringConnecting() throws Exception {
-    initTransport(3, new ConnectedCallback(true));
+    initTransport(3, new ConnectingCallback(true));
     final String message = "Hello Server";
     MockStreamListener listener = new MockStreamListener();
     OkHttpClientStream stream = clientTransport.newStream(method, new Metadata.Headers(), listener);
 
     clientTransport.shutdown();
-    connectedCallback.allowConnected();
+    connectingCallback.allowConnected();
 
-    // The new stream should be failed, but the started stream should not be affected.
+    // The new stream should be failed, as well as the pending stream.
     assertNewStreamFail();
-    InputStream input = new ByteArrayInputStream(message.getBytes(UTF_8));
-    stream.writeMessage(input);
-    stream.flush();
-    ArgumentCaptor<Buffer> captor = ArgumentCaptor.forClass(Buffer.class);
-    verify(frameWriter, timeout(TIME_OUT_MS))
-        .data(eq(false), eq(3), captor.capture(), eq(12 + HEADER_LENGTH));
-    Buffer sentFrame = captor.getValue();
-    assertEquals(createMessageFrame(message), sentFrame);
-    stream.cancel(Status.CANCELLED);
+    listener.waitUntilStreamClosed();
+    assertEquals(listener.status.getCode(), Status.UNAVAILABLE.getCode());
+
+    // Manually close the frameWriter and frameReader to satisfy the checks in tearDown().
+    frameWriter.close();
+    frameReader.close();
   }
 
   private int activeStreamCount() {
@@ -1109,7 +1107,7 @@ public class OkHttpClientTransportTest {
 
   private ClientFrameHandler frameHandler() throws Exception {
     if (frameHandler == null) {
-      connectedCallback.waitUntilConnected();
+      waitUntilConnected();
       frameHandler = clientTransport.getHandler();
     }
     return frameHandler;
@@ -1321,12 +1319,14 @@ public class OkHttpClientTransportTest {
     }
   }
 
-  private class ConnectedCallback implements Runnable {
-    SettableFuture<Void> connected;
+  private void waitUntilConnected() throws Exception {
+    connectedFuture.get(TIME_OUT_MS, TimeUnit.MILLISECONDS);
+  }
+
+  private class ConnectingCallback implements Runnable {
     SettableFuture<Void> delayed;
 
-    private ConnectedCallback(boolean delayConnection) {
-      connected = SettableFuture.create();
+    private ConnectingCallback(boolean delayConnection) {
       if (delayConnection) {
         delayed = SettableFuture.create();
       }
@@ -1337,15 +1337,10 @@ public class OkHttpClientTransportTest {
       if (delayed != null) {
         Futures.getUnchecked(delayed);
       }
-      connected.set(null);
     }
 
     void allowConnected() {
       delayed.set(null);
-    }
-
-    void waitUntilConnected() throws Exception {
-      connected.get(TIME_OUT_MS, TimeUnit.MILLISECONDS);
     }
   }
 }
