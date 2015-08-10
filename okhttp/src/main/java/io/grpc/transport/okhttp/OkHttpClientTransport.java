@@ -37,6 +37,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Ticker;
+import com.google.common.util.concurrent.SettableFuture;
 
 import com.squareup.okhttp.ConnectionSpec;
 import com.squareup.okhttp.OkHttpTlsUpgrader;
@@ -53,7 +54,6 @@ import com.squareup.okhttp.internal.spdy.Variant;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
-import io.grpc.SerializingExecutor;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.transport.ClientStreamListener;
@@ -138,8 +138,6 @@ class OkHttpClientTransport implements ClientTransport {
   private final Map<Integer, OkHttpClientStream> streams =
       new HashMap<Integer, OkHttpClientStream>();
   private final Executor executor;
-  // Wrap on executor, to guarantee some operations be executed serially.
-  private final SerializingExecutor serializingExecutor;
   private int connectionUnacknowledgedBytesRead;
   private ClientFrameHandler clientFrameHandler;
   // The status used to finish all active streams when the transport is closed.
@@ -153,14 +151,17 @@ class OkHttpClientTransport implements ClientTransport {
   private boolean stopped;
   private SSLSocketFactory sslSocketFactory;
   private Socket socket;
+  // Become non-zero when the connection is connected.
   @GuardedBy("lock")
-  private int maxConcurrentStreams = Integer.MAX_VALUE;
+  private int maxConcurrentStreams = 0;
   @GuardedBy("lock")
   private LinkedList<OkHttpClientStream> pendingStreams = new LinkedList<OkHttpClientStream>();
   private final ConnectionSpec connectionSpec;
   private FrameWriter testFrameWriter;
-  // Used by test only.
-  Runnable connectedCallback;
+
+  // The following fields are used by test only.
+  Runnable connectingCallback;
+  SettableFuture<Void> connectedFuture;
 
   OkHttpClientTransport(String host, int port, String authorityHost, Executor executor,
       @Nullable SSLSocketFactory sslSocketFactory, ConnectionSpec connectionSpec) {
@@ -169,7 +170,6 @@ class OkHttpClientTransport implements ClientTransport {
     this.authorityHost = authorityHost;
     defaultAuthority = authorityHost + ":" + port;
     this.executor = Preconditions.checkNotNull(executor);
-    serializingExecutor = new SerializingExecutor(executor);
     // Client initiated streams are odd, server initiated ones are even. Server should not need to
     // use it. We start clients at 3 to avoid conflicting with HTTP negotiation.
     nextStreamId = 3;
@@ -183,20 +183,21 @@ class OkHttpClientTransport implements ClientTransport {
    */
   @VisibleForTesting
   OkHttpClientTransport(Executor executor, FrameReader frameReader, FrameWriter testFrameWriter,
-      int nextStreamId, Socket socket, Ticker ticker, Runnable connectedCallback) {
+      int nextStreamId, Socket socket, Ticker ticker,
+      Runnable connectingCallback, SettableFuture<Void> connectedFuture) {
     host = null;
     port = 0;
     authorityHost = null;
     defaultAuthority = "notarealauthority:80";
     this.executor = Preconditions.checkNotNull(executor);
-    serializingExecutor = new SerializingExecutor(executor);
     this.testFrameReader = Preconditions.checkNotNull(frameReader);
     this.testFrameWriter = Preconditions.checkNotNull(testFrameWriter);
     this.socket = Preconditions.checkNotNull(socket);
     this.nextStreamId = nextStreamId;
     this.ticker = ticker;
     this.connectionSpec = null;
-    this.connectedCallback = Preconditions.checkNotNull(connectedCallback);
+    this.connectingCallback = Preconditions.checkNotNull(connectingCallback);
+    this.connectedFuture = Preconditions.checkNotNull(connectedFuture);
   }
 
   private boolean isForTest() {
@@ -263,18 +264,25 @@ class OkHttpClientTransport implements ClientTransport {
   @GuardedBy("lock")
   private void startStream(OkHttpClientStream stream) {
     Preconditions.checkState(stream.id() == null, "StreamId already assigned");
-    streams.put(nextStreamId, stream);
-    stream.start(nextStreamId);
+    int streamId = nextStreamId;
+    if (nextStreamId >= Integer.MAX_VALUE - 2) {
+      // Make sure nextStreamId is greater than all used ids, so that mayHaveCreatedStream()
+      // performs correctly.
+      nextStreamId = Integer.MAX_VALUE;
+    } else {
+      nextStreamId += 2;
+    }
+    streams.put(streamId, stream);
+    stream.start(streamId);
     stream.allocated();
     // For unary and server streaming, there will be a data frame soon, no need to flush the header.
     if (stream.getType() != MethodType.UNARY
         && stream.getType() != MethodType.SERVER_STREAMING) {
       frameWriter.flush();
     }
-    if (nextStreamId >= Integer.MAX_VALUE - 2) {
+
+    if (nextStreamId == Integer.MAX_VALUE) {
       onGoAway(Integer.MAX_VALUE, Status.INTERNAL.withDescription("Stream ids exhausted"));
-    } else {
-      nextStreamId += 2;
     }
   }
 
@@ -305,73 +313,70 @@ class OkHttpClientTransport implements ClientTransport {
   public void start(Listener listener) {
     this.listener = Preconditions.checkNotNull(listener, "listener");
 
-    frameWriter = new AsyncFrameWriter(this, serializingExecutor);
+    frameWriter = new AsyncFrameWriter(this, executor);
     outboundFlow = new OutboundFlowController(this, frameWriter);
 
-    // Connecting in the serializingExecutor, so that some stream operations like synStream
-    // will be executed after connected.
-    serializingExecutor.execute(new Runnable() {
+    // Connecting in another thread, do not block start.
+    executor.execute(new Runnable() {
       @Override
       public void run() {
         if (isForTest()) {
+          connectingCallback.run();
           clientFrameHandler = new ClientFrameHandler(testFrameReader);
           executor.execute(clientFrameHandler);
-          connectedCallback.run();
           frameWriter.becomeConnected(testFrameWriter, socket);
+          synchronized (lock) {
+            maxConcurrentStreams = Integer.MAX_VALUE;
+          }
+          startPendingStreams();
+          connectedFuture.set(null);
           return;
         }
+
         BufferedSource source;
         BufferedSink sink;
-        Socket sock;
         try {
-          sock = new Socket(host, port);
+          socket = new Socket(host, port);
           if (sslSocketFactory != null) {
-            sock = OkHttpTlsUpgrader.upgrade(
-                sslSocketFactory, sock, authorityHost, port, connectionSpec);
+            socket = OkHttpTlsUpgrader.upgrade(
+                sslSocketFactory, socket, authorityHost, port, connectionSpec);
           }
-          sock.setTcpNoDelay(true);
-          source = Okio.buffer(Okio.source(sock));
-          sink = Okio.buffer(Okio.sink(sock));
+          socket.setTcpNoDelay(true);
+          source = Okio.buffer(Okio.source(socket));
+          sink = Okio.buffer(Okio.sink(socket));
         } catch (IOException e) {
           onIoException(e);
           // (and probably do all of this work asynchronously instead of in calling thread)
           throw new RuntimeException(e);
         }
 
-        FrameWriter rawFrameWriter;
+        Variant variant = new Http2();
         synchronized (lock) {
           if (stopped) {
             // In case user called shutdown() during the connecting.
             try {
-              sock.close();
+              socket.close();
             } catch (IOException e) {
               log.log(Level.WARNING, "Failed closing socket", e);
             }
             return;
           }
-          socket = sock;
-        }
+          maxConcurrentStreams = Integer.MAX_VALUE;
 
-        Variant variant = new Http2();
-        rawFrameWriter = variant.newWriter(sink, true);
-        frameWriter.becomeConnected(rawFrameWriter, socket);
-
-        try {
-          // Do these with the raw FrameWriter, so that they will be done in this thread,
-          // and before any possible pending stream operations.
-          rawFrameWriter.connectionPreface();
+          // Pass in the original framewriter and socket inside lock, so that it will not race with
+          // frameWriter.close() in stopIfNecessary().
+          frameWriter.becomeConnected(variant.newWriter(sink, true), socket);
+          frameWriter.connectionPreface();
           Settings settings = new Settings();
-          rawFrameWriter.settings(settings);
-        } catch (IOException e) {
-          onIoException(e);
-          throw new RuntimeException(e);
+          frameWriter.settings(settings);
+
+          OkHttpClientTransport.this.listener.transportReady();
         }
 
         clientFrameHandler = new ClientFrameHandler(variant.newReader(source, true));
-        synchronized (lock) {
-          OkHttpClientTransport.this.listener.transportReady();
-        }
         executor.execute(clientFrameHandler);
+
+        startPendingStreams();
       }
     });
   }

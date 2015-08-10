@@ -45,6 +45,7 @@ import okio.Buffer;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.List;
+import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -57,16 +58,14 @@ class AsyncFrameWriter implements FrameWriter {
   private final SerializingExecutor executor;
   private final OkHttpClientTransport transport;
 
-  public AsyncFrameWriter(OkHttpClientTransport transport, SerializingExecutor executor) {
+  public AsyncFrameWriter(OkHttpClientTransport transport, Executor executor) {
     this.transport = transport;
-    this.executor = executor;
+    this.executor = new SerializingExecutor(executor);
   }
 
   /**
    * Set the real frameWriter and the corresponding underlying socket, the socket is needed for
    * closing.
-   *
-   * <p>should only be called by thread of executor.
    */
   void becomeConnected(FrameWriter frameWriter, Socket socket) {
     Preconditions.checkState(this.frameWriter == null,
@@ -164,6 +163,9 @@ class AsyncFrameWriter implements FrameWriter {
     executor.execute(new WriteRunnable() {
       @Override
       public void doRun() throws IOException {
+        if (frameWriter == null) {
+          throw new IOException("Unable to send data due to unavailable frameWriter.");
+        }
         frameWriter.data(outFinished, streamId, source, byteCount);
       }
     });
@@ -174,6 +176,9 @@ class AsyncFrameWriter implements FrameWriter {
     executor.execute(new WriteRunnable() {
       @Override
       public void doRun() throws IOException {
+        if (frameWriter == null) {
+          throw new IOException("Unable to send settings due to unavailable frameWriter.");
+        }
         frameWriter.settings(okHttpSettings);
       }
     });
@@ -184,6 +189,10 @@ class AsyncFrameWriter implements FrameWriter {
     executor.execute(new WriteRunnable() {
       @Override
       public void doRun() throws IOException {
+        if (frameWriter == null) {
+          // In case the upper layer calls ping when the connection hasn't been connected yet.
+          return;
+        }
         frameWriter.ping(ack, payload1, payload2);
       }
     });
@@ -195,6 +204,11 @@ class AsyncFrameWriter implements FrameWriter {
     executor.execute(new WriteRunnable() {
       @Override
       public void doRun() throws IOException {
+        if (frameWriter == null) {
+          // goAway can be called when the transport is shutting down when connection hasn't
+          // been connected, we just return for such case.
+          return;
+        }
         frameWriter.goAway(lastGoodStreamId, errorCode, debugData);
         // Flush it since after goAway, we are likely to close this writer.
         frameWriter.flush();
@@ -207,6 +221,9 @@ class AsyncFrameWriter implements FrameWriter {
     executor.execute(new WriteRunnable() {
       @Override
       public void doRun() throws IOException {
+        if (frameWriter == null) {
+          throw new IOException("Unable to send window update due to unavailable frameWriter.");
+        }
         frameWriter.windowUpdate(streamId, windowSizeIncrement);
       }
     });
@@ -233,9 +250,6 @@ class AsyncFrameWriter implements FrameWriter {
     @Override
     public final void run() {
       try {
-        if (frameWriter == null) {
-          throw new IOException("Unable to perform write due to unavailable frameWriter.");
-        }
         doRun();
       } catch (IOException ex) {
         transport.onIoException(ex);
