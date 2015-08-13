@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Google Inc. All rights reserved.
+ * Copyright 2014, Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -34,13 +34,37 @@ package io.grpc;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Intercepts the creation of {@link ClientCall} instances, allowing modification of call behavior.
+ * A factory for manufacturing {@link ClientCall} instances.
  */
 @ThreadSafe
-public interface ClientInterceptor {
+public abstract class ClientCallFactory {
 
   /**
-   * Decorates the given {@link ClientCallFactory} with logic provided by this interceptor.
+   * Create a {@link ClientCall} to the remote operation specified by the given
+   * {@link MethodDescriptor}, and with the default call options.
+   *
+   * @param method describes the name and parameter types of the operation to call.
+   * @return a {@link ClientCall} bound to the specified method.
+   * @deprecated use {@link #newCall(MethodDescriptor, CallOptions)}
+   *
    */
-  ClientCallFactory intercept(ClientCallFactory next);
+  @Deprecated
+  public final <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
+      MethodDescriptor<RequestT, ResponseT> method) {
+    return newCall(method, CallOptions.DEFAULT);
+  }
+
+  /**
+   * Create a {@link ClientCall} to the remote operation specified by the given
+   * {@link MethodDescriptor}. The returned {@link ClientCall} does not trigger any remote
+   * behavior until {@link ClientCall#start(ClientCall.Listener, Metadata.Headers)} is
+   * invoked.
+   *
+   * @param method describes the name and parameter types of the operation to call.
+   * @param callOptions runtime options to be applied to this call.
+   * @return a {@link ClientCall} bound to the specified method.
+   *
+   */
+  public abstract <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
+      MethodDescriptor<RequestT, ResponseT> method, CallOptions callOptions);
 }

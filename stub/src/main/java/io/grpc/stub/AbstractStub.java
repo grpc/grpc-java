@@ -32,7 +32,7 @@
 package io.grpc.stub;
 
 import io.grpc.CallOptions;
-import io.grpc.Channel;
+import io.grpc.ClientCallFactory;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 
@@ -49,34 +49,34 @@ import javax.annotation.Nullable;
  * @param <S> the concrete type of this stub.
  */
 public abstract class AbstractStub<S extends AbstractStub<?>> {
-  protected final Channel channel;
+  protected final ClientCallFactory callFactory;
   protected final CallOptions callOptions;
 
   /**
    * Constructor for use by subclasses, with the default {@code CallOptions}.
    *
-   * @param channel the channel that this stub will use to do communications
+   * @param callFactory the channel that this stub will use to do communications
    */
-  protected AbstractStub(Channel channel) {
-    this(channel, CallOptions.DEFAULT);
+  protected AbstractStub(ClientCallFactory callFactory) {
+    this(callFactory, CallOptions.DEFAULT);
   }
 
   /**
    * Constructor for use by subclasses, with the default {@code CallOptions}.
    *
-   * @param channel the channel that this stub will use to do communications
+   * @param callFactory the channel that this stub will use to do communications
    * @param callOptions the runtime call options to be applied to every call on this stub
    */
-  protected AbstractStub(Channel channel, CallOptions callOptions) {
-    this.channel = channel;
+  protected AbstractStub(ClientCallFactory callFactory, CallOptions callOptions) {
+    this.callFactory = callFactory;
     this.callOptions = callOptions;
   }
 
   /**
    * The underlying channel of the stub.
    */
-  public Channel getChannel() {
-    return channel;
+  public ClientCallFactory getChannel() {
+    return callFactory;
   }
 
   /**
@@ -89,10 +89,10 @@ public abstract class AbstractStub<S extends AbstractStub<?>> {
   /**
    * Returns a new stub with the given channel for the provided method configurations.
    *
-   * @param channel the channel that this stub will use to do communications
+   * @param callFactory the channel that this stub will use to do communications
    * @param callOptions the runtime call options to be applied to every call on this stub
    */
-  protected abstract S build(Channel channel, CallOptions callOptions);
+  protected abstract S build(ClientCallFactory callFactory, CallOptions callOptions);
 
   /**
    * Returns a new stub with an absolute deadline in nanoseconds in the clock as per {@link
@@ -104,7 +104,7 @@ public abstract class AbstractStub<S extends AbstractStub<?>> {
    * @param deadlineNanoTime nanoseconds in the clock as per {@link System#nanoTime()}
    */
   public final S withDeadlineNanoTime(@Nullable Long deadlineNanoTime) {
-    return build(channel, callOptions.withDeadlineNanoTime(deadlineNanoTime));
+    return build(callFactory, callOptions.withDeadlineNanoTime(deadlineNanoTime));
   }
 
   /**
@@ -113,20 +113,20 @@ public abstract class AbstractStub<S extends AbstractStub<?>> {
    * @see CallOptions#withDeadlineAfter
    */
   public final S withDeadlineAfter(long duration, TimeUnit unit) {
-    return build(channel, callOptions.withDeadlineAfter(duration, unit));
+    return build(callFactory, callOptions.withDeadlineAfter(duration, unit));
   }
 
   /**
    * Returns a new stub that uses the given channel.
    */
-  public final S withChannel(Channel newChannel) {
-    return build(newChannel, callOptions);
+  public final S withChannel(ClientCallFactory newCallFactory) {
+    return build(newCallFactory, callOptions);
   }
 
   /**
    * Returns a new stub that has the given interceptors attached to the underlying channel.
    */
   public final S withInterceptors(ClientInterceptor... interceptors) {
-    return build(ClientInterceptors.intercept(channel, interceptors), callOptions);
+    return build(ClientInterceptors.intercept(callFactory, interceptors), callOptions);
   }
 }

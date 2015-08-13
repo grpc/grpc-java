@@ -45,49 +45,33 @@ public class ClientInterceptors {
   private ClientInterceptors() {}
 
   /**
-   * Create a new {@link Channel} that will call {@code interceptors} before starting a call on the
-   * given channel. The last interceptor will have its {@link ClientInterceptor#interceptCall}
-   * called first.
+   * Creates an interceptor chain around the given {@link ClientCallFactory}.
+   * The last interceptor will be called first.
    *
-   * @param channel the underlying channel to intercept.
+   * @param callFactory  the underlying {@link ClientCallFactory} to intercept.
    * @param interceptors array of interceptors to bind to {@code channel}.
    * @return a new channel instance with the interceptors applied.
    */
-  public static Channel intercept(Channel channel, ClientInterceptor... interceptors) {
-    return intercept(channel, Arrays.asList(interceptors));
+  public static ClientCallFactory intercept(ClientCallFactory callFactory,
+                                            ClientInterceptor... interceptors) {
+    return intercept(callFactory, Arrays.asList(interceptors));
   }
 
   /**
-   * Create a new {@link Channel} that will call {@code interceptors} before starting a call on the
-   * given channel. The last interceptor will have its {@link ClientInterceptor#interceptCall}
-   * called first.
+   * Creates an interceptor chain around the given {@link ClientCallFactory}.
+   * The last interceptor will be called first.
    *
-   * @param channel the underlying channel to intercept.
+   * @param callFactory  the underlying {@link ClientCallFactory} to intercept.
    * @param interceptors a list of interceptors to bind to {@code channel}.
    * @return a new channel instance with the interceptors applied.
    */
-  public static Channel intercept(Channel channel, List<? extends ClientInterceptor> interceptors) {
-    Preconditions.checkNotNull(channel);
+  public static ClientCallFactory intercept(ClientCallFactory callFactory,
+                                            List<? extends ClientInterceptor> interceptors) {
+    Preconditions.checkNotNull(callFactory);
     for (ClientInterceptor interceptor : interceptors) {
-      channel = new InterceptorChannel(channel, interceptor);
+      callFactory = interceptor.intercept(callFactory);
     }
-    return channel;
-  }
-
-  private static class InterceptorChannel extends Channel {
-    private final Channel channel;
-    private final ClientInterceptor interceptor;
-
-    private InterceptorChannel(Channel channel, ClientInterceptor interceptor) {
-      this.channel = channel;
-      this.interceptor = Preconditions.checkNotNull(interceptor, "interceptor");
-    }
-
-    @Override
-    public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
-        MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
-      return interceptor.interceptCall(method, callOptions, channel);
-    }
+    return callFactory;
   }
 
   private static final ClientCall<Object, Object> NOOP_CALL = new ClientCall<Object, Object>() {

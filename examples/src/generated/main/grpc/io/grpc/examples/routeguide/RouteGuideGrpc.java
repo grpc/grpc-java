@@ -45,18 +45,18 @@ public class RouteGuideGrpc {
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.RouteNote.parser()),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.RouteNote.parser()));
 
-  public static RouteGuideStub newStub(io.grpc.Channel channel) {
-    return new RouteGuideStub(channel);
+  public static RouteGuideStub newStub(io.grpc.ClientCallFactory callFactory) {
+    return new RouteGuideStub(callFactory);
   }
 
   public static RouteGuideBlockingStub newBlockingStub(
-      io.grpc.Channel channel) {
-    return new RouteGuideBlockingStub(channel);
+      io.grpc.ClientCallFactory callFactory) {
+    return new RouteGuideBlockingStub(callFactory);
   }
 
   public static RouteGuideFutureStub newFutureStub(
-      io.grpc.Channel channel) {
-    return new RouteGuideFutureStub(channel);
+      io.grpc.ClientCallFactory callFactory) {
+    return new RouteGuideFutureStub(callFactory);
   }
 
   public static interface RouteGuide {
@@ -90,103 +90,103 @@ public class RouteGuideGrpc {
 
   public static class RouteGuideStub extends io.grpc.stub.AbstractStub<RouteGuideStub>
       implements RouteGuide {
-    private RouteGuideStub(io.grpc.Channel channel) {
-      super(channel);
+    private RouteGuideStub(io.grpc.ClientCallFactory callFactory) {
+      super(callFactory);
     }
 
-    private RouteGuideStub(io.grpc.Channel channel,
+    private RouteGuideStub(io.grpc.ClientCallFactory callFactory,
         io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+      super(callFactory, callOptions);
     }
 
     @java.lang.Override
-    protected RouteGuideStub build(io.grpc.Channel channel,
+    protected RouteGuideStub build(io.grpc.ClientCallFactory callFactory,
         io.grpc.CallOptions callOptions) {
-      return new RouteGuideStub(channel, callOptions);
+      return new RouteGuideStub(callFactory, callOptions);
     }
 
     @java.lang.Override
     public void getFeature(io.grpc.examples.routeguide.Point request,
         io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.Feature> responseObserver) {
       asyncUnaryCall(
-          channel.newCall(METHOD_GET_FEATURE, callOptions), request, responseObserver);
+          callFactory.newCall(METHOD_GET_FEATURE, callOptions), request, responseObserver);
     }
 
     @java.lang.Override
     public void listFeatures(io.grpc.examples.routeguide.Rectangle request,
         io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.Feature> responseObserver) {
       asyncServerStreamingCall(
-          channel.newCall(METHOD_LIST_FEATURES, callOptions), request, responseObserver);
+          callFactory.newCall(METHOD_LIST_FEATURES, callOptions), request, responseObserver);
     }
 
     @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.Point> recordRoute(
         io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.RouteSummary> responseObserver) {
       return asyncClientStreamingCall(
-          channel.newCall(METHOD_RECORD_ROUTE, callOptions), responseObserver);
+          callFactory.newCall(METHOD_RECORD_ROUTE, callOptions), responseObserver);
     }
 
     @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.RouteNote> routeChat(
         io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.RouteNote> responseObserver) {
       return asyncBidiStreamingCall(
-          channel.newCall(METHOD_ROUTE_CHAT, callOptions), responseObserver);
+          callFactory.newCall(METHOD_ROUTE_CHAT, callOptions), responseObserver);
     }
   }
 
   public static class RouteGuideBlockingStub extends io.grpc.stub.AbstractStub<RouteGuideBlockingStub>
       implements RouteGuideBlockingClient {
-    private RouteGuideBlockingStub(io.grpc.Channel channel) {
-      super(channel);
+    private RouteGuideBlockingStub(io.grpc.ClientCallFactory callFactory) {
+      super(callFactory);
     }
 
-    private RouteGuideBlockingStub(io.grpc.Channel channel,
+    private RouteGuideBlockingStub(io.grpc.ClientCallFactory callFactory,
         io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+      super(callFactory, callOptions);
     }
 
     @java.lang.Override
-    protected RouteGuideBlockingStub build(io.grpc.Channel channel,
+    protected RouteGuideBlockingStub build(io.grpc.ClientCallFactory callFactory,
         io.grpc.CallOptions callOptions) {
-      return new RouteGuideBlockingStub(channel, callOptions);
+      return new RouteGuideBlockingStub(callFactory, callOptions);
     }
 
     @java.lang.Override
     public io.grpc.examples.routeguide.Feature getFeature(io.grpc.examples.routeguide.Point request) {
       return blockingUnaryCall(
-          channel.newCall(METHOD_GET_FEATURE, callOptions), request);
+          callFactory.newCall(METHOD_GET_FEATURE, callOptions), request);
     }
 
     @java.lang.Override
     public java.util.Iterator<io.grpc.examples.routeguide.Feature> listFeatures(
         io.grpc.examples.routeguide.Rectangle request) {
       return blockingServerStreamingCall(
-          channel.newCall(METHOD_LIST_FEATURES, callOptions), request);
+          callFactory.newCall(METHOD_LIST_FEATURES, callOptions), request);
     }
   }
 
   public static class RouteGuideFutureStub extends io.grpc.stub.AbstractStub<RouteGuideFutureStub>
       implements RouteGuideFutureClient {
-    private RouteGuideFutureStub(io.grpc.Channel channel) {
-      super(channel);
+    private RouteGuideFutureStub(io.grpc.ClientCallFactory callFactory) {
+      super(callFactory);
     }
 
-    private RouteGuideFutureStub(io.grpc.Channel channel,
+    private RouteGuideFutureStub(io.grpc.ClientCallFactory callFactory,
         io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+      super(callFactory, callOptions);
     }
 
     @java.lang.Override
-    protected RouteGuideFutureStub build(io.grpc.Channel channel,
+    protected RouteGuideFutureStub build(io.grpc.ClientCallFactory callFactory,
         io.grpc.CallOptions callOptions) {
-      return new RouteGuideFutureStub(channel, callOptions);
+      return new RouteGuideFutureStub(callFactory, callOptions);
     }
 
     @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.examples.routeguide.Feature> getFeature(
         io.grpc.examples.routeguide.Point request) {
       return futureUnaryCall(
-          channel.newCall(METHOD_GET_FEATURE, callOptions), request);
+          callFactory.newCall(METHOD_GET_FEATURE, callOptions), request);
     }
   }
 

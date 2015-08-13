@@ -386,7 +386,7 @@ public abstract class AbstractBenchmark {
             if (!done.get()) {
               ByteBuf slice = request.slice();
               ClientCalls.asyncUnaryCall(
-                  channel.newCall(unaryMethod, CALL_OPTIONS), slice, this);
+                  channel.callFactory().newCall(unaryMethod, CALL_OPTIONS), slice, this);
             }
           }
         };
@@ -407,7 +407,7 @@ public abstract class AbstractBenchmark {
     for (final ChannelImpl channel : channels) {
       for (int i = 0; i < callsPerChannel; i++) {
         final ClientCall<ByteBuf, ByteBuf> streamingCall =
-            channel.newCall(pingPongMethod, CALL_OPTIONS);
+            channel.callFactory().newCall(pingPongMethod, CALL_OPTIONS);
         final AtomicReference<StreamObserver<ByteBuf>> requestObserverRef =
             new AtomicReference<StreamObserver<ByteBuf>>();
         StreamObserver<ByteBuf> requestObserver = ClientCalls.asyncBidiStreamingCall(
@@ -452,7 +452,7 @@ public abstract class AbstractBenchmark {
     for (final ChannelImpl channel : channels) {
       for (int i = 0; i < callsPerChannel; i++) {
         final ClientCall<ByteBuf, ByteBuf> streamingCall =
-            channel.newCall(flowControlledStreaming, CALL_OPTIONS);
+            channel.callFactory().newCall(flowControlledStreaming, CALL_OPTIONS);
         final AtomicReference<StreamObserver<ByteBuf>> requestObserverRef =
             new AtomicReference<StreamObserver<ByteBuf>>();
         StreamObserver<ByteBuf> requestObserver = ClientCalls.asyncBidiStreamingCall(

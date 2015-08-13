@@ -35,8 +35,8 @@ import com.google.auth.Credentials;
 import com.google.common.base.Preconditions;
 
 import io.grpc.CallOptions;
-import io.grpc.Channel;
 import io.grpc.ClientCall;
+import io.grpc.ClientCallFactory;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors.CheckedForwardingClientCall;
 import io.grpc.Metadata;
@@ -47,8 +47,9 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 
 /**
- * Client interceptor that authenticates all calls by binding header data provided by a credential.
- * Typically this will populate the Authorization header but other headers may also be filled out.
+ * Creates client-side call interceptors that authenticate all calls by binding header data provided
+ * by a credential. Typically this will populate the Authorization header but other headers may also
+ * be filled out.
  *
  * <p> Uses the new and simplified Google auth library:
  * https://github.com/google/google-auth-library-java
@@ -68,33 +69,40 @@ public class ClientAuthInterceptor implements ClientInterceptor {
   }
 
   @Override
-  public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(MethodDescriptor<ReqT, RespT> method,
-      CallOptions callOptions, Channel next) {
-    // TODO(ejona86): If the call fails for Auth reasons, this does not properly propagate info that
-    // would be in WWW-Authenticate, because it does not yet have access to the header.
-    return new CheckedForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+  public ClientCallFactory intercept(final ClientCallFactory next) {
+    return new ClientCallFactory() {
       @Override
-      protected void checkedStart(Listener<RespT> responseListener, Metadata.Headers headers)
-          throws Exception {
-        Metadata.Headers cachedSaved;
-        synchronized (ClientAuthInterceptor.this) {
-          // TODO(louiscryan): This is icky but the current auth library stores the same
-          // metadata map until the next refresh cycle. This will be fixed once
-          // https://github.com/google/google-auth-library-java/issues/3
-          // is resolved.
-          if (lastMetadata == null || lastMetadata != credentials.getRequestMetadata()) {
-            lastMetadata = credentials.getRequestMetadata();
-            cached = toHeaders(lastMetadata);
+      public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
+              MethodDescriptor<ReqT, RespT> method,
+              CallOptions callOptions) {
+        // TODO(ejona86): If the call fails for Auth reasons, this does not properly
+        // propagate info that would be in WWW-Authenticate, because it does not yet have access
+        // to the header.
+        return new CheckedForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+          @Override
+          protected void checkedStart(Listener<RespT> responseListener, Metadata.Headers headers)
+                  throws Exception {
+            Metadata.Headers cachedSaved;
+            synchronized (ClientAuthInterceptor.this) {
+              // TODO(louiscryan): This is icky but the current auth library stores the same
+              // metadata map until the next refresh cycle. This will be fixed once
+              // https://github.com/google/google-auth-library-java/issues/3
+              // is resolved.
+              if (lastMetadata == null || lastMetadata != credentials.getRequestMetadata()) {
+                lastMetadata = credentials.getRequestMetadata();
+                cached = toHeaders(lastMetadata);
+              }
+              cachedSaved = cached;
+            }
+            headers.merge(cachedSaved);
+            delegate().start(responseListener, headers);
           }
-          cachedSaved = cached;
-        }
-        headers.merge(cachedSaved);
-        delegate().start(responseListener, headers);
+        };
       }
     };
   }
 
-  private static final Metadata.Headers toHeaders(Map<String, List<String>> metadata) {
+  private static Metadata.Headers toHeaders(Map<String, List<String>> metadata) {
     Metadata.Headers headers = new Metadata.Headers();
     if (metadata != null) {
       for (String key : metadata.keySet()) {

@@ -39,7 +39,7 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /**
- * Description of a remote method used by {@link Channel} to initiate a call.
+ * Description of a remote method used by {@link ClientCallFactory} to initiate a call.
  *
  * <p>Provides the name of the operation to execute as well as {@link Marshaller} instances
  * used to parse and serialize request and response messages.

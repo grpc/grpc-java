@@ -32,8 +32,8 @@
 package io.grpc.stub;
 
 import io.grpc.CallOptions;
-import io.grpc.Channel;
 import io.grpc.ClientCall;
+import io.grpc.ClientCallFactory;
 import io.grpc.ClientInterceptor;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
@@ -68,18 +68,23 @@ public class MetadataUtils {
    * @param extraHeaders the headers to be passed by each call that is processed by the returned
    *                     interceptor
    */
-  public static ClientInterceptor newAttachHeadersInterceptor(final Metadata.Headers extraHeaders) {
+  public static ClientInterceptor newAttachHeadersInterceptor(
+          final Metadata.Headers extraHeaders) {
     return new ClientInterceptor() {
       @Override
-      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
-          MethodDescriptor<ReqT, RespT> method,
-          CallOptions callOptions,
-          Channel next) {
-        return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+      public ClientCallFactory intercept(final ClientCallFactory next) {
+        return new ClientCallFactory() {
           @Override
-          public void start(Listener<RespT> responseListener, Metadata.Headers headers) {
-            headers.merge(extraHeaders);
-            super.start(responseListener, headers);
+          public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
+                  MethodDescriptor<ReqT, RespT> method,
+                  CallOptions callOptions) {
+            return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+              @Override
+              public void start(Listener<RespT> responseListener, Metadata.Headers headers) {
+                headers.merge(extraHeaders);
+                super.start(responseListener, headers);
+              }
+            };
           }
         };
       }
@@ -115,28 +120,32 @@ public class MetadataUtils {
       final AtomicReference<Metadata.Trailers> trailersCapture) {
     return new ClientInterceptor() {
       @Override
-      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
-          MethodDescriptor<ReqT, RespT> method,
-          CallOptions callOptions,
-          Channel next) {
-        return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+      public ClientCallFactory intercept(final ClientCallFactory next) {
+        return new ClientCallFactory() {
           @Override
-          public void start(Listener<RespT> responseListener, Metadata.Headers headers) {
-            headersCapture.set(null);
-            trailersCapture.set(null);
-            super.start(new SimpleForwardingClientCallListener<RespT>(responseListener) {
+          public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
+                  MethodDescriptor<ReqT, RespT> method,
+                  CallOptions callOptions) {
+            return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
               @Override
-              public void onHeaders(Metadata.Headers headers) {
-                headersCapture.set(headers);
-                super.onHeaders(headers);
-              }
+              public void start(Listener<RespT> responseListener, Metadata.Headers headers) {
+                headersCapture.set(null);
+                trailersCapture.set(null);
+                super.start(new SimpleForwardingClientCallListener<RespT>(responseListener) {
+                  @Override
+                  public void onHeaders(Metadata.Headers headers) {
+                    headersCapture.set(headers);
+                    super.onHeaders(headers);
+                  }
 
-              @Override
-              public void onClose(Status status, Metadata.Trailers trailers) {
-                trailersCapture.set(trailers);
-                super.onClose(status, trailers);
+                  @Override
+                  public void onClose(Status status, Metadata.Trailers trailers) {
+                    trailersCapture.set(trailers);
+                    super.onClose(status, trailers);
+                  }
+                }, headers);
               }
-            }, headers);
+            };
           }
         };
       }

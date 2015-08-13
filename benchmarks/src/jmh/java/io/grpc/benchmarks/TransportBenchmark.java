@@ -138,7 +138,7 @@ public class TransportBenchmark {
         .build();
     server.start();
     channel = channelBuilder.build();
-    stub = TestServiceGrpc.newBlockingStub(channel);
+    stub = TestServiceGrpc.newBlockingStub(channel.callFactory());
     // Wait for channel to start
     stub.unaryCall(SimpleRequest.getDefaultInstance());
   }

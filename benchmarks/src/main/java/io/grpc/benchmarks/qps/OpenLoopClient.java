@@ -49,7 +49,7 @@ import static io.grpc.benchmarks.qps.Utils.newRequest;
 import static io.grpc.benchmarks.qps.Utils.saveHistogram;
 
 import io.grpc.Channel;
-import io.grpc.ChannelImpl;
+import io.grpc.ClientCallFactory;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.SimpleRequest;
@@ -110,7 +110,7 @@ public class OpenLoopClient {
     Channel ch = newClientChannel(config);
     SimpleRequest req = newRequest(config);
     LoadGenerationWorker worker =
-        new LoadGenerationWorker(ch, req, config.targetQps, config.duration);
+        new LoadGenerationWorker(ch.callFactory(), req, config.targetQps, config.duration);
     final long start = System.nanoTime();
     Histogram histogram = worker.call();
     final long end = System.nanoTime();
@@ -118,7 +118,7 @@ public class OpenLoopClient {
     if (config.histogramFile != null) {
       saveHistogram(histogram, config.histogramFile);
     }
-    ((ChannelImpl) ch).shutdown();
+    ch.shutdown();
   }
 
   private void printStats(Histogram histogram, long elapsedTime) {
@@ -152,8 +152,11 @@ public class OpenLoopClient {
     final int targetQps;
     final long numRpcs;
 
-    LoadGenerationWorker(Channel channel, SimpleRequest request, int targetQps, int duration) {
-      stub = TestServiceGrpc.newStub(checkNotNull(channel, "channel"));
+    LoadGenerationWorker(ClientCallFactory callFactory,
+                         SimpleRequest request,
+                         int targetQps,
+                         int duration) {
+      stub = TestServiceGrpc.newStub(checkNotNull(callFactory, "channel"));
       this.request = checkNotNull(request, "request");
       this.targetQps = targetQps;
       numRpcs = targetQps * duration;

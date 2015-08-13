@@ -31,8 +31,8 @@
 
 package io.grpc.examples.header;
 
-import io.grpc.Channel;
 import io.grpc.ChannelImpl;
+import io.grpc.ClientCallFactory;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.examples.helloworld.GreeterGrpc;
@@ -63,8 +63,9 @@ public class CustomHeaderClient {
             NettyChannelBuilder.forAddress(host, port).negotiationType(NegotiationType.PLAINTEXT)
                     .build();
     ClientInterceptor interceptor = new HeaderClientInterceptor();
-    Channel channel = ClientInterceptors.intercept(originChannel, interceptor);
-    blockingStub = GreeterGrpc.newBlockingStub(channel);
+    ClientCallFactory callFactory = ClientInterceptors.intercept(originChannel.callFactory(),
+            interceptor);
+    blockingStub = GreeterGrpc.newBlockingStub(callFactory);
   }
 
   private void shutdown() throws InterruptedException {

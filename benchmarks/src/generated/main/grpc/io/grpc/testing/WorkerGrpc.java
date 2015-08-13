@@ -31,18 +31,18 @@ public class WorkerGrpc {
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.testing.ServerArgs.parser()),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.testing.ServerStatus.parser()));
 
-  public static WorkerStub newStub(io.grpc.Channel channel) {
-    return new WorkerStub(channel);
+  public static WorkerStub newStub(io.grpc.ClientCallFactory callFactory) {
+    return new WorkerStub(callFactory);
   }
 
   public static WorkerBlockingStub newBlockingStub(
-      io.grpc.Channel channel) {
-    return new WorkerBlockingStub(channel);
+      io.grpc.ClientCallFactory callFactory) {
+    return new WorkerBlockingStub(callFactory);
   }
 
   public static WorkerFutureStub newFutureStub(
-      io.grpc.Channel channel) {
-    return new WorkerFutureStub(channel);
+      io.grpc.ClientCallFactory callFactory) {
+    return new WorkerFutureStub(callFactory);
   }
 
   public static interface Worker {
@@ -62,69 +62,69 @@ public class WorkerGrpc {
 
   public static class WorkerStub extends io.grpc.stub.AbstractStub<WorkerStub>
       implements Worker {
-    private WorkerStub(io.grpc.Channel channel) {
-      super(channel);
+    private WorkerStub(io.grpc.ClientCallFactory callFactory) {
+      super(callFactory);
     }
 
-    private WorkerStub(io.grpc.Channel channel,
+    private WorkerStub(io.grpc.ClientCallFactory callFactory,
         io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+      super(callFactory, callOptions);
     }
 
     @java.lang.Override
-    protected WorkerStub build(io.grpc.Channel channel,
+    protected WorkerStub build(io.grpc.ClientCallFactory callFactory,
         io.grpc.CallOptions callOptions) {
-      return new WorkerStub(channel, callOptions);
+      return new WorkerStub(callFactory, callOptions);
     }
 
     @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.testing.ClientArgs> runTest(
         io.grpc.stub.StreamObserver<io.grpc.testing.ClientStatus> responseObserver) {
       return asyncBidiStreamingCall(
-          channel.newCall(METHOD_RUN_TEST, callOptions), responseObserver);
+          callFactory.newCall(METHOD_RUN_TEST, callOptions), responseObserver);
     }
 
     @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.testing.ServerArgs> runServer(
         io.grpc.stub.StreamObserver<io.grpc.testing.ServerStatus> responseObserver) {
       return asyncBidiStreamingCall(
-          channel.newCall(METHOD_RUN_SERVER, callOptions), responseObserver);
+          callFactory.newCall(METHOD_RUN_SERVER, callOptions), responseObserver);
     }
   }
 
   public static class WorkerBlockingStub extends io.grpc.stub.AbstractStub<WorkerBlockingStub>
       implements WorkerBlockingClient {
-    private WorkerBlockingStub(io.grpc.Channel channel) {
-      super(channel);
+    private WorkerBlockingStub(io.grpc.ClientCallFactory callFactory) {
+      super(callFactory);
     }
 
-    private WorkerBlockingStub(io.grpc.Channel channel,
+    private WorkerBlockingStub(io.grpc.ClientCallFactory callFactory,
         io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+      super(callFactory, callOptions);
     }
 
     @java.lang.Override
-    protected WorkerBlockingStub build(io.grpc.Channel channel,
+    protected WorkerBlockingStub build(io.grpc.ClientCallFactory callFactory,
         io.grpc.CallOptions callOptions) {
-      return new WorkerBlockingStub(channel, callOptions);
+      return new WorkerBlockingStub(callFactory, callOptions);
     }
   }
 
   public static class WorkerFutureStub extends io.grpc.stub.AbstractStub<WorkerFutureStub>
       implements WorkerFutureClient {
-    private WorkerFutureStub(io.grpc.Channel channel) {
-      super(channel);
+    private WorkerFutureStub(io.grpc.ClientCallFactory callFactory) {
+      super(callFactory);
     }
 
-    private WorkerFutureStub(io.grpc.Channel channel,
+    private WorkerFutureStub(io.grpc.ClientCallFactory callFactory,
         io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+      super(callFactory, callOptions);
     }
 
     @java.lang.Override
-    protected WorkerFutureStub build(io.grpc.Channel channel,
+    protected WorkerFutureStub build(io.grpc.ClientCallFactory callFactory,
         io.grpc.CallOptions callOptions) {
-      return new WorkerFutureStub(channel, callOptions);
+      return new WorkerFutureStub(callFactory, callOptions);
     }
   }
 

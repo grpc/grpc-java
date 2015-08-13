@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Google Inc. All rights reserved.
+ * Copyright 2015, Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -31,48 +31,62 @@
 
 package io.grpc;
 
-import javax.annotation.concurrent.ThreadSafe;
+import java.util.concurrent.TimeUnit;
 
 /**
- * A Channel provides an abstraction over the transport layer that is designed to be consumed
- * by stub implementations. Channel and its associated types {@link ClientCall} and
- * {@link ClientCall.Listener} exchange parsed request and response objects whereas the
- * transport layer only works with serialized data.
+ * A Channel provides an abstraction over the transport layer that is designed to be consumed by
+ * stub implementations. Channel and its associated types {@link ClientCall} and {@link
+ * ClientCall.Listener} exchange parsed request and response objects whereas the transport layer
+ * only works with serialized data.
  *
  * <p>Applications can add common cross-cutting behaviors to stubs by decorating Channel
- * implementations using {@link ClientInterceptor}. It is expected that most application
- * code will not use this class directly but rather work with stubs that have been bound to a
- * Channel that was decorated during application initialization,
+ * implementations using {@link ClientInterceptor}. It is expected that most application code
+ * will not use this class directly but rather work with stubs that have been bound to a Channel
+ * that was decorated during application initialization,
  */
-@ThreadSafe
-public abstract class Channel {
+public interface Channel {
 
   /**
-   * Create a {@link ClientCall} to the remote operation specified by the given
-   * {@link MethodDescriptor}, and with the default call options.
-   *
-   * @param methodDescriptor describes the name and parameter types of the operation to call.
-   * @return a {@link ClientCall} bound to the specified method.
-   * @deprecated use {@link #newCall(MethodDescriptor, CallOptions)}
-   *
+   * Returns the factory used for making new calls on this channel.
    */
-  @Deprecated
-  public final <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
-      MethodDescriptor<RequestT, ResponseT> methodDescriptor) {
-    return newCall(methodDescriptor, CallOptions.DEFAULT);
-  }
+  ClientCallFactory callFactory();
 
   /**
-   * Create a {@link ClientCall} to the remote operation specified by the given
-   * {@link MethodDescriptor}. The returned {@link ClientCall} does not trigger any remote
-   * behavior until {@link ClientCall#start(ClientCall.Listener, Metadata.Headers)} is
-   * invoked.
-   *
-   * @param methodDescriptor describes the name and parameter types of the operation to call.
-   * @param callOptions runtime options to be applied to this call.
-   * @return a {@link ClientCall} bound to the specified method.
-   *
+   * Initiates an orderly shutdown in which preexisting calls continue but new calls are immediately
+   * cancelled.
    */
-  public abstract <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
-      MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions);
+  Channel shutdown();
+
+  /**
+   * Initiates a forceful shutdown in which preexisting and new calls are cancelled. Although
+   * forceful, the shutdown process is still not instantaneous; {@link #isTerminated()} will likely
+   * return {@code false} immediately after this method returns.
+   *
+   * <p>NOT YET IMPLEMENTED. This method currently behaves identically to shutdown().
+   */
+  Channel shutdownNow();
+
+  /**
+   * Returns whether the channel is shutdown. Shutdown channels immediately cancel any new calls,
+   * but may still have some calls being processed.
+   *
+   * @see #shutdown()
+   * @see #isTerminated()
+   */
+  boolean isShutdown();
+
+  /**
+   * Waits for the channel to become terminated, giving up if the timeout is reached.
+   *
+   * @return whether the channel is terminated, as would be done by {@link #isTerminated()}.
+   */
+  boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException;
+
+  /**
+   * Returns whether the channel is terminated. Terminated channels have no running calls and
+   * relevant resources released (like TCP connections).
+   *
+   * @see #isShutdown()
+   */
+  boolean isTerminated();
 }

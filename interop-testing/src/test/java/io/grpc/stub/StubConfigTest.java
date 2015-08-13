@@ -40,10 +40,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.grpc.CallOptions;
-import io.grpc.Channel;
 import io.grpc.ClientCall;
+import io.grpc.ClientCallFactory;
 import io.grpc.MethodDescriptor;
-import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
 import io.grpc.testing.integration.TestServiceGrpc;
@@ -63,7 +62,7 @@ import org.mockito.MockitoAnnotations;
 public class StubConfigTest {
 
   @Mock
-  private Channel channel;
+  private ClientCallFactory callFactory;
 
   @Mock
   private StreamObserver<SimpleResponse> responseObserver;
@@ -76,7 +75,7 @@ public class StubConfigTest {
    */
   @Before public void setUp() {
     MockitoAnnotations.initMocks(this);
-    when(channel.newCall(
+    when(callFactory.newCall(
       Mockito.<MethodDescriptor<SimpleRequest, SimpleResponse>>any(), any(CallOptions.class)))
       .thenReturn(call);
   }
@@ -84,7 +83,7 @@ public class StubConfigTest {
   @Test
   public void testConfigureDeadline() {
     // Create a default stub
-    TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(channel);
+    TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(callFactory);
     assertNull(stub.getCallOptions().getDeadlineNanoTime());
     // Reconfigure it
     TestServiceGrpc.TestServiceBlockingStub reconfiguredStub = stub.withDeadlineNanoTime(2L);
@@ -96,15 +95,15 @@ public class StubConfigTest {
 
   @Test
   public void testStubCallOptionsPopulatedToNewCall() {
-    TestServiceGrpc.TestServiceStub stub = TestServiceGrpc.newStub(channel);
+    TestServiceGrpc.TestServiceStub stub = TestServiceGrpc.newStub(callFactory);
     CallOptions options1 = stub.getCallOptions();
     SimpleRequest request = SimpleRequest.getDefaultInstance();
     stub.unaryCall(request, responseObserver);
-    verify(channel).newCall(same(TestServiceGrpc.METHOD_UNARY_CALL), same(options1));
+    verify(callFactory).newCall(same(TestServiceGrpc.METHOD_UNARY_CALL), same(options1));
     stub = stub.withDeadlineNanoTime(2L);
     CallOptions options2 = stub.getCallOptions();
     assertNotSame(options1, options2);
     stub.unaryCall(request, responseObserver);
-    verify(channel).newCall(same(TestServiceGrpc.METHOD_UNARY_CALL), same(options2));
+    verify(callFactory).newCall(same(TestServiceGrpc.METHOD_UNARY_CALL), same(options2));
   }
 }

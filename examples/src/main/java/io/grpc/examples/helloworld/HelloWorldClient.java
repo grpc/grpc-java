@@ -53,7 +53,7 @@ public class HelloWorldClient {
     channel =
         NettyChannelBuilder.forAddress(host, port).negotiationType(NegotiationType.PLAINTEXT)
             .build();
-    blockingStub = GreeterGrpc.newBlockingStub(channel);
+    blockingStub = GreeterGrpc.newBlockingStub(channel.callFactory());
   }
 
   public void shutdown() throws InterruptedException {

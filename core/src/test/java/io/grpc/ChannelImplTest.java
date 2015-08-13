@@ -134,10 +134,11 @@ public class ChannelImplTest {
   @Test
   public void immediateDeadlineExceeded() {
     ClientCall<String, Integer> call =
-        channel.newCall(method, CallOptions.DEFAULT.withDeadlineNanoTime(System.nanoTime()));
+        channel.callFactory().newCall(method,
+                CallOptions.DEFAULT.withDeadlineNanoTime(System.nanoTime()));
     call.start(mockCallListener, new Metadata.Headers());
     verify(mockCallListener, timeout(1000)).onClose(
-        same(Status.DEADLINE_EXCEEDED), any(Metadata.Trailers.class));
+            same(Status.DEADLINE_EXCEEDED), any(Metadata.Trailers.class));
   }
 
   @Test
@@ -151,7 +152,7 @@ public class ChannelImplTest {
   @Test
   public void twoCallsAndGracefulShutdown() {
     verifyNoMoreInteractions(mockTransportFactory);
-    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    ClientCall<String, Integer> call = channel.callFactory().newCall(method, CallOptions.DEFAULT);
     verifyNoMoreInteractions(mockTransportFactory);
 
     // Create transport and call
@@ -170,7 +171,7 @@ public class ChannelImplTest {
     ClientStreamListener streamListener = streamListenerCaptor.getValue();
 
     // Second call
-    ClientCall<String, Integer> call2 = channel.newCall(method, CallOptions.DEFAULT);
+    ClientCall<String, Integer> call2 = channel.callFactory().newCall(method, CallOptions.DEFAULT);
     ClientStream mockStream2 = mock(ClientStream.class);
     Metadata.Headers headers2 = new Metadata.Headers();
     when(mockTransport.newStream(same(method), same(headers2), any(ClientStreamListener.class)))
@@ -190,7 +191,7 @@ public class ChannelImplTest {
     verify(mockTransport).shutdown();
 
     // Further calls should fail without going to the transport
-    ClientCall<String, Integer> call3 = channel.newCall(method, CallOptions.DEFAULT);
+    ClientCall<String, Integer> call3 = channel.callFactory().newCall(method, CallOptions.DEFAULT);
     call3.start(mockCallListener3, new Metadata.Headers());
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     verify(mockCallListener3, timeout(1000))
@@ -217,7 +218,7 @@ public class ChannelImplTest {
     Status goldenStatus = Status.INTERNAL.withDescription("wanted it to fail");
 
     // Have transport throw exception on start
-    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    ClientCall<String, Integer> call = channel.callFactory().newCall(method, CallOptions.DEFAULT);
     ClientTransport mockTransport = mock(ClientTransport.class);
     when(mockTransportFactory.newClientTransport()).thenReturn(mockTransport);
     doThrow(goldenStatus.asRuntimeException())
@@ -231,7 +232,7 @@ public class ChannelImplTest {
     assertSame(goldenStatus, statusCaptor.getValue());
 
     // Have transport shutdown immediately during start
-    call = channel.newCall(method, CallOptions.DEFAULT);
+    call = channel.callFactory().newCall(method, CallOptions.DEFAULT);
     ClientTransport mockTransport2 = mock(ClientTransport.class);
     ClientStream mockStream2 = mock(ClientStream.class);
     Metadata.Headers headers2 = new Metadata.Headers();
@@ -256,7 +257,7 @@ public class ChannelImplTest {
     verify(mockCallListener2, timeout(1000)).onClose(Status.CANCELLED, trailers2);
 
     // Make sure the Channel can still handle new calls
-    call = channel.newCall(method, CallOptions.DEFAULT);
+    call = channel.callFactory().newCall(method, CallOptions.DEFAULT);
     ClientTransport mockTransport3 = mock(ClientTransport.class);
     ClientStream mockStream3 = mock(ClientStream.class);
     Metadata.Headers headers3 = new Metadata.Headers();
@@ -295,22 +296,27 @@ public class ChannelImplTest {
     final AtomicLong atomic = new AtomicLong();
     ClientInterceptor interceptor = new ClientInterceptor() {
       @Override
-      public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> interceptCall(
-          MethodDescriptor<RequestT, ResponseT> method, CallOptions callOptions,
-          Channel next) {
-        atomic.set(1);
-        return next.newCall(method, callOptions);
+      public ClientCallFactory intercept(final ClientCallFactory next) {
+        return new ClientCallFactory() {
+          @Override
+          public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
+                  MethodDescriptor<RequestT, ResponseT> method,
+                  CallOptions callOptions) {
+            atomic.set(1);
+            return next.newCall(method, callOptions);
+          }
+        };
       }
     };
     channel = new ChannelImpl(mockTransportFactory, executor, null, Arrays.asList(interceptor));
-    assertNotNull(channel.newCall(method, CallOptions.DEFAULT));
+    assertNotNull(channel.callFactory().newCall(method, CallOptions.DEFAULT));
     assertEquals(1, atomic.get());
   }
 
   @Test
   public void testNoDeadlockOnShutdown() {
     // Force creation of transport
-    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    ClientCall<String, Integer> call = channel.callFactory().newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata.Headers());
     call.cancel();
 
