@@ -31,6 +31,9 @@
 
 package io.grpc;
 
+import com.google.common.base.Objects;
+import com.google.common.base.Objects.ToStringHelper;
+
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nullable;
@@ -46,12 +49,9 @@ public final class CallOptions {
   /**
    * A blank {@code CallOptions} that all fields are not set.
    */
-  public static final CallOptions DEFAULT = new CallOptions();
+  public static final CallOptions DEFAULT = CallOptions.newBuilder().build();
 
-  // Although {@code CallOptions} is immutable, its fields are not final, so that we can initialize
-  // them outside of constructor. Otherwise the constructor will have a potentially long list of
-  // unnamed arguments, which is undesirable.
-  private Long deadlineNanoTime;
+  private final Long deadlineNanoTime;
 
   /**
    * Returns a new {@code CallOptions} with the given absolute deadline in nanoseconds in the clock
@@ -60,18 +60,20 @@ public final class CallOptions {
    * <p>This is mostly used for propagating an existing deadline. {@link #withDeadlineAfter} is the
    * recommended way of setting a new deadline,
    *
+   * <p>TODO(carl-mastrangelo): maybe remove this in favor of the Builder approach.
+   *
    * @param deadlineNanoTime the deadline in the clock as per {@link System#nanoTime()}.
    *                         {@code null} for unsetting the deadline.
    */
   public CallOptions withDeadlineNanoTime(@Nullable Long deadlineNanoTime) {
-    CallOptions newOptions = new CallOptions(this);
-    newOptions.deadlineNanoTime = deadlineNanoTime;
-    return newOptions;
+    return toBuilder().setDeadlineNanoTime(deadlineNanoTime).build();
   }
 
   /**
    * Returns a new {@code CallOptions} with a deadline that is after the given {@code duration} from
    * now.
+   *
+   * <p>TODO(carl-mastrangelo): maybe remove this in favor of the Builder approach.
    */
   public CallOptions withDeadlineAfter(long duration, TimeUnit unit) {
     return withDeadlineNanoTime(System.nanoTime() + unit.toNanos(duration));
@@ -86,24 +88,64 @@ public final class CallOptions {
     return deadlineNanoTime;
   }
 
-  private CallOptions() {
+  private CallOptions(Builder b) {
+    deadlineNanoTime = b.deadlineNanoTime;
   }
 
   /**
-   * Copy constructor.
+   * Creates a builder from this set of options.
    */
-  private CallOptions(CallOptions other) {
-    deadlineNanoTime = other.deadlineNanoTime;
+  public Builder toBuilder() {
+    Builder b = newBuilder();
+    b.deadlineNanoTime = deadlineNanoTime;
+    return b;
+  }
+
+  public static Builder newBuilder() {
+    return new Builder();
   }
 
   @Override
-  public String toString() {
-    StringBuilder buffer = new StringBuilder();
-    buffer.append("[deadlineNanoTime=").append(deadlineNanoTime);
-    if (deadlineNanoTime != null) {
-      buffer.append(" (").append(deadlineNanoTime - System.nanoTime()).append(" ns from now)");
+  public boolean equals(Object other) {
+    if (this == other) {
+      return true;
     }
-    buffer.append("]");
-    return buffer.toString();
+    if (!(other instanceof CallOptions)) {
+      return false;
+    }
+    CallOptions that = (CallOptions) other;
+    return Objects.equal(this.deadlineNanoTime, that.deadlineNanoTime);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hashCode(deadlineNanoTime);
+  }
+
+  @SuppressWarnings("deprecation") // Guava 14.0
+  @Override
+  public String toString() {
+    ToStringHelper builder = Objects.toStringHelper(this)
+        .add("hasDeadline", deadlineNanoTime != null);
+    if (deadlineNanoTime != null) {
+      long durationNanos = deadlineNanoTime - System.nanoTime();
+      builder.add("deadlineNanoTime", durationNanos + "ns from now");
+    }
+    return builder.toString();
+  }
+
+  public static final class Builder {
+    private Long deadlineNanoTime;
+
+    private Builder() {}
+
+    public CallOptions build() {
+      return new CallOptions(this);
+    }
+
+    public Builder setDeadlineNanoTime(Long deadlineNanoTime) {
+      this.deadlineNanoTime = deadlineNanoTime;
+      return this;
+    }
   }
 }
