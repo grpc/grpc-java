@@ -73,9 +73,9 @@ public abstract class AbstractStub<S extends AbstractStub<?>> {
   }
 
   /**
-   * The underlying channel of the stub.
+   * The underlying {@link ClientCallFactory} of the stub.
    */
-  public ClientCallFactory getChannel() {
+  public ClientCallFactory getCallFactory() {
     return callFactory;
   }
 
@@ -117,9 +117,9 @@ public abstract class AbstractStub<S extends AbstractStub<?>> {
   }
 
   /**
-   * Returns a new stub that uses the given channel.
+   * Returns a new stub that uses the given {@link ClientCallFactory}.
    */
-  public final S withChannel(ClientCallFactory newCallFactory) {
+  public final S withCallFactory(ClientCallFactory newCallFactory) {
     return build(newCallFactory, callOptions);
   }
 
