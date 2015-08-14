@@ -31,7 +31,7 @@
 
 package io.grpc.testing.integration;
 
-import io.grpc.ChannelImpl;
+import io.grpc.Channel;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 
@@ -40,7 +40,7 @@ import org.junit.BeforeClass;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link InProcess}. */
+/** Unit tests for {@link io.grpc.inprocess.InProcessTransport}. */
 @RunWith(JUnit4.class)
 public class InProcessTest extends AbstractTransportTest {
   private static String serverName = "test";
@@ -57,7 +57,7 @@ public class InProcessTest extends AbstractTransportTest {
   }
 
   @Override
-  protected ChannelImpl createChannel() {
+  protected Channel createChannel() {
     return InProcessChannelBuilder.forName(serverName).build();
   }
 }

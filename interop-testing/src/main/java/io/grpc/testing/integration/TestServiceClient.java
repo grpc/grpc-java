@@ -33,12 +33,13 @@ package io.grpc.testing.integration;
 
 import com.google.common.io.Files;
 
-import io.grpc.ChannelImpl;
+import io.grpc.Channel;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.testing.TestUtils;
+
 import io.netty.handler.ssl.SslContext;
 
 import java.io.File;
@@ -228,7 +229,7 @@ public class TestServiceClient {
 
   private class Tester extends AbstractTransportTest {
     @Override
-    protected ChannelImpl createChannel() {
+    protected Channel createChannel() {
       if (!useOkHttp) {
         InetAddress address;
         try {

@@ -31,7 +31,7 @@
 
 package io.grpc;
 
-import static io.grpc.ChannelImpl.TIMEOUT_KEY;
+import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
@@ -40,7 +40,7 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
-import io.grpc.internal.HttpUtil;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SerializingExecutor;
 
 import java.io.InputStream;
@@ -123,9 +123,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
 
     // Fill out the User-Agent header.
-    headers.removeAll(HttpUtil.USER_AGENT_KEY);
+    headers.removeAll(GrpcUtil.USER_AGENT_KEY);
     if (userAgent != null) {
-      headers.put(HttpUtil.USER_AGENT_KEY, userAgent);
+      headers.put(GrpcUtil.USER_AGENT_KEY, userAgent);
     }
 
     try {

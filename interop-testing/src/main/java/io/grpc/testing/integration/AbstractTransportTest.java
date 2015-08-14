@@ -51,13 +51,14 @@ import com.google.protobuf.EmptyProtos.Empty;
 
 import io.grpc.AbstractServerBuilder;
 import io.grpc.CallOptions;
-import io.grpc.ChannelImpl;
+import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.Metadata;
 import io.grpc.ServerImpl;
 import io.grpc.ServerInterceptors;
 import io.grpc.Status;
 import io.grpc.auth.ClientAuthInterceptor;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.protobuf.ProtoUtils;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
@@ -121,7 +122,7 @@ public abstract class AbstractTransportTest {
     testServiceExecutor.shutdown();
   }
 
-  protected ChannelImpl channel;
+  protected Channel channel;
   protected TestServiceGrpc.TestServiceBlockingStub blockingStub;
   protected TestServiceGrpc.TestService asyncStub;
 
@@ -144,7 +145,7 @@ public abstract class AbstractTransportTest {
     }
   }
 
-  protected abstract ChannelImpl createChannel();
+  protected abstract Channel createChannel();
 
   @Test(timeout = 10000)
   public void emptyUnary() throws Exception {
@@ -588,7 +589,7 @@ public abstract class AbstractTransportTest {
                     .withDeadlineAfter(configuredTimeoutMinutes, TimeUnit.MINUTES);
     stub.emptyCall(Empty.getDefaultInstance());
     long transferredTimeoutMinutes = TimeUnit.MICROSECONDS.toMinutes(
-        requestHeadersCapture.get().get(ChannelImpl.TIMEOUT_KEY));
+        requestHeadersCapture.get().get(GrpcUtil.TIMEOUT_KEY));
     Assert.assertTrue(
             "configuredTimeoutMinutes=" + configuredTimeoutMinutes
                     + ", transferredTimeoutMinutes=" + transferredTimeoutMinutes,

@@ -31,19 +31,20 @@
 
 package io.grpc.internal;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 
 import io.grpc.Status;
-import io.grpc.internal.HttpUtil.Http2Error;
+import io.grpc.internal.GrpcUtil.Http2Error;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link HttpUtil}. */
+/** Unit tests for {@link GrpcUtil}. */
 @RunWith(JUnit4.class)
-public class HttpUtilTest {
+public class GrpcUtilTest {
   @Test
   public void http2ErrorForCode() {
     // Try edge cases manually, to make the test obviously correct for important cases.
@@ -72,5 +73,26 @@ public class HttpUtilTest {
     assertSame(Http2Error.NO_ERROR.status(), Http2Error.statusForCode(0));
     assertSame(Http2Error.HTTP_1_1_REQUIRED.status(), Http2Error.statusForCode(0xD));
     assertSame(Status.Code.INTERNAL, Http2Error.statusForCode(0xD + 1).getCode());
+  }
+
+  @Test
+  public void timeoutMarshallerTest() {
+    GrpcUtil.TimeoutMarshaller marshaller = new GrpcUtil.TimeoutMarshaller();
+    assertEquals("1000u", marshaller.toAsciiString(1000L));
+    assertEquals(1000L, (long) marshaller.parseAsciiString("1000u"));
+
+    assertEquals("100000m", marshaller.toAsciiString(100000000L));
+    assertEquals(100000000L, (long) marshaller.parseAsciiString("100000m"));
+
+    assertEquals("100000S", marshaller.toAsciiString(100000000000L));
+    assertEquals(100000000000L, (long) marshaller.parseAsciiString("100000S"));
+
+    // 1,666,667 * 60 has 9 digits
+    assertEquals("1666666M", marshaller.toAsciiString(100000000000000L));
+    assertEquals(60000000000000L, (long) marshaller.parseAsciiString("1000000M"));
+
+    // 1,666,667 * 60 has 9 digits
+    assertEquals("1666666H", marshaller.toAsciiString(6000000000000000L));
+    assertEquals(3600000000000000L, (long) marshaller.parseAsciiString("1000000H"));
   }
 }

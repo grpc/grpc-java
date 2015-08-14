@@ -3,7 +3,7 @@ package io.grpc.benchmarks.netty;
 import com.google.common.util.concurrent.MoreExecutors;
 
 import io.grpc.CallOptions;
-import io.grpc.ChannelImpl;
+import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.Drainable;
 import io.grpc.KnownLength;
@@ -20,6 +20,7 @@ import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.StreamObserver;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.EmptyByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -161,7 +162,7 @@ public abstract class AbstractBenchmark {
   protected MethodDescriptor<ByteBuf, ByteBuf> unaryMethod;
   private MethodDescriptor<ByteBuf, ByteBuf> pingPongMethod;
   private MethodDescriptor<ByteBuf, ByteBuf> flowControlledStreaming;
-  protected ChannelImpl[] channels;
+  protected Channel[] channels;
 
   public AbstractBenchmark() {
   }
@@ -350,7 +351,7 @@ public abstract class AbstractBenchmark {
     // Build and start the clients and servers
     server = serverBuilder.build();
     server.start();
-    channels = new ChannelImpl[channelCount];
+    channels = new Channel[channelCount];
     for (int i = 0; i < channelCount; i++) {
       // Use a dedicated event-loop for each channel
       channels[i] = channelBuilder
@@ -368,7 +369,7 @@ public abstract class AbstractBenchmark {
                                  final AtomicLong counter,
                                  final AtomicBoolean done,
                                  final long counterDelta) {
-    for (final ChannelImpl channel : channels) {
+    for (final Channel channel : channels) {
       for (int i = 0; i < callsPerChannel; i++) {
         StreamObserver<ByteBuf> observer = new StreamObserver<ByteBuf>() {
           @Override
@@ -404,7 +405,7 @@ public abstract class AbstractBenchmark {
                                      final AtomicLong counter,
                                      final AtomicBoolean done,
                                      final long counterDelta) {
-    for (final ChannelImpl channel : channels) {
+    for (final Channel channel : channels) {
       for (int i = 0; i < callsPerChannel; i++) {
         final ClientCall<ByteBuf, ByteBuf> streamingCall =
             channel.callFactory().newCall(pingPongMethod, CALL_OPTIONS);
@@ -449,7 +450,7 @@ public abstract class AbstractBenchmark {
                                                    final AtomicLong counter,
                                                    final AtomicBoolean done,
                                                    final long counterDelta) {
-    for (final ChannelImpl channel : channels) {
+    for (final Channel channel : channels) {
       for (int i = 0; i < callsPerChannel; i++) {
         final ClientCall<ByteBuf, ByteBuf> streamingCall =
             channel.callFactory().newCall(flowControlledStreaming, CALL_OPTIONS);
@@ -487,7 +488,7 @@ public abstract class AbstractBenchmark {
    * Shutdown all the client channels and then shutdown the server.
    */
   protected void teardown() throws Exception {
-    for (ChannelImpl channel : channels) {
+    for (Channel channel : channels) {
       channel.shutdown();
     }
     server.shutdown().awaitTermination(5, TimeUnit.SECONDS);

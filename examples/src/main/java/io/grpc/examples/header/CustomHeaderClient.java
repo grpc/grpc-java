@@ -31,7 +31,7 @@
 
 package io.grpc.examples.header;
 
-import io.grpc.ChannelImpl;
+import io.grpc.Channel;
 import io.grpc.ClientCallFactory;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
@@ -52,7 +52,7 @@ import java.util.logging.Logger;
 public class CustomHeaderClient {
   private static final Logger logger = Logger.getLogger(CustomHeaderClient.class.getName());
 
-  private final ChannelImpl originChannel;
+  private final Channel originChannel;
   private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
   /**

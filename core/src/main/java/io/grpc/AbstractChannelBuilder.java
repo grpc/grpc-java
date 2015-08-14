@@ -150,6 +150,7 @@ public abstract class AbstractChannelBuilder<BuilderT extends AbstractChannelBui
     final ChannelEssentials essentials = buildEssentials();
     ChannelImpl channel = new ChannelImpl(essentials.transportFactory, executor, userAgent,
         interceptors);
+    // TODO(nmittler): find a better way to do this that doesn't require ChannelImpl.
     channel.setTerminationRunnable(new Runnable() {
       @Override
       public void run() {

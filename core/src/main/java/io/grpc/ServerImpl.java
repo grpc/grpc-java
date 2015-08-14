@@ -31,12 +31,13 @@
 
 package io.grpc;
 
-import static io.grpc.ChannelImpl.TIMER_SERVICE;
+import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.Futures;
 
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerStream;
@@ -327,7 +328,7 @@ public final class ServerImpl extends Server {
     }
 
     private Future<?> scheduleTimeout(final ServerStream stream, Metadata.Headers headers) {
-      Long timeoutMicros = headers.get(ChannelImpl.TIMEOUT_KEY);
+      Long timeoutMicros = headers.get(GrpcUtil.TIMEOUT_KEY);
       if (timeoutMicros == null) {
         return DEFAULT_TIMEOUT_FUTURE;
       }

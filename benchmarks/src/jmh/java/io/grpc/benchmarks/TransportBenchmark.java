@@ -38,7 +38,7 @@ import com.google.protobuf.ByteString;
 
 import io.grpc.AbstractChannelBuilder;
 import io.grpc.AbstractServerBuilder;
-import io.grpc.ChannelImpl;
+import io.grpc.Channel;
 import io.grpc.ServerImpl;
 import io.grpc.benchmarks.qps.AsyncServer;
 import io.grpc.inprocess.InProcessChannelBuilder;
@@ -51,6 +51,7 @@ import io.grpc.testing.Payload;
 import io.grpc.testing.SimpleRequest;
 import io.grpc.testing.SimpleResponse;
 import io.grpc.testing.TestServiceGrpc;
+
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
@@ -80,7 +81,7 @@ public class TransportBenchmark {
   @Param({"true", "false"})
   public boolean direct;
 
-  private ChannelImpl channel;
+  private Channel channel;
   private ServerImpl server;
   private TestServiceGrpc.TestServiceBlockingStub stub;
 
