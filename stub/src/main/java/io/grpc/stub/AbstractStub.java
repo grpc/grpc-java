@@ -55,7 +55,7 @@ public abstract class AbstractStub<S extends AbstractStub<?>> {
   /**
    * Constructor for use by subclasses, with the default {@code CallOptions}.
    *
-   * @param callFactory the channel that this stub will use to do communications
+   * @param callFactory the {@link ClientCallFactory} that this stub will use to do communications
    */
   protected AbstractStub(ClientCallFactory callFactory) {
     this(callFactory, CallOptions.DEFAULT);
@@ -64,7 +64,7 @@ public abstract class AbstractStub<S extends AbstractStub<?>> {
   /**
    * Constructor for use by subclasses, with the default {@code CallOptions}.
    *
-   * @param callFactory the channel that this stub will use to do communications
+   * @param callFactory the {@link ClientCallFactory} that this stub will use to do communications
    * @param callOptions the runtime call options to be applied to every call on this stub
    */
   protected AbstractStub(ClientCallFactory callFactory, CallOptions callOptions) {
@@ -87,9 +87,10 @@ public abstract class AbstractStub<S extends AbstractStub<?>> {
   }
 
   /**
-   * Returns a new stub with the given channel for the provided method configurations.
+   * Returns a new stub with the given {@link ClientCallFactory} for the provided method
+   * configurations.
    *
-   * @param callFactory the channel that this stub will use to do communications
+   * @param callFactory the {@link ClientCallFactory} that this stub will use to do communications
    * @param callOptions the runtime call options to be applied to every call on this stub
    */
   protected abstract S build(ClientCallFactory callFactory, CallOptions callOptions);
@@ -124,7 +125,8 @@ public abstract class AbstractStub<S extends AbstractStub<?>> {
   }
 
   /**
-   * Returns a new stub that has the given interceptors attached to the underlying channel.
+   * Returns a new stub that has the given interceptors attached to the underlying
+   * {@link ClientCallFactory}.
    */
   public final S withInterceptors(ClientInterceptor... interceptors) {
     return build(ClientInterceptors.intercept(callFactory, interceptors), callOptions);
