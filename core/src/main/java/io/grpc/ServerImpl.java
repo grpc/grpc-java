@@ -500,7 +500,7 @@ public final class ServerImpl extends Server {
       Preconditions.checkState(!closeCalled, "call is closed");
       sendMessageCalled = true;
       try {
-        InputStream resp = method.streamResponse(message);
+        InputStream resp = method.marshalResponse(message);
         stream.writeMessage(resp);
         stream.flush();
       } catch (Throwable t) {
@@ -551,7 +551,7 @@ public final class ServerImpl extends Server {
             return;
           }
 
-          listener.onMessage(method.parseRequest(message));
+          listener.onMessage(method.unmarshalRequest(message));
         } finally {
           try {
             message.close();

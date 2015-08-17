@@ -209,14 +209,14 @@ public class ServerImplTest {
     assertNotNull(call);
 
     String order = "Lots of pizza, please";
-    streamListener.messageRead(STRING_MARSHALLER.stream(order));
+    streamListener.messageRead(STRING_MARSHALLER.marshal(order));
     verify(callListener, timeout(2000)).onMessage(order);
 
     call.sendMessage(314);
     ArgumentCaptor<InputStream> inputCaptor = ArgumentCaptor.forClass(InputStream.class);
     verify(stream).writeMessage(inputCaptor.capture());
     verify(stream).flush();
-    assertEquals(314, INTEGER_MARSHALLER.parse(inputCaptor.getValue()).intValue());
+    assertEquals(314, INTEGER_MARSHALLER.unmarshal(inputCaptor.getValue()).intValue());
 
     streamListener.halfClosed(); // All full; no dessert.
     executeBarrier(executor).await();
@@ -225,7 +225,7 @@ public class ServerImplTest {
     call.sendMessage(50);
     verify(stream, times(2)).writeMessage(inputCaptor.capture());
     verify(stream, times(2)).flush();
-    assertEquals(50, INTEGER_MARSHALLER.parse(inputCaptor.getValue()).intValue());
+    assertEquals(50, INTEGER_MARSHALLER.unmarshal(inputCaptor.getValue()).intValue());
 
     Metadata trailers = new Metadata();
     trailers.put(metadataKey, 3);

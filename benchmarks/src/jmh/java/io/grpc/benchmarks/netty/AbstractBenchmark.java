@@ -505,12 +505,12 @@ public abstract class AbstractBenchmark {
     }
 
     @Override
-    public InputStream stream(ByteBuf value) {
+    public InputStream marshal(ByteBuf value) {
       return new ByteBufInputStream(value);
     }
 
     @Override
-    public ByteBuf parse(InputStream stream) {
+    public ByteBuf unmarshal(InputStream stream) {
       try {
         // We don't do anything with the message and it's already been read into buffers
         // so just skip copying it.
