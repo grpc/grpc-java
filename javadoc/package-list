@@ -1,8 +1,9 @@
 io.grpc
 io.grpc.auth
+io.grpc.inprocess
+io.grpc.internal
+io.grpc.netty
+io.grpc.okhttp
 io.grpc.protobuf
 io.grpc.protobuf.nano
 io.grpc.stub
-io.grpc.transport
-io.grpc.transport.netty
-io.grpc.transport.okhttp
