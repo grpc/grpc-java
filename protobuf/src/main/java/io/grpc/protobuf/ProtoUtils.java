@@ -78,6 +78,7 @@ public class ProtoUtils {
           // when parsing.
           CodedInputStream codedInput = CodedInputStream.newInstance(stream);
           codedInput.setSizeLimit(Integer.MAX_VALUE);
+          codedInput.checkLastTagWas(0);
 
           return parser.parseFrom(codedInput);
         } catch (InvalidProtocolBufferException ipbe) {
