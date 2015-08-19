@@ -36,7 +36,6 @@ import static org.junit.Assert.assertSame;
 
 import com.google.common.io.ByteStreams;
 import com.google.protobuf.ByteString;
-import com.google.protobuf.Descriptors;
 import com.google.protobuf.Enum;
 import com.google.protobuf.Type;
 
