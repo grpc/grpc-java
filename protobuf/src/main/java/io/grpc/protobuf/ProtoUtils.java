@@ -31,6 +31,7 @@
 
 package io.grpc.protobuf;
 
+import com.google.protobuf.CodedInputStream;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.MessageLite;
@@ -73,7 +74,12 @@ public class ProtoUtils {
           }
         }
         try {
-          return parser.parseFrom(stream);
+          // Pre-create the CodedInputStream so that we can remove the size limit restriction
+          // when parsing.
+          CodedInputStream codedInput = CodedInputStream.newInstance(stream);
+          codedInput.setSizeLimit(Integer.MAX_VALUE);
+
+          return parser.parseFrom(codedInput);
         } catch (InvalidProtocolBufferException ipbe) {
           throw Status.INTERNAL.withDescription("Invalid protobuf byte sequence")
             .withCause(ipbe).asRuntimeException();
