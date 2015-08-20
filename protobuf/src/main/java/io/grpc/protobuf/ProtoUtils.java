@@ -74,16 +74,26 @@ public class ProtoUtils {
           }
         }
         try {
-          // Pre-create the CodedInputStream so that we can remove the size limit restriction
-          // when parsing.
-          CodedInputStream codedInput = CodedInputStream.newInstance(stream);
-          codedInput.setSizeLimit(Integer.MAX_VALUE);
-          codedInput.checkLastTagWas(0);
-
-          return parser.parseFrom(codedInput);
+          return parseFrom(stream);
         } catch (InvalidProtocolBufferException ipbe) {
           throw Status.INTERNAL.withDescription("Invalid protobuf byte sequence")
             .withCause(ipbe).asRuntimeException();
+        }
+      }
+
+      private T parseFrom(InputStream stream) throws InvalidProtocolBufferException {
+        // Pre-create the CodedInputStream so that we can remove the size limit restriction
+        // when parsing.
+        CodedInputStream codedInput = CodedInputStream.newInstance(stream);
+        codedInput.setSizeLimit(Integer.MAX_VALUE);
+
+        T message = parser.parseFrom(codedInput);
+        try {
+          codedInput.checkLastTagWas(0);
+          return message;
+        } catch (InvalidProtocolBufferException e) {
+          e.setUnfinishedMessage(message);
+          throw e;
         }
       }
     };
