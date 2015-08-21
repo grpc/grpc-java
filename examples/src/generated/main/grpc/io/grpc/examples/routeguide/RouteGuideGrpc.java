@@ -15,6 +15,8 @@ import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
 @javax.annotation.Generated("by gRPC proto compiler")
 public class RouteGuideGrpc {
 
+  public static final String SERVICE_NAME = "routeguide.RouteGuide";
+
   // Static method descriptors that strictly reflect the proto.
   public static final io.grpc.MethodDescriptor<io.grpc.examples.routeguide.Point,
       io.grpc.examples.routeguide.Feature> METHOD_GET_FEATURE =
@@ -192,7 +194,7 @@ public class RouteGuideGrpc {
 
   public static io.grpc.ServerServiceDefinition bindService(
       final RouteGuide serviceImpl) {
-    return io.grpc.ServerServiceDefinition.builder("routeguide.RouteGuide")
+    return io.grpc.ServerServiceDefinition.builder(SERVICE_NAME)
       .addMethod(io.grpc.ServerMethodDefinition.create(
           METHOD_GET_FEATURE,
           asyncUnaryCall(
