@@ -32,6 +32,7 @@ public final class SharingExecutorService extends AbstractExecutorService {
     shutdown = true;
     if (activeTasks.isEmpty()) {
       terminated = true;
+      notifyAll();
     }
   }
 
