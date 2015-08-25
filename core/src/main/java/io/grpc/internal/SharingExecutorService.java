@@ -66,7 +66,7 @@ public final class SharingExecutorService extends AbstractExecutorService {
     long remainingNanos = unit.toNanos(timeout);
     long deadline = System.nanoTime() + remainingNanos;
     while (!terminated && remainingNanos > 0) {
-      unit.timedWait(this, remainingNanos);
+      TimeUnit.NANOSECONDS.timedWait(this, remainingNanos);
       remainingNanos = deadline - System.nanoTime();
     }
     return terminated;
