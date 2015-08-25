@@ -4,6 +4,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -40,13 +41,20 @@ public final class SharingExecutorService extends AbstractExecutorService {
   public synchronized List<Runnable> shutdownNow() {
     shutdown();
     List<Runnable> neverRan = new ArrayList<Runnable>(activeTasks.size());
-    for (Entry<CleanupRunnable, Future<?>> entry : activeTasks.entrySet()) {
+    Iterator<Entry<CleanupRunnable, Future<?>>> entries = activeTasks.entrySet().iterator();
+    while (entries.hasNext()) {
+      Entry<CleanupRunnable, Future<?>> entry = entries.next();
+      if (entry.getValue().isDone()) {
+        entries.remove();
+        continue;
+      }
       // Since the underlying executor may have started running this, this is best effort.
       boolean success = entry.getValue().cancel(true);
       if (success) {
         neverRan.add(entry.getKey().r);
       }
     }
+
     return neverRan;
   }
 
