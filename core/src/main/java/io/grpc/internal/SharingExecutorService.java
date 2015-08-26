@@ -11,18 +11,17 @@ import java.util.Map.Entry;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 
 /**
  * Wraps an existing executor, that keeps track of only the tasks it has added.
  */
 public final class SharingExecutorService extends AbstractExecutorService {
-  private final Map<CleanupRunnable, Future<?>> activeTasks =
-      new HashMap<CleanupRunnable, Future<?>>();
+  private final Map<CleanupTask, Future<?>> activeTasks = new HashMap<CleanupTask, Future<?>>();
 
   private final ExecutorService delegate;
   private boolean shutdown;
-  private boolean terminated;
 
   public SharingExecutorService(ExecutorService delegate) {
     this.delegate = delegate;
@@ -32,27 +31,32 @@ public final class SharingExecutorService extends AbstractExecutorService {
   public synchronized void shutdown() {
     shutdown = true;
     if (activeTasks.isEmpty()) {
-      terminated = true;
       notifyAll();
     }
   }
 
   @Override
   public synchronized List<Runnable> shutdownNow() {
-    shutdown();
+    shutdown = true;
     List<Runnable> neverRan = new ArrayList<Runnable>(activeTasks.size());
-    Iterator<Entry<CleanupRunnable, Future<?>>> entries = activeTasks.entrySet().iterator();
+    Iterator<Entry<CleanupTask, Future<?>>> entries = activeTasks.entrySet().iterator();
     while (entries.hasNext()) {
-      Entry<CleanupRunnable, Future<?>> entry = entries.next();
+      Entry<CleanupTask, Future<?>> entry = entries.next();
+      // isDone() returns true before the done() method on CleanupTask is called, so we can still
+      // remove it.
       if (entry.getValue().isDone()) {
         entries.remove();
         continue;
       }
       // Since the underlying executor may have started running this, this is best effort.
-      boolean success = entry.getValue().cancel(true);
-      if (success) {
-        neverRan.add(entry.getKey().r);
+      boolean cancelled = entry.getValue().cancel(true);
+      if (cancelled) {
+        // This will not be the same runnable submitted by the user.
+        neverRan.add(entry.getKey());
       }
+    }
+    if (activeTasks.isEmpty()) {
+      notifyAll();
     }
 
     return neverRan;
@@ -65,7 +69,7 @@ public final class SharingExecutorService extends AbstractExecutorService {
 
   @Override
   public synchronized boolean isTerminated() {
-    return terminated;
+    return shutdown && activeTasks.isEmpty();
   }
 
   @Override
@@ -73,46 +77,39 @@ public final class SharingExecutorService extends AbstractExecutorService {
       throws InterruptedException {
     long remainingNanos = unit.toNanos(timeout);
     long deadline = System.nanoTime() + remainingNanos;
-    while (!terminated && remainingNanos > 0) {
+    while (!isTerminated() && remainingNanos > 0) {
       TimeUnit.NANOSECONDS.timedWait(this, remainingNanos);
       remainingNanos = deadline - System.nanoTime();
     }
-    return terminated;
+    return isTerminated();
   }
 
   @Override
   public synchronized void execute(final Runnable command) {
     checkState(!shutdown, "Executor shutting down");
-    CleanupRunnable cleanupRunnable = new CleanupRunnable(command);
-    Future<?> f = delegate.submit(cleanupRunnable);
+    CleanupTask cleanupTask = new CleanupTask(command);
+    Future<?> f = delegate.submit(cleanupTask);
 
     // If f is already completed (because of a direct executor, or a Caller runs overflow policy,
     // don't add it to the list of tasks.  If not run on this thread, the instrinsic lock prevents
     // the future from being completed.
     if (!f.isDone()) {
-      activeTasks.put(cleanupRunnable, f);
+      activeTasks.put(cleanupTask, f);
     }
   }
 
-  private final class CleanupRunnable implements Runnable {
-    private final Runnable r;
-
-    private CleanupRunnable(Runnable r) {
-      this.r = r;
+  private final class CleanupTask extends FutureTask<Void> {
+    CleanupTask(Runnable runnable) {
+      super(runnable, null);
     }
 
     @Override
-    public void run() {
-      try {
-        r.run();
-      } finally {
-        synchronized (SharingExecutorService.this) {
-          activeTasks.remove(this);
-          if (shutdown) {
-            if (activeTasks.isEmpty()) {
-              terminated = true;
-              SharingExecutorService.this.notifyAll();
-            }
+    protected void done() {
+      synchronized (SharingExecutorService.this) {
+        activeTasks.remove(this);
+        if (shutdown) {
+          if (activeTasks.isEmpty()) {
+            SharingExecutorService.this.notifyAll();
           }
         }
       }
