@@ -228,6 +228,20 @@ public final class GrpcUtil {
   }
 
   /**
+   * Indicates whether or not the given value is a valid gRPC content-type.
+   */
+  public static boolean isGrpcContentType(String contentType) {
+    if (contentType == null) {
+      return false;
+    }
+
+    // Remove any +proto and +json from the content type, as defined by the gRPC wire spec.
+    contentType = contentType.split("\\+", 2)[0];
+
+    return GrpcUtil.CONTENT_TYPE_GRPC.equalsIgnoreCase(contentType);
+  }
+
+  /**
    * Gets the User-Agent string for the gRPC transport.
    */
   public static String getGrpcUserAgent(String transportName,

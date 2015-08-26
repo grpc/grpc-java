@@ -46,7 +46,6 @@ import javax.annotation.Nullable;
  */
 public abstract class Http2ClientStream extends AbstractClientStream<Integer> {
 
-  private static final boolean TEMP_CHECK_CONTENT_TYPE = false;
   /**
    * Metadata marshaller for HTTP status lines.
    */
@@ -87,24 +86,34 @@ public abstract class Http2ClientStream extends AbstractClientStream<Integer> {
       transportError = transportError.augmentDescription(headers.toString());
       return;
     }
+
+    // Verify that the HTTP status is OK.
     Status httpStatus = statusFromHttpStatus(headers);
-    if (httpStatus == null) {
-      transportError = Status.INTERNAL.withDescription(
-          "received non-terminal headers with no :status");
-    } else if (!httpStatus.isOk()) {
-      transportError = httpStatus;
-    } else {
-      transportError = checkContentType(headers);
-    }
-    if (transportError != null) {
+    if (httpStatus == null || !httpStatus.isOk()) {
+      transportError = httpStatus != null ? httpStatus : Status.INTERNAL.withDescription(
+              "received non-terminal headers with no :status");
+
+      // TODO(nmittler): What to do if nothing else comes?
+      // The error is generated from the HTTP status.
       // Note we don't immediately report the transport error, instead we wait for more data on the
       // stream so we can accumulate more detail into the error before reporting it.
       transportError = transportError.augmentDescription("\n" + headers.toString());
       errorCharset = extractCharset(headers);
-    } else {
-      stripTransportDetails(headers);
-      inboundHeadersReceived(headers);
+      return;
     }
+
+    // Verify that the content type is appropriate for gRPC.
+    transportError = checkContentType(headers);
+    if (transportError != null) {
+      // The request contained an invalid Content-Type, cancel the stream now.
+      inboundTransportError(transportError);
+      sendCancel(Status.CANCELLED);
+      return;
+    }
+
+    // All is well, process the headers.
+    stripTransportDetails(headers);
+    inboundHeadersReceived(headers);
   }
 
   /**
@@ -205,9 +214,9 @@ public abstract class Http2ClientStream extends AbstractClientStream<Integer> {
     }
     contentTypeChecked = true;
     String contentType = headers.get(GrpcUtil.CONTENT_TYPE_KEY);
-    if (TEMP_CHECK_CONTENT_TYPE && !GrpcUtil.CONTENT_TYPE_GRPC.equalsIgnoreCase(contentType)) {
-      // Malformed content-type so report an error
-      return Status.INTERNAL.withDescription("invalid content-type " + contentType);
+    if (!GrpcUtil.isGrpcContentType(contentType)) {
+      return Status.INTERNAL.withDescription("Invalid content-type: " + contentType + ".\n"
+              + headers.toString());
     }
     return null;
   }

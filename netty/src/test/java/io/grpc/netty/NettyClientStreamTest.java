@@ -60,6 +60,7 @@ import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.AsciiString;
+import io.netty.util.ByteString;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -255,6 +256,18 @@ public class NettyClientStreamTest extends NettyStreamTestBase {
     assertEquals(Status.UNKNOWN.getCode(), captor.getValue().getCode());
     assertTrue(stream.isClosed());
 
+  }
+
+  @Test
+  public void invalidInboundContentTypeShouldCancelStream() {
+    // Set stream id to indicate it has been created
+    stream().id(STREAM_ID);
+    Http2Headers headers = new DefaultHttp2Headers().status(STATUS_OK).set(CONTENT_TYPE_HEADER,
+            new ByteString("application/bad", UTF_8));
+    stream().transportHeadersReceived(headers, false);
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(listener).closed(captor.capture(), any(Metadata.class));
+    assertEquals(captor.getValue().getCode(), Status.Code.INTERNAL);
   }
 
   @Test
