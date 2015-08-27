@@ -3,13 +3,13 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkState;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 import java.util.Map.Entry;
 import java.util.concurrent.AbstractExecutorService;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -18,12 +18,12 @@ import java.util.concurrent.TimeUnit;
  * Wraps an existing executor, that keeps track of only the tasks it has added.
  */
 public final class SharingExecutorService extends AbstractExecutorService {
-  private final Map<CleanupTask, Future<?>> activeTasks = new HashMap<CleanupTask, Future<?>>();
+  private final Set<CleanupTask> activeTasks = new HashSet<CleanupTask>();
 
-  private final ExecutorService delegate;
+  private final Executor delegate;
   private boolean shutdown;
 
-  public SharingExecutorService(ExecutorService delegate) {
+  public SharingExecutorService(Service delegate) {
     this.delegate = delegate;
   }
 
@@ -39,20 +39,20 @@ public final class SharingExecutorService extends AbstractExecutorService {
   public synchronized List<Runnable> shutdownNow() {
     shutdown = true;
     List<Runnable> neverRan = new ArrayList<Runnable>(activeTasks.size());
-    Iterator<Entry<CleanupTask, Future<?>>> entries = activeTasks.entrySet().iterator();
-    while (entries.hasNext()) {
-      Entry<CleanupTask, Future<?>> entry = entries.next();
+    Iterator<CleanupTask> tasks = activeTasks.iterator();
+    while (tasks.hasNext()) {
+      CleanupTask task = tasks.next();
       // isDone() returns true before the done() method on CleanupTask is called, so we can still
       // remove it.
-      if (entry.getValue().isDone()) {
-        entries.remove();
+      if (task.isDone()) {
+        takss.remove();
         continue;
       }
       // Since the underlying executor may have started running this, this is best effort.
-      boolean cancelled = entry.getValue().cancel(true);
-      if (cancelled) {
+      task.cancel(true);
+      if (!task.started) {
         // This will not be the same runnable submitted by the user.
-        neverRan.add(entry.getKey());
+        neverRan.add(task);
       }
     }
     if (activeTasks.isEmpty()) {
@@ -88,19 +88,22 @@ public final class SharingExecutorService extends AbstractExecutorService {
   public synchronized void execute(final Runnable command) {
     checkState(!shutdown, "Executor shutting down");
     CleanupTask cleanupTask = new CleanupTask(command);
-    Future<?> f = delegate.submit(cleanupTask);
-
-    // If f is already completed (because of a direct executor, or a Caller runs overflow policy,
-    // don't add it to the list of tasks.  If not run on this thread, the instrinsic lock prevents
-    // the future from being completed.
-    if (!f.isDone()) {
-      activeTasks.put(cleanupTask, f);
-    }
+    activeTasks.put(cleanupTask, f);
+    delegate.execute(cleanupTask);
   }
 
   private final class CleanupTask extends FutureTask<Void> {
+    
+    private volatile boolean started;
+
     CleanupTask(Runnable runnable) {
       super(runnable, null);
+    }
+   
+    @Override 
+    public void run() {
+      started = true;
+      super.run();
     }
 
     @Override
