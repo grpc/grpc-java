@@ -36,7 +36,7 @@ public final class SharingExecutorService extends AbstractExecutorService {
   }
 
   @Override
-  public synchronized List<Runnable> shutdownNow() {
+  public List<Runnable> shutdownNow() {
     synchronized (activeTasks) {
       shutdown = true;
       List<Runnable> neverRan = new ArrayList<Runnable>(activeTasks.size());
@@ -103,9 +103,7 @@ public final class SharingExecutorService extends AbstractExecutorService {
     try {
       delegate.execute(task);
     } catch (RuntimeException e) {
-      synchronized (activeTasks) {
-        activeTasks.remove(task);
-      }
+      task.cleanUp();
       throw e;
     }
   }
@@ -123,14 +121,18 @@ public final class SharingExecutorService extends AbstractExecutorService {
       super.run();
     }
 
-    @Override
-    protected void done() {
+    private void cleanUp() {
       synchronized (activeTasks) {
         activeTasks.remove(this);
         if (isTerminated()) {
           activeTasks.notifyAll();
         }
       }
+    }
+
+    @Override
+    protected void done() {
+      cleanUp();
     }
   }
 }
