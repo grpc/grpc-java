@@ -149,9 +149,9 @@ public class NettyClientStreamTest extends NettyStreamTestBase {
     stream.flush();
     // Two writes occur, one for the GRPC frame header and the second with the payload
     verify(writeQueue).enqueue(
-        eq(new SendGrpcFrameCommand(stream, messageFrame(MESSAGE).slice(0, 5), false)),
-        any(ChannelPromise.class),
-        eq(false));
+            eq(new SendGrpcFrameCommand(stream, messageFrame(MESSAGE).slice(0, 5), false)),
+            any(ChannelPromise.class),
+            eq(false));
     verify(writeQueue).enqueue(
         eq(new SendGrpcFrameCommand(stream, messageFrame(MESSAGE).slice(5, 11), false)),
         any(ChannelPromise.class),
@@ -265,9 +265,12 @@ public class NettyClientStreamTest extends NettyStreamTestBase {
     Http2Headers headers = new DefaultHttp2Headers().status(STATUS_OK).set(CONTENT_TYPE_HEADER,
             new ByteString("application/bad", UTF_8));
     stream().transportHeadersReceived(headers, false);
+    stream().transportHeadersReceived(new DefaultHttp2Headers(), true);
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     verify(listener).closed(captor.capture(), any(Metadata.class));
-    assertEquals(captor.getValue().getCode(), Status.Code.INTERNAL);
+    Status status = captor.getValue();
+    assertEquals(status.getCode(), Status.Code.INTERNAL);
+    assertTrue(status.getDescription().contains("content-type"));
   }
 
   @Test

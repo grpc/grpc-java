@@ -86,34 +86,24 @@ public abstract class Http2ClientStream extends AbstractClientStream<Integer> {
       transportError = transportError.augmentDescription(headers.toString());
       return;
     }
-
-    // Verify that the HTTP status is OK.
     Status httpStatus = statusFromHttpStatus(headers);
-    if (httpStatus == null || !httpStatus.isOk()) {
-      transportError = httpStatus != null ? httpStatus : Status.INTERNAL.withDescription(
-              "received non-terminal headers with no :status");
-
-      // TODO(nmittler): What to do if nothing else comes?
-      // The error is generated from the HTTP status.
+    if (httpStatus == null) {
+      transportError = Status.INTERNAL.withDescription(
+          "received non-terminal headers with no :status");
+    } else if (!httpStatus.isOk()) {
+      transportError = httpStatus;
+    } else {
+      transportError = checkContentType(headers);
+    }
+    if (transportError != null) {
       // Note we don't immediately report the transport error, instead we wait for more data on the
       // stream so we can accumulate more detail into the error before reporting it.
       transportError = transportError.augmentDescription("\n" + headers.toString());
       errorCharset = extractCharset(headers);
-      return;
+    } else {
+      stripTransportDetails(headers);
+      inboundHeadersReceived(headers);
     }
-
-    // Verify that the content type is appropriate for gRPC.
-    transportError = checkContentType(headers);
-    if (transportError != null) {
-      // The request contained an invalid Content-Type, cancel the stream now.
-      inboundTransportError(transportError);
-      sendCancel(Status.CANCELLED);
-      return;
-    }
-
-    // All is well, process the headers.
-    stripTransportDetails(headers);
-    inboundHeadersReceived(headers);
   }
 
   /**
