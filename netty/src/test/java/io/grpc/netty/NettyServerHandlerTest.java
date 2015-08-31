@@ -416,7 +416,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase {
     return captureWrite(ctx);
   }
 
-  private NettyServerHandler newHandler(ServerTransportListener transportListener,
+  private static NettyServerHandler newHandler(ServerTransportListener transportListener,
                                                int flowControlWindow) {
     Http2Connection connection = new DefaultHttp2Connection(true);
     Http2FrameReader frameReader = new DefaultHttp2FrameReader();

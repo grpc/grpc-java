@@ -205,8 +205,7 @@ public abstract class Http2ClientStream extends AbstractClientStream<Integer> {
     contentTypeChecked = true;
     String contentType = headers.get(GrpcUtil.CONTENT_TYPE_KEY);
     if (!GrpcUtil.isGrpcContentType(contentType)) {
-      return Status.INTERNAL.withDescription("Invalid content-type: " + contentType + ".\n"
-              + headers.toString());
+      return Status.INTERNAL.withDescription("Invalid content-type: " + contentType);
     }
     return null;
   }
