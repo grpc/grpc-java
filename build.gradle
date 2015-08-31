@@ -113,7 +113,13 @@ subprojects {
         if (osdetector.classifier in ["linux-x86_64", "osx-x86_64", "windows-x86_64"]) {
             // The native code is only pre-compiled on certain platforms.
             tcnative_suffix = ":" + osdetector.classifier
-            if (osdetector.release.isLike("debian")) {
+            // RedHat variants use a different soname for OpenSSL than other linux distributions
+            // (see http://netty.io/wiki/forked-tomcat-native.html). Netty-tcnative, however
+            // assumes RedHat as the default "linux", while calling out "_debian" as a special
+            // build for debian-based systems. This should be inverted in future releases of
+            // netty-tcnative, but in the meantime we invert the logic manually here so that
+            // "debian" is used as the default linux distribution.
+            if (osdetector.os == "linux" && !osdetector.release.isLike("rhel")) {
                 tcnative_suffix += "_debian";
             }
         }
