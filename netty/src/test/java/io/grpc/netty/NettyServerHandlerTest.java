@@ -425,7 +425,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase {
         Integer.MAX_VALUE, flowControlWindow);
   }
 
-  private NettyServerHandler newHandler(ServerTransportListener transportListener) {
+  private static NettyServerHandler newHandler(ServerTransportListener transportListener) {
     return newHandler(transportListener, DEFAULT_WINDOW_SIZE);
   }
 }
