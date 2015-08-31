@@ -31,7 +31,7 @@
 
 package io.grpc.netty;
 
-import static com.google.common.base.Charsets.UTF_8;
+import static com.google.common.base.Charsets.US_ASCII;
 import static io.grpc.netty.Utils.CONTENT_TYPE_GRPC;
 import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
 import static io.grpc.netty.Utils.HTTP_METHOD;
@@ -146,13 +146,12 @@ class NettyServerHandler extends Http2ConnectionHandler {
     try {
       // Verify that the Content-Type is correct in the request.
       verifyContentType(streamId, headers);
+      String method = determineMethod(streamId, headers);
 
       // The Http2Stream object was put by AbstractHttp2ConnectionHandler before calling this
       // method.
       Http2Stream http2Stream = requireHttp2Stream(streamId);
       NettyServerStream stream = new NettyServerStream(ctx.channel(), http2Stream, this);
-      http2Stream.setProperty(streamKey, stream);
-      String method = determineMethod(streamId, headers);
 
       Metadata metadata = Utils.convertHeaders(headers);
       ServerStreamListener listener =
@@ -161,6 +160,7 @@ class NettyServerHandler extends Http2ConnectionHandler {
       if (metadata.containsKey(GrpcUtil.MESSAGE_ENCODING_KEY)) {
         stream.useDecompressor(metadata.get(GrpcUtil.MESSAGE_ENCODING_KEY));
       }
+      http2Stream.setProperty(streamKey, stream);
 
     } catch (Http2Exception e) {
       throw e;
@@ -315,7 +315,7 @@ class NettyServerHandler extends Http2ConnectionHandler {
       throw Http2Exception.streamError(streamId, Http2Error.REFUSED_STREAM,
           "Content-Type is missing from the request");
     }
-    String contentTypeString = contentType.toString(UTF_8);
+    String contentTypeString = contentType.toString(US_ASCII);
     if (!GrpcUtil.isGrpcContentType(contentTypeString)) {
       throw Http2Exception.streamError(streamId, Http2Error.REFUSED_STREAM,
           "Content-Type '%s' is not supported", contentTypeString);

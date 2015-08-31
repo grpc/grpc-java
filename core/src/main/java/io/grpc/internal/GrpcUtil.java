@@ -235,10 +235,26 @@ public final class GrpcUtil {
       return false;
     }
 
-    // Remove any +proto and +json from the content type, as defined by the gRPC wire spec.
-    contentType = contentType.split("\\+", 2)[0];
+    if (CONTENT_TYPE_GRPC.length() > contentType.length()) {
+      return false;
+    }
 
-    return GrpcUtil.CONTENT_TYPE_GRPC.equalsIgnoreCase(contentType);
+    contentType = contentType.toLowerCase();
+    if (!contentType.startsWith(CONTENT_TYPE_GRPC)) {
+      // Not a gRPC content-type.
+      return false;
+    }
+
+    if (contentType.length() == CONTENT_TYPE_GRPC.length()) {
+      // The strings match exactly.
+      return true;
+    }
+
+    // The contentType matches, but is longer than the expected string.
+    // We need to support variations on the content-type (e.g. +proto, +json) as defined by the
+    // gRPC wire spec.
+    char nextChar = contentType.charAt(CONTENT_TYPE_GRPC.length());
+    return nextChar == '+' || nextChar == ';';
   }
 
   /**
