@@ -33,9 +33,12 @@ package io.grpc;
 
 import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
 
+import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import io.grpc.ClientCallImpl.ClientTransportProvider;
+import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
+import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.MessageEncoding.Compressor;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
@@ -48,7 +51,10 @@ import io.grpc.internal.SharedResourceHolder.Resource;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -71,6 +77,7 @@ public final class ChannelImpl extends Channel {
         @Override
         public ExecutorService create() {
           return Executors.newCachedThreadPool(new ThreadFactoryBuilder()
+              .setDaemon(true)
               .setNameFormat(name + "-%d").build());
         }
 
@@ -118,8 +125,8 @@ public final class ChannelImpl extends Channel {
   private volatile ClientTransport activeTransport;
   @GuardedBy("lock")
   private boolean shutdown;
-  @GuardedBy("lock")
-  private boolean terminated;
+  private final Set<ClientCall<?, ?>> activeCalls =
+      Collections.newSetFromMap(new ConcurrentHashMap<ClientCall<?, ?>, Boolean>());
 
   private long reconnectTimeMillis;
   private BackoffPolicy reconnectPolicy;
@@ -179,9 +186,9 @@ public final class ChannelImpl extends Channel {
       savedActiveTransport = activeTransport;
       if (savedActiveTransport != null) {
         activeTransport = null;
-      } else if (transports.isEmpty()) {
-        terminated = true;
+      } else if (isTerminated()) {
         lock.notifyAll();
+        // TODO(carl-mastrangelo): maybe remove this outside of the sync
         onChannelTerminated();
       }
     }
@@ -195,12 +202,12 @@ public final class ChannelImpl extends Channel {
    * Initiates a forceful shutdown in which preexisting and new calls are cancelled. Although
    * forceful, the shutdown process is still not instantaneous; {@link #isTerminated()} will likely
    * return {@code false} immediately after this method returns.
-   *
-   * <p>NOT YET IMPLEMENTED. This method currently behaves identically to shutdown().
    */
-  // TODO(ejona86): cancel preexisting calls.
   public ChannelImpl shutdownNow() {
     shutdown();
+    for (ClientCall<?, ?> call : activeCalls) {
+      call.cancel();
+    }
     return this;
   }
 
@@ -226,22 +233,23 @@ public final class ChannelImpl extends Channel {
     synchronized (lock) {
       long timeoutNanos = unit.toNanos(timeout);
       long endTimeNanos = System.nanoTime() + timeoutNanos;
-      while (!terminated && (timeoutNanos = endTimeNanos - System.nanoTime()) > 0) {
+      while (!isTerminated() && (timeoutNanos = endTimeNanos - System.nanoTime()) > 0) {
         TimeUnit.NANOSECONDS.timedWait(lock, timeoutNanos);
       }
-      return terminated;
+      return isTerminated();
     }
   }
 
   /**
-   * Returns whether the channel is terminated. Terminated channels have no running calls and
-   * relevant resources released (like TCP connections).
+   * Returns whether the channel is terminated.  Terminated channels have no running calls and
+   * relevant resources released (like TCP connections).  Additionally, all callbacks from calls
+   * must be finished for this to return true.
    *
    * @see #isShutdown()
    */
   public boolean isTerminated() {
     synchronized (lock) {
-      return terminated;
+      return shutdown && transports.isEmpty() && activeCalls.isEmpty();
     }
   }
 
@@ -341,13 +349,45 @@ public final class ChannelImpl extends Channel {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions) {
-      return new ClientCallImpl<ReqT, RespT>(
+      final ClientCall<ReqT, RespT> call = new ClientCallImpl<ReqT, RespT>(
           method,
           new SerializingExecutor(executor),
           callOptions,
           transportProvider,
           scheduledExecutor)
               .setUserAgent(userAgent);
+      return new SimpleForwardingClientCall<ReqT, RespT>(call) {
+        @Override
+        public void start(ClientCall.Listener<RespT> responseListener, Metadata headers) {
+          final SimpleForwardingClientCall<ReqT, RespT> self = this;
+          activeCalls.add(self);
+          try {
+            super.start(new SimpleForwardingClientCallListener<RespT>(responseListener) {
+              @Override
+              public void onClose(Status status, Metadata trailers) {
+                try {
+                  super.onClose(status, trailers);
+                } finally {
+                  activeCalls.remove(self);
+                  synchronized (lock) {
+                    if (isTerminated()) {
+                      lock.notifyAll();
+                    }
+                  }
+                }
+              }
+            }, headers);
+          } catch (Throwable t) {
+            activeCalls.remove(self);
+            synchronized (lock) {
+              if (isTerminated()) {
+                lock.notifyAll();
+              }
+            }
+            Throwables.propagate(t);
+          }
+        }
+      };
     }
 
     @Override
@@ -403,11 +443,8 @@ public final class ChannelImpl extends Channel {
         // TODO(notcarl): replace this with something more meaningful
         transportShutdown(Status.UNKNOWN.withDescription("transport shutdown for unknown reason"));
         transports.remove(transport);
-        if (shutdown && transports.isEmpty()) {
-          if (terminated) {
-            log.warning("transportTerminated called after already terminated");
-          }
-          terminated = true;
+        if (isTerminated()) {
+          log.warning("transportTerminated called after already terminated");
           lock.notifyAll();
           onChannelTerminated();
         }
