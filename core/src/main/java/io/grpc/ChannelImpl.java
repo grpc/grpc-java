@@ -366,11 +366,21 @@ public final class ChannelImpl extends Channel {
                   super.onClose(status, trailers);
                 } finally {
                   activeCalls.remove(self);
+                  synchronized (lock) {
+                    if (isTerminated()) {
+                      lock.notifyAll();
+                    }
+                  }
                 }
               }
             }, headers);
           } catch (Throwable t) {
             activeCalls.remove(self);
+            synchronized (lock) {
+              if (isTerminated()) {
+                lock.notifyAll();
+              }
+            }
             Throwables.propagate(t);
           }
         }
