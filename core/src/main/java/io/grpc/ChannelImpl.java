@@ -202,8 +202,6 @@ public final class ChannelImpl extends Channel {
    * Initiates a forceful shutdown in which preexisting and new calls are cancelled. Although
    * forceful, the shutdown process is still not instantaneous; {@link #isTerminated()} will likely
    * return {@code false} immediately after this method returns.
-   *
-   * <p>NOT YET IMPLEMENTED. This method currently behaves identically to shutdown().
    */
   public ChannelImpl shutdownNow() {
     shutdown();
