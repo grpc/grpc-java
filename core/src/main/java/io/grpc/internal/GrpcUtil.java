@@ -300,6 +300,7 @@ public final class GrpcUtil {
       new SharedResourceHolder.Resource<ScheduledExecutorService>() {
         @Override
         public ScheduledExecutorService create() {
+          // TODO(carl-mastrangelo): This should be using ThreadFactoryBuilder
           return Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
             @Override
             public Thread newThread(Runnable r) {

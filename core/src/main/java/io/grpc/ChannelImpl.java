@@ -33,6 +33,7 @@ package io.grpc;
 
 import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
 
+import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import io.grpc.ClientCallImpl.ClientTransportProvider;
@@ -45,10 +46,15 @@ import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
+import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
+import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -71,6 +77,7 @@ public final class ChannelImpl extends Channel {
         @Override
         public ExecutorService create() {
           return Executors.newCachedThreadPool(new ThreadFactoryBuilder()
+              .setDaemon(true)
               .setNameFormat(name + "-%d").build());
         }
 
@@ -120,6 +127,8 @@ public final class ChannelImpl extends Channel {
   private boolean shutdown;
   @GuardedBy("lock")
   private boolean terminated;
+  private final Set<? super ClientCall<?, ?>> activeCalls =
+      Collections.newSetFromMap(new ConcurrentHashMap<ClientCall<?, ?>, Boolean>());
 
   private long reconnectTimeMillis;
   private BackoffPolicy reconnectPolicy;
@@ -234,8 +243,9 @@ public final class ChannelImpl extends Channel {
   }
 
   /**
-   * Returns whether the channel is terminated. Terminated channels have no running calls and
-   * relevant resources released (like TCP connections).
+   * Returns whether the channel is terminated.  Terminated channels have no running calls and
+   * relevant resources released (like TCP connections).  Additionally, all callbacks from calls
+   * must be finished for this to return true.
    *
    * @see #isShutdown()
    */
@@ -336,13 +346,36 @@ public final class ChannelImpl extends Channel {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions) {
-      return new ClientCallImpl<ReqT, RespT>(
+      final ClientCall<ReqT, RespT> call = new ClientCallImpl<ReqT, RespT>(
           method,
           new SerializingExecutor(executor),
           callOptions,
           transportProvider,
           scheduledExecutor)
               .setUserAgent(userAgent);
+      return new SimpleForwardingClientCall<ReqT, RespT> (call) {
+        @Override
+        public void start(ClientCall.Listener<RespT> responseListener, Metadata headers) {
+          final SimpleForwardingClientCall<ReqT, RespT> self = this;
+          activeCalls.add(self);
+          try {
+            super.start(new SimpleForwardingClientCallListener<RespT>(responseListener) {
+              @Override
+              public void onClose(Status status, Metadata trailers) {
+                try {
+                  super.onClose(status, trailers);
+                } finally {
+                  activeCalls.remove(self);
+                }
+              }
+            }, headers);
+          } catch (Throwable t) {
+            activeCalls.remove(self);
+            Throwables.propagate(t);
+          }
+
+        }
+      };
     }
   }
 
