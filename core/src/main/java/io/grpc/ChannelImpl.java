@@ -125,8 +125,8 @@ public final class ChannelImpl extends Channel {
   private volatile ClientTransport activeTransport;
   @GuardedBy("lock")
   private boolean shutdown;
-  private final Set<ClientCall<?, ?>> activeCalls =
-      Collections.newSetFromMap(new ConcurrentHashMap<ClientCall<?, ?>, Boolean>());
+  private final Set<ClientCallImpl<?, ?>> activeCalls =
+      Collections.newSetFromMap(new ConcurrentHashMap<ClientCallImpl<?, ?>, Boolean>());
 
   private long reconnectTimeMillis;
   private BackoffPolicy reconnectPolicy;
@@ -203,8 +203,9 @@ public final class ChannelImpl extends Channel {
    */
   public ChannelImpl shutdownNow() {
     shutdown();
-    for (ClientCall<?, ?> call : activeCalls) {
-      call.cancel();
+
+    for (ClientCallImpl<?, ?> call : activeCalls) {
+      call.getStream().cancel(Status.INTERNAL.withDescription("Shutting down"));
     }
     return this;
   }
@@ -355,7 +356,7 @@ public final class ChannelImpl extends Channel {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions) {
-      final ClientCall<ReqT, RespT> call = new ClientCallImpl<ReqT, RespT>(
+      final ClientCallImpl<ReqT, RespT> call = new ClientCallImpl<ReqT, RespT>(
           method,
           new SerializingExecutor(executor),
           callOptions,
@@ -365,8 +366,7 @@ public final class ChannelImpl extends Channel {
       return new SimpleForwardingClientCall<ReqT, RespT>(call) {
         @Override
         public void start(ClientCall.Listener<RespT> responseListener, Metadata headers) {
-          final SimpleForwardingClientCall<ReqT, RespT> self = this;
-          activeCalls.add(self);
+          activeCalls.add(call);
           try {
             super.start(new SimpleForwardingClientCallListener<RespT>(responseListener) {
               @Override
@@ -374,13 +374,13 @@ public final class ChannelImpl extends Channel {
                 try {
                   super.onClose(status, trailers);
                 } finally {
-                  activeCalls.remove(self);
+                  activeCalls.remove(call);
                   checkTerminated();
                 }
               }
             }, headers);
           } catch (Throwable t) {
-            activeCalls.remove(self);
+            activeCalls.remove(call);
             checkTerminated();
             Throwables.propagate(t);
           }

@@ -330,6 +330,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
   }
 
+  ClientStream getStream() {
+    return stream;
+  }
+
   static class NoopClientStream implements ClientStream {
     @Override public void writeMessage(InputStream message) {}
 
