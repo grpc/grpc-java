@@ -186,11 +186,9 @@ public final class ChannelImpl extends Channel {
       savedActiveTransport = activeTransport;
       if (savedActiveTransport != null) {
         activeTransport = null;
-      } else if (isTerminated()) {
-        lock.notifyAll();
-        // TODO(carl-mastrangelo): maybe remove this outside of the sync
-        onChannelTerminated();
       }
+      // TODO(carl-mastrangelo): maybe remove this outside of the sync
+      checkTerminated();
     }
     if (savedActiveTransport != null) {
       savedActiveTransport.shutdown();
@@ -291,6 +289,19 @@ public final class ChannelImpl extends Channel {
     return interceptorChannel.newCall(method, callOptions);
   }
 
+  private void checkTerminated() {
+    boolean terminated;
+    synchronized (lock) {
+      terminated = isTerminated();
+      if (terminated) {
+        lock.notifyAll();
+      }
+    }
+    if (terminated) {
+      onChannelTerminated();
+    }
+  }
+
   private ClientTransport obtainActiveTransport() {
     ClientTransport savedActiveTransport = activeTransport;
     // If we know there is an active transport and we are not in backoff mode, return quickly.
@@ -364,21 +375,13 @@ public final class ChannelImpl extends Channel {
                   super.onClose(status, trailers);
                 } finally {
                   activeCalls.remove(self);
-                  synchronized (lock) {
-                    if (isTerminated()) {
-                      lock.notifyAll();
-                    }
-                  }
+                  checkTerminated();
                 }
               }
             }, headers);
           } catch (Throwable t) {
             activeCalls.remove(self);
-            synchronized (lock) {
-              if (isTerminated()) {
-                lock.notifyAll();
-              }
-            }
+            checkTerminated();
             Throwables.propagate(t);
           }
         }
@@ -433,11 +436,7 @@ public final class ChannelImpl extends Channel {
         // TODO(notcarl): replace this with something more meaningful
         transportShutdown(Status.UNKNOWN.withDescription("transport shutdown for unknown reason"));
         transports.remove(transport);
-        if (isTerminated()) {
-          log.warning("transportTerminated called after already terminated");
-          lock.notifyAll();
-          onChannelTerminated();
-        }
+        checkTerminated();
       }
     }
   }
