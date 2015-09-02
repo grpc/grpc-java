@@ -396,12 +396,12 @@ public class NettyClientTransportTest {
     static final StringMarshaller INSTANCE = new StringMarshaller();
 
     @Override
-    public InputStream stream(String value) {
+    public InputStream marshal(String value) {
       return new ByteArrayInputStream(value.getBytes(UTF_8));
     }
 
     @Override
-    public String parse(InputStream stream) {
+    public String unmarshal(InputStream stream) {
       try {
         return new String(ByteStreams.toByteArray(stream), UTF_8);
       } catch (IOException ex) {

@@ -38,12 +38,12 @@ class IntegerMarshaller implements MethodDescriptor.Marshaller<Integer> {
   public static IntegerMarshaller INSTANCE = new IntegerMarshaller();
 
   @Override
-  public InputStream stream(Integer value) {
-    return StringMarshaller.INSTANCE.stream(value.toString());
+  public InputStream marshal(Integer value) {
+    return StringMarshaller.INSTANCE.marshal(value.toString());
   }
 
   @Override
-  public Integer parse(InputStream stream) {
-    return Integer.valueOf(StringMarshaller.INSTANCE.parse(stream));
+  public Integer unmarshal(InputStream stream) {
+    return Integer.valueOf(StringMarshaller.INSTANCE.unmarshal(stream));
   }
 }

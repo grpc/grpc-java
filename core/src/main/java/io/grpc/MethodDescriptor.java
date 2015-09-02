@@ -120,7 +120,7 @@ public class MethodDescriptor<RequestT, ResponseT> {
      * @param value to serialize.
      * @return serialized value as stream of bytes.
      */
-    public InputStream stream(T value);
+    public InputStream marshal(T value);
 
     /**
      * Given an {@link InputStream} parse it into an instance of the declared type so that it can be
@@ -129,7 +129,7 @@ public class MethodDescriptor<RequestT, ResponseT> {
      * @param stream of bytes for serialized value
      * @return parsed value
      */
-    public T parse(InputStream stream);
+    public T unmarshal(InputStream stream);
   }
 
   /**
@@ -177,8 +177,8 @@ public class MethodDescriptor<RequestT, ResponseT> {
    * @param input stream containing response message to parse.
    * @return parsed response message object.
    */
-  public ResponseT parseResponse(InputStream input) {
-    return responseMarshaller.parse(input);
+  public ResponseT unmarshalResponse(InputStream input) {
+    return responseMarshaller.unmarshal(input);
   }
 
   /**
@@ -187,8 +187,8 @@ public class MethodDescriptor<RequestT, ResponseT> {
    * @param requestMessage to serialize using the request {@link Marshaller}.
    * @return serialized request message.
    */
-  public InputStream streamRequest(RequestT requestMessage) {
-    return requestMarshaller.stream(requestMessage);
+  public InputStream marshalRequest(RequestT requestMessage) {
+    return requestMarshaller.marshal(requestMessage);
   }
 
   /**
@@ -197,8 +197,8 @@ public class MethodDescriptor<RequestT, ResponseT> {
    * @param input the serialized message as a byte stream.
    * @return a parsed instance of the message.
    */
-  public RequestT parseRequest(InputStream input) {
-    return requestMarshaller.parse(input);
+  public RequestT unmarshalRequest(InputStream input) {
+    return requestMarshaller.unmarshal(input);
   }
 
   /**
@@ -207,8 +207,8 @@ public class MethodDescriptor<RequestT, ResponseT> {
    * @param response the response message to serialize.
    * @return the serialized message as a byte stream.
    */
-  public InputStream streamResponse(ResponseT response) {
-    return responseMarshaller.stream(response);
+  public InputStream marshalResponse(ResponseT response) {
+    return responseMarshaller.marshal(response);
   }
 
   /**

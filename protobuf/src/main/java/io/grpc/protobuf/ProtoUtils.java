@@ -52,12 +52,12 @@ public class ProtoUtils {
   public static <T extends MessageLite> Marshaller<T> marshaller(final Parser<T> parser) {
     return new Marshaller<T>() {
       @Override
-      public InputStream stream(T value) {
+      public InputStream marshal(T value) {
         return new ProtoInputStream(value, parser);
       }
 
       @Override
-      public T parse(InputStream stream) {
+      public T unmarshal(InputStream stream) {
         if (stream instanceof ProtoInputStream) {
           ProtoInputStream protoStream = (ProtoInputStream) stream;
           // Optimization for in-memory transport. Returning provided object is safe since protobufs

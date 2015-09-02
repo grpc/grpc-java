@@ -57,14 +57,14 @@ public class ProtoUtilsTest {
 
   @Test
   public void testPassthrough() {
-    assertSame(proto, marshaller.parse(marshaller.stream(proto)));
+    assertSame(proto, marshaller.unmarshal(marshaller.marshal(proto)));
   }
 
   @Test
   public void testRoundtrip() throws Exception {
-    InputStream is = marshaller.stream(proto);
+    InputStream is = marshaller.marshal(proto);
     is = new ByteArrayInputStream(ByteStreams.toByteArray(is));
-    assertEquals(proto, marshaller.parse(is));
+    assertEquals(proto, marshaller.unmarshal(is));
   }
 
   @Test
@@ -72,7 +72,7 @@ public class ProtoUtilsTest {
     Marshaller<Enum> enumMarshaller = ProtoUtils.marshaller(Enum.parser());
     // Enum's name and Type's name are both strings with tag 1.
     Enum altProto = Enum.newBuilder().setName(proto.getName()).build();
-    assertEquals(proto, marshaller.parse(enumMarshaller.stream(altProto)));
+    assertEquals(proto, marshaller.unmarshal(enumMarshaller.marshal(altProto)));
   }
 
   @Test

@@ -197,7 +197,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     Preconditions.checkState(!halfCloseCalled, "call was half-closed");
     boolean failed = true;
     try {
-      InputStream messageIs = method.streamRequest(message);
+      InputStream messageIs = method.marshalRequest(message);
       stream.writeMessage(messageIs);
       failed = false;
     } finally {
@@ -278,7 +278,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
             }
 
             try {
-              observer.onMessage(method.parseResponse(message));
+              observer.onMessage(method.unmarshalResponse(message));
             } finally {
               message.close();
             }

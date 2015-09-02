@@ -52,14 +52,14 @@ public class NanoUtils {
   public static <T extends MessageNano> Marshaller<T> marshaller(final Parser<T> parser) {
     return new Marshaller<T>() {
       @Override
-      public InputStream stream(T value) {
+      public InputStream marshal(T value) {
         return new NanoProtoInputStream(value);
       }
 
       @Override
-      public T parse(InputStream stream) {
+      public T unmarshal(InputStream stream) {
         try {
-          // TODO(simonma): Investigate whether we can do 0-copy here. 
+          // TODO(simonma): Investigate whether we can do 0-copy here.
           CodedInputByteBufferNano input =
               CodedInputByteBufferNano.newInstance(ByteStreams.toByteArray(stream));
           input.setSizeLimit(Integer.MAX_VALUE);
