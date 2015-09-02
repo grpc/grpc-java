@@ -60,6 +60,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
 import java.util.logging.Logger;
 
 import javax.annotation.Nullable;
@@ -97,6 +98,8 @@ public final class ChannelImpl extends Channel {
   private final boolean usingSharedExecutor;
   private final String userAgent;
   private final Object lock = new Object();
+  @GuardedBy("lock")
+  private boolean resourcesReleased;
 
   /**
    * Executor that runs deadline timers for requests.
@@ -446,11 +449,16 @@ public final class ChannelImpl extends Channel {
    * If we're using the shared executor, returns its reference.
    */
   private void onChannelTerminated() {
-    if (usingSharedExecutor) {
-      SharedResourceHolder.release(SHARED_EXECUTOR, executor);
+    synchronized (lock) {
+      if (resourcesReleased) {
+        return;
+      }
+      if (usingSharedExecutor) {
+        SharedResourceHolder.release(SHARED_EXECUTOR, executor);
+      }
+      // Release the transport factory so that it can deallocate any resources.
+      transportFactory.release();
     }
-    // Release the transport factory so that it can deallocate any resources.
-    transportFactory.release();
   }
 
   private static final class InactiveTransport implements ClientTransport {
