@@ -186,9 +186,10 @@ public final class ChannelImpl extends Channel {
       savedActiveTransport = activeTransport;
       if (savedActiveTransport != null) {
         activeTransport = null;
+      } else {
+        // TODO(carl-mastrangelo): maybe remove this outside of the sync
+        checkTerminated();
       }
-      // TODO(carl-mastrangelo): maybe remove this outside of the sync
-      checkTerminated();
     }
     if (savedActiveTransport != null) {
       savedActiveTransport.shutdown();

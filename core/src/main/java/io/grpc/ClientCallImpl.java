@@ -59,7 +59,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private final SerializingExecutor callExecutor;
   private final boolean unaryRequest;
   private final CallOptions callOptions;
-  private ClientStream stream;
+  private volatile ClientStream stream;
   private volatile ScheduledFuture<?> deadlineCancellationFuture;
   private boolean cancelCalled;
   private boolean halfCloseCalled;
@@ -330,6 +330,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
   }
 
+  // TODO(carl-mastrangelo): this is a hack and breaks encapsulation.  the only reason it is here
+  // is because ClientCallImpl is not threadsafe.  Remove this method once this class can be safely
+  // canceled.
   ClientStream getStream() {
     return stream;
   }
