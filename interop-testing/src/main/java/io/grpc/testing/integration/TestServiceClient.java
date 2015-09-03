@@ -232,7 +232,6 @@ public class TestServiceClient {
       FileInputStream credentialsStream = new FileInputStream(new File(serviceAccountKeyFile));
       tester.serviceAccountCreds(jsonKey, credentialsStream, oauthScope);
     } else if ("jwt_token_creds".equals(testCase)) {
-      String jsonKey = Files.toString(new File(serviceAccountKeyFile), Charset.forName("UTF-8"));
       FileInputStream credentialsStream = new FileInputStream(new File(serviceAccountKeyFile));
       tester.jwtTokenCreds(credentialsStream);
     } else if ("oauth2_auth_token".equals(testCase)) {
