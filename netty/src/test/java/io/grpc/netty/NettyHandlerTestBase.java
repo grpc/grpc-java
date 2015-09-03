@@ -39,6 +39,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.buffer.UnpooledByteBufAllocator;
@@ -49,9 +50,9 @@ import io.netty.channel.EventLoop;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
 import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
+import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2ConnectionHandler;
 import io.netty.handler.codec.http2.Http2Exception;
-import io.netty.handler.codec.http2.Http2FrameListener;
 import io.netty.handler.codec.http2.Http2FrameReader;
 import io.netty.handler.codec.http2.Http2FrameWriter;
 import io.netty.handler.codec.http2.Http2Headers;
@@ -60,8 +61,8 @@ import io.netty.handler.codec.http2.Http2Settings;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
 import org.mockito.Mockito;
+import org.mockito.verification.VerificationMode;
 
 /**
  * Base class for Netty handler unit tests.
@@ -69,25 +70,24 @@ import org.mockito.Mockito;
 @RunWith(JUnit4.class)
 public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
 
-  protected ByteBuf content;
+  private ByteBuf content;
 
-  protected EmbeddedChannel channel;
+  private EmbeddedChannel channel;
 
-  protected ChannelHandlerContext ctx;
+  private ChannelHandlerContext ctx;
 
-  @Mock
-  protected ChannelFuture succeededFuture;
+  private Http2FrameWriter frameWriter;
 
-  @Mock
-  protected Http2FrameListener frameListener;
+  private Http2FrameReader frameReader;
 
-  protected Http2FrameWriter frameWriter;
+  private T handler;
 
-  protected Http2FrameReader frameReader;
+  private WriteQueue writeQueue;
 
-  protected T handler;
-
-  protected void setUp() throws Exception {
+  /**
+   * Must be called by subclasses to initialize the handler and channel.
+   */
+  protected final void initChannel() throws Exception {
     content = Unpooled.copiedBuffer("hello world", UTF_8);
     frameWriter = spy(new DefaultHttp2FrameWriter());
     frameReader = new DefaultHttp2FrameReader();
@@ -97,7 +97,47 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     channel = new EmbeddedChannel(handler);
     ctx = channel.pipeline().context(handler);
 
-    initWriteQueue();
+    writeQueue = initWriteQueue();
+  }
+
+  protected final T handler() {
+    return handler;
+  }
+
+  protected final EmbeddedChannel channel() {
+    return channel;
+  }
+
+  protected final ChannelHandlerContext ctx() {
+    return ctx;
+  }
+
+  protected final Http2FrameWriter frameWriter() {
+    return frameWriter;
+  }
+
+  protected final Http2FrameReader frameReader() {
+    return frameReader;
+  }
+
+  protected final ByteBuf content() {
+    return content;
+  }
+
+  protected final byte[] contentAsArray() {
+    return ByteBufUtil.getBytes(content());
+  }
+
+  protected final Http2FrameWriter verifyWrite() {
+    return verify(frameWriter);
+  }
+
+  protected final Http2FrameWriter verifyWrite(VerificationMode verificationMode) {
+    return verify(frameWriter, verificationMode);
+  }
+
+  protected final void channelRead(Object obj) throws Exception {
+    handler().channelRead(ctx, obj);
   }
 
   protected final ByteBuf dataFrame(int streamId, boolean endStream, ByteBuf content) {
@@ -150,8 +190,12 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     return channel.newPromise();
   }
 
+  protected final Http2Connection connection() {
+    return handler().connection();
+  }
+
   protected final ChannelFuture enqueue(Object command) {
-    ChannelFuture future = writeQueue().enqueue(command, newPromise(), true);
+    ChannelFuture future = writeQueue.enqueue(command, newPromise(), true);
     channel.runPendingTasks();
     return future;
   }
@@ -177,7 +221,5 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
 
   protected abstract T newHandler() throws Http2Exception;
 
-  protected abstract void initWriteQueue();
-
-  protected abstract WriteQueue writeQueue();
+  protected abstract WriteQueue initWriteQueue();
 }
