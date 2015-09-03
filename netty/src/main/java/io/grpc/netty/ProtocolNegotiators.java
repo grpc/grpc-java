@@ -38,6 +38,7 @@ import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.HttpClientCodec;
@@ -54,6 +55,8 @@ import io.netty.util.ByteString;
 import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
 import java.util.Queue;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLParameters;
@@ -62,6 +65,8 @@ import javax.net.ssl.SSLParameters;
  * Common {@link ProtocolNegotiator}s used by gRPC.
  */
 public final class ProtocolNegotiators {
+  private static final Logger log = Logger.getLogger(ProtocolNegotiators.class.getName());
+
   private ProtocolNegotiators() {
   }
 
@@ -72,7 +77,7 @@ public final class ProtocolNegotiators {
     Preconditions.checkNotNull(sslEngine, "sslEngine");
 
     final SslHandler sslHandler = new SslHandler(sslEngine, false);
-    return new AbstractNegotiationHandler() {
+    return new ChannelInboundHandlerAdapter() {
       @Override
       public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
         super.handlerAdded(ctx);
@@ -97,6 +102,11 @@ public final class ProtocolNegotiators {
           }
         }
         super.userEventTriggered(ctx, evt);
+      }
+
+      private void fail(ChannelHandlerContext ctx, Throwable exception) {
+        log.log(Level.FINEST, "TLS negotiation failed for new client.", exception);
+        ctx.close();
       }
     };
   }
@@ -166,80 +176,18 @@ public final class ProtocolNegotiators {
   }
 
   /**
-   * Base class for protocol negotiation. Handles negotiation failure and will automatically
-   * fail future writes after a failure occurs. When a failure occurs the channel is closed. This
-   * behavior can be overridden, see {@link #doFail(ChannelHandlerContext, Throwable)}.
-   */
-  public abstract static class AbstractNegotiationHandler extends ChannelDuplexHandler {
-    private Throwable failCause;
-
-    @Override
-    public final void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-      fail(ctx, cause);
-    }
-
-    @Override
-    public final void channelInactive(ChannelHandlerContext ctx) throws Exception {
-      fail(ctx, unavailableException("Connection broken while performing protocol negotiation"));
-      super.channelInactive(ctx);
-    }
-
-    @Override
-    public final void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
-        throws Exception {
-      if (failCause != null) {
-        promise.setFailure(failCause);
-      } else {
-        doWrite(ctx, msg, promise);
-      }
-    }
-
-    @Override
-    public final void close(ChannelHandlerContext ctx, ChannelPromise future) throws Exception {
-      fail(ctx, unavailableException("Channel closed while performing protocol negotiation"));
-    }
-
-    protected final void fail(ChannelHandlerContext ctx, Throwable cause) {
-      // Save the promise so that we can fail any future attempts to write.
-      if (failCause == null) {
-        failCause = cause;
-      }
-      doFail(ctx, cause);
-    }
-
-    /**
-     * Handler for a write when there is currently no failure. Default implementation just delegates
-     * to {@link ChannelHandlerContext#write(Object, ChannelPromise)}.
-     */
-    protected void doWrite(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
-        throws Exception {
-      ctx.write(msg, promise);
-    }
-
-    /**
-     * Handler for the failure of a protocol negotiation. Default behavior just closes the context.
-     */
-    protected void doFail(ChannelHandlerContext ctx, @SuppressWarnings("unused") Throwable cause) {
-      /**
-       * In case something goes wrong ensure that the channel gets closed as the
-       * NettyClientTransport relies on the channel's close future to get completed.
-       */
-      ctx.close();
-    }
-  }
-
-  /**
    * Buffers all writes until either {@link #writeBufferedAndRemove(ChannelHandlerContext)} or
    * {@link #fail(ChannelHandlerContext, Throwable)} is called. This handler allows us to
    * write to a {@link io.netty.channel.Channel} before we are allowed to write to it officially
    * i.e.  before it's active or the TLS Handshake is complete.
    */
-  public abstract static class AbstractBufferingHandler extends AbstractNegotiationHandler {
+  public abstract static class AbstractBufferingHandler extends ChannelDuplexHandler {
 
     private ChannelHandler[] handlers;
     private Queue<ChannelWrite> bufferedWrites = new ArrayDeque<ChannelWrite>();
     private boolean writing;
     private boolean flushRequested;
+    private Throwable failCause;
 
     /**
      * @param handlers the ChannelHandlers are added to the pipeline on channelRegistered and
@@ -263,7 +211,18 @@ public final class ProtocolNegotiators {
     }
 
     @Override
-    protected void doWrite(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+      fail(ctx, cause);
+    }
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+      fail(ctx, unavailableException("Connection broken while performing protocol negotiation"));
+      super.channelInactive(ctx);
+    }
+
+    @Override
+    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
         throws Exception {
       /**
        * This check handles a race condition between Channel.write (in the calling thread) and the
@@ -275,7 +234,9 @@ public final class ProtocolNegotiators {
        *    the event loop thread. When this happens, we identify that this handler has been
        *    removed with "bufferedWrites == null".
        */
-      if (bufferedWrites == null) {
+      if (failCause != null) {
+        promise.setFailure(failCause);
+      } else if (bufferedWrites == null) {
         super.write(ctx, msg, promise);
       } else {
         bufferedWrites.add(new ChannelWrite(msg, promise));
@@ -298,7 +259,15 @@ public final class ProtocolNegotiators {
       }
     }
 
-    protected final void doFail(ChannelHandlerContext ctx, Throwable cause) {
+    @Override
+    public void close(ChannelHandlerContext ctx, ChannelPromise future) throws Exception {
+      fail(ctx, unavailableException("Channel closed while performing protocol negotiation"));
+    }
+
+    protected final void fail(ChannelHandlerContext ctx, Throwable cause) {
+      if (failCause == null) {
+        failCause = cause;
+      }
       if (bufferedWrites != null) {
         while (!bufferedWrites.isEmpty()) {
           ChannelWrite write = bufferedWrites.poll();
@@ -311,7 +280,7 @@ public final class ProtocolNegotiators {
        * In case something goes wrong ensure that the channel gets closed as the
        * NettyClientTransport relies on the channel's close future to get completed.
        */
-      super.doFail(ctx, cause);
+      ctx.close();
     }
 
     protected final void writeBufferedAndRemove(ChannelHandlerContext ctx) {
