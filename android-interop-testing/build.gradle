@@ -1,22 +1,39 @@
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
+// We fork the android build to avoid classpath conflicts from buildscript.
+task prereqs(dependsOn: [
+        ':grpc-okhttp:install',
+        ':grpc-core:install',
+        ':grpc-protobuf-nano:install',
+        ':grpc-stub:install',
+        ':grpc-testing:install',
+]) {}
 
-buildscript {
-    repositories {
-        jcenter()
-    }
-    dependencies {
-        classpath 'com.jakewharton.sdkmanager:gradle-plugin:0.12.+'
-        classpath 'com.android.tools.build:gradle:1.1.0'
-        classpath "com.google.protobuf:protobuf-gradle-plugin:0.6.1"
-
-        // NOTE: Do not place your application dependencies here; they belong
-        // in the individual module build.gradle files
-    }
+task assemble(type: GradleBuild, dependsOn: 'prereqs') {
+    buildFile = 'delegate.gradle'
+    tasks = ['assemble']
 }
 
-allprojects {
-    repositories {
-        mavenLocal()
-        jcenter()
-    }
+task assembleDebug(type: GradleBuild, dependsOn: 'prereqs') {
+    buildFile = 'delegate.gradle'
+    tasks = ['assembleDebug']
+}
+
+
+task build(type: GradleBuild, dependsOn: 'prereqs') {
+    buildFile = 'delegate.gradle'
+    tasks = ['build']
+}
+
+task install(type: GradleBuild, dependsOn: 'prereqs') {
+    buildFile = 'delegate.gradle'
+    tasks = ['install']
+}
+
+task installDebug(type: GradleBuild, dependsOn: 'prereqs') {
+    buildFile = 'delegate.gradle'
+    tasks = ['installDebug']
+}
+
+task clean(type: GradleBuild) {
+    buildFile = 'delegate.gradle'
+    tasks = ['clean']
 }

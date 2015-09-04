@@ -41,10 +41,10 @@ import android.os.Build;
 import android.support.annotation.Nullable;
 import android.util.Log;
 
+import io.grpc.ManagedChannel;
 import io.grpc.android.integrationtest.nano.Messages;
-import io.grpc.ChannelImpl;
-import io.grpc.stub.StreamObserver;
 import io.grpc.okhttp.OkHttpChannelBuilder;
+import io.grpc.stub.StreamObserver;
 import io.grpc.testing.StreamRecorder;
 
 import junit.framework.Assert;
@@ -74,7 +74,7 @@ import javax.security.auth.x500.X500Principal;
 public final class InteropTester extends AsyncTask<Void, Void, String> {
   final static String SUCCESS_MESSAGE = "Succeed!!!";
 
-  private ChannelImpl channel;
+  private ManagedChannel channel;
   private TestServiceGrpc.TestServiceBlockingStub blockingStub;
   private TestServiceGrpc.TestService asyncStub;
   private String testCase;

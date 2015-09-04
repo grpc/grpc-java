@@ -1,9 +1,26 @@
+buildscript {
+    repositories {
+        mavenCentral()
+        mavenLocal()
+    }
+    dependencies {
+        classpath 'com.jakewharton.sdkmanager:gradle-plugin:0.12.+'
+        classpath 'com.android.tools.build:gradle:1.1.0'
+        classpath "com.google.protobuf:protobuf-gradle-plugin:0.6.1"
+    }
+}
+
 apply plugin: 'android-sdk-manager'
 apply plugin: 'com.android.application'
 apply plugin: 'com.google.protobuf'
 
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
 def properties = new Properties()
-properties.load(new FileInputStream(file('../../version.properties')))
+properties.load(new FileInputStream(file('../version.properties')))
 
 android {
     compileSdkVersion 22
@@ -17,10 +34,6 @@ android {
         versionName "1.0"
     }
     buildTypes {
-        debug {
-            minifyEnabled true
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-        }
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
@@ -41,19 +54,16 @@ protobuf {
         }
     }
     generateProtoTasks {
-        all().each { task ->
-            task.builtins {
-                javanano {
-                    // Options added to --javanano_out
-                    option 'ignore_services=true'
-                }
+        all()*.builtins {
+            javanano {
+                // Options added to --javanano_out
+                option 'ignore_services=true'
             }
-
-            task.plugins {
-                grpc {
-                    // Options added to --grpc_out
-                    option 'nano=true'
-                }
+        }
+        ofNonTest()*.plugins {
+            grpc {
+                // Options added to --grpc_out
+                option 'nano=true'
             }
         }
     }
@@ -67,10 +77,9 @@ dependencies {
     compile 'com.google.guava:guava:18.0'
     compile 'com.squareup.okhttp:okhttp:2.2.0'
     testCompile 'junit:junit:4.12'
-    // You need to build grpc-java to obtain these libraries below.
+    compile 'javax.annotation:javax.annotation-api:1.2'
     compile "io.grpc:grpc-android:${properties.version}"
     compile "io.grpc:grpc-protobuf-nano:${properties.version}"
     compile "io.grpc:grpc-stub:${properties.version}"
     compile "io.grpc:grpc-testing:${properties.version}"
-    compile 'javax.annotation:javax.annotation-api:1.2'
 }
