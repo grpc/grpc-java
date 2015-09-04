@@ -8,7 +8,7 @@ buildscript {
   }
 }
 
-configure(subprojects - project(":grpc-android")) {
+configure(subprojects - [project(":grpc-android"), project(":grpc-android-interop-testing")]) {
     apply plugin: "checkstyle"
     apply plugin: "java"
     apply plugin: "maven"
