@@ -97,6 +97,10 @@ public abstract class ServerCall<ResponseT> {
      * {@link #sendMessage}) without requiring excessive buffering internally. This event is
      * just a suggestion and the application is free to ignore it, however doing so may
      * result in excessive buffering within the call.
+     *
+     * <p>Any calls to {@link ServerCall#sendMessage(Object)} made by an implementation of this
+     * method may have their writes to the underlying transport deferred until completion of this
+     * method to improve throughput.
      */
     public void onReady() {}
   }

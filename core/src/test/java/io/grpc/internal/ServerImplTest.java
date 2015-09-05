@@ -37,6 +37,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.notNull;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.timeout;
@@ -68,10 +69,12 @@ import org.mockito.MockitoAnnotations;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /** Unit tests for {@link ServerImpl}. */
@@ -244,6 +247,53 @@ public class ServerImplTest {
 
     verifyNoMoreInteractions(stream);
     verifyNoMoreInteractions(callListener);
+  }
+
+  @Test
+  public void onReadyBatchesFlush() throws Exception {
+    final AtomicReference<ServerCall<Integer>> callReference
+        = new AtomicReference<ServerCall<Integer>>();
+    final CountDownLatch latch = new CountDownLatch(1);
+    registry.addService(ServerServiceDefinition.builder("Waiter")
+        .addMethod(
+            MethodDescriptor.create(
+                MethodType.UNKNOWN, "Waiter/serve", STRING_MARSHALLER, INTEGER_MARSHALLER),
+            new ServerCallHandler<String, Integer>() {
+              @Override
+              public ServerCall.Listener<String> startCall(
+                  MethodDescriptor<String, Integer> method,
+                  ServerCall<Integer> call,
+                  Metadata headers) {
+                callReference.set(call);
+                return new ServerCall.Listener<String>() {
+                  @Override
+                  public void onReady() {
+                    latch.countDown();
+                    callReference.get().sendMessage(1);
+                    callReference.get().sendMessage(2);
+                    callReference.get().sendMessage(3);
+                  }
+                };
+              }
+            }).build());
+    ServerTransportListener transportListener
+        = transportServer.registerNewServerTransport(new SimpleServerTransport());
+
+    ServerStreamListener streamListener
+        = transportListener.streamCreated(stream, "Waiter/serve", new Metadata());
+    assertNotNull(streamListener);
+
+    executeBarrier(executor).await();
+    ServerCall<Integer> call = callReference.get();
+    assertNotNull(call);
+
+    // trigger the onReadyCallback
+    streamListener.onReady();
+
+    verify(stream, timeout(5000).times(3)).writeMessage(any(InputStream.class));
+    verify(stream, times(1)).flush();
+
+    verifyNoMoreInteractions(stream);
   }
 
   @Test

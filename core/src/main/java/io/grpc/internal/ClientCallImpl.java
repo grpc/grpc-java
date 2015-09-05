@@ -63,6 +63,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private final CallOptions callOptions;
   private ClientStream stream;
   private volatile ScheduledFuture<?> deadlineCancellationFuture;
+  private volatile boolean inOnReady;
   private boolean cancelCalled;
   private boolean halfCloseCalled;
   private ClientTransportProvider clientTransportProvider;
@@ -211,7 +212,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     // For unary requests, we don't flush since we know that halfClose should be coming soon. This
     // allows us to piggy-back the END_STREAM=true on the last message frame without opening the
     // possibility of broken applications forgetting to call halfClose without noticing.
-    if (!unaryRequest) {
+    if (!unaryRequest && !inOnReady) {
       stream.flush();
     }
   }
@@ -326,7 +327,13 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       callExecutor.execute(new Runnable() {
         @Override
         public void run() {
-          observer.onReady();
+          try {
+            inOnReady = true;
+            observer.onReady();
+            stream.flush();
+          } finally {
+            inOnReady = false;
+          }
         }
       });
     }
