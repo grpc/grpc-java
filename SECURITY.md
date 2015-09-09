@@ -7,10 +7,28 @@ As outlined in <a href="https://github.com/grpc/grpc/blob/master/doc/grpc-auth-s
 ## Cipher-Suites
 Java 7 does not support the <a href="https://tools.ietf.org/html/draft-ietf-httpbis-http2-17#section-9.2.2">the cipher suites recommended</a> by the HTTP2 specification. To address this we suggest servers use Java 8 where possible or use an alternative JCE implementation such as <a href="https://www.bouncycastle.org/java.html">Bouncy Castle</a>. If this is not practical it is possible to use other ciphers but you need to ensure that the services you intend to call have <a href="https://github.com/grpc/grpc/issues/681">allowed out-of-spec ciphers</a> and have evaluated the security risks of doing so. On Android we recommend the use of the <a href="http://appfoundry.be/blog/2014/11/18/Google-Play-Services-Dynamic-Security-Provider/">Play Services Dynamic Security Provider</a> to ensure your application has an up-to-date OpenSSL library with the necessary ciper-suites and a reliable ALPN implementation.
 
-Users should be aware that GCM is [_very_ slow (1 MB/s)](https://bugzilla.redhat.com/show_bug.cgi?id=1135504) in JDK 8. GCM cipher suites are the only suites available that comply with HTTP2's cipher requirements.
+Users should be aware that GCM is [_very_ slow (1 MB/s)](https://bugzilla.redhat.com/show_bug.cgi?id=1135504) in JDK 8. GCM cipher suites are the only suites available that comply with HTTP2's cipher requirements. When using the Netty transport, it is recommended to use OpenSSL (described below) which has a GCM implementation that does not suffer from the same performance issues. 
 
 ## Protocol Negotiation (TLS-ALPN)
-HTTP2 mandates the use of <a href="https://tools.ietf.org/html/draft-ietf-tls-applayerprotoneg-05">ALPN</a> to negotiate the use of the protocol over SSL. No standard Java release has built-in support for ALPN today (<a href="https://bugs.openjdk.java.net/browse/JDK-8051498">there is a tracking issue</a> so go upvote it!) so we need to use the <a href="https://github.com/jetty-project/jetty-alpn">Jetty-ALPN</a> bootclasspath extension for OpenJDK to make it work.
+HTTP2 mandates the use of <a href="https://tools.ietf.org/html/draft-ietf-tls-applayerprotoneg-05">ALPN</a> to negotiate the use of the protocol over SSL. No standard Java release has built-in support for ALPN today (<a href="https://bugs.openjdk.java.net/browse/JDK-8051498">there is a tracking issue</a> so go upvote it!).
+
+To support ALPN, gRPC provides a few alternatives:
+
+### TLS-ALPN with OpenSSL
+
+This is currently the recommended approach for using gRPC over TLS-ALPN. In local testing, we've seen performance improvements of 3x over the JDK. Also, the GCM codec in OpenSSL does not suffer from the performance problems in Java 8.
+
+Requirements:
+
+1. Netty transport.
+2. [OpenSSL](https://www.openssl.org/) version 1.0.2 (or greater) installed (ALPN support was introduced in 1.0.2).
+3. [netty-tcnative](https://github.com/netty/netty-tcnative) version 1.1.33.Fork7 (or greater) on classpath (Earlier versions only support NPN).
+4. Supported platforms (for `netty-tcnative`): linux-x86_64, mac-x86_64, windows-x86_64. Supporting other platforms will require manually building `netty-tcnative`.
+
+If the above requirements met, the Netty transport will automatically select OpenSSL as the default TLS provider.
+
+### TLS-ALPN with Jetty ALPN
+If not using the Netty transport (or you are unable to use OpenSSL for some reason) another alternative is to use the [Jetty-ALPN](https://github.com/jetty-project/jetty-alpn) bootclasspath extension for OpenJDK. To do this, add a `Xbootclasspath` JVM option referencing the path to the Jetty `alpn-boot` jar.
 
 ```sh
 java -Xbootclasspath/p:/path/to/jetty/alpn/extension.jar ...
@@ -18,15 +36,7 @@ java -Xbootclasspath/p:/path/to/jetty/alpn/extension.jar ...
 
 Note that you must use the release of the Jetty-ALPN jar specific to the version of Java you are using.
 
-An option is provided to use GRPC over plaintext without TLS. This is convenient for testing environments, however users must be aware of the secuirty risks of doing so for real production systems.
-
-### TLS-ALPN on Android
-On Android, it is needed to <a href="https://developer.android.com/training/articles/security-gms-provider.html">update your security provider</a> to enable ALPN support, especially for Android versions < 5.0. If the provider fails to update, ALPN may not work.
-
-### TLS-ALPN in Jetty
-Some web containers, such as <a href="http://www.eclipse.org/jetty/documentation/current/jetty-classloading.html">Jetty</a> restrict access to server classes for web applications. A gRPC client running within such a container must be properly configured to allow access to the ALPN classes.
-
-In Jetty, this is done by including a `WEB-INF/jetty-env.xml` file containing the following:
+Some web containers, such as <a href="http://www.eclipse.org/jetty/documentation/current/jetty-classloading.html">Jetty</a> restrict access to server classes for web applications. A gRPC client running within such a container must be properly configured to allow access to the ALPN classes. In Jetty, this is done by including a `WEB-INF/jetty-env.xml` file containing the following:
 
 ```xml
 <?xml version="1.0"  encoding="ISO-8859-1"?>
@@ -41,9 +51,15 @@ In Jetty, this is done by including a `WEB-INF/jetty-env.xml` file containing th
 </Configure>
 ```
 
+### TLS-ALPN on Android
+On Android, it is needed to <a href="https://developer.android.com/training/articles/security-gms-provider.html">update your security provider</a> to enable ALPN support, especially for Android versions < 5.0. If the provider fails to update, ALPN may not work.
+
+### gRPC over plaintext
+An option is provided to use gRPC over plaintext without TLS. This is convenient for testing environments, however users must be aware of the security risks of doing so for real production systems.
+
 # Using OAuth2
 
-The following code snippet shows how you can call the Google Cloud PubSub API using GRPC with a service account. The credentials are loaded from a key stored in a well-known location or by detecting that the application is running in an environment that can provide one automatically, e.g. Google Compute Engine. While this example is specific to Google and it's services, similar patterns can be followed for other service providers.
+The following code snippet shows how you can call the Google Cloud PubSub API using gRPC with a service account. The credentials are loaded from a key stored in a well-known location or by detecting that the application is running in an environment that can provide one automatically, e.g. Google Compute Engine. While this example is specific to Google and it's services, similar patterns can be followed for other service providers.
 
 ```java
 // Create a channel to the test service.
