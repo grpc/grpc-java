@@ -204,9 +204,9 @@ public final class ProtocolNegotiators {
       builder.append(" (").append(OpenSsl.versionString()).append("), ");
       builder.append("ALPN supported: ").append(OpenSsl.isAlpnSupported());
     } else if (JettyTlsUtil.isJettyAlpnConfigured()) {
-      builder.append("Jetty ALPN");
+      builder.append("    Jetty ALPN");
     } else if (JettyTlsUtil.isJettyNpnConfigured()) {
-      builder.append("Jetty NPN");
+      builder.append("    Jetty NPN");
     }
     builder.append("\n    TLS Protocol: ");
     builder.append(engine.getSession().getProtocol());
