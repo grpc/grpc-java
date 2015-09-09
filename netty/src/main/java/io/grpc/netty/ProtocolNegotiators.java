@@ -113,7 +113,7 @@ public final class ProtocolNegotiators {
       }
 
       private void fail(ChannelHandlerContext ctx, Throwable exception) {
-        Level level = Level.WARNING;
+        Level level = Level.FINE;
         if (log.isLoggable(level)) {
           log.log(level, errorMessage(ctx), exception);
         }
