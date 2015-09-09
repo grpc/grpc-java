@@ -357,8 +357,8 @@ class OkHttpClientTransport implements ClientTransport {
           sock.setTcpNoDelay(true);
           source = Okio.buffer(Okio.source(sock));
           sink = Okio.buffer(Okio.sink(sock));
-        } catch (IOException e) {
-          onIoException(e);
+        } catch (Exception e) {
+          onException(e);
           // (and probably do all of this work asynchronously instead of in calling thread)
           throw new RuntimeException(e);
         }
@@ -389,7 +389,7 @@ class OkHttpClientTransport implements ClientTransport {
           Settings settings = new Settings();
           rawFrameWriter.settings(settings);
         } catch (IOException e) {
-          onIoException(e);
+          onException(e);
           throw new RuntimeException(e);
         }
 
@@ -439,7 +439,7 @@ class OkHttpClientTransport implements ClientTransport {
   /**
    * Finish all active streams due to an IOException, then close the transport.
    */
-  void onIoException(IOException failureCause) {
+  void onException(Exception failureCause) {
     log.log(Level.SEVERE, "Transport failed", failureCause);
     onGoAway(0, Status.UNAVAILABLE.withCause(failureCause));
   }
@@ -591,7 +591,7 @@ class OkHttpClientTransport implements ClientTransport {
         // We send GoAway here because OkHttp wraps many protocol errors as IOException.
         // TODO(madongfly): Send the exception message to the server.
         frameWriter.goAway(0, ErrorCode.PROTOCOL_ERROR, new byte[0]);
-        onIoException(ioe);
+        onException(ioe);
       } finally {
         try {
           frameReader.close();
