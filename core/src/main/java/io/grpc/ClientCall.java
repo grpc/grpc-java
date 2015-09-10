@@ -175,6 +175,25 @@ public abstract class ClientCall<ReqT, RespT> {
   public abstract void sendMessage(ReqT message);
 
   /**
+   * Defers flushing the messages written using {@link #sendMessage(Object)} to the
+   * transport until the write buffer is full.  The amount of data buffered while corked is
+   * dependent on the transport implementation so users of this API should not make strong
+   * assumptions about how long data is buffered while corked.
+   *
+   * <p>Corking can provide throughput gains by allowing a transport to perform fewer writes to
+   * the underlying network.
+   */
+  @ExperimentalApi
+  public abstract void cork();
+
+  /**
+   * Disables corking that was enabled by an earlier call to {@link #cork()}. Any buffered
+   * messages will be immediately flushed to the transport.
+   */
+  @ExperimentalApi
+  public abstract void uncork();
+
+  /**
    * If {@code true}, indicates that the call is capable of sending additional messages
    * without requiring excessive buffering internally. This event is
    * just a suggestion and the application is free to ignore it, however doing so may

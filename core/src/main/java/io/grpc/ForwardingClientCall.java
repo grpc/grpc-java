@@ -66,6 +66,16 @@ public abstract class ForwardingClientCall<ReqT, RespT> extends ClientCall<ReqT,
   }
 
   @Override
+  public void cork() {
+    delegate().cork();
+  }
+
+  @Override
+  public void uncork() {
+    delegate().uncork();
+  }
+
+  @Override
   public boolean isReady() {
     return delegate().isReady();
   }

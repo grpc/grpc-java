@@ -369,8 +369,13 @@ public abstract class AbstractBenchmark {
 
                       @Override
                       public void onReady() {
-                        while (call.isReady()) {
-                          call.sendMessage(response.slice());
+                        call.cork();
+                        try {
+                          while (call.isReady()) {
+                            call.sendMessage(response.slice());
+                          }
+                        } finally {
+                          call.uncork();
                         }
                       }
                     };

@@ -61,7 +61,9 @@ import java.util.concurrent.TimeUnit;
 final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private final MethodDescriptor<ReqT, RespT> method;
   private final SerializingExecutor callExecutor;
-  private final boolean unaryRequest;
+  private final int initialMessageCountPerFlush;
+  private int currentMessageCountPerFlush;
+  private int unflushedMessageCount;
   private final CallOptions callOptions;
   private ClientStream stream;
   private volatile ScheduledFuture<?> deadlineCancellationFuture;
@@ -77,8 +79,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       ScheduledExecutorService deadlineCancellationExecutor) {
     this.method = method;
     this.callExecutor = executor;
-    this.unaryRequest = method.getType() == MethodType.UNARY
-        || method.getType() == MethodType.SERVER_STREAMING;
+    // For unary and server streaming we want to defer the flush until close as it follows
+    // immediately.
+    initialMessageCountPerFlush = (method.getType() == MethodType.UNARY
+        || method.getType() == MethodType.SERVER_STREAMING) ? 2 : 1;
+    currentMessageCountPerFlush = initialMessageCountPerFlush;
     this.callOptions = callOptions;
     this.clientTransportProvider = clientTransportProvider;
     this.deadlineCancellationExecutor = deadlineCancellationExecutor;
@@ -219,6 +224,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     try {
       InputStream messageIs = method.streamRequest(message);
       stream.writeMessage(messageIs);
+      unflushedMessageCount++;
       failed = false;
     } finally {
       // TODO(notcarl): Find out if messageIs needs to be closed.
@@ -229,7 +235,22 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     // For unary requests, we don't flush since we know that halfClose should be coming soon. This
     // allows us to piggy-back the END_STREAM=true on the last message frame without opening the
     // possibility of broken applications forgetting to call halfClose without noticing.
-    if (!unaryRequest) {
+    if (unflushedMessageCount >= currentMessageCountPerFlush) {
+      unflushedMessageCount = 0;
+      stream.flush();
+    }
+  }
+
+  @Override
+  public void cork() {
+    currentMessageCountPerFlush = Integer.MAX_VALUE;
+  }
+
+  @Override
+  public void uncork() {
+    currentMessageCountPerFlush = initialMessageCountPerFlush;
+    if (unflushedMessageCount >= currentMessageCountPerFlush) {
+      unflushedMessageCount = 0;
       stream.flush();
     }
   }

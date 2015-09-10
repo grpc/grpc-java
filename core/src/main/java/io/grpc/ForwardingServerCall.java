@@ -56,6 +56,16 @@ public abstract class ForwardingServerCall<RespT> extends ServerCall<RespT> {
   }
 
   @Override
+  public void cork() {
+    delegate().cork();
+  }
+
+  @Override
+  public void uncork() {
+    delegate().uncork();
+  }
+
+  @Override
   public boolean isReady() {
     return delegate().isReady();
   }

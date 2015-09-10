@@ -466,6 +466,8 @@ public final class ServerImpl extends io.grpc.Server {
     private boolean sendHeadersCalled;
     private boolean closeCalled;
     private boolean sendMessageCalled;
+    private int currentMessageCountPerFlush;
+    private int unflushedMessageCount;
 
     public ServerCallImpl(ServerStream stream, MethodDescriptor<ReqT, RespT> method) {
       this.stream = stream;
@@ -484,6 +486,7 @@ public final class ServerImpl extends io.grpc.Server {
       Preconditions.checkState(!sendMessageCalled, "sendMessage has already been called");
       sendHeadersCalled = true;
       stream.writeHeaders(headers);
+      currentMessageCountPerFlush = 1;
     }
 
     @Override
@@ -494,10 +497,28 @@ public final class ServerImpl extends io.grpc.Server {
       try {
         InputStream resp = method.streamResponse(message);
         stream.writeMessage(resp);
-        stream.flush();
+        unflushedMessageCount++;
+        if (unflushedMessageCount >= currentMessageCountPerFlush) {
+          unflushedMessageCount = 0;
+          stream.flush();
+        }
       } catch (Throwable t) {
         close(Status.fromThrowable(t), new Metadata());
         throw Throwables.propagate(t);
+      }
+    }
+
+    @Override
+    public void cork() {
+      currentMessageCountPerFlush = Integer.MAX_VALUE;
+    }
+
+    @Override
+    public void uncork() {
+      currentMessageCountPerFlush = 1;
+      if (unflushedMessageCount >= currentMessageCountPerFlush) {
+        unflushedMessageCount = 0;
+        stream.flush();
       }
     }
 
