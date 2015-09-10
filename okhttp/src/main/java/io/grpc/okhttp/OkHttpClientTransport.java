@@ -594,14 +594,9 @@ class OkHttpClientTransport implements ClientTransport {
         // Read until the underlying socket closes.
         while (frameReader.nextFrame(this)) {
         }
-      } catch (IOException e) {
-        // We send GoAway here because OkHttp wraps many protocol errors as IOException.
+      } catch (Throwable t) {
         // TODO(madongfly): Send the exception message to the server.
         frameWriter.goAway(0, ErrorCode.PROTOCOL_ERROR, new byte[0]);
-        onException(e);
-      } catch (Throwable t) {
-        // For non-IOExceptions, it's not clear if the transport is in a safe state to attempt
-        // writing. Don't send a GO_AWAY, just shutdown the transport.
         onException(t);
       } finally {
         try {
