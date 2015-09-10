@@ -64,6 +64,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private final CallOptions callOptions;
   private ClientStream stream;
   private volatile ScheduledFuture<?> deadlineCancellationFuture;
+  private long onReadyThreadId = -1;
   private boolean cancelCalled;
   private boolean halfCloseCalled;
   private ClientTransportProvider clientTransportProvider;
@@ -212,7 +213,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     // For unary requests, we don't flush since we know that halfClose should be coming soon. This
     // allows us to piggy-back the END_STREAM=true on the last message frame without opening the
     // possibility of broken applications forgetting to call halfClose without noticing.
-    if (!unaryRequest) {
+    if (!unaryRequest && (onReadyThreadId == -1
+        || onReadyThreadId != Thread.currentThread().getId())) {
       stream.flush();
     }
   }
@@ -327,7 +329,17 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       callExecutor.execute(new Runnable() {
         @Override
         public void run() {
-          observer.onReady();
+          if (onReadyThreadId != -1) {
+            throw new IllegalStateException("Re-entrant call to onReady not allowed");
+          }
+          try {
+            onReadyThreadId = Thread.currentThread().getId();
+            observer.onReady();
+            stream.flush();
+          } finally {
+            // A thread cannot have a negative id
+            onReadyThreadId = -1;
+          }
         }
       });
     }

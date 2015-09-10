@@ -109,6 +109,19 @@ public abstract class ClientCall<ReqT, RespT> {
      * {@link #sendMessage}) without requiring excessive buffering internally. This event is
      * just a suggestion and the application is free to ignore it, however doing so may
      * result in excessive buffering within the ClientCall.
+     *
+     * <p>Any calls to {@link ClientCall#sendMessage(Object)} made by an implementation of this
+     * method may have their writes to the underlying transport deferred until completion of this
+     * method to improve throughput.
+     *
+     * <p>Typical use:
+     * <pre>
+     * public void onReady() {
+     *   while (haveMoreData() && call.isReady()) {
+     *     call.sendMessage(nextData());
+     *   }
+     * }
+     * </pre>
      */
     public void onReady() {}
   }

@@ -466,6 +466,7 @@ public final class ServerImpl extends io.grpc.Server {
     private boolean sendHeadersCalled;
     private boolean closeCalled;
     private boolean sendMessageCalled;
+    private long onReadyThreadId = -1;
 
     public ServerCallImpl(ServerStream stream, MethodDescriptor<ReqT, RespT> method) {
       this.stream = stream;
@@ -493,7 +494,9 @@ public final class ServerImpl extends io.grpc.Server {
       try {
         InputStream resp = method.streamResponse(message);
         stream.writeMessage(resp);
-        stream.flush();
+        if (onReadyThreadId == -1 || onReadyThreadId != Thread.currentThread().getId()) {
+          stream.flush();
+        }
       } catch (Throwable t) {
         close(Status.fromThrowable(t), new Metadata());
         throw Throwables.propagate(t);
@@ -577,7 +580,16 @@ public final class ServerImpl extends io.grpc.Server {
         if (cancelled) {
           return;
         }
-        listener.onReady();
+        if (onReadyThreadId != -1) {
+          throw new IllegalStateException("Re-entrant call to onReady not allowed");
+        }
+        try {
+          onReadyThreadId = Thread.currentThread().getId();
+          listener.onReady();
+          stream.flush();
+        } finally {
+          onReadyThreadId = -1;
+        }
       }
     }
   }
