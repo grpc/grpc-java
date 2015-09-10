@@ -357,8 +357,12 @@ class OkHttpClientTransport implements ClientTransport {
           sock.setTcpNoDelay(true);
           source = Okio.buffer(Okio.source(sock));
           sink = Okio.buffer(Okio.sink(sock));
+        } catch (RuntimeException e) {
+          onException(e);
+          throw e;
         } catch (Exception e) {
           onException(e);
+
           // (and probably do all of this work asynchronously instead of in calling thread)
           throw new RuntimeException(e);
         }
@@ -388,7 +392,10 @@ class OkHttpClientTransport implements ClientTransport {
           rawFrameWriter.connectionPreface();
           Settings settings = new Settings();
           rawFrameWriter.settings(settings);
-        } catch (IOException e) {
+        } catch (RuntimeException e) {
+          onException(e);
+          throw e;
+        } catch (Exception e) {
           onException(e);
           throw new RuntimeException(e);
         }
@@ -439,7 +446,7 @@ class OkHttpClientTransport implements ClientTransport {
   /**
    * Finish all active streams due to an IOException, then close the transport.
    */
-  void onException(Exception failureCause) {
+  void onException(Throwable failureCause) {
     log.log(Level.SEVERE, "Transport failed", failureCause);
     onGoAway(0, Status.UNAVAILABLE.withCause(failureCause));
   }
@@ -587,11 +594,15 @@ class OkHttpClientTransport implements ClientTransport {
         // Read until the underlying socket closes.
         while (frameReader.nextFrame(this)) {
         }
-      } catch (IOException ioe) {
+      } catch (IOException e) {
         // We send GoAway here because OkHttp wraps many protocol errors as IOException.
         // TODO(madongfly): Send the exception message to the server.
         frameWriter.goAway(0, ErrorCode.PROTOCOL_ERROR, new byte[0]);
-        onException(ioe);
+        onException(e);
+      } catch (Throwable t) {
+        // For non-IOExceptions, it's not clear if the transport is in a safe state to attempt
+        // writing. Don't send a GO_AWAY, just shutdown the transport.
+        onException(t);
       } finally {
         try {
           frameReader.close();
