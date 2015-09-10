@@ -594,7 +594,7 @@ class OkHttpClientTransport implements ClientTransport {
         // Read until the underlying socket closes.
         while (frameReader.nextFrame(this)) {
         }
-      } catch (Throwable t) {
+      } catch (Exception t) {
         // TODO(madongfly): Send the exception message to the server.
         frameWriter.goAway(0, ErrorCode.PROTOCOL_ERROR, new byte[0]);
         onException(t);
