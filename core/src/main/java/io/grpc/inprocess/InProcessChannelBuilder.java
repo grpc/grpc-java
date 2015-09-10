@@ -64,6 +64,14 @@ public class InProcessChannelBuilder extends
     this.name = Preconditions.checkNotNull(name);
   }
 
+  /**
+   * Does nothing.
+   */
+  @Override
+  public InProcessChannelBuilder usePlaintext(boolean skipNegotiation) {
+    return this;
+  }
+
   @Override
   protected ClientTransportFactory buildTransportFactory() {
     return new InProcessClientTransportFactory(name);

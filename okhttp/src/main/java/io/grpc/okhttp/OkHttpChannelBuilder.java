@@ -178,6 +178,19 @@ public final class OkHttpChannelBuilder extends
     return this;
   }
 
+  /**
+   * Equivalent to using {@link #negotiationType(NegotiationType)} with {@code PLAINTEXT}.
+   */
+  @Override
+  public OkHttpChannelBuilder usePlaintext(boolean skipNegotiation) {
+    if (skipNegotiation) {
+      negotiationType(NegotiationType.PLAINTEXT);
+    } else {
+      throw new IllegalArgumentException("Plaintext negotiation not currently supported");
+    }
+    return this;
+  }
+
   @Override
   protected ClientTransportFactory buildTransportFactory() {
     return new OkHttpTransportFactory(host, port, authorityHost, transportExecutor,

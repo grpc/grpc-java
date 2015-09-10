@@ -149,6 +149,20 @@ public final class NettyChannelBuilder
     return this;
   }
 
+  /**
+   * Equivalent to using {@link #negotiationType(NegotiationType)} with {@code PLAINTEXT} or
+   * {@code PLAINTEXT_UPGRADE}.
+   */
+  @Override
+  public NettyChannelBuilder usePlaintext(boolean skipNegotiation) {
+    if (skipNegotiation) {
+      negotiationType(NegotiationType.PLAINTEXT);
+    } else {
+      negotiationType(NegotiationType.PLAINTEXT_UPGRADE);
+    }
+    return this;
+  }
+
   @Override
   protected ClientTransportFactory buildTransportFactory() {
     return new NettyTransportFactory(serverAddress, channelType, eventLoopGroup, flowControlWindow,
