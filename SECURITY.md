@@ -84,7 +84,7 @@ In Maven, you can use the [os-maven-plugin](https://github.com/trustin/os-maven-
 
 Gradle you can use the [osdetector-gradle-plugin](https://github.com/google/osdetector-gradle-plugin), which is a wrapper around the os-maven-plugin.
 
-```
+```gradle
 buildscript {
   repositories {
     mavenCentral()
@@ -103,14 +103,10 @@ repositories {
   mavenLocal()
 }
 
-// Use the appropriate artifact for Fedora vs non-Fedora.
-def netty_tcnative = 'io.netty:netty-tcnative:1.1.33.Fork6:' + osdetector.classifier
-if (osdetector.os == "linux" && osdetector.release.isLike("fedora")) {
-  netty_tcnative += "-fedora";
-}
+// TODO(nmittler): configure the osdetector plugin to add "-fedora" to the classifier.
 
 dependencies {
-    compile netty_tcnative
+    compile 'io.netty:netty-tcnative:1.1.33.Fork6:' + osdetector.classifier
 }
 ```
 
