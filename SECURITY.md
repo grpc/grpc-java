@@ -98,12 +98,13 @@ buildscript {
 // Use the osdetector-gradle-plugin
 apply plugin: "osdetector"
 
+// Configure a special classifier on Fedora-"like" systems.
+osdetector.classifierWithLikes = [`fedora`]
+
 repositories {
   mavenCentral()
   mavenLocal()
 }
-
-// TODO(nmittler): configure the osdetector plugin to add "-fedora" to the classifier.
 
 dependencies {
     compile 'io.netty:netty-tcnative:1.1.33.Fork6:' + osdetector.classifier
