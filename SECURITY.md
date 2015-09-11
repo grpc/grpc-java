@@ -88,7 +88,6 @@ Gradle you can use the [osdetector-gradle-plugin](https://github.com/google/osde
 buildscript {
   repositories {
     mavenCentral()
-    mavenLocal()
   }
   dependencies {
     classpath 'com.google.gradle:osdetector-gradle-plugin:1.4.0'
@@ -99,15 +98,10 @@ buildscript {
 apply plugin: "osdetector"
 
 // Configure a special classifier on Fedora-"like" systems.
-osdetector.classifierWithLikes = [`fedora`]
-
-repositories {
-  mavenCentral()
-  mavenLocal()
-}
+osdetector.classifierWithLikes = ['fedora']
 
 dependencies {
-    compile 'io.netty:netty-tcnative:1.1.33.Fork6:' + osdetector.classifier
+    compile 'io.netty:netty-tcnative:1.1.33.Fork7:' + osdetector.classifier
 }
 ```
 
