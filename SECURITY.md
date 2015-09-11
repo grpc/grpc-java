@@ -14,19 +14,19 @@ You may need to [update the security provider](https://developer.android.com/tra
 
 ## TLS with OpenSSL
 
-This is currently the recommended approach for using gRPC over TLS-ALPN (on non-Android systems). 
+This is currently the recommended approach for using gRPC over TLS (on non-Android systems). 
 
 ### Benefits of using OpenSSL
 
-1. Speed. In local testing, we've seen performance improvements of 3x over the JDK.
-2. Ciphers. OpenSSL has its own ciphers and is not dependent on the limitations of the JDK (see section on TLS with JDK). Also, the GCM codec (the main codec recommended by the HTTP/2 spec) in OpenSSL does not suffer from the performance problems in Java 8.
-3. Supports fallback to NPN if the remote endpoint doesn't support ALPN.
+1. **Speed**: In local testing, we've seen performance improvements of 3x over the JDK.
+2. **Ciphers**: OpenSSL has its own ciphers and is not dependent on the limitations of the JDK (see section on TLS with JDK). Also, the GCM codec (the main codec recommended by the HTTP/2 spec) in OpenSSL does not suffer from the performance problems in Java 8.
+3. **ALPN to NPN Fallback**: if the remote endpoint doesn't support ALPN.
 
 ### Requirements for using OpenSSL
 
 1. Currently only supported by the Netty transport (via netty-tcnative).
-2. [OpenSSL](https://www.openssl.org/) version >= 1.0.2 for ALPN support, or version >= 1.0.0g for NPN.
-3. [netty-tcnative](https://github.com/netty/netty-tcnative) must be on classpath. Use version >= 1.1.33.Fork7 for ALPN (prior versions only support NPN).
+2. [OpenSSL](https://www.openssl.org/) version >= 1.0.2 for ALPN support, or version >= 1.0.1 for NPN.
+3. [netty-tcnative](https://github.com/netty/netty-tcnative) version >= 1.1.33.Fork7 must be on classpath.
 4. Supported platforms (for netty-tcnative): `linux-x86_64`, `mac-x86_64`, `windows-x86_64`. Supporting other platforms will require manually building netty-tcnative.
 
 If the above requirements met, the Netty transport will automatically select OpenSSL as the default TLS provider.
@@ -44,12 +44,20 @@ osx-x86_64 | Mac distribution
 linux-x86_64 | Used for non-Fedora derivatives of Linux
 linux-x86_64-fedora | Used for Fedora derivatives
 
+*NOTE: Make sure you use a version of netty-tcnative >= 1.1.33.Fork7.  Prior versions only supported NPN and only Fedora-derivatives were supported for Linux.*
+
 #### Getting netty-tcnative from Maven
 
 In Maven, you can use the [os-maven-plugin](https://github.com/trustin/os-maven-plugin) to help simplify the dependency.
 
 ```xml
 <project>
+  <properties>
+    <!-- Configure the os-maven-plugin extension to expand the classifier on -->
+    <!-- Fedora-"like" systems. -->
+    <os.detection.classifierWithLikes>fedora</os.detection.classifierWithLikes>
+  </properties>
+
   <dependencies>
     <dependency>
       <groupId>io.netty</groupId>
@@ -58,40 +66,16 @@ In Maven, you can use the [os-maven-plugin](https://github.com/trustin/os-maven-
       <classifier>${tcnative.classifier}</classifier>
     </dependency>
   </dependencies>
+
   <build>
     <extensions>
       <!-- Use os-maven-plugin to initialize the "os.detected" properties -->
       <extension>
         <groupId>kr.motd.maven</groupId>
         <artifactId>os-maven-plugin</artifactId>
-        <version>1.2.3.Final</version>
+        <version>1.4.0.Final</version>
       </extension>
     </extensions>
-    <plugins>
-      <!-- Use Ant to configure the appropriate "tcnative.classifier" property -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-antrun-plugin</artifactId>
-        <executions>
-          <execution>
-            <phase>initialize</phase>
-            <configuration>
-              <exportAntProperties>true</exportAntProperties>
-              <target>
-                <condition property="tcnative.classifier"
-                           value="${os.detected.classifier}-fedora"
-                           else="${os.detected.classifier}">
-                  <isset property="os.detected.release.fedora"/>
-                </condition>
-              </target>
-            </configuration>
-            <goals>
-              <goal>run</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
-    </plugins>
   </build>
 </project>
 ```
@@ -107,7 +91,7 @@ buildscript {
     mavenLocal()
   }
   dependencies {
-    classpath 'com.google.gradle:osdetector-gradle-plugin:1.3.0'
+    classpath 'com.google.gradle:osdetector-gradle-plugin:1.4.0'
   }
 }
 
