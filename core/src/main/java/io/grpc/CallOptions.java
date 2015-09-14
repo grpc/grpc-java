@@ -140,6 +140,7 @@ public final class CallOptions {
    * TLS certificate.</em>
    */
   @Nullable
+  @ExperimentalApi
   public String getAuthority() {
     return authority;
   }
