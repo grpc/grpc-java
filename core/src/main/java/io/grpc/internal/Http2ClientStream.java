@@ -204,8 +204,10 @@ public abstract class Http2ClientStream extends AbstractClientStream<Integer> {
       return null;
     }
     contentTypeChecked = true;
+    // Temporarily disable content type checking due to lacking content-type from C servers (#1021).
+    final boolean contentTypeChecking = false;
     String contentType = headers.get(GrpcUtil.CONTENT_TYPE_KEY);
-    if (!GrpcUtil.isGrpcContentType(contentType)) {
+    if (contentTypeChecking && !GrpcUtil.isGrpcContentType(contentType)) {
       return Status.INTERNAL.withDescription("Invalid content-type: " + contentType);
     }
     return null;
