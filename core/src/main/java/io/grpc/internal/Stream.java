@@ -79,6 +79,9 @@ public interface Stream {
    */
   boolean isReady();
 
+
+  void start();
+
   /**
    * Sets the default message encoder for messages on this stream.
    * @param c the compressor
