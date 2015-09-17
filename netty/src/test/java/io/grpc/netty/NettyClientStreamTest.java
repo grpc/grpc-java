@@ -341,7 +341,9 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
   @Test
   public void setHttp2StreamShouldNotifyReady() {
     listener = mock(ClientStreamListener.class);
-    stream = new NettyClientStream(listener, channel, handler, DEFAULT_MAX_MESSAGE_SIZE);
+    Http2Headers headers = mock(Http2Headers.class);
+    stream = new NettyClientStream(
+        listener, channel, handler, DEFAULT_MAX_MESSAGE_SIZE, headers, true);
     stream().id(STREAM_ID);
     verify(listener, never()).onReady();
     assertFalse(stream.isReady());
@@ -363,8 +365,9 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
       }
     }).when(writeQueue).enqueue(any(), any(ChannelPromise.class), anyBoolean());
     when(writeQueue.enqueue(any(), anyBoolean())).thenReturn(future);
-    NettyClientStream stream = new NettyClientStream(listener, channel, handler,
-            DEFAULT_MAX_MESSAGE_SIZE);
+    Http2Headers headers = mock(Http2Headers.class);
+    NettyClientStream stream = new NettyClientStream(
+        listener, channel, handler, DEFAULT_MAX_MESSAGE_SIZE, headers, true);
     assertTrue(stream.canSend());
     assertTrue(stream.canReceive());
     stream.id(STREAM_ID);
@@ -386,7 +389,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
   }
 
   private NettyClientStream stream() {
-    return (NettyClientStream) stream;
+    return stream;
   }
 
   private Http2Headers grpcResponseHeaders() {

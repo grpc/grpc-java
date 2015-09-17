@@ -35,6 +35,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
 
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.Http2ClientStream;
@@ -57,13 +58,37 @@ class NettyClientStream extends Http2ClientStream {
   private Http2Stream http2Stream;
   private Integer id;
   private WriteQueue writeQueue;
+  private final Http2Headers http2Headers;
+  private final boolean isUnary;
 
   NettyClientStream(ClientStreamListener listener, Channel channel, NettyClientHandler handler,
-                    int maxMessageSize) {
+                    int maxMessageSize, Http2Headers http2Headers, boolean isUnary) {
     super(new NettyWritableBufferAllocator(channel.alloc()), listener, maxMessageSize);
     this.writeQueue = handler.getWriteQueue();
     this.channel = checkNotNull(channel, "channel");
     this.handler = checkNotNull(handler, "handler");
+    this.http2Headers = checkNotNull(http2Headers, "http2Headers");
+    this.isUnary = isUnary;
+  }
+
+  @Override
+  public void start() {
+    final ChannelFutureListener failureListener = new ChannelFutureListener() {
+      @Override
+      public void operationComplete(ChannelFuture future) throws Exception {
+        if (!future.isSuccess()) {
+          // Stream creation failed. Close the stream if not already closed.
+          NettyClientStream.this.transportReportStatus(
+              Status.fromThrowable(future.cause()), true, new Metadata());
+        }
+      }
+    };
+
+    boolean shouldFlush = !isUnary;
+    // Write the command requesting the creation of the stream.
+    handler.getWriteQueue().enqueue(
+        new CreateStreamCommand(http2Headers, this), shouldFlush)
+        .addListener(failureListener);
   }
 
   @Override

@@ -441,6 +441,11 @@ class InProcessTransport implements ServerTransport, ClientTransport {
 
       @Override
       public void setDecompressionRegistry(DecompressorRegistry registry) {}
+
+      @Override
+      public void start() {
+        // Currently a no op
+      }
     }
   }
 
@@ -472,5 +477,10 @@ class InProcessTransport implements ServerTransport, ClientTransport {
 
     @Override
     public void setDecompressionRegistry(DecompressorRegistry registry) {}
+
+    @Override
+    public void start() {
+      // Currently a no op
+    }
   }
 }

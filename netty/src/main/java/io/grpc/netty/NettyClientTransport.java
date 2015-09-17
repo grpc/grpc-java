@@ -31,6 +31,7 @@
 
 package io.grpc.netty;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.AUTHORITY_KEY;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
@@ -116,37 +117,23 @@ class NettyClientTransport implements ClientTransport {
   @Override
   public ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers,
       ClientStreamListener listener) {
-    Preconditions.checkNotNull(method, "method");
-    Preconditions.checkNotNull(headers, "headers");
-    Preconditions.checkNotNull(listener, "listener");
-
-    // Create the stream.
-    final NettyClientStream stream = new NettyClientStream(listener, channel, handler,
-        maxMessageSize);
+    checkNotNull(method, "method");
+    checkNotNull(headers, "headers");
+    checkNotNull(listener, "listener");
 
     // Convert the headers into Netty HTTP/2 headers.
     AsciiString defaultPath = new AsciiString("/" + method.getFullMethodName());
-    AsciiString defaultAuthority  = new AsciiString(headers.containsKey(AUTHORITY_KEY)
+    AsciiString defaultAuthority = new AsciiString(headers.containsKey(AUTHORITY_KEY)
         ? headers.get(AUTHORITY_KEY) : authority);
     headers.removeAll(AUTHORITY_KEY);
-    Http2Headers http2Headers = Utils.convertClientHeaders(headers, negotiationHandler.scheme(),
-        defaultPath, defaultAuthority);
+    Http2Headers http2Headers = Utils.convertClientHeaders(
+        headers,
+        negotiationHandler.scheme(),
+        defaultPath,
+        defaultAuthority);
+    boolean isUnary = method.getType().clientSendsOneMessage();
 
-    ChannelFutureListener failureListener = new ChannelFutureListener() {
-      @Override
-      public void operationComplete(ChannelFuture future) throws Exception {
-        if (!future.isSuccess()) {
-          // Stream creation failed. Close the stream if not already closed.
-          stream.transportReportStatus(Status.fromThrowable(future.cause()), true,
-                  new Metadata());
-        }
-      }
-    };
-
-    // Write the command requesting the creation of the stream.
-    handler.getWriteQueue().enqueue(new CreateStreamCommand(http2Headers, stream),
-            !method.getType().clientSendsOneMessage()).addListener(failureListener);
-    return stream;
+    return new NettyClientStream(listener, channel, handler, maxMessageSize, http2Headers, isUnary);
   }
 
   @Override

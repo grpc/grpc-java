@@ -166,19 +166,23 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       closeCallPrematurely(listener, Status.fromThrowable(ex));
     }
 
-    if (stream != null) {
-      // TODO: this can race with the callbacks.  Fix the race ~eventually~ by decoupling stream
-      // creation and stream starting.
-      stream.setDecompressionRegistry(decompressorRegistry);
-      if (compressor != null) {
-        stream.setCompressor(compressor);
-      }
+    if (stream == null) {
+      return;
+    }
+
+    // TODO: this can race with the callbacks.  Fix the race ~eventually~ by decoupling stream
+    // creation and stream starting.
+    stream.setDecompressionRegistry(decompressorRegistry);
+    if (compressor != null) {
+      stream.setCompressor(compressor);
     }
 
     // Start the deadline timer after stream creation because it will close the stream
     if (deadlineNanoTime != null) {
       deadlineCancellationFuture = startDeadlineTimer(timeoutMicros);
     }
+
+    stream.start();
   }
 
   @Override
@@ -372,6 +376,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
     @Override
     public void setDecompressionRegistry(DecompressorRegistry registry) {}
+
+    @Override
+    public void start() {}
+
   }
 }
 

@@ -79,6 +79,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -251,21 +252,33 @@ class OkHttpClientTransport implements ClientTransport {
     Preconditions.checkNotNull(headers, "headers");
     Preconditions.checkNotNull(listener, "listener");
 
+    // TODO(carl-mastrangelo): This is a hack, and deserves something more elegant.
+    final AtomicReference<OkHttpClientStream> clientStreamRef =
+        new AtomicReference<OkHttpClientStream>();
+    Runnable startCallback = new Runnable() {
+      @Override
+      public void run() {
+        OkHttpClientStream clientStream = clientStreamRef.get();
+        synchronized (lock) {
+          if (goAway) {
+            clientStream.transportReportStatus(goAwayStatus, true, new Metadata());
+          } else if (streams.size() >= maxConcurrentStreams) {
+            pendingStreams.add(clientStream);
+          } else {
+            startStream(clientStream);
+          }
+        }
+      }
+    };
+
     String defaultPath = "/" + method.getFullMethodName();
     OkHttpClientStream clientStream = new OkHttpClientStream(
         listener, frameWriter, this, outboundFlow, method.getType(), lock,
+        startCallback,
         Headers.createRequestHeaders(headers, defaultPath, defaultAuthority),
         maxMessageSize);
 
-    synchronized (lock) {
-      if (goAway) {
-        clientStream.transportReportStatus(goAwayStatus, true, new Metadata());
-      } else if (streams.size() >= maxConcurrentStreams) {
-        pendingStreams.add(clientStream);
-      } else {
-        startStream(clientStream);
-      }
-    }
+    clientStreamRef.set(clientStream);
 
     return clientStream;
   }
