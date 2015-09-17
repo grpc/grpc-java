@@ -21,7 +21,7 @@ subprojects {
     osdetector.classifierWithLikes = ['fedora']
 
     group = "io.grpc"
-    version = "0.9.0-SNAPSHOT"
+    version = "0.9.0"
 
     sourceCompatibility = 1.6
     targetCompatibility = 1.6
