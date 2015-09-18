@@ -366,6 +366,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
     @Override
     public void setDecompressor(String messageEncoding) {}
+
+    @Override
+    public void start() {}
   }
 }
 

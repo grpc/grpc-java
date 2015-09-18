@@ -151,6 +151,9 @@ public class AbstractStreamTest {
     protected void deframeFailed(Throwable cause) {
       throw new UnsupportedOperationException();
     }
+
+    @Override
+    public void start() {}
   }
 }
 

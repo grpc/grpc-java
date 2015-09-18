@@ -281,6 +281,9 @@ public class AbstractClientStreamTest {
     }
 
     @Override
+    public void start() {}
+
+    @Override
     protected void returnProcessedBytes(int processedBytes) {}
   }
 
