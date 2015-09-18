@@ -329,9 +329,6 @@ public class AbstractServerStreamTest {
 
     @Override
     protected void returnProcessedBytes(int processedBytes) {}
-
-    @Override
-    public void start() {}
   }
 }
 

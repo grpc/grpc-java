@@ -132,9 +132,4 @@ class NettyServerStream extends AbstractServerStream<Integer> {
   void useDecompressor(String messageEncoding) {
     setDecompressor(messageEncoding);
   }
-
-  @Override
-  public void start() {
-    // no op for now, maybe added in later
-  }
 }

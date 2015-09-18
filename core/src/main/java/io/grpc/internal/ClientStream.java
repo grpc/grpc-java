@@ -58,4 +58,9 @@ public interface ClientStream extends Stream {
    * the remote end-point is closed. This method may only be called once.
    */
   void halfClose();
+
+  /**
+   * Begins this client stream.
+   */
+  void start();
 }

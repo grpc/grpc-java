@@ -331,11 +331,6 @@ class InProcessTransport implements ServerTransport, ClientTransport {
         clientStreamListener.closed(status, new Metadata());
         return true;
       }
-
-      @Override
-      public void start() {
-        // Currently a no op
-      }
     }
 
     private class InProcessClientStream implements ClientStream {

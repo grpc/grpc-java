@@ -162,7 +162,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       closeCallPrematurely(listener, Status.fromThrowable(ex));
     }
 
-    if (stream != null && compressor != null) {
+    if (stream == null) {
+      return;
+    }
+
+    if (compressor != null) {
       stream.setCompressor(compressor);
     }
 
@@ -170,6 +174,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     if (deadlineNanoTime != null) {
       deadlineCancellationFuture = startDeadlineTimer(timeoutMicros);
     }
+
+    stream.start();
   }
 
   @Override
