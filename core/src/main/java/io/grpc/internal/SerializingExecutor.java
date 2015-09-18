@@ -34,7 +34,6 @@ package io.grpc.internal;
 import com.google.common.base.Preconditions;
 
 import java.util.ArrayDeque;
-import java.util.Queue;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -54,17 +53,22 @@ public final class SerializingExecutor implements Executor {
   /** Underlying executor that all submitted Runnable objects are run on. */
   private final Executor executor;
 
-  /** A list of Runnables to be run in order. */
+  /** The list of {@link Runnable} instances produced by the application to be executed. */
   // Initial size set to 4 because it is a nice number and at least the size necessary for handling
   // a unary response: onHeaders + onPayload + onClose
   @GuardedBy("internalLock")
-  private final Queue<Runnable> waitQueue = new ArrayDeque<Runnable>(4);
+  private ArrayDeque<Runnable> producerQueue = new ArrayDeque<Runnable>(4);
+
+  /**
+   * The list of @link Runnable} instances being actively processed by the executor.
+   */
+  private ArrayDeque<Runnable> consumerQueue = new ArrayDeque<Runnable>(4);
 
   /**
    * We explicitly keep track of if the TaskRunner is currently scheduled to
    * run.  If it isn't, we start it.  We can't just use
-   * waitQueue.isEmpty() as a proxy because we need to ensure that only one
-   * Runnable submitted is running at a time so even if waitQueue is empty
+   * producerQueue.isEmpty() as a proxy because we need to ensure that only one
+   * Runnable submitted is running at a time so even if producerQueue is empty
    * the isThreadScheduled isn't set to false until after the Runnable is
    * finished.
    */
@@ -96,10 +100,9 @@ public final class SerializingExecutor implements Executor {
    */
   @Override
   public void execute(Runnable r) {
-    Preconditions.checkNotNull(r, "'r' must not be null.");
     boolean scheduleTaskRunner = false;
     synchronized (internalLock) {
-      waitQueue.add(r);
+      producerQueue.add(r);
 
       if (!isThreadScheduled) {
         isThreadScheduled = true;
@@ -114,9 +117,44 @@ public final class SerializingExecutor implements Executor {
       } finally {
         if (threw) {
           synchronized (internalLock) {
-            // It is possible that at this point that there are still tasks in
+            // It is possible that at this point there are still tasks in
             // the queue, it would be nice to keep trying but the error may not
-            // be recoverable.  So we update our state and propogate so that if
+            // be recoverable.  So we update our state and propagate so that if
+            // our caller deems it recoverable we won't be stuck.
+            isThreadScheduled = false;
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Runs the given runnable strictly after all Runnables that were submitted
+   * before it, and using the {@code executor} passed to the constructor.     .
+   */
+  public void execute(Runnable... r) {
+    boolean scheduleTaskRunner = false;
+    synchronized (internalLock) {
+      for (Runnable tmp : r) {
+        producerQueue.add(tmp);
+      }
+
+      if (!isThreadScheduled) {
+        isThreadScheduled = true;
+        scheduleTaskRunner = true;
+      }
+    }
+    if (scheduleTaskRunner) {
+      boolean threw = true;
+      try {
+        executor.execute(taskRunner);
+        threw = false;
+      } finally {
+        if (threw) {
+          synchronized (internalLock) {
+            // It is possible that at this point there are still tasks in
+            // the queue, it would be nice to keep trying but the error may not
+            // be recoverable.  So we update our state and propagate so that if
             // our caller deems it recoverable we won't be stuck.
             isThreadScheduled = false;
           }
@@ -135,39 +173,38 @@ public final class SerializingExecutor implements Executor {
   private class TaskRunner implements Runnable {
     @Override
     public void run() {
-      boolean stillRunning = true;
-      try {
-        while (true) {
-          Runnable nextToRun;
+      Runnable nextToRun;
+      ArrayDeque<Runnable> tmpConsumerQueue;
+      do {
+        if (consumerQueue.isEmpty()) {
           synchronized (internalLock) {
-            Preconditions.checkState(isThreadScheduled);
-            nextToRun = waitQueue.poll();
-            if (nextToRun == null) {
+            if (producerQueue.isEmpty()) {
               isThreadScheduled = false;
-              stillRunning = false;
-              break;
+              return;
             }
+            // Swap the queues rather than copying.
+            tmpConsumerQueue = producerQueue;
+            producerQueue = consumerQueue;
           }
-
-          // Always run while not holding the lock, to avoid deadlocks.
+          consumerQueue = tmpConsumerQueue;
+        }
+        while ((nextToRun = consumerQueue.poll()) != null) {
           try {
             nextToRun.run();
           } catch (RuntimeException e) {
             // Log it and keep going.
-            log.log(Level.SEVERE, "Exception while executing runnable "
-                + nextToRun, e);
+            log.log(Level.SEVERE, "Exception while executing runnable " + nextToRun, e);
+          } catch (Error e) {
+            // If the application can recover from the error then execution can restart
+            // when more work is scheduled.
+            synchronized (internalLock) {
+              isThreadScheduled = false;
+            }
+            // Propagate the error
+            throw e;
           }
         }
-      } finally {
-        if (stillRunning) {
-          // An Error is bubbling up, we should mark ourselves as no longer
-          // running, that way if anyone tries to keep using us we won't be
-          // corrupted.
-          synchronized (internalLock) {
-            isThreadScheduled = false;
-          }
-        }
-      }
+      } while (true);
     }
   }
 }
