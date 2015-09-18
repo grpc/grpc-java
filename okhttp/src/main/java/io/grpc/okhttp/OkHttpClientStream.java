@@ -80,12 +80,16 @@ class OkHttpClientStream extends Http2ClientStream {
   @GuardedBy("lock")
   private boolean cancelSent = false;
 
+  // This depends on the internals of the transport.
+  private final Runnable startCallback;
+
   OkHttpClientStream(ClientStreamListener listener,
       AsyncFrameWriter frameWriter,
       OkHttpClientTransport transport,
       OutboundFlowController outboundFlow,
       MethodType type,
       Object lock,
+      Runnable startCallback,
       List<Header> requestHeaders,
       int maxMessageSize) {
     super(new OkHttpWritableBufferAllocator(), listener, maxMessageSize);
@@ -95,6 +99,7 @@ class OkHttpClientStream extends Http2ClientStream {
     this.type = type;
     this.lock = lock;
     this.requestHeaders = requestHeaders;
+    this.startCallback = startCallback;
   }
 
   /**
@@ -115,6 +120,11 @@ class OkHttpClientStream extends Http2ClientStream {
   @Nullable
   public Integer id() {
     return id;
+  }
+
+  @Override
+  public void start() {
+    startCallback.run();
   }
 
   @GuardedBy("lock")

@@ -451,6 +451,11 @@ class InProcessTransport implements ServerTransport, ClientTransport {
       public void setDecompressor(String messageEncoding) {
         // nop
       }
+
+      @Override
+      public void start() {
+        // Currently a no op
+      }
     }
   }
 
@@ -488,6 +493,11 @@ class InProcessTransport implements ServerTransport, ClientTransport {
     @Override
     public void setDecompressor(String messageEncoding) {
       // nop
+    }
+
+    @Override
+    public void start() {
+      // Currently a no op
     }
   }
 }
