@@ -144,14 +144,18 @@ public abstract class ServerCall<RespT> {
    * the underlying network.
    */
   @ExperimentalApi
-  public abstract void cork();
+  public void cork() {
+    // No-op impl to avoid breaking backward compatibility.
+  }
 
   /**
    * Disables corking that was enabled by an earlier call to {@link #cork()}. Any buffered
    * messages will be immediately flushed to the transport.
    */
   @ExperimentalApi
-  public abstract void uncork();
+  public void uncork() {
+    // No-op impl to avoid breaking backward compatibility.
+  }
 
   /**
    * If {@code true}, indicates that the call is capable of sending additional messages

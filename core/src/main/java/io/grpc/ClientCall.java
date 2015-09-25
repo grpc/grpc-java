@@ -184,14 +184,18 @@ public abstract class ClientCall<ReqT, RespT> {
    * the underlying network.
    */
   @ExperimentalApi
-  public abstract void cork();
+  public void cork() {
+    // No-op implementation to avoid API breakage.
+  }
 
   /**
    * Disables corking that was enabled by an earlier call to {@link #cork()}. Any buffered
    * messages will be immediately flushed to the transport.
    */
   @ExperimentalApi
-  public abstract void uncork();
+  public void uncork() {
+    // No-op implementation to avoid API breakage.
+  }
 
   /**
    * If {@code true}, indicates that the call is capable of sending additional messages

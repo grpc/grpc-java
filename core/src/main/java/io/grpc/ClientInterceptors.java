@@ -111,12 +111,6 @@ public class ClientInterceptors {
     @Override
     public void sendMessage(Object message) {}
 
-    @Override
-    public void cork() {}
-
-    @Override
-    public void uncork() {}
-
     /**
      * Always returns {@code false}, since this is only used when the startup of the {@link
      * ClientCall} fails (i.e. the {@link ClientCall} is closed).

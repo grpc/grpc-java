@@ -70,6 +70,7 @@ import java.net.SocketAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Enumeration;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -79,6 +80,15 @@ import java.util.concurrent.atomic.AtomicReference;
  * Abstract base class for Netty end-to-end benchmarks.
  */
 public abstract class AbstractBenchmark {
+
+  public static final ThreadFactory DEMON_THREAD_FACTORY = new ThreadFactory() {
+    @Override
+    public Thread newThread(Runnable r) {
+      Thread thread = new Thread(r);
+      thread.setDaemon(true);
+      return thread;
+    }
+  };
 
   /**
    * Standard message sizes.
@@ -234,7 +244,8 @@ public abstract class AbstractBenchmark {
     }
 
     // Always use a different worker group from the client.
-    serverBuilder.workerEventLoopGroup(new NioEventLoopGroup());
+    serverBuilder.bossEventLoopGroup(new NioEventLoopGroup(1, DEMON_THREAD_FACTORY));
+    serverBuilder.workerEventLoopGroup(new NioEventLoopGroup(0, DEMON_THREAD_FACTORY));
 
     // Always set connection and stream window size to same value
     serverBuilder.flowControlWindow(windowSize.bytes());
@@ -274,6 +285,7 @@ public abstract class AbstractBenchmark {
                       MethodDescriptor<ByteBuf, ByteBuf> method,
                       final ServerCall<ByteBuf> call,
                       Metadata headers) {
+                    call.sendHeaders(new Metadata());
                     call.request(1);
                     return new ServerCall.Listener<ByteBuf>() {
                       @Override
@@ -306,6 +318,7 @@ public abstract class AbstractBenchmark {
                       MethodDescriptor<ByteBuf, ByteBuf> method,
                       final ServerCall<ByteBuf> call,
                       Metadata headers) {
+                    call.sendHeaders(new Metadata());
                     call.request(1);
                     return new ServerCall.Listener<ByteBuf>() {
                       @Override
@@ -340,14 +353,13 @@ public abstract class AbstractBenchmark {
                       MethodDescriptor<ByteBuf, ByteBuf> method,
                       final ServerCall<ByteBuf> call,
                       Metadata headers) {
+                    call.sendHeaders(new Metadata());
                     call.request(1);
                     return new ServerCall.Listener<ByteBuf>() {
                       @Override
                       public void onMessage(ByteBuf message) {
                         message.release();
-                        while (call.isReady()) {
-                          call.sendMessage(response.slice());
-                        }
+                        onReady();
                         // Request next message
                         call.request(1);
                       }
@@ -369,6 +381,8 @@ public abstract class AbstractBenchmark {
 
                       @Override
                       public void onReady() {
+                        // Cork while the transport declares that it can receive more messages
+                        // so that flushes are deferred until the framer buffer is full.
                         call.cork();
                         try {
                           while (call.isReady()) {
@@ -390,7 +404,7 @@ public abstract class AbstractBenchmark {
     for (int i = 0; i < channelCount; i++) {
       // Use a dedicated event-loop for each channel
       channels[i] = channelBuilder
-          .eventLoopGroup(new NioEventLoopGroup(1))
+          .eventLoopGroup(new NioEventLoopGroup(1, DEMON_THREAD_FACTORY))
           .build();
     }
   }
