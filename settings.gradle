@@ -2,6 +2,7 @@ rootProject.name = "grpc"
 include ":grpc-core"
 include ":grpc-stub"
 include ":grpc-auth"
+include ":grpc-callable"
 include ":grpc-okhttp"
 include ":grpc-protobuf"
 include ":grpc-protobuf-nano"
@@ -15,6 +16,7 @@ include ":grpc-examples"
 project(':grpc-core').projectDir = "$rootDir/core" as File
 project(':grpc-stub').projectDir = "$rootDir/stub" as File
 project(':grpc-auth').projectDir = "$rootDir/auth" as File
+project(':grpc-callable').projectDir = "$rootDir/callable" as File
 project(':grpc-okhttp').projectDir = "$rootDir/okhttp" as File
 project(':grpc-protobuf').projectDir = "$rootDir/protobuf" as File
 project(':grpc-protobuf-nano').projectDir = "$rootDir/protobuf-nano" as File

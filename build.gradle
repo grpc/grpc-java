@@ -141,7 +141,8 @@ subprojects {
 
                 // Test dependencies.
                 junit: 'junit:junit:4.11',
-                mockito: 'org.mockito:mockito-core:1.10.19'
+                mockito: 'org.mockito:mockito-core:1.10.19',
+                truth: 'com.google.truth:truth:0.27'
         ]
 
         // Determine the correct version of Jetty ALPN boot to use based
@@ -162,7 +163,8 @@ subprojects {
 
     dependencies {
         testCompile libraries.junit,
-                    libraries.mockito
+                    libraries.mockito,
+                    libraries.truth
 
         // Configuration for modules that use Jetty ALPN
         alpnboot alpnboot_package_name
