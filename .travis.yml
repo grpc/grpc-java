@@ -25,6 +25,7 @@ jdk:
 
 os:
   - linux
+  - osx
 
 notifications:
   email: false
