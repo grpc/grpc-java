@@ -31,7 +31,6 @@
 
 package io.grpc.callable;
 
-import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 
 import io.grpc.CallOptions;
@@ -39,6 +38,7 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ExperimentalApi;
 import io.grpc.MethodDescriptor;
+import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.StatusException;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.StreamObserver;
@@ -61,7 +61,7 @@ import javax.annotation.Nullable;
 @ExperimentalApi
 public abstract class Callable<RequestT, ResponseT> {
 
-  // TODO(wrwg): Support interceptors and method option configurations.
+  // TODO(wrwg): Support interceptors and method/call option configurations.
   // TODO(wrwg): gather more feedback whether the overload with java.util.Concurrent hurts that
   //             much that we want to rename this into ClientCallable or such.
 
@@ -123,11 +123,22 @@ public abstract class Callable<RequestT, ResponseT> {
   // Running Callables
   // =================
 
+  private void requireMethodType(MethodType type) {
+    MethodType actualType = getDescriptor() != null
+        ? getDescriptor().getMethodDescriptor().getType() : null;
+    if (actualType == null || actualType == MethodType.UNKNOWN || actualType.equals(type)) {
+      return;
+    }
+    throw new IllegalArgumentException(String.format(
+        "Requested method type '%s' differs from actual type '%s'", type, actualType));
+  }
+
   /**
    * Convenience method to run a unary callable synchronously. If no channel is provided,
    * the callable must be bound to one.
    */
   public ResponseT call(@Nullable Channel channel, RequestT request) {
+    requireMethodType(MethodType.UNARY);
     return ClientCalls.blockingUnaryCall(newCall(channel), request);
   }
 
@@ -145,6 +156,7 @@ public abstract class Callable<RequestT, ResponseT> {
    */
   public void asyncCall(@Nullable Channel channel, RequestT request,
       StreamObserver<ResponseT> responseObserver) {
+    requireMethodType(MethodType.UNARY);
     ClientCalls.asyncUnaryCall(newCall(channel), request, responseObserver);
   }
 
@@ -161,6 +173,7 @@ public abstract class Callable<RequestT, ResponseT> {
    * the callable must be bound to one.
    */
   public ListenableFuture<ResponseT> futureCall(@Nullable Channel channel, RequestT request) {
+    requireMethodType(MethodType.UNARY);
     return ClientCalls.futureUnaryCall(newCall(channel), request);
   }
 
@@ -181,6 +194,7 @@ public abstract class Callable<RequestT, ResponseT> {
    */
   public Iterable<ResponseT> iterableResponseStreamCall(@Nullable Channel channel,
       RequestT request) {
+    requireMethodType(MethodType.SERVER_STREAMING);
     final Iterator<ResponseT> result =
         ClientCalls.blockingServerStreamingCall(newCall(channel), request);
     return new Iterable<ResponseT>() {
@@ -327,34 +341,6 @@ public abstract class Callable<RequestT, ResponseT> {
   public <FinalResT> Callable<RequestT, FinalResT>
       followedBy(Callable<ResponseT, FinalResT> callable) {
     return new FollowedByCallable<RequestT, ResponseT, FinalResT>(this, callable);
-  }
-
-  // Channel Redirection
-  // ===================
-
-  /**
-   * Returns a callable which redirects the execution of this callable to a channel determined at
-   * call execution time, via a supplier. This can be used for creating batches which target
-   * different services. Example:
-   *
-   * <pre>
-   * Author response =
-   *     Callable.redirect(
-   *       Suppliers.ofInstance(bookChannel),
-   *       Callable.create(LibraryGrpc.CONFIG.getBook))
-   *     .followedBy(Callable.create(LibraryGrpc.CONFIG.getAuthor))
-   *     .call(authorChannel, new GetBookRequest().setName(bookName));
-   * </pre>
-   */
-  public static <RequestT, ResponseT> Callable<RequestT, ResponseT>
-      redirect(final Supplier<Channel> channelSupplier,
-               final Callable<RequestT, ResponseT> scoped) {
-    return new Callable<RequestT, ResponseT>() {
-      @Override
-      public ClientCall<RequestT, ResponseT> newCall(Channel channel) {
-        return scoped.newCall(channelSupplier.get());
-      }
-    };
   }
 
   // Retrying
