@@ -56,6 +56,7 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
                        Http2Settings initialSettings) {
     super(decoder, encoder, initialSettings);
 
+    // If a stream window was specified, update the connection window to match it.
     this.initialConnectionWindow = initialSettings.initialWindowSize() == null ? -1 :
         initialSettings.initialWindowSize();
   }
