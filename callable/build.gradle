@@ -1,0 +1,16 @@
+plugins {
+    id "be.insaneprogramming.gradle.animalsniffer" version "1.4.0"
+}
+
+description = "gRPC: Callable"
+dependencies {
+    compile project(':grpc-core'),\
+            project(':grpc-stub')
+}
+
+// Configure the animal sniffer plugin
+animalsniffer {
+    signature = "org.codehaus.mojo.signature:java16:+@signature"
+}
+
+javadoc.options.links 'http://docs.guava-libraries.googlecode.com/git-history/release/javadoc/'

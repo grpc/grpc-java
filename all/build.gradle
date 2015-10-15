@@ -16,6 +16,7 @@ configurations.compile.transitive = false
 
 def subprojects = [
   project(':grpc-auth'),
+  project(':grpc-callable'),
   project(':grpc-core'),
   project(':grpc-netty'),
   project(':grpc-okhttp'),
