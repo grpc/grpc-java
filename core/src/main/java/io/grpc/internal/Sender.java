@@ -46,7 +46,7 @@ import javax.annotation.concurrent.GuardedBy;
  * A class that manages the outbound state on behalf of a stream. Manages the sending of headers,
  * messages, and trailers, as well as outbound flow control.
  */
-final class MessageSender {
+final class Sender {
   /**
    * The default number of queued bytes for a given stream, below which {@link
    * StreamListener#onReady()} will be called.
@@ -58,37 +58,44 @@ final class MessageSender {
   }
 
   /**
-   * The handler for this state.
+   * The handler responsible for writing gRPC frames to the wire as well as reacting to outbound
+   * flow control events.
    */
   interface Handler {
     /**
-     * Sends the given headers to the remote endpoint.
+     * Writes out the given headers to the remote endpoint. This is called in the channel thread
+     * context as a result of a call to {@link Sender#sendHeaders(Metadata)}.
      */
-    void sendHeaders(Metadata headers);
+    void writeHeadersFrame(Metadata headers);
 
     /**
-     * Sends the given message to the remote endpoint.
+     * Writes out the given message to the remote endpoint. This is called in the channel thread
+     * context as a result from either a call to {@link Sender#sendMessage(InputStream)}, {@link
+     * Sender#flush()} or {@link Sender#close(Status, boolean)}.
      *
-     * @param frame the message to be sent.
-     * @param endOfStream if {@code true}, indicates that the frame should be marked as the end of stream.
-     * @param flush if {@code true}, indicates that any buffered IO should be flushed to the remote endpoint.
+     * @param frame       the message to be sent.
+     * @param endOfStream if {@code true}, indicates that the frame should be marked as the end of
+     *                    stream.
+     * @param flush       if {@code true}, indicates that any buffered IO should be flushed to the
+     *                    remote endpoint.
      */
-    void sendMessage(@Nullable WritableBuffer frame, boolean endOfStream, boolean flush);
+    void writeMessageFrame(@Nullable WritableBuffer frame, boolean endOfStream, boolean flush);
 
     /**
-     * Sends the specified trailers to the remote endpoint. This is only called for server-side
-     * handlers.
+     * Writes out the specified trailers to the remote endpoint. This is only called for server-side
+     * handlers. This is called in the channel thread context as a result of calling {@link
+     * Sender#close(Status, boolean)}.
      *
-     * @param trailers the trailers to be sent
+     * @param trailers    the trailers to be sent
      * @param headersSent if {@code true}, indicates that headers were previously sent.
      */
-    void sendTrailers(Metadata trailers, boolean headersSent);
+    void writeTrailersFrame(Metadata trailers, boolean headersSent);
 
     /**
-     * This indicates that the transport is now capable of sending additional messages
-     * without requiring excessive buffering internally. This event is
-     * just a suggestion and the application is free to ignore it, however doing so may
-     * result in excessive buffering within the transport.
+     * This indicates that the transport is now capable of sending additional messages without
+     * requiring excessive buffering internally. This event is just a suggestion and the application
+     * is free to ignore it, however doing so may result in excessive buffering within the
+     * transport.
      */
     void onReady();
   }
@@ -109,7 +116,7 @@ final class MessageSender {
 
   private final Object onReadyLock = new Object();
 
-  MessageSender(WritableBufferAllocator bufferAllocator, Handler handler, boolean server) {
+  Sender(WritableBufferAllocator bufferAllocator, Handler handler, boolean server) {
     this.handler = checkNotNull(handler, "handler");
     this.server = server;
     MessageFramer.Sink frameHandler = new MessageFramer.Sink() {
@@ -128,18 +135,20 @@ final class MessageSender {
   }
 
   /**
-   * Request the sending of headers. Must be called from the channel thread context.
+   * Request the sending of headers. Must be called from the channel thread context. This will call
+   * {@link Handler#writeHeadersFrame(Metadata)}.
    */
   void sendHeaders(Metadata headers) {
     checkNotNull(headers, "headers");
     phase(Phase.HEADERS);
     headersSent = true;
-    handler.sendHeaders(headers);
+    handler.writeHeadersFrame(headers);
     phase(Phase.MESSAGE);
   }
 
   /**
-   * Request that a message be sent. Must be called from the channel thread context.
+   * Request that a message be sent. Must be called from the channel thread context. This may call
+   * {@link Handler#writeMessageFrame(WritableBuffer, boolean, boolean)}.
    */
   void sendMessage(InputStream message) {
     checkNotNull(message);
@@ -150,7 +159,8 @@ final class MessageSender {
   }
 
   /**
-   * Request to flush any buffered messages. Must be called form the channel thread context.
+   * Request to flush any buffered messages. Must be called form the channel thread context. This
+   * may call {@link Handler#writeMessageFrame(WritableBuffer, boolean, boolean)}.
    */
   void flush() {
     if (!framer.isClosed()) {
@@ -160,8 +170,8 @@ final class MessageSender {
 
   /**
    * If {@code true}, indicates that the transport is capable of sending additional messages without
-   * requiring excessive buffering internally. Otherwise, {@link Handler#onReady()} will be
-   * called when it turns {@code true}.
+   * requiring excessive buffering internally. Otherwise, {@link Handler#onReady()} will be called
+   * when it turns {@code true}. This method is thread-safe.
    *
    * <p>This is just a suggestion and the application is free to ignore it, however doing so may
    * result in excessive buffering within the transport.
@@ -176,7 +186,10 @@ final class MessageSender {
   }
 
   /**
-   * Closes this outbound context. Must be called from the application thread context.
+   * Closes this outbound context. Must be called from the channel thread context. If {@code send}
+   * is {@code true}, this may call {@link Handler#writeMessageFrame(WritableBuffer, boolean,
+   * boolean)}. If server-side, this will call {@link Handler#writeTrailersFrame(Metadata,
+   * boolean)}.
    */
   void close(Status status, boolean send) {
     checkNotNull(status, "status");
@@ -199,15 +212,15 @@ final class MessageSender {
       writeStatusToTrailers(status);
     }
 
-    // Close the framer and flush any remaining data. For server-side, this will trigger
-    // the sending of trailers.
+    // Close the framer and flush any remaining data. This will call onMessageFrame, which
+    // will send trailers if we're a server.
     framer.close();
   }
 
   /**
    * Notifies this context that the given number of bytes has actually been sent to the remote
-   * endpoint. May call {@link Handler#onReady()} if appropriate. This should be called
-   * from the transport thread.
+   * endpoint. May call {@link Handler#onReady()} if appropriate. This should be called from the
+   * transport thread.
    *
    * @param numBytes the number of bytes that were sent by the transport.
    */
@@ -249,17 +262,17 @@ final class MessageSender {
       // Sending the last frame from a server.
 
       // Don't bother flushing since we're sending trailers.
-      handler.sendMessage(frame, false, false);
+      handler.writeMessageFrame(frame, false, false);
 
       // Send the trailers.
       Metadata trailers = stashedTrailers;
       boolean previouslySentHeaders = this.headersSent;
       stashedTrailers = null;
       this.headersSent = true;
-      handler.sendTrailers(trailers, previouslySentHeaders);
+      handler.writeTrailersFrame(trailers, previouslySentHeaders);
     } else {
       // Just send the message.
-      handler.sendMessage(frame, endOfStream, flush);
+      handler.writeMessageFrame(frame, endOfStream, flush);
     }
   }
 
