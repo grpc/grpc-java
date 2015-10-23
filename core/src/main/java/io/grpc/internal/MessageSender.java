@@ -46,7 +46,7 @@ import javax.annotation.concurrent.GuardedBy;
  * A class that manages the outbound state on behalf of a stream. Manages the sending of headers,
  * messages, and trailers, as well as outbound flow control.
  */
-final class OutboundState {
+final class MessageSender {
   /**
    * The default number of queued bytes for a given stream, below which {@link
    * StreamListener#onReady()} will be called.
@@ -109,7 +109,7 @@ final class OutboundState {
 
   private final Object onReadyLock = new Object();
 
-  OutboundState(WritableBufferAllocator bufferAllocator, Handler handler, boolean server) {
+  MessageSender(WritableBufferAllocator bufferAllocator, Handler handler, boolean server) {
     this.handler = checkNotNull(handler, "handler");
     this.server = server;
     MessageFramer.Sink frameHandler = new MessageFramer.Sink() {
@@ -241,8 +241,7 @@ final class OutboundState {
   /**
    * Handles the output of the {@link MessageFramer}.
    */
-  private void onMessageFrame(final WritableBuffer frame, final boolean endOfStream,
-                              final boolean flush) {
+  private void onMessageFrame(WritableBuffer frame, boolean endOfStream, boolean flush) {
     // Update the number of queued bytes.
     bytesQueued(frame == null ? 0 : frame.readableBytes());
 
