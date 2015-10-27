@@ -56,6 +56,7 @@ import io.grpc.Status;
 import io.grpc.TransportManager;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -104,6 +105,7 @@ public final class ManagedChannelImpl extends ManagedChannel {
   private final Channel interceptorChannel;
 
   private final NameResolver nameResolver;
+  private final int defaultPort;
   private final LoadBalancer loadBalancer;
 
   /**
@@ -133,7 +135,8 @@ public final class ManagedChannelImpl extends ManagedChannel {
   };
 
   ManagedChannelImpl(String target, BackoffPolicy.Provider backoffPolicyProvider,
-      NameResolver.Factory nameResolverFactory, LoadBalancer.Factory loadBalancerFactory,
+      NameResolver.Factory nameResolverFactory, int defaultPort,
+      LoadBalancer.Factory loadBalancerFactory,
       ClientTransportFactory transportFactory, @Nullable Executor executor,
       @Nullable String userAgent, List<ClientInterceptor> interceptors) {
     if (executor == null) {
@@ -175,6 +178,7 @@ public final class ManagedChannelImpl extends ManagedChannel {
         "cannot find a NameResolver for %s%s", target,
         uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors.toString() + ")" : "");
     this.nameResolver = nameResolver;
+    this.defaultPort = defaultPort;
 
     this.loadBalancer = loadBalancerFactory.newLoadBalancer(nameResolver.getServiceAuthority(), tm);
     this.transportFactory = transportFactory;
@@ -185,7 +189,21 @@ public final class ManagedChannelImpl extends ManagedChannel {
     this.nameResolver.start(new NameResolver.Listener() {
       @Override
       public void onUpdate(List<ResolvedServerInfo> servers, Attributes config) {
-        loadBalancer.handleResolvedAddresses(servers, config);
+        ArrayList<ResolvedServerInfo> effectiveServers = new ArrayList<ResolvedServerInfo>();
+        for (ResolvedServerInfo server : servers) {
+          SocketAddress address = server.getAddress();
+          if (address instanceof InetSocketAddress) {
+            InetSocketAddress inetSocketAddress = (InetSocketAddress) address;
+            if (inetSocketAddress.getPort() == 0) {
+              server = new ResolvedServerInfo(
+                  new InetSocketAddress(
+                      inetSocketAddress.getAddress(), ManagedChannelImpl.this.defaultPort),
+                  server.getAttributes());
+            }
+          }
+          effectiveServers.add(server);
+        }
+        loadBalancer.handleResolvedAddresses(effectiveServers, config);
       }
 
       @Override

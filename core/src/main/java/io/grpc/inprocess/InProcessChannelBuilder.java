@@ -80,6 +80,12 @@ public class InProcessChannelBuilder extends
     return new InProcessClientTransportFactory(name);
   }
 
+  @Override
+  protected int getDefaultPort() {
+    // port is not applicable
+    return -1;
+  }
+
   private static class InProcessClientTransportFactory extends AbstractReferenceCounted
           implements ClientTransportFactory {
     private final String name;

@@ -193,6 +193,19 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
         eventLoopGroup, flowControlWindow, maxMessageSize);
   }
 
+  @Override
+  protected int getDefaultPort() {
+    switch (negotiationType) {
+      case PLAINTEXT:
+      case PLAINTEXT_UPGRADE:
+        return GrpcUtil.DEFAULT_PORT_PLAINTEXT;
+      case TLS:
+        return GrpcUtil.DEFAULT_PORT_SSL;
+      default:
+        throw new AssertionError(negotiationType + " not handled");
+    }
+  }
+
   @VisibleForTesting
   static ProtocolNegotiator createProtocolNegotiator(
       String authority,

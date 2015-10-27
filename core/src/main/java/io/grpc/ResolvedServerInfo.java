@@ -57,6 +57,10 @@ public final class ResolvedServerInfo {
 
   /**
    * Returns the address.
+   *
+   * <p>For address types (e.g., {@link java.net.InetSocketAddress}) that carry port numbers, the
+   * port being 0 means undefined, in which case the channel will use an appropriate default port to
+   * make connections.
    */
   public SocketAddress getAddress() {
     return address;
