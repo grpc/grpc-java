@@ -49,8 +49,8 @@ import javax.annotation.Nullable;
  *
  * <p>It resolves a target URI whose scheme is {@code "dns"}. The (optional) authority of the target
  * URI is reserved for the address of alternative DNS server (not implemented yet). The path of the
- * target URI, exluding the leading slash {@code '/'}, is treated as the host name to be resolved by
- * DNS. Example target URIs:
+ * target URI, exluding the leading slash {@code '/'}, is treated as the host name and the optional
+ * port to be resolved by DNS. Example target URIs:
  * <ul>
  *   <li>{@code "dns:///foo.googleapis.com:8080"} (using default DNS)</li>
  *   <li>{@code "dns://8.8.8.8/foo.googleapis.com:8080"} (using alternative DNS (not implemented
@@ -99,8 +99,7 @@ public final class DnsNameResolverFactory extends NameResolver.Factory {
       authority = Preconditions.checkNotNull(nameUri.getAuthority(),
           "nameUri (%s) doesn't have an authority", nameUri);
       host = Preconditions.checkNotNull(nameUri.getHost(), "host");
-      port = nameUri.getPort();
-      Preconditions.checkArgument(port > 0, "port (%s) must be positive", port);
+      port = nameUri.getPort() == -1 ? 0 : nameUri.getPort();
     }
 
     @Override

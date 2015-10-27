@@ -121,7 +121,7 @@ public class ManagedChannelImplTest {
   private ManagedChannel createChannel(
       NameResolver.Factory nameResolverFactory, List<ClientInterceptor> interceptors) {
     return new ManagedChannelImpl(target, new FakeBackoffPolicyProvider(),
-        nameResolverFactory, SimpleLoadBalancerFactory.getInstance(),
+        nameResolverFactory, 80, SimpleLoadBalancerFactory.getInstance(),
         mockTransportFactory, executor, null, interceptors);
   }
 

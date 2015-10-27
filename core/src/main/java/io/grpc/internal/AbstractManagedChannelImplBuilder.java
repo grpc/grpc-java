@@ -35,7 +35,6 @@ import com.google.common.base.Preconditions;
 
 import io.grpc.Attributes;
 import io.grpc.ClientInterceptor;
-import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
@@ -165,6 +164,7 @@ public abstract class AbstractManagedChannelImplBuilder
         new ExponentialBackoffPolicy.Provider(),
         nameResolverFactory == null ? NameResolverRegistry.getDefaultRegistry()
             : nameResolverFactory,
+        getDefaultPort(),
         loadBalancerFactory == null ? SimpleLoadBalancerFactory.getInstance()
             : loadBalancerFactory,
         transportFactory, executor, userAgent, interceptors);
@@ -175,8 +175,13 @@ public abstract class AbstractManagedChannelImplBuilder
    * {@link ClientTransportFactory} appropriate for this channel.  This method is meant for
    * Transport implementors and should not be used by normal users.
    */
-  @Internal
   protected abstract ClientTransportFactory buildTransportFactory();
+
+  /**
+   * Children of AbstractChannelBuilder should override this method to provide the default port for
+   * creating outgoing connections in case the {@link NameResolver} not provide a port.
+   */
+  protected abstract int getDefaultPort();
 
   private static class AuthorityOverridingTransportFactory implements ClientTransportFactory {
     final ClientTransportFactory factory;

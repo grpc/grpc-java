@@ -198,6 +198,18 @@ public class OkHttpChannelBuilder extends
             createSocketFactory(), connectionSpec, maxMessageSize);
   }
 
+  @Override
+  protected int getDefaultPort() {
+    switch (negotiationType) {
+      case PLAINTEXT:
+        return GrpcUtil.DEFAULT_PORT_PLAINTEXT;
+      case TLS:
+        return GrpcUtil.DEFAULT_PORT_SSL;
+      default:
+        throw new AssertionError(negotiationType + " not handled");
+    }
+  }
+
   private SSLSocketFactory createSocketFactory() {
     switch (negotiationType) {
       case TLS:
