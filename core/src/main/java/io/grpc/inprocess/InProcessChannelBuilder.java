@@ -38,7 +38,6 @@ import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.AbstractReferenceCounted;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.ClientTransportFactory;
-import io.grpc.internal.GrpcUtil;
 
 import java.net.SocketAddress;
 
@@ -83,8 +82,8 @@ public class InProcessChannelBuilder extends
 
   @Override
   protected int getDefaultPort() {
-    // Not used
-    return GrpcUtil.DEFAULT_PORT_PLAINTEXT;
+    // port is not applicable
+    return -1;
   }
 
   private static class InProcessClientTransportFactory extends AbstractReferenceCounted

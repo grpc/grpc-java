@@ -178,7 +178,6 @@ public final class ManagedChannelImpl extends ManagedChannel {
         "cannot find a NameResolver for %s%s", target,
         uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors.toString() + ")" : "");
     this.nameResolver = nameResolver;
-    Preconditions.checkArgument(defaultPort > 0, "defaultPort is %s, must > 0", defaultPort);
     this.defaultPort = defaultPort;
 
     this.loadBalancer = loadBalancerFactory.newLoadBalancer(nameResolver.getServiceAuthority(), tm);

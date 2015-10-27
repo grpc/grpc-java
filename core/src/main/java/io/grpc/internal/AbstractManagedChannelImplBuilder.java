@@ -180,6 +180,9 @@ public abstract class AbstractManagedChannelImplBuilder
   /**
    * Children of AbstractChannelBuilder should override this method to provide the default port for
    * creating outgoing connections in case the {@link NameResolver} not provide a port.
+   *
+   * <p>If the port is not applicable, for example, in the case of in-process channel builder, this
+   * method may return -1.
    */
   protected abstract int getDefaultPort();
 

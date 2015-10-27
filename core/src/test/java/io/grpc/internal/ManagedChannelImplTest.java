@@ -74,6 +74,7 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.Arrays;
@@ -89,6 +90,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class ManagedChannelImplTest {
   private static final List<ClientInterceptor> NO_INTERCEPTOR =
       Collections.<ClientInterceptor>emptyList();
+  private static final int DEFAULT_PORT = 445;
   private final MethodDescriptor<String, Integer> method = MethodDescriptor.create(
       MethodDescriptor.MethodType.UNKNOWN, "/service/method",
       new StringMarshaller(), new IntegerMarshaller());
@@ -121,7 +123,7 @@ public class ManagedChannelImplTest {
   private ManagedChannel createChannel(
       NameResolver.Factory nameResolverFactory, List<ClientInterceptor> interceptors) {
     return new ManagedChannelImpl(target, new FakeBackoffPolicyProvider(),
-        nameResolverFactory, 80, SimpleLoadBalancerFactory.getInstance(),
+        nameResolverFactory, DEFAULT_PORT, SimpleLoadBalancerFactory.getInstance(),
         mockTransportFactory, executor, null, interceptors);
   }
 
@@ -305,6 +307,28 @@ public class ManagedChannelImplTest {
     verify(mockCallListener, timeout(1000)).onClose(statusCaptor.capture(), any(Metadata.class));
     Status status = statusCaptor.getValue();
     assertSame(error, status);
+  }
+
+  @Test
+  public void defaultPort() {
+    ResolvedServerInfo serverWithoutPort = new ResolvedServerInfo(
+        new InetSocketAddress("127.0.0.1", 0), Attributes.EMPTY);
+    ManagedChannel channel = createChannel(
+        new FakeNameResolverFactory(serverWithoutPort), NO_INTERCEPTOR);
+    ClientTransport mockTransport = mock(ClientTransport.class);
+    ClientStream mockStream = mock(ClientStream.class);
+    Metadata headers = new Metadata();
+    when(mockTransportFactory.newClientTransport(any(SocketAddress.class), any(String.class)))
+        .thenReturn(mockTransport);
+    when(mockTransport.newStream(same(method), same(headers), any(ClientStreamListener.class)))
+        .thenReturn(mockStream);
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, headers);
+    ArgumentCaptor<SocketAddress> addressCaptor = ArgumentCaptor.forClass(SocketAddress.class);
+    verify(mockTransportFactory, timeout(1000))
+        .newClientTransport(addressCaptor.capture(), eq(authority));
+    InetSocketAddress inetSocketAddress = (InetSocketAddress) addressCaptor.getValue();
+    assertEquals(new InetSocketAddress("127.0.0.1", DEFAULT_PORT), inetSocketAddress);
   }
 
   private static class FakeBackoffPolicyProvider implements BackoffPolicy.Provider {
