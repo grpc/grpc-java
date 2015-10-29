@@ -180,7 +180,7 @@ public abstract class AbstractManagedChannelImplBuilder
   /**
    * Subclasses can override this method to provide additional parameters to {@link
    * NameResolver.Factory#newNameResolver}. The default implementation returns {@link
-   * Attributes.EMPTY}.
+   * Attributes#EMPTY}.
    */
   protected Attributes getNameResolverParams() {
     return Attributes.EMPTY;
