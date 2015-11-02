@@ -303,6 +303,14 @@ public final class Metadata {
     }
   }
 
+  /**
+   * Is the set of metadata empty.
+   * @return {@code true} if the metadata set is empty, {@code false} otherwise.
+   */
+  public boolean isEmpty() {
+    return store.isEmpty();
+  }
+
   @Override
   public String toString() {
     return "Metadata(" + toStringInternal() + ")";

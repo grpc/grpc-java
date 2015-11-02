@@ -31,7 +31,6 @@
 
 package io.grpc.netty;
 
-import static io.grpc.internal.GrpcUtil.AUTHORITY_KEY;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
 import com.google.common.base.Preconditions;
@@ -68,6 +67,7 @@ import io.netty.handler.logging.LogLevel;
 import io.netty.util.AsciiString;
 
 import java.net.SocketAddress;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 
 import javax.annotation.concurrent.GuardedBy;
@@ -76,6 +76,21 @@ import javax.annotation.concurrent.GuardedBy;
  * A Netty-based {@link ClientTransport} implementation.
  */
 class NettyClientTransport implements ClientTransport {
+
+  private final ConcurrentHashMap<String, Http2Headers> methodToDefaultHeaders =
+      new ConcurrentHashMap<String, Http2Headers>();
+
+  private Http2Headers forMethod(MethodDescriptor<?, ?> methodDescriptor) {
+    final String fullMethodName = methodDescriptor.getFullMethodName();
+    Http2Headers headers = methodToDefaultHeaders.get(fullMethodName);
+    if (headers == null) {
+      AsciiString path = new AsciiString("/" + fullMethodName);
+      headers = Utils.defaultHeaders(negotiationHandler.scheme(), path, authority);
+      methodToDefaultHeaders.put(fullMethodName, headers);
+    }
+    return headers;
+  }
+
   private final SocketAddress address;
   private final Class<? extends Channel> channelType;
   private final EventLoopGroup group;
@@ -131,12 +146,8 @@ class NettyClientTransport implements ClientTransport {
         maxMessageSize);
 
     // Convert the headers into Netty HTTP/2 headers.
-    AsciiString defaultPath = new AsciiString("/" + method.getFullMethodName());
-    AsciiString defaultAuthority  = new AsciiString(headers.containsKey(AUTHORITY_KEY)
-        ? headers.get(AUTHORITY_KEY) : authority);
-    headers.removeAll(AUTHORITY_KEY);
-    Http2Headers http2Headers = Utils.convertClientHeaders(headers, negotiationHandler.scheme(),
-        defaultPath, defaultAuthority);
+    Http2Headers http2Headers = forMethod(method);
+    Utils.convertClientHeaders(http2Headers, headers);
 
     ChannelFutureListener failureListener = new ChannelFutureListener() {
       @Override

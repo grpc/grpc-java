@@ -332,11 +332,18 @@ class NettyServerHandler extends AbstractNettyHandler {
     encoder().writeRstStream(ctx, cmd.stream().id(), Http2Error.CANCEL.code(), promise);
   }
 
+  private static final ByteString FAST_CONTENT_TYPE = new ByteString(GrpcUtil.CONTENT_TYPE_GRPC,
+      US_ASCII);
+
   private void verifyContentType(int streamId, Http2Headers headers) throws Http2Exception {
     ByteString contentType = headers.get(CONTENT_TYPE_HEADER);
     if (contentType == null) {
       throw Http2Exception.streamError(streamId, Http2Error.REFUSED_STREAM,
           "Content-Type is missing from the request");
+    }
+    // Avoid constructing a string and compare the bytes directly for fast path.
+    if (FAST_CONTENT_TYPE.equals(contentType)) {
+      return;
     }
     String contentTypeString = contentType.toString(US_ASCII);
     if (!GrpcUtil.isGrpcContentType(contentTypeString)) {
@@ -366,6 +373,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       throw Http2Exception.streamError(streamId, Http2Error.REFUSED_STREAM,
           "Malformatted path: %s", path);
     }
+    // HPack canonicalization would be useful here
     return path.toString(1, path.length());
   }
 

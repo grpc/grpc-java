@@ -80,6 +80,8 @@ class Utils {
 
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP =
       new DefaultEventLoopGroupResource(0, "grpc-default-worker-ELG");
+  public static final ByteString DEFAULT_USER_AGENT = new ByteString(
+      GrpcUtil.getGrpcUserAgent("netty", null).getBytes(UTF_8));
 
   public static Metadata convertHeaders(Http2Headers http2Headers) {
     return new Metadata(convertHeadersToArray(http2Headers));
@@ -97,14 +99,31 @@ class Utils {
     return TransportFrameUtil.toRawSerializedHeaders(headerValues);
   }
 
-  public static Http2Headers convertClientHeaders(Metadata headers,
-      ByteString scheme,
-      ByteString defaultPath,
-      ByteString defaultAuthority) {
+  public static Http2Headers convertClientHeaders(Http2Headers defaults, Metadata headers) {
+    if (headers.isEmpty()) {
+      return defaults;
+    }
+    // Add any application-provided headers to a copy of the defaults.
+    Http2Headers http2Headers = convertMetadata(headers, new DefaultHttp2Headers().add(defaults));
+
+    // Set the User-Agent header.
+    String applicationUserAgent = headers.get(USER_AGENT_KEY);
+    if (applicationUserAgent != null) {
+      http2Headers.set(USER_AGENT,
+          new ByteString(GrpcUtil.getGrpcUserAgent("netty", applicationUserAgent).getBytes(UTF_8)));
+    }
+
+    return http2Headers;
+  }
+
+  public static Http2Headers defaultHeaders(ByteString scheme,
+                                          ByteString defaultPath,
+                                          ByteString defaultAuthority) {
     Preconditions.checkNotNull(defaultPath, "defaultPath");
     Preconditions.checkNotNull(defaultAuthority, "defaultAuthority");
+
     // Add any application-provided headers first.
-    Http2Headers http2Headers = convertMetadata(headers);
+    Http2Headers http2Headers = new DefaultHttp2Headers();
 
     // Now set GRPC-specific default headers.
     http2Headers.authority(defaultAuthority)
@@ -112,16 +131,8 @@ class Utils {
         .method(HTTP_METHOD)
         .scheme(scheme)
         .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
-        .set(TE_HEADER, TE_TRAILERS);
-
-    // Override the default authority and path if provided by the headers.
-    if (headers.containsKey(AUTHORITY_KEY)) {
-      http2Headers.authority(new ByteString(headers.get(AUTHORITY_KEY).getBytes(UTF_8)));
-    }
-
-    // Set the User-Agent header.
-    String userAgent = GrpcUtil.getGrpcUserAgent("netty", headers.get(USER_AGENT_KEY));
-    http2Headers.set(USER_AGENT, new ByteString(userAgent.getBytes(UTF_8)));
+        .set(TE_HEADER, TE_TRAILERS)
+        .set(USER_AGENT, DEFAULT_USER_AGENT);
 
     return http2Headers;
   }
@@ -147,15 +158,17 @@ class Utils {
   }
 
   private static Http2Headers convertMetadata(Metadata headers) {
+    return convertMetadata(headers, new DefaultHttp2Headers());
+  }
+
+  private static Http2Headers convertMetadata(Metadata headers, Http2Headers http2Headers) {
     Preconditions.checkNotNull(headers, "headers");
-    Http2Headers http2Headers = new DefaultHttp2Headers();
     byte[][] serializedHeaders = TransportFrameUtil.toHttp2Headers(headers);
     for (int i = 0; i < serializedHeaders.length; i += 2) {
       ByteString name = new ByteString(serializedHeaders[i], false);
       ByteString value = new ByteString(serializedHeaders[i + 1], false);
       http2Headers.add(name, value);
     }
-
     return http2Headers;
   }
 

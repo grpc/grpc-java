@@ -282,6 +282,11 @@ public final class GrpcUtil {
       return false;
     }
 
+    // Optimize for the typical case,
+    if (CONTENT_TYPE_GRPC.equals(contentType)) {
+      return true;
+    }
+
     if (CONTENT_TYPE_GRPC.length() > contentType.length()) {
       return false;
     }
