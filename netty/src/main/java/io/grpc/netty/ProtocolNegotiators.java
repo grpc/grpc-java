@@ -102,6 +102,7 @@ public final class ProtocolNegotiators {
           @Override
           public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
             // Should never happen.
+            ctx.fireExceptionCaught(cause);
           }
 
           @Override
