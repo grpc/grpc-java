@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 
 import io.grpc.ExperimentalApi;
 import io.grpc.HandlerRegistry;
+import io.grpc.Internal;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.GrpcUtil;
 import io.netty.channel.EventLoopGroup;
@@ -186,6 +187,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    *
    * <p>Default: {@code null}.
    */
+  @Internal
   public final NettyServerBuilder protocolNegotiator(
           @Nullable ProtocolNegotiator protocolNegotiator) {
     this.protocolNegotiator = protocolNegotiator;

@@ -37,6 +37,7 @@ import static io.grpc.netty.GrpcSslContexts.HTTP2_VERSIONS;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
+import io.grpc.Internal;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
 import io.netty.channel.ChannelDuplexHandler;
@@ -74,6 +75,7 @@ import javax.net.ssl.SSLParameters;
 /**
  * Common {@link ProtocolNegotiator}s used by gRPC.
  */
+@Internal
 public final class ProtocolNegotiators {
   private static final Logger log = Logger.getLogger(ProtocolNegotiators.class.getName());
 
