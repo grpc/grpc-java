@@ -32,6 +32,7 @@
 package io.grpc.testing.integration;
 
 import io.grpc.ManagedChannel;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
@@ -76,11 +77,13 @@ public class Http2NettyTest extends AbstractTransportTest {
   protected ManagedChannel createChannel() {
     try {
       return NettyChannelBuilder
-          .forAddress(TestUtils.testServerAddress(serverPort))
+          .forAddress("127.0.0.1", serverPort)
           .sslContext(GrpcSslContexts.forClient()
               .trustManager(TestUtils.loadCert("ca.pem"))
               .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
               .build())
+          .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
+              TestUtils.TEST_SERVER_HOST, serverPort))
           .build();
     } catch (Exception ex) {
       throw new RuntimeException(ex);

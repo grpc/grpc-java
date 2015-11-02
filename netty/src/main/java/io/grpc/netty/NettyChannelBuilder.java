@@ -81,14 +81,18 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
    * noticing changes to DNS.
    */
   public static NettyChannelBuilder forAddress(SocketAddress serverAddress) {
-    return new NettyChannelBuilder(serverAddress);
+    if (serverAddress instanceof InetSocketAddress) {
+      return forTarget(getAuthorityFromAddress(serverAddress));
+    } else {
+      return new NettyChannelBuilder(serverAddress);
+    }
   }
 
   /**
    * Creates a new builder with the given host and port.
    */
   public static NettyChannelBuilder forAddress(String host, int port) {
-    return forAddress(new InetSocketAddress(host, port));
+    return forTarget(GrpcUtil.authorityFromHostAndPort(host, port));
   }
 
   /**
