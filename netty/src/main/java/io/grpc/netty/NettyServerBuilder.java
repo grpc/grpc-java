@@ -66,6 +66,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   @Nullable
   private EventLoopGroup workerEventLoopGroup;
   private SslContext sslContext;
+  private ProtocolNegotiator protocolNegotiator;
   private int maxConcurrentCallsPerConnection = Integer.MAX_VALUE;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private int maxMessageSize = DEFAULT_MAX_MESSAGE_SIZE;
@@ -180,6 +181,18 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   }
 
   /**
+   * Sets the {@link ProtocolNegotiator} to be used. If non-{@code null}, overrides the value
+   * specified in {@link #sslContext(SslContext)}.
+   *
+   * <p>Default: {@code null}.
+   */
+  public final NettyServerBuilder protocolNegotiator(
+          @Nullable ProtocolNegotiator protocolNegotiator) {
+    this.protocolNegotiator = protocolNegotiator;
+    return this;
+  }
+
+  /**
    * The maximum number of concurrent calls permitted for each incoming connection. Defaults to no
    * limit.
    */
@@ -221,8 +234,13 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
 
   @Override
   protected NettyServer buildTransportServer() {
+    ProtocolNegotiator negotiator = protocolNegotiator;
+    if (negotiator == null) {
+      negotiator = sslContext != null ? ProtocolNegotiators.serverTls(sslContext) :
+              ProtocolNegotiators.serverPlaintext();
+    }
     return new NettyServer(address, channelType, bossEventLoopGroup,
-            workerEventLoopGroup, sslContext, maxConcurrentCallsPerConnection, flowControlWindow,
+            workerEventLoopGroup, negotiator, maxConcurrentCallsPerConnection, flowControlWindow,
             maxMessageSize, maxHeaderListSize);
   }
 
