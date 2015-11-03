@@ -33,8 +33,6 @@ package io.grpc.internal;
 
 import static com.google.common.base.Charsets.US_ASCII;
 
-import com.google.common.io.BaseEncoding;
-
 import io.grpc.Metadata;
 
 import java.util.ArrayList;
@@ -50,6 +48,7 @@ import java.util.logging.Logger;
 public final class TransportFrameUtil {
 
   private static final Logger logger = Logger.getLogger(TransportFrameUtil.class.getName());
+  private static final Base64Codec base64Codec = PlatformProvider.getPlatform().getBase64Encoder();
 
   private static final byte[] binaryHeaderSuffixBytes =
       Metadata.BINARY_HEADER_SUFFIX.getBytes(US_ASCII);
@@ -67,9 +66,10 @@ public final class TransportFrameUtil {
       byte[] key = serializedHeaders[i];
       byte[] value = serializedHeaders[i + 1];
       if (endsWith(key, binaryHeaderSuffixBytes)) {
+        
         // Binary header.
         result.add(key);
-        result.add(BaseEncoding.base64().encode(value).getBytes(US_ASCII));
+        result.add(base64Codec.encode(value).getBytes(US_ASCII));
       } else {
         // Non-binary header.
         // Filter out headers that contain non-spec-compliant ASCII characters.
@@ -102,7 +102,7 @@ public final class TransportFrameUtil {
       result[i] = key;
       if (endsWith(key, binaryHeaderSuffixBytes)) {
         // Binary header
-        result[i + 1] = BaseEncoding.base64().decode(new String(value, US_ASCII));
+        result[i + 1] = base64Codec.decode(new String(value, US_ASCII));
       } else {
         // Non-binary header
         result[i + 1] = value;
