@@ -31,8 +31,6 @@
 
 package io.grpc;
 
-import com.google.common.base.Objects;
-
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nullable;
@@ -180,18 +178,18 @@ public final class CallOptions {
     requestKey = other.requestKey;
   }
 
-  @SuppressWarnings("deprecation") // guava 14.0
   @Override
   public String toString() {
-    Objects.ToStringHelper toStringHelper = Objects.toStringHelper(this);
-    toStringHelper.add("deadlineNanoTime", deadlineNanoTime);
+    StringBuilder out = new StringBuilder();
+    out.append("CallOptions{");
+    out.append("deadlineNanoTime=").append(deadlineNanoTime);
     if (deadlineNanoTime != null) {
       long remainingNanos = deadlineNanoTime - System.nanoTime();
-      toStringHelper.addValue(remainingNanos + " ns from now");
+      out.append(" (").append(remainingNanos + " ns from now)");
     }
-    toStringHelper.add("compressor", compressor);
-    toStringHelper.add("authority", authority);
-
-    return toStringHelper.toString();
+    out.append(", compressor=").append(compressor);
+    out.append(", authority=").append(authority);
+    out.append("}");
+    return out.toString();
   }
 }

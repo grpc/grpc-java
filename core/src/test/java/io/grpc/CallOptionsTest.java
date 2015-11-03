@@ -130,7 +130,7 @@ public class CallOptionsTest {
     // Deadline makes it hard to check string for equality.
     assertEquals("CallOptions{deadlineNanoTime=null, compressor=GziP, authority=authority}",
         allSet.withCompressor(gzip).withDeadlineNanoTime(null).toString());
-    assertTrue(allSet.toString().contains("deadlineNanoTime=" + sampleDeadlineNanoTime + ","));
+    assertTrue(allSet.toString().contains("deadlineNanoTime=" + sampleDeadlineNanoTime + " ("));
   }
 
   private static boolean equal(CallOptions o1, CallOptions o2) {
