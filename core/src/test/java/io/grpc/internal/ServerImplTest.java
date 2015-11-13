@@ -37,6 +37,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.Matchers.isA;
 import static org.mockito.Matchers.notNull;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.timeout;
@@ -44,6 +45,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import io.grpc.DecompressorRegistry;
 import io.grpc.IntegerMarshaller;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -62,7 +64,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Matchers;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import java.io.IOException;
@@ -210,6 +214,7 @@ public class ServerImplTest {
     assertNotNull(streamListener);
 
     executeBarrier(executor).await();
+    verify(stream).setDecompressionRegistry(isA(DecompressorRegistry.class));
     ServerCall<Integer> call = callReference.get();
     assertNotNull(call);
 
@@ -278,6 +283,7 @@ public class ServerImplTest {
 
     barrier.await();
     executeBarrier(executor).await();
+    verify(stream).setDecompressionRegistry(isA(DecompressorRegistry.class));
     verify(stream).close(same(status), notNull(Metadata.class));
     verifyNoMoreInteractions(stream);
   }

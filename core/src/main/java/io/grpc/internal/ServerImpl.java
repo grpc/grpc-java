@@ -35,10 +35,12 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.Futures;
 
+import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -73,13 +75,14 @@ import java.util.concurrent.TimeUnit;
  */
 public final class ServerImpl extends io.grpc.Server {
   private static final ServerStreamListener NOOP_LISTENER = new NoopListener();
-
   private static final Future<?> DEFAULT_TIMEOUT_FUTURE = Futures.immediateCancelledFuture();
 
   /** Executor for application processing. */
   private Executor executor;
   private boolean usingSharedExecutor;
   private final HandlerRegistry registry;
+  private final DecompressorRegistry decompressorRegistry =
+      DecompressorRegistry.getDefaultInstance();
   private boolean started;
   private boolean shutdown;
   private boolean terminated;
@@ -278,29 +281,8 @@ public final class ServerImpl extends io.grpc.Server {
       // Run in serializingExecutor so jumpListener.setListener() is called before any callbacks
       // are delivered, including any errors. Callbacks can still be triggered, but they will be
       // queued.
-      serializingExecutor.execute(new Runnable() {
-          @Override
-          public void run() {
-            ServerStreamListener listener = NOOP_LISTENER;
-            try {
-              ServerMethodDefinition<?, ?> method = registry.lookupMethod(methodName);
-              if (method == null) {
-                stream.close(
-                    Status.UNIMPLEMENTED.withDescription("Method not found: " + methodName),
-                    new Metadata());
-                timeout.cancel(true);
-                return;
-              }
-              listener = startCall(stream, methodName, method, timeout, headers);
-            } catch (Throwable t) {
-              stream.close(Status.fromThrowable(t), new Metadata());
-              timeout.cancel(true);
-              throw Throwables.propagate(t);
-            } finally {
-              jumpListener.setListener(listener);
-            }
-          }
-        });
+      serializingExecutor.execute(new StreamCreatedCallback(
+          stream, methodName, headers, jumpListener, registry, decompressorRegistry, timeout));
       return jumpListener;
     }
 
@@ -320,23 +302,87 @@ public final class ServerImpl extends io.grpc.Server {
         timeoutMicros,
         TimeUnit.MICROSECONDS);
     }
+  }
+
+  @VisibleForTesting
+  static class StreamCreatedCallback implements Runnable {
+    private final ServerStream stream;
+    private final String methodName;
+    private final Metadata headers;
+    private final JumpToApplicationThreadServerStreamListener jumpListener;
+    private final HandlerRegistry registry;
+    private final DecompressorRegistry decompressorRegistry;
+    private final Future<?> timeout;
+
+    StreamCreatedCallback(ServerStream stream, String methodName, Metadata headers,
+        JumpToApplicationThreadServerStreamListener jumpListener, HandlerRegistry registry,
+        DecompressorRegistry decompressorRegistry, Future<?> timeout) {
+      this.stream = stream;
+      this.methodName = methodName;
+      this.headers = headers;
+      this.jumpListener = jumpListener;
+      this.registry = registry;
+      this.timeout = timeout;
+      this.decompressorRegistry = decompressorRegistry;
+    }
+
+    @Override
+    public void run() {
+      ServerStreamListener listener = NOOP_LISTENER;
+      try {
+        ServerMethodDefinition<?, ?> method = registry.lookupMethod(methodName);
+        if (method == null) {
+          stream.close(
+              Status.UNIMPLEMENTED.withDescription("Method not found: " + methodName),
+              new Metadata());
+          timeout.cancel(true);
+          return;
+        }
+        listener = startCall(method);
+      } catch (Throwable t) {
+        stream.close(Status.fromThrowable(t), new Metadata());
+        timeout.cancel(true);
+        throw Throwables.propagate(t);
+      } finally {
+        jumpListener.setListener(listener);
+      }
+    }
 
     /** Never returns {@code null}. */
-    private <ReqT, RespT> ServerStreamListener startCall(ServerStream stream, String fullMethodName,
-        ServerMethodDefinition<ReqT, RespT> methodDef, Future<?> timeout,
-        Metadata headers) {
-      // TODO(ejona86): should we update fullMethodName to have the canonical path of the method?
+    private <ReqT, RespT> ServerStreamListener startCall(
+        ServerMethodDefinition<ReqT, RespT> methodDef) {
+      if (decompressorRegistry != null) {
+        stream.setDecompressionRegistry(decompressorRegistry);
+      }
+
+      String messageEncoding = headers.get(GrpcUtil.MESSAGE_ENCODING_KEY);
+      if (messageEncoding != null && stream instanceof AbstractStream) {
+        try {
+          // InProcessTransport doesn't support decompressors, so cast :(
+          ((AbstractStream<?>)stream).setDecompressor(messageEncoding);
+        } catch (IllegalArgumentException e) {
+          throw Status.INVALID_ARGUMENT
+              .withDescription("Unable to decompress message with encoding: " + messageEncoding)
+              .withCause(e)
+              .asRuntimeException();
+        }
+      }
+
+      // TODO(carl-mastrangelo): parse MESSAGE_ACCEPT_ENCODING_KEY
+
+      // TODO(ejona86): should we update methodName to have the canonical path of the method?
       ServerCallImpl<ReqT, RespT> call = new ServerCallImpl<ReqT, RespT>(
           stream, methodDef.getMethodDescriptor());
       ServerCall.Listener<ReqT> listener = methodDef.getServerCallHandler()
           .startCall(methodDef.getMethodDescriptor(), call, headers);
       if (listener == null) {
         throw new NullPointerException(
-            "startCall() returned a null listener for method " + fullMethodName);
+            "startCall() returned a null listener for method " + methodName);
       }
       return call.newServerStreamListener(listener, timeout);
     }
   }
+
 
   private static class NoopListener implements ServerStreamListener {
     @Override
@@ -362,7 +408,8 @@ public final class ServerImpl extends io.grpc.Server {
    * Dispatches callbacks onto an application-provided executor and correctly propagates
    * exceptions.
    */
-  private static class JumpToApplicationThreadServerStreamListener implements ServerStreamListener {
+  @VisibleForTesting
+  static class JumpToApplicationThreadServerStreamListener implements ServerStreamListener {
     private final SerializingExecutor callExecutor;
     private final ServerStream stream;
     // Only accessed from callExecutor.
