@@ -227,10 +227,10 @@ public abstract class AbstractBenchmark {
     }
 
     if (serverExecutor == ExecutorType.DIRECT) {
-      serverBuilder.executor(MoreExecutors.directExecutor());
+      serverBuilder.executor(MoreExecutors.newDirectExecutorService());
     }
     if (clientExecutor == ExecutorType.DIRECT) {
-      channelBuilder.executor(MoreExecutors.directExecutor());
+      channelBuilder.executor(MoreExecutors.newDirectExecutorService());
     }
 
     // Always use a different worker group from the client.

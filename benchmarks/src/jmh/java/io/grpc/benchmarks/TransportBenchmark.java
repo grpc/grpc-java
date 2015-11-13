@@ -129,8 +129,8 @@ public class TransportBenchmark {
     }
 
     if (direct) {
-      serverBuilder.executor(MoreExecutors.directExecutor());
-      channelBuilder.executor(MoreExecutors.directExecutor());
+      serverBuilder.executor(MoreExecutors.newDirectExecutorService());
+      channelBuilder.executor(MoreExecutors.newDirectExecutorService());
     }
 
     server = serverBuilder
