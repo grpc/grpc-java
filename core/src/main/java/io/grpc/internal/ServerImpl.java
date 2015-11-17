@@ -74,7 +74,7 @@ import java.util.concurrent.TimeUnit;
  * server stops servicing new requests and waits for all connections to terminate.
  */
 public final class ServerImpl extends io.grpc.Server {
-  private static final ServerStreamListener NOOP_LISTENER = new NoopListener();
+  static final ServerStreamListener NOOP_LISTENER = new NoopListener();
   private static final Future<?> DEFAULT_TIMEOUT_FUTURE = Futures.immediateCancelledFuture();
 
   /** Executor for application processing. */
@@ -409,7 +409,7 @@ public final class ServerImpl extends io.grpc.Server {
    * exceptions.
    */
   @VisibleForTesting
-  static class JumpToApplicationThreadServerStreamListener implements ServerStreamListener {
+  static final class JumpToApplicationThreadServerStreamListener implements ServerStreamListener {
     private final SerializingExecutor callExecutor;
     private final ServerStream stream;
     // Only accessed from callExecutor.
@@ -421,7 +421,8 @@ public final class ServerImpl extends io.grpc.Server {
       this.stream = stream;
     }
 
-    private ServerStreamListener getListener() {
+    @VisibleForTesting
+    ServerStreamListener getListener() {
       if (listener == null) {
         throw new IllegalStateException("listener unset");
       }

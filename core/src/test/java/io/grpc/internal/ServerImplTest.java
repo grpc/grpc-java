@@ -45,6 +45,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import com.google.common.util.concurrent.SettableFuture;
+
 import io.grpc.DecompressorRegistry;
 import io.grpc.IntegerMarshaller;
 import io.grpc.Metadata;
@@ -57,6 +59,8 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
+import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
+import io.grpc.internal.ServerImpl.StreamCreatedCallback;
 
 import org.junit.After;
 import org.junit.Before;
@@ -64,9 +68,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Matchers;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import java.io.IOException;
@@ -366,6 +368,32 @@ public class ServerImplTest {
       }
     }.start();
     server.shutdown();
+  }
+
+  @Test
+  public void streamCreatedCallback_methodNotFound() {
+    JumpToApplicationThreadServerStreamListener jumpListener =
+        new JumpToApplicationThreadServerStreamListener(new SerializingExecutor(executor), stream);
+
+    Metadata headers = new Metadata();
+    SettableFuture<?> timeout = SettableFuture.create();
+
+    StreamCreatedCallback callback = new StreamCreatedCallback(stream, "/bad/method", headers,
+        jumpListener, registry, DecompressorRegistry.getDefaultInstance(), timeout);
+
+    callback.run();
+
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(stream).close(captor.capture(), isA(Metadata.class));
+
+    Status status = captor.getValue();
+    assertEquals(Status.Code.UNIMPLEMENTED, status.getCode());
+    assertTrue(status.getDescription().contains("Method not found"));
+
+    assertTrue(timeout.isCancelled());
+    assertNotNull(jumpListener.getListener());
+    // Use reference identity
+    assertTrue(ServerImpl.NOOP_LISTENER == jumpListener.getListener());
   }
 
   /**
