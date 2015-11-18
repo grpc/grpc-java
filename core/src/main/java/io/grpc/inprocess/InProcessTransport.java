@@ -328,6 +328,11 @@ class InProcessTransport implements ServerTransport, ClientTransport {
         clientStreamListener.closed(status, new Metadata());
         return true;
       }
+
+      @Override
+      public void setDecompressor(String messageEncoding) {
+        // No op
+      }
     }
 
     private class InProcessClientStream implements ClientStream {
