@@ -37,6 +37,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.Matchers.isA;
 import static org.mockito.Matchers.notNull;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.timeout;
@@ -44,6 +45,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import com.google.common.util.concurrent.SettableFuture;
+
+import io.grpc.DecompressorRegistry;
 import io.grpc.IntegerMarshaller;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -55,6 +59,8 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
+import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
+import io.grpc.internal.ServerImpl.StreamCreatedCallback;
 
 import org.junit.After;
 import org.junit.Before;
@@ -210,6 +216,7 @@ public class ServerImplTest {
     assertNotNull(streamListener);
 
     executeBarrier(executor).await();
+    verify(stream).setDecompressionRegistry(isA(DecompressorRegistry.class));
     ServerCall<Integer> call = callReference.get();
     assertNotNull(call);
 
@@ -278,6 +285,7 @@ public class ServerImplTest {
 
     barrier.await();
     executeBarrier(executor).await();
+    verify(stream).setDecompressionRegistry(isA(DecompressorRegistry.class));
     verify(stream).close(same(status), notNull(Metadata.class));
     verifyNoMoreInteractions(stream);
   }
@@ -360,6 +368,32 @@ public class ServerImplTest {
       }
     }.start();
     server.shutdown();
+  }
+
+  @Test
+  public void streamCreatedCallback_methodNotFound() {
+    JumpToApplicationThreadServerStreamListener jumpListener =
+        new JumpToApplicationThreadServerStreamListener(new SerializingExecutor(executor), stream);
+
+    Metadata headers = new Metadata();
+    SettableFuture<?> timeout = SettableFuture.create();
+
+    StreamCreatedCallback callback = new StreamCreatedCallback(stream, "/bad/method", headers,
+        jumpListener, registry, DecompressorRegistry.getDefaultInstance(), timeout);
+
+    callback.run();
+
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(stream).close(captor.capture(), isA(Metadata.class));
+
+    Status status = captor.getValue();
+    assertEquals(Status.Code.UNIMPLEMENTED, status.getCode());
+    assertTrue(status.getDescription().contains("Method not found"));
+
+    assertTrue(timeout.isCancelled());
+    assertNotNull(jumpListener.getListener());
+    // Use reference identity
+    assertTrue(ServerImpl.NOOP_LISTENER == jumpListener.getListener());
   }
 
   /**
