@@ -66,4 +66,13 @@ public interface ServerStream extends Stream {
    * times and from any thread.
    */
   void cancel(Status status);
+
+  /**
+   * Looks up the decompressor by its message encoding name, and sets it for this stream.
+   * Decompressors are registered with {@link DecompressorRegistry#register}.
+   *
+   * @param messageEncoding the name of the encoding provided by the remote host
+   * @throws IllegalArgumentException if the provided message encoding cannot be found.
+   */
+  void setDecompressor(String messageEncoding);
 }
