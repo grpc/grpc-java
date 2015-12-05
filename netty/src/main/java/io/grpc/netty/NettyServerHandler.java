@@ -224,15 +224,18 @@ class NettyServerHandler extends Http2ConnectionHandler {
    */
   @Override
   public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-    super.channelInactive(ctx);
-    // Any streams that are still active must be closed
-    connection().forEachActiveStream(new Http2StreamVisitor() {
-      @Override
-      public boolean visit(Http2Stream stream) throws Http2Exception {
-        serverStream(stream).abortStream(GOAWAY_STATUS, false);
-        return true;
-      }
-    });
+    try {
+      // Any streams that are still active must be closed
+      connection().forEachActiveStream(new Http2StreamVisitor() {
+        @Override
+        public boolean visit(Http2Stream stream) throws Http2Exception {
+          serverStream(stream).abortStream(GOAWAY_STATUS, false);
+          return true;
+        }
+      });
+    } finally {
+      super.channelInactive(ctx);
+    }
   }
 
   WriteQueue getWriteQueue() {
