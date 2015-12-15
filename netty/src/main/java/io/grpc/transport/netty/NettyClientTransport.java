@@ -31,12 +31,9 @@
 
 package io.grpc.transport.netty;
 
-import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
-
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
-
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.transport.ClientStream;
@@ -51,32 +48,21 @@ import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.AsciiString;
-import io.netty.handler.codec.http2.DefaultHttp2Connection;
-import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
-import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
-import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
-import io.netty.handler.codec.http2.DefaultHttp2StreamRemovalPolicy;
-import io.netty.handler.codec.http2.Http2Connection;
-import io.netty.handler.codec.http2.Http2FrameLogger;
-import io.netty.handler.codec.http2.Http2FrameReader;
-import io.netty.handler.codec.http2.Http2FrameWriter;
-import io.netty.handler.codec.http2.Http2Headers;
-import io.netty.handler.codec.http2.Http2InboundFrameLogger;
-import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
-import io.netty.handler.codec.http2.Http2StreamRemovalPolicy;
+import io.netty.handler.codec.http2.*;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.internal.logging.InternalLogLevel;
 
+import javax.annotation.concurrent.GuardedBy;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLParameters;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.annotation.concurrent.GuardedBy;
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
-import javax.net.ssl.SSLParameters;
+import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
 /**
  * A Netty-based {@link ClientTransport} implementation.

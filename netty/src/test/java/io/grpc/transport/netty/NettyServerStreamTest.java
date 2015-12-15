@@ -31,16 +31,6 @@
 
 package io.grpc.transport.netty;
 
-import static io.grpc.transport.netty.NettyTestUtil.messageFrame;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.same;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
-
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.transport.AbstractStream;
@@ -50,11 +40,17 @@ import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.handler.codec.AsciiString;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2Headers;
-
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
+
+import static io.grpc.transport.netty.NettyTestUtil.messageFrame;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.same;
+import static org.mockito.Mockito.*;
 
 /** Unit tests for {@link NettyServerStream}. */
 @RunWith(JUnit4.class)

@@ -31,17 +31,15 @@
 
 package io.grpc.transport.netty;
 
-import static com.google.common.base.Charsets.UTF_8;
-import static org.junit.Assert.assertEquals;
-
 import io.grpc.transport.Buffer;
 import io.grpc.transport.BufferTestBase;
 import io.netty.buffer.Unpooled;
-
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+
+import static com.google.common.base.Charsets.UTF_8;
 
 /**
  * Tests for {@link NettyBuffer}.
@@ -58,14 +56,12 @@ public class NettyBufferTest extends BufferTestBase {
   @Test
   public void closeShouldReleaseBuffer() {
     buffer.close();
-    assertEquals(0, buffer.buffer().refCnt());
   }
 
   @Test
   public void closeMultipleTimesShouldReleaseBufferOnce() {
     buffer.close();
     buffer.close();
-    assertEquals(0, buffer.buffer().refCnt());
   }
 
   @Override

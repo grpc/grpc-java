@@ -31,26 +31,6 @@
 
 package io.grpc.transport.netty;
 
-import static com.google.common.base.Charsets.UTF_8;
-import static io.grpc.transport.netty.Utils.CONTENT_TYPE_GRPC;
-import static io.grpc.transport.netty.Utils.CONTENT_TYPE_HEADER;
-import static io.grpc.transport.netty.Utils.HTTPS;
-import static io.grpc.transport.netty.Utils.HTTP_METHOD;
-import static io.grpc.transport.netty.Utils.STATUS_OK;
-import static io.grpc.transport.netty.Utils.TE_HEADER;
-import static io.grpc.transport.netty.Utils.TE_TRAILERS;
-import static org.junit.Assert.assertEquals;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.notNull;
-import static org.mockito.Mockito.calls;
-import static org.mockito.Mockito.inOrder;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
-
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.netty.buffer.ByteBuf;
@@ -58,19 +38,7 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.AsciiString;
-import io.netty.handler.codec.http2.DefaultHttp2Connection;
-import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
-import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
-import io.netty.handler.codec.http2.DefaultHttp2Headers;
-import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
-import io.netty.handler.codec.http2.Http2CodecUtil;
-import io.netty.handler.codec.http2.Http2Connection;
-import io.netty.handler.codec.http2.Http2Error;
-import io.netty.handler.codec.http2.Http2FrameReader;
-import io.netty.handler.codec.http2.Http2FrameWriter;
-import io.netty.handler.codec.http2.Http2Headers;
-import io.netty.handler.codec.http2.Http2Settings;
-
+import io.netty.handler.codec.http2.*;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -79,6 +47,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+
+import static com.google.common.base.Charsets.UTF_8;
+import static io.grpc.transport.netty.Utils.*;
+import static org.junit.Assert.assertEquals;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Matchers.notNull;
+import static org.mockito.Mockito.*;
 
 /**
  * Tests for {@link NettyClientHandler}.

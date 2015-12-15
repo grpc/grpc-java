@@ -31,27 +31,21 @@
 
 package io.grpc.transport.netty;
 
-import static io.netty.channel.ChannelOption.SO_BACKLOG;
-import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
-
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.AbstractService;
-
 import io.grpc.transport.ServerListener;
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.EventLoopGroup;
+import io.netty.channel.*;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalServerChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.ssl.SslContext;
 
+import javax.annotation.Nullable;
 import java.net.SocketAddress;
 
-import javax.annotation.Nullable;
+import static io.netty.channel.ChannelOption.SO_BACKLOG;
+import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
 /**
  * Implementation of the {@link com.google.common.util.concurrent.Service} interface for a

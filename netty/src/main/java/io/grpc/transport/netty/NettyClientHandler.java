@@ -32,7 +32,6 @@
 package io.grpc.transport.netty;
 
 import com.google.common.base.Preconditions;
-
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.netty.buffer.ByteBuf;
@@ -40,23 +39,12 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
-import io.netty.handler.codec.http2.Http2Connection;
-import io.netty.handler.codec.http2.Http2ConnectionAdapter;
-import io.netty.handler.codec.http2.Http2ConnectionHandler;
-import io.netty.handler.codec.http2.Http2Error;
-import io.netty.handler.codec.http2.Http2Exception;
-import io.netty.handler.codec.http2.Http2FrameAdapter;
-import io.netty.handler.codec.http2.Http2FrameReader;
-import io.netty.handler.codec.http2.Http2FrameWriter;
-import io.netty.handler.codec.http2.Http2Headers;
-import io.netty.handler.codec.http2.Http2LocalFlowController;
-import io.netty.handler.codec.http2.Http2Stream;
+import io.netty.handler.codec.http2.*;
 
+import javax.annotation.Nullable;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Iterator;
-
-import javax.annotation.Nullable;
 
 /**
  * Client-side Netty handler for GRPC processing. All event handlers are executed entirely within

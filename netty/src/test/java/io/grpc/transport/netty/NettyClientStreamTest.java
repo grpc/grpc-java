@@ -31,20 +31,6 @@
 
 package io.grpc.transport.netty;
 
-import static io.grpc.transport.netty.NettyTestUtil.messageFrame;
-import static io.grpc.transport.netty.Utils.CONTENT_TYPE_GRPC;
-import static io.grpc.transport.netty.Utils.CONTENT_TYPE_HEADER;
-import static io.grpc.transport.netty.Utils.STATUS_OK;
-import static io.netty.util.CharsetUtil.UTF_8;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.same;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.transport.AbstractStream;
@@ -54,7 +40,6 @@ import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.AsciiString;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2Headers;
-
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -62,6 +47,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 
 import java.io.InputStream;
+
+import static io.grpc.transport.netty.NettyTestUtil.messageFrame;
+import static io.grpc.transport.netty.Utils.*;
+import static io.netty.util.CharsetUtil.UTF_8;
+import static org.junit.Assert.*;
+import static org.mockito.Matchers.*;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 /**
  * Tests for {@link NettyClientStream}.

@@ -31,17 +31,7 @@
 
 package io.grpc.transport.netty;
 
-import static io.grpc.transport.netty.Utils.CONTENT_TYPE_GRPC;
-import static io.grpc.transport.netty.Utils.CONTENT_TYPE_HEADER;
-import static io.grpc.transport.netty.Utils.HTTP_METHOD;
-import static io.grpc.transport.netty.Utils.TE_HEADER;
-import static io.grpc.transport.netty.Utils.TE_TRAILERS;
-import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
-import static io.netty.handler.codec.http2.Http2CodecUtil.toByteBuf;
-import static io.netty.handler.codec.http2.Http2Error.NO_ERROR;
-
 import com.google.common.base.Preconditions;
-
 import io.grpc.Status;
 import io.grpc.transport.ServerStreamListener;
 import io.grpc.transport.ServerTransportListener;
@@ -52,23 +42,18 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.AsciiString;
-import io.netty.handler.codec.http2.Http2Connection;
-import io.netty.handler.codec.http2.Http2ConnectionHandler;
-import io.netty.handler.codec.http2.Http2Error;
-import io.netty.handler.codec.http2.Http2Exception;
+import io.netty.handler.codec.http2.*;
 import io.netty.handler.codec.http2.Http2Exception.StreamException;
-import io.netty.handler.codec.http2.Http2FrameAdapter;
-import io.netty.handler.codec.http2.Http2FrameReader;
-import io.netty.handler.codec.http2.Http2FrameWriter;
-import io.netty.handler.codec.http2.Http2Headers;
-import io.netty.handler.codec.http2.Http2LocalFlowController;
-import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.ReferenceCountUtil;
 
+import javax.annotation.Nullable;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.annotation.Nullable;
+import static io.grpc.transport.netty.Utils.*;
+import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
+import static io.netty.handler.codec.http2.Http2CodecUtil.toByteBuf;
+import static io.netty.handler.codec.http2.Http2Error.NO_ERROR;
 
 /**
  * Server-side Netty handler for GRPC processing. All event handlers are executed entirely within

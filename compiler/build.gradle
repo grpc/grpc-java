@@ -58,3 +58,4 @@ task testNanoGolden(type: Exec, dependsOn: 'java_pluginExecutable') {
 }
 
 
+apply plugin: 'idea'

@@ -33,7 +33,6 @@ package io.grpc.transport.netty;
 
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
 import io.grpc.Metadata;
 import io.grpc.SharedResourceHolder.Resource;
 import io.grpc.transport.HttpUtil;

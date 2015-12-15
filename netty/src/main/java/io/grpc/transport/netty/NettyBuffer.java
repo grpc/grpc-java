@@ -33,7 +33,6 @@ package io.grpc.transport.netty;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
-
 import io.grpc.transport.AbstractBuffer;
 import io.netty.buffer.ByteBuf;
 
