@@ -54,17 +54,16 @@ import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.Codec;
+import io.grpc.CompressionNegotiator;
 import io.grpc.Compressor;
-import io.grpc.CompressorRegistry;
 import io.grpc.Context;
-import io.grpc.DecompressorRegistry;
+import io.grpc.Decompressor;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 
 import java.io.InputStream;
-import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -92,8 +91,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
   private String userAgent;
   private ScheduledExecutorService deadlineCancellationExecutor;
   private Set<String> knownMessageEncodingRegistry;
-  private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
-  private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
+  private volatile CompressionNegotiator compressionNegotiator;
 
   ClientCallImpl(MethodDescriptor<ReqT, RespT> method, Executor executor,
       CallOptions callOptions, ClientTransportProvider clientTransportProvider,
@@ -136,13 +134,13 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
     return this;
   }
 
-  ClientCallImpl<ReqT, RespT> setDecompressorRegistry(DecompressorRegistry decompressorRegistry) {
-    this.decompressorRegistry = decompressorRegistry;
-    return this;
+  @Override
+  public void overrideCompressionNegotiator(CompressionNegotiator negotiator) {
+    this.compressionNegotiator = checkNotNull(negotiator, "negotiator");
   }
 
-  ClientCallImpl<ReqT, RespT> setCompressorRegistry(CompressorRegistry compressorRegistry) {
-    this.compressorRegistry = compressorRegistry;
+  ClientCallImpl<ReqT, RespT> setCompressionNegotiator(CompressionNegotiator cn) {
+    overrideCompressionNegotiator(cn);
     return this;
   }
 
@@ -157,8 +155,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
 
   @VisibleForTesting
   static void prepareHeaders(Metadata headers, CallOptions callOptions, String userAgent,
-      Set<String> knownMessageEncodings, DecompressorRegistry decompressorRegistry,
-      CompressorRegistry compressorRegistry) {
+      Compressor compressor, Set<String> acceptEncodings) {
     // Hack to propagate authority.  This should be properly pass to the transport.newStream
     // somehow.
     headers.removeAll(AUTHORITY_KEY);
@@ -172,20 +169,14 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       headers.put(USER_AGENT_KEY, userAgent);
     }
 
-    headers.removeAll(MESSAGE_ENCODING_KEY);
-    for (String messageEncoding : knownMessageEncodings) {
-      Compressor compressor = compressorRegistry.lookupCompressor(messageEncoding);
-      if (compressor != null && compressor != Codec.Identity.NONE) {
-        headers.put(MESSAGE_ENCODING_KEY, compressor.getMessageEncoding());
-        break;
-      }
+    headers.removeAll(MESSAGE_ACCEPT_ENCODING_KEY);
+    if (!acceptEncodings.isEmpty()) {
+      headers.put(MESSAGE_ACCEPT_ENCODING_KEY, ACCEPT_ENCODING_JOINER.join(acceptEncodings));
     }
 
-    headers.removeAll(MESSAGE_ACCEPT_ENCODING_KEY);
-    if (!decompressorRegistry.getAdvertisedMessageEncodings().isEmpty()) {
-      String acceptEncoding =
-          ACCEPT_ENCODING_JOINER.join(decompressorRegistry.getAdvertisedMessageEncodings());
-      headers.put(MESSAGE_ACCEPT_ENCODING_KEY, acceptEncoding);
+    headers.removeAll(MESSAGE_ENCODING_KEY);
+    if (compressor != Codec.Identity.NONE) {
+      headers.put(MESSAGE_ENCODING_KEY, compressor.getMessageEncoding());
     }
   }
 
@@ -207,8 +198,12 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       });
       return;
     }
-    prepareHeaders(headers, callOptions, userAgent,
-        knownMessageEncodingRegistry, decompressorRegistry, compressorRegistry);
+
+    Compressor compressor = checkNotNull(
+        compressionNegotiator.pickCompressor(knownMessageEncodingRegistry),
+        "Can't use null compressor");
+    prepareHeaders(headers, callOptions, userAgent, compressor,
+        compressionNegotiator.advertiseDecompressors());
 
     ListenableFuture<ClientTransport> transportFuture = clientTransportProvider.get(callOptions);
 
@@ -236,13 +231,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
           transportFuture.isDone() ? directExecutor() : callExecutor);
     }
 
-    stream.setDecompressionRegistry(decompressorRegistry);
-    stream.setCompressionRegistry(compressorRegistry);
-    if (headers.containsKey(MESSAGE_ENCODING_KEY)) {
-      stream.pickCompressor(Collections.singleton(headers.get(MESSAGE_ENCODING_KEY)));
-      // TODO(carl-mastrangelo): move this to ClientCall.
-      stream.setMessageCompression(true);
-    }
+    stream.setCompressor(compressor);
 
     stream.start(new ClientStreamListenerImpl(observer, transportFuture));
     // Delay any sources of cancellation after start(), because most of the transports are broken if
@@ -394,6 +383,13 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
         String serverAcceptEncodings = headers.get(MESSAGE_ACCEPT_ENCODING_KEY);
         addAll(knownMessageEncodingRegistry, ACCEPT_ENCODING_SPLITER.split(serverAcceptEncodings));
       }
+
+      String messageEncoding = headers.get(MESSAGE_ENCODING_KEY);
+      if (messageEncoding != null) {
+        Decompressor d = compressionNegotiator.pickDecompressor(messageEncoding);
+        stream.setDecompressor(d);
+      }
+
       callExecutor.execute(new ContextRunnable(context) {
         @Override
         public final void runInContext() {

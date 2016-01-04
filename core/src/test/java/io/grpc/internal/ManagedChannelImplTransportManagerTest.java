@@ -48,8 +48,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 
 import io.grpc.Attributes;
 import io.grpc.ClientInterceptor;
-import io.grpc.CompressorRegistry;
-import io.grpc.DecompressorRegistry;
+import io.grpc.CompressionNegotiator;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.NameResolver;
@@ -126,8 +125,7 @@ public class ManagedChannelImplTransportManagerTest {
 
     channel = new ManagedChannelImpl("fake://target", mockBackoffPolicyProvider,
         nameResolverFactory, Attributes.EMPTY, mockLoadBalancerFactory,
-        mockTransportFactory, DecompressorRegistry.getDefaultInstance(),
-        CompressorRegistry.getDefaultInstance(), executor, null,
+        mockTransportFactory, new CompressionNegotiator(), executor, null,
         Collections.<ClientInterceptor>emptyList());
 
     ArgumentCaptor<TransportManager> tmCaptor = ArgumentCaptor.forClass(TransportManager.class);

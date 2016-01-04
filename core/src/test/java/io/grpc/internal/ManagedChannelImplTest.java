@@ -54,8 +54,8 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
-import io.grpc.CompressorRegistry;
-import io.grpc.DecompressorRegistry;
+import io.grpc.CompressionNegotiator;
+import io.grpc.Compressor;
 import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
@@ -135,8 +135,7 @@ public class ManagedChannelImplTest {
       NameResolver.Factory nameResolverFactory, List<ClientInterceptor> interceptors) {
     return new ManagedChannelImpl(target, new FakeBackoffPolicyProvider(),
         nameResolverFactory, NAME_RESOLVER_PARAMS, loadBalancerFactory,
-        mockTransportFactory, DecompressorRegistry.getDefaultInstance(),
-        CompressorRegistry.getDefaultInstance(), executor, null, interceptors);
+        mockTransportFactory, new CompressionNegotiator(), executor, null, interceptors);
   }
 
   @Before
@@ -194,9 +193,8 @@ public class ManagedChannelImplTest {
     verify(mockTransport, timeout(1000)).start(transportListenerCaptor.capture());
     ClientTransport.Listener transportListener = transportListenerCaptor.getValue();
     verify(mockTransport, timeout(1000)).newStream(same(method), same(headers));
+    verify(mockStream).setCompressor(isA(Compressor.class));
     verify(mockStream).start(streamListenerCaptor.capture());
-    verify(mockStream).setDecompressionRegistry(isA(DecompressorRegistry.class));
-    verify(mockStream).setCompressionRegistry(isA(CompressorRegistry.class));
     ClientStreamListener streamListener = streamListenerCaptor.getValue();
 
     // Second call

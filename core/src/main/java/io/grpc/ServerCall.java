@@ -31,7 +31,6 @@
 
 package io.grpc;
 
-
 /**
  * Encapsulates a single call received from a remote client. Calls may not simply be unary
  * request-response even though this is the most common pattern. Calls may stream any number of
@@ -171,9 +170,23 @@ public abstract class ServerCall<RespT> {
   /**
    * Enables per-message compression, if an encoding type has been negotiated.  If no message
    * encoding has been negotiated, this is a no-op.
+   *
+   * @param enabled whether or not subsequent calls to {@link #sendMessage} should be compressed.
    */
   @ExperimentalApi
   public void setMessageCompression(boolean enabled) {
-    // noop
+    throw new UnsupportedOperationException("unimplemented");
+  }
+
+  /**
+   * Overrides the compression negotiator for this call.  By default calls inherit a negotiator
+   * from their channel.  This method exists to allow per call override of negotiation.  This is an
+   * advanced API call and shouldn't need to be used in normal circumstances.
+   *
+   * @param negotiator the new compression negotiator.
+   */
+  @ExperimentalApi
+  public void overrideCompressionNegotiator(CompressionNegotiator negotiator) {
+    throw new UnsupportedOperationException("unimplemented");
   }
 }

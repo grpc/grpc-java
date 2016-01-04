@@ -43,6 +43,7 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientCall.Listener;
 import io.grpc.ClientInterceptor;
+import io.grpc.CompressionNegotiator;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
@@ -141,19 +142,19 @@ public class CompressionTest {
 
   @Before
   public void setUp() throws Exception {
+    CompressionNegotiator ccn = new CompressionNegotiator(clientCompressors, clientDecompressors){};
+    CompressionNegotiator scn = new CompressionNegotiator(serverCompressors, serverDecompressors){};
     int serverPort = TestUtils.pickUnusedPort();
     server = ServerBuilder.forPort(serverPort)
         .addService(ServerInterceptors.intercept(
             TestServiceGrpc.bindService(new TestServiceImpl(executor)),
             new ServerCompressorInterceptor()))
-        .compressorRegistry(serverCompressors)
-        .decompressorRegistry(serverDecompressors)
+        .compressionNegotiator(scn)
         .build()
         .start();
 
     channel = ManagedChannelBuilder.forAddress("localhost", serverPort)
-        .decompressorRegistry(clientDecompressors)
-        .compressorRegistry(clientCompressors)
+        .compressionNegotiator(ccn)
         .intercept(new ClientCompressorInterceptor())
         .usePlaintext(true)
         .build();

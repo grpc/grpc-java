@@ -49,6 +49,8 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.util.concurrent.MoreExecutors;
 
+import io.grpc.CompressionNegotiator;
+import io.grpc.Compressor;
 import io.grpc.Context;
 import io.grpc.IntegerMarshaller;
 import io.grpc.Metadata;
@@ -101,7 +103,8 @@ public class ServerImplTest {
   private ExecutorService executor = Executors.newSingleThreadExecutor();
   private MutableHandlerRegistry registry = new MutableHandlerRegistryImpl();
   private SimpleServer transportServer = new SimpleServer();
-  private ServerImpl server = new ServerImpl(executor, registry, transportServer, SERVER_CONTEXT);
+  private ServerImpl server = new ServerImpl(executor, registry, transportServer, SERVER_CONTEXT,
+      new CompressionNegotiator());
 
   @Mock
   private ServerStream stream;
@@ -129,7 +132,8 @@ public class ServerImplTest {
       @Override
       public void shutdown() {}
     };
-    ServerImpl server = new ServerImpl(executor, registry, transportServer, SERVER_CONTEXT);
+    ServerImpl server = new ServerImpl(executor, registry, transportServer, SERVER_CONTEXT,
+        new CompressionNegotiator());
     server.start();
     server.shutdown();
     assertTrue(server.isShutdown());
@@ -146,7 +150,8 @@ public class ServerImplTest {
         throw new AssertionError("Should not be called, because wasn't started");
       }
     };
-    ServerImpl server = new ServerImpl(executor, registry, transportServer, SERVER_CONTEXT);
+    ServerImpl server = new ServerImpl(executor, registry, transportServer, SERVER_CONTEXT,
+        new CompressionNegotiator());
     server.shutdown();
     assertTrue(server.isShutdown());
     assertTrue(server.isTerminated());
@@ -154,7 +159,8 @@ public class ServerImplTest {
 
   @Test
   public void startStopImmediateWithChildTransport() throws IOException {
-    ServerImpl server = new ServerImpl(executor, registry, transportServer, SERVER_CONTEXT);
+    ServerImpl server = new ServerImpl(executor, registry, transportServer, SERVER_CONTEXT,
+        new CompressionNegotiator());
     server.start();
     class DelayedShutdownServerTransport extends SimpleServerTransport {
       boolean shutdown;
@@ -186,7 +192,7 @@ public class ServerImplTest {
     }
 
     ServerImpl server = new ServerImpl(executor, registry, new FailingStartupServer(),
-        SERVER_CONTEXT);
+        SERVER_CONTEXT, new CompressionNegotiator());
     try {
       server.start();
       fail("expected exception");
@@ -239,6 +245,7 @@ public class ServerImplTest {
     Metadata responseHeaders = new Metadata();
     responseHeaders.put(metadataKey, "response value");
     call.sendHeaders(responseHeaders);
+    verify(stream).setCompressor(isA(Compressor.class));
     verify(stream).writeHeaders(responseHeaders);
 
     call.sendMessage(314);
@@ -322,7 +329,8 @@ public class ServerImplTest {
     }
 
     transportServer = new MaybeDeadlockingServer();
-    ServerImpl server = new ServerImpl(executor, registry, transportServer, SERVER_CONTEXT);
+    ServerImpl server = new ServerImpl(executor, registry, transportServer, SERVER_CONTEXT,
+        new CompressionNegotiator());
     server.start();
     new Thread() {
       @Override

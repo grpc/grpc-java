@@ -44,8 +44,7 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
-import io.grpc.CompressorRegistry;
-import io.grpc.DecompressorRegistry;
+import io.grpc.CompressionNegotiator;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
@@ -95,6 +94,7 @@ public final class ManagedChannelImpl extends ManagedChannel {
   private final boolean usingSharedExecutor;
   private final String userAgent;
   private final Object lock = new Object();
+  private final CompressionNegotiator compressionNegotiator;
 
   /* Compression related */
   /**
@@ -108,8 +108,6 @@ public final class ManagedChannelImpl extends ManagedChannel {
    */
   private final Set<String> knownAcceptEncodingRegistry =
       Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
-  private final DecompressorRegistry decompressorRegistry;
-  private final CompressorRegistry compressorRegistry;
 
   /**
    * Executor that runs deadline timers for requests.
@@ -154,7 +152,7 @@ public final class ManagedChannelImpl extends ManagedChannel {
   ManagedChannelImpl(String target, BackoffPolicy.Provider backoffPolicyProvider,
       NameResolver.Factory nameResolverFactory, Attributes nameResolverParams,
       LoadBalancer.Factory loadBalancerFactory, ClientTransportFactory transportFactory,
-      DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
+      CompressionNegotiator compressionNegotiator,
       @Nullable Executor executor, @Nullable String userAgent,
       List<ClientInterceptor> interceptors) {
     if (executor == null) {
@@ -167,12 +165,11 @@ public final class ManagedChannelImpl extends ManagedChannel {
     this.backoffPolicyProvider = backoffPolicyProvider;
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
     this.loadBalancer = loadBalancerFactory.newLoadBalancer(nameResolver.getServiceAuthority(), tm);
+    this.compressionNegotiator = compressionNegotiator;
     this.transportFactory = transportFactory;
     this.userAgent = userAgent;
     this.interceptorChannel = ClientInterceptors.intercept(new RealChannel(), interceptors);
     scheduledExecutor = SharedResourceHolder.get(TIMER_SERVICE);
-    this.decompressorRegistry = decompressorRegistry;
-    this.compressorRegistry = compressorRegistry;
 
     this.nameResolver.start(new NameResolver.Listener() {
       @Override
@@ -334,8 +331,7 @@ public final class ManagedChannelImpl extends ManagedChannel {
           transportProvider,
           scheduledExecutor)
               .setUserAgent(userAgent)
-              .setDecompressorRegistry(decompressorRegistry)
-              .setCompressorRegistry(compressorRegistry)
+              .setCompressionNegotiator(compressionNegotiator)
               .setKnownMessageEncodingRegistry(knownAcceptEncodingRegistry);
     }
 
