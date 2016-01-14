@@ -165,14 +165,14 @@ Some web containers, such as [Jetty](http://www.eclipse.org/jetty/documentation/
 ```
 ## Enabling TLS on a server
 
-In this example the service owner provides a certificate chain and private key to create an SslContext. This is then bound to the server which is started on a specific port, in this case 443 which is the standard SSL port. Note that the service implementation is also bound while creating the server.
+To use TLS on the server, a certificate chain and private key need to be
+specified in PEM format. The standard TLS port is 443, but we use 8443 below to
+avoid needing extra permissions from the OS.
 
 ```java
-// Load certificate chain and key for SSL server into a Netty SslContext
-SslContext sslContext = GrpcSslContexts.forServer(certChainFile, privateKeyFile);
-// Create a server, bound to port 443 and exposing a service implementation
-ServerImpl server = NettyServerBuilder.forPort(443)
-    .sslContext(sslContext)
+ServerImpl server = ServerBuilder.forPort(8443)
+    // Enable TLS
+    .useTransportSecurity(certChainFile, privateKeyFile)
     .addService(TestServiceGrpc.bindService(serviceImplementation))
     .build();
 server.start();
