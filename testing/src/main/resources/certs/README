@@ -64,6 +64,20 @@ common name which is set to *.test.google.com.
 $ openssl ca -in server1.csr -out server1.pem -keyfile ca.key -cert ca.pem -verbose -config server1-openssl.cnf -days 3650 -extensions v3_req -updatedb
 $ openssl x509 -in server1.pem -out server1.pem -outform PEM
 
+localhost_server is issued by CA with the common name "localhost":
+------------------------------------------------------------------
+
+$ openssl genrsa -out localhost_server.key.rsa 1024
+$ openssl pkcs8 -topk8 -in localhost_server.key.rsa -out localhost_server.key -nocrypt
+$ rm localhost_server.key.rsa
+$ openssl req -new -key localhost_server.key -out localhost_server.csr
+
+When prompted for certificate information, everything is default except the
+common name which is set to "localhost".
+
+$ openssl ca -in localhost_server.csr -out localhost_server.pem -keyfile ca.key -cert ca.pem -verbose -config openssl.cnf -days 3650 -updatedb -create_serial
+$ openssl x509 -in localhost_server.pem -out localhost_server.pem -outform PEM
+
 Gotchas
 =======
 
