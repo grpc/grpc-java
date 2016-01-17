@@ -50,9 +50,7 @@ import io.grpc.testing.integration.EchoServiceGrpc.EchoServiceBlockingStub;
 import io.grpc.testing.integration.EchoServiceOuterClass.EchoRequest;
 import io.grpc.testing.integration.EchoServiceOuterClass.EchoResponse;
 import io.netty.handler.ssl.ClientAuth;
-import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslContextBuilder;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -68,7 +66,8 @@ import javax.net.ssl.SSLException;
 /**
  * Integration tests for GRPC's TLS support.
  */
-// TODO: Use @RunWith(Parameterized.class) to run these tests for all TLS providers.
+// TODO: Use @RunWith(Parameterized.class) to run these tests for all TLS providers. Doing so will
+// require changes to allow programmatically choosing which TLS provider to use.
 @RunWith(JUnit4.class)
 public class TlsTest {
   private static class DummyEchoRpcService implements EchoServiceGrpc.EchoService {
@@ -158,7 +157,8 @@ public class TlsTest {
         TestUtils.loadX509Cert("ca.pem"),
         TestUtils.loadX509Cert("badclient.pem")  // Cert is self-signed, and so is its own issuer.
       };
-      ManagedChannel channel = clientChannel("localhost", port, clientCertFile, clientPrivateKeyFile, clientTrustedCaCerts);
+      ManagedChannel channel = clientChannel("localhost", port, clientCertFile,
+                                             clientPrivateKeyFile, clientTrustedCaCerts);
       EchoServiceBlockingStub client = EchoServiceGrpc.newBlockingStub(channel);
 
       // Check that the TLS handshake fails.
@@ -213,29 +213,15 @@ public class TlsTest {
       try {
         EchoResponse response = client.echo(request);
         fail("TLS handshake should have failed, but didn't; received RPC response: " + response);
-      } catch (Exception expected) {
-        assertTlsException(expected);
+      } catch (StatusRuntimeException e) {
+        // GRPC reports this situation by throwing a StatusRuntimeException that wraps either a
+        // javax.net.ssl.SSLHandshakeException or a java.nio.channels.ClosedChannelException.
+        // Thus, reliably detecting the underlying cause is not feasible.
+        assertEquals(Status.Code.UNAVAILABLE, e.getStatus().getCode());
       }
     } finally {
       server.shutdown();
     }
-  }
-
-
-  /**
-   * Checks that 'e' either *is* an SSLException or *has* such an exception somewhere in its cause
-   * chain.
-   */
-  private static void assertTlsException(Exception e) {
-    Throwable t = e;
-    while (t != null) {
-      if (t instanceof SSLException) {
-        return;
-      }
-      t = t.getCause();
-    }
-
-    fail("Error not caused by SSLException: " + e.toString());
   }
 
 
