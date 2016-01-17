@@ -32,7 +32,6 @@
 package io.grpc.testing.integration;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import io.grpc.ManagedChannel;
@@ -40,11 +39,11 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
-import io.grpc.stub.StreamObserver;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
+import io.grpc.stub.StreamObserver;
 import io.grpc.testing.TestUtils;
 import io.grpc.testing.integration.EchoServiceGrpc.EchoServiceBlockingStub;
 import io.grpc.testing.integration.EchoServiceOuterClass.EchoRequest;
@@ -52,7 +51,6 @@ import io.grpc.testing.integration.EchoServiceOuterClass.EchoResponse;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
 
-import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -60,8 +58,6 @@ import org.junit.runners.JUnit4;
 import java.io.File;
 import java.io.IOException;
 import java.security.cert.X509Certificate;
-
-import javax.net.ssl.SSLException;
 
 /**
  * Integration tests for GRPC's TLS support.
