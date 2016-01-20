@@ -47,6 +47,7 @@ import io.grpc.internal.ClientTransport.PingCallback;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -186,7 +187,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     connection.addListener(new Http2ConnectionAdapter() {
       @Override
       public void onGoAwayReceived(int lastStreamId, long errorCode, ByteBuf debugData) {
-        goAwayStatus(statusFromGoAway(errorCode, debugData));
+        goAwayStatus(statusFromGoAway(errorCode, ByteBufUtil.getBytes(debugData)));
         goingAway();
       }
     });
@@ -372,12 +373,13 @@ class NettyClientHandler extends AbstractNettyHandler {
                   // Attach the client stream to the HTTP/2 stream object as user data.
                   stream.setHttp2Stream(http2Stream);
                 } else {
-                  if (future.cause() instanceof GoAwayClosedStreamException) {
-                    GoAwayClosedStreamException e = (GoAwayClosedStreamException) future.cause();
+                  final Throwable cause = future.cause();
+                  if (cause instanceof GoAwayClosedStreamException) {
+                    GoAwayClosedStreamException e = (GoAwayClosedStreamException) cause;
                     goAwayStatus(statusFromGoAway(e.errorCode(), e.debugData()));
                     stream.transportReportStatus(goAwayStatus, false, new Metadata());
                   } else {
-                    stream.transportReportStatus(Status.fromThrowable(future.cause()), true,
+                    stream.transportReportStatus(Status.fromThrowable(cause), true,
                         new Metadata());
                   }
                 }
@@ -496,11 +498,11 @@ class NettyClientHandler extends AbstractNettyHandler {
     }
   }
 
-  private Status statusFromGoAway(long errorCode, ByteBuf debugData) {
+  private Status statusFromGoAway(long errorCode, byte[] debugData) {
     Status status = GrpcUtil.Http2Error.statusForCode((int) errorCode);
-    if (debugData.isReadable()) {
+    if (debugData != null && debugData.length > 0) {
       // If a debug message was provided, use it.
-      String msg = debugData.toString(UTF_8);
+      String msg = new String(debugData, UTF_8);
       status = status.augmentDescription(msg);
     }
     return status;
