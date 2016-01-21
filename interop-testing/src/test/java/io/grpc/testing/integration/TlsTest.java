@@ -34,6 +34,9 @@ package io.grpc.testing.integration;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
+import com.google.common.util.concurrent.MoreExecutors;
+import com.google.protobuf.EmptyProtos.Empty;
+
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
@@ -43,14 +46,12 @@ import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
-import io.grpc.stub.StreamObserver;
 import io.grpc.testing.TestUtils;
-import io.grpc.testing.integration.EchoServiceGrpc.EchoServiceBlockingStub;
-import io.grpc.testing.integration.EchoServiceOuterClass.EchoRequest;
-import io.grpc.testing.integration.EchoServiceOuterClass.EchoResponse;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
 
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -59,23 +60,26 @@ import org.junit.runners.JUnit4;
 import java.io.File;
 import java.io.IOException;
 import java.security.cert.X509Certificate;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
 
 /**
  * Integration tests for GRPC's TLS support.
  */
-// TODO: Use @RunWith(Parameterized.class) to run these tests for all TLS providers. Doing so will
-// require changes to allow programmatically choosing which TLS provider to use.
+// TODO: Use @RunWith(Parameterized.class) to run these tests for all TLS providers, probably via
+// GrpcSslContexts.configure(SslContextBuilder, SslProvider).
 @RunWith(JUnit4.class)
 public class TlsTest {
-  private static class DummyEchoRpcService implements EchoServiceGrpc.EchoService {
-    @Override
-    public void echo(EchoRequest request, StreamObserver<EchoResponse> responseObserver) {
-      EchoResponse response = EchoResponse.newBuilder()
-          .setText("Request said: " + request.getText())
-          .build();
-      responseObserver.onNext(response);
-      responseObserver.onCompleted();
-    }
+  @Before
+  public void setUp() {
+    executor = Executors.newSingleThreadScheduledExecutor();
+  }
+
+  @After
+  public void tearDown() {
+    MoreExecutors.shutdownAndAwaitTermination(executor, 5, TimeUnit.SECONDS);
   }
 
 
@@ -96,7 +100,7 @@ public class TlsTest {
       TestUtils.loadX509Cert("ca.pem")
     };
     Server server = serverBuilder(port, serverCertFile, serverPrivateKeyFile, serverTrustedCaCerts)
-        .addService(EchoServiceGrpc.bindService(new DummyEchoRpcService()))
+        .addService(TestServiceGrpc.bindService(new TestServiceImpl(executor)))
         .build()
         .start();
 
@@ -109,15 +113,12 @@ public class TlsTest {
       };
       ManagedChannel channel = clientChannel("localhost", port, clientCertFile,
                                              clientPrivateKeyFile, clientTrustedCaCerts);
-      EchoServiceBlockingStub client = EchoServiceGrpc.newBlockingStub(channel);
+      TestServiceGrpc.TestServiceBlockingStub client = TestServiceGrpc.newBlockingStub(channel);
 
       // Send an actual request, via the full GRPC & network stack, and check that a proper
       // response comes back.
-      EchoRequest request = EchoRequest.newBuilder()
-          .setText("dummy text")
-          .build();
-      EchoResponse response = client.echo(request);
-      assertEquals("Request said: dummy text", response.getText());
+      Empty request = Empty.getDefaultInstance();
+      client.emptyCall(request);
     } finally {
       server.shutdown();
     }
@@ -141,7 +142,7 @@ public class TlsTest {
       TestUtils.loadX509Cert("ca.pem")
     };
     Server server = serverBuilder(port, serverCertFile, serverPrivateKeyFile, serverTrustedCaCerts)
-        .addService(EchoServiceGrpc.bindService(new DummyEchoRpcService()))
+        .addService(TestServiceGrpc.bindService(new TestServiceImpl(executor)))
         .build()
         .start();
 
@@ -156,15 +157,13 @@ public class TlsTest {
       };
       ManagedChannel channel = clientChannel("localhost", port, clientCertFile,
                                              clientPrivateKeyFile, clientTrustedCaCerts);
-      EchoServiceBlockingStub client = EchoServiceGrpc.newBlockingStub(channel);
+      TestServiceGrpc.TestServiceBlockingStub client = TestServiceGrpc.newBlockingStub(channel);
 
       // Check that the TLS handshake fails.
-      EchoRequest request = EchoRequest.newBuilder()
-          .setText("dummy text")
-          .build();
+      Empty request = Empty.getDefaultInstance();
       try {
-        EchoResponse response = client.echo(request);
-        fail("TLS handshake should have failed, but didn't; received RPC response: " + response);
+        client.emptyCall(request);
+        fail("TLS handshake should have failed, but didn't; received RPC response");
       } catch (StatusRuntimeException e) {
         // GRPC reports this situation by throwing a StatusRuntimeException that wraps either a
         // javax.net.ssl.SSLHandshakeException or a java.nio.channels.ClosedChannelException.
@@ -192,7 +191,7 @@ public class TlsTest {
       TestUtils.loadX509Cert("ca.pem")
     };
     Server server = serverBuilder(port, serverCertFile, serverPrivateKeyFile, serverTrustedCaCerts)
-        .addService(EchoServiceGrpc.bindService(new DummyEchoRpcService()))
+        .addService(TestServiceGrpc.bindService(new TestServiceImpl(executor)))
         .build()
         .start();
 
@@ -202,15 +201,13 @@ public class TlsTest {
           .overrideAuthority(TestUtils.TEST_SERVER_HOST)
           .negotiationType(NegotiationType.TLS)
           .build();
-      EchoServiceBlockingStub client = EchoServiceGrpc.newBlockingStub(channel);
+      TestServiceGrpc.TestServiceBlockingStub client = TestServiceGrpc.newBlockingStub(channel);
 
       // Check that the TLS handshake fails.
-      EchoRequest request = EchoRequest.newBuilder()
-          .setText("dummy text")
-          .build();
+      Empty request = Empty.getDefaultInstance();
       try {
-        EchoResponse response = client.echo(request);
-        fail("TLS handshake should have failed, but didn't; received RPC response: " + response);
+        client.emptyCall(request);
+        fail("TLS handshake should have failed, but didn't; received RPC response");
       } catch (StatusRuntimeException e) {
         // GRPC reports this situation by throwing a StatusRuntimeException that wraps either a
         // javax.net.ssl.SSLHandshakeException or a java.nio.channels.ClosedChannelException.
@@ -253,4 +250,7 @@ public class TlsTest {
         .sslContext(sslContext)
         .build();
   }
+
+
+  private ScheduledExecutorService executor;
 }
