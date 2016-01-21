@@ -299,6 +299,21 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   @Test
+  public void receivedGoAwayShouldFailNewStreams() throws Exception {
+    // Read a GOAWAY that indicates our stream was never processed by the server.
+    channelRead(goAwayFrame(0, 8 /* Cancel */, Unpooled.copiedBuffer("this is a test", UTF_8)));
+
+    // Now try to create a stream.
+    enqueue(new CreateStreamCommand(grpcHeaders, stream));
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(stream).transportReportStatus(captor.capture(), eq(false),
+            notNull(Metadata.class));
+    assertEquals(Status.CANCELLED.getCode(), captor.getValue().getCode());
+    assertEquals("HTTP/2 error code: CANCEL\nthis is a test",
+            captor.getValue().getDescription());
+  }
+
+  @Test
   public void cancelStreamShouldCreateAndThenFailBufferedStream() throws Exception {
     receiveMaxConcurrentStreams(0);
     enqueue(new CreateStreamCommand(grpcHeaders, stream));

@@ -351,6 +351,15 @@ class NettyClientHandler extends AbstractNettyHandler {
     final NettyClientStream stream = command.stream();
     final Http2Headers headers = command.headers();
     stream.id(streamId);
+
+    if (connection().goAwayReceived() && streamId > connection().local().lastStreamKnownByPeer()) {
+      // A GOAWAY was already received and this stream will never be known by the remote endpoint.
+      // Just terminate it now.
+      promise.setFailure(goAwayStatus.asException());
+      stream.transportReportStatus(goAwayStatus, false, new Metadata());
+      return;
+    }
+
     encoder().writeHeaders(ctx(), streamId, headers, 0, false, promise)
             .addListener(new ChannelFutureListener() {
               @Override

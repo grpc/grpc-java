@@ -84,7 +84,6 @@ class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
   // Smallest stream id whose corresponding frames do not get buffered.
   private int largestCreatedStreamId;
   private boolean receivedSettings;
-  private GoAwayClosedStreamException goAwayException;
 
   protected BufferingHttp2ConnectionEncoder(Http2ConnectionEncoder delegate) {
     this(delegate, SMALLEST_MAX_CONCURRENT_STREAMS);
@@ -126,12 +125,7 @@ class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
   public ChannelFuture writeHeaders(ChannelHandlerContext ctx, int streamId, Http2Headers headers,
                                     int streamDependency, short weight, boolean exclusive,
                                     int padding, boolean endOfStream, ChannelPromise promise) {
-    if (goAwayException != null) {
-      promise.setFailure(goAwayException);
-      return promise;
-    }
-
-    if (existingStream(streamId)) {
+    if (existingStream(streamId) || connection().goAwayReceived()) {
       return super.writeHeaders(ctx, streamId, headers, streamDependency, weight,
               exclusive, padding, endOfStream, promise);
     }
@@ -223,15 +217,14 @@ class BufferingHttp2ConnectionEncoder extends DecoratingHttp2ConnectionEncoder {
   }
 
   private void cancelGoAwayStreams(int lastStreamId, long errorCode, ByteBuf debugData) {
-    goAwayException = new GoAwayClosedStreamException(lastStreamId, errorCode,
-            ByteBufUtil.getBytes(debugData));
-
     Iterator<PendingStream> iter = pendingStreams.values().iterator();
+    Exception e = new GoAwayClosedStreamException(lastStreamId, errorCode,
+            ByteBufUtil.getBytes(debugData));
     while (iter.hasNext()) {
       PendingStream stream = iter.next();
       if (stream.streamId > lastStreamId) {
         iter.remove();
-        stream.close(goAwayException);
+        stream.close(e);
       }
     }
   }
