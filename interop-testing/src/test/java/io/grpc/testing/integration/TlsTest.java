@@ -152,8 +152,7 @@ public class TlsTest {
       File clientCertFile = TestUtils.loadCert("badclient.pem");
       File clientPrivateKeyFile = TestUtils.loadCert("badclient.key");
       X509Certificate[] clientTrustedCaCerts = {
-        TestUtils.loadX509Cert("ca.pem"),
-        TestUtils.loadX509Cert("badclient.pem")  // Cert is self-signed, and so is its own issuer.
+        TestUtils.loadX509Cert("ca.pem")
       };
       ManagedChannel channel = clientChannel("localhost", port, clientCertFile,
                                              clientPrivateKeyFile, clientTrustedCaCerts);
