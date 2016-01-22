@@ -29,7 +29,7 @@ protobuf {
     }
     plugins {
         grpc {
-            artifact = 'io.grpc:protoc-gen-grpc-java:0.12.0'
+            artifact = 'io.grpc:protoc-gen-grpc-java:0.12.0-SNAPSHOT'
         }
     }
     generateProtoTasks {
@@ -60,7 +60,7 @@ dependencies {
 
     // You need to build the https://github.com/grpc/grpc-java
     // to obtain these libraries below.
-    compile 'io.grpc:grpc-protobuf-nano:0.12.0'
-    compile 'io.grpc:grpc-okhttp:0.12.0'
-    compile 'io.grpc:grpc-stub:0.12.0'
+    compile 'io.grpc:grpc-protobuf-nano:0.12.0-SNAPSHOT'
+    compile 'io.grpc:grpc-okhttp:0.12.0-SNAPSHOT'
+    compile 'io.grpc:grpc-stub:0.12.0-SNAPSHOT'
 }
