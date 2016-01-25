@@ -355,40 +355,46 @@ class NettyClientHandler extends AbstractNettyHandler {
     if (goAwayStatus != null) {
       // The connection is going away, just terminate the stream now.
       promise.setFailure(goAwayStatus.asException());
-      stream.transportReportStatus(goAwayStatus, false, new Metadata());
       return;
     }
 
-    encoder().writeHeaders(ctx(), streamId, headers, 0, false, promise)
+    // Create an intermediate promise so that we can intercept the failure reported back to the
+    // application.
+    ChannelPromise tempPromise = ctx().newPromise();
+    encoder().writeHeaders(ctx(), streamId, headers, 0, false, tempPromise)
             .addListener(new ChannelFutureListener() {
               @Override
               public void operationComplete(ChannelFuture future) throws Exception {
                 if (future.isSuccess()) {
-                  // The http2Stream will be null in case a stream buffered in the encoder
-                  // was canceled via RST_STREAM.
-                  Http2Stream http2Stream = connection().stream(streamId);
-                  if (http2Stream != null) {
-                    http2Stream.setProperty(streamKey, stream);
-                  } else if (stream.isClosed()) {
-                    // The stream has been cancelled and Netty is sending a RST_STREAM frame which
-                    // causes it to purge pending writes from the flow-controller and delete the
-                    // http2Stream. The stream listener has already been notified of cancellation
-                    // so there is nothing to do.
-                    return;
-                  } else {
-                    throw new IllegalStateException("Stream closed but http2 stream not defined");
+                  try {
+                    // The http2Stream will be null in case a stream buffered in the encoder
+                    // was canceled via RST_STREAM.
+                    Http2Stream http2Stream = connection().stream(streamId);
+                    if (http2Stream != null) {
+                      http2Stream.setProperty(streamKey, stream);
+                    } else if (stream.isClosed()) {
+                      // The stream has been cancelled and Netty is sending a RST_STREAM frame which
+                      // causes it to purge pending writes from the flow-controller and delete the
+                      // http2Stream. The stream listener has already been notified of cancellation
+                      // so there is nothing to do.
+                      throw new Exception("Stream is already been closed.");
+                    } else {
+                      throw new IllegalStateException("Stream closed but http2 stream not defined");
+                    }
+                    // Attach the client stream to the HTTP/2 stream object as user data.
+                    stream.setHttp2Stream(http2Stream);
+                    promise.setSuccess();
+                  } catch (Throwable t) {
+                    promise.setFailure(t);
                   }
-                  // Attach the client stream to the HTTP/2 stream object as user data.
-                  stream.setHttp2Stream(http2Stream);
                 } else {
                   final Throwable cause = future.cause();
                   if (cause instanceof GoAwayClosedStreamException) {
                     GoAwayClosedStreamException e = (GoAwayClosedStreamException) cause;
                     goAwayStatus(statusFromGoAway(e.errorCode(), e.debugData()));
-                    stream.transportReportStatus(goAwayStatus, false, new Metadata());
+                    promise.setFailure(goAwayStatus.asException());
                   } else {
-                    stream.transportReportStatus(Status.fromThrowable(cause), true,
-                        new Metadata());
+                    promise.setFailure(cause);
                   }
                 }
               }
