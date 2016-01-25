@@ -140,7 +140,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     // Cancel the stream.
     cancelStream(Status.CANCELLED);
 
-    assertFalse(createFuture.isSuccess());
+    assertTrue(createFuture.isSuccess());
     verify(stream).transportReportStatus(eq(Status.CANCELLED), eq(true),
         any(Metadata.class));
   }
@@ -180,7 +180,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     ChannelFuture cancelFuture = cancelStream(Status.CANCELLED);
     assertTrue(cancelFuture.isSuccess());
     assertTrue(createFuture.isDone());
-    assertFalse(createFuture.isSuccess());
+    assertTrue(createFuture.isSuccess());
   }
 
   /**
