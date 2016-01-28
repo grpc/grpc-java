@@ -32,6 +32,7 @@
 package io.grpc.internal;
 
 import static io.grpc.internal.GrpcUtil.ACCEPT_ENCODING_SPLITER;
+import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -55,9 +56,9 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.Codec;
+import io.grpc.CompressionNegotiator;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
-import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -78,7 +79,6 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashSet;
 import java.util.Set;
@@ -107,6 +107,10 @@ public class ClientCallImplTest {
   private final CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
   private final DecompressorRegistry decompressorRegistry =
       DecompressorRegistry.getDefaultInstance();
+  private final CompressionNegotiator negotiator =
+      new CompressionNegotiator(compressorRegistry, decompressorRegistry);
+  private final Set<String> acceptEncodings =
+      ImmutableSet.of(Codec.Identity.NONE.getMessageEncoding());
   private final MethodDescriptor<Void, Void> method = MethodDescriptor.create(
       MethodType.UNARY,
       "service/method",
@@ -159,8 +163,7 @@ public class ClientCallImplTest {
         CallOptions.DEFAULT,
         provider,
         deadlineCancellationExecutor)
-            .setDecompressorRegistry(decompressorRegistry)
-            .setCompressorRegistry(compressorRegistry)
+            .setCompressionNegotiator(negotiator)
             .setKnownMessageEncodingRegistry(knownMessageEncodings);
 
     call.start(callListener, new Metadata());
@@ -178,8 +181,8 @@ public class ClientCallImplTest {
   public void prepareHeaders_authorityAdded() {
     Metadata m = new Metadata();
     CallOptions callOptions = CallOptions.DEFAULT.withAuthority("auth");
-    ClientCallImpl.prepareHeaders(m, callOptions, "user agent", knownMessageEncodings,
-        decompressorRegistry, compressorRegistry);
+    ClientCallImpl.prepareHeaders(m, callOptions, "user agent", Codec.Identity.NONE,
+        acceptEncodings);
 
     assertEquals(m.get(GrpcUtil.AUTHORITY_KEY), "auth");
   }
@@ -187,8 +190,8 @@ public class ClientCallImplTest {
   @Test
   public void prepareHeaders_userAgentAdded() {
     Metadata m = new Metadata();
-    ClientCallImpl.prepareHeaders(m, CallOptions.DEFAULT, "user agent", knownMessageEncodings,
-        decompressorRegistry, compressorRegistry);
+    ClientCallImpl.prepareHeaders(m, CallOptions.DEFAULT, "user agent", Codec.Identity.NONE,
+        acceptEncodings);
 
     assertEquals(m.get(GrpcUtil.USER_AGENT_KEY), "user agent");
   }
@@ -197,8 +200,8 @@ public class ClientCallImplTest {
   public void prepareHeaders_messageEncodingAdded() {
     Metadata m = new Metadata();
     knownMessageEncodings.add(new Codec.Gzip().getMessageEncoding());
-    ClientCallImpl.prepareHeaders(m, CallOptions.DEFAULT, "user agent", knownMessageEncodings,
-        decompressorRegistry, compressorRegistry);
+    ClientCallImpl.prepareHeaders(m, CallOptions.DEFAULT, "user agent", new Codec.Gzip(),
+        acceptEncodings);
 
     assertEquals(m.get(GrpcUtil.MESSAGE_ENCODING_KEY), new Codec.Gzip().getMessageEncoding());
   }
@@ -207,8 +210,8 @@ public class ClientCallImplTest {
   public void prepareHeaders_ignoreIdentityEncoding() {
     Metadata m = new Metadata();
     knownMessageEncodings.add(Codec.Identity.NONE.getMessageEncoding());
-    ClientCallImpl.prepareHeaders(m,  CallOptions.DEFAULT, "user agent", knownMessageEncodings,
-        decompressorRegistry, compressorRegistry);
+    ClientCallImpl.prepareHeaders(m, CallOptions.DEFAULT, "user agent", Codec.Identity.NONE,
+        acceptEncodings);
 
     assertNull(m.get(GrpcUtil.MESSAGE_ENCODING_KEY));
   }
@@ -216,47 +219,12 @@ public class ClientCallImplTest {
   @Test
   public void prepareHeaders_acceptedEncodingsAdded() {
     Metadata m = new Metadata();
-    DecompressorRegistry customRegistry = DecompressorRegistry.newEmptyInstance();
-    customRegistry.register(new Decompressor() {
-      @Override
-      public String getMessageEncoding() {
-        return "a";
-      }
 
-      @Override
-      public InputStream decompress(InputStream is) throws IOException {
-        return null;
-      }
-    }, true);
-    customRegistry.register(new Decompressor() {
-      @Override
-      public String getMessageEncoding() {
-        return "b";
-      }
-
-      @Override
-      public InputStream decompress(InputStream is) throws IOException {
-        return null;
-      }
-    }, true);
-    customRegistry.register(new Decompressor() {
-      @Override
-      public String getMessageEncoding() {
-        return "c";
-      }
-
-      @Override
-      public InputStream decompress(InputStream is) throws IOException {
-        return null;
-      }
-    }, false); // not advertised
-
-    ClientCallImpl.prepareHeaders(m, CallOptions.DEFAULT, "user agent", knownMessageEncodings,
-        customRegistry, compressorRegistry);
+    ClientCallImpl.prepareHeaders(m, CallOptions.DEFAULT, "user agent", Codec.Identity.NONE,
+        ImmutableSet.of("a", "b"));
 
     Iterable<String> acceptedEncodings =
-        ACCEPT_ENCODING_SPLITER.split(m.get(GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY));
-
+        ACCEPT_ENCODING_SPLITER.split(m.get(MESSAGE_ACCEPT_ENCODING_KEY));
     // Order may be different, since decoder priorities have not yet been implemented.
     assertEquals(ImmutableSet.of("b", "a"), ImmutableSet.copyOf(acceptedEncodings));
   }
@@ -269,8 +237,8 @@ public class ClientCallImplTest {
     m.put(GrpcUtil.MESSAGE_ENCODING_KEY, "gzip");
     m.put(GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY, "gzip");
 
-    ClientCallImpl.prepareHeaders(m, CallOptions.DEFAULT, null, knownMessageEncodings,
-        DecompressorRegistry.newEmptyInstance(), compressorRegistry);
+    ClientCallImpl.prepareHeaders(m, CallOptions.DEFAULT, null, Codec.Identity.NONE,
+        ImmutableSet.<String>of());
 
     assertNull(m.get(GrpcUtil.AUTHORITY_KEY));
     assertNull(m.get(GrpcUtil.USER_AGENT_KEY));
@@ -280,7 +248,6 @@ public class ClientCallImplTest {
 
   @Test
   public void callerContextPropagatedToListener() throws Exception {
-
     when(transport.newStream(any(MethodDescriptor.class), any(Metadata.class))).thenReturn(stream);
     when(provider.get(any(CallOptions.class))).thenReturn(Futures.immediateFuture(transport));
 
@@ -294,8 +261,7 @@ public class ClientCallImplTest {
         CallOptions.DEFAULT,
         provider,
         deadlineCancellationExecutor)
-            .setDecompressorRegistry(decompressorRegistry)
-            .setCompressorRegistry(compressorRegistry)
+            .setCompressionNegotiator(negotiator)
             .setKnownMessageEncodingRegistry(knownMessageEncodings);
 
     Context.ROOT.attach();
@@ -372,8 +338,7 @@ public class ClientCallImplTest {
         CallOptions.DEFAULT,
         provider,
         deadlineCancellationExecutor)
-            .setDecompressorRegistry(decompressorRegistry)
-            .setCompressorRegistry(compressorRegistry)
+            .setCompressionNegotiator(negotiator)
             .setKnownMessageEncodingRegistry(knownMessageEncodings);
 
     previous.attach();
@@ -407,7 +372,7 @@ public class ClientCallImplTest {
         CallOptions.DEFAULT,
         provider,
         deadlineCancellationExecutor)
-        .setDecompressorRegistry(decompressorRegistry);
+            .setCompressionNegotiator(negotiator);
 
     previous.attach();
 
@@ -454,8 +419,7 @@ public class ClientCallImplTest {
         callOptions,
         provider,
         deadlineCancellationExecutor)
-            .setDecompressorRegistry(decompressorRegistry)
-            .setCompressorRegistry(compressorRegistry)
+            .setCompressionNegotiator(negotiator)
             .setKnownMessageEncodingRegistry(knownMessageEncodings);
     call.start(callListener, new Metadata());
     assertFalse(future.isDone());

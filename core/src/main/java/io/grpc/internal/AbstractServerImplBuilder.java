@@ -31,12 +31,13 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.MoreObjects.firstNonNull;
+
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
 
-import io.grpc.CompressorRegistry;
+import io.grpc.CompressionNegotiator;
 import io.grpc.Context;
-import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
 import io.grpc.Internal;
 import io.grpc.MutableHandlerRegistry;
@@ -61,10 +62,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   private Executor executor;
 
   @Nullable
-  private DecompressorRegistry decompressorRegistry;
-
-  @Nullable
-  private CompressorRegistry compressorRegistry;
+  private CompressionNegotiator compressionNegotiator;
 
   /**
    * Constructs using a given handler registry.
@@ -107,29 +105,20 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   }
 
   @Override
-  public final T decompressorRegistry(DecompressorRegistry registry) {
-    decompressorRegistry = registry;
+  public final T compressionNegotiator(CompressionNegotiator cn) {
+    compressionNegotiator = cn;
     return thisT();
   }
 
-  protected final DecompressorRegistry decompressorRegistry() {
-    return decompressorRegistry;
-  }
-
-  @Override
-  public final T compressorRegistry(CompressorRegistry registry) {
-    compressorRegistry = registry;
-    return thisT();
-  }
-
-  protected final CompressorRegistry compressorRegistry() {
-    return compressorRegistry;
+  protected final CompressionNegotiator compressionNegotiator() {
+    return compressionNegotiator;
   }
 
   @Override
   public ServerImpl build() {
     io.grpc.internal.Server transportServer = buildTransportServer();
-    return new ServerImpl(executor, registry, transportServer, Context.ROOT);
+    return new ServerImpl(executor, registry, transportServer, Context.ROOT,
+        firstNonNull(compressionNegotiator, new CompressionNegotiator()));
   }
 
   /**

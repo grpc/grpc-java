@@ -35,7 +35,8 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.annotations.VisibleForTesting;
 
-
+import java.util.Collections;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -49,7 +50,8 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 public final class CompressorRegistry {
   private static final CompressorRegistry DEFAULT_INSTANCE = new CompressorRegistry(
-      new Codec.Gzip());
+      new Codec.Gzip(),
+      Codec.Identity.NONE);
 
   public static CompressorRegistry getDefaultInstance() {
     return DEFAULT_INSTANCE;
@@ -72,6 +74,13 @@ public final class CompressorRegistry {
   @Nullable
   public Compressor lookupCompressor(String compressorName) {
     return compressors.get(compressorName);
+  }
+
+  /**
+   * Provides a list of all message encodings that have compressors available.
+   */
+  public Set<String> getKnownMessageEncodings() {
+    return Collections.unmodifiableSet(compressors.keySet());
   }
 
   /**

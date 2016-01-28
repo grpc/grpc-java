@@ -34,8 +34,7 @@ package io.grpc.inprocess;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.Compressor;
-import io.grpc.CompressorRegistry;
-import io.grpc.DecompressorRegistry;
+import io.grpc.Decompressor;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -231,9 +230,6 @@ class InProcessTransport implements ServerTransport, ClientTransport {
       }
 
       @Override
-      public void setDecompressionRegistry(DecompressorRegistry registry) {}
-
-      @Override
       public void request(int numMessages) {
         clientStream.serverRequested(numMessages);
       }
@@ -340,17 +336,13 @@ class InProcessTransport implements ServerTransport, ClientTransport {
       }
 
       @Override
-      public void setMessageCompression(boolean enable) {
-         // noop
-      }
+      public void setMessageCompression(boolean enable) {}
 
       @Override
-      public Compressor pickCompressor(Iterable<String> messageEncodings) {
-        return null;
-      }
+      public void setCompressor(Compressor c) {}
 
       @Override
-      public void setCompressionRegistry(CompressorRegistry registry) {}
+      public void setDecompressor(Decompressor d) {}
     }
 
     private class InProcessClientStream implements ClientStream {
@@ -458,18 +450,13 @@ class InProcessTransport implements ServerTransport, ClientTransport {
       }
 
       @Override
-      public void setDecompressionRegistry(DecompressorRegistry registry) {}
-
-      @Override
       public void setMessageCompression(boolean enable) {}
 
       @Override
-      public Compressor pickCompressor(Iterable<String> messageEncodings) {
-        return null;
-      }
+      public void setCompressor(Compressor c) {}
 
       @Override
-      public void setCompressionRegistry(CompressorRegistry registry) {}
+      public void setDecompressor(Decompressor d) {}
 
       @Override
       public void start(ClientStreamListener listener) {

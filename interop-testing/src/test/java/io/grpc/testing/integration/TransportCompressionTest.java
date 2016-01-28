@@ -41,6 +41,7 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.Codec;
+import io.grpc.CompressionNegotiator;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.ForwardingClientCall;
@@ -98,8 +99,7 @@ public class TransportCompressionTest extends AbstractTransportTest {
     compressors.register(Fzip.INSTANCE);
     startStaticServer(
         ServerBuilder.forPort(serverPort)
-            .compressorRegistry(compressors)
-            .decompressorRegistry(decompressors),
+            .compressionNegotiator(new CompressionNegotiator(compressors, decompressors){}),
         new ServerInterceptor() {
           @Override
           public <ReqT, RespT> Listener<ReqT> interceptCall(MethodDescriptor<ReqT, RespT> method,
@@ -140,8 +140,7 @@ public class TransportCompressionTest extends AbstractTransportTest {
   @Override
   protected ManagedChannel createChannel() {
     return ManagedChannelBuilder.forAddress("localhost", serverPort)
-        .decompressorRegistry(decompressors)
-        .compressorRegistry(compressors)
+        .compressionNegotiator(new CompressionNegotiator(compressors, decompressors){})
         .intercept(new ClientInterceptor() {
           @Override
           public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(

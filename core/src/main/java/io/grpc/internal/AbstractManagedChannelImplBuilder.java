@@ -38,8 +38,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 
 import io.grpc.Attributes;
 import io.grpc.ClientInterceptor;
-import io.grpc.CompressorRegistry;
-import io.grpc.DecompressorRegistry;
+import io.grpc.CompressionNegotiator;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannelBuilder;
@@ -89,10 +88,7 @@ public abstract class AbstractManagedChannelImplBuilder
   private LoadBalancer.Factory loadBalancerFactory;
 
   @Nullable
-  private DecompressorRegistry decompressorRegistry;
-
-  @Nullable
-  private CompressorRegistry compressorRegistry;
+  private CompressionNegotiator compressionNegotiator;
 
   protected AbstractManagedChannelImplBuilder(String target) {
     this.target = Preconditions.checkNotNull(target);
@@ -147,15 +143,8 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Override
   @ExperimentalApi
-  public final T decompressorRegistry(DecompressorRegistry registry) {
-    this.decompressorRegistry = registry;
-    return thisT();
-  }
-
-  @Override
-  @ExperimentalApi
-  public final T compressorRegistry(CompressorRegistry registry) {
-    this.compressorRegistry = registry;
+  public final T compressionNegotiator(CompressionNegotiator cn) {
+    this.compressionNegotiator = cn;
     return thisT();
   }
 
@@ -198,8 +187,7 @@ public abstract class AbstractManagedChannelImplBuilder
         getNameResolverParams(),
         firstNonNull(loadBalancerFactory, SimpleLoadBalancerFactory.getInstance()),
         transportFactory,
-        firstNonNull(decompressorRegistry, DecompressorRegistry.getDefaultInstance()),
-        firstNonNull(compressorRegistry, CompressorRegistry.getDefaultInstance()),
+        firstNonNull(compressionNegotiator, new CompressionNegotiator()),
         executor, userAgent, interceptors);
   }
 

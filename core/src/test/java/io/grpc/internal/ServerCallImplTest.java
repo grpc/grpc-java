@@ -44,6 +44,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.io.CharStreams;
 import com.google.common.util.concurrent.Futures;
 
+import io.grpc.CompressionNegotiator;
 import io.grpc.Context;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -89,7 +90,8 @@ public class ServerCallImplTest {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     context = Context.ROOT.withCancellation();
-    call = new ServerCallImpl<Long, Long>(stream, method, context);
+    call = new ServerCallImpl<Long, Long>(stream, method, context, new CompressionNegotiator(),
+        new Metadata());
   }
 
   @Test
