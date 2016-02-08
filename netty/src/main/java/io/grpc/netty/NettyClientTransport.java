@@ -177,7 +177,7 @@ class NettyClientTransport implements ManagedClientTransport {
     notifyShutdown(Status.OK.withDescription("Channel requested transport to shut down"));
     // Notifying of termination is automatically done when the channel closes.
     if (channel != null && channel.isOpen()) {
-      channel.close();
+      handler.getWriteQueue().enqueue(new GracefulCloseCommand(), true);
     }
   }
 

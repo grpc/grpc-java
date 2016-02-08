@@ -214,6 +214,11 @@ class NettyClientHandler extends AbstractNettyHandler {
       ((RequestMessagesCommand) msg).requestMessages();
     } else if (msg instanceof SendPingCommand) {
       sendPingFrame(ctx, (SendPingCommand) msg, promise);
+    } else if (msg instanceof GracefulCloseCommand) {
+      // Explicitly flush to create any buffered streams before sending GOAWAY.
+      // TODO(ejona): determine if the need to flush is a bug in Netty
+      flush(ctx);
+      close(ctx, promise);
     } else if (msg == NOOP_MESSAGE) {
       ctx.write(Unpooled.EMPTY_BUFFER, promise);
     } else {
@@ -268,6 +273,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   @Override
   public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
     logger.fine("Network channel being closed by the application.");
+    goAwayStatus(Status.UNAVAILABLE.withDescription("Channel requested transport shutdown"));
     super.close(ctx, promise);
   }
 
@@ -331,6 +337,12 @@ class NettyClientHandler extends AbstractNettyHandler {
    */
   private void createStream(CreateStreamCommand command, final ChannelPromise promise)
           throws Exception {
+    if (goAwayStatus != null) {
+      // The connection is going away, just terminate the stream now.
+      promise.setFailure(goAwayStatusThrowable);
+      return;
+    }
+
     // Get the stream ID for the new stream.
     final int streamId;
     try {
@@ -351,12 +363,6 @@ class NettyClientHandler extends AbstractNettyHandler {
     final NettyClientStream stream = command.stream();
     final Http2Headers headers = command.headers();
     stream.id(streamId);
-
-    if (goAwayStatus != null) {
-      // The connection is going away, just terminate the stream now.
-      promise.setFailure(goAwayStatusThrowable);
-      return;
-    }
 
     // Create an intermediate promise so that we can intercept the failure reported back to the
     // application.
