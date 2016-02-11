@@ -42,6 +42,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientTransport;
+import io.grpc.internal.DebugFlags;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -53,7 +54,10 @@ import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.AsciiString;
 
 import java.net.SocketAddress;
+import java.util.Map.Entry;
 import java.util.concurrent.Executor;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -61,6 +65,8 @@ import javax.annotation.concurrent.GuardedBy;
  * A Netty-based {@link ClientTransport} implementation.
  */
 class NettyClientTransport implements ClientTransport {
+  private static final Logger logger = Logger.getLogger(NettyClientTransport.class.getName());
+
   private final SocketAddress address;
   private final Class<? extends Channel> channelType;
   private final EventLoopGroup group;
@@ -114,6 +120,14 @@ class NettyClientTransport implements ClientTransport {
     headers.removeAll(AUTHORITY_KEY);
     final Http2Headers http2Headers = Utils.convertClientHeaders(
         headers, negotiationHandler.scheme(), defaultPath, defaultAuthority);
+
+    if (DebugFlags.shouldLogHeaders()) {
+      StringBuilder sb = new StringBuilder(String.format("Sending headers: %n"));
+      for (Entry<CharSequence, CharSequence> header : http2Headers) {
+        sb.append(String.format("  %s: %s%n", header.getKey(), header.getValue()));
+      }
+      logger.log(Level.INFO, sb.toString());
+    }
 
     class StartCallback implements Runnable {
       final NettyClientStream clientStream =

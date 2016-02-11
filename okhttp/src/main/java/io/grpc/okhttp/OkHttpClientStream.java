@@ -38,6 +38,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener;
+import io.grpc.internal.DebugFlags;
 import io.grpc.internal.Http2ClientStream;
 import io.grpc.internal.WritableBuffer;
 import io.grpc.okhttp.internal.framed.ErrorCode;
@@ -48,6 +49,8 @@ import okio.Buffer;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
@@ -57,6 +60,7 @@ import javax.annotation.concurrent.GuardedBy;
  */
 class OkHttpClientStream extends Http2ClientStream {
 
+  private static final Logger log = Logger.getLogger(OkHttpClientStream.class.getName());
   private static final int WINDOW_UPDATE_THRESHOLD = Utils.DEFAULT_WINDOW_SIZE / 2;
 
   private static final Buffer EMPTY_BUFFER = new Buffer();
@@ -175,6 +179,14 @@ class OkHttpClientStream extends Http2ClientStream {
    */
   @GuardedBy("lock")
   public void transportHeadersReceived(List<Header> headers, boolean endOfStream) {
+    if (DebugFlags.shouldLogHeaders()) {
+      StringBuilder sb = new StringBuilder(String.format("Received headers on stream %d:%n", id()));
+      for (Header header : headers) {
+        sb.append(String.format("  %s%n", header));
+      }
+      log.log(Level.INFO, sb.toString());
+    }
+
     if (endOfStream) {
       transportTrailersReceived(Utils.convertTrailers(headers));
     } else {

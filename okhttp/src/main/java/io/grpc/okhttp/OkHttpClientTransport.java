@@ -45,6 +45,7 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.internal.ClientTransport;
+import io.grpc.internal.DebugFlags;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
 import io.grpc.internal.SerializingExecutor;
@@ -247,11 +248,20 @@ class OkHttpClientTransport implements ClientTransport {
     Preconditions.checkNotNull(headers, "headers");
 
     final String defaultPath = "/" + method.getFullMethodName();
+    final List<Header> okHttpHeaders =
+        Headers.createRequestHeaders(headers, defaultPath, defaultAuthority);
+    if (DebugFlags.shouldLogHeaders()) {
+      StringBuilder sb = new StringBuilder(String.format("Sending headers: %n"));
+      for (Header header : okHttpHeaders) {
+        sb.append(String.format("  %s%n", header));
+      }
+      log.log(Level.INFO, sb.toString());
+    }
+
     class StartCallback implements Runnable {
       final OkHttpClientStream clientStream = new OkHttpClientStream(
           frameWriter, OkHttpClientTransport.this, this, outboundFlow, method.getType(), lock,
-          Headers.createRequestHeaders(headers, defaultPath, defaultAuthority),
-          maxMessageSize);
+          okHttpHeaders, maxMessageSize);
 
       @Override
       public void run() {

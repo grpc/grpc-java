@@ -37,6 +37,7 @@ import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
 
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener;
+import io.grpc.internal.DebugFlags;
 import io.grpc.internal.Http2ClientStream;
 import io.grpc.internal.WritableBuffer;
 import io.netty.buffer.ByteBuf;
@@ -46,12 +47,18 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2Stream;
 
+import java.util.Map.Entry;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import javax.annotation.Nullable;
 
 /**
  * Client stream for a Netty transport.
  */
 class NettyClientStream extends Http2ClientStream {
+  private static final Logger logger = Logger.getLogger(NettyClientStream.class.getName());
+
   private final Channel channel;
   private final NettyClientHandler handler;
   private final Runnable startCallback;
@@ -116,6 +123,13 @@ class NettyClientStream extends Http2ClientStream {
   }
 
   void transportHeadersReceived(Http2Headers headers, boolean endOfStream) {
+    if (DebugFlags.shouldLogHeaders()) {
+      StringBuilder sb = new StringBuilder(String.format("Received headers on stream %d:%n", id()));
+      for (Entry<CharSequence, CharSequence> header : headers) {
+        sb.append(String.format("  %s: %s%n", header.getKey(), header.getValue()));
+      }
+      logger.log(Level.INFO, sb.toString());
+    }
     if (endOfStream) {
       transportTrailersReceived(Utils.convertTrailers(headers));
     } else {
