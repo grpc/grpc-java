@@ -262,8 +262,6 @@ class OkHttpClientStream extends Http2ClientStream {
       }
       cancelSent = true;
       if (pendingData != null) {
-        // stream is pending.
-        transport.removePendingStream(this);
         // release holding data, so they can be GCed or returned to pool earlier.
         requestHeaders = null;
         for (PendingData data : pendingData) {
@@ -271,6 +269,8 @@ class OkHttpClientStream extends Http2ClientStream {
         }
         pendingData = null;
         transportReportStatus(reason, true, new Metadata());
+        // stream is pending.
+        transport.removePendingStream(this);
       } else {
         // If pendingData is null, start must have already been called, which means synStream has
         // been called as well.

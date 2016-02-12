@@ -660,7 +660,6 @@ public class OkHttpClientTransportTest {
     stream2.start(listener2);
     assertEquals(2, activeStreamCount());
     clientTransport.shutdown();
-    verify(frameWriter, timeout(TIME_OUT_MS)).goAway(eq(0), eq(ErrorCode.NO_ERROR), (byte[]) any());
 
     assertEquals(2, activeStreamCount());
     verify(transportListener).transportShutdown(isA(Status.class));
@@ -672,6 +671,7 @@ public class OkHttpClientTransportTest {
     assertEquals(0, activeStreamCount());
     assertEquals(Status.CANCELLED.getCode(), listener1.status.getCode());
     assertEquals(Status.CANCELLED.getCode(), listener2.status.getCode());
+    verify(frameWriter, timeout(TIME_OUT_MS)).goAway(eq(0), eq(ErrorCode.NO_ERROR), (byte[]) any());
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
     shutdownAndVerify();
   }
@@ -853,7 +853,7 @@ public class OkHttpClientTransportTest {
   }
 
   @Test
-  public void pendingStreamFailedByShutdown() throws Exception {
+  public void pendingStreamSucceedAfterShutdown() throws Exception {
     initTransport();
     setMaxConcurrentStreams(0);
     final MockStreamListener listener = new MockStreamListener();
@@ -863,10 +863,11 @@ public class OkHttpClientTransportTest {
     waitForStreamPending(1);
 
     clientTransport.shutdown();
-
-    listener.waitUntilStreamClosed();
-    assertEquals(Status.UNAVAILABLE.getCode(), listener.status.getCode());
-    assertEquals(0, clientTransport.getPendingStreamSize());
+    setMaxConcurrentStreams(1);
+    verify(frameWriter, timeout(TIME_OUT_MS))
+        .synStream(anyBoolean(), anyBoolean(), eq(3), anyInt(), anyListHeader());
+    assertEquals(1, activeStreamCount());
+    stream.sendCancel(Status.CANCELLED);
     shutdownAndVerify();
   }
 
@@ -897,7 +898,7 @@ public class OkHttpClientTransportTest {
     stream1.cancel(Status.CANCELLED);
     listener1.waitUntilStreamClosed();
     listener3.waitUntilStreamClosed();
-    assertEquals(Status.INTERNAL.getCode(), listener3.status.getCode());
+    assertEquals(Status.UNAVAILABLE.getCode(), listener3.status.getCode());
     assertEquals(0, clientTransport.getPendingStreamSize());
     assertEquals(1, activeStreamCount());
     stream2 = getStream(startId + 2);
@@ -1290,10 +1291,14 @@ public class OkHttpClientTransportTest {
     clientTransport.shutdown();
     allowTransportConnected();
 
-    // The new stream should be failed, as well as the pending stream.
+    // The new stream should be failed, but not the pending stream.
     assertNewStreamFail();
+    verify(frameWriter, timeout(TIME_OUT_MS))
+        .synStream(anyBoolean(), anyBoolean(), eq(3), anyInt(), anyListHeader());
+    assertEquals(1, activeStreamCount());
+    stream.cancel(Status.CANCELLED);
     listener.waitUntilStreamClosed();
-    assertEquals(Status.UNAVAILABLE.getCode(), listener.status.getCode());
+    assertEquals(Status.CANCELLED.getCode(), listener.status.getCode());
     shutdownAndVerify();
   }
 
@@ -1408,6 +1413,10 @@ public class OkHttpClientTransportTest {
         new Header(Status.CODE_KEY.name(), "0"),
         // Adding Content-Type for testing responses with only a single HEADERS frame.
         CONTENT_TYPE_HEADER);
+  }
+
+  private static List<Header> anyListHeader() {
+    return any();
   }
 
   private static class MockFrameReader implements FrameReader {
