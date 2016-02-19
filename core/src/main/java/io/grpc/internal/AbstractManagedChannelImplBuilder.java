@@ -32,10 +32,6 @@
 package io.grpc.internal;
 
 import static com.google.common.base.MoreObjects.firstNonNull;
-
-import com.google.common.base.Preconditions;
-import com.google.common.util.concurrent.MoreExecutors;
-
 import io.grpc.Attributes;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
@@ -57,6 +53,9 @@ import java.util.List;
 import java.util.concurrent.Executor;
 
 import javax.annotation.Nullable;
+
+import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.MoreExecutors;
 
 /**
  * The base class for channel builders.
@@ -93,6 +92,9 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Nullable
   private CompressorRegistry compressorRegistry;
+
+  @Nullable
+  private Attributes nameResolverParams = Attributes.EMPTY;
 
   protected AbstractManagedChannelImplBuilder(String target) {
     this.target = Preconditions.checkNotNull(target);
@@ -177,6 +179,13 @@ public abstract class AbstractManagedChannelImplBuilder
     return thisT();
   }
 
+  @Override
+  public final T nameResolverParams(Attributes params) {
+    Preconditions.checkNotNull(params, "nameResolverParams may not be null");
+    this.nameResolverParams = params;   
+    return thisT();
+  }
+  
   /**
    * Verifies the authority is valid.  This method exists as an escape hatch for putting in an
    * authority that is valid, but would fail the default validation provided by this
@@ -195,7 +204,7 @@ public abstract class AbstractManagedChannelImplBuilder
         // TODO(carl-mastrangelo): Allow clients to pass this in
         new ExponentialBackoffPolicy.Provider(),
         firstNonNull(nameResolverFactory, NameResolverRegistry.getDefaultRegistry()),
-        getNameResolverParams(),
+        getNameResolverParams().overrideWith(nameResolverParams),
         firstNonNull(loadBalancerFactory, SimpleLoadBalancerFactory.getInstance()),
         transportFactory,
         firstNonNull(decompressorRegistry, DecompressorRegistry.getDefaultInstance()),

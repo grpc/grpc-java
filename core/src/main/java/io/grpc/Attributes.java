@@ -31,12 +31,13 @@
 
 package io.grpc;
 
-import com.google.common.base.Preconditions;
-
 import java.util.HashMap;
 
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
+
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 
 /**
  * An immutable type-safe container of attributes.
@@ -59,6 +60,22 @@ public final class Attributes {
   @Nullable
   public <T> T get(Key<T> key) {
     return (T) data.get(key.name);
+  }
+  
+  @VisibleForTesting
+  int size() {
+    return data.size();
+  }
+  
+  /**
+   * Create a new Attributes object that contains all attributes in this
+   * object overridden with attributes in other.
+   */
+  public Attributes overrideWith(Attributes other) {
+    Attributes result = new Attributes();
+    result.data.putAll(this.data);
+    result.data.putAll(other.data);
+    return result;
   }
 
   /**
