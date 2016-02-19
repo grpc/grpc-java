@@ -61,6 +61,7 @@ import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
 import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
 import io.netty.handler.codec.http2.DefaultHttp2HeadersDecoder;
 import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
+import io.netty.handler.codec.http2.DefaultHttp2RemoteFlowController;
 import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2ConnectionAdapter;
@@ -78,6 +79,7 @@ import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.handler.codec.http2.Http2StreamVisitor;
+import io.netty.handler.codec.http2.UniformStreamByteDistributor;
 import io.netty.handler.logging.LogLevel;
 
 import java.util.Random;
@@ -144,6 +146,9 @@ class NettyClientHandler extends AbstractNettyHandler {
     frameReader = new Http2InboundFrameLogger(frameReader, frameLogger);
     frameWriter = new Http2OutboundFrameLogger(frameWriter, frameLogger);
 
+    // Override default flow controller to avoid netty/netty#4758
+    connection.remote().flowController(new DefaultHttp2RemoteFlowController(connection,
+          new UniformStreamByteDistributor(connection)));
     BufferingHttp2ConnectionEncoder encoder = new BufferingHttp2ConnectionEncoder(
         new DefaultHttp2ConnectionEncoder(connection, frameWriter)) {
       private boolean firstSettings = true;
