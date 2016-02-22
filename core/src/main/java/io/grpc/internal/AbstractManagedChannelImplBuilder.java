@@ -93,7 +93,6 @@ public abstract class AbstractManagedChannelImplBuilder
   @Nullable
   private CompressorRegistry compressorRegistry;
 
-  @Nullable
   private Attributes nameResolverParams = Attributes.EMPTY;
 
   protected AbstractManagedChannelImplBuilder(String target) {
