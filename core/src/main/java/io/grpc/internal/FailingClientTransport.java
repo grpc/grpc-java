@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Google Inc. All rights reserved.
+ * Copyright 2016, Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -29,41 +29,41 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc;
+package io.grpc.internal;
+
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
+import io.grpc.Status;
+
+import java.util.concurrent.Executor;
 
 /**
- * A {@link ServerCall.Listener} which forwards all of its methods to another {@link
- * ServerCall.Listener} of matching parameterized types.
+ * A client transport that creates streams that will immediately fail when started.
  */
-public abstract class ForwardingServerCallListener<ReqT>
-    extends PartialForwardingServerCallListener<ReqT> {
-  /**
-   * Returns the delegated {@code ServerCall.Listener}.
-   */
-  @Override
-  protected abstract ServerCall.Listener<ReqT> delegate();
+class FailingClientTransport implements ClientTransport {
 
-  @Override
-  public void onMessage(ReqT message) {
-    delegate().onMessage(message);
+  @VisibleForTesting
+  final Status error;
+
+  FailingClientTransport(Status error) {
+    Preconditions.checkArgument(!error.isOk(), "error must not be OK");
+    this.error = error;
   }
 
-  /**
-   * A simplified version of {@link ForwardingServerCallListener} where subclasses can pass in a
-   * {@link ServerCall.Listener} as the delegate.
-   */
-  public abstract static class SimpleForwardingServerCallListener<ReqT>
-      extends ForwardingServerCallListener<ReqT> {
+  @Override
+  public ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers) {
+    return new FailingClientStream(error);
+  }
 
-    private final ServerCall.Listener<ReqT> delegate;
-
-    protected SimpleForwardingServerCallListener(ServerCall.Listener<ReqT> delegate) {
-      this.delegate = delegate;
-    }
-
-    @Override
-    protected ServerCall.Listener<ReqT> delegate() {
-      return delegate;
-    }
+  @Override
+  public void ping(final PingCallback callback, Executor executor) {
+    executor.execute(new Runnable() {
+        @Override public void run() {
+          callback.onFailure(error.asException());
+        }
+      });
   }
 }

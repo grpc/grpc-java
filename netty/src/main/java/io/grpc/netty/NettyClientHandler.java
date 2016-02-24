@@ -78,6 +78,7 @@ import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.handler.codec.http2.Http2StreamVisitor;
+import io.netty.handler.codec.http2.StreamBufferingEncoder;
 import io.netty.handler.logging.LogLevel;
 
 import java.util.Random;
@@ -113,7 +114,6 @@ class NettyClientHandler extends AbstractNettyHandler {
   private Http2Ping ping;
   private Status goAwayStatus;
   private Throwable goAwayStatusThrowable;
-  private int nextStreamId;
 
   static NettyClientHandler newHandler(ManagedClientTransport.Listener listener,
                                        int flowControlWindow, int maxHeaderListSize,
@@ -144,7 +144,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     frameReader = new Http2InboundFrameLogger(frameReader, frameLogger);
     frameWriter = new Http2OutboundFrameLogger(frameWriter, frameLogger);
 
-    BufferingHttp2ConnectionEncoder encoder = new BufferingHttp2ConnectionEncoder(
+    StreamBufferingEncoder encoder = new StreamBufferingEncoder(
         new DefaultHttp2ConnectionEncoder(connection, frameWriter)) {
       private boolean firstSettings = true;
 
@@ -174,7 +174,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   }
 
   private NettyClientHandler(Http2ConnectionDecoder decoder,
-                             BufferingHttp2ConnectionEncoder encoder, Http2Settings settings,
+                             StreamBufferingEncoder encoder, Http2Settings settings,
                              Ticker ticker) {
     super(decoder, encoder, settings);
     this.ticker = ticker;
@@ -184,7 +184,6 @@ class NettyClientHandler extends AbstractNettyHandler {
 
     Http2Connection connection = encoder.connection();
     streamKey = connection.newKey();
-    nextStreamId = connection.local().nextStreamId();
     connection.addListener(new Http2ConnectionAdapter() {
       @Override
       public void onGoAwayReceived(int lastStreamId, long errorCode, ByteBuf debugData) {
@@ -323,7 +322,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   protected boolean isGracefulShutdownComplete() {
     // Only allow graceful shutdown to complete after all pending streams have completed.
     return super.isGracefulShutdownComplete()
-        && ((BufferingHttp2ConnectionEncoder) encoder()).numBufferedStreams() == 0;
+        && ((StreamBufferingEncoder) encoder()).numBufferedStreams() == 0;
   }
 
   /**
@@ -335,7 +334,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     // Get the stream ID for the new stream.
     final int streamId;
     try {
-      streamId = getAndIncrementNextStreamId();
+      streamId = incrementAndGetNextStreamId();
     } catch (StatusException e) {
       // Stream IDs have been exhausted for this connection. Fail the promise immediately.
       promise.setFailure(e);
@@ -385,8 +384,9 @@ class NettyClientHandler extends AbstractNettyHandler {
                   promise.setSuccess();
                 } else {
                   final Throwable cause = future.cause();
-                  if (cause instanceof GoAwayClosedStreamException) {
-                    GoAwayClosedStreamException e = (GoAwayClosedStreamException) cause;
+                  if (cause instanceof StreamBufferingEncoder.Http2GoAwayException) {
+                    StreamBufferingEncoder.Http2GoAwayException e =
+                        (StreamBufferingEncoder.Http2GoAwayException) cause;
                     goAwayStatus(statusFromGoAway(e.errorCode(), e.debugData()));
                     promise.setFailure(goAwayStatusThrowable);
                   } else {
@@ -529,16 +529,14 @@ class NettyClientHandler extends AbstractNettyHandler {
     return stream == null ? null : (NettyClientStream) stream.getProperty(streamKey);
   }
 
-  private int getAndIncrementNextStreamId() throws StatusException {
+  private int incrementAndGetNextStreamId() throws StatusException {
+    int nextStreamId = connection().local().incrementAndGetNextStreamId();
     if (nextStreamId < 0) {
       logger.fine("Stream IDs have been exhausted for this connection. "
               + "Initiating graceful shutdown of the connection.");
       throw EXHAUSTED_STREAMS_STATUS.asException();
     }
-
-    int id = nextStreamId;
-    nextStreamId += 2;
-    return id;
+    return nextStreamId;
   }
 
   private Http2Stream requireHttp2Stream(int streamId) {

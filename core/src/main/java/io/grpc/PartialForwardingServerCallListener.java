@@ -29,29 +29,37 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.netty;
+package io.grpc;
 
-class GoAwayClosedStreamException extends Exception {
-  private static final long serialVersionUID = 1326785622777291198L;
-  private final int lastStreamId;
-  private final long errorCode;
-  private final byte[] debugData;
+/**
+ * A {@link ServerCall.Listener} which forwards all of its methods to another {@link
+ * ServerCall.Listener} which may have a different parameterized type than the
+ * onMessage() message type.
+ */
+abstract class PartialForwardingServerCallListener<ReqT>
+    extends ServerCall.Listener<ReqT> {
+  /**
+   * Returns the delegated {@code ServerCall.Listener}.
+   */
+  protected abstract ServerCall.Listener<?> delegate();
 
-  GoAwayClosedStreamException(int lastStreamId, long errorCode, byte[] debugData) {
-    this.lastStreamId = lastStreamId;
-    this.errorCode = errorCode;
-    this.debugData = debugData;
+  @Override
+  public void onHalfClose() {
+    delegate().onHalfClose();
   }
 
-  int lastStreamId() {
-    return lastStreamId;
+  @Override
+  public void onCancel() {
+    delegate().onCancel();
   }
 
-  long errorCode() {
-    return errorCode;
+  @Override
+  public void onComplete() {
+    delegate().onComplete();
   }
 
-  byte[] debugData() {
-    return debugData;
+  @Override
+  public void onReady() {
+    delegate().onReady();
   }
 }
