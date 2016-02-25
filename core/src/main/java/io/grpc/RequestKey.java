@@ -31,17 +31,116 @@
 
 package io.grpc;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 
 /**
  * A key generated from an RPC request, and to be used for affinity-based
- * routing.
+ * routing.  For affinity-based routing the RequestKey contains a map of 
+ * key-value pairs to be used for equality matching against labels associated
+ * with servers.
  */
 @ExperimentalApi
-public final class RequestKey {
+public class RequestKey {
+  final public static RequestKey NONE = new RequestKey();
+  
+  private Map<String, String> affinities = new LinkedHashMap<String, String>();
+  private boolean additive = true;
 
-  // TODO(zhangkun83): materialize this class once we decide the form of the affinity key.
+  // TODO(zhangkun83): materialize this class once we decide the form of the
+  // affinity key.
   @VisibleForTesting
   RequestKey() {
+  }
+
+  public RequestKey extendWith(RequestKey key) {
+    RequestKey newKey = new RequestKey();
+    newKey.affinities.putAll(this.affinities);
+    newKey.affinities.putAll(key.affinities);
+    return newKey;
+  }
+
+  public static Builder newBuilder() {
+    return new Builder();
+  }
+
+  public final static class Builder {
+    RequestKey requestKey = new RequestKey();
+
+    public Builder affinityTo(String key, String value) {
+      Preconditions.checkNotNull(key, "key must not be null");
+      Preconditions.checkNotNull(key, "value must not be null");
+      Preconditions.checkNotNull(requestKey, "build() already called");
+      requestKey.affinities.put(key, value);
+      return this;
+    }
+
+    public Builder additive(boolean flag) {
+      requestKey.additive = flag;
+      return this;
+    }
+
+    public RequestKey build() {
+      Preconditions.checkNotNull(requestKey, "build() already called");
+      try {
+        return requestKey;
+      } finally {
+        requestKey = null;
+      }
+    }
+  }
+
+  public Map<String, String> getAffinities() {
+    return Collections.unmodifiableMap(affinities);
+  }
+
+  /**
+   * @return True if this RequestKey's affinity is to be applied on top of the default affinity or
+   *         false to be used as the entire affinity for the request
+   */
+  public boolean isAdditive() {
+    return this.additive;
+  }
+
+  public boolean hasAffinity() {
+    return !affinities.isEmpty();
+  }
+
+  @Override
+  public String toString() {
+    return "RequestKey [tags=" + affinities + "]";
+  }
+
+  @Override
+  public int hashCode() {
+    final int prime = 31;
+    int result = 1;
+    result = prime * result + (additive ? 1231 : 1237);
+    result = prime * result
+        + ((affinities == null) ? 0 : affinities.hashCode());
+    return result;
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj)
+      return true;
+    if (obj == null)
+      return false;
+    if (getClass() != obj.getClass())
+      return false;
+    RequestKey other = (RequestKey) obj;
+    if (additive != other.additive)
+      return false;
+    if (affinities == null) {
+      if (other.affinities != null)
+        return false;
+    } else if (!affinities.equals(other.affinities))
+      return false;
+    return true;
   }
 }

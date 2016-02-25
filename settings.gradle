@@ -12,6 +12,7 @@ include ":grpc-interop-testing"
 include ":grpc-all"
 include ":grpc-benchmarks"
 include ":grpc-examples"
+include ":grpc-loadbalancers"
 
 project(':grpc-core').projectDir = "$rootDir/core" as File
 project(':grpc-stub').projectDir = "$rootDir/stub" as File
@@ -21,6 +22,7 @@ project(':grpc-protobuf').projectDir = "$rootDir/protobuf" as File
 project(':grpc-protobuf-nano').projectDir = "$rootDir/protobuf-nano" as File
 project(':grpc-netty').projectDir = "$rootDir/netty" as File
 project(':grpc-grpclb').projectDir = "$rootDir/grpclb" as File
+project(':grpc-loadbalancers').projectDir = "$rootDir/loadbalancers" as File
 project(':grpc-testing').projectDir = "$rootDir/testing" as File
 project(':grpc-interop-testing').projectDir = "$rootDir/interop-testing" as File
 project(':grpc-all').projectDir = "$rootDir/all" as File
