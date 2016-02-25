@@ -155,8 +155,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T nameResolverFactory(NameResolver.Factory resolverFactory);
 
   /*
-   * Provides the {@link Attributes} to pass into the {@link NameResolver.Factory#newNameResolver} for this
-   * channel
+   * Provides the {@link Attributes} to pass into the {@link NameResolver.Factory#newNameResolver} 
+   * for this channel
    */
   @ExperimentalApi
   public abstract T nameResolverParams(Attributes attributes);

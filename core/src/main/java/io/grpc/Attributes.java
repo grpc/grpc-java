@@ -31,13 +31,12 @@
 
 package io.grpc;
 
+import com.google.common.base.Preconditions;
+
 import java.util.HashMap;
 
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
-
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 
 /**
  * An immutable type-safe container of attributes.
@@ -62,7 +61,6 @@ public final class Attributes {
     return (T) data.get(key.name);
   }
   
-  @VisibleForTesting
   int size() {
     return data.size();
   }
