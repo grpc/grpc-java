@@ -57,10 +57,28 @@ public class Contexts {
         ServerCall<RespT> call,
         Metadata headers,
         ServerCallHandler<ReqT, RespT> next) {
+    return interceptCall(context, next.startCall(method, call, headers));
+  }
+
+  /**
+   * Make the provided {@link Context} {@link Context#current()} for the creation of a listener
+   * to a received call and for all events received by that listener.
+   *
+   * <p>This utility is expected to be used by {@link ServerInterceptor} implementations that need
+   * to augment the {@link Context} in which the application does work when receiving events from
+   * the client.
+   *
+   * @param context to make {@link Context#current()}.
+   * @param listener the listener to be made context aware.
+   * @return listener that will receive events in the scope of the provided context.
+   */
+  public static <ReqT> ServerCall.Listener<ReqT> interceptCall(
+      Context context,
+      ServerCall.Listener<ReqT> listener) {
     Context previous = context.attach();
     try {
       return new ContextualizedServerCallListener<ReqT>(
-          next.startCall(method, call, headers),
+          listener,
           context);
     } finally {
       context.detach(previous);
