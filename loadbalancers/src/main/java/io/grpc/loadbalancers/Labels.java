@@ -20,7 +20,7 @@ import com.google.common.base.Preconditions;
 @ExperimentalApi
 public final class Labels {
 
-  public static final Attributes.Key<Labels> ATTRIBUTE = new Attributes.Key<>("io.grpc.NameResolver.Labels");
+  public static final Attributes.Key<Labels> ATTRIBUTE = new Attributes.Key<Labels>("io.grpc.NameResolver.Labels");
   
   public static class Builder {
     private Map<String, Set<String>> labels = new LinkedHashMap<>();
