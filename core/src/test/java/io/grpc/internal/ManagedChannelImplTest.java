@@ -41,6 +41,7 @@ import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
 import static org.mockito.Matchers.same;
+import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -197,7 +198,11 @@ public class ManagedChannelImplTest {
     verify(mockTransport, timeout(1000)).newStream(same(method), same(headers));
     verify(mockStream).start(streamListenerCaptor.capture());
     verify(mockStream).setCompressor(isA(Compressor.class));
-    verify(mockStream).setMessageCompression(anyBoolean());
+    // Depends on how quick the real transport is created, ClientCallImpl may start on mockStream
+    // directly, or on a DelayedStream which later starts mockStream. In the former case,
+    // setMessageCompression() is not called. In the latter case, it is (in
+    // DelayedStream.startStream()).
+    verify(mockStream, atMost(1)).setMessageCompression(anyBoolean());
     ClientStreamListener streamListener = streamListenerCaptor.getValue();
 
     // Second call
