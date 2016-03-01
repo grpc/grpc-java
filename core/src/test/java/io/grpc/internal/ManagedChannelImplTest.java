@@ -37,6 +37,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
 import static org.mockito.Matchers.same;
@@ -196,6 +197,7 @@ public class ManagedChannelImplTest {
     verify(mockTransport, timeout(1000)).newStream(same(method), same(headers));
     verify(mockStream).start(streamListenerCaptor.capture());
     verify(mockStream).setCompressor(isA(Compressor.class));
+    verify(mockStream).setMessageCompression(anyBoolean());
     ClientStreamListener streamListener = streamListenerCaptor.getValue();
 
     // Second call
