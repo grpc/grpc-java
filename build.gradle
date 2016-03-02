@@ -279,6 +279,7 @@ subprojects {
             showExceptions true
             showCauses true
             showStackTraces true
+            events 'standard_error'
         }
         maxHeapSize = '1500m'
     }
