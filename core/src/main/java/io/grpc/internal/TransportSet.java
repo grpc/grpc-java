@@ -34,6 +34,7 @@ package io.grpc.internal;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 
@@ -45,6 +46,7 @@ import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -156,6 +158,7 @@ final class TransportSet {
     if (savedTransport != null) {
       return Futures.<ClientTransport>immediateFuture(savedTransport);
     }
+    Callable<ClientTransport> immediateConnectionTask = null;
     synchronized (lock) {
       // Check again, since it could have changed before acquiring the lock
       if (activeTransport == null && !shutdown) {
@@ -163,14 +166,29 @@ final class TransportSet {
         transports.add(delayedTransport);
         delayedTransport.start(new BaseTransportListener(delayedTransport));
         activeTransport = delayedTransport;
-        scheduleConnection();
+        immediateConnectionTask = scheduleConnection();
       }
-      return Futures.<ClientTransport>immediateFuture(activeTransport);
+      savedTransport = activeTransport;
     }
+    if (immediateConnectionTask != null) {
+      try {
+        return Futures.<ClientTransport>immediateFuture(immediateConnectionTask.call());
+      } catch (Exception e) {
+        throw Throwables.propagate(e);
+      }
+    }
+    return Futures.<ClientTransport>immediateFuture(savedTransport);
   }
 
+  /**
+   * Schedule a task that creates a new transport.
+   *
+   * @return if not {@code null}, caller should run the returned callable outside of lock. The
+   *         callable returns the real transport that has been created.
+   */
+  @Nullable
   @GuardedBy("lock")
-  private void scheduleConnection() {
+  private Callable<ClientTransport> scheduleConnection() {
     Preconditions.checkState(reconnectTask == null || reconnectTask.isDone(),
         "previous reconnectTask is not done");
 
@@ -182,14 +200,15 @@ final class TransportSet {
       nextAddressIndex = 0;
     }
 
-    Runnable createTransportRunnable = new Runnable() {
+    final Callable<ClientTransport> createTransportCallable = new Callable<ClientTransport>() {
       @Override
-      public void run() {
+      public ClientTransport call() {
         DelayedClientTransport savedDelayedTransport;
         ManagedClientTransport newActiveTransport;
         boolean savedShutdown;
         synchronized (lock) {
           savedShutdown = shutdown;
+          reconnectTask = null;
           if (currentAddressIndex == headIndex) {
             backoffWatch.reset().start();
           }
@@ -219,6 +238,7 @@ final class TransportSet {
           // See comments in the synchronized block above on why we shutdown here.
           newActiveTransport.shutdown();
         }
+        return newActiveTransport;
       }
     };
 
@@ -238,10 +258,20 @@ final class TransportSet {
     if (delayMillis <= 0) {
       reconnectTask = null;
       // No back-off this time.
-      createTransportRunnable.run();
+      // Note createTransportRunnable is not supposed to run under the lock.
+      return createTransportCallable;
     } else {
       reconnectTask = scheduledExecutor.schedule(
-          createTransportRunnable, delayMillis, TimeUnit.MILLISECONDS);
+          new Runnable() {
+            @Override public void run() {
+              try {
+                createTransportCallable.call();
+              } catch (Exception e) {
+                throw Throwables.propagate(e);
+              }
+            }
+          }, delayMillis, TimeUnit.MILLISECONDS);
+      return null;
     }
   }
 

@@ -73,7 +73,7 @@ import java.net.SocketAddress;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedList;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -174,7 +174,7 @@ public class ManagedChannelImplTransportManagerTest {
     SocketAddress addr2 = mock(SocketAddress.class);
     EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(Arrays.asList(addr1, addr2));
 
-    LinkedList<MockClientTransportInfo> transports =
+    BlockingQueue<MockClientTransportInfo> transports =
         TestUtils.captureTransports(mockTransportFactory);
 
     // Invocation counters
@@ -222,7 +222,7 @@ public class ManagedChannelImplTransportManagerTest {
     SocketAddress addr2 = mock(SocketAddress.class);
     EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(Arrays.asList(addr1, addr2));
 
-    LinkedList<MockClientTransportInfo> transports =
+    BlockingQueue<MockClientTransportInfo> transports =
         TestUtils.captureTransports(mockTransportFactory);
 
     // Invocation counters
