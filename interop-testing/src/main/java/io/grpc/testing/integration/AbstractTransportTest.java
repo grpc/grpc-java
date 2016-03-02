@@ -70,6 +70,7 @@ import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.StreamRecorder;
 import io.grpc.testing.TestUtils;
+import io.grpc.testing.TestWatchDog;
 import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.PayloadType;
 import io.grpc.testing.integration.Messages.ResponseParameters;
@@ -137,12 +138,14 @@ public abstract class AbstractTransportTest {
   protected ManagedChannel channel;
   protected TestServiceGrpc.TestServiceBlockingStub blockingStub;
   protected TestServiceGrpc.TestService asyncStub;
+  protected TestWatchDog watchDog;
 
   /**
    * Must be called by the subclass setup method if overridden.
    */
   @Before
   public void setUp() {
+    watchDog = new TestWatchDog(9, TimeUnit.SECONDS);
     channel = createChannel();
     blockingStub = TestServiceGrpc.newBlockingStub(channel);
     asyncStub = TestServiceGrpc.newStub(channel);
@@ -155,6 +158,7 @@ public abstract class AbstractTransportTest {
     if (channel != null) {
       channel.shutdown();
     }
+    watchDog.close();
   }
 
   protected abstract ManagedChannel createChannel();

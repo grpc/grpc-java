@@ -194,6 +194,7 @@ final class TransportSet {
         boolean savedShutdown;
         synchronized (lock) {
           savedShutdown = shutdown;
+          reconnectTask = null;
           if (currentAddressIndex == 0) {
             backoffWatch.reset().start();
           }
@@ -238,14 +239,14 @@ final class TransportSet {
       }
     }
     firstAttempt = false;
-    if (delayMillis <= 0) {
-      reconnectTask = null;
-      // No back-off this time.
-      createTransportRunnable.run();
-    } else {
-      reconnectTask = scheduledExecutor.schedule(
-          createTransportRunnable, delayMillis, TimeUnit.MILLISECONDS);
-    }
+    // TODO(zhangkun83): If delayedMillis <= 0, it would be better to run createTransportRunnable
+    // inline to get better performance. However, since this method is run under lock, if we ran
+    // createTransportRunnable inline, savedDelayedTransport.setTransport() will be under lock which
+    // violates the assumption made in https://github.com/grpc/grpc-java/issues/1408 that "there is
+    // an implicit rule today that channel layer will not hold any lock while calling into
+    // transport", and had caused deadlock.
+    reconnectTask = scheduledExecutor.schedule(
+        createTransportRunnable, delayMillis, TimeUnit.MILLISECONDS);
   }
 
   /**
