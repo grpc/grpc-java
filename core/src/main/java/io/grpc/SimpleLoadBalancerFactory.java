@@ -86,7 +86,7 @@ public final class SimpleLoadBalancerFactory extends LoadBalancer.Factory {
     }
 
     @Override
-    public T pickTransport(@Nullable RequestKey requestKey) {
+    public T pickTransport(@Nullable Attributes attributes) {
       EquivalentAddressGroup addressesCopy;
       synchronized (lock) {
         if (closed) {

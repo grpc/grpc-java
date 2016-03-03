@@ -40,7 +40,6 @@ import io.grpc.Attributes;
 import io.grpc.Channel;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
-import io.grpc.RequestKey;
 import io.grpc.ResolvedServerInfo;
 import io.grpc.Status;
 import io.grpc.TransportManager.InterimTransport;
@@ -125,7 +124,7 @@ class GrpclbLoadBalancer<T> extends LoadBalancer<T> {
   }
 
   @Override
-  public T pickTransport(@Nullable RequestKey requestKey) {
+  public T pickTransport(@Nullable Attributes requestKey) {
     RoundRobinServerList<T> serverListCopy;
     synchronized (lock) {
       if (closed) {

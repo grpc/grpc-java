@@ -61,7 +61,7 @@ public final class CallOptions {
   private String authority;
 
   @Nullable
-  private RequestKey requestKey;
+  private Attributes attributes;
 
   @Nullable
   private String compressorName;
@@ -130,9 +130,9 @@ public final class CallOptions {
    * Returns a new {@code CallOptions} with a request key for affinity-based routing.
    */
   @ExperimentalApi
-  public CallOptions withRequestKey(@Nullable RequestKey requestKey) {
+  public CallOptions withAttributes(@Nullable Attributes attributes) {
     CallOptions newOptions = new CallOptions(this);
-    newOptions.requestKey = requestKey;
+    newOptions.attributes = attributes;
     return newOptions;
   }
 
@@ -141,8 +141,8 @@ public final class CallOptions {
    */
   @ExperimentalApi
   @Nullable
-  public RequestKey getRequestKey() {
-    return requestKey;
+  public Attributes getAttributes() {
+    return attributes;
   }
 
 
@@ -194,7 +194,7 @@ public final class CallOptions {
   private CallOptions(CallOptions other) {
     deadlineNanoTime = other.deadlineNanoTime;
     authority = other.authority;
-    requestKey = other.requestKey;
+    attributes = other.attributes;
     executor = other.executor;
     compressorName = other.compressorName;
   }
