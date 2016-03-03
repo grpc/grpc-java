@@ -57,9 +57,7 @@ import io.netty.handler.ssl.SslProvider;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameter;
@@ -79,9 +77,6 @@ import java.util.concurrent.TimeUnit;
  */
 @RunWith(Parameterized.class)
 public class TlsTest {
-
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   /**
    * Iterable of various configurations to use for tests.
