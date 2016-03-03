@@ -34,6 +34,7 @@ package io.grpc.testing.integration;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
+import com.google.api.client.repackaged.com.google.common.base.Throwables;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.EmptyProtos.Empty;
 
@@ -56,7 +57,9 @@ import io.netty.handler.ssl.SslProvider;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameter;
@@ -76,6 +79,10 @@ import java.util.concurrent.TimeUnit;
  */
 @RunWith(Parameterized.class)
 public class TlsTest {
+
+  @Rule
+  public final ExpectedException thrown = ExpectedException.none();
+
   /**
    * Iterable of various configurations to use for tests.
    */
@@ -192,7 +199,9 @@ public class TlsTest {
       // GRPC reports this situation by throwing a StatusRuntimeException that wraps either a
       // javax.net.ssl.SSLHandshakeException or a java.nio.channels.ClosedChannelException.
       // Thus, reliably detecting the underlying cause is not feasible.
-      assertEquals(Status.Code.UNAVAILABLE, e.getStatus().getCode());
+      assertEquals(
+          Throwables.getStackTraceAsString(e),
+          Status.Code.UNAVAILABLE, e.getStatus().getCode());
     }
   }
 
@@ -232,7 +241,9 @@ public class TlsTest {
       // GRPC reports this situation by throwing a StatusRuntimeException that wraps either a
       // javax.net.ssl.SSLHandshakeException or a java.nio.channels.ClosedChannelException.
       // Thus, reliably detecting the underlying cause is not feasible.
-      assertEquals(Status.Code.UNAVAILABLE, e.getStatus().getCode());
+      assertEquals(
+          Throwables.getStackTraceAsString(e),
+          Status.Code.UNAVAILABLE, e.getStatus().getCode());
     }
   }
 
@@ -275,7 +286,10 @@ public class TlsTest {
       // GRPC reports this situation by throwing a StatusRuntimeException that wraps either a
       // javax.net.ssl.SSLHandshakeException or a java.nio.channels.ClosedChannelException.
       // Thus, reliably detecting the underlying cause is not feasible.
-      assertEquals(Status.Code.UNAVAILABLE, e.getStatus().getCode());
+      // TODO(carl-mastrangelo): eventually replace this with a hamcrest matcher.
+      assertEquals(
+          Throwables.getStackTraceAsString(e),
+          Status.Code.UNAVAILABLE, e.getStatus().getCode());
     }
   }
 
