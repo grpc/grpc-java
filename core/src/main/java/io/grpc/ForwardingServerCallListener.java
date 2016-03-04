@@ -33,37 +33,19 @@ package io.grpc;
 
 /**
  * A {@link ServerCall.Listener} which forwards all of its methods to another {@link
- * ServerCall.Listener}.
+ * ServerCall.Listener} of matching parameterized types.
  */
-public abstract class ForwardingServerCallListener<ReqT> extends ServerCall.Listener<ReqT> {
+public abstract class ForwardingServerCallListener<ReqT>
+    extends PartialForwardingServerCallListener<ReqT> {
   /**
    * Returns the delegated {@code ServerCall.Listener}.
    */
+  @Override
   protected abstract ServerCall.Listener<ReqT> delegate();
 
   @Override
   public void onMessage(ReqT message) {
     delegate().onMessage(message);
-  }
-
-  @Override
-  public void onHalfClose() {
-    delegate().onHalfClose();
-  }
-
-  @Override
-  public void onCancel() {
-    delegate().onCancel();
-  }
-
-  @Override
-  public void onComplete() {
-    delegate().onComplete();
-  }
-
-  @Override
-  public void onReady() {
-    delegate().onReady();
   }
 
   /**

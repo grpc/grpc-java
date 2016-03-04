@@ -32,8 +32,6 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static io.grpc.Status.Code.CANCELLED;
-import static io.grpc.Status.Code.DEADLINE_EXCEEDED;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
@@ -51,9 +49,7 @@ import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.EnumSet;
 import java.util.Map.Entry;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -146,12 +142,6 @@ public final class GrpcUtil {
    */
   public static final int DEFAULT_MAX_HEADER_LIST_SIZE = 8192;
 
-  /**
-   * The set of valid status codes for client cancellation.
-   */
-  public static final Set<Status.Code> CANCEL_REASONS =
-          EnumSet.of(CANCELLED, DEADLINE_EXCEEDED, Status.Code.INTERNAL, Status.Code.UNKNOWN);
-
   public static final Splitter ACCEPT_ENCODING_SPLITER = Splitter.on(',').trimResults();
 
   public static final Joiner ACCEPT_ENCODING_JOINER = Joiner.on(',');
@@ -210,15 +200,17 @@ public final class GrpcUtil {
     HTTP_1_1_REQUIRED(0xD, Status.UNKNOWN);
 
     // Populate a mapping of code to enum value for quick look-up.
-    private static final Http2Error[] codeMap;
-    static {
+    private static final Http2Error[] codeMap = buildHttp2CodeMap();
+
+    private static Http2Error[] buildHttp2CodeMap() {
       Http2Error[] errors = Http2Error.values();
       int size = (int) errors[errors.length - 1].code() + 1;
-      codeMap = new Http2Error[size];
+      Http2Error[] http2CodeMap = new Http2Error[size];
       for (Http2Error error : errors) {
         int index = (int) error.code();
-        codeMap[index] = error;
+        http2CodeMap[index] = error;
       }
+      return http2CodeMap;
     }
 
     private final int code;

@@ -33,7 +33,11 @@ package io.grpc;
 
 import com.google.common.base.Preconditions;
 
+import java.io.BufferedInputStream;
+import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -45,10 +49,41 @@ public class ServerInterceptors {
 
   /**
    * Create a new {@code ServerServiceDefinition} whose {@link ServerCallHandler}s will call
+   * {@code interceptors} before calling the pre-existing {@code ServerCallHandler}. The first
+   * interceptor will have its {@link ServerInterceptor#interceptCall} called first.
+   *
+   * @param serviceDef   the service definition for which to intercept all its methods.
+   * @param interceptors array of interceptors to apply to the service.
+   * @return a wrapped version of {@code serviceDef} with the interceptors applied.
+   */
+  public static ServerServiceDefinition interceptForward(ServerServiceDefinition serviceDef,
+                                                         ServerInterceptor... interceptors) {
+    return interceptForward(serviceDef, Arrays.asList(interceptors));
+  }
+
+  /**
+   * Create a new {@code ServerServiceDefinition} whose {@link ServerCallHandler}s will call
+   * {@code interceptors} before calling the pre-existing {@code ServerCallHandler}. The first
+   * interceptor will have its {@link ServerInterceptor#interceptCall} called first.
+   *
+   * @param serviceDef   the service definition for which to intercept all its methods.
+   * @param interceptors list of interceptors to apply to the service.
+   * @return a wrapped version of {@code serviceDef} with the interceptors applied.
+   */
+  public static ServerServiceDefinition interceptForward(
+      ServerServiceDefinition serviceDef,
+      List<? extends ServerInterceptor> interceptors) {
+    List<? extends ServerInterceptor> copy = new ArrayList<ServerInterceptor>(interceptors);
+    Collections.reverse(copy);
+    return intercept(serviceDef, copy);
+  }
+
+  /**
+   * Create a new {@code ServerServiceDefinition} whose {@link ServerCallHandler}s will call
    * {@code interceptors} before calling the pre-existing {@code ServerCallHandler}. The last
    * interceptor will have its {@link ServerInterceptor#interceptCall} called first.
    *
-   * @param serviceDef the service definition for which to intercept all its methods.
+   * @param serviceDef   the service definition for which to intercept all its methods.
    * @param interceptors array of interceptors to apply to the service.
    * @return a wrapped version of {@code serviceDef} with the interceptors applied.
    */
@@ -62,12 +97,12 @@ public class ServerInterceptors {
    * {@code interceptors} before calling the pre-existing {@code ServerCallHandler}. The last
    * interceptor will have its {@link ServerInterceptor#interceptCall} called first.
    *
-   * @param serviceDef the service definition for which to intercept all its methods.
+   * @param serviceDef   the service definition for which to intercept all its methods.
    * @param interceptors list of interceptors to apply to the service.
    * @return a wrapped version of {@code serviceDef} with the interceptors applied.
    */
   public static ServerServiceDefinition intercept(ServerServiceDefinition serviceDef,
-      List<? extends ServerInterceptor> interceptors) {
+                                                  List<? extends ServerInterceptor> interceptors) {
     Preconditions.checkNotNull(serviceDef);
     if (interceptors.isEmpty()) {
       return serviceDef;
@@ -78,6 +113,72 @@ public class ServerInterceptors {
       wrapAndAddMethod(serviceDefBuilder, method, interceptors);
     }
     return serviceDefBuilder.build();
+  }
+
+  /**
+   * Create a new {@code ServerServiceDefinition} whose {@link MethodDescriptor} serializes to
+   * and from InputStream for all methods.  The InputStream is guaranteed return true for
+   * markSupported().  The {@code ServerCallHandler} created will automatically
+   * convert back to the original types for request and response before calling the existing
+   * {@code ServerCallHandler}.  Calling this method combined with the intercept methods will
+   * allow the developer to choose whether to intercept messages of InputStream, or the modeled
+   * types of their application.
+   *
+   * @param serviceDef the service definition to convert messages to InputStream
+   * @return a wrapped version of {@code serviceDef} with the InputStream conversion applied.
+   */
+  @ExperimentalApi
+  public static ServerServiceDefinition useInputStreamMessages(
+      final ServerServiceDefinition serviceDef) {
+    final MethodDescriptor.Marshaller<InputStream> marshaller =
+        new MethodDescriptor.Marshaller<InputStream>() {
+      @Override
+      public InputStream stream(final InputStream value) {
+        return value;
+      }
+
+      @Override
+      public InputStream parse(final InputStream stream) {
+        if (stream.markSupported()) {
+          return stream;
+        } else {
+          return new BufferedInputStream(stream);
+        }
+      }
+    };
+
+    return useMarshalledMessages(serviceDef, marshaller);
+  }
+
+  /**
+   * Create a new {@code ServerServiceDefinition} whose {@link MethodDescriptor} serializes to
+   * and from T for all methods.  The {@code ServerCallHandler} created will automatically
+   * convert back to the original types for request and response before calling the existing
+   * {@code ServerCallHandler}.  Calling this method combined with the intercept methods will
+   * allow the developer to choose whether to intercept messages of T, or the modeled types
+   * of their application.  This can also be chained to allow for interceptors to handle messages
+   * as multiple different T types within the chain if the added cost of serialization is not
+   * a concern.
+   *
+   * @param serviceDef the service definition to convert messages to T
+   * @return a wrapped version of {@code serviceDef} with the T conversion applied.
+   */
+  @ExperimentalApi
+  public static <T> ServerServiceDefinition useMarshalledMessages(
+      final ServerServiceDefinition serviceDef,
+      final MethodDescriptor.Marshaller<T> marshaller) {
+    final ServerServiceDefinition.Builder serviceBuilder = ServerServiceDefinition
+        .builder(serviceDef.getName());
+    for (final ServerMethodDefinition<?, ?> definition : serviceDef.getMethods()) {
+      final MethodDescriptor<?, ?> originalMethodDescriptor = definition.getMethodDescriptor();
+      final MethodDescriptor<T, T> wrappedMethodDescriptor = MethodDescriptor
+          .create(originalMethodDescriptor.getType(),
+              originalMethodDescriptor.getFullMethodName(),
+              marshaller,
+              marshaller);
+      serviceBuilder.addMethod(wrapMethod(definition, wrappedMethodDescriptor));
+    }
+    return serviceBuilder.build();
   }
 
   private static <ReqT, RespT> void wrapAndAddMethod(
@@ -100,7 +201,7 @@ public class ServerInterceptors {
     private final ServerCallHandler<ReqT, RespT> callHandler;
 
     private InterceptCallHandler(ServerInterceptor interceptor,
-        ServerCallHandler<ReqT, RespT> callHandler) {
+                                 ServerCallHandler<ReqT, RespT> callHandler) {
       this.interceptor = Preconditions.checkNotNull(interceptor, "interceptor");
       this.callHandler = callHandler;
     }
@@ -112,5 +213,59 @@ public class ServerInterceptors {
         Metadata headers) {
       return interceptor.interceptCall(method, call, headers, callHandler);
     }
+  }
+
+  private static <OReqT, ORespT, WReqT, WRespT> ServerMethodDefinition<WReqT, WRespT> wrapMethod(
+      final ServerMethodDefinition<OReqT, ORespT> definition,
+      final MethodDescriptor<WReqT, WRespT> wrappedMethod) {
+    final ServerCallHandler<WReqT, WRespT> wrappedHandler = wrapHandler(
+        definition.getServerCallHandler(),
+        definition.getMethodDescriptor(),
+        wrappedMethod);
+    return ServerMethodDefinition.create(wrappedMethod, wrappedHandler);
+  }
+
+  private static <OReqT, ORespT, WReqT, WRespT> ServerCallHandler<WReqT, WRespT> wrapHandler(
+      final ServerCallHandler<OReqT, ORespT> originalHandler,
+      final MethodDescriptor<OReqT, ORespT> originalMethod,
+      final MethodDescriptor<WReqT, WRespT> wrappedMethod) {
+    return new ServerCallHandler<WReqT, WRespT>() {
+      @Override
+      public ServerCall.Listener<WReqT> startCall(
+          final MethodDescriptor<WReqT, WRespT> method,
+          final ServerCall<WRespT> call,
+          final Metadata headers) {
+        final ServerCall<ORespT> unwrappedCall = new PartialForwardingServerCall<ORespT>() {
+          @Override
+          protected ServerCall<WRespT> delegate() {
+            return call;
+          }
+
+          @Override
+          public void sendMessage(ORespT message) {
+            final InputStream is = originalMethod.streamResponse(message);
+            final WRespT wrappedMessage = wrappedMethod.parseResponse(is);
+            delegate().sendMessage(wrappedMessage);
+          }
+        };
+
+        final ServerCall.Listener<OReqT> originalListener = originalHandler
+            .startCall(originalMethod, unwrappedCall, headers);
+
+        return new PartialForwardingServerCallListener<WReqT>() {
+          @Override
+          protected ServerCall.Listener<OReqT> delegate() {
+            return originalListener;
+          }
+
+          @Override
+          public void onMessage(WReqT message) {
+            final InputStream is = wrappedMethod.streamRequest(message);
+            final OReqT originalMessage = originalMethod.parseRequest(is);
+            delegate().onMessage(originalMessage);
+          }
+        };
+      }
+    };
   }
 }

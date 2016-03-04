@@ -58,6 +58,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.io.IOException;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -75,8 +76,8 @@ public class CascadingTest {
   private ManagedChannelImpl channel;
   private ServerImpl server;
   private AtomicInteger nodeCount;
-  private AtomicInteger observedCancellations;
-  private AtomicInteger receivedCancellations;
+  private CountDownLatch observedCancellations;
+  private CountDownLatch receivedCancellations;
   private TestServiceGrpc.TestServiceBlockingStub blockingStub;
   private TestServiceGrpc.TestServiceStub asyncStub;
   private ScheduledExecutorService scheduler;
@@ -86,8 +87,6 @@ public class CascadingTest {
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
     nodeCount = new AtomicInteger();
-    observedCancellations = new AtomicInteger();
-    receivedCancellations = new AtomicInteger();
     scheduler = Executors.newScheduledThreadPool(1);
     // Use a cached thread pool as we need a thread for each blocked call
     otherWork = Executors.newCachedThreadPool();
@@ -111,7 +110,10 @@ public class CascadingTest {
    */
   @Test
   public void testCascadingCancellationViaOuterContextExpiration() throws Exception {
+    observedCancellations = new CountDownLatch(2);
+    receivedCancellations = new CountDownLatch(3);
     startChainingServer(3);
+
     Context.current().withDeadlineAfter(500, TimeUnit.MILLISECONDS, scheduler).attach();
     try {
       blockingStub.unaryCall(Messages.SimpleRequest.getDefaultInstance());
@@ -121,17 +123,16 @@ public class CascadingTest {
       Status status = Status.fromThrowable(sre);
       assertEquals(Status.Code.CANCELLED, status.getCode());
 
-      // Wait for the channel to shutdown so we know all the calls have completed
-      channel.shutdown();
-      channel.awaitTermination(5, TimeUnit.SECONDS);
-
       // Should have 3 calls before timeout propagates
       assertEquals(3, nodeCount.get());
 
       // Should have observed 2 cancellations responses from downstream servers
-      assertEquals(2, observedCancellations.get());
-      // and received 3 cancellations from upstream clients
-      assertEquals(3, receivedCancellations.get());
+      if (!observedCancellations.await(5, TimeUnit.SECONDS)) {
+        fail("Expected number of cancellations not observed by clients");
+      }
+      if (!receivedCancellations.await(5, TimeUnit.SECONDS)) {
+        fail("Expected number of cancellations to be received by servers not observed");
+      }
     }
   }
 
@@ -140,7 +141,10 @@ public class CascadingTest {
    */
   @Test
   public void testCascadingCancellationViaMethodTimeout() throws Exception {
+    observedCancellations = new CountDownLatch(2);
+    receivedCancellations = new CountDownLatch(3);
     startChainingServer(3);
+
     try {
       blockingStub.withDeadlineAfter(500, TimeUnit.MILLISECONDS)
           .unaryCall(Messages.SimpleRequest.getDefaultInstance());
@@ -152,16 +156,14 @@ public class CascadingTest {
       // receive cancellation.
       assertEquals(Status.Code.DEADLINE_EXCEEDED, status.getCode());
 
-      // Wait for the channel to shutdown so we know all the calls have completed
-      channel.shutdown();
-      channel.awaitTermination(5, TimeUnit.SECONDS);
-
       // Should have 3 calls before deadline propagates
       assertEquals(3, nodeCount.get());
-      // Server should have observed 2 cancellations from downstream calls
-      assertEquals(2, observedCancellations.get());
-      // and received 2 cancellations
-      assertEquals(3, receivedCancellations.get());
+      if (!observedCancellations.await(5, TimeUnit.SECONDS)) {
+        fail("Expected number of cancellations not observed by clients");
+      }
+      if (!receivedCancellations.await(5, TimeUnit.SECONDS)) {
+        fail("Expected number of cancellations to be received by servers not observed");
+      }
     }
   }
 
@@ -171,6 +173,9 @@ public class CascadingTest {
    */
   @Test
   public void testCascadingCancellationViaLeafFailure() throws Exception {
+    // All nodes (15) except one edge of the tree (4) will be cancelled.
+    observedCancellations = new CountDownLatch(11);
+    receivedCancellations = new CountDownLatch(11);
     startCallTreeServer(3);
     try {
       // Use response size limit to control tree nodeCount.
@@ -183,13 +188,12 @@ public class CascadingTest {
       // The descendant RPCs are cancelled so they receive CANCELLED.
       assertEquals(Status.Code.ABORTED, status.getCode());
 
-      // Wait for the channel to shutdown so we know all the calls have completed
-      channel.shutdown();
-      channel.awaitTermination(5, TimeUnit.SECONDS);
-
-      // All nodes (15) except one edge of the tree (4) will be cancelled.
-      assertEquals(11, observedCancellations.get());
-      assertEquals(11, receivedCancellations.get());
+      if (!observedCancellations.await(5, TimeUnit.SECONDS)) {
+        fail("Expected number of cancellations not observed by clients");
+      }
+      if (!receivedCancellations.await(5, TimeUnit.SECONDS)) {
+        fail("Expected number of cancellations to be received by servers not observed");
+      }
     }
   }
 
@@ -198,7 +202,7 @@ public class CascadingTest {
    */
   private void startChainingServer(final int depthThreshold)
       throws IOException {
-    server = InProcessServerBuilder.forName("channel").addService(
+    server = InProcessServerBuilder.forName("channel").executor(otherWork).addService(
         ServerInterceptors.intercept(TestServiceGrpc.bindService(service),
             new ServerInterceptor() {
               @Override
@@ -218,7 +222,7 @@ public class CascadingTest {
                       return;
                     }
 
-                    Context.propagate(otherWork).execute(new Runnable() {
+                    Context.currentContextExecutor(otherWork).execute(new Runnable() {
                       @Override
                       public void run() {
                         try {
@@ -226,7 +230,7 @@ public class CascadingTest {
                         } catch (Exception e) {
                           Status status = Status.fromThrowable(e);
                           if (status.getCode() == Status.Code.CANCELLED) {
-                            observedCancellations.incrementAndGet();
+                            observedCancellations.countDown();
                           } else if (status.getCode() == Status.Code.ABORTED) {
                             // Propagate aborted back up
                             call.close(status, new Metadata());
@@ -238,7 +242,7 @@ public class CascadingTest {
 
                   @Override
                   public void onCancel() {
-                    receivedCancellations.incrementAndGet();
+                    receivedCancellations.countDown();
                   }
                 };
               }
@@ -254,7 +258,7 @@ public class CascadingTest {
    */
   private void startCallTreeServer(int depthThreshold) throws IOException {
     final AtomicInteger nodeCount = new AtomicInteger((2 << depthThreshold) - 1);
-    server = InProcessServerBuilder.forName("channel").addService(
+    server = InProcessServerBuilder.forName("channel").executor(otherWork).addService(
         ServerInterceptors.intercept(TestServiceGrpc.bindService(service),
             new ServerInterceptor() {
               @Override
@@ -272,7 +276,7 @@ public class CascadingTest {
                     Messages.SimpleRequest req = (Messages.SimpleRequest) message;
                     if (nodeCount.decrementAndGet() == 0) {
                       // we are in the final leaf node so trigger an ABORT upwards
-                      Context.propagate(otherWork).execute(new Runnable() {
+                      Context.currentContextExecutor(otherWork).execute(new Runnable() {
                         @Override
                         public void run() {
                           call.close(Status.ABORTED, new Metadata());
@@ -293,7 +297,7 @@ public class CascadingTest {
                               public void onError(Throwable t) {
                                 Status status = Status.fromThrowable(t);
                                 if (status.getCode() == Status.Code.CANCELLED) {
-                                  observedCancellations.incrementAndGet();
+                                  observedCancellations.countDown();
                                 }
                                 // Propagate closure upwards.
                                 try {
@@ -313,7 +317,7 @@ public class CascadingTest {
 
                   @Override
                   public void onCancel() {
-                    receivedCancellations.incrementAndGet();
+                    receivedCancellations.countDown();
                   }
                 };
               }

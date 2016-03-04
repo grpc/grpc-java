@@ -78,6 +78,7 @@ import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.handler.codec.http2.Http2StreamVisitor;
+import io.netty.handler.codec.http2.StreamBufferingEncoder;
 import io.netty.handler.logging.LogLevel;
 
 import java.util.Random;
@@ -113,7 +114,6 @@ class NettyClientHandler extends AbstractNettyHandler {
   private Http2Ping ping;
   private Status goAwayStatus;
   private Throwable goAwayStatusThrowable;
-  private int nextStreamId;
 
   static NettyClientHandler newHandler(ManagedClientTransport.Listener listener,
                                        int flowControlWindow, int maxHeaderListSize,
@@ -144,7 +144,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     frameReader = new Http2InboundFrameLogger(frameReader, frameLogger);
     frameWriter = new Http2OutboundFrameLogger(frameWriter, frameLogger);
 
-    BufferingHttp2ConnectionEncoder encoder = new BufferingHttp2ConnectionEncoder(
+    StreamBufferingEncoder encoder = new StreamBufferingEncoder(
         new DefaultHttp2ConnectionEncoder(connection, frameWriter)) {
       private boolean firstSettings = true;
 
@@ -174,7 +174,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   }
 
   private NettyClientHandler(Http2ConnectionDecoder decoder,
-                             BufferingHttp2ConnectionEncoder encoder, Http2Settings settings,
+                             StreamBufferingEncoder encoder, Http2Settings settings,
                              Ticker ticker) {
     super(decoder, encoder, settings);
     this.ticker = ticker;
@@ -184,7 +184,6 @@ class NettyClientHandler extends AbstractNettyHandler {
 
     Http2Connection connection = encoder.connection();
     streamKey = connection.newKey();
-    nextStreamId = connection.local().nextStreamId();
     connection.addListener(new Http2ConnectionAdapter() {
       @Override
       public void onGoAwayReceived(int lastStreamId, long errorCode, ByteBuf debugData) {
@@ -194,6 +193,11 @@ class NettyClientHandler extends AbstractNettyHandler {
     });
   }
 
+  /**
+   * Return the reason the handler failed. Only intended to be used by {@link NettyClientTransport}.
+   * Most other classes should retrieve the transport's shutdown status, since it may be more
+   * complete.
+   */
   @Nullable
   public Status errorStatus() {
     return goAwayStatus;
@@ -215,6 +219,11 @@ class NettyClientHandler extends AbstractNettyHandler {
       ((RequestMessagesCommand) msg).requestMessages();
     } else if (msg instanceof SendPingCommand) {
       sendPingFrame(ctx, (SendPingCommand) msg, promise);
+    } else if (msg instanceof GracefulCloseCommand) {
+      // Explicitly flush to create any buffered streams before sending GOAWAY.
+      // TODO(ejona): determine if the need to flush is a bug in Netty
+      flush(ctx);
+      close(ctx, promise);
     } else if (msg == NOOP_MESSAGE) {
       ctx.write(Unpooled.EMPTY_BUFFER, promise);
     } else {
@@ -269,6 +278,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   @Override
   public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
     logger.fine("Network channel being closed by the application.");
+    goAwayStatus(Status.UNAVAILABLE.withDescription("Channel requested transport shutdown"));
     super.close(ctx, promise);
   }
 
@@ -323,7 +333,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   protected boolean isGracefulShutdownComplete() {
     // Only allow graceful shutdown to complete after all pending streams have completed.
     return super.isGracefulShutdownComplete()
-        && ((BufferingHttp2ConnectionEncoder) encoder()).numBufferedStreams() == 0;
+        && ((StreamBufferingEncoder) encoder()).numBufferedStreams() == 0;
   }
 
   /**
@@ -332,10 +342,16 @@ class NettyClientHandler extends AbstractNettyHandler {
    */
   private void createStream(CreateStreamCommand command, final ChannelPromise promise)
           throws Exception {
+    if (goAwayStatus != null) {
+      // The connection is going away, just terminate the stream now.
+      promise.setFailure(goAwayStatusThrowable);
+      return;
+    }
+
     // Get the stream ID for the new stream.
     final int streamId;
     try {
-      streamId = getAndIncrementNextStreamId();
+      streamId = incrementAndGetNextStreamId();
     } catch (StatusException e) {
       // Stream IDs have been exhausted for this connection. Fail the promise immediately.
       promise.setFailure(e);
@@ -352,12 +368,6 @@ class NettyClientHandler extends AbstractNettyHandler {
     final NettyClientStream stream = command.stream();
     final Http2Headers headers = command.headers();
     stream.id(streamId);
-
-    if (goAwayStatus != null) {
-      // The connection is going away, just terminate the stream now.
-      promise.setFailure(goAwayStatusThrowable);
-      return;
-    }
 
     // Create an intermediate promise so that we can intercept the failure reported back to the
     // application.
@@ -385,8 +395,9 @@ class NettyClientHandler extends AbstractNettyHandler {
                   promise.setSuccess();
                 } else {
                   final Throwable cause = future.cause();
-                  if (cause instanceof GoAwayClosedStreamException) {
-                    GoAwayClosedStreamException e = (GoAwayClosedStreamException) cause;
+                  if (cause instanceof StreamBufferingEncoder.Http2GoAwayException) {
+                    StreamBufferingEncoder.Http2GoAwayException e =
+                        (StreamBufferingEncoder.Http2GoAwayException) cause;
                     goAwayStatus(statusFromGoAway(e.errorCode(), e.debugData()));
                     promise.setFailure(goAwayStatusThrowable);
                   } else {
@@ -423,20 +434,25 @@ class NettyClientHandler extends AbstractNettyHandler {
    */
   private void sendPingFrame(ChannelHandlerContext ctx, SendPingCommand msg,
       ChannelPromise promise) {
+    // Don't check goAwayStatus since we want to allow pings after shutdown but before termination.
+    // After termination, messages will no longer arrive because the pipeline clears all handlers on
+    // channel close.
+
     PingCallback callback = msg.callback();
     Executor executor = msg.executor();
-    if (!ctx.channel().isOpen()) {
-      Http2Ping.notifyFailed(callback, executor, goAwayStatus().asException());
-      return;
-    }
-
     // we only allow one outstanding ping at a time, so just add the callback to
     // any outstanding operation
     if (ping != null) {
+      promise.setSuccess();
       ping.addCallback(callback, executor);
       return;
     }
 
+    // Use a new promise to prevent calling the callback twice on write failure: here and in
+    // NettyClientTransport.ping(). It may appear strange, but it will behave the same as if
+    // ping != null above.
+    promise.setSuccess();
+    promise = ctx().newPromise();
     // set outstanding operation
     long data = random.nextLong();
     ByteBuf buffer = ctx.alloc().buffer(8);
@@ -529,16 +545,14 @@ class NettyClientHandler extends AbstractNettyHandler {
     return stream == null ? null : (NettyClientStream) stream.getProperty(streamKey);
   }
 
-  private int getAndIncrementNextStreamId() throws StatusException {
+  private int incrementAndGetNextStreamId() throws StatusException {
+    int nextStreamId = connection().local().incrementAndGetNextStreamId();
     if (nextStreamId < 0) {
       logger.fine("Stream IDs have been exhausted for this connection. "
               + "Initiating graceful shutdown of the connection.");
       throw EXHAUSTED_STREAMS_STATUS.asException();
     }
-
-    int id = nextStreamId;
-    nextStreamId += 2;
-    return id;
+    return nextStreamId;
   }
 
   private Http2Stream requireHttp2Stream(int streamId) {

@@ -32,8 +32,6 @@
 package io.grpc.internal;
 
 import com.google.common.base.Preconditions;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
 
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -41,9 +39,6 @@ import io.grpc.ClientCall;
 import io.grpc.MethodDescriptor;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 
-import java.util.Collections;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -56,13 +51,11 @@ final class SingleTransportChannel extends Channel {
   private final Executor executor;
   private final String authority;
   private final ScheduledExecutorService deadlineCancellationExecutor;
-  private final Set<String> knownAcceptEncodingRegistry =
-      Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
 
   private final ClientTransportProvider transportProvider = new ClientTransportProvider() {
     @Override
-    public ListenableFuture<ClientTransport> get(CallOptions callOptions) {
-      return Futures.immediateFuture(transport);
+    public ClientTransport get(CallOptions callOptions) {
+      return transport;
     }
   };
 

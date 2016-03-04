@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Google Inc. All rights reserved.
+ * Copyright 2016, Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -31,27 +31,5 @@
 
 package io.grpc.netty;
 
-class GoAwayClosedStreamException extends Exception {
-  private static final long serialVersionUID = 1326785622777291198L;
-  private final int lastStreamId;
-  private final long errorCode;
-  private final byte[] debugData;
-
-  GoAwayClosedStreamException(int lastStreamId, long errorCode, byte[] debugData) {
-    this.lastStreamId = lastStreamId;
-    this.errorCode = errorCode;
-    this.debugData = debugData;
-  }
-
-  int lastStreamId() {
-    return lastStreamId;
-  }
-
-  long errorCode() {
-    return errorCode;
-  }
-
-  byte[] debugData() {
-    return debugData;
-  }
-}
+/** A command to trigger close. It is buffered differently than normal close. */
+class GracefulCloseCommand {}

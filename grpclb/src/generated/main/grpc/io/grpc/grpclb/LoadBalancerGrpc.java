@@ -13,12 +13,14 @@ import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
 import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
 import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
 
-@javax.annotation.Generated("by gRPC proto compiler")
+@javax.annotation.Generated(
+    value = "by gRPC proto compiler",
+    comments = "Source: load_balancer.proto")
 public class LoadBalancerGrpc {
 
   private LoadBalancerGrpc() {}
 
-  public static final String SERVICE_NAME = "loadbalancer_gslb.client.grpc.LoadBalancer";
+  public static final String SERVICE_NAME = "grpc.lb.v1.LoadBalancer";
 
   // Static method descriptors that strictly reflect the proto.
   @io.grpc.ExperimentalApi
@@ -27,7 +29,7 @@ public class LoadBalancerGrpc {
       io.grpc.MethodDescriptor.create(
           io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING,
           generateFullMethodName(
-              "loadbalancer_gslb.client.grpc.LoadBalancer", "BalanceLoad"),
+              "grpc.lb.v1.LoadBalancer", "BalanceLoad"),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.grpclb.LoadBalanceRequest.getDefaultInstance()),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.grpclb.LoadBalanceResponse.getDefaultInstance()));
 

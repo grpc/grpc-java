@@ -124,7 +124,7 @@ subprojects {
             epoll_suffix = ":" + osdetector.classifier
         }
         libraries = [
-                guava: 'com.google.guava:guava:18.0',
+                guava: 'com.google.guava:guava:19.0',
                 // used to collect benchmark results
                 hdrhistogram: 'org.hdrhistogram:HdrHistogram:2.1.4',
                 hpack: 'com.twitter:hpack:0.10.1',
@@ -135,10 +135,11 @@ subprojects {
                 protobuf: "com.google.protobuf:protobuf-java:${protobufVersion}",
                 protobuf_nano: "com.google.protobuf.nano:protobuf-javanano:${protobufNanoVersion}",
                 protobuf_plugin: 'com.google.protobuf:protobuf-gradle-plugin:0.7.4',
+                protobuf_util: "com.google.protobuf:protobuf-java-util:${protobufVersion}",
 
-                netty: 'io.netty:netty-codec-http2:4.1.0.CR1',
-                netty_epoll: 'io.netty:netty-transport-native-epoll:4.1.0.CR1' + epoll_suffix,
-                netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:1.1.33.Fork13:' + osdetector.classifier,
+                netty: 'io.netty:netty-codec-http2:4.1.0.CR3',
+                netty_epoll: 'io.netty:netty-transport-native-epoll:4.1.0.CR3' + epoll_suffix,
+                netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:1.1.33.Fork14:' + osdetector.classifier,
 
                 // Test dependencies.
                 junit: 'junit:junit:4.11',
@@ -280,5 +281,6 @@ subprojects {
             showCauses true
             showStackTraces true
         }
+        maxHeapSize = '1500m'
     }
 }
