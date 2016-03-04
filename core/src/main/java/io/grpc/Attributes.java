@@ -69,7 +69,7 @@ public final class Attributes {
    * Create a new Attributes object that contains all attributes in this
    * object overridden with attributes in other.
    */
-  public Attributes overrideWith(Attributes other) {
+  public Attributes appendWith(Attributes other) {
     Attributes result = new Attributes();
     result.data.putAll(this.data);
     result.data.putAll(other.data);

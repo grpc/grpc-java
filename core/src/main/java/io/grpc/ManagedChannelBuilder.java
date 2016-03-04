@@ -170,6 +170,13 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   @ExperimentalApi
   public abstract T loadBalancerFactory(LoadBalancer.Factory loadBalancerFactory);
 
+  /*
+   * Provides the {@link Attributes} to pass into the {@link LoadBalancer.Factory#newLoadBalancer} 
+   * for this channel
+   */
+  @ExperimentalApi
+  public abstract T loadBalancerParams(Attributes params);
+
   /**
    * Set the decompression registry for use in the channel.  This is an advanced API call and
    * shouldn't be used unless you are using custom message encoding.   The default supported

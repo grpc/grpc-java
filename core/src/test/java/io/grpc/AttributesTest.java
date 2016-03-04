@@ -47,7 +47,7 @@ public class AttributesTest {
 
     Attributes override = Attributes.newBuilder().set(key2, "value2").build();
 
-    Attributes result = original.overrideWith(override);
+    Attributes result = original.appendWith(override);
     Assert.assertEquals(2, result.size());
     Assert.assertEquals("value1", result.get(key1));
     Assert.assertEquals("value2", result.get(key2));
@@ -59,7 +59,7 @@ public class AttributesTest {
 
     Attributes override = Attributes.EMPTY;
 
-    Attributes result = original.overrideWith(override);
+    Attributes result = original.appendWith(override);
     Assert.assertEquals(1, result.size());
     Assert.assertEquals("value1", result.get(key1));
   }
@@ -70,7 +70,7 @@ public class AttributesTest {
 
     Attributes override = Attributes.newBuilder().set(key1, "override").build();
 
-    Attributes result = original.overrideWith(override);
+    Attributes result = original.appendWith(override);
     Assert.assertEquals(1, result.size());
     Assert.assertEquals("override", result.get(key1));
   }

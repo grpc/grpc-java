@@ -60,7 +60,8 @@ public final class SimpleLoadBalancerFactory extends LoadBalancer.Factory {
   }
 
   @Override
-  public <T> LoadBalancer<T> newLoadBalancer(String serviceName, TransportManager<T> tm) {
+  public <T> LoadBalancer<T> newLoadBalancer(String serviceName, Attributes attributes, 
+      TransportManager<T> tm) {
     return new SimpleLoadBalancer<T>(tm);
   }
 

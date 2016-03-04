@@ -31,6 +31,7 @@
 
 package io.grpc.grpclb;
 
+import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.TransportManager;
@@ -56,7 +57,8 @@ public class GrpclbLoadBalancerFactory extends LoadBalancer.Factory {
   }
 
   @Override
-  public <T> LoadBalancer<T> newLoadBalancer(String serviceName, TransportManager<T> tm) {
+  public <T> LoadBalancer<T> newLoadBalancer(String serviceName, Attributes attributes, 
+          TransportManager<T> tm) {
     return new GrpclbLoadBalancer<T>(serviceName, tm);
   }
 }

@@ -94,7 +94,7 @@ public abstract class AbstractManagedChannelImplBuilder
   @Nullable
   private CompressorRegistry compressorRegistry;
 
-  private Attributes nameResolverParams = Attributes.EMPTY;
+  private Attributes attributes = Attributes.EMPTY;
 
   protected AbstractManagedChannelImplBuilder(String target) {
     this.target = Preconditions.checkNotNull(target);
@@ -180,9 +180,16 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   @Override
+  public final T loadBalancerParams(Attributes params) {
+    Preconditions.checkNotNull(params, "nameResolverParams may not be null");
+    this.attributes = this.attributes.appendWith(params);   
+    return thisT();
+  }
+  
+  @Override
   public final T nameResolverParams(Attributes params) {
     Preconditions.checkNotNull(params, "nameResolverParams may not be null");
-    this.nameResolverParams = params;   
+    this.attributes = this.attributes.appendWith(params);   
     return thisT();
   }
   
@@ -204,7 +211,7 @@ public abstract class AbstractManagedChannelImplBuilder
         // TODO(carl-mastrangelo): Allow clients to pass this in
         new ExponentialBackoffPolicy.Provider(),
         firstNonNull(nameResolverFactory, NameResolverRegistry.getDefaultRegistry()),
-        getNameResolverParams().overrideWith(nameResolverParams),
+        getNameResolverParams().appendWith(attributes),
         firstNonNull(loadBalancerFactory, SimpleLoadBalancerFactory.getInstance()),
         transportFactory,
         firstNonNull(decompressorRegistry, DecompressorRegistry.getDefaultInstance()),

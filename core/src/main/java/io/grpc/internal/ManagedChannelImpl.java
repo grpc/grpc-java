@@ -93,7 +93,7 @@ public final class ManagedChannelImpl extends ManagedChannel {
   private final boolean usingSharedExecutor;
   private final String userAgent;
   private final Object lock = new Object();
-
+  
   private final DecompressorRegistry decompressorRegistry;
   private final CompressorRegistry compressorRegistry;
 
@@ -142,7 +142,7 @@ public final class ManagedChannelImpl extends ManagedChannel {
   };
 
   ManagedChannelImpl(String target, BackoffPolicy.Provider backoffPolicyProvider,
-      NameResolver.Factory nameResolverFactory, Attributes nameResolverParams,
+      NameResolver.Factory nameResolverFactory, Attributes shardAttributes,
       LoadBalancer.Factory loadBalancerFactory, ClientTransportFactory transportFactory,
       DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
       @Nullable Executor executor, @Nullable String userAgent,
@@ -155,8 +155,9 @@ public final class ManagedChannelImpl extends ManagedChannel {
       this.executor = executor;
     }
     this.backoffPolicyProvider = backoffPolicyProvider;
-    this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
-    this.loadBalancer = loadBalancerFactory.newLoadBalancer(nameResolver.getServiceAuthority(), tm);
+    this.nameResolver = getNameResolver(target, nameResolverFactory, shardAttributes);
+    this.loadBalancer = loadBalancerFactory.newLoadBalancer(nameResolver.getServiceAuthority(), 
+        shardAttributes, tm);
     this.transportFactory = transportFactory;
     this.userAgent = userAgent;
     this.interceptorChannel = ClientInterceptors.intercept(new RealChannel(), interceptors);

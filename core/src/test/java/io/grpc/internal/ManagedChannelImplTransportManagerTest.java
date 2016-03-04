@@ -136,7 +136,8 @@ public class ManagedChannelImplTransportManagerTest {
     @SuppressWarnings("unchecked")
     LoadBalancer<ClientTransport> loadBalancer = mock(LoadBalancer.class);
     when(mockLoadBalancerFactory
-        .newLoadBalancer(anyString(), Matchers.<TransportManager<ClientTransport>>any()))
+        .newLoadBalancer(anyString(), Matchers.<Attributes>any(), 
+            Matchers.<TransportManager<ClientTransport>>any()))
         .thenReturn(loadBalancer);
 
     channel = new ManagedChannelImpl("fake://target", mockBackoffPolicyProvider,
@@ -147,7 +148,8 @@ public class ManagedChannelImplTransportManagerTest {
 
     ArgumentCaptor<TransportManager<ClientTransport>> tmCaptor
         = ArgumentCaptor.forClass(null);
-    verify(mockLoadBalancerFactory).newLoadBalancer(anyString(), tmCaptor.capture());
+    verify(mockLoadBalancerFactory).newLoadBalancer(anyString(), 
+        Matchers.<Attributes>any(), tmCaptor.capture());
     tm = tmCaptor.getValue();
     transports = TestUtils.captureTransports(mockTransportFactory);
   }
