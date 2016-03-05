@@ -154,6 +154,13 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   @ExperimentalApi
   public abstract T nameResolverFactory(NameResolver.Factory resolverFactory);
 
+  /*
+   * Provides the {@link Attributes} to pass into the {@link NameResolver.Factory#newNameResolver} 
+   * for this channel
+   */
+  @ExperimentalApi
+  public abstract T nameResolverParams(Attributes attributes);
+
   /**
    * Provides a custom {@link LoadBalancer.Factory} for the channel.
    *
@@ -162,6 +169,13 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    */
   @ExperimentalApi
   public abstract T loadBalancerFactory(LoadBalancer.Factory loadBalancerFactory);
+
+  /*
+   * Provides the {@link Attributes} to pass into the {@link LoadBalancer.Factory#newLoadBalancer} 
+   * for this channel
+   */
+  @ExperimentalApi
+  public abstract T loadBalancerParams(Attributes params);
 
   /**
    * Set the decompression registry for use in the channel.  This is an advanced API call and
@@ -183,4 +197,5 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * Builds a channel using the given parameters.
    */
   public abstract ManagedChannel build();
+
 }

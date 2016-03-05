@@ -97,6 +97,7 @@ public abstract class LoadBalancer<T> {
      * @param tm the interface where an {@code LoadBalancer} implementation gets connected
      *               transports from
      */
-    public abstract <T> LoadBalancer<T> newLoadBalancer(String serviceName, TransportManager<T> tm);
+    public abstract <T> LoadBalancer<T> newLoadBalancer(String serviceName, Attributes attributes, 
+        TransportManager<T> tm);
   }
 }

@@ -94,6 +94,8 @@ public abstract class AbstractManagedChannelImplBuilder
   @Nullable
   private CompressorRegistry compressorRegistry;
 
+  private Attributes attributes = Attributes.EMPTY;
+
   protected AbstractManagedChannelImplBuilder(String target) {
     this.target = Preconditions.checkNotNull(target);
     this.directServerAddress = null;
@@ -177,6 +179,20 @@ public abstract class AbstractManagedChannelImplBuilder
     return thisT();
   }
 
+  @Override
+  public final T loadBalancerParams(Attributes params) {
+    Preconditions.checkNotNull(params, "nameResolverParams may not be null");
+    this.attributes = this.attributes.appendWith(params);   
+    return thisT();
+  }
+  
+  @Override
+  public final T nameResolverParams(Attributes params) {
+    Preconditions.checkNotNull(params, "nameResolverParams may not be null");
+    this.attributes = this.attributes.appendWith(params);   
+    return thisT();
+  }
+  
   /**
    * Verifies the authority is valid.  This method exists as an escape hatch for putting in an
    * authority that is valid, but would fail the default validation provided by this
@@ -195,7 +211,7 @@ public abstract class AbstractManagedChannelImplBuilder
         // TODO(carl-mastrangelo): Allow clients to pass this in
         new ExponentialBackoffPolicy.Provider(),
         firstNonNull(nameResolverFactory, NameResolverRegistry.getDefaultRegistry()),
-        getNameResolverParams(),
+        getNameResolverParams().appendWith(attributes),
         firstNonNull(loadBalancerFactory, SimpleLoadBalancerFactory.getInstance()),
         transportFactory,
         firstNonNull(decompressorRegistry, DecompressorRegistry.getDefaultInstance()),

@@ -541,8 +541,9 @@ public class ManagedChannelImplTest {
     }
 
     @Override
-    public <T> LoadBalancer<T> newLoadBalancer(String serviceName, TransportManager<T> tm) {
-      LoadBalancer<T> lb = spy(delegate.newLoadBalancer(serviceName, tm));
+    public <T> LoadBalancer<T> newLoadBalancer(String serviceName, Attributes attributes, 
+        TransportManager<T> tm) {
+      LoadBalancer<T> lb = spy(delegate.newLoadBalancer(serviceName, attributes, tm));
       balancers.add(lb);
       return lb;
     }

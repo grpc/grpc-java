@@ -60,6 +60,21 @@ public final class Attributes {
   public <T> T get(Key<T> key) {
     return (T) data.get(key.name);
   }
+  
+  int size() {
+    return data.size();
+  }
+  
+  /**
+   * Create a new Attributes object that contains all attributes in this
+   * object overridden with attributes in other.
+   */
+  public Attributes appendWith(Attributes other) {
+    Attributes result = new Attributes();
+    result.data.putAll(this.data);
+    result.data.putAll(other.data);
+    return result;
+  }
 
   /**
    * Create a new builder.

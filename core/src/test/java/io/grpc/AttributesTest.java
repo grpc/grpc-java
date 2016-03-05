@@ -29,36 +29,50 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.grpclb;
+package io.grpc;
 
-import io.grpc.Attributes;
-import io.grpc.ExperimentalApi;
-import io.grpc.LoadBalancer;
-import io.grpc.TransportManager;
+import org.junit.Assert;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
-/**
- * A factory for {@link LoadBalancer}s that uses the GRPCLB protocol.
- *
- * <p><b>Experimental:</b>This only works with the GRPCLB load-balancer service, which is not
- * available yet. Right now it's only good for internal testing. It's not feature-complete either,
- * so before using it, make sure you have read all the {@code TODO} comments in {@link
- * GrpclbLoadBalancer}.
- */
-@ExperimentalApi
-public class GrpclbLoadBalancerFactory extends LoadBalancer.Factory {
+@RunWith(JUnit4.class)
+public class AttributesTest {
+  private Attributes.Key<String> key1 = new Attributes.Key<String>("key1");
+  private Attributes.Key<String> key2 = new Attributes.Key<String>("key2");
 
-  private static final GrpclbLoadBalancerFactory instance = new GrpclbLoadBalancerFactory();
+  @Test
+  public void overrideIsAdditive() {
+    Attributes original = Attributes.newBuilder().set(key1, "value1").build();
 
-  private GrpclbLoadBalancerFactory() {
+    Attributes override = Attributes.newBuilder().set(key2, "value2").build();
+
+    Attributes result = original.appendWith(override);
+    Assert.assertEquals(2, result.size());
+    Assert.assertEquals("value1", result.get(key1));
+    Assert.assertEquals("value2", result.get(key2));
   }
 
-  public static GrpclbLoadBalancerFactory getInstance() {
-    return instance;
+  @Test
+  public void overrideWithEmpty() {
+    Attributes original = Attributes.newBuilder().set(key1, "value1").build();
+
+    Attributes override = Attributes.EMPTY;
+
+    Attributes result = original.appendWith(override);
+    Assert.assertEquals(1, result.size());
+    Assert.assertEquals("value1", result.get(key1));
   }
 
-  @Override
-  public <T> LoadBalancer<T> newLoadBalancer(String serviceName, Attributes attributes, 
-          TransportManager<T> tm) {
-    return new GrpclbLoadBalancer<T>(serviceName, tm);
+  @Test
+  public void overrideWithOther() {
+    Attributes original = Attributes.newBuilder().set(key1, "original").build();
+
+    Attributes override = Attributes.newBuilder().set(key1, "override").build();
+
+    Attributes result = original.appendWith(override);
+    Assert.assertEquals(1, result.size());
+    Assert.assertEquals("override", result.get(key1));
   }
+
 }
