@@ -88,7 +88,7 @@ public class HelloWorldClient {
       }
       client.greet(user);
     } finally {
-      client.shutdown();
+      client.shutDown();
     }
   }
 }
