@@ -57,7 +57,6 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.logging.Logger;
 
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 
 /**
@@ -124,7 +123,7 @@ class GrpclbLoadBalancer<T> extends LoadBalancer<T> {
   }
 
   @Override
-  public T pickTransport(@Nullable Attributes requestKey) {
+  public T pickTransport(Attributes affinity) {
     RoundRobinServerList<T> serverListCopy;
     synchronized (lock) {
       if (closed) {

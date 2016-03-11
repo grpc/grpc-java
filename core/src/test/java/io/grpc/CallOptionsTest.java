@@ -51,17 +51,17 @@ import java.util.concurrent.TimeUnit;
 public class CallOptionsTest {
   private String sampleAuthority = "authority";
   private Long sampleDeadlineNanoTime = 1L;
-  private Attributes sampleAttributes = Attributes.EMPTY;
+  private Attributes sampleAffinity = Attributes.EMPTY;
   private CallOptions allSet = CallOptions.DEFAULT
       .withAuthority(sampleAuthority)
       .withDeadlineNanoTime(sampleDeadlineNanoTime)
-      .withAttributes(sampleAttributes);
+      .withAffinity(sampleAffinity);
 
   @Test
   public void defaultsAreAllNull() {
     assertNull(CallOptions.DEFAULT.getDeadlineNanoTime());
     assertNull(CallOptions.DEFAULT.getAuthority());
-    assertNull(CallOptions.DEFAULT.getAttributes());
+    assertEquals(Attributes.EMPTY, CallOptions.DEFAULT.getAffinity());
     assertNull(CallOptions.DEFAULT.getExecutor());
   }
 
@@ -69,7 +69,7 @@ public class CallOptionsTest {
   public void allWiths() {
     assertSame(sampleAuthority, allSet.getAuthority());
     assertSame(sampleDeadlineNanoTime, allSet.getDeadlineNanoTime());
-    assertSame(sampleAttributes, allSet.getAttributes());
+    assertSame(sampleAffinity, allSet.getAffinity());
   }
 
   @Test
@@ -79,7 +79,7 @@ public class CallOptionsTest {
     assertTrue(equal(allSet,
           allSet.withDeadlineNanoTime(314L).withDeadlineNanoTime(sampleDeadlineNanoTime)));
     assertTrue(equal(allSet,
-          allSet.withAttributes(Attributes.EMPTY).withAttributes(sampleAttributes)));
+          allSet.withAffinity(Attributes.EMPTY).withAffinity(sampleAffinity)));
   }
 
   @Test
@@ -127,6 +127,6 @@ public class CallOptionsTest {
   private static boolean equal(CallOptions o1, CallOptions o2) {
     return Objects.equal(o1.getDeadlineNanoTime(), o2.getDeadlineNanoTime())
         && Objects.equal(o1.getAuthority(), o2.getAuthority())
-        && Objects.equal(o1.getAttributes(), o2.getAttributes());
+        && Objects.equal(o1.getAffinity(), o2.getAffinity());
   }
 }

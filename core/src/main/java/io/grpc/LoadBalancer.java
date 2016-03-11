@@ -56,9 +56,9 @@ public abstract class LoadBalancer<T> {
    * <p>If called after {@link #shutdown} has been called, this method will return
    * a transport that would fail all requests.
    *
-   * @param attributes for affinity-based routing
+   * @param affinity for affinity-based routing
    */
-  public abstract T pickTransport(@Nullable Attributes attributes);
+  public abstract T pickTransport(Attributes affinity);
 
   /**
    * Shuts down this {@code LoadBalancer}.

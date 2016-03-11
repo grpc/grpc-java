@@ -137,7 +137,7 @@ public final class ManagedChannelImpl extends ManagedChannel {
           return SHUTDOWN_TRANSPORT;
         }
       }
-      return loadBalancer.pickTransport(callOptions.getAttributes());
+      return loadBalancer.pickTransport(callOptions.getAffinity());
     }
   };
 
