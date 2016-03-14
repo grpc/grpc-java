@@ -32,6 +32,7 @@
 package io.grpc;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Preconditions;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -126,12 +127,12 @@ public final class CallOptions {
   }
 
   /**
-   * Returns a new {@code CallOptions} with a attributes for affinity-based routing.
+   * Returns a new {@code CallOptions} with attributes for affinity-based routing.
    */
   @ExperimentalApi
   public CallOptions withAffinity(Attributes affinity) {
     CallOptions newOptions = new CallOptions(this);
-    newOptions.affinity = affinity;
+    newOptions.affinity = Preconditions.checkNotNull(affinity);
     return newOptions;
   }
 

@@ -39,6 +39,8 @@ import static org.junit.Assert.assertTrue;
 import com.google.common.base.Objects;
 import com.google.common.util.concurrent.MoreExecutors;
 
+import io.grpc.Attributes.Key;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -51,7 +53,8 @@ import java.util.concurrent.TimeUnit;
 public class CallOptionsTest {
   private String sampleAuthority = "authority";
   private Long sampleDeadlineNanoTime = 1L;
-  private Attributes sampleAffinity = Attributes.EMPTY;
+  private Key<String> sampleKey = new Attributes.Key<String>("sample");
+  private Attributes sampleAffinity = Attributes.newBuilder().set(sampleKey, "blah").build();
   private CallOptions allSet = CallOptions.DEFAULT
       .withAuthority(sampleAuthority)
       .withDeadlineNanoTime(sampleDeadlineNanoTime)
