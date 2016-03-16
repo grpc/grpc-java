@@ -39,6 +39,9 @@ import io.grpc.internal.AbstractServerImplBuilder;
 
 import java.io.File;
 
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.TrustManagerFactory;
+
 /**
  * Builder for a server that services in-process requests. Clients identify the in-process server by
  * its name.
@@ -83,6 +86,12 @@ public final class InProcessServerBuilder
   @Override
   protected InProcessServer buildTransportServer() {
     return new InProcessServer(name);
+  }
+
+  @Override
+  public InProcessServerBuilder useTransportSecurity(TrustManagerFactory trustManagerFactory,
+                                                     KeyManagerFactory keyManagerFactory) {
+    throw new UnsupportedOperationException("TLS not supported in InProcessServer");
   }
 
   @Override

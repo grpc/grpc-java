@@ -51,7 +51,9 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 
 import javax.annotation.Nullable;
+import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLException;
+import javax.net.ssl.TrustManagerFactory;
 
 /**
  * A builder to help simplify the construction of a Netty-based GRPC server.
@@ -244,6 +246,18 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     return new NettyServer(address, channelType, bossEventLoopGroup, workerEventLoopGroup,
         negotiator, maxConcurrentCallsPerConnection, flowControlWindow, maxMessageSize,
         maxHeaderListSize);
+  }
+
+  @Override
+  public NettyServerBuilder useTransportSecurity(TrustManagerFactory trustManagerFactory,
+                                                 KeyManagerFactory keyManagerFactory) {
+    try {
+      sslContext = GrpcSslContexts.forServer(trustManagerFactory, keyManagerFactory).build();
+    } catch (SSLException e) {
+      // This should likely be some other, easier to catch exception.
+      throw new RuntimeException(e);
+    }
+    return this;
   }
 
   @Override

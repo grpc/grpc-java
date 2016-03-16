@@ -35,6 +35,8 @@ import java.io.File;
 import java.util.concurrent.Executor;
 
 import javax.annotation.Nullable;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.TrustManagerFactory;
 
 /**
  * A builder for {@link Server} instances.
@@ -86,6 +88,15 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * @param privateKey file containing the private key
    */
   public abstract T useTransportSecurity(File certChain, File privateKey);
+
+  /**
+   * Makes the server use TLS.
+   *
+   * @param trustManagerFactory {@link TrustManagerFactory}
+   * @param keyManagerFactory {@link KeyManagerFactory}
+   */
+  public abstract T useTransportSecurity(TrustManagerFactory trustManagerFactory,
+                                         KeyManagerFactory keyManagerFactory);
 
   /**
    * Set the decompression registry for use in the channel.  This is an advanced API call and
