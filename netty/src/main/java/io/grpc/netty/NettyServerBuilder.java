@@ -254,8 +254,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     try {
       sslContext = GrpcSslContexts.forServer(trustManagerFactory, keyManagerFactory).build();
     } catch (SSLException e) {
-      // This should likely be some other, easier to catch exception.
-      throw new RuntimeException(e);
+      throw new IllegalArgumentException(e);
     }
     return this;
   }
@@ -265,8 +264,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     try {
       sslContext = GrpcSslContexts.forServer(certChain, privateKey).build();
     } catch (SSLException e) {
-      // This should likely be some other, easier to catch exception.
-      throw new RuntimeException(e);
+      throw new IllegalArgumentException(e);
     }
     return this;
   }
