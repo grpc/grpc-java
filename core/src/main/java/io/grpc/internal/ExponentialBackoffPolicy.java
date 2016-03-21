@@ -39,7 +39,7 @@ import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Exponential backoff policy for reconnects.
+ * Exponential backoff policy for reconnects and call retries.
  */
 final class ExponentialBackoffPolicy implements BackoffPolicy {
   /**
@@ -52,6 +52,16 @@ final class ExponentialBackoffPolicy implements BackoffPolicy {
     public BackoffPolicy get() {
       return new ExponentialBackoffPolicy(new Random(), TimeUnit.SECONDS.toMillis(1),
               TimeUnit.MINUTES.toMillis(2),  1.6, .2);
+    }
+  }
+
+  /**
+   * Provider tuned for call retries.
+   */
+  static final class CallRetryProvider implements BackoffPolicy.Provider {
+    @Override
+    public BackoffPolicy get() {
+      return new ExponentialBackoffPolicy(new Random(), 50, TimeUnit.SECONDS.toMillis(30), 2, .2);
     }
   }
 

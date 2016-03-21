@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Google Inc. All rights reserved.
+ * Copyright 2016, Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -31,47 +31,19 @@
 
 package io.grpc.internal;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import io.grpc.CallOptions;
+import io.grpc.MethodDescriptor;
+import io.grpc.Status;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
-
-import java.util.Random;
-import java.util.concurrent.TimeUnit;
-
-/**
- * Test for {@link ExponentialBackoffPolicy}.
- */
-@RunWith(JUnit4.class)
-public class ExponentialBackoffPolicyTest {
-  private Random notRandom = new Random() {
+public class IdempotentRetryPolicy extends RetryPolicy {
+  public static final class Provider implements RetryPolicy.Provider {
     @Override
-    public double nextDouble() {
-      return .5;
+    public RetryPolicy get() {
+      return new IdempotentRetryPolicy();
     }
-  };
-
-  @Test
-  public void maxDelayReached() {
-    long maxBackoffMillis = 120 * 1000;
-    ExponentialBackoffPolicy policy = new ExponentialBackoffPolicy(notRandom,
-            TimeUnit.SECONDS.toMillis(1), maxBackoffMillis, 1.6, 0);
-    for (int i = 0; i < 50; i++) {
-      if (maxBackoffMillis == policy.nextBackoffMillis()) {
-        return; // Success
-      }
-    }
-    assertEquals("max delay not reached", maxBackoffMillis, policy.nextBackoffMillis());
   }
-
-  @Test public void canProvideReconnectBackoff() {
-    assertNotNull(new ExponentialBackoffPolicy.ReconnectProvider().get());
-  }
-
-  @Test public void canProvideRetryBackoff() {
-    assertNotNull(new ExponentialBackoffPolicy.CallRetryProvider().get());
+  @Override
+  public boolean isRetryable(Status status, MethodDescriptor method, CallOptions callOptions) {
+    return method.isIdempotent();
   }
 }
-
