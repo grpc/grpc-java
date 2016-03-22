@@ -39,13 +39,13 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Test for {@link ExponentialBackoffPolicy}.
  */
 @RunWith(JUnit4.class)
 public class ExponentialBackoffPolicyTest {
-  private ExponentialBackoffPolicy policy = new ExponentialBackoffPolicy();
   private Random notRandom = new Random() {
     @Override
     public double nextDouble() {
@@ -56,9 +56,8 @@ public class ExponentialBackoffPolicyTest {
   @Test
   public void maxDelayReached() {
     long maxBackoffMillis = 120 * 1000;
-    policy.setMaxBackoffMillis(maxBackoffMillis)
-        .setJitter(0)
-        .setRandom(notRandom);
+    ExponentialBackoffPolicy policy = new ExponentialBackoffPolicy(notRandom,
+            TimeUnit.SECONDS.toMillis(1), maxBackoffMillis, 1.6, 0);
     for (int i = 0; i < 50; i++) {
       if (maxBackoffMillis == policy.nextBackoffMillis()) {
         return; // Success
@@ -67,8 +66,8 @@ public class ExponentialBackoffPolicyTest {
     assertEquals("max delay not reached", maxBackoffMillis, policy.nextBackoffMillis());
   }
 
-  @Test public void canProvide() {
-    assertNotNull(new ExponentialBackoffPolicy.Provider().get());
+  @Test public void canProvideReconnectBackoff() {
+    assertNotNull(new ExponentialBackoffPolicy.ReconnectProvider().get());
   }
 }
 

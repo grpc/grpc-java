@@ -193,7 +193,7 @@ public abstract class AbstractManagedChannelImplBuilder
     return new ManagedChannelImpl(
         target,
         // TODO(carl-mastrangelo): Allow clients to pass this in
-        new ExponentialBackoffPolicy.Provider(),
+        new ExponentialBackoffPolicy.ReconnectProvider(),
         firstNonNull(nameResolverFactory, NameResolverRegistry.getDefaultRegistry()),
         getNameResolverParams(),
         firstNonNull(loadBalancerFactory, SimpleLoadBalancerFactory.getInstance()),

@@ -39,26 +39,40 @@ import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Retry Policy for Transport reconnection.  Initial parameters from
- * https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md
- *
- * <p>TODO(carl-mastrangelo): add unit tests for this class
+ * Exponential backoff policy for reconnects.
  */
 final class ExponentialBackoffPolicy implements BackoffPolicy {
-  static final class Provider implements BackoffPolicy.Provider {
+  /**
+   * Provider tuned for connection retries.
+   *
+   * https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md
+   */
+  static final class ReconnectProvider implements BackoffPolicy.Provider {
     @Override
     public BackoffPolicy get() {
-      return new ExponentialBackoffPolicy();
+      return new ExponentialBackoffPolicy(new Random(), TimeUnit.SECONDS.toMillis(1),
+              TimeUnit.MINUTES.toMillis(2),  1.6, .2);
     }
   }
 
-  private Random random = new Random();
-  private long initialBackoffMillis = TimeUnit.SECONDS.toMillis(1);
-  private long maxBackoffMillis = TimeUnit.MINUTES.toMillis(2);
-  private double multiplier = 1.6;
-  private double jitter = .2;
+  private final Random random;
+  private final long initialBackoffMillis;
+  private final long maxBackoffMillis;
+  private final double multiplier;
+  private final double jitter;
 
-  private long nextBackoffMillis = initialBackoffMillis;
+  private long nextBackoffMillis;
+
+  public ExponentialBackoffPolicy(Random random, long initialBackoffMilis, long maxBackoffMillis,
+                                  double multiplier, double jitter) {
+    this.random = random;
+    this.initialBackoffMillis = initialBackoffMilis;
+    this.maxBackoffMillis = maxBackoffMillis;
+    this.multiplier = multiplier;
+    this.jitter = jitter;
+
+    this.nextBackoffMillis =  initialBackoffMillis;
+  }
 
   @Override
   public long nextBackoffMillis() {
@@ -72,41 +86,6 @@ final class ExponentialBackoffPolicy implements BackoffPolicy {
     checkArgument(high >= low);
     double mag = high - low;
     return (long) (random.nextDouble() * mag + low);
-  }
-
-  /*
-   * No guice and no flags means we get to implement these setters for testing ourselves.  Do not
-   * call these from non-test code.
-   */
-
-  @VisibleForTesting
-  ExponentialBackoffPolicy setRandom(Random random) {
-    this.random = random;
-    return this;
-  }
-
-  @VisibleForTesting
-  ExponentialBackoffPolicy setInitialBackoffMillis(long initialBackoffMillis) {
-    this.initialBackoffMillis = initialBackoffMillis;
-    return this;
-  }
-
-  @VisibleForTesting
-  ExponentialBackoffPolicy setMaxBackoffMillis(long maxBackoffMillis) {
-    this.maxBackoffMillis = maxBackoffMillis;
-    return this;
-  }
-
-  @VisibleForTesting
-  ExponentialBackoffPolicy setMultiplier(double multiplier) {
-    this.multiplier = multiplier;
-    return this;
-  }
-
-  @VisibleForTesting
-  ExponentialBackoffPolicy setJitter(double jitter) {
-    this.jitter = jitter;
-    return this;
   }
 }
 
