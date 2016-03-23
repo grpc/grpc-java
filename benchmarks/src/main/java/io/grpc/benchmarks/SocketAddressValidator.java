@@ -29,7 +29,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.benchmarks.qps;
+package io.grpc.benchmarks;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -37,7 +37,7 @@ import java.net.SocketAddress;
 /**
  * Verifies whether or not the given {@link SocketAddress} is valid.
  */
-interface SocketAddressValidator {
+public interface SocketAddressValidator {
   /**
    * Verifier for {@link InetSocketAddress}es.
    */
