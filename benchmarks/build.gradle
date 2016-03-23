@@ -13,6 +13,7 @@ buildscript {
         }
     }
     dependencies {
+        classpath libraries.math
         classpath libraries.protobuf_plugin
         classpath "me.champeau.gradle:jmh-gradle-plugin:0.2.0"
     }
@@ -20,7 +21,7 @@ buildscript {
 apply plugin: 'me.champeau.gradle.jmh'
 
 jmh {
-    jmhVersion = '1.7.1'
+    jmhVersion = '1.11.3'
     warmupIterations = 10
     iterations = 10
     fork = 1
@@ -38,7 +39,8 @@ dependencies {
             libraries.mockito,
             libraries.hdrhistogram,
             libraries.netty_tcnative,
-            libraries.netty_epoll
+            libraries.netty_epoll,
+            libraries.math
 }
 
 configureProtoCompilation()
