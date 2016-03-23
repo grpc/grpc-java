@@ -74,8 +74,27 @@ public class StatusTest {
   }
 
   @Test
-  public void useObjectHashCode() {
-    assertEquals(Status.CANCELLED.hashCode(), System.identityHashCode(Status.CANCELLED));
+  public void equalityIsBasedOnCode() {
+    assertEquals(Status.OK, Status.OK.withCause(new Throwable()));
+    assertEquals(Status.OK, Status.OK.withDescription("test"));
+    assertEquals(Status.OK, Status.OK.withCause(new Throwable()).withDescription("test"));
+  }
+
+  @Test
+  public void hashCodeIsBasedOnCode() {
+    final int canceledHashCode = Code.CANCELLED.hashCode();
+    assertEquals(canceledHashCode, Status.CANCELLED.hashCode());
+    assertEquals(canceledHashCode, Status.CANCELLED.withCause(new Throwable()).hashCode());
+    assertEquals(canceledHashCode, Status.CANCELLED.withDescription("test").hashCode());
+    assertEquals(canceledHashCode, Status.CANCELLED.withDescription("test")
+        .withCause(new Throwable()).hashCode());
+  }
+
+  @Test
+  public void codeUsesObjectHashCode() {
+    for (Code code : Code.values()) {
+      assertEquals(code.hashCode(), System.identityHashCode(code));
+    }
   }
 
   @Test
