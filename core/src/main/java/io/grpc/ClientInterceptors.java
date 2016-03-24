@@ -240,7 +240,7 @@ public class ClientInterceptors {
         return next.newCall(method, callOptions);
       }
 
-      return new RetryingCall<ReqT, RespT>(retryPolicyProvider, method, callOptions, next);
+      return new RetryingCall<ReqT, RespT>(retryPolicyProvider, method, callOptions, next, Context.current());
     }
 
     private class RetryingCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
@@ -248,6 +248,7 @@ public class ClientInterceptors {
       private final MethodDescriptor<ReqT, RespT> method;
       private final CallOptions callOptions;
       private final Channel channel;
+      private final Context context;
       private final ScheduledExecutorService scheduledExecutor;
       private Listener<RespT> responseListener;
       private Metadata requestHeaders;
@@ -259,11 +260,13 @@ public class ClientInterceptors {
       private volatile ScheduledFuture<?> retryTask;
 
       RetryingCall(RetryPolicy.Provider retryPolicyProvider, MethodDescriptor<ReqT, RespT> method,
-                   CallOptions callOptions, Channel channel) {
+                   CallOptions callOptions, Channel channel, Context context) {
+        this.retryPolicy = retryPolicyProvider.get();
         this.method = method;
         this.callOptions = callOptions;
         this.channel = channel;
-        this.retryPolicy = retryPolicyProvider.get();
+        this.context = context;
+
         this.scheduledExecutor = SharedResourceHolder.get(TIMER_SERVICE);
       }
 
@@ -341,7 +344,7 @@ public class ClientInterceptors {
           return;
         }
         latestResponse = attempt;
-        retryTask = scheduledExecutor.schedule(new Runnable() {
+        retryTask = scheduledExecutor.schedule(context.wrap(new Runnable() {
           @Override
           public void run() {
             ClientCall<ReqT, RespT> nextCall = channel.newCall(method, callOptions);
@@ -355,7 +358,7 @@ public class ClientInterceptors {
             nextCall.request(1);
             nextCall.halfClose();
           }
-        }, nextBackoffMillis, TimeUnit.MILLISECONDS);
+        }), nextBackoffMillis, TimeUnit.MILLISECONDS);
       }
 
       private void useResponse(AttemptListener attempt) {
