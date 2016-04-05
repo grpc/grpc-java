@@ -94,6 +94,7 @@ import java.io.InputStream;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executors;
@@ -637,10 +638,12 @@ public abstract class AbstractInteropTest {
     TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(channel)
         .withDeadlineAfter(10, TimeUnit.MILLISECONDS);
     try {
-      stub.streamingOutputCall(StreamingOutputCallRequest.newBuilder()
-           .addResponseParameters(ResponseParameters.newBuilder()
-               .setIntervalUs(20000))
-               .build()).next();
+      Iterator<StreamingOutputCallResponse> iter = stub.streamingOutputCall(
+          StreamingOutputCallRequest.newBuilder()
+              .addResponseParameters(ResponseParameters.newBuilder().setIntervalUs(20000))
+              .addResponseParameters(ResponseParameters.newBuilder()).build());
+      iter.next();
+      iter.next();
       fail("Expected deadline to be exceeded");
     } catch (Throwable t) {
       assertEquals(Status.DEADLINE_EXCEEDED, Status.fromThrowable(t));
