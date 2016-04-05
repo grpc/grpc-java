@@ -68,6 +68,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.RuntimeException;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -565,11 +566,16 @@ public final class InteropTester extends AsyncTask<Void, Void, String> {
     TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(channel)
         .withDeadlineAfter(10, TimeUnit.MILLISECONDS);
     StreamingOutputCallRequest request = new StreamingOutputCallRequest();
-    request.responseParameters = new ResponseParameters[1];
+    request.responseParameters = new ResponseParameters[2];
     request.responseParameters[0] = new ResponseParameters();
     request.responseParameters[0].intervalUs = 20000;
+    request.responseParameters[1] = new ResponseParameters();
     try {
-      stub.streamingOutputCall(request).next();
+      Iterator<StreamingOutputCallResponse> iter = stub.streamingOutputCall(request);
+      assertTrue(iter.hasNext());
+      iter.next();
+      assertTrue(iter.hasNext());
+      iter.next();
       fail("Expected deadline to be exceeded");
     } catch (StatusRuntimeException ex) {
       assertCodeEquals(io.grpc.Status.DEADLINE_EXCEEDED, ex.getStatus());
