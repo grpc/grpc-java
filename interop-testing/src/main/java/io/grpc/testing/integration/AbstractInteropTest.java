@@ -642,7 +642,9 @@ public abstract class AbstractInteropTest {
           StreamingOutputCallRequest.newBuilder()
               .addResponseParameters(ResponseParameters.newBuilder().setIntervalUs(20000))
               .addResponseParameters(ResponseParameters.newBuilder()).build());
+      assertTrue(iter.hasNext());
       iter.next();
+      assertTrue(iter.hasNext());
       iter.next();
       fail("Expected deadline to be exceeded");
     } catch (Throwable t) {

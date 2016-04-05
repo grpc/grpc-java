@@ -572,7 +572,9 @@ public final class InteropTester extends AsyncTask<Void, Void, String> {
     request.responseParameters[1] = new ResponseParameters();
     try {
       Iterator<StreamingOutputCallResponse> iter = stub.streamingOutputCall(request);
+      assertTrue(iter.hasNext());
       iter.next();
+      assertTrue(iter.hasNext());
       iter.next();
       fail("Expected deadline to be exceeded");
     } catch (StatusRuntimeException ex) {
