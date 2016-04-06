@@ -44,6 +44,7 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
 
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
@@ -386,7 +387,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
             }
           } catch (Throwable t) {
             stream.cancel(Status.CANCELLED.withCause(t).withDescription("Failed to read message."));
-            return;
+            Throwables.propagateIfPossible(t);
           }
         }
       });
