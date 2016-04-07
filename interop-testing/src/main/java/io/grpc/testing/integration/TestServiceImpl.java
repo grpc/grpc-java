@@ -89,6 +89,7 @@ public class TestServiceImpl implements TestServiceGrpc.TestService {
   @Override
   public void unaryCall(SimpleRequest req,
         StreamObserver<SimpleResponse> responseObserver) {
+    System.out.println("hello world server");
     SimpleResponse.Builder responseBuilder = SimpleResponse.newBuilder();
     if (req.getResponseSize() != 0) {
       boolean compressable = compressableResponse(req.getResponseType());
