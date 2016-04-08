@@ -74,6 +74,7 @@ task stresstest_client(type: CreateStartScripts) {
     applicationName = "stresstest-client"
     outputDir = new File(project.buildDir, 'tmp')
     classpath = jar.outputs.files + configurations.runtime + configurations.tcnative
+    defaultJvmOpts = ["-verbose:gc"]
 }
 
 applicationDistribution.into("bin") {

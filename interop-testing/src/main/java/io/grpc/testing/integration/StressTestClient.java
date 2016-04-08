@@ -33,11 +33,18 @@ package io.grpc.testing.integration;
 
 import static java.util.Collections.shuffle;
 import static java.util.Collections.singletonList;
+import static java.util.concurrent.Executors.newFixedThreadPool;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
+import com.google.api.client.repackaged.com.google.common.base.Joiner;
 import com.google.common.annotations.VisibleForTesting;
-
+import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
 
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
@@ -49,14 +56,15 @@ import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javax.annotation.Nullable;
 
 /**
  * A stress test client following the
@@ -64,6 +72,8 @@ import java.util.concurrent.TimeUnit;
  * specifications</a> of the gRPC stress testing framework.
  */
 public class StressTestClient {
+
+  private static final Logger log = Logger.getLogger(StressTestClient.class.getName());
 
   /**
    * The main application allowing this client to be launched from the command line.
@@ -93,7 +103,6 @@ public class StressTestClient {
     }
   }
 
-  // Grace period to wait for until seconds is
   private static final int WORKER_GRACE_PERIOD_SECS = 30;
 
   private List<InetSocketAddress> addresses =
@@ -113,9 +122,10 @@ public class StressTestClient {
   /**
    * List of futures that {@link #blockUntilStressTestComplete()} waits for.
    */
-  private final List<Future<?>> workerFutures = new ArrayList<Future<?>>();
+  private final List<ListenableFuture<?>> workerFutures =
+      new ArrayList<ListenableFuture<?>>();
   private final List<ManagedChannel> channels = new ArrayList<ManagedChannel>();
-  private ExecutorService threadpool;
+  private ListeningExecutorService threadpool;
 
   @VisibleForTesting
   void parseArgs(String[] args) {
@@ -158,6 +168,24 @@ public class StressTestClient {
       }
     }
     if (usage) {
+      StressTestClient c = new StressTestClient();
+      System.out.println(
+          "Usage: [ARGS...]"
+              + "\n"
+              + "\n  --server_addresses=<name_1>:<port_1>,<name_2>:<port_2>...<name_N>:<port_N>"
+              + "\n    Default: " + serverAddressesToString(c.addresses)
+              + "\n  --test_cases=<testcase_1:w_1>,<testcase_2:w_2>...<testcase_n:w_n>"
+              + "\n    List of <testcase,weight> tuples. Weight is the relative frequency at which"
+              + " testcase is run."
+              + "\n    Valid Testcases:"
+              + validTestCasesHelpText()
+              + "\n  --test_duration-secs=SECONDS   '-1' for no limit. Default: " + c.durationSecs
+              + "\n  --num_channels_per_server=INT  Number of connections to each server address."
+              + " Default: " + c.channelsPerServer
+              + "\n  --num_stubs_per_channel=INT    Default: " + c.stubsPerChannel
+              + "\n  --metrics_port=PORT            Listening port of the metrics server."
+              + " Default: " + c.metricsPort
+      );
       System.exit(1);
     }
   }
@@ -178,7 +206,7 @@ public class StressTestClient {
 
     int numChannels = addresses.size() * channelsPerServer;
     int numThreads =  numChannels * stubsPerChannel;
-    threadpool = Executors.newFixedThreadPool(numThreads);
+    threadpool = MoreExecutors.listeningDecorator(newFixedThreadPool(numThreads));
     try {
       int server_idx = -1;
       for (InetSocketAddress address : addresses) {
@@ -197,8 +225,7 @@ public class StressTestClient {
         }
       }
     } catch (Exception e) {
-      System.err.println("The stress test client encountered an error:");
-      e.printStackTrace();
+      log.log(Level.WARNING, "The stress test client encountered an error!", e);
     }
   }
 
@@ -206,17 +233,12 @@ public class StressTestClient {
   void blockUntilStressTestComplete() throws Exception {
     Preconditions.checkState(!shutdown, "client was shutdown.");
 
-    // The deadline is just so that client doesn't run endlessly in case a worker crashed.
-    long workerDeadline = System.nanoTime() + SECONDS.toNanos(durationSecs)
-        + SECONDS.toNanos(WORKER_GRACE_PERIOD_SECS);
-    for (Future<?> worker : workerFutures) {
-      long timeout = workerDeadline - System.nanoTime();
-      if (durationSecs < 0) {
-        // -1 indicates that we should wait forever.
-        worker.get();
-      } else {
-        worker.get(timeout, TimeUnit.NANOSECONDS);
-      }
+    ListenableFuture<?> f = Futures.allAsList(workerFutures);
+    if (durationSecs < 0) {
+      // -1 indicates that the stress test runs "forever".
+      f.get();
+    } else {
+      f.get(durationSecs + WORKER_GRACE_PERIOD_SECS, TimeUnit.SECONDS);
     }
   }
 
@@ -231,16 +253,14 @@ public class StressTestClient {
       try {
         ch.shutdownNow();
       } catch (Throwable t) {
-        System.err.println("Error shutting down channel.");
-        t.printStackTrace();
+        log.log(Level.WARNING, "Error shutting down channel!", t);
       }
     }
 
     try {
       metricsServer.shutdownNow();
     } catch (Throwable t) {
-      System.err.println("Error shutting down metrics service.");
-      t.printStackTrace();
+      log.log(Level.WARNING, "Error shutting down metrics service!", t);
     }
 
     try {
@@ -248,8 +268,7 @@ public class StressTestClient {
         threadpool.shutdownNow();
       }
     } catch (Throwable t) {
-      System.err.println("Error shutting down threadpool.");
-      t.printStackTrace();
+      log.log(Level.WARNING, "Error shutting down threadpool.", t);
     }
   }
 
@@ -296,6 +315,30 @@ public class StressTestClient {
     return NettyChannelBuilder.forAddress(address)
         .negotiationType(NegotiationType.PLAINTEXT)
         .build();
+  }
+
+  private static String serverAddressesToString(List<InetSocketAddress> addresses) {
+    return Joiner.on(",").join(Lists.transform(addresses,
+        new Function<InetSocketAddress, String>() {
+          @Nullable
+          @Override
+          public String apply(@Nullable InetSocketAddress input) {
+            Preconditions.checkNotNull(input);
+            return input.getHostName() + ":" + input.getPort();
+          }
+        }));
+  }
+
+  private static String validTestCasesHelpText() {
+    StringBuilder builder = new StringBuilder();
+    for (TestCases testCase : TestCases.values()) {
+      String strTestcase = testCase.name().toLowerCase();
+      builder.append("\n      ")
+          .append(strTestcase)
+          .append(": ")
+          .append(testCase.description());
+    }
+    return builder.toString();
   }
 
   /**
@@ -474,7 +517,8 @@ public class StressTestClient {
     }
   }
 
-  private static class TestCaseWeightPair {
+  @VisibleForTesting
+  static class TestCaseWeightPair {
     final TestCases testCase;
     final int weight;
 
@@ -482,5 +526,49 @@ public class StressTestClient {
       this.testCase = Preconditions.checkNotNull(testCase);
       this.weight = weight;
     }
+
+    @Override
+    public boolean equals(Object other) {
+      if (!(other instanceof TestCaseWeightPair)) {
+        return false;
+      }
+      TestCaseWeightPair other0 = (TestCaseWeightPair) other;
+      return testCase.equals(other0.testCase) && weight == other0.weight;
+    }
+
+    @Override
+    public int hashCode() {
+      return testCase.hashCode() + 31 * weight;
+    }
+  }
+
+  @VisibleForTesting
+  List<InetSocketAddress> addresses() {
+    return Collections.unmodifiableList(addresses);
+  }
+
+  @VisibleForTesting
+  List<TestCaseWeightPair> testCaseWeightPairs() {
+    return testCaseWeightPairs;
+  }
+
+  @VisibleForTesting
+  int durationSecs() {
+    return durationSecs;
+  }
+
+  @VisibleForTesting
+  int channelsPerServer() {
+    return channelsPerServer;
+  }
+
+  @VisibleForTesting
+  int stubsPerChannel() {
+    return stubsPerChannel;
+  }
+
+  @VisibleForTesting
+  int metricsPort() {
+    return metricsPort;
   }
 }

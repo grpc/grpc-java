@@ -31,8 +31,9 @@
 
 package io.grpc.testing.integration;
 
+import static com.google.common.collect.Sets.newHashSet;
+import static java.util.Collections.singletonList;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import io.grpc.ManagedChannel;
@@ -41,18 +42,62 @@ import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.testing.TestUtils;
 import io.grpc.testing.integration.Metrics.EmptyMessage;
 import io.grpc.testing.integration.Metrics.GaugeResponse;
+import io.grpc.testing.integration.StressTestClient.TestCaseWeightPair;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 import java.net.InetSocketAddress;
+import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
 
 /** Unit tests for {@link StressTestClient}. */
 @RunWith(JUnit4.class)
 public class StressTestClientTest {
+
+  @Test
+  public void testDefaults() {
+    StressTestClient client = new StressTestClient();
+    assertEquals(singletonList(new InetSocketAddress("localhost", 8080)), client.addresses());
+    assertTrue(client.testCaseWeightPairs().isEmpty());
+    assertEquals(-1, client.durationSecs());
+    assertEquals(1, client.channelsPerServer());
+    assertEquals(1, client.stubsPerChannel());
+    assertEquals(8081, client.metricsPort());
+  }
+
+  @Test
+  public void allCommandlineSwitchesAreSupported() {
+    StressTestClient client = new StressTestClient();
+    client.parseArgs(new String[] {
+        "--server_addresses=localhost:8080,localhost:8081,localhost:8082",
+        "--test_cases=empty_unary:20,large_unary:50,server_streaming:30",
+        "--test_duration-secs=20",
+        "--num_channels_per_server=10",
+        "--num_stubs_per_channel=5",
+        "--metrics_port=9090"
+    });
+
+    List<InetSocketAddress> addresses = Arrays.asList(new InetSocketAddress("localhost", 8080),
+        new InetSocketAddress("localhost", 8081), new InetSocketAddress("localhost", 8082));
+    assertEquals(addresses, client.addresses());
+
+    List<TestCaseWeightPair> testCases = Arrays.asList(
+        new TestCaseWeightPair(TestCases.EMPTY_UNARY, 20),
+        new TestCaseWeightPair(TestCases.LARGE_UNARY, 50),
+        new TestCaseWeightPair(TestCases.SERVER_STREAMING, 30));
+    assertEquals(testCases, client.testCaseWeightPairs());
+
+    assertEquals(20, client.durationSecs());
+    assertEquals(10, client.channelsPerServer());
+    assertEquals(5, client.stubsPerChannel());
+    assertEquals(9090, client.metricsPort());
+  }
 
   @Test(timeout = 5000)
   public void gaugesShouldBeExported() throws Exception {
@@ -85,22 +130,24 @@ public class StressTestClientTest {
       responseIt = stub.getAllGauges(EmptyMessage.getDefaultInstance());
     }
 
-    int gaugesCount = 0;
+    Set<String> gaugeNames = newHashSet("/stress_test/server_0/channel_0/stub_0/qps",
+        "/stress_test/server_0/channel_0/stub_1/qps");
+
     while (responseIt.hasNext()) {
       GaugeResponse response = responseIt.next();
-      assertNotNull(response.getName());
+      String gaugeName = response.getName();
+
+      assertTrue("gaugeName: " + gaugeName, gaugeNames.contains(gaugeName));
       assertTrue("qps: " + response.getLongValue(), response.getLongValue() > 0);
+      gaugeNames.remove(response.getName());
 
       GaugeResponse response1 =
-          stub.getGauge(Metrics.GaugeRequest.newBuilder().setName(response.getName()).build());
-      assertEquals(response.getName(), response1.getName());
+          stub.getGauge(Metrics.GaugeRequest.newBuilder().setName(gaugeName).build());
+      assertEquals(gaugeName, response1.getName());
       assertTrue("qps: " + response1.getLongValue(), response1.getLongValue() > 0);
-
-      gaugesCount++;
     }
 
-    // Because 1 server, 1 channel and 2 stubs
-    assertEquals(2, gaugesCount);
+    assertTrue(gaugeNames.isEmpty());
 
     client.shutdown();
     server.stop();
