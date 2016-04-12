@@ -31,40 +31,43 @@
 
 package io.grpc.testing.integration;
 
+import static java.util.Arrays.asList;
 import static java.util.Collections.shuffle;
 import static java.util.Collections.singletonList;
 import static java.util.concurrent.Executors.newFixedThreadPool;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.api.client.repackaged.com.google.common.base.Joiner;
+import com.google.api.client.repackaged.com.google.common.base.Objects;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
+import com.google.common.base.Splitter;
+import com.google.common.collect.Iterators;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
-import io.grpc.netty.NegotiationType;
-import io.grpc.netty.NettyChannelBuilder;
+import io.grpc.Status;
+import io.grpc.StatusException;
 import io.grpc.stub.StreamObserver;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nullable;
 
 /**
  * A stress test client following the
@@ -86,11 +89,7 @@ public class StressTestClient {
     Runtime.getRuntime().addShutdownHook(new Thread() {
       @Override
       public void run() {
-        for (ManagedChannel channel : client.channels) {
-          if (!channel.isShutdown()) {
-            channel.shutdownNow();
-          }
-        }
+        client.shutdown();
       }
     });
 
@@ -98,6 +97,8 @@ public class StressTestClient {
       client.startMetricsService();
       client.runStressTest();
       client.blockUntilStressTestComplete();
+    } catch (Exception e) {
+      log.log(Level.WARNING, "The stress test client encountered an error!", e);
     } finally {
       client.shutdown();
     }
@@ -153,7 +154,7 @@ public class StressTestClient {
         usage = addresses.isEmpty();
       } else if ("test_cases".equals(key)) {
         testCaseWeightPairs = parseTestCases(value);
-      } else if ("test_duration-secs".equals(key)) {
+      } else if ("test_duration_secs".equals(key)) {
         durationSecs = Integer.valueOf(value);
       } else if ("num_channels_per_server".equals(key)) {
         channelsPerServer = Integer.valueOf(value);
@@ -169,7 +170,7 @@ public class StressTestClient {
     }
     if (usage) {
       StressTestClient c = new StressTestClient();
-      System.out.println(
+      System.err.println(
           "Usage: [ARGS...]"
               + "\n"
               + "\n  --server_addresses=<name_1>:<port_1>,<name_2>:<port_2>...<name_N>:<port_N>"
@@ -179,7 +180,7 @@ public class StressTestClient {
               + " testcase is run."
               + "\n    Valid Testcases:"
               + validTestCasesHelpText()
-              + "\n  --test_duration-secs=SECONDS   '-1' for no limit. Default: " + c.durationSecs
+              + "\n  --test_duration_secs=SECONDS   '-1' for no limit. Default: " + c.durationSecs
               + "\n  --num_channels_per_server=INT  Number of connections to each server address."
               + " Default: " + c.channelsPerServer
               + "\n  --num_stubs_per_channel=INT    Default: " + c.stubsPerChannel
@@ -201,31 +202,30 @@ public class StressTestClient {
   }
 
   @VisibleForTesting
-  void runStressTest() throws ExecutionException, InterruptedException {
+  void runStressTest() throws Exception {
     Preconditions.checkState(!shutdown, "client was shutdown.");
+    if (testCaseWeightPairs.isEmpty()) {
+      return;
+    }
 
     int numChannels = addresses.size() * channelsPerServer;
-    int numThreads =  numChannels * stubsPerChannel;
+    int numThreads = numChannels * stubsPerChannel;
     threadpool = MoreExecutors.listeningDecorator(newFixedThreadPool(numThreads));
-    try {
-      int server_idx = -1;
-      for (InetSocketAddress address : addresses) {
-        server_idx++;
-        for (int i = 0; i < channelsPerServer; i++) {
-          ManagedChannel channel = createChannel(address);
-          channels.add(channel);
-          for (int j = 0; j < stubsPerChannel; j++) {
-            String gaugeName =
-                String.format("/stress_test/server_%d/channel_%d/stub_%d/qps", server_idx, i, j);
-            Worker worker =
-                new Worker(channel, testCaseWeightPairs, durationSecs, gaugeName);
+    int server_idx = -1;
+    for (InetSocketAddress address : addresses) {
+      server_idx++;
+      for (int i = 0; i < channelsPerServer; i++) {
+        ManagedChannel channel = createChannel(address);
+        channels.add(channel);
+        for (int j = 0; j < stubsPerChannel; j++) {
+          String gaugeName =
+              String.format("/stress_test/server_%d/channel_%d/stub_%d/qps", server_idx, i, j);
+          Worker worker =
+              new Worker(channel, testCaseWeightPairs, durationSecs, gaugeName);
 
-            workerFutures.add(threadpool.submit(worker));
-          }
+          workerFutures.add(threadpool.submit(worker));
         }
       }
-    } catch (Exception e) {
-      log.log(Level.WARNING, "The stress test client encountered an error!", e);
     }
   }
 
@@ -234,11 +234,11 @@ public class StressTestClient {
     Preconditions.checkState(!shutdown, "client was shutdown.");
 
     ListenableFuture<?> f = Futures.allAsList(workerFutures);
-    if (durationSecs < 0) {
-      // -1 indicates that the stress test runs "forever".
+    if (durationSecs == -1) {
+      // '-1' indicates that the stress test runs until terminated by the user.
       f.get();
     } else {
-      f.get(durationSecs + WORKER_GRACE_PERIOD_SECS, TimeUnit.SECONDS);
+      f.get(durationSecs + WORKER_GRACE_PERIOD_SECS, SECONDS);
     }
   }
 
@@ -252,6 +252,7 @@ public class StressTestClient {
     for (ManagedChannel ch : channels) {
       try {
         ch.shutdownNow();
+        ch.awaitTermination(1, SECONDS);
       } catch (Throwable t) {
         log.log(Level.WARNING, "Error shutting down channel!", t);
       }
@@ -275,9 +276,9 @@ public class StressTestClient {
   private static List<InetSocketAddress> parseServerAddresses(String addressesStr) {
     List<InetSocketAddress> addresses = new ArrayList<InetSocketAddress>();
 
-    for (String[] namePort : parseCommaSeparatedTuples(addressesStr)) {
-      String name = namePort[0];
-      int port = Integer.valueOf(namePort[1]);
+    for (List<String> namePort : parseCommaSeparatedTuples(addressesStr)) {
+      String name = namePort.get(0);
+      int port = Integer.valueOf(namePort.get(1));
       addresses.add(new InetSocketAddress(name, port));
     }
 
@@ -287,46 +288,47 @@ public class StressTestClient {
   private static List<TestCaseWeightPair> parseTestCases(String testCasesStr) {
     List<TestCaseWeightPair> testCaseWeightPairs = new ArrayList<TestCaseWeightPair>();
 
-    for (String[] nameWeight : parseCommaSeparatedTuples(testCasesStr)) {
-      TestCases testCase = TestCases.fromString(nameWeight[0]);
-      int weight = Integer.valueOf(nameWeight[1]);
+    for (List<String> nameWeight : parseCommaSeparatedTuples(testCasesStr)) {
+      TestCases testCase = TestCases.fromString(nameWeight.get(0));
+      int weight = Integer.valueOf(nameWeight.get(1));
       testCaseWeightPairs.add(new TestCaseWeightPair(testCase, weight));
     }
 
     return testCaseWeightPairs;
   }
 
-  private static List<String[]> parseCommaSeparatedTuples(String str) {
-    List<String[]> tuples = new ArrayList<String[]>();
-
-    String[] tuples0 = str.split(",");
-    for (String tupleStr : tuples0) {
-      String[] tuple = tupleStr.split(":");
-      if (tuple.length != 2) {
-        throw new IllegalArgumentException("Illegal tuple format: " + tupleStr);
+  private static List<List<String>> parseCommaSeparatedTuples(String str) {
+    List<List<String>> tuples = new ArrayList<List<String>>();
+    for (String tupleStr : Splitter.on(',').split(str)) {
+      int splitIdx = tupleStr.lastIndexOf(':');
+      if (splitIdx == -1) {
+        throw new IllegalArgumentException("Illegal tuple format: '" + tupleStr + "'");
       }
-      tuples.add(tuple);
+      String part0 = tupleStr.substring(0, splitIdx);
+      String part1 = tupleStr.substring(splitIdx + 1);
+      tuples.add(asList(part0, part1));
     }
-
     return tuples;
   }
 
   private static ManagedChannel createChannel(InetSocketAddress address) {
-    return NettyChannelBuilder.forAddress(address)
-        .negotiationType(NegotiationType.PLAINTEXT)
+    return ManagedChannelBuilder.forAddress(address.getHostName(), address.getPort())
+        .usePlaintext(true)
         .build();
   }
 
   private static String serverAddressesToString(List<InetSocketAddress> addresses) {
-    return Joiner.on(",").join(Lists.transform(addresses,
-        new Function<InetSocketAddress, String>() {
-          @Nullable
-          @Override
-          public String apply(@Nullable InetSocketAddress input) {
-            Preconditions.checkNotNull(input);
-            return input.getHostName() + ":" + input.getPort();
-          }
-        }));
+    List<String> tmp = new ArrayList<String>();
+    for (InetSocketAddress address : addresses) {
+      URI uri;
+      try {
+        uri = new URI(null, null, address.getHostName(), address.getPort(), null, null, null);
+      } catch (URISyntaxException e) {
+        throw new RuntimeException(e);
+      }
+      tmp.add(uri.getAuthority());
+    }
+    return Joiner.on(',').join(tmp);
   }
 
   private static String validTestCasesHelpText() {
@@ -351,15 +353,16 @@ public class StressTestClient {
 
     private final ManagedChannel channel;
     private final List<TestCaseWeightPair> testCaseWeightPairs;
-    private final int durationSec;
+    private final Integer durationSec;
     private final String gaugeName;
 
     Worker(ManagedChannel channel, List<TestCaseWeightPair> testCaseWeightPairs,
         int durationSec, String gaugeName) {
-      this.channel = channel;
-      this.testCaseWeightPairs = testCaseWeightPairs;
-      this.durationSec = durationSec;
-      this.gaugeName = gaugeName;
+      Preconditions.checkArgument(durationSec >= -1, "durationSec must be gte -1.");
+      this.channel = Preconditions.checkNotNull(channel);
+      this.testCaseWeightPairs = Preconditions.checkNotNull(testCaseWeightPairs);
+      this.durationSec = durationSec == -1 ? null : durationSec;
+      this.gaugeName = Preconditions.checkNotNull(gaugeName);
     }
 
     @Override
@@ -367,32 +370,27 @@ public class StressTestClient {
       // Simplify debugging if the worker crashes / never terminates.
       Thread.currentThread().setName(gaugeName);
 
-      final Tester tester = new Tester();
+      Tester tester = new Tester();
       tester.setUp();
-      final WeightedTestCaseSelector testCaseSelector =
-          new WeightedTestCaseSelector(testCaseWeightPairs);
-      final long endTime = durationSec < 0
-          ? -1
-          : System.nanoTime() + SECONDS.toNanos(durationSec);
-
-      // Set it so that the stats are published after the first loop iteration.
-      long lastMetricsCollectionTime = System.nanoTime()
-          - SECONDS.toNanos(METRICS_COLLECTION_INTERVAL_SECS);
+      WeightedTestCaseSelector testCaseSelector = new WeightedTestCaseSelector(testCaseWeightPairs);
+      Long endTime = durationSec == null ? null : System.nanoTime() + SECONDS.toNanos(durationSecs);
+      long lastMetricsCollectionTime = initLastMetricsCollectionTime();
+      // Number of interop testcases run since the last time metrics have been updated.
       long testCasesSinceLastMetricsCollection = 0;
-      while (!shutdown && (endTime == -1 || endTime > System.nanoTime())) {
+
+      while (!Thread.currentThread().isInterrupted() && !shutdown
+          && (endTime == null || endTime - System.nanoTime() > 0)) {
         try {
           runTestCase(tester, testCaseSelector.nextTestCase());
         } catch (Exception e) {
-          e.printStackTrace();
           throw new RuntimeException(e);
         }
 
         testCasesSinceLastMetricsCollection++;
 
-        if (lastMetricsCollectionTime
-            + SECONDS.toNanos(METRICS_COLLECTION_INTERVAL_SECS) <= System.nanoTime()) {
-          double durationSeconds = (System.nanoTime() - lastMetricsCollectionTime) / 1000000000.0;
-          long qps = (long) Math.ceil(testCasesSinceLastMetricsCollection / durationSeconds);
+        double durationSecs = computeDurationSecs(lastMetricsCollectionTime);
+        if (durationSecs >= METRICS_COLLECTION_INTERVAL_SECS) {
+          long qps = (long) Math.ceil(testCasesSinceLastMetricsCollection / durationSecs);
 
           Metrics.GaugeResponse gauge = Metrics.GaugeResponse
               .newBuilder()
@@ -406,6 +404,14 @@ public class StressTestClient {
           testCasesSinceLastMetricsCollection = 0;
         }
       }
+    }
+
+    private long initLastMetricsCollectionTime() {
+      return System.nanoTime() - SECONDS.toNanos(METRICS_COLLECTION_INTERVAL_SECS);
+    }
+
+    private double computeDurationSecs(long lastMetricsCollectionTime) {
+      return (System.nanoTime() - lastMetricsCollectionTime) / 1000000000.0;
     }
 
     private void runTestCase(Tester tester, TestCases testCase) throws Exception {
@@ -468,12 +474,17 @@ public class StressTestClient {
     }
 
     class WeightedTestCaseSelector {
-      // Randomly shuffled list that contains each testcase as often as
-      // the testcase's weight.
-      final List<TestCases> testCases = new ArrayList<TestCases>();
-      int idx;
+      /**
+       * Randomly shuffled and cyclic sequence that contains each testcase proportionally
+       * to its weight.
+       */
+      final Iterator<TestCases> testCases;
 
       WeightedTestCaseSelector(List<TestCaseWeightPair> testCaseWeightPairs) {
+        Preconditions.checkNotNull(testCaseWeightPairs);
+        Preconditions.checkArgument(testCaseWeightPairs.size() > 0);
+
+        List<TestCases> testCases = new ArrayList<TestCases>();
         for (TestCaseWeightPair testCaseWeightPair : testCaseWeightPairs) {
           for (int i = 0; i < testCaseWeightPair.weight; i++) {
             testCases.add(testCaseWeightPair.testCase);
@@ -481,10 +492,12 @@ public class StressTestClient {
         }
 
         shuffle(testCases);
+
+        this.testCases = Iterators.cycle(testCases);
       }
 
       TestCases nextTestCase() {
-        return testCases.get(idx++ % testCases.size());
+        return testCases.next();
       }
     }
   }
@@ -512,7 +525,7 @@ public class StressTestClient {
         responseObserver.onNext(gauge);
         responseObserver.onCompleted();
       } else {
-        responseObserver.onError(new Throwable("Gauge '" + gaugeName + "' does not exist."));
+        responseObserver.onError(new StatusException(Status.NOT_FOUND));
       }
     }
   }
@@ -523,6 +536,7 @@ public class StressTestClient {
     final int weight;
 
     TestCaseWeightPair(TestCases testCase, int weight) {
+      Preconditions.checkArgument(weight >= 0, "weight must be positive.");
       this.testCase = Preconditions.checkNotNull(testCase);
       this.weight = weight;
     }
@@ -532,13 +546,13 @@ public class StressTestClient {
       if (!(other instanceof TestCaseWeightPair)) {
         return false;
       }
-      TestCaseWeightPair other0 = (TestCaseWeightPair) other;
-      return testCase.equals(other0.testCase) && weight == other0.weight;
+      TestCaseWeightPair that = (TestCaseWeightPair) other;
+      return testCase.equals(that.testCase) && weight == that.weight;
     }
 
     @Override
     public int hashCode() {
-      return testCase.hashCode() + 31 * weight;
+      return Objects.hashCode(testCase, weight);
     }
   }
 

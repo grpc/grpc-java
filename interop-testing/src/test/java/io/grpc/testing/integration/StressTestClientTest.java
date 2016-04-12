@@ -37,13 +37,11 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import io.grpc.ManagedChannel;
-import io.grpc.netty.NegotiationType;
-import io.grpc.netty.NettyChannelBuilder;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.testing.TestUtils;
 import io.grpc.testing.integration.Metrics.EmptyMessage;
 import io.grpc.testing.integration.Metrics.GaugeResponse;
 import io.grpc.testing.integration.StressTestClient.TestCaseWeightPair;
-
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -61,7 +59,18 @@ import java.util.concurrent.locks.LockSupport;
 public class StressTestClientTest {
 
   @Test
-  public void testDefaults() {
+  public void ipv6AddressesShouldBeSupported() {
+    StressTestClient client = new StressTestClient();
+    client.parseArgs(new String[] {"--server_addresses=[0:0:0:0:0:0:0:1]:8080,"
+        + "[1:2:3:4:f:e:a:b]:8083"});
+
+    assertEquals(2, client.addresses().size());
+    assertEquals(new InetSocketAddress("0:0:0:0:0:0:0:1", 8080), client.addresses().get(0));
+    assertEquals(new InetSocketAddress("1:2:3:4:f:e:a:b", 8083), client.addresses().get(1));
+  }
+
+  @Test
+  public void defaults() {
     StressTestClient client = new StressTestClient();
     assertEquals(singletonList(new InetSocketAddress("localhost", 8080)), client.addresses());
     assertTrue(client.testCaseWeightPairs().isEmpty());
@@ -77,7 +86,7 @@ public class StressTestClientTest {
     client.parseArgs(new String[] {
         "--server_addresses=localhost:8080,localhost:8081,localhost:8082",
         "--test_cases=empty_unary:20,large_unary:50,server_streaming:30",
-        "--test_duration-secs=20",
+        "--test_duration_secs=20",
         "--num_channels_per_server=10",
         "--num_stubs_per_channel=5",
         "--metrics_port=9090"
@@ -101,8 +110,8 @@ public class StressTestClientTest {
 
   @Test(timeout = 5000)
   public void gaugesShouldBeExported() throws Exception {
-    final int serverPort = TestUtils.pickUnusedPort();
-    final int metricsPort = TestUtils.pickUnusedPort();
+    int serverPort = TestUtils.pickUnusedPort();
+    int metricsPort = TestUtils.pickUnusedPort();
 
     TestServiceServer server = new TestServiceServer();
     server.parseArgs(new String[]{"--port=" + serverPort, "--use_tls=false"});
@@ -116,9 +125,8 @@ public class StressTestClientTest {
     client.runStressTest();
 
     // Connect to the metrics service
-    ManagedChannel ch =
-        NettyChannelBuilder.forAddress(new InetSocketAddress("localhost", metricsPort))
-        .negotiationType(NegotiationType.PLAINTEXT)
+    ManagedChannel ch = ManagedChannelBuilder.forAddress("localhost", metricsPort)
+        .usePlaintext(true)
         .build();
 
     MetricsServiceGrpc.MetricsServiceBlockingStub stub = MetricsServiceGrpc.newBlockingStub(ch);
@@ -147,7 +155,7 @@ public class StressTestClientTest {
       assertTrue("qps: " + response1.getLongValue(), response1.getLongValue() > 0);
     }
 
-    assertTrue(gaugeNames.isEmpty());
+    assertTrue("gauges: " + gaugeNames, gaugeNames.isEmpty());
 
     client.shutdown();
     server.stop();
