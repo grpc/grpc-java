@@ -56,6 +56,9 @@ import javax.net.ssl.SSLSocketFactory;
  * series of tests.
  */
 public class TestServiceClient {
+
+  private static final Charset UTF_8 = Charset.forName("UTF-8");
+
   /**
    * The main application allowing this client to be launched from the command line.
    */
@@ -232,7 +235,7 @@ public class TestServiceClient {
         break;
 
       case SERVICE_ACCOUNT_CREDS: {
-        String jsonKey = Files.toString(new File(serviceAccountKeyFile), Charset.forName("UTF-8"));
+        String jsonKey = Files.toString(new File(serviceAccountKeyFile), UTF_8);
         FileInputStream credentialsStream = new FileInputStream(new File(serviceAccountKeyFile));
         tester.serviceAccountCreds(jsonKey, credentialsStream, oauthScope);
         break;
@@ -245,14 +248,14 @@ public class TestServiceClient {
       }
 
       case OAUTH2_AUTH_TOKEN: {
-        String jsonKey = Files.toString(new File(serviceAccountKeyFile), Charset.forName("UTF-8"));
+        String jsonKey = Files.toString(new File(serviceAccountKeyFile), UTF_8);
         FileInputStream credentialsStream = new FileInputStream(new File(serviceAccountKeyFile));
         tester.oauth2AuthToken(jsonKey, credentialsStream, oauthScope);
         break;
       }
 
       case PER_RPC_CREDS: {
-        String jsonKey = Files.toString(new File(serviceAccountKeyFile), Charset.forName("UTF-8"));
+        String jsonKey = Files.toString(new File(serviceAccountKeyFile), UTF_8);
         FileInputStream credentialsStream = new FileInputStream(new File(serviceAccountKeyFile));
         tester.perRpcCreds(jsonKey, credentialsStream, oauthScope);
         break;
