@@ -31,11 +31,8 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.MoreObjects.firstNonNull;
-
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
-
 import io.grpc.Attributes;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
@@ -48,6 +45,7 @@ import io.grpc.NameResolverRegistry;
 import io.grpc.ResolvedServerInfo;
 import io.grpc.SimpleLoadBalancerFactory;
 
+import javax.annotation.Nullable;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -56,7 +54,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
 
-import javax.annotation.Nullable;
+import static com.google.common.base.MoreObjects.firstNonNull;
 
 /**
  * The base class for channel builders.
@@ -189,9 +187,8 @@ public abstract class AbstractManagedChannelImplBuilder
   @Override
   public ManagedChannelImpl build() {
     ClientTransportFactory transportFactory = buildTransportFactory();
-    if (authorityOverride != null ) {
-        transportFactory = new AuthorityOverridingTransportFactory(
-            transportFactory, authorityOverride);
+    if (authorityOverride != null) {
+      transportFactory = new AuthorityOverridingTransportFactory(transportFactory, authorityOverride);
     }
     return new ManagedChannelImpl(
         target,
@@ -224,19 +221,18 @@ public abstract class AbstractManagedChannelImplBuilder
 
   private static class AuthorityOverridingTransportFactory implements ClientTransportFactory {
     final ClientTransportFactory factory;
-    @Nullable final String authorityOverride;
+    final String authorityOverride;
 
     AuthorityOverridingTransportFactory(
-        ClientTransportFactory factory, @Nullable String authorityOverride) {
+        ClientTransportFactory factory, String authorityOverride) {
       this.factory = factory;
-      this.authorityOverride = authorityOverride;
+      this.authorityOverride = Preconditions.checkNotNull(authorityOverride);
     }
 
     @Override
     public ManagedClientTransport newClientTransport(SocketAddress serverAddress,
         String authority) {
-      return factory.newClientTransport(
-          serverAddress, authorityOverride != null ? authorityOverride : authority);
+      return factory.newClientTransport(serverAddress, authorityOverride);
     }
 
     @Override
