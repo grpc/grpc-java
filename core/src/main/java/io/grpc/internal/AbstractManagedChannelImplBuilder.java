@@ -31,8 +31,11 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.MoreObjects.firstNonNull;
+
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
+
 import io.grpc.Attributes;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
@@ -45,7 +48,6 @@ import io.grpc.NameResolverRegistry;
 import io.grpc.ResolvedServerInfo;
 import io.grpc.SimpleLoadBalancerFactory;
 
-import javax.annotation.Nullable;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -54,7 +56,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
 
-import static com.google.common.base.MoreObjects.firstNonNull;
+import javax.annotation.Nullable;
 
 /**
  * The base class for channel builders.
@@ -188,7 +190,8 @@ public abstract class AbstractManagedChannelImplBuilder
   public ManagedChannelImpl build() {
     ClientTransportFactory transportFactory = buildTransportFactory();
     if (authorityOverride != null) {
-      transportFactory = new AuthorityOverridingTransportFactory(transportFactory, authorityOverride);
+      transportFactory = new AuthorityOverridingTransportFactory(transportFactory,
+        authorityOverride);
     }
     return new ManagedChannelImpl(
         target,
