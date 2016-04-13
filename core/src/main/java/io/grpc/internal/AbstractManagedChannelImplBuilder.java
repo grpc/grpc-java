@@ -188,8 +188,11 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Override
   public ManagedChannelImpl build() {
-    ClientTransportFactory transportFactory = new AuthorityOverridingTransportFactory(
-        buildTransportFactory(), authorityOverride);
+    ClientTransportFactory transportFactory = buildTransportFactory();
+    if (authorityOverride != null ) {
+        transportFactory = new AuthorityOverridingTransportFactory(
+            transportFactory, authorityOverride);
+    }
     return new ManagedChannelImpl(
         target,
         // TODO(carl-mastrangelo): Allow clients to pass this in
