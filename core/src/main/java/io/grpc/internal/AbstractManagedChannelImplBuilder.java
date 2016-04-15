@@ -190,8 +190,8 @@ public abstract class AbstractManagedChannelImplBuilder
   public ManagedChannelImpl build() {
     ClientTransportFactory transportFactory = buildTransportFactory();
     if (authorityOverride != null) {
-      transportFactory = new AuthorityOverridingTransportFactory(transportFactory,
-        authorityOverride);
+      transportFactory = new AuthorityOverridingTransportFactory(
+        transportFactory, authorityOverride);
     }
     return new ManagedChannelImpl(
         target,
@@ -228,8 +228,9 @@ public abstract class AbstractManagedChannelImplBuilder
 
     AuthorityOverridingTransportFactory(
         ClientTransportFactory factory, String authorityOverride) {
-      this.factory = factory;
-      this.authorityOverride = Preconditions.checkNotNull(authorityOverride);
+      this.factory = Preconditions.checkNotNull(factory, "factory should not be null");
+      this.authorityOverride = Preconditions.checkNotNull(
+        authorityOverride, "authorityOverride should not be null";
     }
 
     @Override
