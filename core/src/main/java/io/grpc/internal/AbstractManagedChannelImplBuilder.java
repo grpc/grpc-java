@@ -230,7 +230,7 @@ public abstract class AbstractManagedChannelImplBuilder
         ClientTransportFactory factory, String authorityOverride) {
       this.factory = Preconditions.checkNotNull(factory, "factory should not be null");
       this.authorityOverride = Preconditions.checkNotNull(
-        authorityOverride, "authorityOverride should not be null";
+        authorityOverride, "authorityOverride should not be null");
     }
 
     @Override
