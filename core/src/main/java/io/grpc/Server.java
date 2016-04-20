@@ -64,6 +64,44 @@ public abstract class Server {
   }
 
   /**
+   * Adds a service implementation to the handler registry.
+   *
+   * @param service ServerServiceDefinition object
+   * @throws UnsupportedOperationException if this server does not support dynamically adding
+   *                                       services.
+   */
+  public abstract ServerServiceDefinition addService(ServerServiceDefinition service);
+
+  /**
+   * Adds a service implementation to the handler registry.
+   *
+   * @param bindableService BindableService object
+   * @throws UnsupportedOperationException if this server does not support dynamically adding
+   *                                       services.
+   */
+  @ExperimentalApi
+  public abstract ServerServiceDefinition addService(BindableService bindableService);
+
+  /**
+   * Removes a service implementation from the handler registry.
+   *
+   * @param service ServerServiceDefinition object
+   * @throws UnsupportedOperationException if this server does not support dynamically removing
+   *                                       services.
+   */
+  public abstract boolean removeService(ServerServiceDefinition service);
+
+  /**
+   * Removes a service implementation from the handler registry.
+   *
+   * @param bindableService BindableService object
+   * @throws UnsupportedOperationException if this server does not support dynamically removing
+   *                                       services.
+   */
+  @ExperimentalApi
+  public abstract boolean removeService(BindableService bindableService);
+
+  /**
    * Initiates an orderly shutdown in which preexisting calls continue but new calls are rejected.
    */
   public abstract Server shutdown();
