@@ -513,7 +513,7 @@ class LoadClient {
             call.sendMessage(genericRequest.slice());
             now = System.nanoTime();
             if (shutdown) {
-              call.cancel();
+              call.cancel("Shutting down");
             }
           }
 

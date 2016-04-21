@@ -51,8 +51,8 @@ public abstract class ForwardingClientCall<ReqT, RespT> extends ClientCall<ReqT,
   }
 
   @Override
-  public void cancel() {
-    delegate().cancel();
+  public void cancel(String message) {
+    delegate().cancel(message);
   }
 
   @Override

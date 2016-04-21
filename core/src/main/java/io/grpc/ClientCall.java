@@ -157,15 +157,29 @@ public abstract class ClientCall<ReqT, RespT> {
   public abstract void request(int numMessages);
 
   /**
+   * Equivalent as {@code cancel(String)} without passing any useful information.
+   *
+   * @deprecated Use or override {@link #cancel(String)} instead. See
+   *             https://github.com/grpc/grpc-java/issues/1221
+   */
+  @Deprecated
+  public void cancel() {
+    cancel("Cancelled by ClientCall.cancel()");
+  }
+
+  /**
    * Prevent any further processing for this {@code ClientCall}. No further messages may be sent or
    * will be received. The server is informed of cancellations, but may not stop processing the
    * call. Cancellation is permitted if previously {@link #halfClose}d. Cancelling an already {@code
    * cancel()}ed {@code ClientCall} has no effect.
    *
-   *
    * <p>No other methods on this class can be called after this method has been called.
+   *
+   * @param message will appear in the description of the CANCELLED status
    */
-  public abstract void cancel();
+  public void cancel(String message) {
+    throw new UnsupportedOperationException(getClass() + " should implement this method");
+  }
 
   /**
    * Close the call for request message sending. Incoming response messages are unaffected.  This

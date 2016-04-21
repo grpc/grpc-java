@@ -34,6 +34,7 @@ package io.grpc.stub;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.util.concurrent.ListenableFuture;
@@ -101,7 +102,7 @@ public class ClientCallsTest {
     verify(call).start(listenerCaptor.capture(), any(Metadata.class));
     ClientCall.Listener<String> listener = listenerCaptor.getValue();
     future.cancel(true);
-    verify(call).cancel();
+    verify(call).cancel(eq("GrpcFuture was cancelled"));
     listener.onMessage("bar");
     listener.onClose(Status.OK, new Metadata());
     try {

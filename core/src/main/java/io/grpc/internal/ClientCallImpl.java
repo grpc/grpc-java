@@ -62,7 +62,6 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 
 import java.io.InputStream;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -304,7 +303,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
   }
 
   @Override
-  public void cancel() {
+  public void cancel(String message) {
+    Preconditions.checkArgument(message != null, "cancellation message is null");
     if (cancelCalled) {
       return;
     }
@@ -313,8 +313,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       // Cancel is called in exception handling cases, so it may be the case that the
       // stream was never successfully created.
       if (stream != null) {
-        stream.cancel(Status.CANCELLED.withCause(
-            new CancellationException("Client requested cancellation")));
+        stream.cancel(Status.CANCELLED.withDescription("Client initiated cancel: " + message));
       }
     } finally {
       if (context != null) {
