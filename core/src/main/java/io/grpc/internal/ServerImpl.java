@@ -41,13 +41,16 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import com.google.common.base.Preconditions;
 
+import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
 import io.grpc.Metadata;
+import io.grpc.MutableHandlerRegistry;
 import io.grpc.ServerCall;
 import io.grpc.ServerMethodDefinition;
+import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 
 import java.io.IOException;
@@ -146,6 +149,32 @@ public final class ServerImpl extends io.grpc.Server {
       checkState(!terminated, "Already terminated");
       return transportServer.getPort();
     }
+  }
+
+  @Override
+  public ServerServiceDefinition addService(ServerServiceDefinition service) {
+    if (registry instanceof MutableHandlerRegistry) {
+      return ((MutableHandlerRegistry) registry).addService(service);
+    }
+    throw new UnsupportedOperationException("Underlying HandlerRegistry is not mutable");
+  }
+
+  @Override
+  public ServerServiceDefinition addService(BindableService bindableService) {
+    return addService(bindableService.bindService());
+  }
+
+  @Override
+  public boolean removeService(ServerServiceDefinition service) {
+    if (registry instanceof MutableHandlerRegistry) {
+      return ((MutableHandlerRegistry) registry).removeService(service);
+    }
+    throw new UnsupportedOperationException("Underlying HandlerRegistry is not mutable");
+  }
+
+  @Override
+  public boolean removeService(BindableService bindableService) {
+    return removeService(bindableService.bindService());
   }
 
   /**
