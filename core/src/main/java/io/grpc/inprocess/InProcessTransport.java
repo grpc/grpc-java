@@ -66,6 +66,7 @@ class InProcessTransport implements ServerTransport, ManagedClientTransport {
   private static final Logger log = Logger.getLogger(InProcessTransport.class.getName());
 
   private final String name;
+  private final InProcessServer server;
   private ServerTransportListener serverTransportListener;
   private final Attributes serverStreamAttributes;
   private ManagedClientTransport.Listener clientTransportListener;
@@ -78,22 +79,56 @@ class InProcessTransport implements ServerTransport, ManagedClientTransport {
   @GuardedBy("this")
   private Set<InProcessStream> streams = new HashSet<InProcessStream>();
 
-  public InProcessTransport(String name) {
+  /**
+   * Creates a transport that will connect to an in-process server registered with the given
+   * name.
+   *
+   * @param name the name used to register the server
+   * @see InProcessServerBuilder#forName(String)
+   */
+  InProcessTransport(String name) {
     this.name = name;
+    this.server = null;
     this.serverStreamAttributes = Attributes.newBuilder()
         .set(ServerCall.REMOTE_ADDR_KEY, new InProcessSocketAddress(name))
+        .build();
+  }
+
+  /**
+   * Creates a transport that connects to the given server.
+   *
+   * @param server an in-process server
+   */
+  InProcessTransport(InProcessServer server) {
+    this.name = null;
+    this.server = checkNotNull(server);
+    this.serverStreamAttributes = Attributes.newBuilder()
+        .set(ServerCall.REMOTE_ADDR_KEY, new InProcessSocketAddress(""))
         .build();
   }
 
   @Override
   public synchronized void start(ManagedClientTransport.Listener listener) {
     this.clientTransportListener = listener;
-    InProcessServer server = InProcessServer.findServer(name);
     if (server != null) {
+      // a server was provided
       serverTransportListener = server.register(this);
+      if (serverTransportListener == null) {
+        shutdownStatus =
+            Status.UNAVAILABLE.withDescription("Provided in-process server has shutdown");
+      }
+    } else {
+      // name was provided; lookup server
+      InProcessServer server = InProcessServer.findServer(name);
+      if (server != null) {
+        serverTransportListener = server.register(this);
+      }
+      if (serverTransportListener == null) {
+        shutdownStatus = Status.UNAVAILABLE.withDescription("Could not find server: " + name);
+      }
     }
-    if (serverTransportListener == null) {
-      shutdownStatus = Status.UNAVAILABLE.withDescription("Could not find server: " + name);
+
+    if (shutdownStatus != null) {
       final Status localShutdownStatus = shutdownStatus;
       Thread shutdownThread = new Thread(new Runnable() {
         @Override
@@ -109,6 +144,7 @@ class InProcessTransport implements ServerTransport, ManagedClientTransport {
       shutdownThread.start();
       return;
     }
+
     Thread readyThread = new Thread(new Runnable() {
       @Override
       public void run() {
