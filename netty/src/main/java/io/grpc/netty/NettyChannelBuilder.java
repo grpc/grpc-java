@@ -170,6 +170,9 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
    * GrpcSslContexts}, but options could have been overridden.
    */
   public final NettyChannelBuilder sslContext(SslContext sslContext) {
+    if (sslContext != null && sslContext.isServer()) {
+      throw new IllegalArgumentException("Server SSL context can not be used for client channel");
+    }
     this.sslContext = sslContext;
     return this;
   }
