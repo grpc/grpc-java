@@ -35,7 +35,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.netty.ProtocolNegotiators.TlsNegotiator;
