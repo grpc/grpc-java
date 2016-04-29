@@ -34,7 +34,6 @@ package io.grpc;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
 
 import io.grpc.Metadata.AsciiMarshaller;
 
@@ -392,16 +391,19 @@ public final class Status {
 
   /**
    * Extract an error {@link Status} from the causal chain of a {@link Throwable}.
+   * {@link Status#UNKNOWN} is returned if no status can be found or {@code t} is {@code null}.
    *
-   * @return non-{@code null} status
+   * @return non-{@code null} status.
    */
   public static Status fromThrowable(Throwable t) {
-    for (Throwable cause : Throwables.getCausalChain(t)) {
+    Throwable cause = t;
+    while (cause != null) {
       if (cause instanceof StatusException) {
         return ((StatusException) cause).getStatus();
       } else if (cause instanceof StatusRuntimeException) {
         return ((StatusRuntimeException) cause).getStatus();
       }
+      cause = cause.getCause();
     }
     // Couldn't find a cause with a Status
     return UNKNOWN.withCause(t);
