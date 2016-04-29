@@ -393,7 +393,8 @@ public final class Status {
 
   /**
    * Extract an error {@link Status} from the causal chain of a {@link Throwable}.
-   * {@link Status#UNKNOWN} is returned if no status can be found.
+   * If no status can be found, a status is created with {@link Code#UNKNOWN} as its code and
+   * {@code t} as its cause.
    *
    * @return non-{@code null} status
    */
