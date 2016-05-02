@@ -151,11 +151,36 @@ subprojects {
                 math: 'org.apache.commons:commons-math3:3.6',
         ]
 
-        // Determine the correct version of Jetty ALPN boot to use based
-        // on the Java version.
-        def alpnboot_version = '8.1.2.v20141202'
-        if (JavaVersion.current().ordinal() < JavaVersion.VERSION_1_8.ordinal()) {
-            alpnboot_version = '7.1.3.v20150130'
+        // Determine the correct version of Jetty alpn-boot to use based on the Java version.
+        // The Java/alpn-boot version correspondence is documented here:
+        //   http://www.eclipse.org/jetty/documentation/current/alpn-chapter.html#alpn-versions
+        // Use numeric thresholds (vs. a map) so that the current alpn-boot version automatically
+        // applies to new Java versions.
+        String alpnboot_version = null
+        def jdk_update_matcher = System.getProperty('java.version') =~ /^.*_(\d+)$/
+        int jdk_update = jdk_update_matcher.matches() ? Integer.parseInt(jdk_update_matcher.group(1)) : 0
+        switch (JavaVersion.current()) {
+          case JavaVersion.VERSION_1_8:
+            if (jdk_update >= 71) {
+              alpnboot_version = '8.1.7.v20160121'
+            } else if (jdk_update >= 65) {
+              alpnboot_version = '8.1.6.v20151105'
+            } else if (jdk_update >= 60) {
+              alpnboot_version = '8.1.5.v20150921'
+            } else if (jdk_update >= 51) {
+              alpnboot_version = '8.1.4.v20150727'
+            }
+            break
+          case JavaVersion.VERSION_1_7:
+            if (jdk_update >= 75) {
+              alpnboot_version = '7.1.3.v20150130'
+            }
+            break
+          default:
+            break
+        }
+        if (alpnboot_version == null) {
+          throw new GradleException('Unrecognized JDK version')
         }
 
         alpnboot_package_name = 'org.mortbay.jetty.alpn:alpn-boot:' + alpnboot_version
