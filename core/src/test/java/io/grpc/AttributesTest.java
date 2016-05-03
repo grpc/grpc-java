@@ -55,14 +55,27 @@ public class AttributesTest {
     Attributes attrs = Attributes.newBuilder()
             .set(YOLO_KEY, "To be?")
             .set(YOLO_KEY, "Or not to be?")
-            .set(Attributes.Key.of("yolo"), "I'm not a duplicate")
+            .set(Attributes.Key.of("yolo"), "I a duplicate")
             .build();
-    assertSame("Or not to be?", attrs.get(YOLO_KEY));
-    assertEquals(2, attrs.keys().size());
+    assertSame("I a duplicate", attrs.get(YOLO_KEY));
+    assertEquals(1, attrs.keys().size());
   }
 
   @Test
   public void empty() {
     assertEquals(0, Attributes.EMPTY.keys().size());
+  }
+  
+  @Test
+  public void dynamicAttributes() {
+    Attributes.Key<String> attr1 = Attributes.Key.of("key" + 0);
+    Attributes.Key<String> attr2 = Attributes.Key.of("key" + 0);
+
+    Attributes attrs = Attributes.newBuilder()
+        .set(attr1, "value")
+        .build();
+    
+    assertEquals("value", attrs.get(attr1));
+    assertEquals("value", attrs.get(attr2));
   }
 }

@@ -91,10 +91,29 @@ public final class Attributes {
       return name;
     }
 
+    @Override
+    public int hashCode() {
+      return name.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (this == obj) {
+        return true;
+      }
+      if (obj == null) {
+        return false;
+      }
+      if (getClass() != obj.getClass()) {
+        return false;
+      }
+      return name.equals(((Key<?>)obj).name);
+    }
+
     /**
      * Factory method for creating instances of {@link Key}.
      *
-     * @param name the name of Key. Name collision, won't cause key collision.
+     * @param name the name of Key.
      * @param <T> Key type
      * @return Key object
      */
