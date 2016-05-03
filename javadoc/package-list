@@ -4,5 +4,6 @@ io.grpc.inprocess
 io.grpc.netty
 io.grpc.okhttp
 io.grpc.protobuf
+io.grpc.protobuf.lite
 io.grpc.protobuf.nano
 io.grpc.stub
