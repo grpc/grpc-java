@@ -33,11 +33,16 @@ package io.grpc.inprocess;
 
 import com.google.common.base.Preconditions;
 
+import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.ExperimentalApi;
 import io.grpc.HandlerRegistry;
 import io.grpc.internal.AbstractServerImplBuilder;
+import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.ServerImpl;
+import io.grpc.internal.SharedResourceHolder;
 
 import java.io.File;
+import java.util.concurrent.Executor;
 
 /**
  * Builder for a server that services in-process requests. Clients identify the in-process server by
@@ -69,6 +74,38 @@ public final class InProcessServerBuilder
     return new InProcessServerBuilder(name);
   }
 
+  /**
+   * Builds an anonymous (e.g. unregistered) in-process server that exposes a given underlying
+   * server. The returned in-process server will have already been started.
+   *
+   * @param server the server that the in-process server is exposing
+   * @return an in-process form of the given server
+   */
+  static InProcessServer anonymous(ServerImpl server) {
+    InProcessServerBuilder builder = new InProcessServerBuilder(server.handlerRegistry());
+    Executor executor = server.executor();
+    if (executor != SharedResourceHolder.get(GrpcUtil.SHARED_CHANNEL_EXECUTOR)) {
+      if (executor == MoreExecutors.directExecutor()) {
+        builder.directExecutor();
+      } else {
+        builder.executor(executor);
+      }
+    }
+    ServerImpl inProcessServer = builder.compressorRegistry(server.compressorRegistry())
+        .decompressorRegistry(server.decompressorRegistry())
+        .build();
+    // Since it's anonymous and in-process, starting the server doesn't actually do anything or
+    // consume resources. Similarly, failing to subsequently shutdown the server would not leak
+    // resources or memory. So this is safe. The server is not actually usable without being
+    // started anyway.
+    try {
+      inProcessServer.start();
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to start in-process server", e);
+    }
+    return (InProcessServer) inProcessServer.internalServer();
+  }
+
   private final String name;
 
   private InProcessServerBuilder(String name, HandlerRegistry registry) {
@@ -78,6 +115,12 @@ public final class InProcessServerBuilder
 
   private InProcessServerBuilder(String name) {
     this.name = Preconditions.checkNotNull(name, "name");
+  }
+
+  private InProcessServerBuilder(HandlerRegistry registry) {
+    super(registry);
+    // used only for anonymous in-process servers
+    this.name = null;
   }
 
   @Override

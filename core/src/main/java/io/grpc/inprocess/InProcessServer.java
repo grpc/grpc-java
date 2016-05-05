@@ -61,6 +61,10 @@ class InProcessServer implements InternalServer {
   @Override
   public void start(ServerListener serverListener) throws IOException {
     this.listener = serverListener;
+    if (name == null) {
+      // anonymous
+      return;
+    }
     // Must be last, as channels can start connecting after this point.
     if (registry.putIfAbsent(name, this) != null) {
       throw new IOException("name already registered: " + name);
@@ -74,8 +78,10 @@ class InProcessServer implements InternalServer {
 
   @Override
   public void shutdown() {
-    if (!registry.remove(name, this)) {
-      throw new AssertionError();
+    if (name != null) {
+      if (!registry.remove(name, this)) {
+        throw new AssertionError();
+      }
     }
     synchronized (this) {
       shutdown = true;

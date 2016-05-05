@@ -67,7 +67,9 @@ import java.util.concurrent.TimeUnit;
  * <pre><code>public class TcpTransportServerFactory {
  *   public static Server newServer(Executor executor, HandlerRegistry registry,
  *       String configuration) {
- *     return new ServerImpl(executor, registry, new TcpTransportServer(configuration));
+ *     return new ServerImpl(executor, registry, new TcpTransportServer(configuration),
+ *         Context.ROOT, DecompressorRegistry.getDefaultInstance(),
+ *         CompressorRegistry.getDefaultInstance());
  *   }
  * }</code></pre>
  *
@@ -146,6 +148,26 @@ public final class ServerImpl extends io.grpc.Server {
       checkState(!terminated, "Already terminated");
       return transportServer.getPort();
     }
+  }
+
+  public InternalServer internalServer() {
+    return transportServer;
+  }
+
+  public Executor executor() {
+    return executor;
+  }
+
+  public CompressorRegistry compressorRegistry() {
+    return compressorRegistry;
+  }
+
+  public DecompressorRegistry decompressorRegistry() {
+    return decompressorRegistry;
+  }
+
+  public HandlerRegistry handlerRegistry() {
+    return registry;
   }
 
   /**

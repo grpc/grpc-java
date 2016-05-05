@@ -31,13 +31,13 @@
 
 package io.grpc.inprocess;
 
-import com.google.common.base.Preconditions;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.ExperimentalApi;
-import io.grpc.Internal;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ManagedClientTransport;
+import io.grpc.internal.ServerImpl;
 
 import java.net.SocketAddress;
 
@@ -51,7 +51,7 @@ import java.net.SocketAddress;
 public class InProcessChannelBuilder extends
         AbstractManagedChannelImplBuilder<InProcessChannelBuilder> {
   /**
-   * Create a channel builder that will connect to the server with the given name.
+   * Creates a channel builder that will connect to the server with the given name.
    *
    * @param name the identity of the server to connect to
    * @return a new builder
@@ -60,11 +60,33 @@ public class InProcessChannelBuilder extends
     return new InProcessChannelBuilder(name);
   }
 
+  /**
+   * Creates a channel builder that connects to the given server instead of looking up a
+   * registered server by name. The given server does not need to be an in-process server. An
+   * in-process form of the server will be created and started to service the built channel.
+   *
+   * @param server the server to connect to
+   * @return a new builder
+   */
+  public static InProcessChannelBuilder anonymousChannelTo(ServerImpl server) {
+    return new InProcessChannelBuilder(InProcessServerBuilder.anonymous(server))
+        .compressorRegistry(server.compressorRegistry())
+        .decompressorRegistry(server.decompressorRegistry());
+  }
+
   private final String name;
+  private final InProcessServer server;
 
   private InProcessChannelBuilder(String name) {
     super(new InProcessSocketAddress(name), "localhost");
-    this.name = Preconditions.checkNotNull(name);
+    this.name = checkNotNull(name);
+    this.server = null;
+  }
+
+  private InProcessChannelBuilder(InProcessServer server) {
+    super(new InProcessSocketAddress(""), "localhost");
+    this.name = null;
+    this.server = checkNotNull(server);
   }
 
   /**
@@ -77,20 +99,21 @@ public class InProcessChannelBuilder extends
 
   @Override
   protected ClientTransportFactory buildTransportFactory() {
-    return new InProcessClientTransportFactory(name);
+    return new InProcessClientTransportFactory(name, server);
   }
 
   /**
-   * Creates InProcess transports. Exposed for internal use, as it should be private.
+   * Creates InProcess transports.
    */
-  @Internal
-  static final class InProcessClientTransportFactory implements ClientTransportFactory {
+  private class InProcessClientTransportFactory implements ClientTransportFactory {
     private final String name;
+    private final InProcessServer server;
 
     private boolean closed;
 
-    private InProcessClientTransportFactory(String name) {
+    private InProcessClientTransportFactory(String name, InProcessServer server) {
       this.name = name;
+      this.server = server;
     }
 
     @Override
@@ -98,7 +121,7 @@ public class InProcessChannelBuilder extends
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
       }
-      return new InProcessTransport(name);
+      return server != null ? new InProcessTransport(server) : new InProcessTransport(name);
     }
 
     @Override
