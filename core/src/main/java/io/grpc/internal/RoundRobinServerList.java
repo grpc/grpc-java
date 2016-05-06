@@ -87,7 +87,8 @@ public final class RoundRobinServerList<T> {
   }
 
   @VisibleForTesting
-  List<EquivalentAddressGroup> getList() {
+  @Internal
+  public List<EquivalentAddressGroup> getList() {
     return list;
   }
 
