@@ -126,15 +126,18 @@ public class StubConfigTest {
     long sum = 0;
     int samples = 100;
     long maxObservedDelta = 0;
+    long minObservedDelta = Long.MAX_VALUE;
     for (int i = 0; i < samples; i++) {
+      reconfiguredStub = stub.withDeadlineNanoTime(deadline);
       long delta =
           Math.abs(reconfiguredStub.getCallOptions().getDeadlineNanoTime() - deadline);
       sum += delta;
       maxObservedDelta = Math.max(maxObservedDelta, delta);
+      minObservedDelta = Math.min(minObservedDelta, delta);
     }
     long avgDelta = sum / samples;
-    assertTrue(maxDelta + " < " + avgDelta + ", maxObservedDelta: " + maxObservedDelta,
-        maxDelta >= avgDelta);
+    assertTrue(maxDelta + " < " + avgDelta + ", maxObservedDelta: " + maxObservedDelta
+        + ", minObservedDelta: " + minObservedDelta, maxDelta >= avgDelta);
     // Default config unchanged
     assertNull(stub.getCallOptions().getDeadlineNanoTime());
   }
