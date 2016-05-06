@@ -34,18 +34,16 @@ package io.grpc;
 import com.google.common.base.Supplier;
 
 import io.grpc.TransportManager.InterimTransport;
+import io.grpc.internal.RoundRobinServerList;
 
-import java.net.SocketAddress;
-import java.util.ArrayList;
 import java.util.List;
 
 import javax.annotation.concurrent.GuardedBy;
 
 /**
- * A {@link LoadBalancer} that provides simple round-robin and pick-first routing mechanism over the
+ * A {@link LoadBalancer} that provides simple round-robin routing mechanism over the
  * addresses from the {@link NameResolver}.
  */
-// TODO(zhangkun83): Only pick-first is implemented. We need to implement round-robin.
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
 public final class SimpleLoadBalancerFactory extends LoadBalancer.Factory {
 
@@ -70,7 +68,7 @@ public final class SimpleLoadBalancerFactory extends LoadBalancer.Factory {
     private final Object lock = new Object();
 
     @GuardedBy("lock")
-    private EquivalentAddressGroup addresses;
+    private RoundRobinServerList<T> addresses;
     @GuardedBy("lock")
     private InterimTransport<T> interimTransport;
     @GuardedBy("lock")
@@ -86,13 +84,11 @@ public final class SimpleLoadBalancerFactory extends LoadBalancer.Factory {
 
     @Override
     public T pickTransport(Attributes affinity) {
-      EquivalentAddressGroup addressesCopy;
       synchronized (lock) {
         if (closed) {
           return tm.createFailingTransport(SHUTDOWN_STATUS);
         }
-        addressesCopy = addresses;
-        if (addressesCopy == null) {
+        if (addresses == null) {
           if (nameResolutionError != null) {
             return tm.createFailingTransport(nameResolutionError);
           }
@@ -102,28 +98,22 @@ public final class SimpleLoadBalancerFactory extends LoadBalancer.Factory {
           return interimTransport.transport();
         }
       }
-      return tm.getTransport(addressesCopy);
+      return addresses.getTransportForNextServer();
     }
 
     @Override
     public void handleResolvedAddresses(
         List<ResolvedServerInfo> updatedServers, Attributes config) {
       InterimTransport<T> savedInterimTransport;
-      final EquivalentAddressGroup newAddresses;
       synchronized (lock) {
         if (closed) {
           return;
         }
-        ArrayList<SocketAddress> newAddressList =
-            new ArrayList<SocketAddress>(updatedServers.size());
+        RoundRobinServerList.Builder<T> listBuilder = new RoundRobinServerList.Builder<T>(tm);
         for (ResolvedServerInfo server : updatedServers) {
-          newAddressList.add(server.getAddress());
+          listBuilder.add(server.getAddress());
         }
-        newAddresses = new EquivalentAddressGroup(newAddressList);
-        if (newAddresses.equals(addresses)) {
-          return;
-        }
-        addresses = newAddresses;
+        addresses = listBuilder.build();
         nameResolutionError = null;
         savedInterimTransport = interimTransport;
         interimTransport = null;
@@ -131,7 +121,7 @@ public final class SimpleLoadBalancerFactory extends LoadBalancer.Factory {
       if (savedInterimTransport != null) {
         savedInterimTransport.closeWithRealTransports(new Supplier<T>() {
             @Override public T get() {
-              return tm.getTransport(newAddresses);
+              return addresses.getTransportForNextServer();
             }
           });
       }

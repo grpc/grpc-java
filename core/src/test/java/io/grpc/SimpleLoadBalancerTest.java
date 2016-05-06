@@ -62,10 +62,13 @@ public class SimpleLoadBalancerTest {
   private LoadBalancer<Transport> loadBalancer;
 
   private ArrayList<ResolvedServerInfo> servers;
+  private ArrayList<SocketAddress> addresses;
   private EquivalentAddressGroup addressGroup;
 
   @Mock private TransportManager<Transport> mockTransportManager;
-  @Mock private Transport mockTransport;
+  @Mock private Transport mockTransport1;
+  @Mock private Transport mockTransport2;
+  @Mock private Transport mockTransport3;
   @Mock private InterimTransport<Transport> mockInterimTransport;
   @Mock private Transport mockInterimTransportAsTransport;
   @Captor private ArgumentCaptor<Supplier<Transport>> transportSupplierCaptor;
@@ -76,14 +79,19 @@ public class SimpleLoadBalancerTest {
     loadBalancer = SimpleLoadBalancerFactory.getInstance().newLoadBalancer(
         "fakeservice", mockTransportManager);
     servers = new ArrayList<ResolvedServerInfo>();
-    ArrayList<SocketAddress> addresses = new ArrayList<SocketAddress>();
+    addresses = new ArrayList<SocketAddress>();
     for (int i = 0; i < 3; i++) {
       SocketAddress addr = new FakeSocketAddress("server" + i);
       servers.add(new ResolvedServerInfo(addr, Attributes.EMPTY));
       addresses.add(addr);
     }
     addressGroup = new EquivalentAddressGroup(addresses);
-    when(mockTransportManager.getTransport(eq(addressGroup))).thenReturn(mockTransport);
+    when(mockTransportManager.getTransport(eq(new EquivalentAddressGroup(addresses.get(0)))))
+        .thenReturn(mockTransport1);
+    when(mockTransportManager.getTransport(eq(new EquivalentAddressGroup(addresses.get(1)))))
+        .thenReturn(mockTransport2);
+    when(mockTransportManager.getTransport(eq(new EquivalentAddressGroup(addresses.get(2)))))
+        .thenReturn(mockTransport3);
     when(mockTransportManager.createInterimTransport()).thenReturn(mockInterimTransport);
     when(mockInterimTransport.transport()).thenReturn(mockInterimTransportAsTransport);
   }
@@ -100,10 +108,13 @@ public class SimpleLoadBalancerTest {
 
     loadBalancer.handleResolvedAddresses(servers, Attributes.EMPTY);
     verify(mockInterimTransport).closeWithRealTransports(transportSupplierCaptor.capture());
-    for (int i = 0; i < 2; i++) {
-      assertSame(mockTransport, transportSupplierCaptor.getValue().get());
-    }
-    verify(mockTransportManager, times(2)).getTransport(eq(addressGroup));
+    assertSame(mockTransport1, transportSupplierCaptor.getValue().get());
+    assertSame(mockTransport2, transportSupplierCaptor.getValue().get());
+    assertSame(mockTransport3, transportSupplierCaptor.getValue().get());
+    verify(mockTransportManager).getTransport(eq(new EquivalentAddressGroup(addresses.get(0))));
+    verify(mockTransportManager).getTransport(eq(new EquivalentAddressGroup(addresses.get(1))));
+    verify(mockTransportManager).getTransport(eq(new EquivalentAddressGroup(addresses.get(2))));
+    verify(mockTransportManager).createFailingTransport(any(Status.class));
     verifyNoMoreInteractions(mockTransportManager);
     verifyNoMoreInteractions(mockInterimTransport);
   }
@@ -111,9 +122,15 @@ public class SimpleLoadBalancerTest {
   @Test
   public void pickAfterResolved() throws Exception {
     loadBalancer.handleResolvedAddresses(servers, Attributes.EMPTY);
-    Transport t = loadBalancer.pickTransport(null);
-    assertSame(mockTransport, t);
-    verify(mockTransportManager).getTransport(addressGroup);
+    assertSame(mockTransport1, loadBalancer.pickTransport(null));
+    assertSame(mockTransport2, loadBalancer.pickTransport(null));
+    assertSame(mockTransport3, loadBalancer.pickTransport(null));
+    assertSame(mockTransport1, loadBalancer.pickTransport(null));
+    verify(mockTransportManager, times(2))
+        .getTransport(eq(new EquivalentAddressGroup(addresses.get(0))));
+    verify(mockTransportManager).getTransport(eq(new EquivalentAddressGroup(addresses.get(1))));
+    verify(mockTransportManager).getTransport(eq(new EquivalentAddressGroup(addresses.get(2))));
+    verify(mockTransportManager).createFailingTransport(any(Status.class));
     verifyNoMoreInteractions(mockTransportManager);
   }
 
