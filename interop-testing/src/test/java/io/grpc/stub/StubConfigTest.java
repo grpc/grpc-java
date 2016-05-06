@@ -112,8 +112,32 @@ public class StubConfigTest {
     // New altered config
     assertNotNull(reconfiguredStub.getCallOptions().getDeadlineNanoTime());
     long maxDelta = MILLISECONDS.toNanos(30);
-    long actualDelta = Math.abs(reconfiguredStub.getCallOptions().getDeadlineNanoTime() - deadline);
-    assertTrue(maxDelta + " < " + actualDelta, maxDelta >= actualDelta);
+
+    /**
+     * This test fails randomly from time to time: https://github.com/grpc/grpc-java/issues/1646
+     *
+     * <p>We suspect STW pauses / system jitter to be at fault. Thus, in order to make this test
+     * more reliable, we take the average of 100 runs.
+     *
+     * <p>For example, if on average (without STW/jitter) one computation takes 20ms, then we can
+     * tolerate 30ms * 100 - 20ms * 100 = 1s of STW/jitter for the average to still be below
+     * the maxDelta of 30ms.
+     */
+    long sum = 0;
+    int samples = 100;
+    long maxObservedDelta = 0;
+    long minObservedDelta = Long.MAX_VALUE;
+    for (int i = 0; i < samples; i++) {
+      reconfiguredStub = stub.withDeadlineNanoTime(deadline);
+      long delta =
+          Math.abs(reconfiguredStub.getCallOptions().getDeadlineNanoTime() - deadline);
+      sum += delta;
+      maxObservedDelta = Math.max(maxObservedDelta, delta);
+      minObservedDelta = Math.min(minObservedDelta, delta);
+    }
+    long avgDelta = sum / samples;
+    assertTrue(maxDelta + " < " + avgDelta + ", maxObservedDelta: " + maxObservedDelta
+        + ", minObservedDelta: " + minObservedDelta, maxDelta >= avgDelta);
     // Default config unchanged
     assertNull(stub.getCallOptions().getDeadlineNanoTime());
   }
