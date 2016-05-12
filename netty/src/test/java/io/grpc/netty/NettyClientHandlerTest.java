@@ -396,7 +396,10 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     future = createStream();
     assertTrue(future.isDone());
     assertFalse(future.isSuccess());
-    assertNotNull(lifecycleManager.getShutdownStatus());
+    Status status = lifecycleManager.getShutdownStatus();
+    assertNotNull(status);
+    assertTrue("description does not reference 'exhausted': " + status.getDescription(),
+        status.getDescription().contains("exhausted"));
   }
 
   @Test
