@@ -78,7 +78,7 @@ public class TestServiceImpl implements TestServiceGrpc.TestService {
 
   @Override
   public void emptyCall(EmptyProtos.Empty empty,
-                        StreamObserver<EmptyProtos.Empty> responseObserver) {
+      StreamObserver<EmptyProtos.Empty> responseObserver) {
     responseObserver.onNext(EmptyProtos.Empty.getDefaultInstance());
     responseObserver.onCompleted();
   }
