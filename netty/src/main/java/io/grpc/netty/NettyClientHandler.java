@@ -340,7 +340,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       if (!connection().goAwaySent()) {
         logger.fine("Stream IDs have been exhausted for this connection. "
                 + "Initiating graceful shutdown of the connection.");
-        super.close(ctx(), ctx().newPromise());
+        close(ctx(), ctx().newPromise());
       }
       return;
     }
