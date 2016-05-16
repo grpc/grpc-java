@@ -61,7 +61,6 @@ public interface ServerStream extends Stream {
    */
   void close(Status status, Metadata trailers);
 
-
   /**
    * Tears down the stream, typically in the event of a timeout. This method may be called multiple
    * times and from any thread.

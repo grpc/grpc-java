@@ -49,9 +49,12 @@ import org.junit.runners.JUnit4;
 public class MethodDescriptorTest {
   @Test
   public void createMethodDescriptor() {
-    MethodDescriptor<String, String> descriptor = MethodDescriptor.<String, String>create(
-        MethodType.CLIENT_STREAMING, "/package.service/method", new StringMarshaller(),
-        new StringMarshaller());
+    MethodDescriptor<String, String> descriptor =
+        MethodDescriptor.<String, String>create(
+            MethodType.CLIENT_STREAMING,
+            "/package.service/method",
+            new StringMarshaller(),
+            new StringMarshaller());
     assertEquals(MethodType.CLIENT_STREAMING, descriptor.getType());
     assertEquals("/package.service/method", descriptor.getFullMethodName());
     assertFalse(descriptor.isIdempotent());
@@ -59,9 +62,12 @@ public class MethodDescriptorTest {
 
   @Test
   public void idempotent() {
-    MethodDescriptor<String,String> descriptor = MethodDescriptor.<String, String>create(
-        MethodType.SERVER_STREAMING, "/package.service/method", new StringMarshaller(),
-        new StringMarshaller());    
+    MethodDescriptor<String, String> descriptor =
+        MethodDescriptor.<String, String>create(
+            MethodType.SERVER_STREAMING,
+            "/package.service/method",
+            new StringMarshaller(),
+            new StringMarshaller());
     assertFalse(descriptor.isIdempotent());
 
     // Create a new desriptor by setting idempotent to true
@@ -72,4 +78,3 @@ public class MethodDescriptorTest {
     assertEquals("/package.service/method", newDescriptor.getFullMethodName());
   }
 }
-

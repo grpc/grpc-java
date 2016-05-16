@@ -67,16 +67,16 @@ public class MetadataTest {
 
   private static final Metadata.BinaryMarshaller<Fish> FISH_MARSHALLER =
       new Metadata.BinaryMarshaller<Fish>() {
-    @Override
-    public byte[] toBytes(Fish fish) {
-      return fish.name.getBytes(UTF_8);
-    }
+        @Override
+        public byte[] toBytes(Fish fish) {
+          return fish.name.getBytes(UTF_8);
+        }
 
-    @Override
-    public Fish parseBytes(byte[] serialized) {
-      return new Fish(new String(serialized, UTF_8));
-    }
-  };
+        @Override
+        public Fish parseBytes(byte[] serialized) {
+          return new Fish(new String(serialized, UTF_8));
+        }
+      };
 
   private static final String LANCE = "lance";
   private static final byte[] LANCE_BYTES = LANCE.getBytes(US_ASCII);
@@ -210,8 +210,9 @@ public class MetadataTest {
   }
 
   private void roundTripInteger(Integer i) {
-    assertEquals(i, Metadata.INTEGER_MARSHALLER.parseAsciiString(
-        Metadata.INTEGER_MARSHALLER.toAsciiString(i)));
+    assertEquals(
+        i,
+        Metadata.INTEGER_MARSHALLER.parseAsciiString(Metadata.INTEGER_MARSHALLER.toAsciiString(i)));
   }
 
   @Test
@@ -225,8 +226,12 @@ public class MetadataTest {
     t.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER), "ascii");
     assertEquals("Metadata({test=[ascii]})", t.toString());
 
-    t = new Metadata("test".getBytes(US_ASCII), "ascii".getBytes(US_ASCII),
-        "test-bin".getBytes(US_ASCII), "binary".getBytes(US_ASCII));
+    t =
+        new Metadata(
+            "test".getBytes(US_ASCII),
+            "ascii".getBytes(US_ASCII),
+            "test-bin".getBytes(US_ASCII),
+            "binary".getBytes(US_ASCII));
     assertEquals("Metadata({test=[ascii], test-bin=[[98, 105, 110, 97, 114, 121]]})", t.toString());
   }
 
@@ -240,12 +245,12 @@ public class MetadataTest {
       assertEquals("İ", "i".toUpperCase());
       assertEquals("ı", "I".toLowerCase());
 
-      Metadata.Key<String> keyTitleCase
-          = Metadata.Key.of("If-Modified-Since", Metadata.ASCII_STRING_MARSHALLER);
-      Metadata.Key<String> keyLowerCase
-          = Metadata.Key.of("if-modified-since", Metadata.ASCII_STRING_MARSHALLER);
-      Metadata.Key<String> keyUpperCase
-          = Metadata.Key.of("IF-MODIFIED-SINCE", Metadata.ASCII_STRING_MARSHALLER);
+      Metadata.Key<String> keyTitleCase =
+          Metadata.Key.of("If-Modified-Since", Metadata.ASCII_STRING_MARSHALLER);
+      Metadata.Key<String> keyLowerCase =
+          Metadata.Key.of("if-modified-since", Metadata.ASCII_STRING_MARSHALLER);
+      Metadata.Key<String> keyUpperCase =
+          Metadata.Key.of("IF-MODIFIED-SINCE", Metadata.ASCII_STRING_MARSHALLER);
 
       Metadata metadata = new Metadata();
       metadata.put(keyTitleCase, "plain string");
@@ -289,7 +294,7 @@ public class MetadataTest {
     Key<Integer> k2 = Key.of("CASE", Metadata.INTEGER_MARSHALLER);
     assertEquals(k1, k1);
     assertNotEquals(k1, null);
-    assertNotEquals(k1, new Object(){});
+    assertNotEquals(k1, new Object() {});
     assertEquals(k1, k2);
 
     assertEquals(k1.hashCode(), k2.hashCode());

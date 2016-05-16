@@ -99,12 +99,9 @@ public class DnsNameResolverTest {
         }
       };
 
-  @Mock
-  private NameResolver.Listener mockListener;
-  @Captor
-  private ArgumentCaptor<List<ResolvedServerInfo>> resultCaptor;
-  @Captor
-  private ArgumentCaptor<Status> statusCaptor;
+  @Mock private NameResolver.Listener mockListener;
+  @Captor private ArgumentCaptor<List<ResolvedServerInfo>> resultCaptor;
+  @Captor private ArgumentCaptor<Status> statusCaptor;
 
   @Before
   public void setUp() {
@@ -129,14 +126,14 @@ public class DnsNameResolverTest {
 
   @Test
   public void validDnsNameWithoutPort() throws Exception {
-    testValidUri(new URI("dns", null, "/foo.googleapis.com", null),
-        "foo.googleapis.com", DEFAULT_PORT);
+    testValidUri(
+        new URI("dns", null, "/foo.googleapis.com", null), "foo.googleapis.com", DEFAULT_PORT);
   }
 
   @Test
   public void validDnsNameWithPort() throws Exception {
-    testValidUri(new URI("dns", null, "/foo.googleapis.com:456", null),
-        "foo.googleapis.com:456", 456);
+    testValidUri(
+        new URI("dns", null, "/foo.googleapis.com:456", null), "foo.googleapis.com:456", 456);
   }
 
   @Test
@@ -284,8 +281,8 @@ public class DnsNameResolverTest {
     return list;
   }
 
-  private static void assertAnswerMatches(InetAddress[] addrs, int port,
-      List<ResolvedServerInfo> result) {
+  private static void assertAnswerMatches(
+      InetAddress[] addrs, int port, List<ResolvedServerInfo> result) {
     assertEquals(addrs.length, result.size());
     for (int i = 0; i < addrs.length; i++) {
       InetSocketAddress socketAddr = (InetSocketAddress) result.get(i).getAddress();
@@ -298,9 +295,14 @@ public class DnsNameResolverTest {
     final LinkedList<Object> answers = new LinkedList<Object>();
     final LinkedList<String> invocations = new LinkedList<String>();
 
-    MockResolver(String name, int defaultPort, Object ... answers) {
-      super(null, name, Attributes.newBuilder().set(
-          NameResolver.Factory.PARAMS_DEFAULT_PORT, defaultPort).build(), fakeTimerServiceResource,
+    MockResolver(String name, int defaultPort, Object... answers) {
+      super(
+          null,
+          name,
+          Attributes.newBuilder()
+              .set(NameResolver.Factory.PARAMS_DEFAULT_PORT, defaultPort)
+              .build(),
+          fakeTimerServiceResource,
           fakeExecutorResource);
       for (Object answer : answers) {
         this.answers.add(answer);

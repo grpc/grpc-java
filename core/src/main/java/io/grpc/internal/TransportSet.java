@@ -115,22 +115,40 @@ final class TransportSet implements WithLogId {
    *
    * 'lock' must be held when assigning to it.
    */
-  @Nullable
-  private volatile ManagedClientTransport activeTransport;
+  @Nullable private volatile ManagedClientTransport activeTransport;
 
-  TransportSet(EquivalentAddressGroup addressGroup, String authority,
-      LoadBalancer<ClientTransport> loadBalancer, BackoffPolicy.Provider backoffPolicyProvider,
-      ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
-      Executor appExecutor, Callback callback) {
-    this(addressGroup, authority, loadBalancer, backoffPolicyProvider, transportFactory,
-        scheduledExecutor, appExecutor, callback, Stopwatch.createUnstarted());
+  TransportSet(
+      EquivalentAddressGroup addressGroup,
+      String authority,
+      LoadBalancer<ClientTransport> loadBalancer,
+      BackoffPolicy.Provider backoffPolicyProvider,
+      ClientTransportFactory transportFactory,
+      ScheduledExecutorService scheduledExecutor,
+      Executor appExecutor,
+      Callback callback) {
+    this(
+        addressGroup,
+        authority,
+        loadBalancer,
+        backoffPolicyProvider,
+        transportFactory,
+        scheduledExecutor,
+        appExecutor,
+        callback,
+        Stopwatch.createUnstarted());
   }
 
   @VisibleForTesting
-  TransportSet(EquivalentAddressGroup addressGroup, String authority,
-      LoadBalancer<ClientTransport> loadBalancer, BackoffPolicy.Provider backoffPolicyProvider,
-      ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
-      Executor appExecutor, Callback callback, Stopwatch backoffWatch) {
+  TransportSet(
+      EquivalentAddressGroup addressGroup,
+      String authority,
+      LoadBalancer<ClientTransport> loadBalancer,
+      BackoffPolicy.Provider backoffPolicyProvider,
+      ClientTransportFactory transportFactory,
+      ScheduledExecutorService scheduledExecutor,
+      Executor appExecutor,
+      Callback callback,
+      Stopwatch backoffWatch) {
     this.addressGroup = Preconditions.checkNotNull(addressGroup, "addressGroup");
     this.authority = authority;
     this.loadBalancer = loadBalancer;
@@ -170,8 +188,8 @@ final class TransportSet implements WithLogId {
 
   @GuardedBy("lock")
   private void scheduleConnection(final DelayedClientTransport delayedTransport) {
-    Preconditions.checkState(reconnectTask == null || reconnectTask.isDone(),
-        "previous reconnectTask is not done");
+    Preconditions.checkState(
+        reconnectTask == null || reconnectTask.isDone(), "previous reconnectTask is not done");
 
     if (firstAttempt) {
       nextAddressIndex = 0;
@@ -184,25 +202,28 @@ final class TransportSet implements WithLogId {
       nextAddressIndex = 0;
     }
 
-    Runnable createTransportRunnable = new Runnable() {
-      @Override
-      public void run() {
-        synchronized (lock) {
-          reconnectTask = null;
-          if (currentAddressIndex == 0) {
-            backoffWatch.reset().start();
+    Runnable createTransportRunnable =
+        new Runnable() {
+          @Override
+          public void run() {
+            synchronized (lock) {
+              reconnectTask = null;
+              if (currentAddressIndex == 0) {
+                backoffWatch.reset().start();
+              }
+              ManagedClientTransport transport =
+                  transportFactory.newClientTransport(address, authority);
+              if (log.isLoggable(Level.FINE)) {
+                log.log(
+                    Level.FINE,
+                    "[{0}] Created {1} for {2}",
+                    new Object[] {getLogId(), transport.getLogId(), address});
+              }
+              transports.add(transport);
+              transport.start(new TransportListener(transport, delayedTransport, address));
+            }
           }
-          ManagedClientTransport transport =
-              transportFactory.newClientTransport(address, authority);
-          if (log.isLoggable(Level.FINE)) {
-            log.log(Level.FINE, "[{0}] Created {1} for {2}",
-                new Object[] {getLogId(), transport.getLogId(), address});
-          }
-          transports.add(transport);
-          transport.start(new TransportListener(transport, delayedTransport, address));
-        }
-      }
-    };
+        };
 
     long delayMillis = 0;
     if (currentAddressIndex == 0) {
@@ -217,16 +238,18 @@ final class TransportSet implements WithLogId {
     }
     firstAttempt = false;
     if (log.isLoggable(Level.FINE)) {
-      log.log(Level.FINE, "[{0}] Scheduling connection after {1} ms for {2}",
-          new Object[]{getLogId(), delayMillis, address});
+      log.log(
+          Level.FINE,
+          "[{0}] Scheduling connection after {1} ms for {2}",
+          new Object[] {getLogId(), delayMillis, address});
     }
     if (delayMillis <= 0) {
       reconnectTask = null;
       // No back-off this time.
       createTransportRunnable.run();
     } else {
-      reconnectTask = scheduledExecutor.schedule(
-          createTransportRunnable, delayMillis, TimeUnit.MILLISECONDS);
+      reconnectTask =
+          scheduledExecutor.schedule(createTransportRunnable, delayMillis, TimeUnit.MILLISECONDS);
     }
   }
 
@@ -248,7 +271,7 @@ final class TransportSet implements WithLogId {
       if (transports.isEmpty()) {
         runCallback = true;
         Preconditions.checkState(reconnectTask == null, "Should have no reconnectTask scheduled");
-      }  // else: the callback will be run once all transports have been terminated
+      } // else: the callback will be run once all transports have been terminated
     }
     if (savedActiveTransport != null) {
       savedActiveTransport.shutdown();
@@ -309,8 +332,10 @@ final class TransportSet implements WithLogId {
     private final SocketAddress address;
     private final DelayedClientTransport delayedTransport;
 
-    public TransportListener(ManagedClientTransport transport,
-        DelayedClientTransport delayedTransport, SocketAddress address) {
+    public TransportListener(
+        ManagedClientTransport transport,
+        DelayedClientTransport delayedTransport,
+        SocketAddress address) {
       super(transport);
       this.address = address;
       this.delayedTransport = delayedTransport;
@@ -319,7 +344,9 @@ final class TransportSet implements WithLogId {
     @Override
     public void transportReady() {
       if (log.isLoggable(Level.FINE)) {
-        log.log(Level.FINE, "[{0}] {1} for {2} is ready",
+        log.log(
+            Level.FINE,
+            "[{0}] {1} for {2} is ready",
             new Object[] {getLogId(), transport.getLogId(), address});
       }
       super.transportReady();
@@ -332,8 +359,7 @@ final class TransportSet implements WithLogId {
           // streams in delayedTransport, but will not serve new streams, and it will be shutdown
           // as soon as it's set to the delayedTransport.
           // activeTransport should have already been set to null by shutdown(). We keep it null.
-          Preconditions.checkState(activeTransport == null,
-              "Unexpected non-null activeTransport");
+          Preconditions.checkState(activeTransport == null, "Unexpected non-null activeTransport");
         } else if (activeTransport == delayedTransport) {
           activeTransport = transport;
         }
@@ -353,7 +379,9 @@ final class TransportSet implements WithLogId {
       boolean allAddressesFailed = false;
       boolean closedByServer = false;
       if (log.isLoggable(Level.FINE)) {
-        log.log(Level.FINE, "[{0}] {1} for {2} is being shutdown with status {3}",
+        log.log(
+            Level.FINE,
+            "[{0}] {1} for {2} is being shutdown with status {3}",
             new Object[] {getLogId(), transport.getLogId(), address, s});
       }
       super.transportShutdown(s);
@@ -387,13 +415,16 @@ final class TransportSet implements WithLogId {
     @Override
     public void transportTerminated() {
       if (log.isLoggable(Level.FINE)) {
-        log.log(Level.FINE, "[{0}] {1} for {2} is terminated",
+        log.log(
+            Level.FINE,
+            "[{0}] {1} for {2} is terminated",
             new Object[] {getLogId(), transport.getLogId(), address});
       }
       super.transportTerminated();
-      Preconditions.checkState(activeTransport != transport,
+      Preconditions.checkState(
+          activeTransport != transport,
           "activeTransport still points to the delayedTransport. "
-          + "Seems transportShutdown() was not called.");
+              + "Seems transportShutdown() was not called.");
     }
   }
 

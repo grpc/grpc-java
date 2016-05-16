@@ -53,7 +53,5 @@ public interface ServerCallHandler<RequestT, ResponseT> {
    * @return listener for processing incoming request messages for {@code call}
    */
   ServerCall.Listener<RequestT> startCall(
-      MethodDescriptor<RequestT, ResponseT> method,
-      ServerCall<ResponseT> call,
-      Metadata headers);
+      MethodDescriptor<RequestT, ResponseT> method, ServerCall<ResponseT> call, Metadata headers);
 }

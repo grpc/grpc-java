@@ -69,20 +69,25 @@ class InProcessTransport implements ServerTransport, ManagedClientTransport {
   private ServerTransportListener serverTransportListener;
   private final Attributes serverStreamAttributes;
   private ManagedClientTransport.Listener clientTransportListener;
+
   @GuardedBy("this")
   private boolean shutdown;
+
   @GuardedBy("this")
   private boolean terminated;
+
   @GuardedBy("this")
   private Status shutdownStatus;
+
   @GuardedBy("this")
   private Set<InProcessStream> streams = new HashSet<InProcessStream>();
 
   public InProcessTransport(String name) {
     this.name = name;
-    this.serverStreamAttributes = Attributes.newBuilder()
-        .set(ServerCall.REMOTE_ADDR_KEY, new InProcessSocketAddress(name))
-        .build();
+    this.serverStreamAttributes =
+        Attributes.newBuilder()
+            .set(ServerCall.REMOTE_ADDR_KEY, new InProcessSocketAddress(name))
+            .build();
   }
 
   @Override
@@ -95,28 +100,32 @@ class InProcessTransport implements ServerTransport, ManagedClientTransport {
     if (serverTransportListener == null) {
       shutdownStatus = Status.UNAVAILABLE.withDescription("Could not find server: " + name);
       final Status localShutdownStatus = shutdownStatus;
-      Thread shutdownThread = new Thread(new Runnable() {
-        @Override
-        public void run() {
-          synchronized (InProcessTransport.this) {
-            notifyShutdown(localShutdownStatus);
-            notifyTerminated();
-          }
-        }
-      });
+      Thread shutdownThread =
+          new Thread(
+              new Runnable() {
+                @Override
+                public void run() {
+                  synchronized (InProcessTransport.this) {
+                    notifyShutdown(localShutdownStatus);
+                    notifyTerminated();
+                  }
+                }
+              });
       shutdownThread.setDaemon(true);
       shutdownThread.setName("grpc-inprocess-shutdown");
       shutdownThread.start();
       return;
     }
-    Thread readyThread = new Thread(new Runnable() {
-      @Override
-      public void run() {
-        synchronized (InProcessTransport.this) {
-          clientTransportListener.transportReady();
-        }
-      }
-    });
+    Thread readyThread =
+        new Thread(
+            new Runnable() {
+              @Override
+              public void run() {
+                synchronized (InProcessTransport.this) {
+                  clientTransportListener.transportReady();
+                }
+              }
+            });
     readyThread.setDaemon(true);
     readyThread.setName("grpc-inprocess-ready");
     readyThread.start();
@@ -142,19 +151,21 @@ class InProcessTransport implements ServerTransport, ManagedClientTransport {
   public synchronized void ping(final PingCallback callback, Executor executor) {
     if (terminated) {
       final Status shutdownStatus = this.shutdownStatus;
-      executor.execute(new Runnable() {
-        @Override
-        public void run() {
-          callback.onFailure(shutdownStatus.asRuntimeException());
-        }
-      });
+      executor.execute(
+          new Runnable() {
+            @Override
+            public void run() {
+              callback.onFailure(shutdownStatus.asRuntimeException());
+            }
+          });
     } else {
-      executor.execute(new Runnable() {
-        @Override
-        public void run() {
-          callback.onSuccess(0);
-        }
-      });
+      executor.execute(
+          new Runnable() {
+            @Override
+            public void run() {
+              callback.onSuccess(0);
+            }
+          });
     }
   }
 
@@ -209,7 +220,6 @@ class InProcessTransport implements ServerTransport, ManagedClientTransport {
     private InProcessStream(MethodDescriptor<?, ?> method, Metadata headers) {
       this.method = checkNotNull(method);
       this.headers = checkNotNull(headers);
-
     }
 
     // Can be called multiple times due to races on both client and server closing at same time.
@@ -225,12 +235,16 @@ class InProcessTransport implements ServerTransport, ManagedClientTransport {
     private class InProcessServerStream implements ServerStream {
       @GuardedBy("this")
       private ClientStreamListener clientStreamListener;
+
       @GuardedBy("this")
       private int clientRequested;
+
       @GuardedBy("this")
       private ArrayDeque<InputStream> clientReceiveQueue = new ArrayDeque<InputStream>();
+
       @GuardedBy("this")
       private Status clientNotifyStatus;
+
       @GuardedBy("this")
       private Metadata clientNotifyTrailers;
       // Only is intended to prevent double-close when client cancels.
@@ -365,7 +379,7 @@ class InProcessTransport implements ServerTransport, ManagedClientTransport {
 
       @Override
       public void setMessageCompression(boolean enable) {
-         // noop
+        // noop
       }
 
       @Override
@@ -374,7 +388,8 @@ class InProcessTransport implements ServerTransport, ManagedClientTransport {
       @Override
       public void setDecompressor(Decompressor decompressor) {}
 
-      @Override public Attributes attributes() {
+      @Override
+      public Attributes attributes() {
         return serverStreamAttributes;
       }
     }
@@ -382,10 +397,13 @@ class InProcessTransport implements ServerTransport, ManagedClientTransport {
     private class InProcessClientStream implements ClientStream {
       @GuardedBy("this")
       private ServerStreamListener serverStreamListener;
+
       @GuardedBy("this")
       private int serverRequested;
+
       @GuardedBy("this")
       private ArrayDeque<InputStream> serverReceiveQueue = new ArrayDeque<InputStream>();
+
       @GuardedBy("this")
       private boolean serverNotifyHalfClose;
       // Only is intended to prevent double-close when server closes.
@@ -512,8 +530,9 @@ class InProcessTransport implements ServerTransport, ManagedClientTransport {
         serverStream.setListener(listener);
 
         synchronized (InProcessTransport.this) {
-          ServerStreamListener serverStreamListener = serverTransportListener.streamCreated(
-              serverStream, method.getFullMethodName(), headers);
+          ServerStreamListener serverStreamListener =
+              serverTransportListener.streamCreated(
+                  serverStream, method.getFullMethodName(), headers);
           clientStream.setListener(serverStreamListener);
           streams.add(InProcessTransport.InProcessStream.this);
         }
@@ -538,8 +557,6 @@ class InProcessTransport implements ServerTransport, ManagedClientTransport {
     if (status == null) {
       return null;
     }
-    return Status
-        .fromCodeValue(status.getCode().value())
-        .withDescription(status.getDescription());
+    return Status.fromCodeValue(status.getCode().value()).withDescription(status.getDescription());
   }
 }

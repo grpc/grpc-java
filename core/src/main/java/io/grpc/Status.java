@@ -48,7 +48,6 @@ import java.util.TreeMap;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
-
 /**
  * Defines the status of an operation by providing a standard {@link Code} in conjunction with an
  * optional descriptive message. Instances of {@code Status} are created by starting with the
@@ -246,8 +245,8 @@ public final class Status {
     for (Code code : Code.values()) {
       Status replaced = canonicalizer.put(code.value(), new Status(code));
       if (replaced != null) {
-        throw new IllegalStateException("Code value duplication between "
-            + replaced.getCode().name() + " & " + code.name());
+        throw new IllegalStateException(
+            "Code value duplication between " + replaced.getCode().name() + " & " + code.name());
       }
     }
     return Collections.unmodifiableList(new ArrayList<Status>(canonicalizer.values()));
@@ -285,8 +284,7 @@ public final class Status {
    * Operation was rejected because the system is not in a state required for the operation's
    * execution. See {@link Code#FAILED_PRECONDITION}.
    */
-  public static final Status FAILED_PRECONDITION =
-      Code.FAILED_PRECONDITION.status();
+  public static final Status FAILED_PRECONDITION = Code.FAILED_PRECONDITION.status();
   /**
    * The operation was aborted, typically due to a concurrency issue like sequencer check failures,
    * transaction aborts, etc. See {@link Code#ABORTED}.
@@ -318,8 +316,8 @@ public final class Status {
    * Key to bind status code to trailing metadata.
    */
   @Internal
-  public static final Metadata.Key<Status> CODE_KEY
-      = Metadata.Key.of("grpc-status", new StatusCodeMarshaller());
+  public static final Metadata.Key<Status> CODE_KEY =
+      Metadata.Key.of("grpc-status", new StatusCodeMarshaller());
 
   /**
    * Marshals status messages for ({@link #MESSAGE_KEY}.  gRPC does not use binary coding of
@@ -346,50 +344,50 @@ public final class Status {
   private static final AsciiMarshaller<String> STATUS_MESSAGE_MARSHALLER =
       new AsciiMarshaller<String>() {
 
-    @Override
-    public String toAsciiString(String value) {
-      // This can be made faster if necessary.
-      StringBuilder sb = new StringBuilder(value.length());
-      for (byte b : value.getBytes(Charset.forName("UTF-8"))) {
-        if (b >= ' ' && b < '%' || b > '%' && b < '~') {
-          // fast path, if it's plain ascii and not a percent, pass it through.
-          sb.append((char) b);
-        } else {
-          sb.append(String.format("%%%02X", b));
-        }
-      }
-      return sb.toString();
-    }
-
-    @Override
-    public String parseAsciiString(String value) {
-      Charset transerEncoding = Charset.forName("US-ASCII");
-      // This can be made faster if necessary.
-      byte[] source = value.getBytes(transerEncoding);
-      ByteBuffer buf = ByteBuffer.allocate(source.length);
-      for (int i = 0; i < source.length; ) {
-        if (source[i] == '%' && i + 2 < source.length) {
-          try {
-            buf.put((byte)Integer.parseInt(new String(source, i + 1, 2, transerEncoding), 16));
-            i += 3;
-            continue;
-          } catch (NumberFormatException e) {
-            // ignore, fall through, just push the bytes.
+        @Override
+        public String toAsciiString(String value) {
+          // This can be made faster if necessary.
+          StringBuilder sb = new StringBuilder(value.length());
+          for (byte b : value.getBytes(Charset.forName("UTF-8"))) {
+            if (b >= ' ' && b < '%' || b > '%' && b < '~') {
+              // fast path, if it's plain ascii and not a percent, pass it through.
+              sb.append((char) b);
+            } else {
+              sb.append(String.format("%%%02X", b));
+            }
           }
+          return sb.toString();
         }
-        buf.put(source[i]);
-        i += 1;
-      }
-      return new String(buf.array(), 0, buf.position(), Charset.forName("UTF-8"));
-    }
-  };
+
+        @Override
+        public String parseAsciiString(String value) {
+          Charset transerEncoding = Charset.forName("US-ASCII");
+          // This can be made faster if necessary.
+          byte[] source = value.getBytes(transerEncoding);
+          ByteBuffer buf = ByteBuffer.allocate(source.length);
+          for (int i = 0; i < source.length; ) {
+            if (source[i] == '%' && i + 2 < source.length) {
+              try {
+                buf.put((byte) Integer.parseInt(new String(source, i + 1, 2, transerEncoding), 16));
+                i += 3;
+                continue;
+              } catch (NumberFormatException e) {
+                // ignore, fall through, just push the bytes.
+              }
+            }
+            buf.put(source[i]);
+            i += 1;
+          }
+          return new String(buf.array(), 0, buf.position(), Charset.forName("UTF-8"));
+        }
+      };
 
   /**
    * Key to bind status message to trailing metadata.
    */
   @Internal
-  public static final Metadata.Key<String> MESSAGE_KEY
-      = Metadata.Key.of("grpc-message", STATUS_MESSAGE_MARSHALLER);
+  public static final Metadata.Key<String> MESSAGE_KEY =
+      Metadata.Key.of("grpc-message", STATUS_MESSAGE_MARSHALLER);
 
   /**
    * Extract an error {@link Status} from the causal chain of a {@link Throwable}.

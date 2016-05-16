@@ -41,8 +41,7 @@ import java.util.concurrent.TimeoutException;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1705")
 public class Contexts {
 
-  private Contexts() {
-  }
+  private Contexts() {}
 
   /**
    * Make the provided {@link Context} {@link Context#current()} for the creation of a listener
@@ -60,16 +59,15 @@ public class Contexts {
    * @return listener that will receive events in the scope of the provided context.
    */
   public static <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-        Context context,
-        MethodDescriptor<ReqT, RespT> method,
-        ServerCall<RespT> call,
-        Metadata headers,
-        ServerCallHandler<ReqT, RespT> next) {
+      Context context,
+      MethodDescriptor<ReqT, RespT> method,
+      ServerCall<RespT> call,
+      Metadata headers,
+      ServerCallHandler<ReqT, RespT> next) {
     Context previous = context.attach();
     try {
       return new ContextualizedServerCallListener<ReqT>(
-          next.startCall(method, call, headers),
-          context);
+          next.startCall(method, call, headers), context);
     } finally {
       context.detach(previous);
     }
@@ -79,8 +77,8 @@ public class Contexts {
    * Implementation of {@link io.grpc.ForwardingServerCallListener} that attaches a context before
    * dispatching calls to the delegate and detaches them after the call completes.
    */
-  private static class ContextualizedServerCallListener<ReqT> extends
-      ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT> {
+  private static class ContextualizedServerCallListener<ReqT>
+      extends ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT> {
     private final Context context;
 
     public ContextualizedServerCallListener(ServerCall.Listener<ReqT> delegate, Context context) {
@@ -160,8 +158,7 @@ public class Contexts {
           .withCause(cancellationCause);
     }
     Status status = Status.fromThrowable(cancellationCause);
-    if (Status.Code.UNKNOWN.equals(status.getCode())
-        && status.getCause() == cancellationCause) {
+    if (Status.Code.UNKNOWN.equals(status.getCode()) && status.getCause() == cancellationCause) {
       // If fromThrowable could not determine a status, then
       // just return CANCELLED.
       return Status.CANCELLED.withCause(cancellationCause);

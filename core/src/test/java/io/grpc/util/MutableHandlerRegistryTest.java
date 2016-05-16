@@ -57,32 +57,44 @@ import org.mockito.Mockito;
 @RunWith(JUnit4.class)
 public class MutableHandlerRegistryTest {
   private MutableHandlerRegistry registry = new MutableHandlerRegistry();
+
   @SuppressWarnings("unchecked")
   private Marshaller<String> requestMarshaller = mock(Marshaller.class);
+
   @SuppressWarnings("unchecked")
   private Marshaller<Integer> responseMarshaller = mock(Marshaller.class);
+
   @SuppressWarnings("unchecked")
   private ServerCallHandler<String, Integer> handler = mock(ServerCallHandler.class);
-  private ServerServiceDefinition basicServiceDefinition = ServerServiceDefinition.builder("basic")
-      .addMethod(
-          MethodDescriptor.create(MethodType.UNKNOWN, "basic/flow",
-              requestMarshaller, responseMarshaller),
-          handler).build();
+
+  private ServerServiceDefinition basicServiceDefinition =
+      ServerServiceDefinition.builder("basic")
+          .addMethod(
+              MethodDescriptor.create(
+                  MethodType.UNKNOWN, "basic/flow", requestMarshaller, responseMarshaller),
+              handler)
+          .build();
+
   @SuppressWarnings("rawtypes")
   private ServerMethodDefinition flowMethodDefinition =
       getOnlyElement(basicServiceDefinition.getMethods());
-  private ServerServiceDefinition multiServiceDefinition = ServerServiceDefinition.builder("multi")
-      .addMethod(
-          MethodDescriptor.create(MethodType.UNKNOWN, "multi/couple",
-              requestMarshaller, responseMarshaller),
-          handler)
-      .addMethod(
-          MethodDescriptor.create(MethodType.UNKNOWN, "multi/few",
-              requestMarshaller, responseMarshaller),
-          handler).build();
+
+  private ServerServiceDefinition multiServiceDefinition =
+      ServerServiceDefinition.builder("multi")
+          .addMethod(
+              MethodDescriptor.create(
+                  MethodType.UNKNOWN, "multi/couple", requestMarshaller, responseMarshaller),
+              handler)
+          .addMethod(
+              MethodDescriptor.create(
+                  MethodType.UNKNOWN, "multi/few", requestMarshaller, responseMarshaller),
+              handler)
+          .build();
+
   @SuppressWarnings("rawtypes")
   private ServerMethodDefinition coupleMethodDefinition =
       checkNotNull(multiServiceDefinition.getMethod("multi/couple"));
+
   @SuppressWarnings("rawtypes")
   private ServerMethodDefinition fewMethodDefinition =
       checkNotNull(multiServiceDefinition.getMethod("multi/few"));
@@ -134,9 +146,13 @@ public class MutableHandlerRegistryTest {
   public void replaceAndLookup() {
     assertNull(registry.addService(basicServiceDefinition));
     assertNotNull(registry.lookupMethod("basic/flow"));
-    ServerServiceDefinition replaceServiceDefinition = ServerServiceDefinition.builder("basic")
-        .addMethod(MethodDescriptor.create(MethodType.UNKNOWN, "basic/another",
-              requestMarshaller, responseMarshaller), handler).build();
+    ServerServiceDefinition replaceServiceDefinition =
+        ServerServiceDefinition.builder("basic")
+            .addMethod(
+                MethodDescriptor.create(
+                    MethodType.UNKNOWN, "basic/another", requestMarshaller, responseMarshaller),
+                handler)
+            .build();
     ServerMethodDefinition<?, ?> anotherMethodDefinition =
         replaceServiceDefinition.getMethod("basic/another");
     assertSame(basicServiceDefinition, registry.addService(replaceServiceDefinition));
@@ -191,7 +207,8 @@ public class MutableHandlerRegistryTest {
   @Test
   public void addReturnsPrevious() {
     assertNull(registry.addService(basicServiceDefinition));
-    assertSame(basicServiceDefinition,
+    assertSame(
+        basicServiceDefinition,
         registry.addService(ServerServiceDefinition.builder("basic").build()));
   }
 }

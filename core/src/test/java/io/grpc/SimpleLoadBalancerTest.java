@@ -73,8 +73,9 @@ public class SimpleLoadBalancerTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    loadBalancer = SimpleLoadBalancerFactory.getInstance().newLoadBalancer(
-        "fakeservice", mockTransportManager);
+    loadBalancer =
+        SimpleLoadBalancerFactory.getInstance()
+            .newLoadBalancer("fakeservice", mockTransportManager);
     servers = new ArrayList<ResolvedServerInfo>();
     ArrayList<SocketAddress> addresses = new ArrayList<SocketAddress>();
     for (int i = 0; i < 3; i++) {

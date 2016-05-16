@@ -63,8 +63,7 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
   private Runnable closeListenerTask;
   private volatile boolean cancelled;
 
-  protected AbstractClientStream(WritableBufferAllocator bufferAllocator,
-                                 int maxMessageSize) {
+  protected AbstractClientStream(WritableBufferAllocator bufferAllocator, int maxMessageSize) {
     super(bufferAllocator, maxMessageSize);
   }
 
@@ -101,8 +100,10 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
   protected void inboundTransportError(Status errorStatus, Metadata metadata) {
     Preconditions.checkNotNull(metadata, "metadata");
     if (inboundPhase() == Phase.STATUS) {
-      log.log(Level.INFO, "Received transport error on closed stream {0} {1}",
-          new Object[]{id(), errorStatus});
+      log.log(
+          Level.INFO,
+          "Received transport error on closed stream {0} {1}",
+          new Object[] {id(), errorStatus});
       return;
     }
     // For transport errors we immediately report status to the application layer
@@ -118,8 +119,8 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
   protected void inboundHeadersReceived(Metadata headers) {
     checkState(listener != null, "stream not started");
     if (inboundPhase() == Phase.STATUS) {
-      log.log(Level.INFO, "Received headers on closed stream {0} {1}",
-          new Object[]{id(), headers});
+      log.log(
+          Level.INFO, "Received headers on closed stream {0} {1}", new Object[] {id(), headers});
     }
 
     inboundPhase(Phase.MESSAGE);
@@ -140,8 +141,8 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
       }
       if (inboundPhase() == Phase.HEADERS) {
         // Have not received headers yet so error
-        inboundTransportError(Status.INTERNAL
-            .withDescription("headers not received before payload"), new Metadata());
+        inboundTransportError(
+            Status.INTERNAL.withDescription("headers not received before payload"), new Metadata());
         return;
       }
       inboundPhase(Phase.MESSAGE);
@@ -174,8 +175,10 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
   protected void inboundTrailersReceived(Metadata trailers, Status status) {
     Preconditions.checkNotNull(trailers, "trailers");
     if (inboundPhase() == Phase.STATUS) {
-      log.log(Level.INFO, "Received trailers on closed stream {0}\n {1}\n {2}",
-          new Object[]{id(), status, trailers});
+      log.log(
+          Level.INFO,
+          "Received trailers on closed stream {0}\n {1}\n {2}",
+          new Object[] {id(), status, trailers});
     }
     // Stash the status & trailers so they can be delivered by the deframer calls
     // remoteEndClosed
@@ -217,8 +220,8 @@ public abstract class AbstractClientStream<IdT> extends AbstractStream<IdT>
    *        delivered to the application.
    * @param trailers new instance of {@code Trailers}, either empty or those returned by the server
    */
-  public void transportReportStatus(final Status newStatus, boolean stopDelivery,
-      final Metadata trailers) {
+  public void transportReportStatus(
+      final Status newStatus, boolean stopDelivery, final Metadata trailers) {
     Preconditions.checkNotNull(newStatus, "newStatus");
 
     boolean closingLater = closeListenerTask != null && !stopDelivery;

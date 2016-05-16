@@ -87,11 +87,13 @@ public class SharedResourceHolderTest {
   private static final Resource<ResourceInstance> SHARED_FOO = new ResourceFactory();
   private static final Resource<ResourceInstance> SHARED_BAR = new ResourceFactory();
 
-  @Before public void setUp() {
+  @Before
+  public void setUp() {
     holder = new SharedResourceHolder(new MockExecutorFactory());
   }
 
-  @Test public void destroyResourceWhenRefCountReachesZero() {
+  @Test
+  public void destroyResourceWhenRefCountReachesZero() {
     ResourceInstance foo1 = holder.getInternal(SHARED_FOO);
     ResourceInstance sharedFoo = foo1;
     ResourceInstance foo2 = holder.getInternal(SHARED_FOO);
@@ -112,7 +114,8 @@ public class SharedResourceHolderTest {
     // foo refcount has reached 0, a destroying task is scheduled
     assertEquals(1, scheduledDestroyTasks.size());
     MockScheduledFuture<?> scheduledDestroyTask = scheduledDestroyTasks.poll();
-    assertEquals(SharedResourceHolder.DESTROY_DELAY_SECONDS,
+    assertEquals(
+        SharedResourceHolder.DESTROY_DELAY_SECONDS,
         scheduledDestroyTask.getDelay(TimeUnit.SECONDS));
 
     // Simluate that the destroyer executes the foo destroying task
@@ -128,7 +131,8 @@ public class SharedResourceHolderTest {
     // bar refcount has reached 0, a destroying task is scheduled
     assertEquals(1, scheduledDestroyTasks.size());
     scheduledDestroyTask = scheduledDestroyTasks.poll();
-    assertEquals(SharedResourceHolder.DESTROY_DELAY_SECONDS,
+    assertEquals(
+        SharedResourceHolder.DESTROY_DELAY_SECONDS,
         scheduledDestroyTask.getDelay(TimeUnit.SECONDS));
 
     // Simulate that the destroyer executes the bar destroying task
@@ -136,7 +140,8 @@ public class SharedResourceHolderTest {
     assertTrue(sharedBar.closed);
   }
 
-  @Test public void cancelDestroyTask() {
+  @Test
+  public void cancelDestroyTask() {
     ResourceInstance foo1 = holder.getInternal(SHARED_FOO);
     ResourceInstance sharedFoo = foo1;
     foo1 = holder.releaseInternal(SHARED_FOO, foo1);
@@ -161,7 +166,8 @@ public class SharedResourceHolderTest {
     assertTrue(sharedFoo.closed);
   }
 
-  @Test public void releaseWrongInstance() {
+  @Test
+  public void releaseWrongInstance() {
     ResourceInstance uncached = new ResourceInstance();
     try {
       holder.releaseInternal(SHARED_FOO, uncached);
@@ -179,7 +185,8 @@ public class SharedResourceHolderTest {
     holder.releaseInternal(SHARED_FOO, cached);
   }
 
-  @Test public void overreleaseInstance() {
+  @Test
+  public void overreleaseInstance() {
     ResourceInstance foo1 = holder.getInternal(SHARED_FOO);
     holder.releaseInternal(SHARED_FOO, foo1);
     try {
@@ -190,25 +197,25 @@ public class SharedResourceHolderTest {
     }
   }
 
-  private class MockExecutorFactory implements
-      SharedResourceHolder.ScheduledExecutorFactory {
+  private class MockExecutorFactory implements SharedResourceHolder.ScheduledExecutorFactory {
     @Override
     public ScheduledExecutorService createScheduledExecutor() {
       ScheduledExecutorService mockExecutor = mock(ScheduledExecutorService.class);
-      when(mockExecutor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class))).thenAnswer(
-          new Answer<MockScheduledFuture<Void>>() {
-            @Override
-            public MockScheduledFuture<Void> answer(InvocationOnMock invocation) {
-              Object[] args = invocation.getArguments();
-              Runnable command = (Runnable) args[0];
-              long delay = (Long) args[1];
-              TimeUnit unit = (TimeUnit) args[2];
-              MockScheduledFuture<Void> future = new MockScheduledFuture<Void>(
-                  command, delay, unit);
-              scheduledDestroyTasks.add(future);
-              return future;
-            }
-          });
+      when(mockExecutor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
+          .thenAnswer(
+              new Answer<MockScheduledFuture<Void>>() {
+                @Override
+                public MockScheduledFuture<Void> answer(InvocationOnMock invocation) {
+                  Object[] args = invocation.getArguments();
+                  Runnable command = (Runnable) args[0];
+                  long delay = (Long) args[1];
+                  TimeUnit unit = (TimeUnit) args[2];
+                  MockScheduledFuture<Void> future =
+                      new MockScheduledFuture<Void>(command, delay, unit);
+                  scheduledDestroyTasks.add(future);
+                  return future;
+                }
+              });
       return mockExecutor;
     }
   }

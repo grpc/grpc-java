@@ -51,8 +51,7 @@ public final class SimpleLoadBalancerFactory extends LoadBalancer.Factory {
 
   private static final SimpleLoadBalancerFactory instance = new SimpleLoadBalancerFactory();
 
-  private SimpleLoadBalancerFactory() {
-  }
+  private SimpleLoadBalancerFactory() {}
 
   public static SimpleLoadBalancerFactory getInstance() {
     return instance;
@@ -71,10 +70,13 @@ public final class SimpleLoadBalancerFactory extends LoadBalancer.Factory {
 
     @GuardedBy("lock")
     private EquivalentAddressGroup addresses;
+
     @GuardedBy("lock")
     private InterimTransport<T> interimTransport;
+
     @GuardedBy("lock")
     private Status nameResolutionError;
+
     @GuardedBy("lock")
     private boolean closed;
 
@@ -129,11 +131,13 @@ public final class SimpleLoadBalancerFactory extends LoadBalancer.Factory {
         interimTransport = null;
       }
       if (savedInterimTransport != null) {
-        savedInterimTransport.closeWithRealTransports(new Supplier<T>() {
-            @Override public T get() {
-              return tm.getTransport(newAddresses);
-            }
-          });
+        savedInterimTransport.closeWithRealTransports(
+            new Supplier<T>() {
+              @Override
+              public T get() {
+                return tm.getTransport(newAddresses);
+              }
+            });
       }
     }
 

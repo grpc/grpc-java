@@ -52,15 +52,18 @@ public class ManagedChannelProviderTest {
 
   @Test
   public void multipleProvider() {
-    ClassLoader cl = new ServicesClassLoader(getClass().getClassLoader(),
-        "io/grpc/ManagedChannelProviderTest-multipleProvider.txt");
+    ClassLoader cl =
+        new ServicesClassLoader(
+            getClass().getClassLoader(), "io/grpc/ManagedChannelProviderTest-multipleProvider.txt");
     assertSame(Available7Provider.class, ManagedChannelProvider.load(cl).getClass());
   }
 
   @Test
   public void unavailableProvider() {
-    ClassLoader cl = new ServicesClassLoader(getClass().getClassLoader(),
-        "io/grpc/ManagedChannelProviderTest-unavailableProvider.txt");
+    ClassLoader cl =
+        new ServicesClassLoader(
+            getClass().getClassLoader(),
+            "io/grpc/ManagedChannelProviderTest-unavailableProvider.txt");
     assertNull(ManagedChannelProvider.load(cl));
   }
 

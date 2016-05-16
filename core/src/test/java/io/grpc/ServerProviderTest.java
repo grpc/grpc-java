@@ -53,17 +53,17 @@ public class ServerProviderTest {
 
   @Test
   public void multipleProvider() {
-    ClassLoader cl = new ServicesClassLoader(
-        getClass().getClassLoader(),
-        "io/grpc/ServerProviderTest-multipleProvider.txt");
+    ClassLoader cl =
+        new ServicesClassLoader(
+            getClass().getClassLoader(), "io/grpc/ServerProviderTest-multipleProvider.txt");
     assertSame(Available7Provider.class, ServerProvider.load(cl).getClass());
   }
 
   @Test
   public void unavailableProvider() {
-    ClassLoader cl = new ServicesClassLoader(
-        getClass().getClassLoader(),
-        "io/grpc/ServerProviderTest-unavailableProvider.txt");
+    ClassLoader cl =
+        new ServicesClassLoader(
+            getClass().getClassLoader(), "io/grpc/ServerProviderTest-unavailableProvider.txt");
     assertNull(ServerProvider.load(cl));
   }
 
@@ -147,4 +147,3 @@ public class ServerProviderTest {
     }
   }
 }
-

@@ -53,4 +53,3 @@ public interface Decompressor {
    */
   InputStream decompress(InputStream is) throws IOException;
 }
-

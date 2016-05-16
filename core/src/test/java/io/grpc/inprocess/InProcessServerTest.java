@@ -47,4 +47,3 @@ public class InProcessServerTest {
     Truth.assertThat(s.getPort()).isEqualTo(-1);
   }
 }
-

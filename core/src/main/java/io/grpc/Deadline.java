@@ -73,8 +73,8 @@ public final class Deadline implements Comparable<Deadline> {
     this(ticker, ticker.read(), offset, baseInstantAlreadyExpired);
   }
 
-  private Deadline(Ticker ticker, long baseInstant, long offset,
-      boolean baseInstantAlreadyExpired) {
+  private Deadline(
+      Ticker ticker, long baseInstant, long offset, boolean baseInstantAlreadyExpired) {
     this.ticker = ticker;
     // Clamp to range [MIN_OFFSET, MAX_OFFSET]
     offset = Math.min(MAX_OFFSET, Math.max(MIN_OFFSET, offset));

@@ -59,10 +59,11 @@ public class CallOptionsTest {
   private Deadline sampleDeadline = Deadline.after(1, NANOSECONDS, ticker);
   private Key<String> sampleKey = Attributes.Key.of("sample");
   private Attributes sampleAffinity = Attributes.newBuilder().set(sampleKey, "blah").build();
-  private CallOptions allSet = CallOptions.DEFAULT
-      .withAuthority(sampleAuthority)
-      .withDeadline(sampleDeadline)
-      .withAffinity(sampleAffinity);
+  private CallOptions allSet =
+      CallOptions.DEFAULT
+          .withAuthority(sampleAuthority)
+          .withDeadline(sampleDeadline)
+          .withAffinity(sampleAffinity);
 
   @Test
   public void defaultsAreAllNull() {
@@ -81,15 +82,13 @@ public class CallOptionsTest {
 
   @Test
   public void noStrayModifications() {
-    assertThat(equal(allSet, allSet.withAuthority("blah").withAuthority(sampleAuthority)))
-        .isTrue();
+    assertThat(equal(allSet, allSet.withAuthority("blah").withAuthority(sampleAuthority))).isTrue();
     assertThat(
-        equal(allSet,
-            allSet.withDeadline(Deadline.after(314, NANOSECONDS)).withDeadline(sampleDeadline)))
+            equal(
+                allSet,
+                allSet.withDeadline(Deadline.after(314, NANOSECONDS)).withDeadline(sampleDeadline)))
         .isTrue();
-    assertThat(
-        equal(allSet,
-            allSet.withAffinity(Attributes.EMPTY).withAffinity(sampleAffinity)))
+    assertThat(equal(allSet, allSet.withAffinity(Attributes.EMPTY).withAffinity(sampleAffinity)))
         .isTrue();
   }
 
@@ -127,21 +126,24 @@ public class CallOptionsTest {
 
   @Test
   public void toStringMatches_noDeadline_default() {
-    String expected = "CallOptions{deadline=null, authority=authority, affinity={sample=blah}, "
-        + "executor=class io.grpc.internal.SerializingExecutor, compressorName=null}";
-    String actual = allSet
-        .withDeadline(null)
-        .withExecutor(new SerializingExecutor(directExecutor()))
-        .toString();
+    String expected =
+        "CallOptions{deadline=null, authority=authority, affinity={sample=blah}, "
+            + "executor=class io.grpc.internal.SerializingExecutor, compressorName=null}";
+    String actual =
+        allSet
+            .withDeadline(null)
+            .withExecutor(new SerializingExecutor(directExecutor()))
+            .toString();
 
     assertThat(actual).isEqualTo(expected);
   }
 
   @Test
   public void toStringMatches_noDeadline() {
-    assertThat("CallOptions{deadline=null, authority=null, "
-        + "affinity={}, executor=null, compressorName=null}")
-            .isEqualTo(CallOptions.DEFAULT.toString());
+    assertThat(
+            "CallOptions{deadline=null, authority=null, "
+                + "affinity={}, executor=null, compressorName=null}")
+        .isEqualTo(CallOptions.DEFAULT.toString());
   }
 
   @Test

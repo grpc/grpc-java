@@ -106,9 +106,14 @@ public final class ServerImpl extends io.grpc.Server {
    *        doesn't have the method
    * @param executor to call methods on behalf of remote clients
    */
-  ServerImpl(Executor executor, InternalHandlerRegistry registry, HandlerRegistry fallbackRegistry,
-      InternalServer transportServer, Context rootContext,
-      DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry) {
+  ServerImpl(
+      Executor executor,
+      InternalHandlerRegistry registry,
+      HandlerRegistry fallbackRegistry,
+      InternalServer transportServer,
+      Context rootContext,
+      DecompressorRegistry decompressorRegistry,
+      CompressorRegistry compressorRegistry) {
     this.executor = executor;
     this.registry = Preconditions.checkNotNull(registry, "registry");
     this.fallbackRegistry = Preconditions.checkNotNull(fallbackRegistry, "fallbackRegistry");
@@ -293,8 +298,8 @@ public final class ServerImpl extends io.grpc.Server {
     }
 
     @Override
-    public ServerStreamListener streamCreated(final ServerStream stream, final String methodName,
-        final Metadata headers) {
+    public ServerStreamListener streamCreated(
+        final ServerStream stream, final String methodName, final Metadata headers) {
       final Context.CancellableContext context = createContext(stream, headers);
       final Executor wrappedExecutor;
       // This is a performance optimization that avoids the synchronization and queuing overhead
@@ -305,41 +310,42 @@ public final class ServerImpl extends io.grpc.Server {
         wrappedExecutor = new SerializingExecutor(executor);
       }
 
-      final JumpToApplicationThreadServerStreamListener jumpListener
-          = new JumpToApplicationThreadServerStreamListener(wrappedExecutor, stream, context);
+      final JumpToApplicationThreadServerStreamListener jumpListener =
+          new JumpToApplicationThreadServerStreamListener(wrappedExecutor, stream, context);
       // Run in wrappedExecutor so jumpListener.setListener() is called before any callbacks
       // are delivered, including any errors. Callbacks can still be triggered, but they will be
       // queued.
-      wrappedExecutor.execute(new ContextRunnable(context) {
-          @Override
-          public void runInContext() {
-            ServerStreamListener listener = NOOP_LISTENER;
-            try {
-              ServerMethodDefinition<?, ?> method = registry.lookupMethod(methodName);
-              if (method == null) {
-                method = fallbackRegistry.lookupMethod(methodName);
-              }
-              if (method == null) {
-                stream.close(
-                    Status.UNIMPLEMENTED.withDescription("Method not found: " + methodName),
-                    new Metadata());
+      wrappedExecutor.execute(
+          new ContextRunnable(context) {
+            @Override
+            public void runInContext() {
+              ServerStreamListener listener = NOOP_LISTENER;
+              try {
+                ServerMethodDefinition<?, ?> method = registry.lookupMethod(methodName);
+                if (method == null) {
+                  method = fallbackRegistry.lookupMethod(methodName);
+                }
+                if (method == null) {
+                  stream.close(
+                      Status.UNIMPLEMENTED.withDescription("Method not found: " + methodName),
+                      new Metadata());
+                  context.cancel(null);
+                  return;
+                }
+                listener = startCall(stream, methodName, method, headers, context);
+              } catch (RuntimeException e) {
+                stream.close(Status.fromThrowable(e), new Metadata());
                 context.cancel(null);
-                return;
+                throw e;
+              } catch (Throwable t) {
+                stream.close(Status.fromThrowable(t), new Metadata());
+                context.cancel(null);
+                throw new RuntimeException(t);
+              } finally {
+                jumpListener.setListener(listener);
               }
-              listener = startCall(stream, methodName, method, headers, context);
-            } catch (RuntimeException e) {
-              stream.close(Status.fromThrowable(e), new Metadata());
-              context.cancel(null);
-              throw e;
-            } catch (Throwable t) {
-              stream.close(Status.fromThrowable(t), new Metadata());
-              context.cancel(null);
-              throw new RuntimeException(t);
-            } finally {
-              jumpListener.setListener(listener);
             }
-          }
-        });
+          });
       return jumpListener;
     }
 
@@ -352,31 +358,43 @@ public final class ServerImpl extends io.grpc.Server {
 
       Context.CancellableContext context =
           rootContext.withDeadlineAfter(timeoutNanos, NANOSECONDS, timeoutService);
-      context.addListener(new Context.CancellationListener() {
-        @Override
-        public void cancelled(Context context) {
-          Status status = statusFromCancelled(context);
-          if (DEADLINE_EXCEEDED.getCode().equals(status.getCode())) {
-            // This should rarely get run, since the client will likely cancel the stream before
-            // the timeout is reached.
-            stream.cancel(status);
-          }
-        }
-      }, directExecutor());
+      context.addListener(
+          new Context.CancellationListener() {
+            @Override
+            public void cancelled(Context context) {
+              Status status = statusFromCancelled(context);
+              if (DEADLINE_EXCEEDED.getCode().equals(status.getCode())) {
+                // This should rarely get run, since the client will likely cancel the stream before
+                // the timeout is reached.
+                stream.cancel(status);
+              }
+            }
+          },
+          directExecutor());
 
       return context;
     }
 
     /** Never returns {@code null}. */
-    private <ReqT, RespT> ServerStreamListener startCall(ServerStream stream, String fullMethodName,
-        ServerMethodDefinition<ReqT, RespT> methodDef, Metadata headers,
+    private <ReqT, RespT> ServerStreamListener startCall(
+        ServerStream stream,
+        String fullMethodName,
+        ServerMethodDefinition<ReqT, RespT> methodDef,
+        Metadata headers,
         Context.CancellableContext context) {
       // TODO(ejona86): should we update fullMethodName to have the canonical path of the method?
-      ServerCallImpl<ReqT, RespT> call = new ServerCallImpl<ReqT, RespT>(
-          stream, methodDef.getMethodDescriptor(), headers, context, decompressorRegistry,
-          compressorRegistry);
-      ServerCall.Listener<ReqT> listener = methodDef.getServerCallHandler()
-          .startCall(methodDef.getMethodDescriptor(), call, headers);
+      ServerCallImpl<ReqT, RespT> call =
+          new ServerCallImpl<ReqT, RespT>(
+              stream,
+              methodDef.getMethodDescriptor(),
+              headers,
+              context,
+              decompressorRegistry,
+              compressorRegistry);
+      ServerCall.Listener<ReqT> listener =
+          methodDef
+              .getServerCallHandler()
+              .startCall(methodDef.getMethodDescriptor(), call, headers);
       if (listener == null) {
         throw new NullPointerException(
             "startCall() returned a null listener for method " + fullMethodName);
@@ -416,8 +434,8 @@ public final class ServerImpl extends io.grpc.Server {
     // Only accessed from callExecutor.
     private ServerStreamListener listener;
 
-    public JumpToApplicationThreadServerStreamListener(Executor executor,
-        ServerStream stream, Context.CancellableContext context) {
+    public JumpToApplicationThreadServerStreamListener(
+        Executor executor, ServerStream stream, Context.CancellableContext context) {
       this.callExecutor = executor;
       this.stream = stream;
       this.context = context;
@@ -446,64 +464,68 @@ public final class ServerImpl extends io.grpc.Server {
 
     @Override
     public void messageRead(final InputStream message) {
-      callExecutor.execute(new ContextRunnable(context) {
-        @Override
-        public void runInContext() {
-          try {
-            getListener().messageRead(message);
-          } catch (RuntimeException e) {
-            internalClose(Status.fromThrowable(e), new Metadata());
-            throw e;
-          } catch (Throwable t) {
-            internalClose(Status.fromThrowable(t), new Metadata());
-            throw new RuntimeException(t);
-          }
-        }
-      });
+      callExecutor.execute(
+          new ContextRunnable(context) {
+            @Override
+            public void runInContext() {
+              try {
+                getListener().messageRead(message);
+              } catch (RuntimeException e) {
+                internalClose(Status.fromThrowable(e), new Metadata());
+                throw e;
+              } catch (Throwable t) {
+                internalClose(Status.fromThrowable(t), new Metadata());
+                throw new RuntimeException(t);
+              }
+            }
+          });
     }
 
     @Override
     public void halfClosed() {
-      callExecutor.execute(new ContextRunnable(context) {
-        @Override
-        public void runInContext() {
-          try {
-            getListener().halfClosed();
-          } catch (RuntimeException e) {
-            internalClose(Status.fromThrowable(e), new Metadata());
-            throw e;
-          } catch (Throwable t) {
-            internalClose(Status.fromThrowable(t), new Metadata());
-            throw new RuntimeException(t);
-          }
-        }
-      });
+      callExecutor.execute(
+          new ContextRunnable(context) {
+            @Override
+            public void runInContext() {
+              try {
+                getListener().halfClosed();
+              } catch (RuntimeException e) {
+                internalClose(Status.fromThrowable(e), new Metadata());
+                throw e;
+              } catch (Throwable t) {
+                internalClose(Status.fromThrowable(t), new Metadata());
+                throw new RuntimeException(t);
+              }
+            }
+          });
     }
 
     @Override
     public void closed(final Status status) {
-      callExecutor.execute(new ContextRunnable(context) {
-        @Override
-        public void runInContext() {
-          try {
-            getListener().closed(status);
-          } finally {
-            // Regardless of the status code we cancel the context so that listeners
-            // are aware that the call is done.
-            context.cancel(status.getCause());
-          }
-        }
-      });
+      callExecutor.execute(
+          new ContextRunnable(context) {
+            @Override
+            public void runInContext() {
+              try {
+                getListener().closed(status);
+              } finally {
+                // Regardless of the status code we cancel the context so that listeners
+                // are aware that the call is done.
+                context.cancel(status.getCause());
+              }
+            }
+          });
     }
 
     @Override
     public void onReady() {
-      callExecutor.execute(new ContextRunnable(context) {
-        @Override
-        public void runInContext() {
-          getListener().onReady();
-        }
-      });
+      callExecutor.execute(
+          new ContextRunnable(context) {
+            @Override
+            public void runInContext() {
+              getListener().onReady();
+            }
+          });
     }
   }
 }

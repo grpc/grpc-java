@@ -55,22 +55,22 @@ import java.util.Arrays;
 @RunWith(JUnit4.class)
 public class TransportFrameUtilTest {
 
-  private static final String NONCOMPLIANT_ASCII_STRING = new String(new char[]{1, 2, 3});
+  private static final String NONCOMPLIANT_ASCII_STRING = new String(new char[] {1, 2, 3});
 
   private static final String COMPLIANT_ASCII_STRING = "Kyle";
 
   private static final BinaryMarshaller<String> UTF8_STRING_MARSHALLER =
       new BinaryMarshaller<String>() {
-    @Override
-    public byte[] toBytes(String value) {
-      return value.getBytes(UTF_8);
-    }
+        @Override
+        public byte[] toBytes(String value) {
+          return value.getBytes(UTF_8);
+        }
 
-    @Override
-    public String parseBytes(byte[] serialized) {
-      return new String(serialized, UTF_8);
-    }
-  };
+        @Override
+        public String parseBytes(byte[] serialized) {
+          return new String(serialized, UTF_8);
+        }
+      };
 
   private static final Key<String> PLAIN_STRING = Key.of("plainstring", ASCII_STRING_MARSHALLER);
   private static final Key<String> BINARY_STRING = Key.of("string-bin", UTF8_STRING_MARSHALLER);
@@ -86,10 +86,13 @@ public class TransportFrameUtilTest {
     byte[][] http2Headers = TransportFrameUtil.toHttp2Headers(headers);
     // BINARY_STRING_WITHOUT_SUFFIX should not get in because it contains non-compliant ASCII
     // characters but doesn't have "-bin" in the name.
-    byte[][] answer = new byte[][] {
-        "plainstring".getBytes(US_ASCII), COMPLIANT_ASCII_STRING.getBytes(US_ASCII),
-        "string-bin".getBytes(US_ASCII),
-        base64Encode(NONCOMPLIANT_ASCII_STRING.getBytes(US_ASCII))};
+    byte[][] answer =
+        new byte[][] {
+          "plainstring".getBytes(US_ASCII),
+          COMPLIANT_ASCII_STRING.getBytes(US_ASCII),
+          "string-bin".getBytes(US_ASCII),
+          base64Encode(NONCOMPLIANT_ASCII_STRING.getBytes(US_ASCII))
+        };
     assertEquals(answer.length, http2Headers.length);
     // http2Headers may re-sort the keys, so we cannot compare it with the answer side-by-side.
     for (int i = 0; i < answer.length; i += 2) {
@@ -130,5 +133,4 @@ public class TransportFrameUtilTest {
   private static byte[] base64Encode(byte[] input) {
     return BaseEncoding.base64().encode(input).getBytes(US_ASCII);
   }
-
 }

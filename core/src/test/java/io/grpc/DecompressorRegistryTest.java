@@ -57,9 +57,11 @@ public class DecompressorRegistryTest {
   @Test
   public void lookupDecompressor_checkDefaultMessageEncodingsExist() {
     // Explicitly put the names in, rather than link against MessageEncoding
-    assertNotNull("Expected identity to be registered",
+    assertNotNull(
+        "Expected identity to be registered",
         DecompressorRegistry.getDefaultInstance().lookupDecompressor("identity"));
-    assertNotNull("Expected gzip to be registered",
+    assertNotNull(
+        "Expected gzip to be registered",
         DecompressorRegistry.getDefaultInstance().lookupDecompressor("gzip"));
   }
 
@@ -69,8 +71,8 @@ public class DecompressorRegistryTest {
     knownEncodings.add("identity");
     knownEncodings.add("gzip");
 
-    assertEquals(knownEncodings,
-        DecompressorRegistry.getDefaultInstance().getKnownMessageEncodings());
+    assertEquals(
+        knownEncodings, DecompressorRegistry.getDefaultInstance().getKnownMessageEncodings());
   }
 
   /*
@@ -85,16 +87,16 @@ public class DecompressorRegistryTest {
   public void registerDecompressor_advertisedDecompressor() {
     registry.register(dummyDecompressor, true);
 
-    assertTrue(registry.getAdvertisedMessageEncodings()
-        .contains(dummyDecompressor.getMessageEncoding()));
+    assertTrue(
+        registry.getAdvertisedMessageEncodings().contains(dummyDecompressor.getMessageEncoding()));
   }
 
   @Test
   public void registerDecompressor_nonadvertisedDecompressor() {
     registry.register(dummyDecompressor, false);
 
-    assertFalse(registry.getAdvertisedMessageEncodings()
-        .contains(dummyDecompressor.getMessageEncoding()));
+    assertFalse(
+        registry.getAdvertisedMessageEncodings().contains(dummyDecompressor.getMessageEncoding()));
   }
 
   private static final class Dummy implements Decompressor {
@@ -109,4 +111,3 @@ public class DecompressorRegistryTest {
     }
   }
 }
-

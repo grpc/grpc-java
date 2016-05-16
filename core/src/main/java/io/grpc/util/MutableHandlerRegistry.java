@@ -52,8 +52,8 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/933")
 public final class MutableHandlerRegistry extends HandlerRegistry {
-  private final ConcurrentMap<String, ServerServiceDefinition> services
-      = new ConcurrentHashMap<String, ServerServiceDefinition>();
+  private final ConcurrentMap<String, ServerServiceDefinition> services =
+      new ConcurrentHashMap<String, ServerServiceDefinition>();
 
   @Nullable
   public ServerServiceDefinition addService(ServerServiceDefinition service) {

@@ -91,16 +91,20 @@ public class TransportSetTest {
   @Mock private TransportSet.Callback mockTransportSetCallback;
   @Mock private ClientStreamListener mockStreamListener;
 
-  private final MethodDescriptor<String, Integer> method = MethodDescriptor.create(
-      MethodDescriptor.MethodType.UNKNOWN, "/service/method",
-      new StringMarshaller(), new IntegerMarshaller());
+  private final MethodDescriptor<String, Integer> method =
+      MethodDescriptor.create(
+          MethodDescriptor.MethodType.UNKNOWN,
+          "/service/method",
+          new StringMarshaller(),
+          new IntegerMarshaller());
   private final Metadata headers = new Metadata();
 
   private TransportSet transportSet;
   private EquivalentAddressGroup addressGroup;
   private BlockingQueue<MockClientTransportInfo> transports;
 
-  @Before public void setUp() {
+  @Before
+  public void setUp() {
     MockitoAnnotations.initMocks(this);
     fakeClock = new FakeClock();
     fakeExecutor = new FakeClock();
@@ -113,12 +117,14 @@ public class TransportSetTest {
     transports = TestUtils.captureTransports(mockTransportFactory);
   }
 
-  @After public void noMorePendingTasks() {
+  @After
+  public void noMorePendingTasks() {
     assertEquals(0, fakeClock.numPendingTasks());
     assertEquals(0, fakeExecutor.numPendingTasks());
   }
 
-  @Test public void singleAddressReconnect() {
+  @Test
+  public void singleAddressReconnect() {
     SocketAddress addr = mock(SocketAddress.class);
     createTransportSet(addr);
 
@@ -178,7 +184,8 @@ public class TransportSetTest {
     verifyNoMoreInteractions(mockTransportSetCallback);
   }
 
-  @Test public void twoAddressesReconnect() {
+  @Test
+  public void twoAddressesReconnect() {
     SocketAddress addr1 = mock(SocketAddress.class);
     SocketAddress addr2 = mock(SocketAddress.class);
     createTransportSet(addr1, addr2);
@@ -350,8 +357,8 @@ public class TransportSetTest {
     verify(transportInfo.transport, times(0)).shutdown();
     assertEquals(0, fakeExecutor.numPendingTasks());
     transportInfo.listener.transportReady();
-    verify(transportInfo.transport, times(0)).newStream(
-        any(MethodDescriptor.class), any(Metadata.class));
+    verify(transportInfo.transport, times(0))
+        .newStream(any(MethodDescriptor.class), any(Metadata.class));
     assertEquals(1, fakeExecutor.runDueTasks());
     verify(transportInfo.transport).newStream(same(method), same(headers));
     verify(transportInfo.transport).shutdown();
@@ -415,15 +422,22 @@ public class TransportSetTest {
   @Test
   public void logId() {
     createTransportSet(mock(SocketAddress.class));
-    assertEquals("TransportSet@" + Integer.toHexString(transportSet.hashCode()),
-        transportSet.getLogId());
+    assertEquals(
+        "TransportSet@" + Integer.toHexString(transportSet.hashCode()), transportSet.getLogId());
   }
 
-  private void createTransportSet(SocketAddress ... addrs) {
+  private void createTransportSet(SocketAddress... addrs) {
     addressGroup = new EquivalentAddressGroup(Arrays.asList(addrs));
-    transportSet = new TransportSet(addressGroup, authority, mockLoadBalancer,
-        mockBackoffPolicyProvider, mockTransportFactory, fakeClock.scheduledExecutorService,
-        fakeExecutor.scheduledExecutorService, mockTransportSetCallback,
-        Stopwatch.createUnstarted(fakeClock.ticker));
+    transportSet =
+        new TransportSet(
+            addressGroup,
+            authority,
+            mockLoadBalancer,
+            mockBackoffPolicyProvider,
+            mockTransportFactory,
+            fakeClock.scheduledExecutorService,
+            fakeExecutor.scheduledExecutorService,
+            mockTransportSetCallback,
+            Stopwatch.createUnstarted(fakeClock.ticker));
   }
 }

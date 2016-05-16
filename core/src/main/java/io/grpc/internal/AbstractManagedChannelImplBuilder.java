@@ -62,36 +62,28 @@ import javax.annotation.Nullable;
  *
  * @param <T> The concrete type of this builder.
  */
-public abstract class AbstractManagedChannelImplBuilder
-        <T extends AbstractManagedChannelImplBuilder<T>> extends ManagedChannelBuilder<T> {
+public abstract class AbstractManagedChannelImplBuilder<
+        T extends AbstractManagedChannelImplBuilder<T>> extends ManagedChannelBuilder<T> {
   private static final String DIRECT_ADDRESS_SCHEME = "directaddress";
 
-  @Nullable
-  private Executor executor;
+  @Nullable private Executor executor;
   private final List<ClientInterceptor> interceptors = new ArrayList<ClientInterceptor>();
 
   private final String target;
 
-  @Nullable
-  private final SocketAddress directServerAddress;
+  @Nullable private final SocketAddress directServerAddress;
 
-  @Nullable
-  private String userAgent;
+  @Nullable private String userAgent;
 
-  @Nullable
-  private String authorityOverride;
+  @Nullable private String authorityOverride;
 
-  @Nullable
-  private NameResolver.Factory nameResolverFactory;
+  @Nullable private NameResolver.Factory nameResolverFactory;
 
-  @Nullable
-  private LoadBalancer.Factory loadBalancerFactory;
+  @Nullable private LoadBalancer.Factory loadBalancerFactory;
 
-  @Nullable
-  private DecompressorRegistry decompressorRegistry;
+  @Nullable private DecompressorRegistry decompressorRegistry;
 
-  @Nullable
-  private CompressorRegistry compressorRegistry;
+  @Nullable private CompressorRegistry compressorRegistry;
 
   protected AbstractManagedChannelImplBuilder(String target) {
     this.target = Preconditions.checkNotNull(target);
@@ -128,7 +120,8 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Override
   public final T nameResolverFactory(NameResolver.Factory resolverFactory) {
-    Preconditions.checkState(directServerAddress == null,
+    Preconditions.checkState(
+        directServerAddress == null,
         "directServerAddress is set (%s), which forbids the use of NameResolverFactory",
         directServerAddress);
     this.nameResolverFactory = resolverFactory;
@@ -137,7 +130,8 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Override
   public final T loadBalancerFactory(LoadBalancer.Factory loadBalancerFactory) {
-    Preconditions.checkState(directServerAddress == null,
+    Preconditions.checkState(
+        directServerAddress == null,
         "directServerAddress is set (%s), which forbids the use of LoadBalancerFactory",
         directServerAddress);
     this.loadBalancerFactory = loadBalancerFactory;
@@ -187,8 +181,8 @@ public abstract class AbstractManagedChannelImplBuilder
   public ManagedChannelImpl build() {
     ClientTransportFactory transportFactory = buildTransportFactory();
     if (authorityOverride != null) {
-      transportFactory = new AuthorityOverridingTransportFactory(
-        transportFactory, authorityOverride);
+      transportFactory =
+          new AuthorityOverridingTransportFactory(transportFactory, authorityOverride);
     }
     return new ManagedChannelImpl(
         target,
@@ -200,7 +194,9 @@ public abstract class AbstractManagedChannelImplBuilder
         transportFactory,
         firstNonNull(decompressorRegistry, DecompressorRegistry.getDefaultInstance()),
         firstNonNull(compressorRegistry, CompressorRegistry.getDefaultInstance()),
-        executor, userAgent, interceptors);
+        executor,
+        userAgent,
+        interceptors);
   }
 
   /**
@@ -223,16 +219,15 @@ public abstract class AbstractManagedChannelImplBuilder
     final ClientTransportFactory factory;
     final String authorityOverride;
 
-    AuthorityOverridingTransportFactory(
-        ClientTransportFactory factory, String authorityOverride) {
+    AuthorityOverridingTransportFactory(ClientTransportFactory factory, String authorityOverride) {
       this.factory = Preconditions.checkNotNull(factory, "factory should not be null");
-      this.authorityOverride = Preconditions.checkNotNull(
-        authorityOverride, "authorityOverride should not be null");
+      this.authorityOverride =
+          Preconditions.checkNotNull(authorityOverride, "authorityOverride should not be null");
     }
 
     @Override
-    public ManagedClientTransport newClientTransport(SocketAddress serverAddress,
-        String authority) {
+    public ManagedClientTransport newClientTransport(
+        SocketAddress serverAddress, String authority) {
       return factory.newClientTransport(serverAddress, authorityOverride);
     }
 

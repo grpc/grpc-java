@@ -145,17 +145,20 @@ public class MethodDescriptor<ReqT, RespT> {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1774")
   public static <RequestT, ResponseT> MethodDescriptor<RequestT, ResponseT> create(
-      MethodType type, String fullMethodName,
+      MethodType type,
+      String fullMethodName,
       Marshaller<RequestT> requestMarshaller,
       Marshaller<ResponseT> responseMarshaller) {
     return new MethodDescriptor<RequestT, ResponseT>(
         type, fullMethodName, requestMarshaller, responseMarshaller, false);
   }
 
-  private MethodDescriptor(MethodType type, String fullMethodName,
-                           Marshaller<ReqT> requestMarshaller,
-                           Marshaller<RespT> responseMarshaller,
-                           boolean idempotent) {
+  private MethodDescriptor(
+      MethodType type,
+      String fullMethodName,
+      Marshaller<ReqT> requestMarshaller,
+      Marshaller<RespT> responseMarshaller,
+      boolean idempotent) {
     this.type = Preconditions.checkNotNull(type, "type");
     this.fullMethodName = Preconditions.checkNotNull(fullMethodName, "fullMethodName");
     this.requestMarshaller = Preconditions.checkNotNull(requestMarshaller, "requestMarshaller");
@@ -233,8 +236,8 @@ public class MethodDescriptor<ReqT, RespT> {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1775")
   public MethodDescriptor<ReqT, RespT> withIdempotent(boolean idempotent) {
-    return new MethodDescriptor<ReqT, RespT>(type, fullMethodName, requestMarshaller,
-        responseMarshaller, idempotent);
+    return new MethodDescriptor<ReqT, RespT>(
+        type, fullMethodName, requestMarshaller, responseMarshaller, idempotent);
   }
 
   /**

@@ -83,16 +83,16 @@ public final class Metadata {
   public static final BinaryMarshaller<byte[]> BINARY_BYTE_MARSHALLER =
       new BinaryMarshaller<byte[]>() {
 
-    @Override
-    public byte[] toBytes(byte[] value) {
-      return value;
-    }
+        @Override
+        public byte[] toBytes(byte[] value) {
+          return value;
+        }
 
-    @Override
-    public byte[] parseBytes(byte[] serialized) {
-      return serialized;
-    }
-  };
+        @Override
+        public byte[] parseBytes(byte[] serialized) {
+          return serialized;
+        }
+      };
 
   /**
    * Simple metadata marshaller that encodes strings as is.
@@ -104,32 +104,33 @@ public final class Metadata {
   public static final AsciiMarshaller<String> ASCII_STRING_MARSHALLER =
       new AsciiMarshaller<String>() {
 
-    @Override
-    public String toAsciiString(String value) {
-      return value;
-    }
+        @Override
+        public String toAsciiString(String value) {
+          return value;
+        }
 
-    @Override
-    public String parseAsciiString(String serialized) {
-      return serialized;
-    }
-  };
+        @Override
+        public String parseAsciiString(String serialized) {
+          return serialized;
+        }
+      };
 
   /**
    * Simple metadata marshaller that encodes an integer as a signed decimal string.
    */
-  static final AsciiMarshaller<Integer> INTEGER_MARSHALLER = new AsciiMarshaller<Integer>() {
+  static final AsciiMarshaller<Integer> INTEGER_MARSHALLER =
+      new AsciiMarshaller<Integer>() {
 
-    @Override
-    public String toAsciiString(Integer value) {
-      return value.toString();
-    }
+        @Override
+        public String toAsciiString(Integer value) {
+          return value.toString();
+        }
 
-    @Override
-    public Integer parseAsciiString(String serialized) {
-      return Integer.parseInt(serialized);
-    }
-  };
+        @Override
+        public Integer parseAsciiString(String serialized) {
+          return Integer.parseInt(serialized);
+        }
+      };
 
   /** All value lists can be added to. No value list may be empty. */
   // Use LinkedHashMap for consistent ordering for tests.
@@ -145,8 +146,8 @@ public final class Metadata {
   // TODO(louiscryan): Convert to use ByteString so we can cache transformations
   @Internal
   public Metadata(byte[]... binaryValues) {
-    checkArgument(binaryValues.length % 2 == 0,
-        "Odd number of key-value pairs: %s", binaryValues.length);
+    checkArgument(
+        binaryValues.length % 2 == 0, "Odd number of key-value pairs: %s", binaryValues.length);
     for (int i = 0; i < binaryValues.length; i += 2) {
       String name = new String(binaryValues[i], US_ASCII);
       storeAdd(name, new MetadataEntry(name.endsWith(BINARY_HEADER_SUFFIX), binaryValues[i + 1]));
@@ -207,14 +208,15 @@ public final class Metadata {
       /* This is unmodifiable currently, but could be made to support remove() in the future.  If
        * removal support is added, the {@link #storeCount} variable needs to be updated
        * appropriately. */
-      return Iterables.unmodifiableIterable(Iterables.transform(
-          store.get(key.name()),
-          new Function<MetadataEntry, T>() {
-            @Override
-            public T apply(MetadataEntry entry) {
-              return entry.getParsed(key);
-            }
-          }));
+      return Iterables.unmodifiableIterable(
+          Iterables.transform(
+              store.get(key.name()),
+              new Function<MetadataEntry, T>() {
+                @Override
+                public T apply(MetadataEntry entry) {
+                  return entry.getParsed(key);
+                }
+              }));
     }
     return null;
   }
@@ -276,12 +278,14 @@ public final class Metadata {
       return null;
     }
     storeCount -= values.size();
-    return Iterables.transform(values, new Function<MetadataEntry, T>() {
-      @Override
-      public T apply(MetadataEntry metadataEntry) {
-        return metadataEntry.getParsed(key);
-      }
-    });
+    return Iterables.transform(
+        values,
+        new Function<MetadataEntry, T>() {
+          @Override
+          public T apply(MetadataEntry metadataEntry) {
+            return metadataEntry.getParsed(key);
+          }
+        });
   }
 
   /**
@@ -306,8 +310,10 @@ public final class Metadata {
     int i = 0;
     for (Map.Entry<String, List<MetadataEntry>> storeEntry : store.entrySet()) {
       for (MetadataEntry metadataEntry : storeEntry.getValue()) {
-        serialized[i++] = metadataEntry.key != null
-            ? metadataEntry.key.asciiName() : storeEntry.getKey().getBytes(US_ASCII);
+        serialized[i++] =
+            metadataEntry.key != null
+                ? metadataEntry.key.asciiName()
+                : storeEntry.getKey().getBytes(US_ASCII);
         serialized[i++] = metadataEntry.getSerialized();
       }
     }
@@ -463,7 +469,7 @@ public final class Metadata {
     private final byte[] nameBytes;
 
     private static BitSet generateValidTChars() {
-      BitSet valid  = new BitSet(0x7f);
+      BitSet valid = new BitSet(0x7f);
       valid.set('-');
       valid.set('_');
       valid.set('.');
@@ -487,8 +493,8 @@ public final class Metadata {
           continue;
         }
 
-        checkArgument(VALID_T_CHARS.get(tChar),
-            "Invalid character '%s' in key name '%s'", tChar, n);
+        checkArgument(
+            VALID_T_CHARS.get(tChar), "Invalid character '%s' in key name '%s'", tChar, n);
       }
       return n;
     }
@@ -572,9 +578,11 @@ public final class Metadata {
      */
     private BinaryKey(String name, BinaryMarshaller<T> marshaller) {
       super(name);
-      checkArgument(name.endsWith(BINARY_HEADER_SUFFIX),
+      checkArgument(
+          name.endsWith(BINARY_HEADER_SUFFIX),
           "Binary header is named %s. It must end with %s",
-          name, BINARY_HEADER_SUFFIX);
+          name,
+          BINARY_HEADER_SUFFIX);
       checkArgument(name.length() > BINARY_HEADER_SUFFIX.length(), "empty key name");
       this.marshaller = checkNotNull(marshaller, "marshaller is null");
     }
@@ -601,7 +609,8 @@ public final class Metadata {
       Preconditions.checkArgument(
           !name.endsWith(BINARY_HEADER_SUFFIX),
           "ASCII header is named %s. It must not end with %s",
-          name, BINARY_HEADER_SUFFIX);
+          name,
+          BINARY_HEADER_SUFFIX);
       this.marshaller = Preconditions.checkNotNull(marshaller);
     }
 
@@ -621,6 +630,7 @@ public final class Metadata {
 
     @SuppressWarnings("rawtypes")
     Key key;
+
     boolean isBinary;
     byte[] serializedBinary;
 
@@ -673,9 +683,7 @@ public final class Metadata {
 
     @SuppressWarnings("unchecked")
     public byte[] getSerialized() {
-      return serializedBinary =
-          serializedBinary == null
-              ? key.toBytes(parsed) : serializedBinary;
+      return serializedBinary = serializedBinary == null ? key.toBytes(parsed) : serializedBinary;
     }
 
     @Override

@@ -62,14 +62,11 @@ import java.util.Arrays;
  */
 @RunWith(JUnit4.class)
 public class MessageFramerTest {
-  @Mock
-  private MessageFramer.Sink sink;
+  @Mock private MessageFramer.Sink sink;
   private MessageFramer framer;
 
-  @Captor
-  private ArgumentCaptor<ByteWritableBuffer> frameCaptor;
-  private BytesWritableBufferAllocator allocator =
-      new BytesWritableBufferAllocator(1000, 1000);
+  @Captor private ArgumentCaptor<ByteWritableBuffer> frameCaptor;
+  private BytesWritableBufferAllocator allocator = new BytesWritableBufferAllocator(1000, 1000);
 
   /** Set up for test. */
   @Before
@@ -80,7 +77,7 @@ public class MessageFramerTest {
 
   @Test
   public void simplePayload() {
-    writeKnownLength(framer, new byte[]{3, 14});
+    writeKnownLength(framer, new byte[] {3, 14});
     verifyNoMoreInteractions(sink);
     framer.flush();
     verify(sink).deliverFrame(toWriteBuffer(new byte[] {0, 0, 0, 0, 2, 3, 14}), false, true);
@@ -90,7 +87,7 @@ public class MessageFramerTest {
 
   @Test
   public void simpleUnknownLengthPayload() {
-    writeUnknownLength(framer, new byte[]{3, 14});
+    writeUnknownLength(framer, new byte[] {3, 14});
     framer.flush();
     // Header is written first, then payload
     verify(sink).deliverFrame(toWriteBuffer(new byte[] {0, 0, 0, 0, 2}), false, false);
@@ -101,24 +98,24 @@ public class MessageFramerTest {
 
   @Test
   public void smallPayloadsShouldBeCombined() {
-    writeKnownLength(framer, new byte[]{3});
+    writeKnownLength(framer, new byte[] {3});
     verifyNoMoreInteractions(sink);
-    writeKnownLength(framer, new byte[]{14});
+    writeKnownLength(framer, new byte[] {14});
     verifyNoMoreInteractions(sink);
     framer.flush();
-    verify(sink).deliverFrame(
-        toWriteBuffer(new byte[] {0, 0, 0, 0, 1, 3, 0, 0, 0, 0, 1, 14}), false, true);
+    verify(sink)
+        .deliverFrame(toWriteBuffer(new byte[] {0, 0, 0, 0, 1, 3, 0, 0, 0, 0, 1, 14}), false, true);
     verifyNoMoreInteractions(sink);
     assertEquals(1, allocator.allocCount);
   }
 
   @Test
   public void closeCombinedWithFullSink() {
-    writeKnownLength(framer, new byte[]{3, 14, 1, 5, 9, 2, 6});
+    writeKnownLength(framer, new byte[] {3, 14, 1, 5, 9, 2, 6});
     verifyNoMoreInteractions(sink);
     framer.close();
-    verify(sink).deliverFrame(
-        toWriteBuffer(new byte[] {0, 0, 0, 0, 7, 3, 14, 1, 5, 9, 2, 6}), true, true);
+    verify(sink)
+        .deliverFrame(toWriteBuffer(new byte[] {0, 0, 0, 0, 7, 3, 14, 1, 5, 9, 2, 6}), true, true);
     verifyNoMoreInteractions(sink);
     assertEquals(1, allocator.allocCount);
   }
@@ -135,9 +132,10 @@ public class MessageFramerTest {
   public void payloadSplitBetweenSinks() {
     allocator = new BytesWritableBufferAllocator(12, 12);
     framer = new MessageFramer(sink, allocator);
-    writeKnownLength(framer, new byte[]{3, 14, 1, 5, 9, 2, 6, 5});
-    verify(sink).deliverFrame(
-        toWriteBuffer(new byte[] {0, 0, 0, 0, 8, 3, 14, 1, 5, 9, 2, 6}), false, false);
+    writeKnownLength(framer, new byte[] {3, 14, 1, 5, 9, 2, 6, 5});
+    verify(sink)
+        .deliverFrame(
+            toWriteBuffer(new byte[] {0, 0, 0, 0, 8, 3, 14, 1, 5, 9, 2, 6}), false, false);
     verifyNoMoreInteractions(sink);
 
     framer.flush();
@@ -150,9 +148,10 @@ public class MessageFramerTest {
   public void frameHeaderSplitBetweenSinks() {
     allocator = new BytesWritableBufferAllocator(12, 12);
     framer = new MessageFramer(sink, allocator);
-    writeKnownLength(framer, new byte[]{3, 14, 1});
-    writeKnownLength(framer, new byte[]{3});
-    verify(sink).deliverFrame(
+    writeKnownLength(framer, new byte[] {3, 14, 1});
+    writeKnownLength(framer, new byte[] {3});
+    verify(sink)
+        .deliverFrame(
             toWriteBuffer(new byte[] {0, 0, 0, 0, 3, 3, 14, 1, 0, 0, 0, 0}), false, false);
     verifyNoMoreInteractions(sink);
 
@@ -182,7 +181,7 @@ public class MessageFramerTest {
 
   @Test
   public void flushIsIdempotent() {
-    writeKnownLength(framer, new byte[]{3, 14});
+    writeKnownLength(framer, new byte[] {3, 14});
     framer.flush();
     framer.flush();
     verify(sink).deliverFrame(toWriteBuffer(new byte[] {0, 0, 0, 0, 2, 3, 14}), false, true);
@@ -238,9 +237,10 @@ public class MessageFramerTest {
   @Test
   public void compressed() throws Exception {
     allocator = new BytesWritableBufferAllocator(100, Integer.MAX_VALUE);
-    framer = new MessageFramer(sink, allocator)
-        .setCompressor(new Codec.Gzip())
-        .setMessageCompression(true);
+    framer =
+        new MessageFramer(sink, allocator)
+            .setCompressor(new Codec.Gzip())
+            .setMessageCompression(true);
     writeKnownLength(framer, new byte[1000]);
     framer.flush();
     // The GRPC header is written first as a separate frame.
@@ -263,8 +263,7 @@ public class MessageFramerTest {
   @Test
   public void dontCompressIfNoEncoding() throws Exception {
     allocator = new BytesWritableBufferAllocator(100, Integer.MAX_VALUE);
-    framer = new MessageFramer(sink, allocator)
-        .setMessageCompression(true);
+    framer = new MessageFramer(sink, allocator).setMessageCompression(true);
     writeKnownLength(framer, new byte[1000]);
     framer.flush();
     // The GRPC header is written first as a separate frame
@@ -281,15 +280,16 @@ public class MessageFramerTest {
     int length = byteBuf.getInt();
     assertEquals(1000, length);
 
-    assertEquals(buffer.data.length - 5 , length);
+    assertEquals(buffer.data.length - 5, length);
   }
 
   @Test
   public void dontCompressIfNotRequested() throws Exception {
     allocator = new BytesWritableBufferAllocator(100, Integer.MAX_VALUE);
-    framer = new MessageFramer(sink, allocator)
-        .setCompressor(new Codec.Gzip())
-        .setMessageCompression(false);
+    framer =
+        new MessageFramer(sink, allocator)
+            .setCompressor(new Codec.Gzip())
+            .setMessageCompression(false);
     writeKnownLength(framer, new byte[1000]);
     framer.flush();
     // The GRPC header is written first as a separate frame
@@ -306,25 +306,27 @@ public class MessageFramerTest {
     int length = byteBuf.getInt();
     assertEquals(1000, length);
 
-    assertEquals(buffer.data.length - 5 , length);
+    assertEquals(buffer.data.length - 5, length);
   }
 
   @Test
   public void closeIsRentrantSafe() throws Exception {
-    MessageFramer.Sink reentrant = new MessageFramer.Sink() {
-      int count = 0;
-      @Override
-      public void deliverFrame(WritableBuffer frame, boolean endOfStream, boolean flush) {
-        if (count == 0) {
-          framer.close();
-          count++;
-        } else {
-          fail("received event from reentrant call to close");
-        }
-      }
-    };
+    MessageFramer.Sink reentrant =
+        new MessageFramer.Sink() {
+          int count = 0;
+
+          @Override
+          public void deliverFrame(WritableBuffer frame, boolean endOfStream, boolean flush) {
+            if (count == 0) {
+              framer.close();
+              count++;
+            } else {
+              fail("received event from reentrant call to close");
+            }
+          }
+        };
     framer = new MessageFramer(reentrant, allocator);
-    writeKnownLength(framer, new byte[]{3, 14});
+    writeKnownLength(framer, new byte[] {3, 14});
     framer.close();
   }
 
@@ -332,7 +334,7 @@ public class MessageFramerTest {
   public void zeroLengthCompressibleMessageIsNotCompressed() {
     framer.setCompressor(new Codec.Gzip());
     framer.setMessageCompression(true);
-    writeKnownLength(framer, new byte[]{});
+    writeKnownLength(framer, new byte[] {});
     framer.flush();
     verify(sink).deliverFrame(toWriteBuffer(new byte[] {0, 0, 0, 0, 0}), false, true);
   }
@@ -403,8 +405,8 @@ public class MessageFramerTest {
       ByteWritableBuffer other = (ByteWritableBuffer) buffer;
 
       return readableBytes() == other.readableBytes()
-          && Arrays.equals(Arrays.copyOf(data, readableBytes()),
-            Arrays.copyOf(other.data, readableBytes()));
+          && Arrays.equals(
+              Arrays.copyOf(data, readableBytes()), Arrays.copyOf(other.data, readableBytes()));
     }
 
     @Override

@@ -50,10 +50,12 @@ public class StatusTest {
   @Test
   public void verifyExceptionMessage() {
     assertEquals("UNKNOWN", Status.UNKNOWN.asRuntimeException().getMessage());
-    assertEquals("CANCELLED: This is a test",
+    assertEquals(
+        "CANCELLED: This is a test",
         Status.CANCELLED.withDescription("This is a test").asRuntimeException().getMessage());
     assertEquals("UNKNOWN", Status.UNKNOWN.asException().getMessage());
-    assertEquals("CANCELLED: This is a test",
+    assertEquals(
+        "CANCELLED: This is a test",
         Status.CANCELLED.withDescription("This is a test").asException().getMessage());
   }
 
@@ -104,45 +106,46 @@ public class StatusTest {
 
   @Test
   public void metadataEncode_unmatchedLowSurrogate() {
-    byte[] b = Status.MESSAGE_KEY.toBytes("my favorite character is " + ((char)0xDC37));
+    byte[] b = Status.MESSAGE_KEY.toBytes("my favorite character is " + ((char) 0xDC37));
     assertEquals("my favorite character is ?", new String(b, ascii));
   }
 
   @Test
   public void metadataEncode_maxSurrogatePair() {
-    byte[] b = Status.MESSAGE_KEY.toBytes(
-        "my favorite character is " + ((char)0xDBFF) + ((char)0xDFFF));
+    byte[] b =
+        Status.MESSAGE_KEY.toBytes("my favorite character is " + ((char) 0xDBFF) + ((char) 0xDFFF));
     assertEquals("my favorite character is %F4%8F%BF%BF", new String(b, ascii));
   }
 
   @Test
   public void metadataDecode_ascii() {
-    String s = Status.MESSAGE_KEY.parseBytes(new byte[]{'H', 'e', 'l', 'l', 'o'});
+    String s = Status.MESSAGE_KEY.parseBytes(new byte[] {'H', 'e', 'l', 'l', 'o'});
     assertEquals("Hello", s);
   }
 
   @Test
   public void metadataDecode_percent() {
-    String s = Status.MESSAGE_KEY.parseBytes(new byte[]{'H', '%', '6', '1', 'o'});
+    String s = Status.MESSAGE_KEY.parseBytes(new byte[] {'H', '%', '6', '1', 'o'});
     assertEquals("Hao", s);
   }
 
   @Test
   public void metadataDecode_percentUnderflow() {
-    String s = Status.MESSAGE_KEY.parseBytes(new byte[]{'H', '%', '6'});
+    String s = Status.MESSAGE_KEY.parseBytes(new byte[] {'H', '%', '6'});
     assertEquals("H%6", s);
   }
 
   @Test
   public void metadataDecode_surrogate() {
-    String s = Status.MESSAGE_KEY.parseBytes(
-        new byte[]{'%', 'F', '0', '%', '9', '0', '%', '8', '0', '%', '8', '1'});
+    String s =
+        Status.MESSAGE_KEY.parseBytes(
+            new byte[] {'%', 'F', '0', '%', '9', '0', '%', '8', '0', '%', '8', '1'});
     assertEquals("𐀁", s);
   }
 
   @Test
   public void metadataDecode_badEncoding() {
-    String s = Status.MESSAGE_KEY.parseBytes(new byte[]{'%', 'G', '0'});
+    String s = Status.MESSAGE_KEY.parseBytes(new byte[] {'%', 'G', '0'});
     assertEquals("%G0", s);
   }
 }

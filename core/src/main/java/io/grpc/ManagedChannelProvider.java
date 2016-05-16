@@ -48,13 +48,12 @@ import java.util.ServiceLoader;
  */
 @Internal
 public abstract class ManagedChannelProvider {
-  private static final ManagedChannelProvider provider
-      = load(getCorrectClassLoader());
+  private static final ManagedChannelProvider provider = load(getCorrectClassLoader());
 
   @VisibleForTesting
   static ManagedChannelProvider load(ClassLoader classLoader) {
-    ServiceLoader<ManagedChannelProvider> providers
-        = ServiceLoader.load(ManagedChannelProvider.class, classLoader);
+    ServiceLoader<ManagedChannelProvider> providers =
+        ServiceLoader.load(ManagedChannelProvider.class, classLoader);
     List<ManagedChannelProvider> list = new ArrayList<ManagedChannelProvider>();
     for (ManagedChannelProvider current : providers) {
       if (!current.isAvailable()) {
@@ -65,12 +64,14 @@ public abstract class ManagedChannelProvider {
     if (list.isEmpty()) {
       return null;
     } else {
-      return Collections.max(list, new Comparator<ManagedChannelProvider>() {
-        @Override
-        public int compare(ManagedChannelProvider f1, ManagedChannelProvider f2) {
-          return f1.priority() - f2.priority();
-        }
-      });
+      return Collections.max(
+          list,
+          new Comparator<ManagedChannelProvider>() {
+            @Override
+            public int compare(ManagedChannelProvider f1, ManagedChannelProvider f2) {
+              return f1.priority() - f2.priority();
+            }
+          });
     }
   }
 
@@ -81,8 +82,9 @@ public abstract class ManagedChannelProvider {
    */
   public static ManagedChannelProvider provider() {
     if (provider == null) {
-      throw new ProviderNotFoundException("No functional channel service provider found. "
-          + "Try adding a dependency on the grpc-okhttp or grpc-netty artifact");
+      throw new ProviderNotFoundException(
+          "No functional channel service provider found. "
+              + "Try adding a dependency on the grpc-okhttp or grpc-netty artifact");
     }
     return provider;
   }

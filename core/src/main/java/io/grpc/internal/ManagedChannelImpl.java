@@ -127,26 +127,34 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
   @GuardedBy("lock")
   private boolean shutdown;
+
   @GuardedBy("lock")
   private boolean terminated;
 
-  private final ClientTransportProvider transportProvider = new ClientTransportProvider() {
-    @Override
-    public ClientTransport get(CallOptions callOptions) {
-      synchronized (lock) {
-        if (shutdown) {
-          return SHUTDOWN_TRANSPORT;
+  private final ClientTransportProvider transportProvider =
+      new ClientTransportProvider() {
+        @Override
+        public ClientTransport get(CallOptions callOptions) {
+          synchronized (lock) {
+            if (shutdown) {
+              return SHUTDOWN_TRANSPORT;
+            }
+          }
+          return loadBalancer.pickTransport(callOptions.getAffinity());
         }
-      }
-      return loadBalancer.pickTransport(callOptions.getAffinity());
-    }
-  };
+      };
 
-  ManagedChannelImpl(String target, BackoffPolicy.Provider backoffPolicyProvider,
-      NameResolver.Factory nameResolverFactory, Attributes nameResolverParams,
-      LoadBalancer.Factory loadBalancerFactory, ClientTransportFactory transportFactory,
-      DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
-      @Nullable Executor executor, @Nullable String userAgent,
+  ManagedChannelImpl(
+      String target,
+      BackoffPolicy.Provider backoffPolicyProvider,
+      NameResolver.Factory nameResolverFactory,
+      Attributes nameResolverParams,
+      LoadBalancer.Factory loadBalancerFactory,
+      ClientTransportFactory transportFactory,
+      DecompressorRegistry decompressorRegistry,
+      CompressorRegistry compressorRegistry,
+      @Nullable Executor executor,
+      @Nullable String userAgent,
       List<ClientInterceptor> interceptors) {
     if (executor == null) {
       usingSharedExecutor = true;
@@ -165,37 +173,42 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     this.decompressorRegistry = decompressorRegistry;
     this.compressorRegistry = compressorRegistry;
 
-    this.nameResolver.start(new NameResolver.Listener() {
-      @Override
-      public void onUpdate(List<ResolvedServerInfo> servers, Attributes config) {
-        if (servers.isEmpty()) {
-          onError(Status.UNAVAILABLE.withDescription("NameResolver returned an empty list"));
-        } else {
-          try {
-            loadBalancer.handleResolvedAddresses(servers, config);
-          } catch (Throwable e) {
-            // It must be a bug! Push the exception back to LoadBalancer in the hope that it may be
-            // propagated to the application.
-            onError(Status.INTERNAL.withCause(e)
-                .withDescription("Thrown from handleResolvedAddresses(): " + e));
-          }
-        }
-      }
+    this
+        .nameResolver.start(
+            new NameResolver.Listener() {
+              @Override
+              public void onUpdate(List<ResolvedServerInfo> servers, Attributes config) {
+                if (servers.isEmpty()) {
+                  onError(
+                      Status.UNAVAILABLE.withDescription("NameResolver returned an empty list"));
+                } else {
+                  try {
+                    loadBalancer.handleResolvedAddresses(servers, config);
+                  } catch (Throwable e) {
+                    // It must be a bug! Push the exception back to LoadBalancer in the hope that it
+                    // may be propagated to the application.
+                    onError(
+                        Status.INTERNAL
+                            .withCause(e)
+                            .withDescription("Thrown from handleResolvedAddresses(): " + e));
+                  }
+                }
+              }
 
-      @Override
-      public void onError(Status error) {
-        Preconditions.checkArgument(!error.isOk(), "the error status must not be OK");
-        loadBalancer.handleNameResolutionError(error);
-      }
-    });
+              @Override
+              public void onError(Status error) {
+                Preconditions.checkArgument(!error.isOk(), "the error status must not be OK");
+                loadBalancer.handleNameResolutionError(error);
+              }
+            });
     if (log.isLoggable(Level.INFO)) {
       log.log(Level.INFO, "[{0}] Created with target {1}", new Object[] {getLogId(), target});
     }
   }
 
   @VisibleForTesting
-  static NameResolver getNameResolver(String target, NameResolver.Factory nameResolverFactory,
-      Attributes nameResolverParams) {
+  static NameResolver getNameResolver(
+      String target, NameResolver.Factory nameResolverFactory, Attributes nameResolverParams) {
     // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
     // "dns:///".
     URI targetUri = null;
@@ -235,9 +248,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
         }
       }
     }
-    throw new IllegalArgumentException(String.format(
-        "cannot find a NameResolver for %s%s",
-        target, uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors + ")" : ""));
+    throw new IllegalArgumentException(
+        String.format(
+            "cannot find a NameResolver for %s%s",
+            target,
+            uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors + ")" : ""));
   }
 
   /**
@@ -320,8 +335,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
    * Creates a new outgoing call on the channel.
    */
   @Override
-  public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(MethodDescriptor<ReqT, RespT> method,
-      CallOptions callOptions) {
+  public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
+      MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
     return interceptorChannel.newCall(method, callOptions);
   }
 
@@ -332,21 +347,17 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
   private class RealChannel extends Channel {
     @Override
-    public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(MethodDescriptor<ReqT, RespT> method,
-        CallOptions callOptions) {
+    public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
+        MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
       Executor executor = callOptions.getExecutor();
       if (executor == null) {
         executor = ManagedChannelImpl.this.executor;
       }
       return new ClientCallImpl<ReqT, RespT>(
-          method,
-          executor,
-          callOptions,
-          transportProvider,
-          scheduledExecutor)
-              .setUserAgent(userAgent)
-              .setDecompressorRegistry(decompressorRegistry)
-              .setCompressorRegistry(compressorRegistry);
+              method, executor, callOptions, transportProvider, scheduledExecutor)
+          .setUserAgent(userAgent)
+          .setDecompressorRegistry(decompressorRegistry)
+          .setCompressorRegistry(compressorRegistry);
     }
 
     @Override
@@ -378,68 +389,78 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     }
   }
 
-  private final TransportManager<ClientTransport> tm = new TransportManager<ClientTransport>() {
-    @Override
-    public void updateRetainedTransports(Collection<EquivalentAddressGroup> addrs) {
-      // TODO(zhangkun83): warm-up new servers and discard removed servers.
-    }
-
-    @Override
-    public ClientTransport getTransport(final EquivalentAddressGroup addressGroup) {
-      Preconditions.checkNotNull(addressGroup, "addressGroup");
-      TransportSet ts;
-      synchronized (lock) {
-        if (shutdown) {
-          return SHUTDOWN_TRANSPORT;
+  private final TransportManager<ClientTransport> tm =
+      new TransportManager<ClientTransport>() {
+        @Override
+        public void updateRetainedTransports(Collection<EquivalentAddressGroup> addrs) {
+          // TODO(zhangkun83): warm-up new servers and discard removed servers.
         }
-        ts = transports.get(addressGroup);
-        if (ts == null) {
-          ts = new TransportSet(addressGroup, authority(), loadBalancer, backoffPolicyProvider,
-              transportFactory, scheduledExecutor, executor, new TransportSet.Callback() {
-                @Override
-                public void onTerminated() {
-                  synchronized (lock) {
-                    transports.remove(addressGroup);
-                    maybeTerminateChannel();
-                  }
-                }
 
-                @Override
-                public void onAllAddressesFailed() {
-                  nameResolver.refresh();
-                }
+        @Override
+        public ClientTransport getTransport(final EquivalentAddressGroup addressGroup) {
+          Preconditions.checkNotNull(addressGroup, "addressGroup");
+          TransportSet ts;
+          synchronized (lock) {
+            if (shutdown) {
+              return SHUTDOWN_TRANSPORT;
+            }
+            ts = transports.get(addressGroup);
+            if (ts == null) {
+              ts =
+                  new TransportSet(
+                      addressGroup,
+                      authority(),
+                      loadBalancer,
+                      backoffPolicyProvider,
+                      transportFactory,
+                      scheduledExecutor,
+                      executor,
+                      new TransportSet.Callback() {
+                        @Override
+                        public void onTerminated() {
+                          synchronized (lock) {
+                            transports.remove(addressGroup);
+                            maybeTerminateChannel();
+                          }
+                        }
 
-                @Override
-                public void onConnectionClosedByServer(Status status) {
-                  nameResolver.refresh();
-                }
-              });
-          if (log.isLoggable(Level.FINE)) {
-            log.log(Level.FINE, "[{0}] {1} created for {2}",
-                new Object[] {getLogId(), ts.getLogId(), addressGroup});
+                        @Override
+                        public void onAllAddressesFailed() {
+                          nameResolver.refresh();
+                        }
+
+                        @Override
+                        public void onConnectionClosedByServer(Status status) {
+                          nameResolver.refresh();
+                        }
+                      });
+              if (log.isLoggable(Level.FINE)) {
+                log.log(
+                    Level.FINE,
+                    "[{0}] {1} created for {2}",
+                    new Object[] {getLogId(), ts.getLogId(), addressGroup});
+              }
+              transports.put(addressGroup, ts);
+            }
           }
-          transports.put(addressGroup, ts);
+          return ts.obtainActiveTransport();
         }
-      }
-      return ts.obtainActiveTransport();
-    }
 
-    @Override
-    public Channel makeChannel(ClientTransport transport) {
-      return new SingleTransportChannel(
-          transport, executor, scheduledExecutor, authority());
-    }
+        @Override
+        public Channel makeChannel(ClientTransport transport) {
+          return new SingleTransportChannel(transport, executor, scheduledExecutor, authority());
+        }
 
-    @Override
-    public ClientTransport createFailingTransport(Status error) {
-      return new FailingClientTransport(error);
-    }
+        @Override
+        public ClientTransport createFailingTransport(Status error) {
+          return new FailingClientTransport(error);
+        }
 
-    @Override
-    public InterimTransport<ClientTransport> createInterimTransport() {
-      return new InterimTransportImpl();
-    }
-  };
+        @Override
+        public InterimTransport<ClientTransport> createInterimTransport() {
+          return new InterimTransportImpl();
+        }
+      };
 
   @Override
   public String getLogId() {
@@ -452,18 +473,22 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
     InterimTransportImpl() {
       delayedTransport = new DelayedClientTransport(executor);
-      delayedTransport.start(new ManagedClientTransport.Listener() {
-          @Override public void transportShutdown(Status status) {}
+      delayedTransport.start(
+          new ManagedClientTransport.Listener() {
+            @Override
+            public void transportShutdown(Status status) {}
 
-          @Override public void transportTerminated() {
-            synchronized (lock) {
-              delayedTransports.remove(delayedTransport);
-              maybeTerminateChannel();
+            @Override
+            public void transportTerminated() {
+              synchronized (lock) {
+                delayedTransports.remove(delayedTransport);
+                maybeTerminateChannel();
+              }
             }
-          }
 
-          @Override public void transportReady() {}
-        });
+            @Override
+            public void transportReady() {}
+          });
       boolean savedShutdown;
       synchronized (lock) {
         delayedTransports.add(delayedTransport);

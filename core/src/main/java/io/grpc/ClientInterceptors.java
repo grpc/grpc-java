@@ -68,8 +68,8 @@ public class ClientInterceptors {
    * @param interceptors a list of interceptors to bind to {@code channel}.
    * @return a new channel instance with the interceptors applied.
    */
-  public static Channel interceptForward(Channel channel,
-                                         List<? extends ClientInterceptor> interceptors) {
+  public static Channel interceptForward(
+      Channel channel, List<? extends ClientInterceptor> interceptors) {
     List<? extends ClientInterceptor> copy = new ArrayList<ClientInterceptor>(interceptors);
     Collections.reverse(copy);
     return intercept(channel, copy);
@@ -126,31 +126,32 @@ public class ClientInterceptors {
     }
   }
 
-  private static final ClientCall<Object, Object> NOOP_CALL = new ClientCall<Object, Object>() {
-    @Override
-    public void start(Listener<Object> responseListener, Metadata headers) {}
+  private static final ClientCall<Object, Object> NOOP_CALL =
+      new ClientCall<Object, Object>() {
+        @Override
+        public void start(Listener<Object> responseListener, Metadata headers) {}
 
-    @Override
-    public void request(int numMessages) {}
+        @Override
+        public void request(int numMessages) {}
 
-    @Override
-    public void cancel(String message, Throwable cause) {}
+        @Override
+        public void cancel(String message, Throwable cause) {}
 
-    @Override
-    public void halfClose() {}
+        @Override
+        public void halfClose() {}
 
-    @Override
-    public void sendMessage(Object message) {}
+        @Override
+        public void sendMessage(Object message) {}
 
-    /**
-     * Always returns {@code false}, since this is only used when the startup of the {@link
-     * ClientCall} fails (i.e. the {@link ClientCall} is closed).
-     */
-    @Override
-    public boolean isReady() {
-      return false;
-    }
-  };
+        /**
+         * Always returns {@code false}, since this is only used when the startup of the {@link
+         * ClientCall} fails (i.e. the {@link ClientCall} is closed).
+         */
+        @Override
+        public boolean isReady() {
+          return false;
+        }
+      };
 
   /**
    * A {@link io.grpc.ForwardingClientCall} that delivers exceptions from its start logic to the

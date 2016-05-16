@@ -68,24 +68,28 @@ public class Http2Ping {
   /**
    * The registered callbacks and the executor used to invoke them.
    */
-  @GuardedBy("this") private Map<PingCallback, Executor> callbacks = Maps.newLinkedHashMap();
+  @GuardedBy("this")
+  private Map<PingCallback, Executor> callbacks = Maps.newLinkedHashMap();
 
   /**
    * False until the operation completes, either successfully (other side sent acknowledgement) or
    * unsuccessfully.
    */
-  @GuardedBy("this") private boolean completed;
+  @GuardedBy("this")
+  private boolean completed;
 
   /**
    * If non-null, indicates the ping failed.
    */
-  @GuardedBy("this") private Throwable failureCause;
+  @GuardedBy("this")
+  private Throwable failureCause;
 
   /**
    * The round-trip time for the ping, in nanoseconds. This value is only meaningful when
    * {@link #completed} is true and {@link #failureCause} is null.
    */
-  @GuardedBy("this") private long roundTripTimeNanos;
+  @GuardedBy("this")
+  private long roundTripTimeNanos;
 
   /**
    * Creates a new ping operation. The caller is responsible for sending a ping on an HTTP/2 channel
@@ -115,8 +119,10 @@ public class Http2Ping {
         return;
       }
       // otherwise, invoke callback immediately (but not while holding lock)
-      runnable = this.failureCause != null ? asRunnable(callback, failureCause)
-                                           : asRunnable(callback, roundTripTimeNanos);
+      runnable =
+          this.failureCause != null
+              ? asRunnable(callback, failureCause)
+              : asRunnable(callback, roundTripTimeNanos);
     }
     doExecute(executor, runnable);
   }
@@ -204,23 +210,22 @@ public class Http2Ping {
    * Returns a runnable that, when run, invokes the given callback, providing the given round-trip
    * duration.
    */
-  private static Runnable asRunnable(final ClientTransport.PingCallback callback,
-                                     final long roundTripTimeNanos) {
+  private static Runnable asRunnable(
+      final ClientTransport.PingCallback callback, final long roundTripTimeNanos) {
     return new Runnable() {
       @Override
       public void run() {
         callback.onSuccess(roundTripTimeNanos);
       }
     };
-
   }
 
   /**
    * Returns a runnable that, when run, invokes the given callback, providing the given cause of
    * failure.
    */
-  private static Runnable asRunnable(final ClientTransport.PingCallback callback,
-                                     final Throwable failureCause) {
+  private static Runnable asRunnable(
+      final ClientTransport.PingCallback callback, final Throwable failureCause) {
     return new Runnable() {
       @Override
       public void run() {

@@ -1,5 +1,6 @@
 plugins {
     id "be.insaneprogramming.gradle.animalsniffer" version "1.4.0"
+    id 'com.github.sherter.google-java-format' version '0.2'
 }
 
 description = 'gRPC: Core'

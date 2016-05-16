@@ -65,31 +65,31 @@ public final class GrpcUtil {
    * {@link io.grpc.Metadata.Key} for the timeout header.
    */
   public static final Metadata.Key<Long> TIMEOUT_KEY =
-          Metadata.Key.of(GrpcUtil.TIMEOUT, new TimeoutMarshaller());
+      Metadata.Key.of(GrpcUtil.TIMEOUT, new TimeoutMarshaller());
 
   /**
    * {@link io.grpc.Metadata.Key} for the message encoding header.
    */
   public static final Metadata.Key<String> MESSAGE_ENCODING_KEY =
-          Metadata.Key.of(GrpcUtil.MESSAGE_ENCODING, Metadata.ASCII_STRING_MARSHALLER);
+      Metadata.Key.of(GrpcUtil.MESSAGE_ENCODING, Metadata.ASCII_STRING_MARSHALLER);
 
   /**
    * {@link io.grpc.Metadata.Key} for the accepted message encodings header.
    */
   public static final Metadata.Key<String> MESSAGE_ACCEPT_ENCODING_KEY =
-          Metadata.Key.of(GrpcUtil.MESSAGE_ACCEPT_ENCODING, Metadata.ASCII_STRING_MARSHALLER);
+      Metadata.Key.of(GrpcUtil.MESSAGE_ACCEPT_ENCODING, Metadata.ASCII_STRING_MARSHALLER);
 
   /**
    * {@link io.grpc.Metadata.Key} for the Content-Type request/response header.
    */
   public static final Metadata.Key<String> CONTENT_TYPE_KEY =
-          Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER);
+      Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER);
 
   /**
    * {@link io.grpc.Metadata.Key} for the Content-Type request/response header.
    */
   public static final Metadata.Key<String> USER_AGENT_KEY =
-          Metadata.Key.of("user-agent", Metadata.ASCII_STRING_MARSHALLER);
+      Metadata.Key.of("user-agent", Metadata.ASCII_STRING_MARSHALLER);
 
   /**
    * The default port for plain-text connections.
@@ -151,9 +151,9 @@ public final class GrpcUtil {
   public static Status httpStatusToGrpcStatus(int httpStatusCode) {
     // Specific HTTP code handling.
     switch (httpStatusCode) {
-      case HttpURLConnection.HTTP_UNAUTHORIZED:  // 401
+      case HttpURLConnection.HTTP_UNAUTHORIZED: // 401
         return Status.UNAUTHENTICATED;
-      case HttpURLConnection.HTTP_FORBIDDEN:  // 403
+      case HttpURLConnection.HTTP_FORBIDDEN: // 403
         return Status.PERMISSION_DENIED;
       default:
     }
@@ -194,8 +194,10 @@ public final class GrpcUtil {
     COMPRESSION_ERROR(0x9, Status.INTERNAL),
     CONNECT_ERROR(0xA, Status.INTERNAL),
     ENHANCE_YOUR_CALM(0xB, Status.RESOURCE_EXHAUSTED.withDescription("Bandwidth exhausted")),
-    INADEQUATE_SECURITY(0xC, Status.PERMISSION_DENIED.withDescription("Permission denied as "
-        + "protocol is not secure enough to call")),
+    INADEQUATE_SECURITY(
+        0xC,
+        Status.PERMISSION_DENIED.withDescription(
+            "Permission denied as " + "protocol is not secure enough to call")),
     HTTP_1_1_REQUIRED(0xD, Status.UNKNOWN);
 
     // Populate a mapping of code to enum value for quick look-up.
@@ -303,8 +305,8 @@ public final class GrpcUtil {
   /**
    * Gets the User-Agent string for the gRPC transport.
    */
-  public static String getGrpcUserAgent(String transportName,
-                                        @Nullable String applicationUserAgent) {
+  public static String getGrpcUserAgent(
+      String transportName, @Nullable String applicationUserAgent) {
     StringBuilder builder = new StringBuilder();
     if (applicationUserAgent != null) {
       builder.append(applicationUserAgent);
@@ -343,8 +345,8 @@ public final class GrpcUtil {
   public static String checkAuthority(String authority) {
     URI uri = authorityToUri(authority);
     checkArgument(uri.getHost() != null, "No host in authority '%s'", authority);
-    checkArgument(uri.getUserInfo() == null,
-        "Userinfo must not be present on authority: '%s'", authority);
+    checkArgument(
+        uri.getUserInfo() == null, "Userinfo must not be present on authority: '%s'", authority);
     return authority;
   }
 
@@ -365,12 +367,11 @@ public final class GrpcUtil {
   public static final Resource<ExecutorService> SHARED_CHANNEL_EXECUTOR =
       new Resource<ExecutorService>() {
         private static final String name = "grpc-default-executor";
+
         @Override
         public ExecutorService create() {
-          return Executors.newCachedThreadPool(new ThreadFactoryBuilder()
-              .setDaemon(true)
-              .setNameFormat(name + "-%d")
-              .build());
+          return Executors.newCachedThreadPool(
+              new ThreadFactoryBuilder().setDaemon(true).setNameFormat(name + "-%d").build());
         }
 
         @Override
@@ -393,12 +394,13 @@ public final class GrpcUtil {
         public ScheduledExecutorService create() {
           // We don't use newSingleThreadScheduledExecutor because it doesn't return a
           // ScheduledThreadPoolExecutor.
-          ScheduledExecutorService service = Executors.newScheduledThreadPool(
-              1,
-              new ThreadFactoryBuilder()
-                  .setDaemon(true)
-                  .setNameFormat("grpc-timer-%d")
-                  .build());
+          ScheduledExecutorService service =
+              Executors.newScheduledThreadPool(
+                  1,
+                  new ThreadFactoryBuilder()
+                      .setDaemon(true)
+                      .setNameFormat("grpc-timer-%d")
+                      .build());
           // If there are long timeouts that are cancelled, they will not actually be removed from
           // the executors queue.  This forces immediate removal upon cancellation to avoid a
           // memory leak.  Reflection is used because we cannot use methods added in Java 1.7.  If

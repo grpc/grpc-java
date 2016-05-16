@@ -58,14 +58,13 @@ public abstract class ServerCall<RespT> {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1710")
   public static final Attributes.Key<SocketAddress> REMOTE_ADDR_KEY =
-          Attributes.Key.of("remote-addr");
+      Attributes.Key.of("remote-addr");
   /**
    * {@link Attributes.Key} for the SSL session of server call attributes
    * {@link ServerCall#attributes()}
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1710")
-  public static final Attributes.Key<SSLSession> SSL_SESSION_KEY =
-          Attributes.Key.of("ssl-session");
+  public static final Attributes.Key<SSLSession> SSL_SESSION_KEY = Attributes.Key.of("ssl-session");
 
   /**
    * Callbacks for consuming incoming RPC messages.

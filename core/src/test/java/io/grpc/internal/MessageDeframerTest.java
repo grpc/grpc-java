@@ -76,8 +76,8 @@ public class MessageDeframerTest {
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private Listener listener = mock(Listener.class);
-  private MessageDeframer deframer = new MessageDeframer(listener, Codec.Identity.NONE,
-          DEFAULT_MAX_MESSAGE_SIZE);
+  private MessageDeframer deframer =
+      new MessageDeframer(listener, Codec.Identity.NONE, DEFAULT_MAX_MESSAGE_SIZE);
   private ArgumentCaptor<InputStream> messages = ArgumentCaptor.forClass(InputStream.class);
 
   @Test
@@ -85,7 +85,7 @@ public class MessageDeframerTest {
     deframer.request(1);
     deframer.deframe(buffer(new byte[] {0, 0, 0, 0, 2, 3, 14}), false);
     verify(listener).messageRead(messages.capture());
-    assertEquals(Bytes.asList(new byte[]{3, 14}), bytes(messages));
+    assertEquals(Bytes.asList(new byte[] {3, 14}), bytes(messages));
     verify(listener, atLeastOnce()).bytesRead(anyInt());
     verifyNoMoreInteractions(listener);
   }
@@ -163,8 +163,9 @@ public class MessageDeframerTest {
   @Test
   public void largerFrameSize() {
     deframer.request(1);
-    deframer.deframe(ReadableBuffers.wrap(
-        Bytes.concat(new byte[] {0, 0, 0, 3, (byte) 232}, new byte[1000])), false);
+    deframer.deframe(
+        ReadableBuffers.wrap(Bytes.concat(new byte[] {0, 0, 0, 3, (byte) 232}, new byte[1000])),
+        false);
     verify(listener).messageRead(messages.capture());
     assertEquals(Bytes.asList(new byte[1000]), bytes(messages));
     verify(listener, atLeastOnce()).bytesRead(anyInt());
@@ -201,13 +202,16 @@ public class MessageDeframerTest {
 
   @Test
   public void deliverIsReentrantSafe() {
-    doAnswer(new Answer<Void>() {
-      @Override
-      public Void answer(InvocationOnMock invocation) throws Throwable {
-        deframer.request(1);
-        return null;
-      }
-    }).when(listener).messageRead(Matchers.<InputStream>any());
+    doAnswer(
+            new Answer<Void>() {
+              @Override
+              public Void answer(InvocationOnMock invocation) throws Throwable {
+                deframer.request(1);
+                return null;
+              }
+            })
+        .when(listener)
+        .messageRead(Matchers.<InputStream>any());
     deframer.deframe(buffer(new byte[] {0, 0, 0, 0, 1, 3}), true);
     verifyNoMoreInteractions(listener);
 

@@ -117,17 +117,21 @@ public class ServerImplTest {
   private InternalHandlerRegistry registry = new InternalHandlerRegistry.Builder().build();
   private MutableHandlerRegistry fallbackRegistry = new MutableHandlerRegistry();
   private SimpleServer transportServer = new SimpleServer();
-  private ServerImpl server = new ServerImpl(executor, registry, fallbackRegistry, transportServer,
-      SERVER_CONTEXT, decompressorRegistry, compressorRegistry);
+  private ServerImpl server =
+      new ServerImpl(
+          executor,
+          registry,
+          fallbackRegistry,
+          transportServer,
+          SERVER_CONTEXT,
+          decompressorRegistry,
+          compressorRegistry);
 
-  @Mock
-  private ServerStream stream;
+  @Mock private ServerStream stream;
 
-  @Mock
-  private ServerCall.Listener<String> callListener;
+  @Mock private ServerCall.Listener<String> callListener;
 
-  @Mock
-  private ServerCallHandler<String, Integer> callHandler;
+  @Mock private ServerCallHandler<String, Integer> callHandler;
 
   /** Set up for test. */
   @Before
@@ -145,12 +149,20 @@ public class ServerImplTest {
 
   @Test
   public void startStopImmediate() throws IOException {
-    transportServer = new SimpleServer() {
-      @Override
-      public void shutdown() {}
-    };
-    ServerImpl server = new ServerImpl(executor, registry, fallbackRegistry, transportServer,
-        SERVER_CONTEXT, decompressorRegistry, compressorRegistry);
+    transportServer =
+        new SimpleServer() {
+          @Override
+          public void shutdown() {}
+        };
+    ServerImpl server =
+        new ServerImpl(
+            executor,
+            registry,
+            fallbackRegistry,
+            transportServer,
+            SERVER_CONTEXT,
+            decompressorRegistry,
+            compressorRegistry);
     server.start();
     server.shutdown();
     assertTrue(server.isShutdown());
@@ -161,14 +173,22 @@ public class ServerImplTest {
 
   @Test
   public void stopImmediate() {
-    transportServer = new SimpleServer() {
-      @Override
-      public void shutdown() {
-        throw new AssertionError("Should not be called, because wasn't started");
-      }
-    };
-    ServerImpl server = new ServerImpl(executor, registry, fallbackRegistry, transportServer,
-        SERVER_CONTEXT, decompressorRegistry, compressorRegistry);
+    transportServer =
+        new SimpleServer() {
+          @Override
+          public void shutdown() {
+            throw new AssertionError("Should not be called, because wasn't started");
+          }
+        };
+    ServerImpl server =
+        new ServerImpl(
+            executor,
+            registry,
+            fallbackRegistry,
+            transportServer,
+            SERVER_CONTEXT,
+            decompressorRegistry,
+            compressorRegistry);
     server.shutdown();
     assertTrue(server.isShutdown());
     assertTrue(server.isTerminated());
@@ -176,8 +196,15 @@ public class ServerImplTest {
 
   @Test
   public void startStopImmediateWithChildTransport() throws IOException {
-    ServerImpl server = new ServerImpl(executor, registry, fallbackRegistry, transportServer,
-        SERVER_CONTEXT, decompressorRegistry, compressorRegistry);
+    ServerImpl server =
+        new ServerImpl(
+            executor,
+            registry,
+            fallbackRegistry,
+            transportServer,
+            SERVER_CONTEXT,
+            decompressorRegistry,
+            compressorRegistry);
     server.start();
     class DelayedShutdownServerTransport extends SimpleServerTransport {
       boolean shutdown;
@@ -208,8 +235,15 @@ public class ServerImplTest {
       }
     }
 
-    ServerImpl server = new ServerImpl(executor, registry, fallbackRegistry,
-        new FailingStartupServer(), SERVER_CONTEXT, decompressorRegistry, compressorRegistry);
+    ServerImpl server =
+        new ServerImpl(
+            executor,
+            registry,
+            fallbackRegistry,
+            new FailingStartupServer(),
+            SERVER_CONTEXT,
+            decompressorRegistry,
+            compressorRegistry);
     try {
       server.start();
       fail("expected exception");
@@ -220,35 +254,37 @@ public class ServerImplTest {
 
   @Test
   public void basicExchangeSuccessful() throws Exception {
-    final Metadata.Key<String> metadataKey
-        = Metadata.Key.of("inception", Metadata.ASCII_STRING_MARSHALLER);
-    final AtomicReference<ServerCall<Integer>> callReference
-        = new AtomicReference<ServerCall<Integer>>();
-    fallbackRegistry.addService(ServerServiceDefinition.builder("Waiter")
-        .addMethod(
-            MethodDescriptor.create(
-                MethodType.UNKNOWN, "Waiter/serve", STRING_MARSHALLER, INTEGER_MARSHALLER),
-            new ServerCallHandler<String, Integer>() {
-              @Override
-              public ServerCall.Listener<String> startCall(
-                  MethodDescriptor<String, Integer> method,
-                  ServerCall<Integer> call,
-                  Metadata headers) {
-                assertEquals("Waiter/serve", method.getFullMethodName());
-                assertNotNull(call);
-                assertNotNull(headers);
-                assertEquals("value", headers.get(metadataKey));
-                callReference.set(call);
-                return callListener;
-              }
-            }).build());
-    ServerTransportListener transportListener
-        = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    final Metadata.Key<String> metadataKey =
+        Metadata.Key.of("inception", Metadata.ASCII_STRING_MARSHALLER);
+    final AtomicReference<ServerCall<Integer>> callReference =
+        new AtomicReference<ServerCall<Integer>>();
+    fallbackRegistry.addService(
+        ServerServiceDefinition.builder("Waiter")
+            .addMethod(
+                MethodDescriptor.create(
+                    MethodType.UNKNOWN, "Waiter/serve", STRING_MARSHALLER, INTEGER_MARSHALLER),
+                new ServerCallHandler<String, Integer>() {
+                  @Override
+                  public ServerCall.Listener<String> startCall(
+                      MethodDescriptor<String, Integer> method,
+                      ServerCall<Integer> call,
+                      Metadata headers) {
+                    assertEquals("Waiter/serve", method.getFullMethodName());
+                    assertNotNull(call);
+                    assertNotNull(headers);
+                    assertEquals("value", headers.get(metadataKey));
+                    callReference.set(call);
+                    return callListener;
+                  }
+                })
+            .build());
+    ServerTransportListener transportListener =
+        transportServer.registerNewServerTransport(new SimpleServerTransport());
 
     Metadata requestHeaders = new Metadata();
     requestHeaders.put(metadataKey, "value");
-    ServerStreamListener streamListener
-        = transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
+    ServerStreamListener streamListener =
+        transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
     assertNotNull(streamListener);
 
     executeBarrier(executor).await();
@@ -298,24 +334,26 @@ public class ServerImplTest {
   public void exceptionInStartCallPropagatesToStream() throws Exception {
     CyclicBarrier barrier = executeBarrier(executor);
     final Status status = Status.ABORTED.withDescription("Oh, no!");
-    fallbackRegistry.addService(ServerServiceDefinition.builder("Waiter")
-        .addMethod(
-            MethodDescriptor.create(MethodType.UNKNOWN, "Waiter/serve",
-              STRING_MARSHALLER, INTEGER_MARSHALLER),
-            new ServerCallHandler<String, Integer>() {
-              @Override
-              public ServerCall.Listener<String> startCall(
-                  MethodDescriptor<String, Integer> method,
-                  ServerCall<Integer> call,
-                  Metadata headers) {
-                throw status.asRuntimeException();
-              }
-            }).build());
-    ServerTransportListener transportListener
-        = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    fallbackRegistry.addService(
+        ServerServiceDefinition.builder("Waiter")
+            .addMethod(
+                MethodDescriptor.create(
+                    MethodType.UNKNOWN, "Waiter/serve", STRING_MARSHALLER, INTEGER_MARSHALLER),
+                new ServerCallHandler<String, Integer>() {
+                  @Override
+                  public ServerCall.Listener<String> startCall(
+                      MethodDescriptor<String, Integer> method,
+                      ServerCall<Integer> call,
+                      Metadata headers) {
+                    throw status.asRuntimeException();
+                  }
+                })
+            .build());
+    ServerTransportListener transportListener =
+        transportServer.registerNewServerTransport(new SimpleServerTransport());
 
-    ServerStreamListener streamListener
-        = transportListener.streamCreated(stream, "Waiter/serve", new Metadata());
+    ServerStreamListener streamListener =
+        transportListener.streamCreated(stream, "Waiter/serve", new Metadata());
     assertNotNull(streamListener);
     verifyNoMoreInteractions(stream);
 
@@ -340,14 +378,20 @@ public class ServerImplTest {
         }
         // If deadlock is possible with this setup, this sychronization completes the loop because
         // the serverShutdown needs a lock that Server is holding while calling this method.
-        synchronized (lock) {
-        }
+        synchronized (lock) {}
       }
     }
 
     transportServer = new MaybeDeadlockingServer();
-    ServerImpl server = new ServerImpl(executor, registry, fallbackRegistry, transportServer,
-        SERVER_CONTEXT, decompressorRegistry, compressorRegistry);
+    ServerImpl server =
+        new ServerImpl(
+            executor,
+            registry,
+            fallbackRegistry,
+            transportServer,
+            SERVER_CONTEXT,
+            decompressorRegistry,
+            compressorRegistry);
     server.start();
     new Thread() {
       @Override
@@ -382,13 +426,12 @@ public class ServerImplTest {
         // If deadlock is possible with this setup, this sychronization completes the loop
         // because the transportTerminated needs a lock that Server is holding while calling this
         // method.
-        synchronized (lock) {
-        }
+        synchronized (lock) {}
       }
     }
 
-    final ServerTransportListener transportListener
-        = transportServer.registerNewServerTransport(new MaybeDeadlockingServerTransport());
+    final ServerTransportListener transportListener =
+        transportServer.registerNewServerTransport(new MaybeDeadlockingServerTransport());
     new Thread() {
       @Override
       public void run() {
@@ -408,65 +451,67 @@ public class ServerImplTest {
 
   @Test
   public void testCallContextIsBoundInListenerCallbacks() throws Exception {
-    fallbackRegistry.addService(ServerServiceDefinition.builder("Waiter")
-        .addMethod(
-            MethodDescriptor.create(
-                MethodType.UNKNOWN, "Waiter/serve", STRING_MARSHALLER, INTEGER_MARSHALLER),
-            new ServerCallHandler<String, Integer>() {
-              @Override
-              public ServerCall.Listener<String> startCall(
-                  MethodDescriptor<String, Integer> method,
-                  ServerCall<Integer> call,
-                  Metadata headers) {
-                // Check that the current context is a descendant of SERVER_CONTEXT
-                final Context initial = Context.current();
-                assertEquals("yes", SERVER_ONLY.get(initial));
-                assertNotSame(SERVER_CONTEXT, initial);
-                assertFalse(initial.isCancelled());
-                return new ServerCall.Listener<String>() {
-
+    fallbackRegistry.addService(
+        ServerServiceDefinition.builder("Waiter")
+            .addMethod(
+                MethodDescriptor.create(
+                    MethodType.UNKNOWN, "Waiter/serve", STRING_MARSHALLER, INTEGER_MARSHALLER),
+                new ServerCallHandler<String, Integer>() {
                   @Override
-                  public void onReady() {
-                    checkContext();
-                    super.onReady();
-                  }
+                  public ServerCall.Listener<String> startCall(
+                      MethodDescriptor<String, Integer> method,
+                      ServerCall<Integer> call,
+                      Metadata headers) {
+                    // Check that the current context is a descendant of SERVER_CONTEXT
+                    final Context initial = Context.current();
+                    assertEquals("yes", SERVER_ONLY.get(initial));
+                    assertNotSame(SERVER_CONTEXT, initial);
+                    assertFalse(initial.isCancelled());
+                    return new ServerCall.Listener<String>() {
 
-                  @Override
-                  public void onMessage(String message) {
-                    checkContext();
-                    super.onMessage(message);
-                  }
+                      @Override
+                      public void onReady() {
+                        checkContext();
+                        super.onReady();
+                      }
 
-                  @Override
-                  public void onHalfClose() {
-                    checkContext();
-                    super.onHalfClose();
-                  }
+                      @Override
+                      public void onMessage(String message) {
+                        checkContext();
+                        super.onMessage(message);
+                      }
 
-                  @Override
-                  public void onCancel() {
-                    checkContext();
-                    super.onCancel();
-                  }
+                      @Override
+                      public void onHalfClose() {
+                        checkContext();
+                        super.onHalfClose();
+                      }
 
-                  @Override
-                  public void onComplete() {
-                    checkContext();
-                    super.onComplete();
-                  }
+                      @Override
+                      public void onCancel() {
+                        checkContext();
+                        super.onCancel();
+                      }
 
-                  private void checkContext() {
-                    // Check that the bound context is the same as the initial one.
-                    assertSame(initial, Context.current());
-                  }
-                };
-              }
-            }).build());
-    ServerTransportListener transportListener
-        = transportServer.registerNewServerTransport(new SimpleServerTransport());
+                      @Override
+                      public void onComplete() {
+                        checkContext();
+                        super.onComplete();
+                      }
 
-    ServerStreamListener streamListener
-        = transportListener.streamCreated(stream, "Waiter/serve", new Metadata());
+                      private void checkContext() {
+                        // Check that the bound context is the same as the initial one.
+                        assertSame(initial, Context.current());
+                      }
+                    };
+                  }
+                })
+            .build());
+    ServerTransportListener transportListener =
+        transportServer.registerNewServerTransport(new SimpleServerTransport());
+
+    ServerStreamListener streamListener =
+        transportListener.streamCreated(stream, "Waiter/serve", new Metadata());
     assertNotNull(streamListener);
 
     streamListener.onReady();
@@ -481,39 +526,45 @@ public class ServerImplTest {
   @Test
   public void testClientCancelTriggersContextCancellation() throws Exception {
     final CountDownLatch latch = new CountDownLatch(1);
-    callListener = new ServerCall.Listener<String>() {
-      @Override
-      public void onReady() {
-        Context.current().addListener(new Context.CancellationListener() {
+    callListener =
+        new ServerCall.Listener<String>() {
           @Override
-          public void cancelled(Context context) {
-            latch.countDown();
+          public void onReady() {
+            Context.current()
+                .addListener(
+                    new Context.CancellationListener() {
+                      @Override
+                      public void cancelled(Context context) {
+                        latch.countDown();
+                      }
+                    },
+                    MoreExecutors.directExecutor());
           }
-        }, MoreExecutors.directExecutor());
-      }
-    };
+        };
 
-    final AtomicReference<ServerCall<Integer>> callReference
-        = new AtomicReference<ServerCall<Integer>>();
-    fallbackRegistry.addService(ServerServiceDefinition.builder("Waiter")
-        .addMethod(
-            MethodDescriptor.create(
-                MethodType.UNKNOWN, "Waiter/serve", STRING_MARSHALLER, INTEGER_MARSHALLER),
-            new ServerCallHandler<String, Integer>() {
-              @Override
-              public ServerCall.Listener<String> startCall(
-                  MethodDescriptor<String, Integer> method,
-                  ServerCall<Integer> call,
-                  Metadata headers) {
-                callReference.set(call);
-                return callListener;
-              }
-            }).build());
-    ServerTransportListener transportListener
-        = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    final AtomicReference<ServerCall<Integer>> callReference =
+        new AtomicReference<ServerCall<Integer>>();
+    fallbackRegistry.addService(
+        ServerServiceDefinition.builder("Waiter")
+            .addMethod(
+                MethodDescriptor.create(
+                    MethodType.UNKNOWN, "Waiter/serve", STRING_MARSHALLER, INTEGER_MARSHALLER),
+                new ServerCallHandler<String, Integer>() {
+                  @Override
+                  public ServerCall.Listener<String> startCall(
+                      MethodDescriptor<String, Integer> method,
+                      ServerCall<Integer> call,
+                      Metadata headers) {
+                    callReference.set(call);
+                    return callListener;
+                  }
+                })
+            .build());
+    ServerTransportListener transportListener =
+        transportServer.registerNewServerTransport(new SimpleServerTransport());
 
-    ServerStreamListener streamListener
-        = transportListener.streamCreated(stream, "Waiter/serve", new Metadata());
+    ServerStreamListener streamListener =
+        transportListener.streamCreated(stream, "Waiter/serve", new Metadata());
     assertNotNull(streamListener);
 
     streamListener.onReady();
@@ -524,14 +575,22 @@ public class ServerImplTest {
 
   @Test
   public void getPort() throws Exception {
-    transportServer = new SimpleServer() {
-      @Override
-      public int getPort() {
-        return 65535;
-      }
-    };
-    ServerImpl server = new ServerImpl(executor, registry, fallbackRegistry, transportServer,
-        SERVER_CONTEXT, decompressorRegistry, compressorRegistry);
+    transportServer =
+        new SimpleServer() {
+          @Override
+          public int getPort() {
+            return 65535;
+          }
+        };
+    ServerImpl server =
+        new ServerImpl(
+            executor,
+            registry,
+            fallbackRegistry,
+            transportServer,
+            SERVER_CONTEXT,
+            decompressorRegistry,
+            compressorRegistry);
     server.start();
 
     Truth.assertThat(server.getPort()).isEqualTo(65535);
@@ -540,8 +599,15 @@ public class ServerImplTest {
   @Test
   public void getPortBeforeStartedFails() {
     transportServer = new SimpleServer();
-    ServerImpl server = new ServerImpl(executor, registry, fallbackRegistry, transportServer,
-        SERVER_CONTEXT, decompressorRegistry, compressorRegistry);
+    ServerImpl server =
+        new ServerImpl(
+            executor,
+            registry,
+            fallbackRegistry,
+            transportServer,
+            SERVER_CONTEXT,
+            decompressorRegistry,
+            compressorRegistry);
     thrown.expect(IllegalStateException.class);
     thrown.expectMessage("started");
     server.getPort();
@@ -550,8 +616,15 @@ public class ServerImplTest {
   @Test
   public void getPortAfterTerminationFails() throws Exception {
     transportServer = new SimpleServer();
-    ServerImpl server = new ServerImpl(executor, registry, fallbackRegistry, transportServer,
-        SERVER_CONTEXT, decompressorRegistry, compressorRegistry);
+    ServerImpl server =
+        new ServerImpl(
+            executor,
+            registry,
+            fallbackRegistry,
+            transportServer,
+            SERVER_CONTEXT,
+            decompressorRegistry,
+            compressorRegistry);
     server.start();
     server.shutdown();
     server.awaitTermination();
@@ -563,27 +636,39 @@ public class ServerImplTest {
   @Test
   public void handlerRegistryPriorities() throws Exception {
     HandlerRegistry fallbackRegistry = mock(HandlerRegistry.class);
-    MethodDescriptor<String, Integer> method1 = MethodDescriptor.create(
-        MethodType.UNKNOWN, "Service1/Method1", STRING_MARSHALLER, INTEGER_MARSHALLER);
-    registry = new InternalHandlerRegistry.Builder()
-        .addService(ServerServiceDefinition.builder("Service1")
-            .addMethod(method1, callHandler).build())
-        .build();
+    MethodDescriptor<String, Integer> method1 =
+        MethodDescriptor.create(
+            MethodType.UNKNOWN, "Service1/Method1", STRING_MARSHALLER, INTEGER_MARSHALLER);
+    registry =
+        new InternalHandlerRegistry.Builder()
+            .addService(
+                ServerServiceDefinition.builder("Service1").addMethod(method1, callHandler).build())
+            .build();
     transportServer = new SimpleServer();
-    ServerImpl server = new ServerImpl(executor, registry, fallbackRegistry, transportServer,
-        SERVER_CONTEXT, decompressorRegistry, compressorRegistry);
+    ServerImpl server =
+        new ServerImpl(
+            executor,
+            registry,
+            fallbackRegistry,
+            transportServer,
+            SERVER_CONTEXT,
+            decompressorRegistry,
+            compressorRegistry);
     server.start();
 
-    ServerTransportListener transportListener
-        = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    ServerTransportListener transportListener =
+        transportServer.registerNewServerTransport(new SimpleServerTransport());
     // This call will be handled by callHandler from the internal registry
     transportListener.streamCreated(stream, "Service1/Method1", new Metadata());
     // This call will be handled by the fallbackRegistry because it's not registred in the internal
     // registry.
     transportListener.streamCreated(stream, "Service1/Method2", new Metadata());
 
-    verify(callHandler, timeout(2000)).startCall(same(method1),
-        Matchers.<ServerCall<Integer>>anyObject(), Matchers.<Metadata>anyObject());
+    verify(callHandler, timeout(2000))
+        .startCall(
+            same(method1),
+            Matchers.<ServerCall<Integer>>anyObject(),
+            Matchers.<Metadata>anyObject());
     verify(fallbackRegistry, timeout(2000)).lookupMethod("Service1/Method2", null);
     verifyNoMoreInteractions(callHandler);
     verifyNoMoreInteractions(fallbackRegistry);
@@ -595,19 +680,20 @@ public class ServerImplTest {
    */
   private static CyclicBarrier executeBarrier(Executor executor) {
     final CyclicBarrier barrier = new CyclicBarrier(2);
-    executor.execute(new Runnable() {
-      @Override
-      public void run() {
-        try {
-          barrier.await();
-        } catch (InterruptedException ex) {
-          Thread.currentThread().interrupt();
-          throw new RuntimeException(ex);
-        } catch (BrokenBarrierException ex) {
-          throw new RuntimeException(ex);
-        }
-      }
-    });
+    executor.execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            try {
+              barrier.await();
+            } catch (InterruptedException ex) {
+              Thread.currentThread().interrupt();
+              throw new RuntimeException(ex);
+            } catch (BrokenBarrierException ex) {
+              throw new RuntimeException(ex);
+            }
+          }
+        });
     return barrier;
   }
 

@@ -46,7 +46,7 @@ import java.io.File;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1783")
 public final class InProcessServerBuilder
-        extends AbstractServerImplBuilder<InProcessServerBuilder> {
+    extends AbstractServerImplBuilder<InProcessServerBuilder> {
   /**
    * Create a server builder that will bind with the given name.
    *

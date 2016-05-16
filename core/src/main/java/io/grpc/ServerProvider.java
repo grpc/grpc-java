@@ -73,8 +73,8 @@ public abstract class ServerProvider {
    */
   public static ServerProvider provider() {
     if (provider == null) {
-      throw new ProviderNotFoundException("No functional server found. "
-          + "Try adding a dependency on the grpc-netty artifact");
+      throw new ProviderNotFoundException(
+          "No functional server found. " + "Try adding a dependency on the grpc-netty artifact");
     }
     return provider;
   }
@@ -98,4 +98,3 @@ public abstract class ServerProvider {
    */
   protected abstract ServerBuilder<?> builderForPort(int port);
 }
-

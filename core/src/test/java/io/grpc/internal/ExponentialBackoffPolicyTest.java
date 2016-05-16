@@ -46,19 +46,18 @@ import java.util.Random;
 @RunWith(JUnit4.class)
 public class ExponentialBackoffPolicyTest {
   private ExponentialBackoffPolicy policy = new ExponentialBackoffPolicy();
-  private Random notRandom = new Random() {
-    @Override
-    public double nextDouble() {
-      return .5;
-    }
-  };
+  private Random notRandom =
+      new Random() {
+        @Override
+        public double nextDouble() {
+          return .5;
+        }
+      };
 
   @Test
   public void maxDelayReached() {
     long maxBackoffMillis = 120 * 1000;
-    policy.setMaxBackoffMillis(maxBackoffMillis)
-        .setJitter(0)
-        .setRandom(notRandom);
+    policy.setMaxBackoffMillis(maxBackoffMillis).setJitter(0).setRandom(notRandom);
     for (int i = 0; i < 50; i++) {
       if (maxBackoffMillis == policy.nextBackoffMillis()) {
         return; // Success
@@ -67,8 +66,8 @@ public class ExponentialBackoffPolicyTest {
     assertEquals("max delay not reached", maxBackoffMillis, policy.nextBackoffMillis());
   }
 
-  @Test public void canProvide() {
+  @Test
+  public void canProvide() {
     assertNotNull(new ExponentialBackoffPolicy.Provider().get());
   }
 }
-

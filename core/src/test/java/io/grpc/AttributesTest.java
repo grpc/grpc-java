@@ -52,7 +52,8 @@ public class AttributesTest {
 
   @Test
   public void duplicates() {
-    Attributes attrs = Attributes.newBuilder()
+    Attributes attrs =
+        Attributes.newBuilder()
             .set(YOLO_KEY, "To be?")
             .set(YOLO_KEY, "Or not to be?")
             .set(Attributes.Key.of("yolo"), "I'm not a duplicate")

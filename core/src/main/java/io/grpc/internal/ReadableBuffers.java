@@ -152,8 +152,8 @@ public final class ReadableBuffers {
     ByteArrayWrapper(byte[] bytes, int offset, int length) {
       Preconditions.checkArgument(offset >= 0, "offset must be >= 0");
       Preconditions.checkArgument(length >= 0, "length must be >= 0");
-      Preconditions.checkArgument(offset + length <= bytes.length,
-          "offset + length exceeds array boundary");
+      Preconditions.checkArgument(
+          offset + length <= bytes.length, "offset + length exceeds array boundary");
       this.bytes = Preconditions.checkNotNull(bytes, "bytes");
       this.offset = offset;
       this.end = offset + length;

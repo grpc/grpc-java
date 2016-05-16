@@ -45,7 +45,6 @@ public abstract class AbstractReadableBuffer implements ReadableBuffer {
     return b1 << 16 | b2 << 8 | b3;
   }
 
-
   @Override
   public final int readUnsignedShort() {
     checkReadable(2);

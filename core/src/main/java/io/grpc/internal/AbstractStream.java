@@ -62,7 +62,9 @@ public abstract class AbstractStream<IdT> implements Stream {
    * Indicates the phase of the GRPC stream in one direction.
    */
   protected enum Phase {
-    HEADERS, MESSAGE, STATUS
+    HEADERS,
+    MESSAGE,
+    STATUS
   }
 
   private final MessageFramer framer;
@@ -226,8 +228,8 @@ public abstract class AbstractStream<IdT> implements Stream {
    *        this endpoint.
    * @param flush {@code true} if more data may not be arriving soon
    */
-  protected abstract void internalSendFrame(WritableBuffer frame, boolean endOfStream,
-      boolean flush);
+  protected abstract void internalSendFrame(
+      WritableBuffer frame, boolean endOfStream, boolean flush);
 
   /**
    * Handles a message that was just deframed.

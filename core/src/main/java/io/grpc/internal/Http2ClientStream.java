@@ -62,8 +62,8 @@ public abstract class Http2ClientStream extends AbstractClientStream<Integer> {
         }
       };
 
-  private static final Metadata.Key<Integer> HTTP2_STATUS = Metadata.Key.of(":status",
-      HTTP_STATUS_LINE_MARSHALLER);
+  private static final Metadata.Key<Integer> HTTP2_STATUS =
+      Metadata.Key.of(":status", HTTP_STATUS_LINE_MARSHALLER);
 
   /** When non-{@code null}, {@link #transportErrorMetadata} must also be non-{@code null}. */
   private Status transportError;
@@ -71,8 +71,7 @@ public abstract class Http2ClientStream extends AbstractClientStream<Integer> {
   private Charset errorCharset = Charsets.UTF_8;
   private boolean contentTypeChecked;
 
-  protected Http2ClientStream(WritableBufferAllocator bufferAllocator,
-                              int maxMessageSize) {
+  protected Http2ClientStream(WritableBufferAllocator bufferAllocator, int maxMessageSize) {
     super(bufferAllocator, maxMessageSize);
   }
 
@@ -90,8 +89,8 @@ public abstract class Http2ClientStream extends AbstractClientStream<Integer> {
     }
     Status httpStatus = statusFromHttpStatus(headers);
     if (httpStatus == null) {
-      transportError = Status.INTERNAL.withDescription(
-          "received non-terminal headers with no :status");
+      transportError =
+          Status.INTERNAL.withDescription("received non-terminal headers with no :status");
     } else if (!httpStatus.isOk()) {
       transportError = httpStatus;
     } else {
@@ -125,8 +124,10 @@ public abstract class Http2ClientStream extends AbstractClientStream<Integer> {
     if (transportError != null) {
       // We've already detected a transport error and now we're just accumulating more detail
       // for it.
-      transportError = transportError.augmentDescription("DATA-----------------------------\n"
-          + ReadableBuffers.readAsString(frame, errorCharset));
+      transportError =
+          transportError.augmentDescription(
+              "DATA-----------------------------\n"
+                  + ReadableBuffers.readAsString(frame, errorCharset));
       frame.close();
       if (transportError.getDescription().length() > 1000 || endOfStream) {
         inboundTransportError(transportError, transportErrorMetadata);
@@ -172,7 +173,8 @@ public abstract class Http2ClientStream extends AbstractClientStream<Integer> {
     Integer httpStatus = metadata.get(HTTP2_STATUS);
     if (httpStatus != null) {
       Status status = GrpcUtil.httpStatusToGrpcStatus(httpStatus);
-      return status.isOk() ? status
+      return status.isOk()
+          ? status
           : status.augmentDescription("extracted status from HTTP :status " + httpStatus);
     }
     return null;
@@ -188,8 +190,8 @@ public abstract class Http2ClientStream extends AbstractClientStream<Integer> {
       if (status == null || status.isOk()) {
         status = Status.UNKNOWN.withDescription("missing GRPC status in response");
       } else {
-        status = status.withDescription(
-            "missing GRPC status, inferred error from HTTP status code");
+        status =
+            status.withDescription("missing GRPC status, inferred error from HTTP status code");
       }
     }
     String message = trailers.get(Status.MESSAGE_KEY);

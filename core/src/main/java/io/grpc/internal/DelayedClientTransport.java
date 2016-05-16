@@ -67,6 +67,7 @@ class DelayedClientTransport implements ManagedClientTransport {
 
   @GuardedBy("lock")
   private Collection<PendingStream> pendingStreams = new LinkedHashSet<PendingStream>();
+
   @GuardedBy("lock")
   private Collection<PendingPing> pendingPings = new ArrayList<PendingPing>();
   /**
@@ -122,12 +123,14 @@ class DelayedClientTransport implements ManagedClientTransport {
       supplier.get().ping(callback, executor);
       return;
     }
-    executor.execute(new Runnable() {
-        @Override public void run() {
-          callback.onFailure(
-              Status.UNAVAILABLE.withDescription("transport shutdown").asException());
-        }
-      });
+    executor.execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            callback.onFailure(
+                Status.UNAVAILABLE.withDescription("transport shutdown").asException());
+          }
+        });
   }
 
   /**
@@ -214,13 +217,15 @@ class DelayedClientTransport implements ManagedClientTransport {
         // createRealStream may be expensive. It will start real streams on the transport. If there
         // are pending requests, they will be serialized too, which may be expensive. Since we are
         // now on transport thread, we need to offload the work to an executor.
-        streamCreationExecutor.execute(new Runnable() {
-            @Override public void run() {
-              for (final PendingStream stream : savedPendingStreams) {
-                stream.createRealStream(supplier.get());
+        streamCreationExecutor.execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                for (final PendingStream stream : savedPendingStreams) {
+                  stream.createRealStream(supplier.get());
+                }
               }
-            }
-        });
+            });
       }
       pendingStreams = null;
       if (!shutdown) {
@@ -288,12 +293,13 @@ class DelayedClientTransport implements ManagedClientTransport {
       try {
         transport.ping(callback, executor);
       } catch (final UnsupportedOperationException ex) {
-        executor.execute(new Runnable() {
-          @Override
-          public void run() {
-            callback.onFailure(ex);
-          }
-        });
+        executor.execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                callback.onFailure(ex);
+              }
+            });
       }
     }
   }

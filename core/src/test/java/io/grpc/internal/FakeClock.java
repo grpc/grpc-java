@@ -55,11 +55,13 @@ import java.util.concurrent.TimeUnit;
 public final class FakeClock {
 
   public final ScheduledExecutorService scheduledExecutorService = new ScheduledExecutorImpl();
-  final Ticker ticker = new Ticker() {
-      @Override public long read() {
-        return TimeUnit.MILLISECONDS.toNanos(currentTimeNanos);
-      }
-    };
+  final Ticker ticker =
+      new Ticker() {
+        @Override
+        public long read() {
+          return TimeUnit.MILLISECONDS.toNanos(currentTimeNanos);
+        }
+      };
 
   private final PriorityQueue<ScheduledTask> tasks = new PriorityQueue<ScheduledTask>();
   private long currentTimeNanos;
@@ -73,16 +75,19 @@ public final class FakeClock {
       this.command = command;
     }
 
-    @Override public boolean cancel(boolean mayInterruptIfRunning) {
+    @Override
+    public boolean cancel(boolean mayInterruptIfRunning) {
       tasks.remove(this);
       return super.cancel(mayInterruptIfRunning);
     }
 
-    @Override public long getDelay(TimeUnit unit) {
+    @Override
+    public long getDelay(TimeUnit unit) {
       return unit.convert(dueTimeNanos - currentTimeNanos, TimeUnit.NANOSECONDS);
     }
 
-    @Override public int compareTo(Delayed other) {
+    @Override
+    public int compareTo(Delayed other) {
       ScheduledTask otherTask = (ScheduledTask) other;
       if (dueTimeNanos > otherTask.dueTimeNanos) {
         return 1;
@@ -99,78 +104,93 @@ public final class FakeClock {
   }
 
   private class ScheduledExecutorImpl implements ScheduledExecutorService {
-    @Override public <V> ScheduledFuture<V> schedule(
-        Callable<V> callable, long delay, TimeUnit unit) {
+    @Override
+    public <V> ScheduledFuture<V> schedule(Callable<V> callable, long delay, TimeUnit unit) {
       throw new UnsupportedOperationException();
     }
 
-    @Override public ScheduledFuture<?> schedule(Runnable cmd, long delay, TimeUnit unit) {
+    @Override
+    public ScheduledFuture<?> schedule(Runnable cmd, long delay, TimeUnit unit) {
       ScheduledTask task = new ScheduledTask(currentTimeNanos + unit.toNanos(delay), cmd);
       tasks.add(task);
       return task;
     }
 
-    @Override public ScheduledFuture<?> scheduleAtFixedRate(
+    @Override
+    public ScheduledFuture<?> scheduleAtFixedRate(
         Runnable command, long initialDelay, long period, TimeUnit unit) {
       throw new UnsupportedOperationException();
     }
 
-    @Override public ScheduledFuture<?> scheduleWithFixedDelay(
+    @Override
+    public ScheduledFuture<?> scheduleWithFixedDelay(
         Runnable command, long initialDelay, long delay, TimeUnit unit) {
       throw new UnsupportedOperationException();
     }
 
-    @Override public boolean awaitTermination(long timeout, TimeUnit unit) {
+    @Override
+    public boolean awaitTermination(long timeout, TimeUnit unit) {
       throw new UnsupportedOperationException();
     }
 
-    @Override public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks) {
+    @Override
+    public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks) {
       throw new UnsupportedOperationException();
     }
 
-    @Override public <T> List<Future<T>> invokeAll(
+    @Override
+    public <T> List<Future<T>> invokeAll(
         Collection<? extends Callable<T>> tasks, long timeout, TimeUnit unit) {
       throw new UnsupportedOperationException();
     }
 
-    @Override public <T> T invokeAny(Collection<? extends Callable<T>> tasks) {
+    @Override
+    public <T> T invokeAny(Collection<? extends Callable<T>> tasks) {
       throw new UnsupportedOperationException();
     }
 
-    @Override public <T> T invokeAny(
-        Collection<? extends Callable<T>> tasks, long timeout, TimeUnit unit) {
+    @Override
+    public <T> T invokeAny(Collection<? extends Callable<T>> tasks, long timeout, TimeUnit unit) {
       throw new UnsupportedOperationException();
     }
 
-    @Override public boolean isShutdown() {
+    @Override
+    public boolean isShutdown() {
       throw new UnsupportedOperationException();
     }
 
-    @Override public boolean isTerminated() {
+    @Override
+    public boolean isTerminated() {
       throw new UnsupportedOperationException();
     }
 
-    @Override public void shutdown() {
+    @Override
+    public void shutdown() {
       throw new UnsupportedOperationException();
     }
 
-    @Override public List<Runnable> shutdownNow() {
+    @Override
+    public List<Runnable> shutdownNow() {
       throw new UnsupportedOperationException();
     }
 
-    @Override public <T> Future<T> submit(Callable<T> task) {
+    @Override
+    public <T> Future<T> submit(Callable<T> task) {
       throw new UnsupportedOperationException();
     }
 
-    @Override public Future<?> submit(Runnable task) {
+    @Override
+    public Future<?> submit(Runnable task) {
       throw new UnsupportedOperationException();
     }
 
-    @Override public <T> Future<T> submit(Runnable task, T result) {
+    @Override
+    public <T> Future<T> submit(Runnable task, T result) {
       throw new UnsupportedOperationException();
     }
 
-    @Override public void execute(Runnable command) {
+    @Override
+    public void execute(Runnable command) {
       schedule(command, 0, TimeUnit.NANOSECONDS);
     }
   }

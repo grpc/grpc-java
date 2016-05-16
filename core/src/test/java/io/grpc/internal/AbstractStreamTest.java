@@ -29,7 +29,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-
 package io.grpc.internal;
 
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
@@ -60,12 +59,13 @@ public class AbstractStreamTest {
   @Mock MessageFramer framer;
   @Mock MessageDeframer deframer;
 
-  private final WritableBufferAllocator allocator = new WritableBufferAllocator() {
-    @Override
-    public WritableBuffer allocate(int capacityHint) {
-      return new ByteWritableBuffer(capacityHint);
-    }
-  };
+  private final WritableBufferAllocator allocator =
+      new WritableBufferAllocator() {
+        @Override
+        public WritableBuffer allocate(int capacityHint) {
+          return new ByteWritableBuffer(capacityHint);
+        }
+      };
 
   @Before
   public void setUp() {
@@ -92,14 +92,15 @@ public class AbstractStreamTest {
   @Test
   public void validPhaseTransitions() {
     AbstractStream<Object> stream = new AbstractStreamBase<Object>(null);
-    Multimap<Phase, Phase> validTransitions = ImmutableMultimap.<Phase, Phase>builder()
-        .put(Phase.HEADERS, Phase.HEADERS)
-        .put(Phase.HEADERS, Phase.MESSAGE)
-        .put(Phase.HEADERS, Phase.STATUS)
-        .put(Phase.MESSAGE, Phase.MESSAGE)
-        .put(Phase.MESSAGE, Phase.STATUS)
-        .put(Phase.STATUS, Phase.STATUS)
-        .build();
+    Multimap<Phase, Phase> validTransitions =
+        ImmutableMultimap.<Phase, Phase>builder()
+            .put(Phase.HEADERS, Phase.HEADERS)
+            .put(Phase.HEADERS, Phase.MESSAGE)
+            .put(Phase.HEADERS, Phase.STATUS)
+            .put(Phase.MESSAGE, Phase.MESSAGE)
+            .put(Phase.MESSAGE, Phase.STATUS)
+            .put(Phase.STATUS, Phase.STATUS)
+            .build();
 
     for (Phase startPhase : Phase.values()) {
       for (Phase endPhase : Phase.values()) {
@@ -176,4 +177,3 @@ public class AbstractStreamTest {
     }
   }
 }
-
