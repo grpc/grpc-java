@@ -56,14 +56,14 @@ public class ServerInterceptors {
    * @param interceptors array of interceptors to apply to the service.
    * @return a wrapped version of {@code serviceDef} with the interceptors applied.
    */
-  public static ServerServiceDefinition interceptForward(ServerServiceDefinition serviceDef,
-                                                         ServerInterceptor... interceptors) {
+  public static ServerServiceDefinition interceptForward(
+      ServerServiceDefinition serviceDef, ServerInterceptor... interceptors) {
     return interceptForward(serviceDef, Arrays.asList(interceptors));
   }
 
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1701")
-  public static ServerServiceDefinition interceptForward(BindableService bindableService,
-      ServerInterceptor... interceptors) {
+  public static ServerServiceDefinition interceptForward(
+      BindableService bindableService, ServerInterceptor... interceptors) {
     return interceptForward(bindableService.bindService(), Arrays.asList(interceptors));
   }
 
@@ -77,8 +77,7 @@ public class ServerInterceptors {
    * @return a wrapped version of {@code serviceDef} with the interceptors applied.
    */
   public static ServerServiceDefinition interceptForward(
-      ServerServiceDefinition serviceDef,
-      List<? extends ServerInterceptor> interceptors) {
+      ServerServiceDefinition serviceDef, List<? extends ServerInterceptor> interceptors) {
     List<? extends ServerInterceptor> copy = new ArrayList<ServerInterceptor>(interceptors);
     Collections.reverse(copy);
     return intercept(serviceDef, copy);
@@ -93,14 +92,14 @@ public class ServerInterceptors {
    * @param interceptors array of interceptors to apply to the service.
    * @return a wrapped version of {@code serviceDef} with the interceptors applied.
    */
-  public static ServerServiceDefinition intercept(ServerServiceDefinition serviceDef,
-                                                  ServerInterceptor... interceptors) {
+  public static ServerServiceDefinition intercept(
+      ServerServiceDefinition serviceDef, ServerInterceptor... interceptors) {
     return intercept(serviceDef, Arrays.asList(interceptors));
   }
 
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1701")
-  public static ServerServiceDefinition intercept(BindableService bindableService,
-      ServerInterceptor... interceptors) {
+  public static ServerServiceDefinition intercept(
+      BindableService bindableService, ServerInterceptor... interceptors) {
     return intercept(bindableService.bindService(), Arrays.asList(interceptors));
   }
 
@@ -113,14 +112,14 @@ public class ServerInterceptors {
    * @param interceptors list of interceptors to apply to the service.
    * @return a wrapped version of {@code serviceDef} with the interceptors applied.
    */
-  public static ServerServiceDefinition intercept(ServerServiceDefinition serviceDef,
-                                                  List<? extends ServerInterceptor> interceptors) {
+  public static ServerServiceDefinition intercept(
+      ServerServiceDefinition serviceDef, List<? extends ServerInterceptor> interceptors) {
     Preconditions.checkNotNull(serviceDef);
     if (interceptors.isEmpty()) {
       return serviceDef;
     }
-    ServerServiceDefinition.Builder serviceDefBuilder
-        = ServerServiceDefinition.builder(serviceDef.getName());
+    ServerServiceDefinition.Builder serviceDefBuilder =
+        ServerServiceDefinition.builder(serviceDef.getName());
     for (ServerMethodDefinition<?, ?> method : serviceDef.getMethods()) {
       wrapAndAddMethod(serviceDefBuilder, method, interceptors);
     }
@@ -144,20 +143,20 @@ public class ServerInterceptors {
       final ServerServiceDefinition serviceDef) {
     final MethodDescriptor.Marshaller<InputStream> marshaller =
         new MethodDescriptor.Marshaller<InputStream>() {
-      @Override
-      public InputStream stream(final InputStream value) {
-        return value;
-      }
+          @Override
+          public InputStream stream(final InputStream value) {
+            return value;
+          }
 
-      @Override
-      public InputStream parse(final InputStream stream) {
-        if (stream.markSupported()) {
-          return stream;
-        } else {
-          return new BufferedInputStream(stream);
-        }
-      }
-    };
+          @Override
+          public InputStream parse(final InputStream stream) {
+            if (stream.markSupported()) {
+              return stream;
+            } else {
+              return new BufferedInputStream(stream);
+            }
+          }
+        };
 
     return useMarshalledMessages(serviceDef, marshaller);
   }
@@ -177,14 +176,14 @@ public class ServerInterceptors {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1712")
   public static <T> ServerServiceDefinition useMarshalledMessages(
-      final ServerServiceDefinition serviceDef,
-      final MethodDescriptor.Marshaller<T> marshaller) {
-    final ServerServiceDefinition.Builder serviceBuilder = ServerServiceDefinition
-        .builder(serviceDef.getName());
+      final ServerServiceDefinition serviceDef, final MethodDescriptor.Marshaller<T> marshaller) {
+    final ServerServiceDefinition.Builder serviceBuilder =
+        ServerServiceDefinition.builder(serviceDef.getName());
     for (final ServerMethodDefinition<?, ?> definition : serviceDef.getMethods()) {
       final MethodDescriptor<?, ?> originalMethodDescriptor = definition.getMethodDescriptor();
-      final MethodDescriptor<T, T> wrappedMethodDescriptor = MethodDescriptor
-          .create(originalMethodDescriptor.getType(),
+      final MethodDescriptor<T, T> wrappedMethodDescriptor =
+          MethodDescriptor.create(
+              originalMethodDescriptor.getType(),
               originalMethodDescriptor.getFullMethodName(),
               marshaller,
               marshaller);
@@ -194,7 +193,8 @@ public class ServerInterceptors {
   }
 
   private static <ReqT, RespT> void wrapAndAddMethod(
-      ServerServiceDefinition.Builder serviceDefBuilder, ServerMethodDefinition<ReqT, RespT> method,
+      ServerServiceDefinition.Builder serviceDefBuilder,
+      ServerMethodDefinition<ReqT, RespT> method,
       List<? extends ServerInterceptor> interceptors) {
     ServerCallHandler<ReqT, RespT> callHandler = method.getServerCallHandler();
     for (ServerInterceptor interceptor : interceptors) {
@@ -212,17 +212,15 @@ public class ServerInterceptors {
     private final ServerInterceptor interceptor;
     private final ServerCallHandler<ReqT, RespT> callHandler;
 
-    private InterceptCallHandler(ServerInterceptor interceptor,
-                                 ServerCallHandler<ReqT, RespT> callHandler) {
+    private InterceptCallHandler(
+        ServerInterceptor interceptor, ServerCallHandler<ReqT, RespT> callHandler) {
       this.interceptor = Preconditions.checkNotNull(interceptor, "interceptor");
       this.callHandler = callHandler;
     }
 
     @Override
     public ServerCall.Listener<ReqT> startCall(
-        MethodDescriptor<ReqT, RespT> method,
-        ServerCall<RespT> call,
-        Metadata headers) {
+        MethodDescriptor<ReqT, RespT> method, ServerCall<RespT> call, Metadata headers) {
       return interceptor.interceptCall(method, call, headers, callHandler);
     }
   }
@@ -230,10 +228,9 @@ public class ServerInterceptors {
   private static <OReqT, ORespT, WReqT, WRespT> ServerMethodDefinition<WReqT, WRespT> wrapMethod(
       final ServerMethodDefinition<OReqT, ORespT> definition,
       final MethodDescriptor<WReqT, WRespT> wrappedMethod) {
-    final ServerCallHandler<WReqT, WRespT> wrappedHandler = wrapHandler(
-        definition.getServerCallHandler(),
-        definition.getMethodDescriptor(),
-        wrappedMethod);
+    final ServerCallHandler<WReqT, WRespT> wrappedHandler =
+        wrapHandler(
+            definition.getServerCallHandler(), definition.getMethodDescriptor(), wrappedMethod);
     return ServerMethodDefinition.create(wrappedMethod, wrappedHandler);
   }
 
@@ -247,22 +244,23 @@ public class ServerInterceptors {
           final MethodDescriptor<WReqT, WRespT> method,
           final ServerCall<WRespT> call,
           final Metadata headers) {
-        final ServerCall<ORespT> unwrappedCall = new PartialForwardingServerCall<ORespT>() {
-          @Override
-          protected ServerCall<WRespT> delegate() {
-            return call;
-          }
+        final ServerCall<ORespT> unwrappedCall =
+            new PartialForwardingServerCall<ORespT>() {
+              @Override
+              protected ServerCall<WRespT> delegate() {
+                return call;
+              }
 
-          @Override
-          public void sendMessage(ORespT message) {
-            final InputStream is = originalMethod.streamResponse(message);
-            final WRespT wrappedMessage = wrappedMethod.parseResponse(is);
-            delegate().sendMessage(wrappedMessage);
-          }
-        };
+              @Override
+              public void sendMessage(ORespT message) {
+                final InputStream is = originalMethod.streamResponse(message);
+                final WRespT wrappedMessage = wrappedMethod.parseResponse(is);
+                delegate().sendMessage(wrappedMessage);
+              }
+            };
 
-        final ServerCall.Listener<OReqT> originalListener = originalHandler
-            .startCall(originalMethod, unwrappedCall, headers);
+        final ServerCall.Listener<OReqT> originalListener =
+            originalHandler.startCall(originalMethod, unwrappedCall, headers);
 
         return new PartialForwardingServerCallListener<WReqT>() {
           @Override

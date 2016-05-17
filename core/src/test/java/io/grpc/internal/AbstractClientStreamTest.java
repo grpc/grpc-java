@@ -75,12 +75,13 @@ public class AbstractClientStreamTest {
     MockitoAnnotations.initMocks(this);
   }
 
-  private final WritableBufferAllocator allocator = new WritableBufferAllocator() {
-    @Override
-    public WritableBuffer allocate(int capacityHint) {
-      return new ByteWritableBuffer(capacityHint);
-    }
-  };
+  private final WritableBufferAllocator allocator =
+      new WritableBufferAllocator() {
+        @Override
+        public WritableBuffer allocate(int capacityHint) {
+          return new ByteWritableBuffer(capacityHint);
+        }
+      };
 
   @Test
   public void cancel_doNotAcceptOk() {
@@ -113,12 +114,13 @@ public class AbstractClientStreamTest {
 
   @Test
   public void cancel_notifiesOnlyOnce() {
-    AbstractClientStream<Integer> stream = new BaseAbstractClientStream<Integer>(allocator) {
-      @Override
-      protected void sendCancel(Status errorStatus) {
-        transportReportStatus(errorStatus, true/*stop delivery*/, new Metadata());
-      }
-    };
+    AbstractClientStream<Integer> stream =
+        new BaseAbstractClientStream<Integer>(allocator) {
+          @Override
+          protected void sendCancel(Status errorStatus) {
+            transportReportStatus(errorStatus, true /*stop delivery*/, new Metadata());
+          }
+        };
     stream.start(mockListener);
 
     stream.cancel(Status.DEADLINE_EXCEEDED);
@@ -146,12 +148,13 @@ public class AbstractClientStreamTest {
 
   @Test
   public void deframeFailed_notifiesListener() {
-    AbstractClientStream<Integer> stream = new BaseAbstractClientStream<Integer>(allocator) {
-      @Override
-      protected void sendCancel(Status errorStatus) {
-        transportReportStatus(errorStatus, true/*stop delivery*/, new Metadata());
-      }
-    };
+    AbstractClientStream<Integer> stream =
+        new BaseAbstractClientStream<Integer>(allocator) {
+          @Override
+          protected void sendCancel(Status errorStatus) {
+            transportReportStatus(errorStatus, true /*stop delivery*/, new Metadata());
+          }
+        };
     stream.start(mockListener);
 
     stream.deframeFailed(new RuntimeException("something bad"));

@@ -48,8 +48,7 @@ import org.mockito.stubbing.OngoingStubbing;
 @RunWith(JUnit4.class)
 public class AbstractReadableBufferTest {
 
-  @Mock
-  private AbstractReadableBuffer buffer;
+  @Mock private AbstractReadableBuffer buffer;
 
   @Before
   public void setup() {

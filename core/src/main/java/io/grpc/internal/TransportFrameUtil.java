@@ -81,8 +81,12 @@ public final class TransportFrameUtil {
           k += 2;
         } else {
           String keyString = new String(key, US_ASCII);
-          logger.warning("Metadata key=" + keyString + ", value=" + Arrays.toString(value)
-              + " contains invalid ASCII characters");
+          logger.warning(
+              "Metadata key="
+                  + keyString
+                  + ", value="
+                  + Arrays.toString(value)
+                  + " contains invalid ASCII characters");
         }
       }
     }

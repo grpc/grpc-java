@@ -89,12 +89,18 @@ public class ManagedChannelImplTransportManagerTest {
   private static final String authority = "fakeauthority";
 
   private final ExecutorService executor = Executors.newSingleThreadExecutor();
-  private final MethodDescriptor<String, String> method = MethodDescriptor.create(
-      MethodDescriptor.MethodType.UNKNOWN, "/service/method",
-      new StringMarshaller(), new StringMarshaller());
-  private final MethodDescriptor<String, String> method2 = MethodDescriptor.create(
-      MethodDescriptor.MethodType.UNKNOWN, "/service/method2",
-      new StringMarshaller(), new StringMarshaller());
+  private final MethodDescriptor<String, String> method =
+      MethodDescriptor.create(
+          MethodDescriptor.MethodType.UNKNOWN,
+          "/service/method",
+          new StringMarshaller(),
+          new StringMarshaller());
+  private final MethodDescriptor<String, String> method2 =
+      MethodDescriptor.create(
+          MethodDescriptor.MethodType.UNKNOWN,
+          "/service/method2",
+          new StringMarshaller(),
+          new StringMarshaller());
 
   private ManagedChannelImpl channel;
 
@@ -115,23 +121,30 @@ public class ManagedChannelImplTransportManagerTest {
 
     when(mockBackoffPolicyProvider.get()).thenReturn(mockBackoffPolicy);
     when(mockNameResolver.getServiceAuthority()).thenReturn(authority);
-    when(mockNameResolverFactory
-        .newNameResolver(any(URI.class), any(Attributes.class)))
+    when(mockNameResolverFactory.newNameResolver(any(URI.class), any(Attributes.class)))
         .thenReturn(mockNameResolver);
     @SuppressWarnings("unchecked")
     LoadBalancer<ClientTransport> loadBalancer = mock(LoadBalancer.class);
-    when(mockLoadBalancerFactory
-        .newLoadBalancer(anyString(), Matchers.<TransportManager<ClientTransport>>any()))
+    when(
+            mockLoadBalancerFactory.newLoadBalancer(
+                anyString(), Matchers.<TransportManager<ClientTransport>>any()))
         .thenReturn(loadBalancer);
 
-    channel = new ManagedChannelImpl("fake://target", mockBackoffPolicyProvider,
-        mockNameResolverFactory, Attributes.EMPTY, mockLoadBalancerFactory,
-        mockTransportFactory, DecompressorRegistry.getDefaultInstance(),
-        CompressorRegistry.getDefaultInstance(), executor, null,
-        Collections.<ClientInterceptor>emptyList());
+    channel =
+        new ManagedChannelImpl(
+            "fake://target",
+            mockBackoffPolicyProvider,
+            mockNameResolverFactory,
+            Attributes.EMPTY,
+            mockLoadBalancerFactory,
+            mockTransportFactory,
+            DecompressorRegistry.getDefaultInstance(),
+            CompressorRegistry.getDefaultInstance(),
+            executor,
+            null,
+            Collections.<ClientInterceptor>emptyList());
 
-    ArgumentCaptor<TransportManager<ClientTransport>> tmCaptor
-        = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<TransportManager<ClientTransport>> tmCaptor = ArgumentCaptor.forClass(null);
     verify(mockNameResolverFactory).newNameResolver(any(URI.class), any(Attributes.class));
     verify(mockNameResolver).start(any(NameResolver.Listener.class));
     verify(mockLoadBalancerFactory).newLoadBalancer(anyString(), tmCaptor.capture());

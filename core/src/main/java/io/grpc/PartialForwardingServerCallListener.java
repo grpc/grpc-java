@@ -36,8 +36,7 @@ package io.grpc;
  * ServerCall.Listener} which may have a different parameterized type than the
  * onMessage() message type.
  */
-abstract class PartialForwardingServerCallListener<ReqT>
-    extends ServerCall.Listener<ReqT> {
+abstract class PartialForwardingServerCallListener<ReqT> extends ServerCall.Listener<ReqT> {
   /**
    * Returns the delegated {@code ServerCall.Listener}.
    */

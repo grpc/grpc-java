@@ -95,20 +95,24 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
 
-  ClientCallImpl(MethodDescriptor<ReqT, RespT> method, Executor executor,
-      CallOptions callOptions, ClientTransportProvider clientTransportProvider,
+  ClientCallImpl(
+      MethodDescriptor<ReqT, RespT> method,
+      Executor executor,
+      CallOptions callOptions,
+      ClientTransportProvider clientTransportProvider,
       ScheduledExecutorService deadlineCancellationExecutor) {
     this.method = method;
     // If we know that the executor is a direct executor, we don't need to wrap it with a
     // SerializingExecutor. This is purely for performance reasons.
     // See https://github.com/grpc/grpc-java/issues/368
-    this.callExecutor = executor == directExecutor()
-        ? new SerializeReentrantCallsDirectExecutor()
-        : new SerializingExecutor(executor);
+    this.callExecutor =
+        executor == directExecutor()
+            ? new SerializeReentrantCallsDirectExecutor()
+            : new SerializingExecutor(executor);
     // Propagate the context from the thread which initiated the call to all callbacks.
     this.parentContext = Context.current();
-    this.unaryRequest = method.getType() == MethodType.UNARY
-        || method.getType() == MethodType.SERVER_STREAMING;
+    this.unaryRequest =
+        method.getType() == MethodType.UNARY || method.getType() == MethodType.SERVER_STREAMING;
     this.callOptions = callOptions;
     this.clientTransportProvider = clientTransportProvider;
     this.deadlineCancellationExecutor = deadlineCancellationExecutor;
@@ -145,8 +149,12 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
   }
 
   @VisibleForTesting
-  static void prepareHeaders(Metadata headers, CallOptions callOptions, String userAgent,
-      DecompressorRegistry decompressorRegistry, Compressor compressor) {
+  static void prepareHeaders(
+      Metadata headers,
+      CallOptions callOptions,
+      String userAgent,
+      DecompressorRegistry decompressorRegistry,
+      Compressor compressor) {
     // Fill out the User-Agent header.
     headers.removeAll(USER_AGENT_KEY);
     if (userAgent != null) {
@@ -184,12 +192,13 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       // Context is already cancelled so no need to create a real stream, just notify the observer
       // of cancellation via callback on the executor
       stream = NoopClientStream.INSTANCE;
-      callExecutor.execute(new ContextRunnable(context) {
-        @Override
-        public void runInContext() {
-          observer.onClose(statusFromCancelled(context), new Metadata());
-        }
-      });
+      callExecutor.execute(
+          new ContextRunnable(context) {
+            @Override
+            public void runInContext() {
+              observer.onClose(statusFromCancelled(context), new Metadata());
+            }
+          });
       return;
     }
     final String compressorName = callOptions.getCompressor();
@@ -198,15 +207,16 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       compressor = compressorRegistry.lookupCompressor(compressorName);
       if (compressor == null) {
         stream = NoopClientStream.INSTANCE;
-        callExecutor.execute(new ContextRunnable(context) {
-          @Override
-          public void runInContext() {
-            observer.onClose(
-                Status.INTERNAL.withDescription(
-                    String.format("Unable to find compressor by name %s", compressorName)),
-                new Metadata());
-          }
-        });
+        callExecutor.execute(
+            new ContextRunnable(context) {
+              @Override
+              public void runInContext() {
+                observer.onClose(
+                    Status.INTERNAL.withDescription(
+                        String.format("Unable to find compressor by name %s", compressorName)),
+                    new Metadata());
+              }
+            });
         return;
       }
     } else {
@@ -217,8 +227,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
 
     final boolean deadlineExceeded = effectiveDeadline != null && effectiveDeadline.isExpired();
     if (!deadlineExceeded) {
-      updateTimeoutHeaders(effectiveDeadline, callOptions.getDeadline(),
-          parentContext.getDeadline(), headers);
+      updateTimeoutHeaders(
+          effectiveDeadline, callOptions.getDeadline(), parentContext.getDeadline(), headers);
       ClientTransport transport = clientTransportProvider.get(callOptions);
       stream = transport.newStream(method, headers);
     } else {
@@ -251,8 +261,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
   /**
    * Based on the deadline, calculate and set the timeout to the given headers.
    */
-  private static void updateTimeoutHeaders(@Nullable Deadline effectiveDeadline,
-      @Nullable Deadline callDeadline, @Nullable Deadline outerCallDeadline, Metadata headers) {
+  private static void updateTimeoutHeaders(
+      @Nullable Deadline effectiveDeadline,
+      @Nullable Deadline callDeadline,
+      @Nullable Deadline outerCallDeadline,
+      Metadata headers) {
     headers.removeAll(TIMEOUT_KEY);
 
     if (effectiveDeadline == null) {
@@ -262,20 +275,22 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
     long effectiveTimeout = max(0, effectiveDeadline.timeRemaining(TimeUnit.NANOSECONDS));
     headers.put(TIMEOUT_KEY, effectiveTimeout);
 
-    logIfContextNarrowedTimeout(effectiveTimeout, effectiveDeadline, outerCallDeadline,
-        callDeadline);
+    logIfContextNarrowedTimeout(
+        effectiveTimeout, effectiveDeadline, outerCallDeadline, callDeadline);
   }
-  
-  private static void logIfContextNarrowedTimeout(long effectiveTimeout,
-      Deadline effectiveDeadline, @Nullable Deadline outerCallDeadline,
+
+  private static void logIfContextNarrowedTimeout(
+      long effectiveTimeout,
+      Deadline effectiveDeadline,
+      @Nullable Deadline outerCallDeadline,
       @Nullable Deadline callDeadline) {
     if (!log.isLoggable(Level.INFO) || outerCallDeadline != effectiveDeadline) {
       return;
     }
 
     StringBuilder builder = new StringBuilder();
-    builder.append(String.format("Call timeout set to '%d' ns, due to context deadline.",
-        effectiveTimeout));
+    builder.append(
+        String.format("Call timeout set to '%d' ns, due to context deadline.", effectiveTimeout));
     if (callDeadline == null) {
       builder.append(" Explicit call timeout was not set.");
     } else {
@@ -323,8 +338,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
         if (message == null && cause == null) {
           // TODO(zhangkun83): log a warning with this exception once cancel() has been deleted from
           // ClientCall.
-          status = status.withCause(
-              new CancellationException("Client called cancel() without any detail"));
+          status =
+              status.withCause(
+                  new CancellationException("Client called cancel() without any detail"));
         }
         stream.cancel(status);
       }
@@ -391,51 +407,56 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
         String encoding = headers.get(MESSAGE_ENCODING_KEY);
         decompressor = decompressorRegistry.lookupDecompressor(encoding);
         if (decompressor == null) {
-          stream.cancel(Status.INTERNAL.withDescription(
-              String.format("Can't find decompressor for %s", encoding)));
+          stream.cancel(
+              Status.INTERNAL.withDescription(
+                  String.format("Can't find decompressor for %s", encoding)));
           return;
         }
       }
       stream.setDecompressor(decompressor);
 
-      callExecutor.execute(new ContextRunnable(context) {
-        @Override
-        public final void runInContext() {
-          try {
-            if (closed) {
-              return;
-            }
+      callExecutor.execute(
+          new ContextRunnable(context) {
+            @Override
+            public final void runInContext() {
+              try {
+                if (closed) {
+                  return;
+                }
 
-            observer.onHeaders(headers);
-          } catch (Throwable t) {
-            stream.cancel(Status.CANCELLED.withCause(t).withDescription("Failed to read headers"));
-            return;
-          }
-        }
-      });
+                observer.onHeaders(headers);
+              } catch (Throwable t) {
+                stream.cancel(
+                    Status.CANCELLED.withCause(t).withDescription("Failed to read headers"));
+                return;
+              }
+            }
+          });
     }
 
     @Override
     public void messageRead(final InputStream message) {
-      callExecutor.execute(new ContextRunnable(context) {
-        @Override
-        public final void runInContext() {
-          try {
-            if (closed) {
-              return;
-            }
+      callExecutor.execute(
+          new ContextRunnable(context) {
+            @Override
+            public final void runInContext() {
+              try {
+                if (closed) {
+                  return;
+                }
 
-            try {
-              observer.onMessage(method.parseResponse(message));
-            } finally {
-              message.close();
+                try {
+                  observer.onMessage(method.parseResponse(message));
+                } finally {
+                  message.close();
+                }
+              } catch (Throwable t) {
+                stream.cancel(
+                    Status.CANCELLED.withCause(t).withDescription("Failed to read message."));
+                return;
+              }
             }
-          } catch (Throwable t) {
-            stream.cancel(Status.CANCELLED.withCause(t).withDescription("Failed to read message."));
-            return;
-          }
-        }
-      });
+          });
     }
 
     @Override
@@ -453,28 +474,30 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       }
       final Status savedStatus = status;
       final Metadata savedTrailers = trailers;
-      callExecutor.execute(new ContextRunnable(context) {
-        @Override
-        public final void runInContext() {
-          try {
-            closed = true;
-            contextListenerShouldBeRemoved = true;
-            observer.onClose(savedStatus, savedTrailers);
-          } finally {
-            context.removeListener(ClientCallImpl.this);
-          }
-        }
-      });
+      callExecutor.execute(
+          new ContextRunnable(context) {
+            @Override
+            public final void runInContext() {
+              try {
+                closed = true;
+                contextListenerShouldBeRemoved = true;
+                observer.onClose(savedStatus, savedTrailers);
+              } finally {
+                context.removeListener(ClientCallImpl.this);
+              }
+            }
+          });
     }
 
     @Override
     public void onReady() {
-      callExecutor.execute(new ContextRunnable(context) {
-        @Override
-        public final void runInContext() {
-          observer.onReady();
-        }
-      });
+      callExecutor.execute(
+          new ContextRunnable(context) {
+            @Override
+            public final void runInContext() {
+              observer.onReady();
+            }
+          });
     }
   }
 }

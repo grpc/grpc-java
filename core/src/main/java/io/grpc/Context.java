@@ -66,7 +66,7 @@ import javax.annotation.Nullable;
  *        readUserRecords(userId, CRED_KEY.get());
  *     }
  *   }));
-
+ *
  * </pre>
  *
  *
@@ -124,12 +124,13 @@ public class Context {
   /**
    * Currently bound context.
    */
-  private static final ThreadLocal<Context> localContext = new ThreadLocal<Context>() {
-    @Override
-    protected Context initialValue() {
-      return ROOT;
-    }
-  };
+  private static final ThreadLocal<Context> localContext =
+      new ThreadLocal<Context>() {
+        @Override
+        protected Context initialValue() {
+          return ROOT;
+        }
+      };
 
   /**
    * Create a {@link Key} with the given debug name. Multiple different keys may have the same name;
@@ -176,7 +177,7 @@ public class Context {
   private Context(Context parent) {
     this.parent = parent;
     // Not inheriting cancellation implies not inheriting a deadline too.
-    keyValueEntries = new Object[][]{{DEADLINE_KEY, null}};
+    keyValueEntries = new Object[][] {{DEADLINE_KEY, null}};
     cascadesCancellation = false;
     canBeCancelled = false;
   }
@@ -250,8 +251,8 @@ public class Context {
    *   });
    * </pre>
    */
-  public CancellableContext withDeadlineAfter(long duration, TimeUnit unit,
-                                              ScheduledExecutorService scheduler) {
+  public CancellableContext withDeadlineAfter(
+      long duration, TimeUnit unit, ScheduledExecutorService scheduler) {
     return withDeadline(Deadline.after(duration, unit), scheduler);
   }
 
@@ -274,8 +275,7 @@ public class Context {
    *   });
    * </pre>
    */
-  public CancellableContext withDeadline(Deadline deadline,
-      ScheduledExecutorService scheduler) {
+  public CancellableContext withDeadline(Deadline deadline, ScheduledExecutorService scheduler) {
     Preconditions.checkNotNull(deadline, "deadline");
     Preconditions.checkNotNull(scheduler, "scheduler");
     return new CancellableContext(this, deadline, scheduler);
@@ -285,7 +285,7 @@ public class Context {
    * Create a new context with the given key value set. The new context will cascade cancellation
    * from its parent.
    *
-   <pre>
+   * <pre>
    *   Context withCredential = Context.current().withValue(CRED_KEY, cred);
    *   executorService.execute(withCredential.wrap(new Runnable() {
    *     public void run() {
@@ -296,7 +296,7 @@ public class Context {
    *
    */
   public <V> Context withValue(Key<V> k1, V v1) {
-    return new Context(this, new Object[][]{{k1, v1}});
+    return new Context(this, new Object[][] {{k1, v1}});
   }
 
   /**
@@ -304,7 +304,7 @@ public class Context {
    * from its parent.
    */
   public <V1, V2> Context withValues(Key<V1> k1, V1 v1, Key<V2> k2, V2 v2) {
-    return new Context(this, new Object[][]{{k1, v1}, {k2, v2}});
+    return new Context(this, new Object[][] {{k1, v1}, {k2, v2}});
   }
 
   /**
@@ -312,7 +312,7 @@ public class Context {
    * from its parent.
    */
   public <V1, V2, V3> Context withValues(Key<V1> k1, V1 v1, Key<V2> k2, V2 v2, Key<V3> k3, V3 v3) {
-    return new Context(this, new Object[][]{{k1, v1}, {k2, v2}, {k3, v3}});
+    return new Context(this, new Object[][] {{k1, v1}, {k2, v2}, {k3, v3}});
   }
 
   /**
@@ -355,7 +355,9 @@ public class Context {
       // Log a severe message instead of throwing an exception as the context to attach is assumed
       // to be the correct one and the unbalanced state represents a coding mistake in a lower
       // layer in the stack that cannot be recovered from here.
-      LOG.log(Level.SEVERE, "Context was not attached when detaching",
+      LOG.log(
+          Level.SEVERE,
+          "Context was not attached when detaching",
           new Throwable().fillInStackTrace());
     }
   }
@@ -405,8 +407,8 @@ public class Context {
   /**
    * Add a listener that will be notified when the context becomes cancelled.
    */
-  public void addListener(final CancellationListener cancellationListener,
-                          final Executor executor) {
+  public void addListener(
+      final CancellationListener cancellationListener, final Executor executor) {
     Preconditions.checkNotNull(cancellationListener);
     Preconditions.checkNotNull(executor);
     if (canBeCancelled) {
@@ -630,8 +632,8 @@ public class Context {
     private static Object[][] deriveDeadline(Context parent, Deadline deadline) {
       Deadline parentDeadline = DEADLINE_KEY.get(parent);
       return parentDeadline == null || deadline.isBefore(parentDeadline)
-          ? new Object[][]{{ DEADLINE_KEY, deadline}} :
-          EMPTY_ENTRIES;
+          ? new Object[][] {{DEADLINE_KEY, deadline}}
+          : EMPTY_ENTRIES;
     }
 
     /**
@@ -647,20 +649,23 @@ public class Context {
     /**
      * Create a cancellable context that has a deadline.
      */
-    private CancellableContext(Context parent, Deadline deadline,
-        ScheduledExecutorService scheduler) {
+    private CancellableContext(
+        Context parent, Deadline deadline, ScheduledExecutorService scheduler) {
       super(parent, deriveDeadline(parent, deadline), true);
       if (DEADLINE_KEY.get(this) == deadline) {
         final TimeoutException cause = new TimeoutException("context timed out");
         if (!deadline.isExpired()) {
           // The parent deadline was after the new deadline so we need to install a listener
           // on the new earlier deadline to trigger expiration for this context.
-          pendingDeadline = deadline.runOnExpiration(new Runnable() {
-            @Override
-            public void run() {
-              cancel(cause);
-            }
-          }, scheduler);
+          pendingDeadline =
+              deadline.runOnExpiration(
+                  new Runnable() {
+                    @Override
+                    public void run() {
+                      cancel(cause);
+                    }
+                  },
+                  scheduler);
         } else {
           // Cancel immediately if the deadline is already expired.
           cancel(cause);
@@ -668,7 +673,6 @@ public class Context {
       }
       uncancellableSurrogate = new Context(this, EMPTY_ENTRIES);
     }
-
 
     @Override
     public Context attach() {

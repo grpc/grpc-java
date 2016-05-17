@@ -62,8 +62,8 @@ final class TestUtils {
      */
     final ManagedClientTransport.Listener listener;
 
-    MockClientTransportInfo(ManagedClientTransport transport,
-        ManagedClientTransport.Listener listener) {
+    MockClientTransportInfo(
+        ManagedClientTransport transport, ManagedClientTransport.Listener listener) {
       this.transport = transport;
       this.listener = listener;
     }
@@ -80,24 +80,33 @@ final class TestUtils {
     final BlockingQueue<MockClientTransportInfo> captor =
         new LinkedBlockingQueue<MockClientTransportInfo>();
 
-    doAnswer(new Answer<ManagedClientTransport>() {
-      @Override
-      public ManagedClientTransport answer(InvocationOnMock invocation) throws Throwable {
-        final ManagedClientTransport mockTransport = mock(ManagedClientTransport.class);
-        when(mockTransport.newStream(any(MethodDescriptor.class), any(Metadata.class)))
-            .thenReturn(mock(ClientStream.class));
-        // Save the listener
-        doAnswer(new Answer<Void>() {
-          @Override
-          public Void answer(InvocationOnMock invocation) throws Throwable {
-            captor.add(new MockClientTransportInfo(
-                mockTransport, (ManagedClientTransport.Listener) invocation.getArguments()[0]));
-            return null;
-          }
-        }).when(mockTransport).start(any(ManagedClientTransport.Listener.class));
-        return mockTransport;
-      }
-    }).when(mockTransportFactory).newClientTransport(any(SocketAddress.class), any(String.class));
+    doAnswer(
+            new Answer<ManagedClientTransport>() {
+              @Override
+              public ManagedClientTransport answer(InvocationOnMock invocation) throws Throwable {
+                final ManagedClientTransport mockTransport = mock(ManagedClientTransport.class);
+                when(mockTransport.newStream(any(MethodDescriptor.class), any(Metadata.class)))
+                    .thenReturn(mock(ClientStream.class));
+                // Save the listener
+                doAnswer(
+                        new Answer<Void>() {
+                          @Override
+                          public Void answer(InvocationOnMock invocation) throws Throwable {
+                            captor.add(
+                                new MockClientTransportInfo(
+                                    mockTransport,
+                                    (ManagedClientTransport.Listener)
+                                        invocation.getArguments()[0]));
+                            return null;
+                          }
+                        })
+                    .when(mockTransport)
+                    .start(any(ManagedClientTransport.Listener.class));
+                return mockTransport;
+              }
+            })
+        .when(mockTransportFactory)
+        .newClientTransport(any(SocketAddress.class), any(String.class));
 
     return captor;
   }

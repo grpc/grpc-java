@@ -52,30 +52,37 @@ final class SingleTransportChannel extends Channel {
   private final String authority;
   private final ScheduledExecutorService deadlineCancellationExecutor;
 
-  private final ClientTransportProvider transportProvider = new ClientTransportProvider() {
-    @Override
-    public ClientTransport get(CallOptions callOptions) {
-      return transport;
-    }
-  };
+  private final ClientTransportProvider transportProvider =
+      new ClientTransportProvider() {
+        @Override
+        public ClientTransport get(CallOptions callOptions) {
+          return transport;
+        }
+      };
 
   /**
    * Creates a new channel with a connected transport.
    */
-  public SingleTransportChannel(ClientTransport transport, Executor executor,
-      ScheduledExecutorService deadlineCancellationExecutor, String authority) {
+  public SingleTransportChannel(
+      ClientTransport transport,
+      Executor executor,
+      ScheduledExecutorService deadlineCancellationExecutor,
+      String authority) {
     this.transport = Preconditions.checkNotNull(transport, "transport");
     this.executor = Preconditions.checkNotNull(executor, "executor");
-    this.deadlineCancellationExecutor = Preconditions.checkNotNull(
-        deadlineCancellationExecutor, "deadlineCancellationExecutor");
+    this.deadlineCancellationExecutor =
+        Preconditions.checkNotNull(deadlineCancellationExecutor, "deadlineCancellationExecutor");
     this.authority = Preconditions.checkNotNull(authority, "authority");
   }
 
   @Override
   public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
       MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
-    return new ClientCallImpl<RequestT, ResponseT>(methodDescriptor,
-        new SerializingExecutor(executor), callOptions, transportProvider,
+    return new ClientCallImpl<RequestT, ResponseT>(
+        methodDescriptor,
+        new SerializingExecutor(executor),
+        callOptions,
+        transportProvider,
         deadlineCancellationExecutor);
   }
 

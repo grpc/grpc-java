@@ -63,7 +63,7 @@ public abstract class LoadBalancer<T> {
   /**
    * Shuts down this {@code LoadBalancer}.
    */
-  public void shutdown() { }
+  public void shutdown() {}
 
   /**
    * Handles newly resolved addresses and service config from name resolution system.
@@ -73,24 +73,24 @@ public abstract class LoadBalancer<T> {
    * @param servers the resolved server addresses. Never empty.
    * @param config extra configuration data from naming system.
    */
-  public void handleResolvedAddresses(List<ResolvedServerInfo> servers, Attributes config) { }
+  public void handleResolvedAddresses(List<ResolvedServerInfo> servers, Attributes config) {}
 
   /**
    * Handles an error from the name resolution system.
    *
    * @param error a non-OK status
    */
-  public void handleNameResolutionError(Status error) { }
+  public void handleNameResolutionError(Status error) {}
 
   /**
    * Called when a transport is fully connected and ready to accept traffic.
    */
-  public void handleTransportReady(EquivalentAddressGroup addressGroup) { }
+  public void handleTransportReady(EquivalentAddressGroup addressGroup) {}
 
   /**
    * Called when a transport is shutting down.
    */
-  public void handleTransportShutdown(EquivalentAddressGroup addressGroup, Status s) { }
+  public void handleTransportShutdown(EquivalentAddressGroup addressGroup, Status s) {}
 
   public abstract static class Factory {
     /**

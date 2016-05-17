@@ -34,8 +34,7 @@ package io.grpc;
 /**
  * A {@link ServerCall} which forwards all of it's methods to another {@link ServerCall}.
  */
-public abstract class ForwardingServerCall<RespT>
-    extends PartialForwardingServerCall<RespT> {
+public abstract class ForwardingServerCall<RespT> extends PartialForwardingServerCall<RespT> {
   /**
    * Returns the delegated {@code ServerCall}.
    */

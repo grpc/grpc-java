@@ -93,7 +93,8 @@ public class MessageDeframer implements Closeable {
   }
 
   private enum State {
-    HEADER, BODY
+    HEADER,
+    BODY
   }
 
   private final Listener listener;
@@ -271,7 +272,8 @@ public class MessageDeframer implements Closeable {
         } else {
           // We've received the entire stream and have data available but we don't have
           // enough to read the next frame ... this is bad.
-          throw Status.INTERNAL.withDescription("Encountered end-of-stream mid-frame")
+          throw Status.INTERNAL
+              .withDescription("Encountered end-of-stream mid-frame")
               .asRuntimeException();
         }
       }
@@ -325,7 +327,8 @@ public class MessageDeframer implements Closeable {
   private void processHeader() {
     int type = nextFrame.readUnsignedByte();
     if ((type & RESERVED_MASK) != 0) {
-      throw Status.INTERNAL.withDescription("Frame header malformed: reserved bits not zero")
+      throw Status.INTERNAL
+          .withDescription("Frame header malformed: reserved bits not zero")
           .asRuntimeException();
     }
     compressedFlag = (type & COMPRESSED_FLAG_MASK) != 0;
@@ -333,8 +336,10 @@ public class MessageDeframer implements Closeable {
     // Update the required length to include the length of the frame.
     requiredLength = nextFrame.readInt();
     if (requiredLength < 0 || requiredLength > maxMessageSize) {
-      throw Status.INTERNAL.withDescription(String.format("Frame size %d exceeds maximum: %d, ",
-              requiredLength, maxMessageSize)).asRuntimeException();
+      throw Status.INTERNAL
+          .withDescription(
+              String.format("Frame size %d exceeds maximum: %d, ", requiredLength, maxMessageSize))
+          .asRuntimeException();
     }
 
     // Continue reading the frame body.
@@ -361,8 +366,9 @@ public class MessageDeframer implements Closeable {
 
   private InputStream getCompressedBody() {
     if (decompressor == Codec.Identity.NONE) {
-      throw Status.INTERNAL.withDescription(
-          "Can't decode compressed frame as compression not configured.").asRuntimeException();
+      throw Status.INTERNAL
+          .withDescription("Can't decode compressed frame as compression not configured.")
+          .asRuntimeException();
     }
 
     try {
@@ -439,9 +445,13 @@ public class MessageDeframer implements Closeable {
 
     private void verifySize() {
       if (count > maxMessageSize) {
-        throw Status.INTERNAL.withDescription(String.format(
-                "Compressed frame exceeds maximum frame size: %d. Bytes read: %d",
-                maxMessageSize, count)).asRuntimeException();
+        throw Status.INTERNAL
+            .withDescription(
+                String.format(
+                    "Compressed frame exceeds maximum frame size: %d. Bytes read: %d",
+                    maxMessageSize,
+                    count))
+            .asRuntimeException();
       }
     }
   }

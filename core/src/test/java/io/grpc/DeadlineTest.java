@@ -62,11 +62,12 @@ public class DeadlineTest {
   /** Ticker epochs to vary testing. */
   @Parameters
   public static Iterable<Object[]> data() {
-    return Arrays.asList(new Object[][] {
-      // MAX_VALUE / 2 is important because the signs are generally the same for past and future
-      // deadlines.
-      {Long.MAX_VALUE / 2}, {0}, {Long.MAX_VALUE}, {Long.MIN_VALUE}
-    });
+    return Arrays.asList(
+        new Object[][] {
+          // MAX_VALUE / 2 is important because the signs are generally the same for past and future
+          // deadlines.
+          {Long.MAX_VALUE / 2}, {0}, {Long.MAX_VALUE}, {Long.MIN_VALUE}
+        });
   }
 
   private FakeTicker ticker = new FakeTicker();
@@ -197,7 +198,8 @@ public class DeadlineTest {
           public void run() {
             executed.set(true);
           }
-        }, mockScheduler);
+        },
+        mockScheduler);
     assertFalse(executed.get());
     ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
     verify(mockScheduler).schedule(runnableCaptor.capture(), eq(50000L), eq(TimeUnit.NANOSECONDS));
@@ -216,7 +218,8 @@ public class DeadlineTest {
           public void run() {
             executed.set(true);
           }
-        }, mockScheduler);
+        },
+        mockScheduler);
     assertFalse(executed.get());
     ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
     verify(mockScheduler).schedule(runnableCaptor.capture(), eq(0L), eq(TimeUnit.NANOSECONDS));

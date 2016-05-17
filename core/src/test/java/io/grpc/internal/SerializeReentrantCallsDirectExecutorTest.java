@@ -55,32 +55,39 @@ public class SerializeReentrantCallsDirectExecutorTest {
     executor = new SerializeReentrantCallsDirectExecutor();
   }
 
-  @Test public void reentrantCallsShouldBeSerialized() {
+  @Test
+  public void reentrantCallsShouldBeSerialized() {
     final List<Integer> callOrder = new ArrayList<Integer>(4);
-    executor.execute(new Runnable() {
-      @Override
-      public void run() {
-        executor.execute(new Runnable() {
+    executor.execute(
+        new Runnable() {
           @Override
           public void run() {
-            executor.execute(new Runnable() {
-              @Override public void run() {
-                callOrder.add(3);
-              }
-            });
+            executor.execute(
+                new Runnable() {
+                  @Override
+                  public void run() {
+                    executor.execute(
+                        new Runnable() {
+                          @Override
+                          public void run() {
+                            callOrder.add(3);
+                          }
+                        });
 
-            callOrder.add(2);
+                    callOrder.add(2);
 
-            executor.execute(new Runnable() {
-              @Override public void run() {
-                callOrder.add(4);
-              }
-            });
+                    executor.execute(
+                        new Runnable() {
+                          @Override
+                          public void run() {
+                            callOrder.add(4);
+                          }
+                        });
+                  }
+                });
+            callOrder.add(1);
           }
         });
-        callOrder.add(1);
-      }
-    });
 
     assertEquals(asList(1, 2, 3, 4), callOrder);
   }
@@ -89,26 +96,29 @@ public class SerializeReentrantCallsDirectExecutorTest {
   public void exceptionShouldNotCancelQueuedTasks() {
     final AtomicBoolean executed1 = new AtomicBoolean();
     final AtomicBoolean executed2 = new AtomicBoolean();
-    executor.execute(new Runnable() {
-      @Override
-      public void run() {
-        executor.execute(new Runnable() {
+    executor.execute(
+        new Runnable() {
           @Override
           public void run() {
-            executed1.set(true);
-            throw new RuntimeException("Two");
-          }
-        });
-        executor.execute(new Runnable() {
-          @Override
-          public void run() {
-            executed2.set(true);
-          }
-        });
+            executor.execute(
+                new Runnable() {
+                  @Override
+                  public void run() {
+                    executed1.set(true);
+                    throw new RuntimeException("Two");
+                  }
+                });
+            executor.execute(
+                new Runnable() {
+                  @Override
+                  public void run() {
+                    executed2.set(true);
+                  }
+                });
 
-        throw new RuntimeException("One");
-      }
-    });
+            throw new RuntimeException("One");
+          }
+        });
 
     assertTrue(executed1.get());
     assertTrue(executed2.get());
@@ -122,20 +132,22 @@ public class SerializeReentrantCallsDirectExecutorTest {
   @Test
   public void executeCanBeRepeated() {
     final List<Integer> executes = new ArrayList<Integer>();
-    executor.execute(new Runnable() {
-      @Override
-      public void run() {
-        executes.add(1);
-      }
-    });
-    executor.execute(new Runnable() {
-      @Override
-      public void run() {
-        executes.add(2);
-      }
-    });
+    executor.execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            executes.add(1);
+          }
+        });
+    executor.execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            executes.add(2);
+          }
+        });
 
-    assertEquals(asList(1,2), executes);
+    assertEquals(asList(1, 2), executes);
   }
 
   @Test
@@ -144,20 +156,22 @@ public class SerializeReentrantCallsDirectExecutorTest {
 
     Thread.currentThread().interrupt();
 
-    executor.execute(new Runnable() {
-      @Override
-      public void run() {
-        Thread.currentThread().interrupt();
-        callsExecuted.incrementAndGet();
-      }
-    });
+    executor.execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            Thread.currentThread().interrupt();
+            callsExecuted.incrementAndGet();
+          }
+        });
 
-    executor.execute(new Runnable() {
-      @Override
-      public void run() {
-        callsExecuted.incrementAndGet();
-      }
-    });
+    executor.execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            callsExecuted.incrementAndGet();
+          }
+        });
 
     // clear interrupted flag
     Thread.interrupted();

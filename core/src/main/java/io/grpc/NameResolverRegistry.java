@@ -59,8 +59,8 @@ public final class NameResolverRegistry extends NameResolver.Factory {
 
   private NameResolverRegistry(NameResolver.Factory defaultResolverFactory) {
     register(defaultResolverFactory);
-    defaultScheme = Preconditions.checkNotNull(
-        defaultResolverFactory.getDefaultScheme(), "defaultScheme");
+    defaultScheme =
+        Preconditions.checkNotNull(defaultResolverFactory.getDefaultScheme(), "defaultScheme");
   }
 
   /**

@@ -53,9 +53,10 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 public final class DecompressorRegistry {
 
-  private static final DecompressorRegistry DEFAULT_INSTANCE = new DecompressorRegistry(
-      new DecompressorInfo(new Codec.Gzip(), true),
-      new DecompressorInfo(Codec.Identity.NONE, false));
+  private static final DecompressorRegistry DEFAULT_INSTANCE =
+      new DecompressorRegistry(
+          new DecompressorInfo(new Codec.Gzip(), true),
+          new DecompressorInfo(Codec.Identity.NONE, false));
 
   public static DecompressorRegistry getDefaultInstance() {
     return DEFAULT_INSTANCE;
@@ -119,7 +120,7 @@ public final class DecompressorRegistry {
   }
 
   @VisibleForTesting
-  DecompressorRegistry(DecompressorInfo ...ds) {
+  DecompressorRegistry(DecompressorInfo... ds) {
     decompressors = new ConcurrentHashMap<String, DecompressorInfo>();
     for (DecompressorInfo d : ds) {
       decompressors.put(d.decompressor.getMessageEncoding(), d);

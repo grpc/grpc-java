@@ -62,10 +62,17 @@ public final class DnsNameResolverFactory extends NameResolver.Factory {
   public NameResolver newNameResolver(URI targetUri, Attributes params) {
     if (SCHEME.equals(targetUri.getScheme())) {
       String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
-      Preconditions.checkArgument(targetPath.startsWith("/"),
-          "the path component (%s) of the target (%s) must start with '/'", targetPath, targetUri);
+      Preconditions.checkArgument(
+          targetPath.startsWith("/"),
+          "the path component (%s) of the target (%s) must start with '/'",
+          targetPath,
+          targetUri);
       String name = targetPath.substring(1);
-      return new DnsNameResolver(targetUri.getAuthority(), name, params, GrpcUtil.TIMER_SERVICE,
+      return new DnsNameResolver(
+          targetUri.getAuthority(),
+          name,
+          params,
+          GrpcUtil.TIMER_SERVICE,
           GrpcUtil.SHARED_CHANNEL_EXECUTOR);
     } else {
       return null;
@@ -77,8 +84,7 @@ public final class DnsNameResolverFactory extends NameResolver.Factory {
     return SCHEME;
   }
 
-  private DnsNameResolverFactory() {
-  }
+  private DnsNameResolverFactory() {}
 
   public static DnsNameResolverFactory getInstance() {
     return instance;

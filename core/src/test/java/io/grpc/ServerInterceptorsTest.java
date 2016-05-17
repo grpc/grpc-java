@@ -66,32 +66,37 @@ import java.util.List;
 public class ServerInterceptorsTest {
   @SuppressWarnings("unchecked")
   private Marshaller<String> requestMarshaller = mock(Marshaller.class);
+
   @SuppressWarnings("unchecked")
   private Marshaller<Integer> responseMarshaller = mock(Marshaller.class);
+
   @SuppressWarnings("unchecked")
   private ServerCallHandler<String, Integer> handler = mock(ServerCallHandler.class);
+
   @Mock private ServerCall.Listener<String> listener;
-  private MethodDescriptor<String, Integer> method = MethodDescriptor.create(
-      MethodType.UNKNOWN,
-      "someRandom/Name",
-      requestMarshaller,
-      responseMarshaller);
+  private MethodDescriptor<String, Integer> method =
+      MethodDescriptor.create(
+          MethodType.UNKNOWN, "someRandom/Name", requestMarshaller, responseMarshaller);
   @Mock private ServerCall<Integer> call;
-  private ServerServiceDefinition serviceDefinition = ServerServiceDefinition.builder("basic")
-      .addMethod(
-          MethodDescriptor.create(
-            MethodType.UNKNOWN, "basic/flow", requestMarshaller, responseMarshaller),
-          handler).build();
+  private ServerServiceDefinition serviceDefinition =
+      ServerServiceDefinition.builder("basic")
+          .addMethod(
+              MethodDescriptor.create(
+                  MethodType.UNKNOWN, "basic/flow", requestMarshaller, responseMarshaller),
+              handler)
+          .build();
   private Metadata headers = new Metadata();
 
   /** Set up for test. */
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    Mockito.when(handler.startCall(
-        Mockito.<MethodDescriptor<String, Integer>>any(),
-        Mockito.<ServerCall<Integer>>any(), Mockito.<Metadata>any()))
-            .thenReturn(listener);
+    Mockito.when(
+            handler.startCall(
+                Mockito.<MethodDescriptor<String, Integer>>any(),
+                Mockito.<ServerCall<Integer>>any(),
+                Mockito.<Metadata>any()))
+        .thenReturn(listener);
   }
 
   /** Final checks for all tests. */
@@ -119,23 +124,25 @@ public class ServerInterceptorsTest {
 
   @Test
   public void noop() {
-    assertSame(serviceDefinition,
+    assertSame(
+        serviceDefinition,
         ServerInterceptors.intercept(serviceDefinition, Arrays.<ServerInterceptor>asList()));
   }
 
   @Test
   public void multipleInvocationsOfHandler() {
     ServerInterceptor interceptor = Mockito.spy(new NoopInterceptor());
-    ServerServiceDefinition intercepted
-        = ServerInterceptors.intercept(serviceDefinition, Arrays.asList(interceptor));
-    assertSame(listener,
+    ServerServiceDefinition intercepted =
+        ServerInterceptors.intercept(serviceDefinition, Arrays.asList(interceptor));
+    assertSame(
+        listener,
         getSoleMethod(intercepted).getServerCallHandler().startCall(method, call, headers));
-    verify(interceptor).interceptCall(
-        same(method), same(call), same(headers), anyCallHandler());
+    verify(interceptor).interceptCall(same(method), same(call), same(headers), anyCallHandler());
     verify(handler).startCall(method, call, headers);
     verifyNoMoreInteractions(interceptor, handler);
 
-    assertSame(listener,
+    assertSame(
+        listener,
         getSoleMethod(intercepted).getServerCallHandler().startCall(method, call, headers));
     verify(interceptor, times(2))
         .interceptCall(same(method), same(call), same(headers), anyCallHandler());
@@ -147,21 +154,26 @@ public class ServerInterceptorsTest {
   public void correctHandlerCalled() {
     @SuppressWarnings("unchecked")
     ServerCallHandler<String, Integer> handler2 = mock(ServerCallHandler.class);
-    serviceDefinition = ServerServiceDefinition.builder("basic")
-        .addMethod(MethodDescriptor.create(MethodType.UNKNOWN, "basic/flow",
-              requestMarshaller, responseMarshaller), handler)
-        .addMethod(MethodDescriptor.create(MethodType.UNKNOWN, "basic/flow2",
-              requestMarshaller, responseMarshaller), handler2).build();
-    ServerServiceDefinition intercepted = ServerInterceptors.intercept(
-        serviceDefinition, Arrays.<ServerInterceptor>asList(new NoopInterceptor()));
-    getMethod(intercepted, "basic/flow").getServerCallHandler().startCall(
-        method, call, headers);
+    serviceDefinition =
+        ServerServiceDefinition.builder("basic")
+            .addMethod(
+                MethodDescriptor.create(
+                    MethodType.UNKNOWN, "basic/flow", requestMarshaller, responseMarshaller),
+                handler)
+            .addMethod(
+                MethodDescriptor.create(
+                    MethodType.UNKNOWN, "basic/flow2", requestMarshaller, responseMarshaller),
+                handler2)
+            .build();
+    ServerServiceDefinition intercepted =
+        ServerInterceptors.intercept(
+            serviceDefinition, Arrays.<ServerInterceptor>asList(new NoopInterceptor()));
+    getMethod(intercepted, "basic/flow").getServerCallHandler().startCall(method, call, headers);
     verify(handler).startCall(method, call, headers);
     verifyNoMoreInteractions(handler);
     verifyZeroInteractions(handler2);
 
-    getMethod(intercepted, "basic/flow2").getServerCallHandler().startCall(
-        method, call, headers);
+    getMethod(intercepted, "basic/flow2").getServerCallHandler().startCall(method, call, headers);
     verify(handler2).startCall(method, call, headers);
     verifyNoMoreInteractions(handler);
     verifyNoMoreInteractions(handler2);
@@ -169,21 +181,23 @@ public class ServerInterceptorsTest {
 
   @Test
   public void callNextTwice() {
-    ServerInterceptor interceptor = new ServerInterceptor() {
-      @Override
-      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-          MethodDescriptor<ReqT, RespT> method,
-          ServerCall<RespT> call,
-          Metadata headers,
-          ServerCallHandler<ReqT, RespT> next) {
-        // Calling next twice is permitted, although should only rarely be useful.
-        assertSame(listener, next.startCall(method, call, headers));
-        return next.startCall(method, call, headers);
-      }
-    };
-    ServerServiceDefinition intercepted = ServerInterceptors.intercept(serviceDefinition,
-        interceptor);
-    assertSame(listener,
+    ServerInterceptor interceptor =
+        new ServerInterceptor() {
+          @Override
+          public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+              MethodDescriptor<ReqT, RespT> method,
+              ServerCall<RespT> call,
+              Metadata headers,
+              ServerCallHandler<ReqT, RespT> next) {
+            // Calling next twice is permitted, although should only rarely be useful.
+            assertSame(listener, next.startCall(method, call, headers));
+            return next.startCall(method, call, headers);
+          }
+        };
+    ServerServiceDefinition intercepted =
+        ServerInterceptors.intercept(serviceDefinition, interceptor);
+    assertSame(
+        listener,
         getSoleMethod(intercepted).getServerCallHandler().startCall(method, call, headers));
     verify(handler, times(2)).startCall(same(method), same(call), same(headers));
     verifyNoMoreInteractions(handler);
@@ -192,7 +206,8 @@ public class ServerInterceptorsTest {
   @Test
   public void ordered() {
     final List<String> order = new ArrayList<String>();
-    handler = new ServerCallHandler<String, Integer>() {
+    handler =
+        new ServerCallHandler<String, Integer>() {
           @Override
           public ServerCall.Listener<String> startCall(
               MethodDescriptor<String, Integer> method,
@@ -202,7 +217,8 @@ public class ServerInterceptorsTest {
             return listener;
           }
         };
-    ServerInterceptor interceptor1 = new ServerInterceptor() {
+    ServerInterceptor interceptor1 =
+        new ServerInterceptor() {
           @Override
           public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
               MethodDescriptor<ReqT, RespT> method,
@@ -213,7 +229,8 @@ public class ServerInterceptorsTest {
             return next.startCall(method, call, headers);
           }
         };
-    ServerInterceptor interceptor2 = new ServerInterceptor() {
+    ServerInterceptor interceptor2 =
+        new ServerInterceptor() {
           @Override
           public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
               MethodDescriptor<ReqT, RespT> method,
@@ -224,12 +241,17 @@ public class ServerInterceptorsTest {
             return next.startCall(method, call, headers);
           }
         };
-    ServerServiceDefinition serviceDefinition = ServerServiceDefinition.builder("basic")
-        .addMethod(MethodDescriptor.create(MethodType.UNKNOWN, "basic/flow",
-              requestMarshaller, responseMarshaller), handler).build();
-    ServerServiceDefinition intercepted = ServerInterceptors.intercept(
-        serviceDefinition, Arrays.asList(interceptor1, interceptor2));
-    assertSame(listener,
+    ServerServiceDefinition serviceDefinition =
+        ServerServiceDefinition.builder("basic")
+            .addMethod(
+                MethodDescriptor.create(
+                    MethodType.UNKNOWN, "basic/flow", requestMarshaller, responseMarshaller),
+                handler)
+            .build();
+    ServerServiceDefinition intercepted =
+        ServerInterceptors.intercept(serviceDefinition, Arrays.asList(interceptor1, interceptor2));
+    assertSame(
+        listener,
         getSoleMethod(intercepted).getServerCallHandler().startCall(method, call, headers));
     assertEquals(Arrays.asList("i2", "i1", "handler"), order);
   }
@@ -237,75 +259,88 @@ public class ServerInterceptorsTest {
   @Test
   public void orderedForward() {
     final List<String> order = new ArrayList<String>();
-    handler = new ServerCallHandler<String, Integer>() {
-      @Override
-      public ServerCall.Listener<String> startCall(
-          MethodDescriptor<String, Integer> method,
-          ServerCall<Integer> call,
-          Metadata headers) {
-        order.add("handler");
-        return listener;
-      }
-    };
-    ServerInterceptor interceptor1 = new ServerInterceptor() {
-      @Override
-      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-          MethodDescriptor<ReqT, RespT> method,
-          ServerCall<RespT> call,
-          Metadata headers,
-          ServerCallHandler<ReqT, RespT> next) {
-        order.add("i1");
-        return next.startCall(method, call, headers);
-      }
-    };
-    ServerInterceptor interceptor2 = new ServerInterceptor() {
-      @Override
-      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-          MethodDescriptor<ReqT, RespT> method,
-          ServerCall<RespT> call,
-          Metadata headers,
-          ServerCallHandler<ReqT, RespT> next) {
-        order.add("i2");
-        return next.startCall(method, call, headers);
-      }
-    };
-    ServerServiceDefinition serviceDefinition = ServerServiceDefinition.builder("basic")
-        .addMethod(MethodDescriptor.create(MethodType.UNKNOWN, "basic/flow",
-            requestMarshaller, responseMarshaller), handler).build();
-    ServerServiceDefinition intercepted = ServerInterceptors.interceptForward(
-        serviceDefinition, interceptor1, interceptor2);
-    assertSame(listener,
+    handler =
+        new ServerCallHandler<String, Integer>() {
+          @Override
+          public ServerCall.Listener<String> startCall(
+              MethodDescriptor<String, Integer> method,
+              ServerCall<Integer> call,
+              Metadata headers) {
+            order.add("handler");
+            return listener;
+          }
+        };
+    ServerInterceptor interceptor1 =
+        new ServerInterceptor() {
+          @Override
+          public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+              MethodDescriptor<ReqT, RespT> method,
+              ServerCall<RespT> call,
+              Metadata headers,
+              ServerCallHandler<ReqT, RespT> next) {
+            order.add("i1");
+            return next.startCall(method, call, headers);
+          }
+        };
+    ServerInterceptor interceptor2 =
+        new ServerInterceptor() {
+          @Override
+          public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+              MethodDescriptor<ReqT, RespT> method,
+              ServerCall<RespT> call,
+              Metadata headers,
+              ServerCallHandler<ReqT, RespT> next) {
+            order.add("i2");
+            return next.startCall(method, call, headers);
+          }
+        };
+    ServerServiceDefinition serviceDefinition =
+        ServerServiceDefinition.builder("basic")
+            .addMethod(
+                MethodDescriptor.create(
+                    MethodType.UNKNOWN, "basic/flow", requestMarshaller, responseMarshaller),
+                handler)
+            .build();
+    ServerServiceDefinition intercepted =
+        ServerInterceptors.interceptForward(serviceDefinition, interceptor1, interceptor2);
+    assertSame(
+        listener,
         getSoleMethod(intercepted).getServerCallHandler().startCall(method, call, headers));
     assertEquals(Arrays.asList("i1", "i2", "handler"), order);
   }
 
   @Test
   public void argumentsPassed() {
-    final MethodDescriptor<String, Integer> method2 = MethodDescriptor.create(
-        MethodType.UNKNOWN, "someOtherRandom/Method", requestMarshaller, responseMarshaller);
+    final MethodDescriptor<String, Integer> method2 =
+        MethodDescriptor.create(
+            MethodType.UNKNOWN, "someOtherRandom/Method", requestMarshaller, responseMarshaller);
     @SuppressWarnings("unchecked")
     final ServerCall<Integer> call2 = mock(ServerCall.class);
     @SuppressWarnings("unchecked")
     final ServerCall.Listener<String> listener2 = mock(ServerCall.Listener.class);
 
-    ServerInterceptor interceptor = new ServerInterceptor() {
-        @SuppressWarnings("unchecked") // Lot's of casting for no benefit.  Not intended use.
-        @Override
-        public <R1, R2> ServerCall.Listener<R1> interceptCall(
-            MethodDescriptor<R1, R2> methodDescriptor,
-            ServerCall<R2> call,
-            Metadata headers,
-            ServerCallHandler<R1, R2> next) {
-          assertSame(method, methodDescriptor);
-          assertSame(call, ServerInterceptorsTest.this.call);
-          assertSame(listener,
-              next.startCall((MethodDescriptor<R1, R2>)method2, (ServerCall<R2>)call2, headers));
-          return (ServerCall.Listener<R1>) listener2;
-        }
-      };
-    ServerServiceDefinition intercepted = ServerInterceptors.intercept(
-        serviceDefinition, Arrays.asList(interceptor));
-    assertSame(listener2,
+    ServerInterceptor interceptor =
+        new ServerInterceptor() {
+          @SuppressWarnings("unchecked") // Lot's of casting for no benefit.  Not intended use.
+          @Override
+          public <R1, R2> ServerCall.Listener<R1> interceptCall(
+              MethodDescriptor<R1, R2> methodDescriptor,
+              ServerCall<R2> call,
+              Metadata headers,
+              ServerCallHandler<R1, R2> next) {
+            assertSame(method, methodDescriptor);
+            assertSame(call, ServerInterceptorsTest.this.call);
+            assertSame(
+                listener,
+                next.startCall(
+                    (MethodDescriptor<R1, R2>) method2, (ServerCall<R2>) call2, headers));
+            return (ServerCall.Listener<R1>) listener2;
+          }
+        };
+    ServerServiceDefinition intercepted =
+        ServerInterceptors.intercept(serviceDefinition, Arrays.asList(interceptor));
+    assertSame(
+        listener2,
         getSoleMethod(intercepted).getServerCallHandler().startCall(method, call, headers));
     verify(handler).startCall(method2, call2, headers);
   }
@@ -314,104 +349,113 @@ public class ServerInterceptorsTest {
   @SuppressWarnings("unchecked")
   public void typedMarshalledMessages() {
     final List<String> order = new ArrayList<String>();
-    Marshaller<Holder> marshaller = new Marshaller<Holder>() {
-      @Override
-      public InputStream stream(Holder value) {
-        return value.get();
-      }
-
-      @Override
-      public Holder parse(InputStream stream) {
-        return new Holder(stream);
-      }
-    };
-
-    ServerCallHandler<Holder, Holder> handler2 = new ServerCallHandler<Holder, Holder>() {
-      @Override
-      public Listener<Holder> startCall(final MethodDescriptor<Holder, Holder> method,
-                                        final ServerCall<Holder> call,
-                                        final Metadata headers) {
-        return new Listener<Holder>() {
+    Marshaller<Holder> marshaller =
+        new Marshaller<Holder>() {
           @Override
-          public void onMessage(Holder message) {
-            order.add("handler");
-            call.sendMessage(message);
+          public InputStream stream(Holder value) {
+            return value.get();
           }
-        };
-      }
-    };
 
-    ServerServiceDefinition serviceDef = ServerServiceDefinition.builder("basic")
-        .addMethod(
-            MethodDescriptor.create(
-                MethodType.UNKNOWN, "basic/wrapped", marshaller, marshaller),
-            handler2).build();
-
-    ServerInterceptor interceptor1 = new ServerInterceptor() {
-      @Override
-      public <ReqT, RespT> Listener<ReqT> interceptCall(MethodDescriptor<ReqT, RespT> method,
-                                                        ServerCall<RespT> call,
-                                                        Metadata headers,
-                                                        ServerCallHandler<ReqT, RespT> next) {
-        ServerCall<RespT> interceptedCall = new ForwardingServerCall
-            .SimpleForwardingServerCall<RespT>(call) {
           @Override
-          public void sendMessage(RespT message) {
-            order.add("i1sendMessage");
-            assertTrue(message instanceof Holder);
-            super.sendMessage(message);
+          public Holder parse(InputStream stream) {
+            return new Holder(stream);
           }
         };
 
-        ServerCall.Listener<ReqT> originalListener = next
-            .startCall(method, interceptedCall, headers);
-        return new ForwardingServerCallListener
-            .SimpleForwardingServerCallListener<ReqT>(originalListener) {
+    ServerCallHandler<Holder, Holder> handler2 =
+        new ServerCallHandler<Holder, Holder>() {
           @Override
-          public void onMessage(ReqT message) {
-            order.add("i1onMessage");
-            assertTrue(message instanceof Holder);
-            super.onMessage(message);
-          }
-        };
-      }
-    };
-
-    ServerInterceptor interceptor2 = new ServerInterceptor() {
-      @Override
-      public <ReqT, RespT> Listener<ReqT> interceptCall(MethodDescriptor<ReqT, RespT> method,
-                                                        ServerCall<RespT> call,
-                                                        Metadata headers,
-                                                        ServerCallHandler<ReqT, RespT> next) {
-        ServerCall<RespT> interceptedCall = new ForwardingServerCall
-            .SimpleForwardingServerCall<RespT>(call) {
-          @Override
-          public void sendMessage(RespT message) {
-            order.add("i2sendMessage");
-            assertTrue(message instanceof InputStream);
-            super.sendMessage(message);
+          public Listener<Holder> startCall(
+              final MethodDescriptor<Holder, Holder> method,
+              final ServerCall<Holder> call,
+              final Metadata headers) {
+            return new Listener<Holder>() {
+              @Override
+              public void onMessage(Holder message) {
+                order.add("handler");
+                call.sendMessage(message);
+              }
+            };
           }
         };
 
-        ServerCall.Listener<ReqT> originalListener = next
-            .startCall(method, interceptedCall, headers);
-        return new ForwardingServerCallListener
-            .SimpleForwardingServerCallListener<ReqT>(originalListener) {
+    ServerServiceDefinition serviceDef =
+        ServerServiceDefinition.builder("basic")
+            .addMethod(
+                MethodDescriptor.create(
+                    MethodType.UNKNOWN, "basic/wrapped", marshaller, marshaller),
+                handler2)
+            .build();
+
+    ServerInterceptor interceptor1 =
+        new ServerInterceptor() {
           @Override
-          public void onMessage(ReqT message) {
-            order.add("i2onMessage");
-            assertTrue(message instanceof InputStream);
-            super.onMessage(message);
+          public <ReqT, RespT> Listener<ReqT> interceptCall(
+              MethodDescriptor<ReqT, RespT> method,
+              ServerCall<RespT> call,
+              Metadata headers,
+              ServerCallHandler<ReqT, RespT> next) {
+            ServerCall<RespT> interceptedCall =
+                new ForwardingServerCall.SimpleForwardingServerCall<RespT>(call) {
+                  @Override
+                  public void sendMessage(RespT message) {
+                    order.add("i1sendMessage");
+                    assertTrue(message instanceof Holder);
+                    super.sendMessage(message);
+                  }
+                };
+
+            ServerCall.Listener<ReqT> originalListener =
+                next.startCall(method, interceptedCall, headers);
+            return new ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT>(
+                originalListener) {
+              @Override
+              public void onMessage(ReqT message) {
+                order.add("i1onMessage");
+                assertTrue(message instanceof Holder);
+                super.onMessage(message);
+              }
+            };
           }
         };
-      }
-    };
+
+    ServerInterceptor interceptor2 =
+        new ServerInterceptor() {
+          @Override
+          public <ReqT, RespT> Listener<ReqT> interceptCall(
+              MethodDescriptor<ReqT, RespT> method,
+              ServerCall<RespT> call,
+              Metadata headers,
+              ServerCallHandler<ReqT, RespT> next) {
+            ServerCall<RespT> interceptedCall =
+                new ForwardingServerCall.SimpleForwardingServerCall<RespT>(call) {
+                  @Override
+                  public void sendMessage(RespT message) {
+                    order.add("i2sendMessage");
+                    assertTrue(message instanceof InputStream);
+                    super.sendMessage(message);
+                  }
+                };
+
+            ServerCall.Listener<ReqT> originalListener =
+                next.startCall(method, interceptedCall, headers);
+            return new ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT>(
+                originalListener) {
+              @Override
+              public void onMessage(ReqT message) {
+                order.add("i2onMessage");
+                assertTrue(message instanceof InputStream);
+                super.onMessage(message);
+              }
+            };
+          }
+        };
 
     ServerServiceDefinition intercepted = ServerInterceptors.intercept(serviceDef, interceptor1);
-    ServerServiceDefinition inputStreamMessageService = ServerInterceptors
-        .useInputStreamMessages(intercepted);
-    ServerServiceDefinition intercepted2 = ServerInterceptors
-        .intercept(inputStreamMessageService, interceptor2);
+    ServerServiceDefinition inputStreamMessageService =
+        ServerInterceptors.useInputStreamMessages(intercepted);
+    ServerServiceDefinition intercepted2 =
+        ServerInterceptors.intercept(inputStreamMessageService, interceptor2);
     ServerMethodDefinition<InputStream, InputStream> serverMethod =
         (ServerMethodDefinition<InputStream, InputStream>) intercepted2.getMethod("basic/wrapped");
     MethodDescriptor<InputStream, InputStream> method2 = serverMethod.getMethodDescriptor();

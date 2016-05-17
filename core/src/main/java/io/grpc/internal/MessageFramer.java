@@ -342,10 +342,10 @@ public class MessageFramer {
     @Override
     public void write(int b) throws IOException {
       if (current != null && current.writableBytes() > 0) {
-        current.write((byte)b);
+        current.write((byte) b);
         return;
       }
-      byte[] singleByte = new byte[]{(byte)b};
+      byte[] singleByte = new byte[] {(byte) b};
       write(singleByte, 0, 1);
     }
 

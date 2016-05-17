@@ -58,13 +58,11 @@ public final class CallOptions {
   private Deadline deadline;
   private Executor executor;
 
-  @Nullable
-  private String authority;
+  @Nullable private String authority;
 
   private Attributes affinity = Attributes.EMPTY;
 
-  @Nullable
-  private String compressorName;
+  @Nullable private String compressorName;
 
   /**
    * Override the HTTP/2 authority the channel claims to be connecting to. <em>This is not
@@ -121,9 +119,10 @@ public final class CallOptions {
    */
   @Deprecated
   public CallOptions withDeadlineNanoTime(@Nullable Long deadlineNanoTime) {
-    Deadline deadline = deadlineNanoTime != null
-        ? Deadline.after(deadlineNanoTime - System.nanoTime(), TimeUnit.NANOSECONDS)
-        : null;
+    Deadline deadline =
+        deadlineNanoTime != null
+            ? Deadline.after(deadlineNanoTime - System.nanoTime(), TimeUnit.NANOSECONDS)
+            : null;
     return withDeadline(deadline);
   }
 
@@ -215,8 +214,7 @@ public final class CallOptions {
     return executor;
   }
 
-  private CallOptions() {
-  }
+  private CallOptions() {}
 
   /**
    * Copy constructor.

@@ -55,28 +55,26 @@ import javax.annotation.Nullable;
  * @param <T> The concrete type for this builder.
  */
 public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuilder<T>>
-        extends ServerBuilder<T> {
+    extends ServerBuilder<T> {
 
-  private static final HandlerRegistry EMPTY_FALLBACK_REGISTRY = new HandlerRegistry() {
-      @Override public ServerMethodDefinition<?, ?> lookupMethod(String method, String authority) {
-        return null;
-      }
-    };
+  private static final HandlerRegistry EMPTY_FALLBACK_REGISTRY =
+      new HandlerRegistry() {
+        @Override
+        public ServerMethodDefinition<?, ?> lookupMethod(String method, String authority) {
+          return null;
+        }
+      };
 
   private final InternalHandlerRegistry.Builder registryBuilder =
       new InternalHandlerRegistry.Builder();
 
-  @Nullable
-  private HandlerRegistry fallbackRegistry;
+  @Nullable private HandlerRegistry fallbackRegistry;
 
-  @Nullable
-  private Executor executor;
+  @Nullable private Executor executor;
 
-  @Nullable
-  private DecompressorRegistry decompressorRegistry;
+  @Nullable private DecompressorRegistry decompressorRegistry;
 
-  @Nullable
-  private CompressorRegistry compressorRegistry;
+  @Nullable private CompressorRegistry compressorRegistry;
 
   @Override
   public final T directExecutor() {
@@ -121,9 +119,13 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   @Override
   public ServerImpl build() {
     io.grpc.internal.InternalServer transportServer = buildTransportServer();
-    return new ServerImpl(executor, registryBuilder.build(),
-        firstNonNull(fallbackRegistry, EMPTY_FALLBACK_REGISTRY), transportServer,
-        Context.ROOT, firstNonNull(decompressorRegistry, DecompressorRegistry.getDefaultInstance()),
+    return new ServerImpl(
+        executor,
+        registryBuilder.build(),
+        firstNonNull(fallbackRegistry, EMPTY_FALLBACK_REGISTRY),
+        transportServer,
+        Context.ROOT,
+        firstNonNull(decompressorRegistry, DecompressorRegistry.getDefaultInstance()),
         firstNonNull(compressorRegistry, CompressorRegistry.getDefaultInstance()));
   }
 

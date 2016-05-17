@@ -51,8 +51,7 @@ public final class ServerServiceDefinition {
   private final String name;
   private final ImmutableMap<String, ServerMethodDefinition<?, ?>> methods;
 
-  private ServerServiceDefinition(
-      String name, Map<String, ServerMethodDefinition<?, ?>> methods) {
+  private ServerServiceDefinition(String name, Map<String, ServerMethodDefinition<?, ?>> methods) {
     this.name = checkNotNull(name);
     this.methods = ImmutableMap.copyOf(methods);
   }
@@ -96,9 +95,10 @@ public final class ServerServiceDefinition {
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1774")
     public <ReqT, RespT> Builder addMethod(
         MethodDescriptor<ReqT, RespT> method, ServerCallHandler<ReqT, RespT> handler) {
-      return addMethod(ServerMethodDefinition.create(
-          checkNotNull(method, "method must not be null"),
-          checkNotNull(handler, "handler must not be null")));
+      return addMethod(
+          ServerMethodDefinition.create(
+              checkNotNull(method, "method must not be null"),
+              checkNotNull(handler, "handler must not be null")));
     }
 
     /** Add a method to be supported by the service. */
@@ -108,7 +108,8 @@ public final class ServerServiceDefinition {
       checkArgument(
           serviceName.equals(MethodDescriptor.extractFullServiceName(method.getFullMethodName())),
           "Service name mismatch. Expected service name: '%s'. Actual method name: '%s'.",
-          this.serviceName, method.getFullMethodName());
+          this.serviceName,
+          method.getFullMethodName());
       String name = method.getFullMethodName();
       checkState(!methods.containsKey(name), "Method by same name already registered: %s", name);
       methods.put(name, def);

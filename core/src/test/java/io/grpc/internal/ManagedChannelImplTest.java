@@ -108,9 +108,12 @@ public class ManagedChannelImplTest {
       Collections.<ClientInterceptor>emptyList();
   private static final Attributes NAME_RESOLVER_PARAMS =
       Attributes.newBuilder().set(NameResolver.Factory.PARAMS_DEFAULT_PORT, 447).build();
-  private final MethodDescriptor<String, Integer> method = MethodDescriptor.create(
-      MethodDescriptor.MethodType.UNKNOWN, "/service/method",
-      new StringMarshaller(), new IntegerMarshaller());
+  private final MethodDescriptor<String, Integer> method =
+      MethodDescriptor.create(
+          MethodDescriptor.MethodType.UNKNOWN,
+          "/service/method",
+          new StringMarshaller(),
+          new IntegerMarshaller());
   private final ExecutorService executor = Executors.newSingleThreadExecutor();
   private final String serviceName = "fake.example.com";
   private final String authority = serviceName;
@@ -123,18 +126,12 @@ public class ManagedChannelImplTest {
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
-  @Captor
-  private ArgumentCaptor<Status> statusCaptor;
-  @Mock
-  private ManagedClientTransport mockTransport;
-  @Mock
-  private ClientTransportFactory mockTransportFactory;
-  @Mock
-  private ClientCall.Listener<Integer> mockCallListener;
-  @Mock
-  private ClientCall.Listener<Integer> mockCallListener2;
-  @Mock
-  private ClientCall.Listener<Integer> mockCallListener3;
+  @Captor private ArgumentCaptor<Status> statusCaptor;
+  @Mock private ManagedClientTransport mockTransport;
+  @Mock private ClientTransportFactory mockTransportFactory;
+  @Mock private ClientCall.Listener<Integer> mockCallListener;
+  @Mock private ClientCall.Listener<Integer> mockCallListener2;
+  @Mock private ClientCall.Listener<Integer> mockCallListener3;
 
   private ArgumentCaptor<ManagedClientTransport.Listener> transportListenerCaptor =
       ArgumentCaptor.forClass(ManagedClientTransport.Listener.class);
@@ -143,10 +140,18 @@ public class ManagedChannelImplTest {
 
   private ManagedChannel createChannel(
       NameResolver.Factory nameResolverFactory, List<ClientInterceptor> interceptors) {
-    return new ManagedChannelImpl(target, new FakeBackoffPolicyProvider(),
-        nameResolverFactory, NAME_RESOLVER_PARAMS, loadBalancerFactory,
-        mockTransportFactory, DecompressorRegistry.getDefaultInstance(),
-        CompressorRegistry.getDefaultInstance(), executor, null, interceptors);
+    return new ManagedChannelImpl(
+        target,
+        new FakeBackoffPolicyProvider(),
+        nameResolverFactory,
+        NAME_RESOLVER_PARAMS,
+        loadBalancerFactory,
+        mockTransportFactory,
+        DecompressorRegistry.getDefaultInstance(),
+        CompressorRegistry.getDefaultInstance(),
+        executor,
+        null,
+        interceptors);
   }
 
   @Before
@@ -164,8 +169,7 @@ public class ManagedChannelImplTest {
 
   @Test
   public void immediateDeadlineExceeded() {
-    ManagedChannel channel = createChannel(
-        new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+    ManagedChannel channel = createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
     ClientCall<String, Integer> call =
         channel.newCall(method, CallOptions.DEFAULT.withDeadlineAfter(0, TimeUnit.NANOSECONDS));
     call.start(mockCallListener, new Metadata());
@@ -176,8 +180,7 @@ public class ManagedChannelImplTest {
 
   @Test
   public void shutdownWithNoTransportsEverCreated() {
-    ManagedChannel channel = createChannel(
-        new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+    ManagedChannel channel = createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
     verifyNoMoreInteractions(mockTransportFactory);
     channel.shutdown();
     assertTrue(channel.isShutdown());
@@ -240,8 +243,7 @@ public class ManagedChannelImplTest {
     // Further calls should fail without going to the transport
     ClientCall<String, Integer> call3 = channel.newCall(method, CallOptions.DEFAULT);
     call3.start(mockCallListener3, new Metadata());
-    verify(mockCallListener3, timeout(1000))
-        .onClose(statusCaptor.capture(), any(Metadata.class));
+    verify(mockCallListener3, timeout(1000)).onClose(statusCaptor.capture(), any(Metadata.class));
     assertSame(Status.Code.UNAVAILABLE, statusCaptor.getValue().getCode());
 
     // Finish shutdown
@@ -264,25 +266,24 @@ public class ManagedChannelImplTest {
   @Test
   public void interceptor() throws Exception {
     final AtomicLong atomic = new AtomicLong();
-    ClientInterceptor interceptor = new ClientInterceptor() {
-      @Override
-      public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> interceptCall(
-          MethodDescriptor<RequestT, ResponseT> method, CallOptions callOptions,
-          Channel next) {
-        atomic.set(1);
-        return next.newCall(method, callOptions);
-      }
-    };
-    ManagedChannel channel = createChannel(
-        new FakeNameResolverFactory(true), Arrays.asList(interceptor));
+    ClientInterceptor interceptor =
+        new ClientInterceptor() {
+          @Override
+          public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> interceptCall(
+              MethodDescriptor<RequestT, ResponseT> method, CallOptions callOptions, Channel next) {
+            atomic.set(1);
+            return next.newCall(method, callOptions);
+          }
+        };
+    ManagedChannel channel =
+        createChannel(new FakeNameResolverFactory(true), Arrays.asList(interceptor));
     assertNotNull(channel.newCall(method, CallOptions.DEFAULT));
     assertEquals(1, atomic.get());
   }
 
   @Test
   public void testNoDeadlockOnShutdown() {
-    ManagedChannel channel = createChannel(
-        new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+    ManagedChannel channel = createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
     // Force creation of transport
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     Metadata headers = new Metadata();
@@ -309,22 +310,24 @@ public class ManagedChannelImplTest {
         }
       }
     }.start();
-    doAnswer(new Answer<Void>() {
-      @Override
-      public Void answer(InvocationOnMock invocation) {
-        // To deadlock, a lock would need to be held while this method is in progress.
-        try {
-          barrier.await();
-        } catch (Exception ex) {
-          throw new AssertionError(ex);
-        }
-        // If deadlock is possible with this setup, this sychronization completes the loop because
-        // the transportShutdown needs a lock that Channel is holding while calling this method.
-        synchronized (lock) {
-        }
-        return null;
-      }
-    }).when(mockTransport).shutdown();
+    doAnswer(
+            new Answer<Void>() {
+              @Override
+              public Void answer(InvocationOnMock invocation) {
+                // To deadlock, a lock would need to be held while this method is in progress.
+                try {
+                  barrier.await();
+                } catch (Exception ex) {
+                  throw new AssertionError(ex);
+                }
+                // If deadlock is possible with this setup, this sychronization completes the loop because
+                // the transportShutdown needs a lock that Channel is holding while calling this method.
+                synchronized (lock) {}
+                return null;
+              }
+            })
+        .when(mockTransport)
+        .shutdown();
     channel.shutdown();
 
     transportListener.transportTerminated();
@@ -336,11 +339,11 @@ public class ManagedChannelImplTest {
     ClientStream mockStream = mock(ClientStream.class);
     when(mockTransport.newStream(same(method), same(headers))).thenReturn(mockStream);
     FakeClock fakeExecutor = new FakeClock();
-    ManagedChannel channel = createChannel(
-        new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+    ManagedChannel channel = createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
 
-    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT.withExecutor(
-        fakeExecutor.scheduledExecutorService));
+    ClientCall<String, Integer> call =
+        channel.newCall(
+            method, CallOptions.DEFAULT.withExecutor(fakeExecutor.scheduledExecutorService));
     call.start(mockCallListener, headers);
 
     verify(mockTransport, timeout(1000)).start(transportListenerCaptor.capture());
@@ -380,8 +383,9 @@ public class ManagedChannelImplTest {
     String errorDescription = "NameResolver returned an empty list";
 
     // Name resolution is started as soon as channel is created
-    ManagedChannel channel = createChannel(
-        new FakeNameResolverFactory(new ArrayList<ResolvedServerInfo>()), NO_INTERCEPTOR);
+    ManagedChannel channel =
+        createChannel(
+            new FakeNameResolverFactory(new ArrayList<ResolvedServerInfo>()), NO_INTERCEPTOR);
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());
 
@@ -408,8 +412,10 @@ public class ManagedChannelImplTest {
     call.start(mockCallListener, new Metadata());
     assertEquals(1, loadBalancerFactory.balancers.size());
     LoadBalancer<?> loadBalancer = loadBalancerFactory.balancers.get(0);
-    doThrow(ex).when(loadBalancer).handleResolvedAddresses(
-        Matchers.<List<ResolvedServerInfo>>anyObject(), any(Attributes.class));
+    doThrow(ex)
+        .when(loadBalancer)
+        .handleResolvedAddresses(
+            Matchers.<List<ResolvedServerInfo>>anyObject(), any(Attributes.class));
 
     // NameResolver returns addresses.
     nameResolverFactory.allResolved();
@@ -451,16 +457,20 @@ public class ManagedChannelImplTest {
    */
   @Test
   public void firstResolvedServerFailedToConnect() throws Exception {
-    final SocketAddress goodAddress = new SocketAddress() {
-        @Override public String toString() {
-          return "goodAddress";
-        }
-      };
-    final SocketAddress badAddress = new SocketAddress() {
-        @Override public String toString() {
-          return "badAddress";
-        }
-      };
+    final SocketAddress goodAddress =
+        new SocketAddress() {
+          @Override
+          public String toString() {
+            return "goodAddress";
+          }
+        };
+    final SocketAddress badAddress =
+        new SocketAddress() {
+          @Override
+          public String toString() {
+            return "badAddress";
+          }
+        };
     final ResolvedServerInfo goodServer = new ResolvedServerInfo(goodAddress, Attributes.EMPTY);
     final ResolvedServerInfo badServer = new ResolvedServerInfo(badAddress, Attributes.EMPTY);
     final ManagedClientTransport goodTransport = mock(ManagedClientTransport.class);
@@ -484,15 +494,14 @@ public class ManagedChannelImplTest {
         ArgumentCaptor.forClass(ManagedClientTransport.Listener.class);
     verify(badTransport, timeout(1000)).start(badTransportListenerCaptor.capture());
     verify(mockTransportFactory).newClientTransport(same(badAddress), any(String.class));
-    verify(mockTransportFactory, times(0))
-          .newClientTransport(same(goodAddress), any(String.class));
+    verify(mockTransportFactory, times(0)).newClientTransport(same(goodAddress), any(String.class));
     badTransportListenerCaptor.getValue().transportShutdown(Status.UNAVAILABLE);
 
     // The channel then try the second address (goodAddress)
     ArgumentCaptor<ManagedClientTransport.Listener> goodTransportListenerCaptor =
         ArgumentCaptor.forClass(ManagedClientTransport.Listener.class);
     verify(mockTransportFactory, timeout(1000))
-          .newClientTransport(same(goodAddress), any(String.class));
+        .newClientTransport(same(goodAddress), any(String.class));
     verify(goodTransport, timeout(1000)).start(goodTransportListenerCaptor.capture());
     goodTransportListenerCaptor.getValue().transportReady();
     verify(goodTransport, timeout(1000)).newStream(same(method), same(headers));
@@ -505,16 +514,20 @@ public class ManagedChannelImplTest {
    */
   @Test
   public void allServersFailedToConnect() throws Exception {
-    final SocketAddress addr1 = new SocketAddress() {
-        @Override public String toString() {
-          return "addr1";
-        }
-      };
-    final SocketAddress addr2 = new SocketAddress() {
-        @Override public String toString() {
-          return "addr2";
-        }
-      };
+    final SocketAddress addr1 =
+        new SocketAddress() {
+          @Override
+          public String toString() {
+            return "addr1";
+          }
+        };
+    final SocketAddress addr2 =
+        new SocketAddress() {
+          @Override
+          public String toString() {
+            return "addr2";
+          }
+        };
     final ResolvedServerInfo server1 = new ResolvedServerInfo(addr1, Attributes.EMPTY);
     final ResolvedServerInfo server2 = new ResolvedServerInfo(addr2, Attributes.EMPTY);
     final ManagedClientTransport transport1 = mock(ManagedClientTransport.class);
@@ -534,8 +547,7 @@ public class ManagedChannelImplTest {
     call.start(mockCallListener, headers);
     verify(transport1, timeout(1000)).start(transportListenerCaptor.capture());
     verify(mockTransportFactory).newClientTransport(same(addr1), any(String.class));
-    verify(mockTransportFactory, times(0))
-          .newClientTransport(same(addr2), any(String.class));
+    verify(mockTransportFactory, times(0)).newClientTransport(same(addr2), any(String.class));
     transportListenerCaptor.getValue().transportShutdown(Status.UNAVAILABLE);
 
     // The channel then try the second address, which will fail to connect too.
@@ -558,16 +570,20 @@ public class ManagedChannelImplTest {
    */
   @Test
   public void firstResolvedServerConnectedThenDisconnected() throws Exception {
-    final SocketAddress addr1 = new SocketAddress() {
-        @Override public String toString() {
-          return "addr1";
-        }
-      };
-    final SocketAddress addr2 = new SocketAddress() {
-        @Override public String toString() {
-          return "addr2";
-        }
-      };
+    final SocketAddress addr1 =
+        new SocketAddress() {
+          @Override
+          public String toString() {
+            return "addr1";
+          }
+        };
+    final SocketAddress addr2 =
+        new SocketAddress() {
+          @Override
+          public String toString() {
+            return "addr2";
+          }
+        };
     final ResolvedServerInfo server1 = new ResolvedServerInfo(addr1, Attributes.EMPTY);
     final ResolvedServerInfo server2 = new ResolvedServerInfo(addr2, Attributes.EMPTY);
     // Addr1 will have two transports throughout this test.
@@ -656,11 +672,13 @@ public class ManagedChannelImplTest {
       Listener listener;
       boolean shutdown;
 
-      @Override public String getServiceAuthority() {
+      @Override
+      public String getServiceAuthority() {
         return expectedUri.getAuthority();
       }
 
-      @Override public void start(final Listener listener) {
+      @Override
+      public void start(final Listener listener) {
         this.listener = listener;
         if (resolvedAtStart) {
           resolved();
@@ -671,7 +689,8 @@ public class ManagedChannelImplTest {
         listener.onUpdate(servers, Attributes.EMPTY);
       }
 
-      @Override public void shutdown() {
+      @Override
+      public void shutdown() {
         shutdown = true;
       }
     }
@@ -687,15 +706,18 @@ public class ManagedChannelImplTest {
     @Override
     public NameResolver newNameResolver(URI notUsedUri, Attributes params) {
       return new NameResolver() {
-        @Override public String getServiceAuthority() {
+        @Override
+        public String getServiceAuthority() {
           return "irrelevant-authority";
         }
 
-        @Override public void start(final Listener listener) {
+        @Override
+        public void start(final Listener listener) {
           listener.onError(error);
         }
 
-        @Override public void shutdown() {}
+        @Override
+        public void shutdown() {}
       };
     }
 

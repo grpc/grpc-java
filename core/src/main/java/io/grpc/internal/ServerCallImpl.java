@@ -74,9 +74,13 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<RespT> {
   private boolean closeCalled;
   private Compressor compressor;
 
-  ServerCallImpl(ServerStream stream, MethodDescriptor<ReqT, RespT> method,
-      Metadata inboundHeaders, Context.CancellableContext context,
-      DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry) {
+  ServerCallImpl(
+      ServerStream stream,
+      MethodDescriptor<ReqT, RespT> method,
+      Metadata inboundHeaders,
+      Context.CancellableContext context,
+      DecompressorRegistry decompressorRegistry,
+      CompressorRegistry compressorRegistry) {
     this.stream = stream;
     this.method = method;
     this.context = context;
@@ -219,7 +223,8 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<RespT> {
     private boolean messageReceived;
 
     public ServerStreamListenerImpl(
-        ServerCallImpl<ReqT, ?> call, ServerCall.Listener<ReqT> listener,
+        ServerCallImpl<ReqT, ?> call,
+        ServerCall.Listener<ReqT> listener,
         Context.CancellableContext context) {
       this.call = checkNotNull(call, "call");
       this.listener = checkNotNull(listener, "listener must not be null");
@@ -235,7 +240,8 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<RespT> {
         }
         // Special case for unary calls.
         if (messageReceived && call.method.getType() == MethodType.UNARY) {
-          call.stream.close(Status.INTERNAL.withDescription(
+          call.stream.close(
+              Status.INTERNAL.withDescription(
                   "More than one request messages for unary call or server streaming call"),
               new Metadata());
           return;

@@ -81,21 +81,23 @@ public class ContextTest {
 
   private Context listenerNotifedContext;
   private CountDownLatch deadlineLatch = new CountDownLatch(1);
-  private Context.CancellationListener cancellationListener = new Context.CancellationListener() {
-    @Override
-    public void cancelled(Context context) {
-      listenerNotifedContext = context;
-      deadlineLatch.countDown();
-    }
-  };
+  private Context.CancellationListener cancellationListener =
+      new Context.CancellationListener() {
+        @Override
+        public void cancelled(Context context) {
+          listenerNotifedContext = context;
+          deadlineLatch.countDown();
+        }
+      };
 
   private Context observed;
-  private Runnable runner = new Runnable() {
-    @Override
-    public void run() {
-      observed = Context.current();
-    }
-  };
+  private Runnable runner =
+      new Runnable() {
+        @Override
+        public void run() {
+          observed = Context.current();
+        }
+      };
   private ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
   @Before
@@ -117,12 +119,14 @@ public class ContextTest {
   @Test
   public void rootIsAlwaysBound() throws Exception {
     final SettableFuture<Boolean> rootIsBound = SettableFuture.create();
-    new Thread(new Runnable() {
-      @Override
-      public void run() {
-        rootIsBound.set(Context.current() == Context.ROOT);
-      }
-    }).start();
+    new Thread(
+            new Runnable() {
+              @Override
+              public void run() {
+                rootIsBound.set(Context.current() == Context.ROOT);
+              }
+            })
+        .start();
     assertTrue(rootIsBound.get(5, TimeUnit.SECONDS));
   }
 
@@ -172,20 +176,19 @@ public class ContextTest {
   @Test
   public void detachingNonCurrentLogsSevereMessage() {
     final AtomicReference<LogRecord> logRef = new AtomicReference<LogRecord>();
-    Handler handler = new Handler() {
-      @Override
-      public void publish(LogRecord record) {
-        logRef.set(record);
-      }
+    Handler handler =
+        new Handler() {
+          @Override
+          public void publish(LogRecord record) {
+            logRef.set(record);
+          }
 
-      @Override
-      public void flush() {
-      }
+          @Override
+          public void flush() {}
 
-      @Override
-      public void close() throws SecurityException {
-      }
-    };
+          @Override
+          public void close() throws SecurityException {}
+        };
     Logger logger = Logger.getLogger(Context.class.getName());
     try {
       logger.addHandler(handler);
@@ -290,38 +293,41 @@ public class ContextTest {
   @Test
   public void exceptionOfExecutorDoesntThrow() {
     final AtomicReference<Throwable> loggedThrowable = new AtomicReference<Throwable>();
-    Handler logHandler = new Handler() {
-      @Override
-      public void publish(LogRecord record) {
-        Throwable thrown = record.getThrown();
-        if (thrown != null) {
-          if (loggedThrowable.get() == null) {
-            loggedThrowable.set(thrown);
-          } else {
-            loggedThrowable.set(new RuntimeException("Too many exceptions", thrown));
+    Handler logHandler =
+        new Handler() {
+          @Override
+          public void publish(LogRecord record) {
+            Throwable thrown = record.getThrown();
+            if (thrown != null) {
+              if (loggedThrowable.get() == null) {
+                loggedThrowable.set(thrown);
+              } else {
+                loggedThrowable.set(new RuntimeException("Too many exceptions", thrown));
+              }
+            }
           }
-        }
-      }
 
-      @Override
-      public void close() {}
+          @Override
+          public void close() {}
 
-      @Override
-      public void flush() {}
-    };
+          @Override
+          public void flush() {}
+        };
     Logger logger = Logger.getLogger(Context.class.getName());
     logger.addHandler(logHandler);
     try {
       Context.CancellableContext base = Context.current().withCancellation();
       final AtomicReference<Runnable> observed1 = new AtomicReference<Runnable>();
       final Error err = new Error();
-      base.addListener(cancellationListener, new Executor() {
-        @Override
-        public void execute(Runnable runnable) {
-          observed1.set(runnable);
-          throw err;
-        }
-      });
+      base.addListener(
+          cancellationListener,
+          new Executor() {
+            @Override
+            public void execute(Runnable runnable) {
+              observed1.set(runnable);
+              throw err;
+            }
+          });
       assertNull(observed1.get());
       assertNull(loggedThrowable.get());
       base.cancel(null);
@@ -331,13 +337,15 @@ public class ContextTest {
       final Error err2 = new Error();
       loggedThrowable.set(null);
       final AtomicReference<Runnable> observed2 = new AtomicReference<Runnable>();
-      base.addListener(cancellationListener, new Executor() {
-        @Override
-        public void execute(Runnable runnable) {
-          observed2.set(runnable);
-          throw err2;
-        }
-      });
+      base.addListener(
+          cancellationListener,
+          new Executor() {
+            @Override
+            public void execute(Runnable runnable) {
+              observed2.set(runnable);
+              throw err2;
+            }
+          });
       assertNotNull(observed2.get());
       assertSame(err2, loggedThrowable.get());
     } finally {
@@ -450,12 +458,14 @@ public class ContextTest {
 
     final Error err = new Error();
     try {
-      base.wrap(new Runnable() {
-        @Override
-        public void run() {
-          throw err;
-        }
-      }).run();
+      base.wrap(
+              new Runnable() {
+                @Override
+                public void run() {
+                  throw err;
+                }
+              })
+          .run();
       fail("Expected exception");
     } catch (Error ex) {
       assertSame(err, ex);
@@ -472,13 +482,14 @@ public class ContextTest {
     current.attach();
 
     final Object ret = new Object();
-    Callable<Object> callable = new Callable<Object>() {
-      @Override
-      public Object call() {
-        runner.run();
-        return ret;
-      }
-    };
+    Callable<Object> callable =
+        new Callable<Object>() {
+          @Override
+          public Object call() {
+            runner.run();
+            return ret;
+          }
+        };
 
     assertSame(ret, base.wrap(callable).call());
     assertSame(base, observed);
@@ -490,12 +501,14 @@ public class ContextTest {
 
     final Error err = new Error();
     try {
-      base.wrap(new Callable<Object>() {
-        @Override
-        public Object call() {
-          throw err;
-        }
-      }).call();
+      base.wrap(
+              new Callable<Object>() {
+                @Override
+                public Object call() {
+                  throw err;
+                }
+              })
+          .call();
       fail("Excepted exception");
     } catch (Error ex) {
       assertSame(err, ex);
@@ -582,18 +595,20 @@ public class ContextTest {
     assertSame(child.getDeadline(), sooner);
     final CountDownLatch latch = new CountDownLatch(1);
     final AtomicReference<Exception> error = new AtomicReference<Exception>();
-    child.addListener(new Context.CancellationListener() {
-      @Override
-      public void cancelled(Context context) {
-        try {
-          assertTrue(sooner.isExpired());
-          assertFalse(later.isExpired());
-        } catch (Exception e) {
-          error.set(e);
-        }
-        latch.countDown();
-      }
-    }, MoreExecutors.directExecutor());
+    child.addListener(
+        new Context.CancellationListener() {
+          @Override
+          public void cancelled(Context context) {
+            try {
+              assertTrue(sooner.isExpired());
+              assertFalse(later.isExpired());
+            } catch (Exception e) {
+              error.set(e);
+            }
+            latch.countDown();
+          }
+        },
+        MoreExecutors.directExecutor());
     latch.await(3, TimeUnit.SECONDS);
     if (error.get() != null) {
       throw error.get();
@@ -682,8 +697,8 @@ public class ContextTest {
     ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1);
     try {
       assertEquals(0, executor.getQueue().size());
-      Context.CancellableContext base
-          = Context.current().withDeadline(Deadline.after(1, TimeUnit.DAYS), executor);
+      Context.CancellableContext base =
+          Context.current().withDeadline(Deadline.after(1, TimeUnit.DAYS), executor);
       assertEquals(1, executor.getQueue().size());
       base.cancel(null);
       executor.purge();
@@ -708,20 +723,24 @@ public class ContextTest {
     Context child = parent.withValue(COLOR, "red");
     final AtomicBoolean childAfterParent = new AtomicBoolean();
     final AtomicBoolean parentCalled = new AtomicBoolean();
-    child.addListener(new Context.CancellationListener() {
-      @Override
-      public void cancelled(Context context) {
-        if (parentCalled.get()) {
-          childAfterParent.set(true);
-        }
-      }
-    }, MoreExecutors.directExecutor());
-    parent.addListener(new Context.CancellationListener() {
-      @Override
-      public void cancelled(Context context) {
-        parentCalled.set(true);
-      }
-    }, MoreExecutors.directExecutor());
+    child.addListener(
+        new Context.CancellationListener() {
+          @Override
+          public void cancelled(Context context) {
+            if (parentCalled.get()) {
+              childAfterParent.set(true);
+            }
+          }
+        },
+        MoreExecutors.directExecutor());
+    parent.addListener(
+        new Context.CancellationListener() {
+          @Override
+          public void cancelled(Context context) {
+            parentCalled.set(true);
+          }
+        },
+        MoreExecutors.directExecutor());
     parent.cancel(null);
     assertTrue(parentCalled.get());
     assertTrue(childAfterParent.get());

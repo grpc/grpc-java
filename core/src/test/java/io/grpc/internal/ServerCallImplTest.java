@@ -83,15 +83,22 @@ public class ServerCallImplTest {
   private ServerCallImpl<Long, Long> call;
   private Context.CancellableContext context;
 
-  private final MethodDescriptor<Long, Long> method = MethodDescriptor.create(
-      MethodType.UNARY, "/service/method", new LongMarshaller(), new LongMarshaller());
+  private final MethodDescriptor<Long, Long> method =
+      MethodDescriptor.create(
+          MethodType.UNARY, "/service/method", new LongMarshaller(), new LongMarshaller());
 
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     context = Context.ROOT.withCancellation();
-    call = new ServerCallImpl<Long, Long>(stream, method, new Metadata(), context,
-        DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance());
+    call =
+        new ServerCallImpl<Long, Long>(
+            stream,
+            method,
+            new Metadata(),
+            context,
+            DecompressorRegistry.getDefaultInstance(),
+            CompressorRegistry.getDefaultInstance());
   }
 
   @Test

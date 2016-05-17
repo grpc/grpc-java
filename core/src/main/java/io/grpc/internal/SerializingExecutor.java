@@ -48,8 +48,7 @@ import javax.annotation.concurrent.GuardedBy;
  */
 // TODO(madongfly): figure out a way to not expose it or move it to transport package.
 public final class SerializingExecutor implements Executor {
-  private static final Logger log =
-      Logger.getLogger(SerializingExecutor.class.getName());
+  private static final Logger log = Logger.getLogger(SerializingExecutor.class.getName());
 
   /** Underlying executor that all submitted Runnable objects are run on. */
   private final Executor executor;
@@ -84,11 +83,13 @@ public final class SerializingExecutor implements Executor {
     this.executor = executor;
   }
 
-  private final Object internalLock = new Object() {
-    @Override public String toString() {
-      return "SerializingExecutor lock: " + super.toString();
-    }
-  };
+  private final Object internalLock =
+      new Object() {
+        @Override
+        public String toString() {
+          return "SerializingExecutor lock: " + super.toString();
+        }
+      };
 
   /**
    * Runs the given runnable strictly after all Runnables that were submitted
@@ -154,8 +155,7 @@ public final class SerializingExecutor implements Executor {
             nextToRun.run();
           } catch (RuntimeException e) {
             // Log it and keep going.
-            log.log(Level.SEVERE, "Exception while executing runnable "
-                + nextToRun, e);
+            log.log(Level.SEVERE, "Exception while executing runnable " + nextToRun, e);
           }
         }
       } finally {

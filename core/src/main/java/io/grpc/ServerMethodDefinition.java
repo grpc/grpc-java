@@ -41,8 +41,8 @@ public final class ServerMethodDefinition<ReqT, RespT> {
   private final MethodDescriptor<ReqT, RespT> method;
   private final ServerCallHandler<ReqT, RespT> handler;
 
-  private ServerMethodDefinition(MethodDescriptor<ReqT, RespT> method,
-      ServerCallHandler<ReqT, RespT> handler) {
+  private ServerMethodDefinition(
+      MethodDescriptor<ReqT, RespT> method, ServerCallHandler<ReqT, RespT> handler) {
     this.method = method;
     this.handler = handler;
   }
@@ -55,8 +55,7 @@ public final class ServerMethodDefinition<ReqT, RespT> {
    * @return a new instance.
    */
   public static <ReqT, RespT> ServerMethodDefinition<ReqT, RespT> create(
-      MethodDescriptor<ReqT, RespT> method,
-      ServerCallHandler<ReqT, RespT> handler) {
+      MethodDescriptor<ReqT, RespT> method, ServerCallHandler<ReqT, RespT> handler) {
     return new ServerMethodDefinition<ReqT, RespT>(method, handler);
   }
 

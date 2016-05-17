@@ -84,8 +84,7 @@ public class GrpcUtilTest {
 
   @Test
   public void timeoutTest() {
-    GrpcUtil.TimeoutMarshaller marshaller =
-            new GrpcUtil.TimeoutMarshaller();
+    GrpcUtil.TimeoutMarshaller marshaller = new GrpcUtil.TimeoutMarshaller();
     // nanos
     assertEquals("0n", marshaller.toAsciiString(0L));
     assertEquals(0L, (long) marshaller.parseAsciiString("0n"));
@@ -134,8 +133,9 @@ public class GrpcUtilTest {
   @Test
   public void grpcUserAgent() {
     assertTrue(GrpcUtil.getGrpcUserAgent("netty", null).startsWith("grpc-java-netty"));
-    assertTrue(GrpcUtil.getGrpcUserAgent("okhttp", "libfoo/1.0")
-        .startsWith("libfoo/1.0 grpc-java-okhttp"));
+    assertTrue(
+        GrpcUtil.getGrpcUserAgent("okhttp", "libfoo/1.0")
+            .startsWith("libfoo/1.0 grpc-java-okhttp"));
   }
 
   @Test

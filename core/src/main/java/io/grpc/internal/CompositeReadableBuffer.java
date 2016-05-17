@@ -80,66 +80,75 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
 
   @Override
   public int readUnsignedByte() {
-    ReadOperation op = new ReadOperation() {
-      @Override
-      int readInternal(ReadableBuffer buffer, int length) {
-        return buffer.readUnsignedByte();
-      }
-    };
+    ReadOperation op =
+        new ReadOperation() {
+          @Override
+          int readInternal(ReadableBuffer buffer, int length) {
+            return buffer.readUnsignedByte();
+          }
+        };
     execute(op, 1);
     return op.value;
   }
 
   @Override
   public void skipBytes(int length) {
-    execute(new ReadOperation() {
-      @Override
-      public int readInternal(ReadableBuffer buffer, int length) {
-        buffer.skipBytes(length);
-        return 0;
-      }
-    }, length);
+    execute(
+        new ReadOperation() {
+          @Override
+          public int readInternal(ReadableBuffer buffer, int length) {
+            buffer.skipBytes(length);
+            return 0;
+          }
+        },
+        length);
   }
 
   @Override
   public void readBytes(final byte[] dest, final int destOffset, int length) {
-    execute(new ReadOperation() {
-      int currentOffset = destOffset;
-      @Override
-      public int readInternal(ReadableBuffer buffer, int length) {
-        buffer.readBytes(dest, currentOffset, length);
-        currentOffset += length;
-        return 0;
-      }
-    }, length);
+    execute(
+        new ReadOperation() {
+          int currentOffset = destOffset;
+
+          @Override
+          public int readInternal(ReadableBuffer buffer, int length) {
+            buffer.readBytes(dest, currentOffset, length);
+            currentOffset += length;
+            return 0;
+          }
+        },
+        length);
   }
 
   @Override
   public void readBytes(final ByteBuffer dest) {
-    execute(new ReadOperation() {
-      @Override
-      public int readInternal(ReadableBuffer buffer, int length) {
-        // Change the limit so that only lengthToCopy bytes are available.
-        int prevLimit = dest.limit();
-        dest.limit(dest.position() + length);
+    execute(
+        new ReadOperation() {
+          @Override
+          public int readInternal(ReadableBuffer buffer, int length) {
+            // Change the limit so that only lengthToCopy bytes are available.
+            int prevLimit = dest.limit();
+            dest.limit(dest.position() + length);
 
-        // Write the bytes and restore the original limit.
-        buffer.readBytes(dest);
-        dest.limit(prevLimit);
-        return 0;
-      }
-    }, dest.remaining());
+            // Write the bytes and restore the original limit.
+            buffer.readBytes(dest);
+            dest.limit(prevLimit);
+            return 0;
+          }
+        },
+        dest.remaining());
   }
 
   @Override
   public void readBytes(final OutputStream dest, int length) throws IOException {
-    ReadOperation op = new ReadOperation() {
-      @Override
-      public int readInternal(ReadableBuffer buffer, int length) throws IOException {
-        buffer.readBytes(dest, length);
-        return 0;
-      }
-    };
+    ReadOperation op =
+        new ReadOperation() {
+          @Override
+          public int readInternal(ReadableBuffer buffer, int length) throws IOException {
+            buffer.readBytes(dest, length);
+            return 0;
+          }
+        };
     execute(op, length);
 
     // If an exception occurred, throw it.

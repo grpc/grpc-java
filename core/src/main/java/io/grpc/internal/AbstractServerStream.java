@@ -64,8 +64,7 @@ public abstract class AbstractServerStream<IdT> extends AbstractStream<IdT>
   /** Saved trailers from close() that need to be sent once the framer has sent all messages. */
   private Metadata stashedTrailers;
 
-  protected AbstractServerStream(WritableBufferAllocator bufferAllocator,
-                                 int maxMessageSize) {
+  protected AbstractServerStream(WritableBufferAllocator bufferAllocator, int maxMessageSize) {
     super(bufferAllocator, maxMessageSize);
   }
 
@@ -280,7 +279,8 @@ public abstract class AbstractServerStream<IdT> extends AbstractStream<IdT>
     }
   }
 
-  @Override public Attributes attributes() {
+  @Override
+  public Attributes attributes() {
     return Attributes.EMPTY;
   }
 }

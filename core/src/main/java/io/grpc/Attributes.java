@@ -51,8 +51,7 @@ public final class Attributes {
 
   public static final Attributes EMPTY = new Attributes();
 
-  private Attributes() {
-  }
+  private Attributes() {}
 
   /**
    * Gets the value for the key, or {@code null} if it's not present.

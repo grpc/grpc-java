@@ -93,7 +93,7 @@ public abstract class ReadableBufferTestBase {
     ReadableBuffer buffer = buffer();
     ByteArrayOutputStream stream = new ByteArrayOutputStream();
     buffer.readBytes(stream, 2);
-    assertArrayEquals(new byte[]{'h', 'e'}, Arrays.copyOfRange(stream.toByteArray(), 0, 2));
+    assertArrayEquals(new byte[] {'h', 'e'}, Arrays.copyOfRange(stream.toByteArray(), 0, 2));
     assertEquals(msg.length() - 2, buffer.readableBytes());
   }
 
@@ -117,7 +117,7 @@ public abstract class ReadableBufferTestBase {
     byteBuffer.flip();
     byte[] array = new byte[2];
     byteBuffer.get(array);
-    assertArrayEquals(new byte[]{'h', 'e'}, array);
+    assertArrayEquals(new byte[] {'h', 'e'}, array);
     assertEquals(msg.length() - 2, buffer.readableBytes());
   }
 
@@ -129,7 +129,7 @@ public abstract class ReadableBufferTestBase {
     assertEquals(msg.length() - 2, buffer.readableBytes());
     byte[] array = new byte[2];
     newBuffer.readBytes(array, 0, 2);
-    assertArrayEquals(new byte[] {'h', 'e'}, Arrays.copyOfRange(array, 0, 2));     
+    assertArrayEquals(new byte[] {'h', 'e'}, Arrays.copyOfRange(array, 0, 2));
   }
 
   protected abstract ReadableBuffer buffer();

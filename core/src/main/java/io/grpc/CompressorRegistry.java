@@ -35,7 +35,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.annotations.VisibleForTesting;
 
-
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -48,8 +47,8 @@ import javax.annotation.concurrent.ThreadSafe;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
 @ThreadSafe
 public final class CompressorRegistry {
-  private static final CompressorRegistry DEFAULT_INSTANCE = new CompressorRegistry(
-      new Codec.Gzip());
+  private static final CompressorRegistry DEFAULT_INSTANCE =
+      new CompressorRegistry(new Codec.Gzip());
 
   public static CompressorRegistry getDefaultInstance() {
     return DEFAULT_INSTANCE;
@@ -62,7 +61,7 @@ public final class CompressorRegistry {
   private final ConcurrentMap<String, Compressor> compressors;
 
   @VisibleForTesting
-  CompressorRegistry(Compressor ...cs) {
+  CompressorRegistry(Compressor... cs) {
     compressors = new ConcurrentHashMap<String, Compressor>();
     for (Compressor c : cs) {
       compressors.put(c.getMessageEncoding(), c);

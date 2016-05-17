@@ -113,7 +113,7 @@ public class DelayedStreamTest {
     stream.setCompressor(Codec.Identity.NONE);
 
     stream.setMessageCompression(true);
-    InputStream message = new ByteArrayInputStream(new byte[]{'a'});
+    InputStream message = new ByteArrayInputStream(new byte[] {'a'});
     stream.writeMessage(message);
     stream.setMessageCompression(false);
     stream.writeMessage(message);

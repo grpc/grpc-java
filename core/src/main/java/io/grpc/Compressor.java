@@ -53,4 +53,3 @@ public interface Compressor {
    */
   OutputStream compress(OutputStream os) throws IOException;
 }
-

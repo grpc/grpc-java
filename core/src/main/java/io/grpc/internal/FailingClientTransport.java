@@ -45,8 +45,7 @@ import java.util.concurrent.Executor;
  */
 class FailingClientTransport implements ClientTransport {
 
-  @VisibleForTesting
-  final Status error;
+  @VisibleForTesting final Status error;
 
   FailingClientTransport(Status error) {
     Preconditions.checkArgument(!error.isOk(), "error must not be OK");
@@ -60,10 +59,12 @@ class FailingClientTransport implements ClientTransport {
 
   @Override
   public void ping(final PingCallback callback, Executor executor) {
-    executor.execute(new Runnable() {
-        @Override public void run() {
-          callback.onFailure(error.asException());
-        }
-      });
+    executor.execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            callback.onFailure(error.asException());
+          }
+        });
   }
 }

@@ -63,5 +63,4 @@ public abstract class HandlerRegistry {
   public final ServerMethodDefinition<?, ?> lookupMethod(String methodName) {
     return lookupMethod(methodName, null);
   }
-
 }

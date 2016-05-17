@@ -61,20 +61,29 @@ class DnsNameResolver extends NameResolver {
   private final int port;
   private final Resource<ScheduledExecutorService> timerServiceResource;
   private final Resource<ExecutorService> executorResource;
+
   @GuardedBy("this")
   private boolean shutdown;
+
   @GuardedBy("this")
   private ScheduledExecutorService timerService;
+
   @GuardedBy("this")
   private ExecutorService executor;
+
   @GuardedBy("this")
   private ScheduledFuture<?> resolutionTask;
+
   @GuardedBy("this")
   private boolean resolving;
+
   @GuardedBy("this")
   private Listener listener;
 
-  DnsNameResolver(@Nullable String nsAuthority, String name, Attributes params,
+  DnsNameResolver(
+      @Nullable String nsAuthority,
+      String name,
+      Attributes params,
       Resource<ScheduledExecutorService> timerServiceResource,
       Resource<ExecutorService> executorResource) {
     // TODO: if a DNS server is provided as nsAuthority, use it.
@@ -85,8 +94,9 @@ class DnsNameResolver extends NameResolver {
     // Must prepend a "//" to the name when constructing a URI, otherwise it will be treated as an
     // opaque URI, thus the authority and host of the resulted URI would be null.
     URI nameUri = URI.create("//" + name);
-    authority = Preconditions.checkNotNull(nameUri.getAuthority(),
-        "nameUri (%s) doesn't have an authority", nameUri);
+    authority =
+        Preconditions.checkNotNull(
+            nameUri.getAuthority(), "nameUri (%s) doesn't have an authority", nameUri);
     host = Preconditions.checkNotNull(nameUri.getHost(), "host");
     if (nameUri.getPort() == -1) {
       Integer defaultPort = params.get(NameResolver.Factory.PARAMS_DEFAULT_PORT);
@@ -121,65 +131,67 @@ class DnsNameResolver extends NameResolver {
     resolve();
   }
 
-  private final Runnable resolutionRunnable = new Runnable() {
-      @Override
-      public void run() {
-        InetAddress[] inetAddrs;
-        Listener savedListener;
-        synchronized (DnsNameResolver.this) {
-          // If this task is started by refresh(), there might already be a scheduled task.
-          if (resolutionTask != null) {
-            resolutionTask.cancel(false);
-            resolutionTask = null;
-          }
-          if (shutdown) {
-            return;
-          }
-          savedListener = listener;
-          resolving = true;
-        }
-        try {
-          try {
-            inetAddrs = getAllByName(host);
-          } catch (UnknownHostException e) {
-            synchronized (DnsNameResolver.this) {
-              if (shutdown) {
-                return;
-              }
-              // Because timerService is the single-threaded GrpcUtil.TIMER_SERVICE in production,
-              // we need to delegate the blocking work to the executor
-              resolutionTask = timerService.schedule(resolutionRunnableOnExecutor,
-                  1, TimeUnit.MINUTES);
-            }
-            savedListener.onError(Status.UNAVAILABLE.withCause(e));
-            return;
-          }
-          ArrayList<ResolvedServerInfo> servers =
-              new ArrayList<ResolvedServerInfo>(inetAddrs.length);
-          for (int i = 0; i < inetAddrs.length; i++) {
-            InetAddress inetAddr = inetAddrs[i];
-            servers.add(
-                new ResolvedServerInfo(new InetSocketAddress(inetAddr, port), Attributes.EMPTY));
-          }
-          savedListener.onUpdate(servers, Attributes.EMPTY);
-        } finally {
+  private final Runnable resolutionRunnable =
+      new Runnable() {
+        @Override
+        public void run() {
+          InetAddress[] inetAddrs;
+          Listener savedListener;
           synchronized (DnsNameResolver.this) {
-            resolving = false;
+            // If this task is started by refresh(), there might already be a scheduled task.
+            if (resolutionTask != null) {
+              resolutionTask.cancel(false);
+              resolutionTask = null;
+            }
+            if (shutdown) {
+              return;
+            }
+            savedListener = listener;
+            resolving = true;
+          }
+          try {
+            try {
+              inetAddrs = getAllByName(host);
+            } catch (UnknownHostException e) {
+              synchronized (DnsNameResolver.this) {
+                if (shutdown) {
+                  return;
+                }
+                // Because timerService is the single-threaded GrpcUtil.TIMER_SERVICE in production,
+                // we need to delegate the blocking work to the executor
+                resolutionTask =
+                    timerService.schedule(resolutionRunnableOnExecutor, 1, TimeUnit.MINUTES);
+              }
+              savedListener.onError(Status.UNAVAILABLE.withCause(e));
+              return;
+            }
+            ArrayList<ResolvedServerInfo> servers =
+                new ArrayList<ResolvedServerInfo>(inetAddrs.length);
+            for (int i = 0; i < inetAddrs.length; i++) {
+              InetAddress inetAddr = inetAddrs[i];
+              servers.add(
+                  new ResolvedServerInfo(new InetSocketAddress(inetAddr, port), Attributes.EMPTY));
+            }
+            savedListener.onUpdate(servers, Attributes.EMPTY);
+          } finally {
+            synchronized (DnsNameResolver.this) {
+              resolving = false;
+            }
           }
         }
-      }
-    };
+      };
 
-  private final Runnable resolutionRunnableOnExecutor = new Runnable() {
-      @Override
-      public void run() {
-        synchronized (DnsNameResolver.this) {
-          if (!shutdown) {
-            executor.execute(resolutionRunnable);
+  private final Runnable resolutionRunnableOnExecutor =
+      new Runnable() {
+        @Override
+        public void run() {
+          synchronized (DnsNameResolver.this) {
+            if (!shutdown) {
+              executor.execute(resolutionRunnable);
+            }
           }
         }
-      }
-    };
+      };
 
   // To be mocked out in tests
   @VisibleForTesting

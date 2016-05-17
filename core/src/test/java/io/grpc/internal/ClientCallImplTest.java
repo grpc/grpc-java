@@ -91,44 +91,40 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @RunWith(JUnit4.class)
 public class ClientCallImplTest {
 
-  private static final MethodDescriptor<Void, Void> DESCRIPTOR = MethodDescriptor.create(
-      MethodType.UNARY,
-      "service/method",
-      new TestMarshaller<Void>(),
-      new TestMarshaller<Void>());
+  private static final MethodDescriptor<Void, Void> DESCRIPTOR =
+      MethodDescriptor.create(
+          MethodType.UNARY,
+          "service/method",
+          new TestMarshaller<Void>(),
+          new TestMarshaller<Void>());
 
   private final FakeClock fakeClock = new FakeClock();
   private final ScheduledExecutorService deadlineCancellationExecutor =
       fakeClock.scheduledExecutorService;
   private final DecompressorRegistry decompressorRegistry =
       DecompressorRegistry.getDefaultInstance();
-  private final MethodDescriptor<Void, Void> method = MethodDescriptor.create(
-      MethodType.UNARY,
-      "service/method",
-      new TestMarshaller<Void>(),
-      new TestMarshaller<Void>());
+  private final MethodDescriptor<Void, Void> method =
+      MethodDescriptor.create(
+          MethodType.UNARY,
+          "service/method",
+          new TestMarshaller<Void>(),
+          new TestMarshaller<Void>());
 
   @Mock private ClientStreamListener streamListener;
   @Mock private ClientTransport clientTransport;
   @Captor private ArgumentCaptor<Status> statusCaptor;
 
-  @Mock
-  private ClientTransport transport;
+  @Mock private ClientTransport transport;
 
-  @Mock
-  private ClientTransportProvider provider;
+  @Mock private ClientTransportProvider provider;
 
-  @Mock
-  private ClientStream stream;
+  @Mock private ClientStream stream;
 
-  @Mock
-  private ClientCall.Listener<Void> callListener;
+  @Mock private ClientCall.Listener<Void> callListener;
 
-  @Captor
-  private ArgumentCaptor<ClientStreamListener> listenerArgumentCaptor;
+  @Captor private ArgumentCaptor<ClientStreamListener> listenerArgumentCaptor;
 
-  @Captor
-  private ArgumentCaptor<Status> statusArgumentCaptor;
+  @Captor private ArgumentCaptor<Status> statusArgumentCaptor;
 
   @Before
   public void setUp() {
@@ -146,12 +142,13 @@ public class ClientCallImplTest {
 
   @Test
   public void advertisedEncodingsAreSent() {
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
-        MoreExecutors.directExecutor(),
-        CallOptions.DEFAULT,
-        provider,
-        deadlineCancellationExecutor)
+    ClientCallImpl<Void, Void> call =
+        new ClientCallImpl<Void, Void>(
+                method,
+                MoreExecutors.directExecutor(),
+                CallOptions.DEFAULT,
+                provider,
+                deadlineCancellationExecutor)
             .setDecompressorRegistry(decompressorRegistry);
 
     call.start(callListener, new Metadata());
@@ -167,12 +164,13 @@ public class ClientCallImplTest {
 
   @Test
   public void authorityPropagatedToStream() {
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
-        MoreExecutors.directExecutor(),
-        CallOptions.DEFAULT.withAuthority("overridden-authority"),
-        provider,
-        deadlineCancellationExecutor)
+    ClientCallImpl<Void, Void> call =
+        new ClientCallImpl<Void, Void>(
+                method,
+                MoreExecutors.directExecutor(),
+                CallOptions.DEFAULT.withAuthority("overridden-authority"),
+                provider,
+                deadlineCancellationExecutor)
             .setDecompressorRegistry(decompressorRegistry);
 
     call.start(callListener, new Metadata());
@@ -181,13 +179,14 @@ public class ClientCallImplTest {
 
   @Test
   public void authorityNotPropagatedToStream() {
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
-        MoreExecutors.directExecutor(),
-        // Don't provide an authority
-        CallOptions.DEFAULT,
-        provider,
-        deadlineCancellationExecutor)
+    ClientCallImpl<Void, Void> call =
+        new ClientCallImpl<Void, Void>(
+                method,
+                MoreExecutors.directExecutor(),
+                // Don't provide an authority
+                CallOptions.DEFAULT,
+                provider,
+                deadlineCancellationExecutor)
             .setDecompressorRegistry(decompressorRegistry);
 
     call.start(callListener, new Metadata());
@@ -197,8 +196,8 @@ public class ClientCallImplTest {
   @Test
   public void prepareHeaders_userAgentAdded() {
     Metadata m = new Metadata();
-    ClientCallImpl.prepareHeaders(m, CallOptions.DEFAULT, "user agent", decompressorRegistry,
-        Codec.Identity.NONE);
+    ClientCallImpl.prepareHeaders(
+        m, CallOptions.DEFAULT, "user agent", decompressorRegistry, Codec.Identity.NONE);
 
     assertEquals(m.get(GrpcUtil.USER_AGENT_KEY), "user agent");
   }
@@ -206,8 +205,8 @@ public class ClientCallImplTest {
   @Test
   public void prepareHeaders_ignoreIdentityEncoding() {
     Metadata m = new Metadata();
-    ClientCallImpl.prepareHeaders(m, CallOptions.DEFAULT, "user agent", decompressorRegistry,
-        Codec.Identity.NONE);
+    ClientCallImpl.prepareHeaders(
+        m, CallOptions.DEFAULT, "user agent", decompressorRegistry, Codec.Identity.NONE);
 
     assertNull(m.get(GrpcUtil.MESSAGE_ENCODING_KEY));
   }
@@ -216,42 +215,48 @@ public class ClientCallImplTest {
   public void prepareHeaders_acceptedEncodingsAdded() {
     Metadata m = new Metadata();
     DecompressorRegistry customRegistry = DecompressorRegistry.newEmptyInstance();
-    customRegistry.register(new Decompressor() {
-      @Override
-      public String getMessageEncoding() {
-        return "a";
-      }
+    customRegistry.register(
+        new Decompressor() {
+          @Override
+          public String getMessageEncoding() {
+            return "a";
+          }
 
-      @Override
-      public InputStream decompress(InputStream is) throws IOException {
-        return null;
-      }
-    }, true);
-    customRegistry.register(new Decompressor() {
-      @Override
-      public String getMessageEncoding() {
-        return "b";
-      }
+          @Override
+          public InputStream decompress(InputStream is) throws IOException {
+            return null;
+          }
+        },
+        true);
+    customRegistry.register(
+        new Decompressor() {
+          @Override
+          public String getMessageEncoding() {
+            return "b";
+          }
 
-      @Override
-      public InputStream decompress(InputStream is) throws IOException {
-        return null;
-      }
-    }, true);
-    customRegistry.register(new Decompressor() {
-      @Override
-      public String getMessageEncoding() {
-        return "c";
-      }
+          @Override
+          public InputStream decompress(InputStream is) throws IOException {
+            return null;
+          }
+        },
+        true);
+    customRegistry.register(
+        new Decompressor() {
+          @Override
+          public String getMessageEncoding() {
+            return "c";
+          }
 
-      @Override
-      public InputStream decompress(InputStream is) throws IOException {
-        return null;
-      }
-    }, false); // not advertised
+          @Override
+          public InputStream decompress(InputStream is) throws IOException {
+            return null;
+          }
+        },
+        false); // not advertised
 
-    ClientCallImpl.prepareHeaders(m, CallOptions.DEFAULT, "user agent", customRegistry,
-        Codec.Identity.NONE);
+    ClientCallImpl.prepareHeaders(
+        m, CallOptions.DEFAULT, "user agent", customRegistry, Codec.Identity.NONE);
 
     Iterable<String> acceptedEncodings =
         ACCEPT_ENCODING_SPLITER.split(m.get(GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY));
@@ -267,8 +272,8 @@ public class ClientCallImplTest {
     m.put(GrpcUtil.MESSAGE_ENCODING_KEY, "gzip");
     m.put(GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY, "gzip");
 
-    ClientCallImpl.prepareHeaders(m, CallOptions.DEFAULT, null,
-        DecompressorRegistry.newEmptyInstance(), Codec.Identity.NONE);
+    ClientCallImpl.prepareHeaders(
+        m, CallOptions.DEFAULT, null, DecompressorRegistry.newEmptyInstance(), Codec.Identity.NONE);
 
     assertNull(m.get(GrpcUtil.USER_AGENT_KEY));
     assertNull(m.get(GrpcUtil.MESSAGE_ENCODING_KEY));
@@ -281,12 +286,13 @@ public class ClientCallImplTest {
     final Context.Key<String> testKey = Context.key("testing");
     Context.current().withValue(testKey, "testValue").attach();
 
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        DESCRIPTOR,
-        new SerializingExecutor(Executors.newSingleThreadExecutor()),
-        CallOptions.DEFAULT,
-        provider,
-        deadlineCancellationExecutor)
+    ClientCallImpl<Void, Void> call =
+        new ClientCallImpl<Void, Void>(
+                DESCRIPTOR,
+                new SerializingExecutor(Executors.newSingleThreadExecutor()),
+                CallOptions.DEFAULT,
+                provider,
+                deadlineCancellationExecutor)
             .setDecompressorRegistry(decompressorRegistry);
 
     Context.ROOT.attach();
@@ -300,37 +306,39 @@ public class ClientCallImplTest {
     final AtomicBoolean observedIncorrectContext = new AtomicBoolean();
     final CountDownLatch latch = new CountDownLatch(1);
 
-    call.start(new ClientCall.Listener<Void>() {
-      @Override
-      public void onHeaders(Metadata headers) {
-        onHeadersCalled.set(true);
-        checkContext();
-      }
+    call.start(
+        new ClientCall.Listener<Void>() {
+          @Override
+          public void onHeaders(Metadata headers) {
+            onHeadersCalled.set(true);
+            checkContext();
+          }
 
-      @Override
-      public void onMessage(Void message) {
-        onMessageCalled.set(true);
-        checkContext();
-      }
+          @Override
+          public void onMessage(Void message) {
+            onMessageCalled.set(true);
+            checkContext();
+          }
 
-      @Override
-      public void onClose(Status status, Metadata trailers) {
-        checkContext();
-        latch.countDown();
-      }
+          @Override
+          public void onClose(Status status, Metadata trailers) {
+            checkContext();
+            latch.countDown();
+          }
 
-      @Override
-      public void onReady() {
-        onReadyCalled.set(true);
-        checkContext();
-      }
+          @Override
+          public void onReady() {
+            onReadyCalled.set(true);
+            checkContext();
+          }
 
-      private void checkContext() {
-        if (!"testValue".equals(testKey.get())) {
-          observedIncorrectContext.set(true);
-        }
-      }
-    }, new Metadata());
+          private void checkContext() {
+            if (!"testValue".equals(testKey.get())) {
+              observedIncorrectContext.set(true);
+            }
+          }
+        },
+        new Metadata());
 
     verify(stream).start(listenerArgumentCaptor.capture());
     ClientStreamListener listener = listenerArgumentCaptor.getValue();
@@ -354,12 +362,13 @@ public class ClientCallImplTest {
     Context.CancellableContext cancellableContext = Context.current().withCancellation();
     Context previous = cancellableContext.attach();
 
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        DESCRIPTOR,
-        new SerializingExecutor(Executors.newSingleThreadExecutor()),
-        CallOptions.DEFAULT,
-        provider,
-        deadlineCancellationExecutor)
+    ClientCallImpl<Void, Void> call =
+        new ClientCallImpl<Void, Void>(
+                DESCRIPTOR,
+                new SerializingExecutor(Executors.newSingleThreadExecutor()),
+                CallOptions.DEFAULT,
+                provider,
+                deadlineCancellationExecutor)
             .setDecompressorRegistry(decompressorRegistry);
 
     previous.attach();
@@ -383,23 +392,26 @@ public class ClientCallImplTest {
     cancellableContext.cancel(cause);
     Context previous = cancellableContext.attach();
 
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        DESCRIPTOR,
-        new SerializingExecutor(Executors.newSingleThreadExecutor()),
-        CallOptions.DEFAULT,
-        provider,
-        deadlineCancellationExecutor)
-        .setDecompressorRegistry(decompressorRegistry);
+    ClientCallImpl<Void, Void> call =
+        new ClientCallImpl<Void, Void>(
+                DESCRIPTOR,
+                new SerializingExecutor(Executors.newSingleThreadExecutor()),
+                CallOptions.DEFAULT,
+                provider,
+                deadlineCancellationExecutor)
+            .setDecompressorRegistry(decompressorRegistry);
 
     previous.attach();
 
     final SettableFuture<Status> statusFuture = SettableFuture.create();
-    call.start(new ClientCall.Listener<Void>() {
-      @Override
-      public void onClose(Status status, Metadata trailers) {
-        statusFuture.set(status);
-      }
-    }, new Metadata());
+    call.start(
+        new ClientCall.Listener<Void>() {
+          @Override
+          public void onClose(Status status, Metadata trailers) {
+            statusFuture.set(status);
+          }
+        },
+        new Metadata());
 
     // Caller should receive onClose callback.
     Status status = statusFuture.get(5, TimeUnit.SECONDS);
@@ -426,12 +438,13 @@ public class ClientCallImplTest {
   public void deadlineExceededBeforeCallStarted() {
     CallOptions callOptions = CallOptions.DEFAULT.withDeadlineAfter(0, TimeUnit.SECONDS);
     fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        DESCRIPTOR,
-        new SerializingExecutor(Executors.newSingleThreadExecutor()),
-        callOptions,
-        provider,
-        deadlineCancellationExecutor)
+    ClientCallImpl<Void, Void> call =
+        new ClientCallImpl<Void, Void>(
+                DESCRIPTOR,
+                new SerializingExecutor(Executors.newSingleThreadExecutor()),
+                callOptions,
+                provider,
+                deadlineCancellationExecutor)
             .setDecompressorRegistry(decompressorRegistry);
     call.start(callListener, new Metadata());
     verify(transport, times(0)).newStream(any(MethodDescriptor.class), any(Metadata.class));
@@ -443,16 +456,18 @@ public class ClientCallImplTest {
   @Test
   public void contextDeadlineShouldBePropagatedInMetadata() {
     long deadlineNanos = TimeUnit.SECONDS.toNanos(1);
-    Context context = Context.current().withDeadlineAfter(deadlineNanos, TimeUnit.NANOSECONDS,
-        deadlineCancellationExecutor);
+    Context context =
+        Context.current()
+            .withDeadlineAfter(deadlineNanos, TimeUnit.NANOSECONDS, deadlineCancellationExecutor);
     context.attach();
 
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        DESCRIPTOR,
-        MoreExecutors.directExecutor(),
-        CallOptions.DEFAULT,
-        provider,
-        deadlineCancellationExecutor);
+    ClientCallImpl<Void, Void> call =
+        new ClientCallImpl<Void, Void>(
+            DESCRIPTOR,
+            MoreExecutors.directExecutor(),
+            CallOptions.DEFAULT,
+            provider,
+            deadlineCancellationExecutor);
 
     Metadata headers = new Metadata();
 
@@ -469,17 +484,19 @@ public class ClientCallImplTest {
   @Test
   public void contextDeadlineShouldOverrideLargerMetadataTimeout() {
     long deadlineNanos = TimeUnit.SECONDS.toNanos(1);
-    Context context = Context.current().withDeadlineAfter(deadlineNanos, TimeUnit.NANOSECONDS,
-        deadlineCancellationExecutor);
+    Context context =
+        Context.current()
+            .withDeadlineAfter(deadlineNanos, TimeUnit.NANOSECONDS, deadlineCancellationExecutor);
     context.attach();
 
     CallOptions callOpts = CallOptions.DEFAULT.withDeadlineAfter(2, TimeUnit.SECONDS);
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        DESCRIPTOR,
-        MoreExecutors.directExecutor(),
-        callOpts,
-        provider,
-        deadlineCancellationExecutor);
+    ClientCallImpl<Void, Void> call =
+        new ClientCallImpl<Void, Void>(
+            DESCRIPTOR,
+            MoreExecutors.directExecutor(),
+            callOpts,
+            provider,
+            deadlineCancellationExecutor);
 
     Metadata headers = new Metadata();
 
@@ -496,17 +513,19 @@ public class ClientCallImplTest {
   @Test
   public void contextDeadlineShouldNotOverrideSmallerMetadataTimeout() {
     long deadlineNanos = TimeUnit.SECONDS.toNanos(2);
-    Context context = Context.current().withDeadlineAfter(deadlineNanos, TimeUnit.NANOSECONDS,
-        deadlineCancellationExecutor);
+    Context context =
+        Context.current()
+            .withDeadlineAfter(deadlineNanos, TimeUnit.NANOSECONDS, deadlineCancellationExecutor);
     context.attach();
 
     CallOptions callOpts = CallOptions.DEFAULT.withDeadlineAfter(1, TimeUnit.SECONDS);
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        DESCRIPTOR,
-        MoreExecutors.directExecutor(),
-        callOpts,
-        provider,
-        deadlineCancellationExecutor);
+    ClientCallImpl<Void, Void> call =
+        new ClientCallImpl<Void, Void>(
+            DESCRIPTOR,
+            MoreExecutors.directExecutor(),
+            callOpts,
+            provider,
+            deadlineCancellationExecutor);
 
     Metadata headers = new Metadata();
 
@@ -527,12 +546,13 @@ public class ClientCallImplTest {
    */
   @Test
   public void timeoutShouldNotBeSet() {
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        DESCRIPTOR,
-        MoreExecutors.directExecutor(),
-        CallOptions.DEFAULT,
-        provider,
-        deadlineCancellationExecutor);
+    ClientCallImpl<Void, Void> call =
+        new ClientCallImpl<Void, Void>(
+            DESCRIPTOR,
+            MoreExecutors.directExecutor(),
+            CallOptions.DEFAULT,
+            provider,
+            deadlineCancellationExecutor);
 
     Metadata headers = new Metadata();
 
@@ -543,12 +563,13 @@ public class ClientCallImplTest {
 
   @Test
   public void cancelInOnMessageShouldInvokeStreamCancel() throws Exception {
-    final ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        DESCRIPTOR,
-        MoreExecutors.directExecutor(),
-        CallOptions.DEFAULT,
-        provider,
-        deadlineCancellationExecutor);
+    final ClientCallImpl<Void, Void> call =
+        new ClientCallImpl<Void, Void>(
+            DESCRIPTOR,
+            MoreExecutors.directExecutor(),
+            CallOptions.DEFAULT,
+            provider,
+            deadlineCancellationExecutor);
     final Exception cause = new Exception();
     ClientCall.Listener<Void> callListener =
         new ClientCall.Listener<Void>() {
@@ -590,6 +611,4 @@ public class ClientCallImplTest {
     assertTrue("timeout: " + timeout + " ns", timeout <= to);
     assertTrue("timeout: " + timeout + " ns", timeout >= from);
   }
-
 }
-

@@ -63,8 +63,10 @@ class DelayedStream implements ClientStream {
   private ClientStreamListener listener;
   /** Must hold {@code this} lock when setting. */
   private ClientStream realStream;
+
   @GuardedBy("this")
   private Status error;
+
   @GuardedBy("this")
   private List<Runnable> pendingCalls = new ArrayList<Runnable>();
 
@@ -139,12 +141,13 @@ class DelayedStream implements ClientStream {
   public void setAuthority(final String authority) {
     checkState(listener == null, "May only be called before start");
     checkNotNull(authority, "authority");
-    delayOrExecute(new Runnable() {
-      @Override
-      public void run() {
-        realStream.setAuthority(authority);
-      }
-    });
+    delayOrExecute(
+        new Runnable() {
+          @Override
+          public void run() {
+            realStream.setAuthority(authority);
+          }
+        });
   }
 
   @Override
@@ -162,12 +165,13 @@ class DelayedStream implements ClientStream {
       return;
     }
 
-    delayOrExecute(new Runnable() {
-      @Override
-      public void run() {
-        realStream.start(listener);
-      }
-    });
+    delayOrExecute(
+        new Runnable() {
+          @Override
+          public void run() {
+            realStream.start(listener);
+          }
+        });
   }
 
   @Override
@@ -176,12 +180,13 @@ class DelayedStream implements ClientStream {
     if (passThrough) {
       realStream.writeMessage(message);
     } else {
-      delayOrExecute(new Runnable() {
-        @Override
-        public void run() {
-          realStream.writeMessage(message);
-        }
-      });
+      delayOrExecute(
+          new Runnable() {
+            @Override
+            public void run() {
+              realStream.writeMessage(message);
+            }
+          });
     }
   }
 
@@ -190,12 +195,13 @@ class DelayedStream implements ClientStream {
     if (passThrough) {
       realStream.flush();
     } else {
-      delayOrExecute(new Runnable() {
-        @Override
-        public void run() {
-          realStream.flush();
-        }
-      });
+      delayOrExecute(
+          new Runnable() {
+            @Override
+            public void run() {
+              realStream.flush();
+            }
+          });
     }
   }
 
@@ -217,12 +223,13 @@ class DelayedStream implements ClientStream {
       }
     }
     if (delegateToRealStream) {
-      delayOrExecute(new Runnable() {
-        @Override
-        public void run() {
-          realStream.cancel(reason);
-        }
-      });
+      delayOrExecute(
+          new Runnable() {
+            @Override
+            public void run() {
+              realStream.cancel(reason);
+            }
+          });
     } else {
       if (listenerToClose != null) {
         listenerToClose.closed(reason, new Metadata());
@@ -233,12 +240,13 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void halfClose() {
-    delayOrExecute(new Runnable() {
-      @Override
-      public void run() {
-        realStream.halfClose();
-      }
-    });
+    delayOrExecute(
+        new Runnable() {
+          @Override
+          public void run() {
+            realStream.halfClose();
+          }
+        });
   }
 
   @Override
@@ -246,24 +254,26 @@ class DelayedStream implements ClientStream {
     if (passThrough) {
       realStream.request(numMessages);
     } else {
-      delayOrExecute(new Runnable() {
-        @Override
-        public void run() {
-          realStream.request(numMessages);
-        }
-      });
+      delayOrExecute(
+          new Runnable() {
+            @Override
+            public void run() {
+              realStream.request(numMessages);
+            }
+          });
     }
   }
 
   @Override
   public void setCompressor(final Compressor compressor) {
     checkNotNull(compressor, "compressor");
-    delayOrExecute(new Runnable() {
-      @Override
-      public void run() {
-        realStream.setCompressor(compressor);
-      }
-    });
+    delayOrExecute(
+        new Runnable() {
+          @Override
+          public void run() {
+            realStream.setCompressor(compressor);
+          }
+        });
   }
 
   @Override
@@ -272,7 +282,7 @@ class DelayedStream implements ClientStream {
     // This method being called only makes sense after setStream() has been called (but not
     // necessarily returned), but there is not necessarily a happens-before relationship. This
     // synchronized block creates one.
-    synchronized (this) { }
+    synchronized (this) {}
     checkState(realStream != null, "How did we receive a reply before the request is sent?");
     // ClientStreamListenerImpl (in ClientCallImpl) requires setDecompressor to be set immediately,
     // since messages may be processed immediately after this method returns.
@@ -293,12 +303,13 @@ class DelayedStream implements ClientStream {
     if (passThrough) {
       realStream.setMessageCompression(enable);
     } else {
-      delayOrExecute(new Runnable() {
-        @Override
-        public void run() {
-          realStream.setMessageCompression(enable);
-        }
-      });
+      delayOrExecute(
+          new Runnable() {
+            @Override
+            public void run() {
+              realStream.setMessageCompression(enable);
+            }
+          });
     }
   }
 }
