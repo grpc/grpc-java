@@ -56,10 +56,6 @@ final class HealthServiceImpl extends HealthGrpc.AbstractHealth {
   public void check(HealthOuterClass.HealthCheckRequest request,
       StreamObserver<HealthCheckResponse> responseObserver) {
     ServingStatus status = getStatus(request.getService());
-    respond(status, responseObserver);
-  }
-
-  private void respond(ServingStatus status, StreamObserver<HealthCheckResponse> responseObserver) {
     if (status == null) {
       responseObserver.onError(new StatusException(Status.NOT_FOUND));
     } else {

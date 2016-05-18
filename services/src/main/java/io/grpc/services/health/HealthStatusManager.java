@@ -31,15 +31,16 @@
 
 package io.grpc.services.health;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.services.health.HealthOuterClass.HealthCheckResponse.ServingStatus;
 
-import javax.annotation.Nullable;
+
 
 /**
  * A {@code HealthStatusManager} object manages a health check service. A health check service is
  * created in the constructor of {@code HealthStatusManager}, and it can be retrieved by the
  * {@link #getHealthService()} method.
- * The health status manager can update the health status of gRPC services.
+ * The health status manager can update the health statuses of the server.
  */
 @io.grpc.ExperimentalApi
 public final class HealthStatusManager {
@@ -61,36 +62,27 @@ public final class HealthStatusManager {
   }
 
   /**
-   * Updates the status of service.
+   * Updates the status of the server.
+   * @param service the name of some aspect of the server that is associated with a health status.
+   *     This name can have no relation with the gRPC services that the server is running with.
+   *     It can also be an empty String {@code ""} per the gRPC specification.
    * @param status is one of the values {@link ServingStatus#SERVING},
    *     {@link ServingStatus#NOT_SERVING} and {@link ServingStatus#UNKNOWN}.
    */
   public void setStatus(String service, ServingStatus status) {
+    checkNotNull(status, "status");
     healthService.setStatus(service, status);
   }
 
   /**
-   * Gets the health status of a service.
-   * @return {@code null} if there is no record of the status of the service or the service does
-   *     not exist.
-   */
-  @Nullable
-  public ServingStatus getStatus(String service) {
-    return healthService.getStatus(service);
-  }
-
-  /**
-   * Clears the health status record of a service.
+   * Clears the health status record of a service. The health service will respond with NOT_FOUND
+   * error on checking the status of a cleared service.
+   * @param service the name of some aspect of the server that is associated with a health status.
+   *     This name can have no relation with the gRPC services that the server is running with.
+   *     It can also be an empty String {@code ""} per the gRPC specification.
    */
   public void clearStatus(String service) {
     healthService.clearStatus(service);
-  }
-
-  /**
-   * Clears all the health status records.
-   */
-  public void clearAll() {
-    healthService.clearAll();
   }
 
 }

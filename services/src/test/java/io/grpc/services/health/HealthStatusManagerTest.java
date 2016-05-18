@@ -32,7 +32,6 @@
 package io.grpc.services.health;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
 
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.inOrder;
@@ -64,37 +63,6 @@ public class HealthStatusManagerTest {
     assertEquals(health, manager.getHealthService());
   }
 
-  @Test
-  public void setAndGetStatus() throws Exception {
-    manager.setStatus("", status);
-    assertEquals(status, manager.getStatus(""));
-    assertNull(manager.getStatus("invalid"));
-  }
-
-
-  @Test
-  public void clearStatus() throws Exception {
-    //setup
-    manager.setStatus("", status);
-    //test
-    manager.clearStatus("");
-    //verify
-    assertNull(manager.getStatus(""));
-  }
-
-  @Test
-  public void clearAll() throws Exception {
-    //setup
-    manager.setStatus("", status);
-    manager.setStatus("1", status);
-
-    //test
-    manager.clearAll();
-
-    //verify
-    assertNull(manager.getStatus(""));
-    assertNull(manager.getStatus("1"));
-  }
 
   @Test
   public void checkValidStatus() throws Exception {
@@ -122,6 +90,28 @@ public class HealthStatusManagerTest {
     manager.setStatus("", status);
     HealthOuterClass.HealthCheckRequest request
         = HealthOuterClass.HealthCheckRequest.newBuilder().setService("invalid").build();
+    @SuppressWarnings("unchecked")
+    io.grpc.stub.StreamObserver<HealthOuterClass.HealthCheckResponse> observer
+        = mock(io.grpc.stub.StreamObserver.class);
+
+    //test
+    health.check(request, observer);
+
+    //verify
+    ArgumentCaptor<StatusException> exception = ArgumentCaptor.forClass(StatusException.class);
+    verify(observer, times(1)).onError(exception.capture());
+    assertEquals(Status.NOT_FOUND, exception.getValue().getStatus());
+
+    verify(observer, never()).onCompleted();
+  }
+
+  @Test
+  public void notFoundForClearedStatus() throws Exception {
+    //setup
+    manager.setStatus("", status);
+    manager.clearStatus("");
+    HealthOuterClass.HealthCheckRequest request
+        = HealthOuterClass.HealthCheckRequest.newBuilder().setService("").build();
     @SuppressWarnings("unchecked")
     io.grpc.stub.StreamObserver<HealthOuterClass.HealthCheckResponse> observer
         = mock(io.grpc.stub.StreamObserver.class);
