@@ -55,9 +55,12 @@ public class ServerCalls {
    *
    * @param method an adaptor to the actual method on the service implementation.
    */
-  public static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncUnaryCall(
-      final UnaryMethod<ReqT, RespT> method) {
-    return asyncUnaryRequestCall(method);
+  public static <ReqT, RespT> ServerCall.Listener<ReqT> asyncUnaryCall(
+      UnaryMethod<ReqT, RespT> method,
+      MethodDescriptor<ReqT, RespT> methodDescriptor,
+      ServerCall<RespT> call,
+      Metadata headers) {
+    return asyncUnaryRequestCall(method, methodDescriptor, call, headers);
   }
 
   /**
@@ -65,9 +68,12 @@ public class ServerCalls {
    *
    * @param method an adaptor to the actual method on the service implementation.
    */
-  public static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncServerStreamingCall(
-      final ServerStreamingMethod<ReqT, RespT> method) {
-    return asyncUnaryRequestCall(method);
+  public static <ReqT, RespT> ServerCall.Listener<ReqT> asyncServerStreamingCall(
+      final ServerStreamingMethod<ReqT, RespT> method,
+      MethodDescriptor<ReqT, RespT> methodDescriptor,
+      ServerCall<RespT> call,
+      Metadata headers) {
+    return asyncUnaryRequestCall(method, methodDescriptor, call, headers);
   }
 
   /**
@@ -75,9 +81,12 @@ public class ServerCalls {
    *
    * @param method an adaptor to the actual method on the service implementation.
    */
-  public static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncClientStreamingCall(
-      final ClientStreamingMethod<ReqT, RespT> method) {
-    return asyncStreamingRequestCall(method);
+  public static <ReqT, RespT> ServerCall.Listener<ReqT> asyncClientStreamingCall(
+      final ClientStreamingMethod<ReqT, RespT> method,
+      MethodDescriptor<ReqT, RespT> methodDescriptor,
+      ServerCall<RespT> call,
+      Metadata headers) {
+    return asyncStreamingRequestCall(method, methodDescriptor, call, headers);
   }
 
   /**
@@ -85,9 +94,12 @@ public class ServerCalls {
    *
    * @param method an adaptor to the actual method on the service implementation.
    */
-  public static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncBidiStreamingCall(
-      final BidiStreamingMethod<ReqT, RespT> method) {
-    return asyncStreamingRequestCall(method);
+  public static <ReqT, RespT> ServerCall.Listener<ReqT> asyncBidiStreamingCall(
+      final BidiStreamingMethod<ReqT, RespT> method,
+      MethodDescriptor<ReqT, RespT> methodDescriptor,
+      ServerCall<RespT> call,
+      Metadata headers) {
+    return asyncStreamingRequestCall(method, methodDescriptor, call, headers);
   }
 
   /**
@@ -122,60 +134,55 @@ public class ServerCalls {
    *
    * @param method an adaptor to the actual method on the service implementation.
    */
-  private static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncUnaryRequestCall(
-      final UnaryRequestMethod<ReqT, RespT> method) {
-    return new ServerCallHandler<ReqT, RespT>() {
+  private static <ReqT, RespT> ServerCall.Listener<ReqT> asyncUnaryRequestCall(
+      final UnaryRequestMethod<ReqT, RespT> method,
+      final MethodDescriptor<ReqT, RespT> methodDescriptor,
+      final ServerCall<RespT> call,
+      Metadata headers) {
+    final ServerCallStreamObserverImpl<RespT> responseObserver =
+        new ServerCallStreamObserverImpl<RespT>(call);
+    // We expect only 1 request, but we ask for 2 requests here so that if a misbehaving client
+    // sends more than 1 requests, ServerCall will catch it. Note that disabling auto
+    // inbound flow control has no effect on unary calls.
+    call.request(2);
+    return new EmptyServerCallListener<ReqT>() {
+      ReqT request;
       @Override
-      public ServerCall.Listener<ReqT> startCall(
-          MethodDescriptor<ReqT, RespT> methodDescriptor,
-          final ServerCall<RespT> call,
-          Metadata headers) {
-        final ServerCallStreamObserverImpl<RespT> responseObserver =
-            new ServerCallStreamObserverImpl<RespT>(call);
-        // We expect only 1 request, but we ask for 2 requests here so that if a misbehaving client
-        // sends more than 1 requests, ServerCall will catch it. Note that disabling auto
-        // inbound flow control has no effect on unary calls.
-        call.request(2);
-        return new EmptyServerCallListener<ReqT>() {
-          ReqT request;
-          @Override
-          public void onMessage(ReqT request) {
-            // We delay calling method.invoke() until onHalfClose() to make sure the client
-            // half-closes.
-            this.request = request;
-          }
+      public void onMessage(ReqT request) {
+        // We delay calling method.invoke() until onHalfClose() to make sure the client
+        // half-closes.
+        this.request = request;
+      }
 
-          @Override
-          public void onHalfClose() {
-            if (request != null) {
-              method.invoke(request, responseObserver);
-              responseObserver.freeze();
-              if (call.isReady()) {
-                // Since we are calling invoke in halfClose we have missed the onReady
-                // event from the transport so recover it here.
-                onReady();
-              }
-            } else {
-              call.close(Status.INTERNAL.withDescription("Half-closed without a request"),
-                  new Metadata());
-            }
+      @Override
+      public void onHalfClose() {
+        if (request != null) {
+          method.invoke(methodDescriptor, request, responseObserver);
+          responseObserver.freeze();
+          if (call.isReady()) {
+            // Since we are calling invoke in halfClose we have missed the onReady
+            // event from the transport so recover it here.
+            onReady();
           }
+        } else {
+          call.close(Status.INTERNAL.withDescription("Half-closed without a request"),
+              new Metadata());
+        }
+      }
 
-          @Override
-          public void onCancel() {
-            responseObserver.cancelled = true;
-            if (responseObserver.onCancelHandler != null) {
-              responseObserver.onCancelHandler.run();
-            }
-          }
+      @Override
+      public void onCancel() {
+        responseObserver.cancelled = true;
+        if (responseObserver.onCancelHandler != null) {
+          responseObserver.onCancelHandler.run();
+        }
+      }
 
-          @Override
-          public void onReady() {
-            if (responseObserver.onReadyHandler != null) {
-              responseObserver.onReadyHandler.run();
-            }
-          }
-        };
+      @Override
+      public void onReady() {
+        if (responseObserver.onReadyHandler != null) {
+          responseObserver.onReadyHandler.run();
+        }
       }
     };
   }
@@ -185,68 +192,66 @@ public class ServerCalls {
    *
    * @param method an adaptor to the actual method on the service implementation.
    */
-  private static <ReqT, RespT> ServerCallHandler<ReqT, RespT> asyncStreamingRequestCall(
-      final StreamingRequestMethod<ReqT, RespT> method) {
-    return new ServerCallHandler<ReqT, RespT>() {
+  private static <ReqT, RespT> ServerCall.Listener<ReqT> asyncStreamingRequestCall(
+        final StreamingRequestMethod<ReqT, RespT> method,
+        MethodDescriptor<ReqT, RespT> methodDescriptor, final ServerCall<RespT> call,
+        Metadata headers) {
+    final ServerCallStreamObserverImpl<RespT> responseObserver =
+        new ServerCallStreamObserverImpl<RespT>(call);
+    final StreamObserver<ReqT> requestObserver = method.invoke(methodDescriptor, responseObserver);
+    responseObserver.freeze();
+    if (responseObserver.autoFlowControlEnabled) {
+      call.request(1);
+    }
+    return new EmptyServerCallListener<ReqT>() {
+      boolean halfClosed = false;
+
       @Override
-      public ServerCall.Listener<ReqT> startCall(
-          MethodDescriptor<ReqT, RespT> methodDescriptor,
-          final ServerCall<RespT> call,
-          Metadata headers) {
-        final ServerCallStreamObserverImpl<RespT> responseObserver =
-            new ServerCallStreamObserverImpl<RespT>(call);
-        final StreamObserver<ReqT> requestObserver = method.invoke(responseObserver);
-        responseObserver.freeze();
+      public void onMessage(ReqT request) {
+        requestObserver.onNext(request);
+
+        // Request delivery of the next inbound message.
         if (responseObserver.autoFlowControlEnabled) {
           call.request(1);
         }
-        return new EmptyServerCallListener<ReqT>() {
-          boolean halfClosed = false;
+      }
 
-          @Override
-          public void onMessage(ReqT request) {
-            requestObserver.onNext(request);
+      @Override
+      public void onHalfClose() {
+        halfClosed = true;
+        requestObserver.onCompleted();
+      }
 
-            // Request delivery of the next inbound message.
-            if (responseObserver.autoFlowControlEnabled) {
-              call.request(1);
-            }
-          }
+      @Override
+      public void onCancel() {
+        responseObserver.cancelled = true;
+        if (responseObserver.onCancelHandler != null) {
+          responseObserver.onCancelHandler.run();
+        }
+        if (!halfClosed) {
+          requestObserver.onError(Status.CANCELLED.asException());
+        }
+      }
 
-          @Override
-          public void onHalfClose() {
-            halfClosed = true;
-            requestObserver.onCompleted();
-          }
-
-          @Override
-          public void onCancel() {
-            responseObserver.cancelled = true;
-            if (responseObserver.onCancelHandler != null) {
-              responseObserver.onCancelHandler.run();
-            }
-            if (!halfClosed) {
-              requestObserver.onError(Status.CANCELLED.asException());
-            }
-          }
-
-          @Override
-          public void onReady() {
-            if (responseObserver.onReadyHandler != null) {
-              responseObserver.onReadyHandler.run();
-            }
-          }
-        };
+      @Override
+      public void onReady() {
+        if (responseObserver.onReadyHandler != null) {
+          responseObserver.onReadyHandler.run();
+        }
       }
     };
   }
 
   private static interface UnaryRequestMethod<ReqT, RespT> {
-    void invoke(ReqT request, StreamObserver<RespT> responseObserver);
+    void invoke(
+        MethodDescriptor<ReqT, RespT> method,
+        ReqT request,
+        StreamObserver<RespT> responseObserver);
   }
 
   private static interface StreamingRequestMethod<ReqT, RespT> {
-    StreamObserver<ReqT> invoke(StreamObserver<RespT> responseObserver);
+    StreamObserver<ReqT> invoke(MethodDescriptor<ReqT, RespT> method,
+        StreamObserver<RespT> responseObserver);
   }
 
   private static class ServerCallStreamObserverImpl<RespT>

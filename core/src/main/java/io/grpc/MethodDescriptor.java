@@ -54,6 +54,7 @@ public class MethodDescriptor<ReqT, RespT> {
   private final Marshaller<ReqT> requestMarshaller;
   private final Marshaller<RespT> responseMarshaller;
   private final boolean idempotent;
+  private final int serviceIndex;
 
   /**
    * The call type of a method.
@@ -147,20 +148,23 @@ public class MethodDescriptor<ReqT, RespT> {
   public static <RequestT, ResponseT> MethodDescriptor<RequestT, ResponseT> create(
       MethodType type, String fullMethodName,
       Marshaller<RequestT> requestMarshaller,
-      Marshaller<ResponseT> responseMarshaller) {
+      Marshaller<ResponseT> responseMarshaller,
+      int serviceIndex) {
     return new MethodDescriptor<RequestT, ResponseT>(
-        type, fullMethodName, requestMarshaller, responseMarshaller, false);
+        type, fullMethodName, requestMarshaller, responseMarshaller, false, serviceIndex);
   }
 
   private MethodDescriptor(MethodType type, String fullMethodName,
                            Marshaller<ReqT> requestMarshaller,
                            Marshaller<RespT> responseMarshaller,
-                           boolean idempotent) {
+                           boolean idempotent,
+                           int serviceIndex) {
     this.type = Preconditions.checkNotNull(type, "type");
     this.fullMethodName = Preconditions.checkNotNull(fullMethodName, "fullMethodName");
     this.requestMarshaller = Preconditions.checkNotNull(requestMarshaller, "requestMarshaller");
     this.responseMarshaller = Preconditions.checkNotNull(responseMarshaller, "responseMarshaller");
     this.idempotent = idempotent;
+    this.serviceIndex = serviceIndex;
   }
 
   /**
@@ -226,6 +230,14 @@ public class MethodDescriptor<ReqT, RespT> {
   }
 
   /**
+   * Return index of method within the list of methods a service defines. Used by
+   * generated service implementations to implement fast lookup for method invocation.
+   */
+  public int getServiceIndex() {
+    return serviceIndex;
+  }
+
+  /**
    * Set idempotency on this method.
    *
    * @param idempotent the idempotency of this method.
@@ -234,7 +246,7 @@ public class MethodDescriptor<ReqT, RespT> {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1775")
   public MethodDescriptor<ReqT, RespT> withIdempotent(boolean idempotent) {
     return new MethodDescriptor<ReqT, RespT>(type, fullMethodName, requestMarshaller,
-        responseMarshaller, idempotent);
+        responseMarshaller, idempotent, serviceIndex);
   }
 
   /**

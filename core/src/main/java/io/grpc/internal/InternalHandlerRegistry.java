@@ -33,21 +33,22 @@ package io.grpc.internal;
 
 import com.google.common.collect.ImmutableMap;
 
-import io.grpc.ServerMethodDefinition;
+import io.grpc.HandlerRegistry.RegisteredMethod;
+import io.grpc.MethodDescriptor;
 import io.grpc.ServerServiceDefinition;
 
 import java.util.HashMap;
 import javax.annotation.Nullable;
 
 final class InternalHandlerRegistry {
-  private final ImmutableMap<String, ServerMethodDefinition<?, ?>> methods;
+  private final ImmutableMap<String, RegisteredMethod> methods;
 
-  private InternalHandlerRegistry(ImmutableMap<String, ServerMethodDefinition<?, ?>> methods) {
+  private InternalHandlerRegistry(ImmutableMap<String, RegisteredMethod> methods) {
     this.methods = methods;
   }
 
   @Nullable
-  ServerMethodDefinition<?, ?> lookupMethod(String methodName) {
+  RegisteredMethod lookupMethod(String methodName) {
     return methods.get(methodName);
   }
 
@@ -57,16 +58,17 @@ final class InternalHandlerRegistry {
         new HashMap<String, ServerServiceDefinition>();
 
     Builder addService(ServerServiceDefinition service) {
-      services.put(service.getName(), service);
+      services.put(service.getDescriptor().getName(), service);
       return this;
     }
 
     InternalHandlerRegistry build() {
-      ImmutableMap.Builder<String, ServerMethodDefinition<?, ?>> mapBuilder =
+      ImmutableMap.Builder<String, RegisteredMethod> mapBuilder =
           ImmutableMap.builder();
       for (ServerServiceDefinition service : services.values()) {
-        for (ServerMethodDefinition<?, ?> method : service.getMethods()) {
-          mapBuilder.put(method.getMethodDescriptor().getFullMethodName(), method);
+        for (MethodDescriptor<?, ?> method : service.getDescriptor().getMethods()) {
+          mapBuilder.put(method.getFullMethodName(),
+              new RegisteredMethod(method, service.getCallHandler()));
         }
       }
       return new InternalHandlerRegistry(mapBuilder.build());

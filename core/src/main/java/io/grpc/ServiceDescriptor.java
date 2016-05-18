@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Google Inc. All rights reserved.
+ * Copyright 2016, Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -33,45 +33,38 @@ package io.grpc;
 
 import com.google.common.base.Preconditions;
 
-import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 
 /**
- * Registry of services and their methods used by servers to dispatching incoming calls.
+ * Descriptor for a service.
  */
-@ThreadSafe
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/933")
-public abstract class HandlerRegistry {
+public class ServiceDescriptor {
 
-  /**
-   * Lookup a {@link RegisteredMethod} for a fully-qualified method name.
-   *
-   * @param methodName to lookup {@link RegisteredMethod} for.
-   * @param authority the authority for the desired method (to do virtual hosting). If {@code null}
-   *        the first matching method will be returned.
-   * @return the resolved method or {@code null} if no method for that name exists.
-   */
-  @Nullable
-  public abstract RegisteredMethod lookupMethod(String methodName, @Nullable String authority);
+  private final String name;
+  private final List<MethodDescriptor> methods;
 
-  /**
-   * Lookup a {@link RegisteredMethod} by its fully-qualified name.
-   *
-   * @param methodName to lookup {@link RegisteredMethod} for.
-   * @return the resolved {@link RegisteredMethod} or {@code null} if no method for that name exists.
-   */
-  @Nullable
-  public final RegisteredMethod lookupMethod(String methodName) {
-    return lookupMethod(methodName, null);
+  public ServiceDescriptor(String name, List<MethodDescriptor> methods) {
+    this.name = Preconditions.checkNotNull(name);
+    this.methods = Collections.unmodifiableList(new ArrayList<MethodDescriptor>(methods));
   }
 
-  public static class RegisteredMethod {
-    public final MethodDescriptor methodDescriptor;
-    public final ServerCallHandler callHandler;
+  public String getName() {
+    return name;
+  }
 
-    public RegisteredMethod(MethodDescriptor methodDescriptor, ServerCallHandler callHandler) {
-      this.methodDescriptor = Preconditions.checkNotNull(methodDescriptor);
-      this.callHandler = Preconditions.checkNotNull(callHandler);
+  public Collection<MethodDescriptor> getMethods() {
+    return methods;
+  }
+
+  public MethodDescriptor getMethod(String methodName) {
+    for (MethodDescriptor method : methods) {
+      if (methodName.equals(method.getFullMethodName())) {
+        return method;
+      }
     }
+    return null;
   }
 }

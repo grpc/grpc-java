@@ -31,93 +31,25 @@
 
 package io.grpc;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
-
-import com.google.common.collect.ImmutableMap;
-
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
 
 /** Definition of a service to be exposed via a Server. */
 public final class ServerServiceDefinition {
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1774")
-  public static Builder builder(String serviceName) {
-    return new Builder(serviceName);
+  private final ServiceDescriptor descriptor;
+  private final ServerCallHandler callHandler;
+
+  public ServerServiceDefinition(ServiceDescriptor descriptor,
+      ServerCallHandler callHandler) {
+    this.descriptor = checkNotNull(descriptor);
+    this.callHandler = checkNotNull(callHandler);
   }
 
-  private final String name;
-  private final ImmutableMap<String, ServerMethodDefinition<?, ?>> methods;
-
-  private ServerServiceDefinition(
-      String name, Map<String, ServerMethodDefinition<?, ?>> methods) {
-    this.name = checkNotNull(name);
-    this.methods = ImmutableMap.copyOf(methods);
+  /** The descriptor for the service. */
+  public ServiceDescriptor getDescriptor() {
+    return descriptor;
   }
 
-  /** Simple name of the service. It is not an absolute path. */
-  public String getName() {
-    return name;
-  }
-
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1774")
-  public Collection<ServerMethodDefinition<?, ?>> getMethods() {
-    return methods.values();
-  }
-
-  /**
-   * Look up a method by its fully qualified name.
-   *
-   * @param name the fully qualified name without leading slash. E.g., "com.foo.Foo/Bar"
-   */
-  @Internal
-  public ServerMethodDefinition<?, ?> getMethod(String name) {
-    return methods.get(name);
-  }
-
-  /** Builder for constructing Service instances. */
-  public static final class Builder {
-    private final String serviceName;
-    private final Map<String, ServerMethodDefinition<?, ?>> methods =
-        new HashMap<String, ServerMethodDefinition<?, ?>>();
-
-    private Builder(String serviceName) {
-      this.serviceName = serviceName;
-    }
-
-    /**
-     * Add a method to be supported by the service.
-     *
-     * @param method the {@link MethodDescriptor} of this method.
-     * @param handler handler for incoming calls
-     */
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1774")
-    public <ReqT, RespT> Builder addMethod(
-        MethodDescriptor<ReqT, RespT> method, ServerCallHandler<ReqT, RespT> handler) {
-      return addMethod(ServerMethodDefinition.create(
-          checkNotNull(method, "method must not be null"),
-          checkNotNull(handler, "handler must not be null")));
-    }
-
-    /** Add a method to be supported by the service. */
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1774")
-    public <ReqT, RespT> Builder addMethod(ServerMethodDefinition<ReqT, RespT> def) {
-      MethodDescriptor<ReqT, RespT> method = def.getMethodDescriptor();
-      checkArgument(
-          serviceName.equals(MethodDescriptor.extractFullServiceName(method.getFullMethodName())),
-          "Service name mismatch. Expected service name: '%s'. Actual method name: '%s'.",
-          this.serviceName, method.getFullMethodName());
-      String name = method.getFullMethodName();
-      checkState(!methods.containsKey(name), "Method by same name already registered: %s", name);
-      methods.put(name, def);
-      return this;
-    }
-
-    /** Construct new ServerServiceDefinition. */
-    public ServerServiceDefinition build() {
-      return new ServerServiceDefinition(serviceName, methods);
-    }
+  public ServerCallHandler getCallHandler() {
+    return callHandler;
   }
 }

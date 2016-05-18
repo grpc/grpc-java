@@ -116,15 +116,9 @@ public class ServerInterceptors {
   public static ServerServiceDefinition intercept(ServerServiceDefinition serviceDef,
                                                   List<? extends ServerInterceptor> interceptors) {
     Preconditions.checkNotNull(serviceDef);
-    if (interceptors.isEmpty()) {
-      return serviceDef;
-    }
-    ServerServiceDefinition.Builder serviceDefBuilder
-        = ServerServiceDefinition.builder(serviceDef.getName());
-    for (ServerMethodDefinition<?, ?> method : serviceDef.getMethods()) {
-      wrapAndAddMethod(serviceDefBuilder, method, interceptors);
-    }
-    return serviceDefBuilder.build();
+    return new ServerServiceDefinition(
+        serviceDef.getDescriptor(),
+        wrapServerCallHandler(serviceDef.getCallHandler(), interceptors));
   }
 
   /**
@@ -179,31 +173,33 @@ public class ServerInterceptors {
   public static <T> ServerServiceDefinition useMarshalledMessages(
       final ServerServiceDefinition serviceDef,
       final MethodDescriptor.Marshaller<T> marshaller) {
-    final ServerServiceDefinition.Builder serviceBuilder = ServerServiceDefinition
-        .builder(serviceDef.getName());
-    for (final ServerMethodDefinition<?, ?> definition : serviceDef.getMethods()) {
-      final MethodDescriptor<?, ?> originalMethodDescriptor = definition.getMethodDescriptor();
-      final MethodDescriptor<T, T> wrappedMethodDescriptor = MethodDescriptor
-          .create(originalMethodDescriptor.getType(),
-              originalMethodDescriptor.getFullMethodName(),
+    List<MethodDescriptor> wrappedMethods = new ArrayList<MethodDescriptor>(
+        serviceDef.getDescriptor().getMethods().size());
+    for (final MethodDescriptor<?, ?> originalMethod : serviceDef.getDescriptor().getMethods()) {
+      MethodDescriptor<T, T> wrappedMethodDescriptor = MethodDescriptor
+          .create(originalMethod.getType(),
+              originalMethod.getFullMethodName(),
               marshaller,
-              marshaller);
-      serviceBuilder.addMethod(wrapMethod(definition, wrappedMethodDescriptor));
+              marshaller,
+              originalMethod.getServiceIndex());
+      wrappedMethods.add(wrappedMethodDescriptor);
     }
-    return serviceBuilder.build();
+    return new ServerServiceDefinition(
+        new ServiceDescriptor(serviceDef.getDescriptor().getName(), wrappedMethods),
+        wrapHandler(serviceDef.getDescriptor(), serviceDef.getCallHandler()));
   }
 
-  private static <ReqT, RespT> void wrapAndAddMethod(
-      ServerServiceDefinition.Builder serviceDefBuilder, ServerMethodDefinition<ReqT, RespT> method,
+  private static ServerCallHandler wrapServerCallHandler(
+      ServerCallHandler toWrap,
       List<? extends ServerInterceptor> interceptors) {
-    ServerCallHandler<ReqT, RespT> callHandler = method.getServerCallHandler();
     for (ServerInterceptor interceptor : interceptors) {
-      callHandler = InterceptCallHandler.create(interceptor, callHandler);
+      toWrap = InterceptCallHandler.create(interceptor, toWrap);
     }
-    serviceDefBuilder.addMethod(method.withServerCallHandler(callHandler));
+    return toWrap;
   }
 
   private static class InterceptCallHandler<ReqT, RespT> implements ServerCallHandler<ReqT, RespT> {
+
     public static <ReqT, RespT> InterceptCallHandler<ReqT, RespT> create(
         ServerInterceptor interceptor, ServerCallHandler<ReqT, RespT> callHandler) {
       return new InterceptCallHandler<ReqT, RespT>(interceptor, callHandler);
@@ -227,53 +223,44 @@ public class ServerInterceptors {
     }
   }
 
-  private static <OReqT, ORespT, WReqT, WRespT> ServerMethodDefinition<WReqT, WRespT> wrapMethod(
-      final ServerMethodDefinition<OReqT, ORespT> definition,
-      final MethodDescriptor<WReqT, WRespT> wrappedMethod) {
-    final ServerCallHandler<WReqT, WRespT> wrappedHandler = wrapHandler(
-        definition.getServerCallHandler(),
-        definition.getMethodDescriptor(),
-        wrappedMethod);
-    return ServerMethodDefinition.create(wrappedMethod, wrappedHandler);
-  }
-
-  private static <OReqT, ORespT, WReqT, WRespT> ServerCallHandler<WReqT, WRespT> wrapHandler(
-      final ServerCallHandler<OReqT, ORespT> originalHandler,
-      final MethodDescriptor<OReqT, ORespT> originalMethod,
-      final MethodDescriptor<WReqT, WRespT> wrappedMethod) {
-    return new ServerCallHandler<WReqT, WRespT>() {
+  private static ServerCallHandler wrapHandler(
+      final ServiceDescriptor originalDescriptor,
+      final ServerCallHandler originalHandler) {
+    return new ServerCallHandler() {
       @Override
-      public ServerCall.Listener<WReqT> startCall(
-          final MethodDescriptor<WReqT, WRespT> method,
-          final ServerCall<WRespT> call,
+      public ServerCall.Listener startCall(
+          final MethodDescriptor method,
+          final ServerCall call,
           final Metadata headers) {
-        final ServerCall<ORespT> unwrappedCall = new PartialForwardingServerCall<ORespT>() {
+        final MethodDescriptor originalMethod =
+            originalDescriptor.getMethod(method.getFullMethodName());
+        final ServerCall unwrappedCall = new PartialForwardingServerCall() {
           @Override
-          protected ServerCall<WRespT> delegate() {
+          protected ServerCall delegate() {
             return call;
           }
 
           @Override
-          public void sendMessage(ORespT message) {
+          public void sendMessage(Object message) {
             final InputStream is = originalMethod.streamResponse(message);
-            final WRespT wrappedMessage = wrappedMethod.parseResponse(is);
+            final Object wrappedMessage = method.parseResponse(is);
             delegate().sendMessage(wrappedMessage);
           }
         };
 
-        final ServerCall.Listener<OReqT> originalListener = originalHandler
+        final ServerCall.Listener originalListener = originalHandler
             .startCall(originalMethod, unwrappedCall, headers);
 
-        return new PartialForwardingServerCallListener<WReqT>() {
+        return new PartialForwardingServerCallListener() {
           @Override
-          protected ServerCall.Listener<OReqT> delegate() {
+          protected ServerCall.Listener delegate() {
             return originalListener;
           }
 
           @Override
-          public void onMessage(WReqT message) {
-            final InputStream is = wrappedMethod.streamRequest(message);
-            final OReqT originalMessage = originalMethod.parseRequest(is);
+          public void onMessage(Object message) {
+            final InputStream is = method.streamRequest(message);
+            final Object originalMessage = originalMethod.parseRequest(is);
             delegate().onMessage(originalMessage);
           }
         };
