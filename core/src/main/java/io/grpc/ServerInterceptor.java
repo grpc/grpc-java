@@ -66,5 +66,5 @@ public interface ServerInterceptor {
       MethodDescriptor<ReqT, RespT> method,
       ServerCall<RespT> call,
       Metadata headers,
-      ServerCallHandler<ReqT, RespT> next);
+      ServerCallHandler next);
 }

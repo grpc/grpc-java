@@ -15,27 +15,15 @@ import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
 import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
 
-import com.google.common.collect.ImmutableList;
-import com.google.protobuf.Descriptors;
-import com.google.protobuf.GeneratedMessage;
-
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
-import io.grpc.ServerCallHandler;
 import io.grpc.ServerServiceDefinition;
-import io.grpc.ServiceDefinition;
 import io.grpc.ServiceDescriptor;
-import io.grpc.stub.ServerCalls;
-import io.grpc.stub.ServerCalls.ServerStreamingMethod;
-import io.grpc.stub.ServerCalls.UnaryMethod;
-import io.grpc.stub.StreamObserver;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
 
 /**
  * <pre>
@@ -408,26 +396,29 @@ public class RouteGuideGrpc {
     public Listener startCall(MethodDescriptor method, ServerCall call, Metadata headers) {
       switch (method.getServiceIndex()) {
         case METHODID_GET_FEATURE:
-          return ServerCalls.asyncUnaryCall(this, method, call, headers);
+          return asyncUnaryCall(this, method, call, headers);
         case METHODID_LIST_FEATURES:
-          return ServerCalls.asyncServerStreamingCall(this, method, call, headers);
+          return asyncServerStreamingCall(this, method, call, headers);
         case METHODID_RECORD_ROUTE:
-          return ServerCalls.asyncClientStreamingCall(this, method, call, headers);
+          return asyncClientStreamingCall(this, method, call, headers);
         case METHODID_ROUTE_CHAT:
-          return ServerCalls.asyncBidiStreamingCall(this, method, call, headers);
+          return asyncBidiStreamingCall(this, method, call, headers);
         default: throw new AssertionError();
       }
     }
   }
 
-  public static io.grpc.ServerServiceDefinition bindService(final RouteGuide serviceImpl) {
+  public static io.grpc.ServiceDescriptor getDescriptor() {
     ArrayList<MethodDescriptor> tmpList = new ArrayList<MethodDescriptor>();
     tmpList.add(METHOD_GET_FEATURE);
     tmpList.add(METHOD_LIST_FEATURES);
     tmpList.add(METHOD_RECORD_ROUTE);
     tmpList.add(METHOD_ROUTE_CHAT);
-    return new ServerServiceDefinition(
-        new ServiceDescriptor(SERVICE_NAME, Collections.unmodifiableList(tmpList)),
-        new MethodHandlers(serviceImpl));
+    return new ServiceDescriptor(SERVICE_NAME, Collections.unmodifiableList(tmpList));
+  }
+
+
+  public static io.grpc.ServerServiceDefinition bindService(final RouteGuide serviceImpl) {
+    return new ServerServiceDefinition(getDescriptor(),  new MethodHandlers(serviceImpl));
   }
 }

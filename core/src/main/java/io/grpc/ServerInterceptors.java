@@ -198,24 +198,24 @@ public class ServerInterceptors {
     return toWrap;
   }
 
-  private static class InterceptCallHandler<ReqT, RespT> implements ServerCallHandler<ReqT, RespT> {
+  private static class InterceptCallHandler implements ServerCallHandler {
 
-    public static <ReqT, RespT> InterceptCallHandler<ReqT, RespT> create(
-        ServerInterceptor interceptor, ServerCallHandler<ReqT, RespT> callHandler) {
-      return new InterceptCallHandler<ReqT, RespT>(interceptor, callHandler);
+    public static <ReqT, RespT> InterceptCallHandler create(
+        ServerInterceptor interceptor, ServerCallHandler callHandler) {
+      return new InterceptCallHandler(interceptor, callHandler);
     }
 
     private final ServerInterceptor interceptor;
-    private final ServerCallHandler<ReqT, RespT> callHandler;
+    private final ServerCallHandler callHandler;
 
     private InterceptCallHandler(ServerInterceptor interceptor,
-                                 ServerCallHandler<ReqT, RespT> callHandler) {
+                                 ServerCallHandler callHandler) {
       this.interceptor = Preconditions.checkNotNull(interceptor, "interceptor");
       this.callHandler = callHandler;
     }
 
     @Override
-    public ServerCall.Listener<ReqT> startCall(
+    public <ReqT, RespT> ServerCall.Listener<ReqT> startCall(
         MethodDescriptor<ReqT, RespT> method,
         ServerCall<RespT> call,
         Metadata headers) {
@@ -228,9 +228,9 @@ public class ServerInterceptors {
       final ServerCallHandler originalHandler) {
     return new ServerCallHandler() {
       @Override
-      public ServerCall.Listener startCall(
-          final MethodDescriptor method,
-          final ServerCall call,
+      public <ReqT, RespT> ServerCall.Listener<ReqT> startCall(
+          final MethodDescriptor<ReqT, RespT> method,
+          final ServerCall<RespT> call,
           final Metadata headers) {
         final MethodDescriptor originalMethod =
             originalDescriptor.getMethod(method.getFullMethodName());
@@ -240,10 +240,11 @@ public class ServerInterceptors {
             return call;
           }
 
+          @SuppressWarnings("unchecked")
           @Override
           public void sendMessage(Object message) {
             final InputStream is = originalMethod.streamResponse(message);
-            final Object wrappedMessage = method.parseResponse(is);
+            final RespT wrappedMessage = method.parseResponse(is);
             delegate().sendMessage(wrappedMessage);
           }
         };
@@ -251,14 +252,15 @@ public class ServerInterceptors {
         final ServerCall.Listener originalListener = originalHandler
             .startCall(originalMethod, unwrappedCall, headers);
 
-        return new PartialForwardingServerCallListener() {
+        return new PartialForwardingServerCallListener<ReqT>() {
           @Override
           protected ServerCall.Listener delegate() {
             return originalListener;
           }
 
+          @SuppressWarnings("unchecked")
           @Override
-          public void onMessage(Object message) {
+          public void onMessage(ReqT message) {
             final InputStream is = method.streamRequest(message);
             final Object originalMessage = originalMethod.parseRequest(is);
             delegate().onMessage(originalMessage);

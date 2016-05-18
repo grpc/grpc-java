@@ -88,7 +88,7 @@ public class TestUtils {
           MethodDescriptor<ReqT, RespT> method,
           ServerCall<RespT> call,
           final Metadata requestHeaders,
-          ServerCallHandler<ReqT, RespT> next) {
+          ServerCallHandler next) {
         return next.startCall(method,
             new SimpleForwardingServerCall<RespT>(call) {
               @Override
@@ -120,7 +120,7 @@ public class TestUtils {
           MethodDescriptor<ReqT, RespT> method,
           ServerCall<RespT> call,
           Metadata requestHeaders,
-          ServerCallHandler<ReqT, RespT> next) {
+          ServerCallHandler next) {
         headersCapture.set(requestHeaders);
         return next.startCall(method, call, requestHeaders);
       }
@@ -139,7 +139,7 @@ public class TestUtils {
           MethodDescriptor<ReqT, RespT> method,
           ServerCall<RespT> call,
           Metadata requestHeaders,
-          ServerCallHandler<ReqT, RespT> next) {
+          ServerCallHandler next) {
         serverCallCapture.set(call);
         return next.startCall(method, call, requestHeaders);
       }
