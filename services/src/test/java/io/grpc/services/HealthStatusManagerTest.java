@@ -29,10 +29,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.services.health;
+package io.grpc.services;
+
+import static io.grpc.health.v1.HealthGrpc.Health;
 
 import static org.junit.Assert.assertEquals;
-
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -40,8 +41,13 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+
 import io.grpc.Status;
 import io.grpc.StatusException;
+import io.grpc.health.v1.HealthCheckRequest;
+import io.grpc.health.v1.HealthCheckResponse;
+import io.grpc.stub.StreamObserver;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -53,9 +59,9 @@ import org.mockito.InOrder;
 public class HealthStatusManagerTest {
 
   private final HealthStatusManager manager = new HealthStatusManager();
-  private final HealthGrpc.Health health = manager.getHealthService();
-  private final HealthOuterClass.HealthCheckResponse.ServingStatus status
-      = HealthOuterClass.HealthCheckResponse.ServingStatus.UNKNOWN;
+  private final Health health = manager.getHealthService();
+  private final HealthCheckResponse.ServingStatus status
+      = HealthCheckResponse.ServingStatus.UNKNOWN;
 
   @Test
   public void getHealthService_getterReturnsTheSameHealthRefAfterUpdate() throws Exception {
@@ -68,18 +74,16 @@ public class HealthStatusManagerTest {
   public void checkValidStatus() throws Exception {
     //setup
     manager.setStatus("", status);
-    HealthOuterClass.HealthCheckRequest request
-        = HealthOuterClass.HealthCheckRequest.newBuilder().setService("").build();
+    HealthCheckRequest request = HealthCheckRequest.newBuilder().setService("").build();
     @SuppressWarnings("unchecked")
-    io.grpc.stub.StreamObserver<HealthOuterClass.HealthCheckResponse> observer
-        = mock(io.grpc.stub.StreamObserver.class);
+    StreamObserver<HealthCheckResponse> observer = mock(StreamObserver.class);
 
     //test
     health.check(request, observer);
 
     //verify
     InOrder inOrder = inOrder(observer);
-    inOrder.verify(observer, times(1)).onNext(any(HealthOuterClass.HealthCheckResponse.class));
+    inOrder.verify(observer, times(1)).onNext(any(HealthCheckResponse.class));
     inOrder.verify(observer, times(1)).onCompleted();
     verify(observer, never()).onError(any(Throwable.class));
   }
@@ -88,11 +92,10 @@ public class HealthStatusManagerTest {
   public void checkStatusNotFound() throws Exception {
     //setup
     manager.setStatus("", status);
-    HealthOuterClass.HealthCheckRequest request
-        = HealthOuterClass.HealthCheckRequest.newBuilder().setService("invalid").build();
+    HealthCheckRequest request
+        = HealthCheckRequest.newBuilder().setService("invalid").build();
     @SuppressWarnings("unchecked")
-    io.grpc.stub.StreamObserver<HealthOuterClass.HealthCheckResponse> observer
-        = mock(io.grpc.stub.StreamObserver.class);
+    StreamObserver<HealthCheckResponse> observer = mock(StreamObserver.class);
 
     //test
     health.check(request, observer);
@@ -110,11 +113,10 @@ public class HealthStatusManagerTest {
     //setup
     manager.setStatus("", status);
     manager.clearStatus("");
-    HealthOuterClass.HealthCheckRequest request
-        = HealthOuterClass.HealthCheckRequest.newBuilder().setService("").build();
+    HealthCheckRequest request
+        = HealthCheckRequest.newBuilder().setService("").build();
     @SuppressWarnings("unchecked")
-    io.grpc.stub.StreamObserver<HealthOuterClass.HealthCheckResponse> observer
-        = mock(io.grpc.stub.StreamObserver.class);
+    StreamObserver<HealthCheckResponse> observer = mock(StreamObserver.class);
 
     //test
     health.check(request, observer);

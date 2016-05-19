@@ -29,10 +29,12 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.services.health;
+package io.grpc.services;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.services.health.HealthOuterClass.HealthCheckResponse.ServingStatus;
+import static io.grpc.health.v1.HealthCheckResponse.ServingStatus;
+
+import io.grpc.health.v1.HealthGrpc;
 
 
 

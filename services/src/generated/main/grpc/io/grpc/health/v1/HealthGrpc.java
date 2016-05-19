@@ -1,4 +1,4 @@
-package io.grpc.services.health;
+package io.grpc.health.v1;
 
 import static io.grpc.stub.ClientCalls.asyncUnaryCall;
 import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
@@ -28,14 +28,14 @@ public class HealthGrpc {
 
   // Static method descriptors that strictly reflect the proto.
   @io.grpc.ExperimentalApi
-  public static final io.grpc.MethodDescriptor<io.grpc.services.health.HealthOuterClass.HealthCheckRequest,
-      io.grpc.services.health.HealthOuterClass.HealthCheckResponse> METHOD_CHECK =
+  public static final io.grpc.MethodDescriptor<io.grpc.health.v1.HealthCheckRequest,
+      io.grpc.health.v1.HealthCheckResponse> METHOD_CHECK =
       io.grpc.MethodDescriptor.create(
           io.grpc.MethodDescriptor.MethodType.UNARY,
           generateFullMethodName(
               "grpc.health.v1.Health", "Check"),
-          io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.services.health.HealthOuterClass.HealthCheckRequest.getDefaultInstance()),
-          io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.services.health.HealthOuterClass.HealthCheckResponse.getDefaultInstance()));
+          io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.health.v1.HealthCheckRequest.getDefaultInstance()),
+          io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.health.v1.HealthCheckResponse.getDefaultInstance()));
 
   /**
    * Creates a new async stub that supports all call types for the service
@@ -66,16 +66,16 @@ public class HealthGrpc {
 
     /**
      */
-    public void check(io.grpc.services.health.HealthOuterClass.HealthCheckRequest request,
-        io.grpc.stub.StreamObserver<io.grpc.services.health.HealthOuterClass.HealthCheckResponse> responseObserver);
+    public void check(io.grpc.health.v1.HealthCheckRequest request,
+        io.grpc.stub.StreamObserver<io.grpc.health.v1.HealthCheckResponse> responseObserver);
   }
 
   @io.grpc.ExperimentalApi
   public static abstract class AbstractHealth implements Health, io.grpc.BindableService {
 
     @java.lang.Override
-    public void check(io.grpc.services.health.HealthOuterClass.HealthCheckRequest request,
-        io.grpc.stub.StreamObserver<io.grpc.services.health.HealthOuterClass.HealthCheckResponse> responseObserver) {
+    public void check(io.grpc.health.v1.HealthCheckRequest request,
+        io.grpc.stub.StreamObserver<io.grpc.health.v1.HealthCheckResponse> responseObserver) {
       asyncUnimplementedUnaryCall(METHOD_CHECK, responseObserver);
     }
 
@@ -90,7 +90,7 @@ public class HealthGrpc {
 
     /**
      */
-    public io.grpc.services.health.HealthOuterClass.HealthCheckResponse check(io.grpc.services.health.HealthOuterClass.HealthCheckRequest request);
+    public io.grpc.health.v1.HealthCheckResponse check(io.grpc.health.v1.HealthCheckRequest request);
   }
 
   /**
@@ -99,8 +99,8 @@ public class HealthGrpc {
 
     /**
      */
-    public com.google.common.util.concurrent.ListenableFuture<io.grpc.services.health.HealthOuterClass.HealthCheckResponse> check(
-        io.grpc.services.health.HealthOuterClass.HealthCheckRequest request);
+    public com.google.common.util.concurrent.ListenableFuture<io.grpc.health.v1.HealthCheckResponse> check(
+        io.grpc.health.v1.HealthCheckRequest request);
   }
 
   public static class HealthStub extends io.grpc.stub.AbstractStub<HealthStub>
@@ -121,8 +121,8 @@ public class HealthGrpc {
     }
 
     @java.lang.Override
-    public void check(io.grpc.services.health.HealthOuterClass.HealthCheckRequest request,
-        io.grpc.stub.StreamObserver<io.grpc.services.health.HealthOuterClass.HealthCheckResponse> responseObserver) {
+    public void check(io.grpc.health.v1.HealthCheckRequest request,
+        io.grpc.stub.StreamObserver<io.grpc.health.v1.HealthCheckResponse> responseObserver) {
       asyncUnaryCall(
           getChannel().newCall(METHOD_CHECK, getCallOptions()), request, responseObserver);
     }
@@ -146,7 +146,7 @@ public class HealthGrpc {
     }
 
     @java.lang.Override
-    public io.grpc.services.health.HealthOuterClass.HealthCheckResponse check(io.grpc.services.health.HealthOuterClass.HealthCheckRequest request) {
+    public io.grpc.health.v1.HealthCheckResponse check(io.grpc.health.v1.HealthCheckRequest request) {
       return blockingUnaryCall(
           getChannel(), METHOD_CHECK, getCallOptions(), request);
     }
@@ -170,8 +170,8 @@ public class HealthGrpc {
     }
 
     @java.lang.Override
-    public com.google.common.util.concurrent.ListenableFuture<io.grpc.services.health.HealthOuterClass.HealthCheckResponse> check(
-        io.grpc.services.health.HealthOuterClass.HealthCheckRequest request) {
+    public com.google.common.util.concurrent.ListenableFuture<io.grpc.health.v1.HealthCheckResponse> check(
+        io.grpc.health.v1.HealthCheckRequest request) {
       return futureUnaryCall(
           getChannel().newCall(METHOD_CHECK, getCallOptions()), request);
     }
@@ -197,8 +197,8 @@ public class HealthGrpc {
     public void invoke(Req request, io.grpc.stub.StreamObserver<Resp> responseObserver) {
       switch (methodId) {
         case METHODID_CHECK:
-          serviceImpl.check((io.grpc.services.health.HealthOuterClass.HealthCheckRequest) request,
-              (io.grpc.stub.StreamObserver<io.grpc.services.health.HealthOuterClass.HealthCheckResponse>) responseObserver);
+          serviceImpl.check((io.grpc.health.v1.HealthCheckRequest) request,
+              (io.grpc.stub.StreamObserver<io.grpc.health.v1.HealthCheckResponse>) responseObserver);
           break;
         default:
           throw new AssertionError();
@@ -223,8 +223,8 @@ public class HealthGrpc {
           METHOD_CHECK,
           asyncUnaryCall(
             new MethodHandlers<
-              io.grpc.services.health.HealthOuterClass.HealthCheckRequest,
-              io.grpc.services.health.HealthOuterClass.HealthCheckResponse>(
+              io.grpc.health.v1.HealthCheckRequest,
+              io.grpc.health.v1.HealthCheckResponse>(
                 serviceImpl, METHODID_CHECK)))
         .build();
   }

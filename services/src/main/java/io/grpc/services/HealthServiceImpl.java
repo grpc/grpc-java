@@ -29,13 +29,15 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.services.health;
+package io.grpc.services;
 
-import static io.grpc.services.health.HealthOuterClass.HealthCheckResponse;
-import static io.grpc.services.health.HealthOuterClass.HealthCheckResponse.ServingStatus;
+import static io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 
 import io.grpc.Status;
 import io.grpc.StatusException;
+import io.grpc.health.v1.HealthCheckRequest;
+import io.grpc.health.v1.HealthCheckResponse;
+import io.grpc.health.v1.HealthGrpc;
 import io.grpc.stub.StreamObserver;
 
 import java.util.Map;
@@ -53,7 +55,7 @@ final class HealthServiceImpl extends HealthGrpc.AbstractHealth {
       = new ConcurrentHashMap<String, ServingStatus>();
 
   @Override
-  public void check(HealthOuterClass.HealthCheckRequest request,
+  public void check(HealthCheckRequest request,
       StreamObserver<HealthCheckResponse> responseObserver) {
     ServingStatus status = getStatus(request.getService());
     if (status == null) {
