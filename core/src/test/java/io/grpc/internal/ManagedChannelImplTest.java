@@ -492,10 +492,7 @@ public class ManagedChannelImplTest {
     ArgumentCaptor<ManagedClientTransport.Listener> goodTransportListenerCaptor =
         ArgumentCaptor.forClass(ManagedClientTransport.Listener.class);
     verify(mockTransportFactory, timeout(1000))
-          .newClientTransport(same(goodAddress), any(String.class));
-    verify(goodTransport, timeout(1000)).start(goodTransportListenerCaptor.capture());
-    goodTransportListenerCaptor.getValue().transportReady();
-    verify(goodTransport, timeout(1000)).newStream(same(method), same(headers));
+          .newClientTransport(same(badAddress), any(String.class));
     // The bad transport was never used.
     verify(badTransport, times(0)).newStream(any(MethodDescriptor.class), any(Metadata.class));
   }
@@ -539,9 +536,9 @@ public class ManagedChannelImplTest {
     transportListenerCaptor.getValue().transportShutdown(Status.UNAVAILABLE);
 
     // The channel then try the second address, which will fail to connect too.
-    verify(transport2, timeout(1000)).start(transportListenerCaptor.capture());
-    verify(mockTransportFactory).newClientTransport(same(addr2), any(String.class));
-    verify(transport2, timeout(1000)).start(transportListenerCaptor.capture());
+    verify(transport1, timeout(1000)).start(transportListenerCaptor.capture());
+    verify(mockTransportFactory).newClientTransport(same(addr1), any(String.class));
+    verify(transport1, timeout(1000)).start(transportListenerCaptor.capture());
     transportListenerCaptor.getValue().transportShutdown(Status.UNAVAILABLE);
 
     // Call fails
@@ -597,10 +594,10 @@ public class ManagedChannelImplTest {
     // Second call still use the first address, since it was successfully connected.
     ClientCall<String, Integer> call2 = channel.newCall(method, CallOptions.DEFAULT);
     call2.start(mockCallListener, headers);
-    verify(transport2, timeout(1000)).start(transportListenerCaptor.capture());
-    verify(mockTransportFactory, times(2)).newClientTransport(same(addr1), any(String.class));
+    verify(transport1, timeout(1000)).start(transportListenerCaptor.capture());
+    verify(mockTransportFactory).newClientTransport(same(addr1), any(String.class));
     transportListenerCaptor.getValue().transportReady();
-    verify(transport2, timeout(1000)).newStream(same(method), same(headers));
+    verify(transport1, timeout(1000)).newStream(same(method), same(headers));
   }
 
   private static class FakeBackoffPolicyProvider implements BackoffPolicy.Provider {
