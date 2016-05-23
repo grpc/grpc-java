@@ -1,6 +1,6 @@
 # Authentication
 
-As outlined in <a href="https://github.com/grpc/grpc/blob/master/doc/grpc-auth-support.md">gRPC Authentication Support</a>, gRPC supports a number of different mechanisms for asserting identity between an client and server. This document provides code samples demonstrating how to provide SSL/TLS encryption support and identity assertions in Java, as well as passing OAuth2 tokens to services that support it.
+gRPC supports a number of different mechanisms for asserting identity between an client and server. This document provides code samples demonstrating how to provide SSL/TLS encryption support and identity assertions in Java, as well as passing OAuth2 tokens to services that support it.
 
 # Transport Security (TLS)
 
@@ -268,8 +268,47 @@ server.start();
 
 If the issuing certificate authority is not known to the client then a properly
 configured SslContext or SSLSocketFactory should be provided to the
-NettyChannelBuilder or OkHttpChannelBuilder, respectively. [Mutual
-authentication][] can be configured similarly.
+NettyChannelBuilder or OkHttpChannelBuilder, respectively.
+
+## Mutual TLS
+
+[Mutual authentication][] (or "client-side authentication") is configured similarly to the server, by providing server truststores and a client certificate and private key to the client.  The server must be configured to request a certificate from the client, as well as truststores for which client certificates it should trust.
+
+```java
+Server server = NettyServerBuilder.forPort(8443)
+    .sslContext(GrpcSslContexts.forServer(certChainFile, privateKeyFile)
+        .trustManager(clientCertChainFile)
+        .clientAuth(ClientAuth.OPTIONAL)
+        .build());
+```
+
+When a valid client certificate is presented during TLS negotitiation, details can be exposed using an interceptor.  A ThreadLocal can be used to make these details available to unary invocations by wrapping CallListener.onHalfClose().
+
+```java
+private final static ThreadLocal<SSLSession> sslSessionThreadLocal = new ThreadLocal<>();
+
+@Override
+public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(MethodDescriptor<ReqT, RespT> method,
+    ServerCall<RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+    SSLSession sslSession = call.attributes().get(ServerCall.SSL_SESSION_KEY);
+    final ServerCall.Listener<ReqT> original = next.startCall(method, call, headers);
+    if (sslSession == null) {
+        return original;
+    }
+    return new ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT>(original) {
+        @Override
+        public void onHalfClose() {
+            try {
+                sslSessionThreadLocal.set(sslSession);
+                super.onHalfClose();
+            } finally {
+                sslSessionThreadLocal.set(null);
+            }
+        }
+    };
+}
+
+```
 
 [Mutual authentication]: http://en.wikipedia.org/wiki/Transport_Layer_Security#Client-authenticated_TLS_handshake
 
