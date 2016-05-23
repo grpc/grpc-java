@@ -272,7 +272,7 @@ NettyChannelBuilder or OkHttpChannelBuilder, respectively.
 
 ## Mutual TLS
 
-[Mutual authentication][] (or "client-side authentication") is configured similarly to the server, by providing server truststores and a client certificate and private key to the client.  The server must be configured to request a certificate from the client, as well as truststores for which client certificates it should trust.
+[Mutual authentication][] (or "client-side authentication") is configured similarly for the client, by providing truststores, a client certificate and private key to the client channel.  The server must also be configured to request a certificate from clients, as well as truststores for which client certificates it should allow.
 
 ```java
 Server server = NettyServerBuilder.forPort(8443)
@@ -282,32 +282,22 @@ Server server = NettyServerBuilder.forPort(8443)
         .build());
 ```
 
-When a valid client certificate is presented during TLS negotitiation, details can be exposed using an interceptor.  A ThreadLocal can be used to make these details available to unary invocations by wrapping CallListener.onHalfClose().
+Negotiated client certificates are available in the SSLSession, which is found in the SSL_SESSION_KEY attribute of <a href="https://github.com/grpc/grpc-java/blob/master/core/src/main/java/io/grpc/ServerCall.java">ServerCall</a>.  A server interceptor can provide details in the current Context.
 
 ```java
-private final static ThreadLocal<SSLSession> sslSessionThreadLocal = new ThreadLocal<>();
+public final static Context.Key<SSLSession> SSL_SESSION_CONTEXT = Context.key("SSLSession");
 
 @Override
 public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(MethodDescriptor<ReqT, RespT> method,
     ServerCall<RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
     SSLSession sslSession = call.attributes().get(ServerCall.SSL_SESSION_KEY);
-    final ServerCall.Listener<ReqT> original = next.startCall(method, call, headers);
     if (sslSession == null) {
-        return original;
+        return next.startCall(method, call, headers)
     }
-    return new ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT>(original) {
-        @Override
-        public void onHalfClose() {
-            try {
-                sslSessionThreadLocal.set(sslSession);
-                super.onHalfClose();
-            } finally {
-                sslSessionThreadLocal.set(null);
-            }
-        }
-    };
+    return Contexts.interceptCall(
+        Context.current().withValue(SSL_SESSION_CONTEXT, clientContext),
+        method, call, headers, next);
 }
-
 ```
 
 [Mutual authentication]: http://en.wikipedia.org/wiki/Transport_Layer_Security#Client-authenticated_TLS_handshake
