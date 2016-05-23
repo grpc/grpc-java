@@ -272,7 +272,7 @@ NettyChannelBuilder or OkHttpChannelBuilder, respectively.
 
 ## Mutual TLS
 
-[Mutual authentication][] (or "client-side authentication") is configured similarly for the client, by providing truststores, a client certificate and private key to the client channel.  The server must also be configured to request a certificate from clients, as well as truststores for which client certificates it should allow.
+[Mutual authentication][] (or "client-side authentication") configuration is similar to the server by providing truststores, a client certificate and private key to the client channel.  The server must also be configured to request a certificate from clients, as well as truststores for which client certificates it should allow.
 
 ```java
 Server server = NettyServerBuilder.forPort(8443)
