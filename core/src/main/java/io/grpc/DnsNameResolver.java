@@ -42,6 +42,7 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -161,7 +162,8 @@ class DnsNameResolver extends NameResolver {
             servers.add(
                 new ResolvedServerInfo(new InetSocketAddress(inetAddr, port), Attributes.EMPTY));
           }
-          savedListener.onUpdate(servers, Attributes.EMPTY);
+          savedListener.onUpdate(Arrays.asList(new EquivalentAddressGroup(servers)),
+              Attributes.EMPTY);
         } finally {
           synchronized (DnsNameResolver.this) {
             resolving = false;

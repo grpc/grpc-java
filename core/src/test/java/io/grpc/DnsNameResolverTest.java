@@ -102,7 +102,7 @@ public class DnsNameResolverTest {
   @Mock
   private NameResolver.Listener mockListener;
   @Captor
-  private ArgumentCaptor<List<ResolvedServerInfo>> resultCaptor;
+  private ArgumentCaptor<List<EquivalentAddressGroup>> resultCaptor;
   @Captor
   private ArgumentCaptor<Status> statusCaptor;
 
@@ -149,14 +149,14 @@ public class DnsNameResolverTest {
     assertEquals(1, fakeExecutor.runDueTasks());
     verify(mockListener).onUpdate(resultCaptor.capture(), any(Attributes.class));
     assertEquals(name, resolver.invocations.poll());
-    assertAnswerMatches(answer1, 81, resultCaptor.getValue());
+    assertAnswerMatches(answer1, 81, resultCaptor.getValue().get(0).getResolvedServerInfos());
     assertEquals(0, fakeClock.numPendingTasks());
 
     resolver.refresh();
     assertEquals(1, fakeExecutor.runDueTasks());
     verify(mockListener, times(2)).onUpdate(resultCaptor.capture(), any(Attributes.class));
     assertEquals(name, resolver.invocations.poll());
-    assertAnswerMatches(answer2, 81, resultCaptor.getValue());
+    assertAnswerMatches(answer2, 81, resultCaptor.getValue().get(0).getResolvedServerInfos());
     assertEquals(0, fakeClock.numPendingTasks());
 
     resolver.shutdown();
@@ -201,7 +201,7 @@ public class DnsNameResolverTest {
     assertEquals(1, fakeExecutor.runDueTasks());
     verify(mockListener).onUpdate(resultCaptor.capture(), any(Attributes.class));
     assertEquals(name, resolver.invocations.poll());
-    assertAnswerMatches(answer, 81, resultCaptor.getValue());
+    assertAnswerMatches(answer, 81, resultCaptor.getValue().get(0).getResolvedServerInfos());
 
     verifyNoMoreInteractions(mockListener);
   }
@@ -229,7 +229,7 @@ public class DnsNameResolverTest {
     assertEquals(0, fakeClock.numPendingTasks());
     verify(mockListener).onUpdate(resultCaptor.capture(), any(Attributes.class));
     assertEquals(name, resolver.invocations.poll());
-    assertAnswerMatches(answer, 81, resultCaptor.getValue());
+    assertAnswerMatches(answer, 81, resultCaptor.getValue().get(0).getResolvedServerInfos());
 
     verifyNoMoreInteractions(mockListener);
   }

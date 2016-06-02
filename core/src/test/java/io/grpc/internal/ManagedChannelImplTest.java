@@ -62,6 +62,7 @@ import io.grpc.ClientInterceptor;
 import io.grpc.Compressor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
@@ -412,7 +413,7 @@ public class ManagedChannelImplTest {
     assertEquals(1, loadBalancerFactory.balancers.size());
     LoadBalancer<?> loadBalancer = loadBalancerFactory.balancers.get(0);
     doThrow(ex).when(loadBalancer).handleResolvedAddresses(
-        Matchers.<List<ResolvedServerInfo>>anyObject(), any(Attributes.class));
+        Matchers.<List<EquivalentAddressGroup>>anyObject(), any(Attributes.class));
 
     // NameResolver returns addresses.
     nameResolverFactory.allResolved();
@@ -688,7 +689,11 @@ public class ManagedChannelImplTest {
       }
 
       void resolved() {
-        listener.onUpdate(servers, Attributes.EMPTY);
+        if (servers.isEmpty()) {
+          listener.onUpdate(Collections.<EquivalentAddressGroup>emptyList(), Attributes.EMPTY);
+        } else {
+          listener.onUpdate(Arrays.asList(new EquivalentAddressGroup(servers)), Attributes.EMPTY);
+        }
       }
 
       @Override public void shutdown() {

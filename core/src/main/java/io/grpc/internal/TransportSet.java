@@ -38,6 +38,7 @@ import com.google.common.base.Supplier;
 
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
+import io.grpc.ResolvedServerInfo;
 import io.grpc.Status;
 
 import java.net.SocketAddress;
@@ -189,21 +190,21 @@ final class TransportSet implements WithLogId {
     if (nextAddressIndex == 0) {
       connectingTimer.reset().start();
     }
-    List<SocketAddress> addrs = addressGroup.getAddresses();
-    final SocketAddress address = addrs.get(nextAddressIndex++);
+    List<ResolvedServerInfo> addrs = addressGroup.getResolvedServerInfos();
+    final ResolvedServerInfo serverInfo = addrs.get(nextAddressIndex++);
     if (nextAddressIndex >= addrs.size()) {
       nextAddressIndex = 0;
     }
 
     ManagedClientTransport transport =
-        transportFactory.newClientTransport(address, authority, userAgent);
+        transportFactory.newClientTransport(serverInfo.getAddress(), authority, userAgent);
     if (log.isLoggable(Level.FINE)) {
       log.log(Level.FINE, "[{0}] Created {1} for {2}",
-          new Object[] {getLogId(), transport.getLogId(), address});
+          new Object[] {getLogId(), transport.getLogId(), serverInfo});
     }
     pendingTransport = transport;
     transports.add(transport);
-    transport.start(new TransportListener(transport, delayedTransport, address));
+    transport.start(new TransportListener(transport, delayedTransport, serverInfo.getAddress()));
   }
 
   /**

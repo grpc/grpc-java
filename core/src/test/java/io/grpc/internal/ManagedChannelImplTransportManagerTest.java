@@ -54,6 +54,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
+import io.grpc.ResolvedServerInfo;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.TransportManager.InterimTransport;
@@ -149,7 +150,8 @@ public class ManagedChannelImplTransportManagerTest {
   @Test
   public void createAndReuseTransport() throws Exception {
     SocketAddress addr = mock(SocketAddress.class);
-    EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(addr);
+    EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(
+        new ResolvedServerInfo(addr, Attributes.EMPTY));
     ClientTransport t1 = tm.getTransport(addressGroup);
     verify(mockTransportFactory, timeout(1000)).newClientTransport(addr, authority, userAgent);
     // The real transport
@@ -168,7 +170,9 @@ public class ManagedChannelImplTransportManagerTest {
   public void reconnect() throws Exception {
     SocketAddress addr1 = mock(SocketAddress.class);
     SocketAddress addr2 = mock(SocketAddress.class);
-    EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(Arrays.asList(addr1, addr2));
+    EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(Arrays.asList(
+        new ResolvedServerInfo(addr1, Attributes.EMPTY),
+        new ResolvedServerInfo(addr2, Attributes.EMPTY)));
 
     // Invocation counters
     int backoffReset = 0;
@@ -225,7 +229,9 @@ public class ManagedChannelImplTransportManagerTest {
   public void reconnectWithBackoff() throws Exception {
     SocketAddress addr1 = mock(SocketAddress.class);
     SocketAddress addr2 = mock(SocketAddress.class);
-    EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(Arrays.asList(addr1, addr2));
+    EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(Arrays.asList(
+        new ResolvedServerInfo(addr1, Attributes.EMPTY),
+        new ResolvedServerInfo(addr2, Attributes.EMPTY)));
 
     // Invocation counters
     int transportsAddr1 = 0;

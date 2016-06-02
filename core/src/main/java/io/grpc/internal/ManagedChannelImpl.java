@@ -50,7 +50,6 @@ import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
-import io.grpc.ResolvedServerInfo;
 import io.grpc.Status;
 import io.grpc.TransportManager;
 import io.grpc.TransportManager.InterimTransport;
@@ -168,7 +167,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
     this.nameResolver.start(new NameResolver.Listener() {
       @Override
-      public void onUpdate(List<ResolvedServerInfo> servers, Attributes config) {
+      public void onUpdate(List<EquivalentAddressGroup> servers, Attributes config) {
         if (servers.isEmpty()) {
           onError(Status.UNAVAILABLE.withDescription("NameResolver returned an empty list"));
         } else {
