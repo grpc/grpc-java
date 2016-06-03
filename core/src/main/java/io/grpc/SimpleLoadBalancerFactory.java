@@ -35,15 +35,14 @@ import com.google.common.base.Supplier;
 
 import io.grpc.TransportManager.InterimTransport;
 
-import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 
 import javax.annotation.concurrent.GuardedBy;
 
 /**
- * A {@link LoadBalancer} that provides simple round-robin and pick-first routing mechanism over the
- * addresses from the {@link NameResolver}.
+ * A {@link LoadBalancer} that provides pick-first routing mechanism over the
+ * {@link EquivalentAddressGroup}s from the {@link NameResolver}.
  */
 // TODO(zhangkun83): Only pick-first is implemented. We need to implement round-robin.
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
@@ -107,19 +106,22 @@ public final class SimpleLoadBalancerFactory extends LoadBalancer.Factory {
 
     @Override
     public void handleResolvedAddresses(
-        List<ResolvedServerInfo> updatedServers, Attributes config) {
+        List<EquivalentAddressGroup> updatedServers, Attributes config) {
       InterimTransport<T> savedInterimTransport;
       final EquivalentAddressGroup newAddresses;
       synchronized (lock) {
         if (closed) {
           return;
         }
-        ArrayList<SocketAddress> newAddressList =
-            new ArrayList<SocketAddress>(updatedServers.size());
-        for (ResolvedServerInfo server : updatedServers) {
-          newAddressList.add(server.getAddress());
+        if (updatedServers.size() == 1) {
+          newAddresses = updatedServers.get(0);
+        } else {
+          final List<ResolvedServerInfo> serverInfos = new ArrayList<ResolvedServerInfo>();
+          for (final EquivalentAddressGroup group : updatedServers) {
+            serverInfos.addAll(group.getResolvedServerInfos());
+          }
+          newAddresses = new EquivalentAddressGroup(serverInfos);
         }
-        newAddresses = new EquivalentAddressGroup(newAddressList);
         if (newAddresses.equals(addresses)) {
           return;
         }

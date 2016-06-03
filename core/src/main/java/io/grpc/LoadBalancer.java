@@ -36,8 +36,8 @@ import java.util.List;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * A pluggable component that receives resolved addresses from {@link NameResolver} and provides the
- * channel a usable transport when asked.
+ * A pluggable component that receives {@link EquivalentAddressGroup}s from {@link NameResolver}
+ * and provides the channel a usable transport when asked.
  *
  * <p>Note to implementations: all methods are expected to return quickly. Any work that may block
  * should be done asynchronously.
@@ -66,14 +66,14 @@ public abstract class LoadBalancer<T> {
   public void shutdown() { }
 
   /**
-   * Handles newly resolved addresses and service config from name resolution system.
+   * Handles {@link EquivalentAddressGroup}s and service config from name resolution system.
    *
    * <p>Implementations should not modify the given {@code servers}.
    *
-   * @param servers the resolved server addresses. Never empty.
+   * @param servers the {@link EquivalentAddressGroup}s newly resolved. Never empty.
    * @param config extra configuration data from naming system.
    */
-  public void handleResolvedAddresses(List<ResolvedServerInfo> servers, Attributes config) { }
+  public void handleResolvedAddresses(List<EquivalentAddressGroup> servers, Attributes config) { }
 
   /**
    * Handles an error from the name resolution system.

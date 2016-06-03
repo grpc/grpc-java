@@ -33,36 +33,36 @@ package io.grpc;
 
 import com.google.common.base.Preconditions;
 
-import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * A group of {@link SocketAddress}es that are considered equivalent when channel makes connections.
+ * A group of {@link ResolvedServerInfo}s that are considered equivalent when channel
+ * makes connections.
  *
- * <p>Usually the addresses are addresses resolved from the same host name, and connecting to any of
- * them is equally sufficient. They do have order. An address appears earlier on the list is likely
- * to be tried earlier.
+ * <p>Usually the ResolvedServerInfos in the EquivalentAddressGroup are resolved from the same host
+ * name, and connecting to any of them is equally sufficient. They do have order. An address that
+ * appears earlier on the list is likely to be tried earlier.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
 public final class EquivalentAddressGroup {
 
-  private final List<SocketAddress> addrs;
+  private final List<ResolvedServerInfo> addrs;
 
-  public EquivalentAddressGroup(List<SocketAddress> addrs) {
+  public EquivalentAddressGroup(List<ResolvedServerInfo> addrs) {
     Preconditions.checkArgument(!addrs.isEmpty(), "addrs is empty");
-    this.addrs = Collections.unmodifiableList(new ArrayList<SocketAddress>(addrs));
+    this.addrs = Collections.unmodifiableList(new ArrayList<ResolvedServerInfo>(addrs));
   }
 
-  public EquivalentAddressGroup(SocketAddress addr) {
+  public EquivalentAddressGroup(ResolvedServerInfo addr) {
     this.addrs = Collections.singletonList(addr);
   }
 
   /**
-   * Returns an immutable list of the addresses.
+   * Returns an immutable list of the {@link ResolvedServerInfo}s.
    */
-  public List<SocketAddress> getAddresses() {
+  public List<ResolvedServerInfo> getResolvedServerInfos() {
     return addrs;
   }
 

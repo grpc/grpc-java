@@ -38,7 +38,7 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * A pluggable component that resolves a target {@link URI} and return addresses to the caller.
+ * A pluggable component that resolves a target {@link URI} and returns addresses to the caller.
  *
  * <p>A {@code NameResolver} uses the URI's scheme to determine whether it can resolve it, and uses
  * the components after the scheme for actual resolution.
@@ -116,14 +116,15 @@ public abstract class NameResolver {
   @ThreadSafe
   public interface Listener {
     /**
-     * Handles updates on resolved addresses and config.
+     * Handles updates on resolved {@link EquivalentAddressGroup}s and config.
      *
      * <p>Implementations will not modify the given {@code servers}.
      *
-     * @param servers the resolved server addresses. An empty list will trigger {@link #onError}
+     * @param servers the resolved {@link EquivalentAddressGroup}s.
+     *                An empty list will trigger {@link #onError}
      * @param config extra configuration data from naming system
      */
-    void onUpdate(List<ResolvedServerInfo> servers, Attributes config);
+    void onUpdate(List<EquivalentAddressGroup> servers, Attributes config);
 
     /**
      * Handles an error from the resolver.

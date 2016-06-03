@@ -41,6 +41,7 @@ import io.grpc.Attributes;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
@@ -53,7 +54,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
 
@@ -279,7 +279,8 @@ public abstract class AbstractManagedChannelImplBuilder
         @Override
         public void start(final Listener listener) {
           listener.onUpdate(
-              Collections.singletonList(new ResolvedServerInfo(address, Attributes.EMPTY)),
+              Arrays.asList(new EquivalentAddressGroup(
+                  new ResolvedServerInfo(address, Attributes.EMPTY))),
               Attributes.EMPTY);
         }
 

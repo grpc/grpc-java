@@ -55,6 +55,7 @@ import org.mockito.MockitoAnnotations;
 
 import java.net.SocketAddress;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 /** Unit test for {@link SimpleLoadBalancerFactory}. */
 @RunWith(JUnit4.class)
@@ -76,13 +77,11 @@ public class SimpleLoadBalancerTest {
     loadBalancer = SimpleLoadBalancerFactory.getInstance().newLoadBalancer(
         "fakeservice", mockTransportManager);
     servers = new ArrayList<ResolvedServerInfo>();
-    ArrayList<SocketAddress> addresses = new ArrayList<SocketAddress>();
     for (int i = 0; i < 3; i++) {
       SocketAddress addr = new FakeSocketAddress("server" + i);
       servers.add(new ResolvedServerInfo(addr, Attributes.EMPTY));
-      addresses.add(addr);
     }
-    addressGroup = new EquivalentAddressGroup(addresses);
+    addressGroup = new EquivalentAddressGroup(servers);
     when(mockTransportManager.getTransport(eq(addressGroup))).thenReturn(mockTransport);
     when(mockTransportManager.createInterimTransport()).thenReturn(mockInterimTransport);
     when(mockInterimTransport.transport()).thenReturn(mockInterimTransportAsTransport);
@@ -98,7 +97,8 @@ public class SimpleLoadBalancerTest {
     verify(mockTransportManager, never()).getTransport(any(EquivalentAddressGroup.class));
     verify(mockInterimTransport, times(2)).transport();
 
-    loadBalancer.handleResolvedAddresses(servers, Attributes.EMPTY);
+    loadBalancer.handleResolvedAddresses(Arrays.asList(
+        new EquivalentAddressGroup(servers)), Attributes.EMPTY);
     verify(mockInterimTransport).closeWithRealTransports(transportSupplierCaptor.capture());
     for (int i = 0; i < 2; i++) {
       assertSame(mockTransport, transportSupplierCaptor.getValue().get());
@@ -110,7 +110,8 @@ public class SimpleLoadBalancerTest {
 
   @Test
   public void pickAfterResolved() throws Exception {
-    loadBalancer.handleResolvedAddresses(servers, Attributes.EMPTY);
+    loadBalancer.handleResolvedAddresses(Arrays.asList(
+        new EquivalentAddressGroup(servers)), Attributes.EMPTY);
     Transport t = loadBalancer.pickTransport(null);
     assertSame(mockTransport, t);
     verify(mockTransportManager).getTransport(addressGroup);

@@ -48,11 +48,13 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.base.Stopwatch;
 
+import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.ResolvedServerInfo;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
@@ -66,7 +68,8 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.net.SocketAddress;
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
 
 /**
@@ -533,7 +536,11 @@ public class TransportSetTest {
   }
 
   private void createTransportSet(SocketAddress ... addrs) {
-    addressGroup = new EquivalentAddressGroup(Arrays.asList(addrs));
+    final List<ResolvedServerInfo> serverInfos = new ArrayList<ResolvedServerInfo>(addrs.length);
+    for (final SocketAddress addr : addrs) {
+      serverInfos.add(new ResolvedServerInfo(addr, Attributes.EMPTY));
+    }
+    addressGroup = new EquivalentAddressGroup(serverInfos);
     transportSet = new TransportSet(addressGroup, authority, userAgent, mockLoadBalancer,
         mockBackoffPolicyProvider, mockTransportFactory, fakeClock.scheduledExecutorService,
         fakeExecutor.scheduledExecutorService, mockTransportSetCallback,
