@@ -66,6 +66,7 @@ public class CallOptionsTest {
       .withDeadline(sampleDeadline)
       .withAffinity(sampleAffinity)
       .withCredentials(sampleCreds);
+      .withWaitForReady(true);
   private CallOptions.Key<String> option1 = CallOptions.Key.of("option1", "default");
   private CallOptions.Key<String> option2 = CallOptions.Key.of("option2", "default");
 
@@ -79,11 +80,17 @@ public class CallOptionsTest {
   }
 
   @Test
+  public void defaultOptionsIsFailFast() {
+    assertThat(CallOptions.DEFAULT.isFailFast()).isTrue();
+  }
+
+  @Test
   public void allWiths() {
     assertThat(allSet.getAuthority()).isSameAs(sampleAuthority);
     assertThat(allSet.getDeadline()).isSameAs(sampleDeadline);
     assertThat(allSet.getAffinity()).isSameAs(sampleAffinity);
     assertThat(allSet.getCredentials()).isSameAs(sampleCreds);
+    assertThat(allSet.isFailFast()).isFalse();
   }
 
   @Test
@@ -141,7 +148,7 @@ public class CallOptionsTest {
     String expected = "CallOptions{deadline=null, authority=authority, callCredentials=null, "
         + "affinity={sample=blah}, "
         + "executor=class io.grpc.internal.SerializingExecutor, compressorName=null, "
-        + "customOptions=[]}";
+        + "customOptions=[], isFailFast=true}";
     String actual = allSet
         .withDeadline(null)
         .withExecutor(new SerializingExecutor(directExecutor()))
@@ -153,8 +160,8 @@ public class CallOptionsTest {
 
   @Test
   public void toStringMatches_noDeadline() {
-    assertThat("CallOptions{deadline=null, authority=null, callCredentials=null, "
-        + "affinity={}, executor=null, compressorName=null, customOptions=[]}")
+    assertThat("CallOptions{deadline=null, authority=null, "
+        + "affinity={}, executor=null, compressorName=null, customOptions=[], isFailFast=true}")
             .isEqualTo(CallOptions.DEFAULT.toString());
   }
 

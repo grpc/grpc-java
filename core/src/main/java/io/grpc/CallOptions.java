@@ -73,6 +73,11 @@ public final class CallOptions {
   private Object[][] customOptions = new Object[0][2];
 
   /**
+   * Opposite to fail fast.
+   */
+  private boolean waitForReady;
+
+  /**
    * Override the HTTP/2 authority the channel claims to be connecting to. <em>This is not
    * generally safe.</em> Overriding allows advanced users to re-use a single Channel for multiple
    * services, even if those services are hosted on different domain names. That assumes the
@@ -179,6 +184,18 @@ public final class CallOptions {
   public CallOptions withAffinity(Attributes affinity) {
     CallOptions newOptions = new CallOptions(this);
     newOptions.affinity = Preconditions.checkNotNull(affinity);
+    return newOptions;
+  }
+
+  /**
+   * Sets whether the call is not
+   * <a href="https://github.com/grpc/grpc/blob/master/doc/fail_fast.md">fail fast</a>.
+   * 'Fail fast' is the default option for gRPC calls and 'Wait for ready' is the opposite to it.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1915")
+  public CallOptions withWaitForReady(boolean waitForReady) {
+    CallOptions newOptions = new CallOptions(this);
+    newOptions.waitForReady = waitForReady;
     return newOptions;
   }
 
@@ -311,6 +328,15 @@ public final class CallOptions {
   }
 
   /**
+   * Returns whether the call is
+   * <a href="https://github.com/grpc/grpc/blob/master/doc/fail_fast.md">fail fast</a>.
+   * Fail fast is the default option for gRPC calls.
+   */
+  public boolean isFailFast() {
+    return !waitForReady;
+  }
+
+  /**
    * Copy constructor.
    */
   private CallOptions(CallOptions other) {
@@ -333,6 +359,7 @@ public final class CallOptions {
     toStringHelper.add("executor", executor != null ? executor.getClass() : null);
     toStringHelper.add("compressorName", compressorName);
     toStringHelper.add("customOptions", Arrays.toString(customOptions));
+    toStringHelper.add("isFailFast", isFailFast());
 
     return toStringHelper.toString();
   }
