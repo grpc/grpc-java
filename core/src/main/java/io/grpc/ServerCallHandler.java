@@ -39,7 +39,7 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/933")
 @ThreadSafe
-public interface ServerCallHandler<RequestT, ResponseT> {
+public interface ServerCallHandler {
   /**
    * Produce a non-{@code null} listener for the incoming call. Implementations are free to call
    * methods on {@code call} before this method has returned.
@@ -52,7 +52,7 @@ public interface ServerCallHandler<RequestT, ResponseT> {
    * @param call object for responding to the remote client.
    * @return listener for processing incoming request messages for {@code call}
    */
-  ServerCall.Listener<RequestT> startCall(
+  <RequestT, ResponseT> ServerCall.Listener<RequestT> startCall(
       MethodDescriptor<RequestT, ResponseT> method,
       ServerCall<ResponseT> call,
       Metadata headers);

@@ -119,7 +119,8 @@ public abstract class AbstractTransportTest {
   private ManagedClientTransport client;
   private MethodDescriptor<String, String> methodDescriptor = MethodDescriptor.create(
       MethodDescriptor.MethodType.UNKNOWN, "service/method", StringMarshaller.INSTANCE,
-      StringMarshaller.INSTANCE);
+      StringMarshaller.INSTANCE,
+      0);
   private Metadata.Key<String> asciiKey = Metadata.Key.of(
       "ascii-key", Metadata.ASCII_STRING_MARSHALLER);
   private Metadata.Key<String> binaryKey = Metadata.Key.of(

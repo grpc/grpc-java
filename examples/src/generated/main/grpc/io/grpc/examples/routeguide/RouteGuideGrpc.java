@@ -15,6 +15,16 @@ import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
 import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
 
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
+import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
+import io.grpc.ServerServiceDefinition;
+import io.grpc.ServiceDescriptor;
+
+import java.util.ArrayList;
+import java.util.Collections;
+
 /**
  * <pre>
  * Interface exported by the server.
@@ -29,6 +39,11 @@ public class RouteGuideGrpc {
 
   public static final String SERVICE_NAME = "routeguide.RouteGuide";
 
+  private static final int METHODID_GET_FEATURE = 0;
+  private static final int METHODID_LIST_FEATURES = 1;
+  private static final int METHODID_RECORD_ROUTE = 2;
+  private static final int METHODID_ROUTE_CHAT = 3;
+
   // Static method descriptors that strictly reflect the proto.
   @io.grpc.ExperimentalApi
   public static final io.grpc.MethodDescriptor<io.grpc.examples.routeguide.Point,
@@ -38,7 +53,8 @@ public class RouteGuideGrpc {
           generateFullMethodName(
               "routeguide.RouteGuide", "GetFeature"),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.Point.getDefaultInstance()),
-          io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.Feature.getDefaultInstance()));
+          io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.Feature.getDefaultInstance()),
+          METHODID_GET_FEATURE);
   @io.grpc.ExperimentalApi
   public static final io.grpc.MethodDescriptor<io.grpc.examples.routeguide.Rectangle,
       io.grpc.examples.routeguide.Feature> METHOD_LIST_FEATURES =
@@ -47,7 +63,8 @@ public class RouteGuideGrpc {
           generateFullMethodName(
               "routeguide.RouteGuide", "ListFeatures"),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.Rectangle.getDefaultInstance()),
-          io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.Feature.getDefaultInstance()));
+          io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.Feature.getDefaultInstance()),
+          METHODID_LIST_FEATURES);
   @io.grpc.ExperimentalApi
   public static final io.grpc.MethodDescriptor<io.grpc.examples.routeguide.Point,
       io.grpc.examples.routeguide.RouteSummary> METHOD_RECORD_ROUTE =
@@ -56,7 +73,8 @@ public class RouteGuideGrpc {
           generateFullMethodName(
               "routeguide.RouteGuide", "RecordRoute"),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.Point.getDefaultInstance()),
-          io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.RouteSummary.getDefaultInstance()));
+          io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.RouteSummary.getDefaultInstance()),
+          METHODID_RECORD_ROUTE);
   @io.grpc.ExperimentalApi
   public static final io.grpc.MethodDescriptor<io.grpc.examples.routeguide.RouteNote,
       io.grpc.examples.routeguide.RouteNote> METHOD_ROUTE_CHAT =
@@ -65,7 +83,9 @@ public class RouteGuideGrpc {
           generateFullMethodName(
               "routeguide.RouteGuide", "RouteChat"),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.RouteNote.getDefaultInstance()),
-          io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.RouteNote.getDefaultInstance()));
+          io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.RouteNote.getDefaultInstance()),
+          METHODID_ROUTE_CHAT);
+
 
   /**
    * Creates a new async stub that supports all call types for the service
@@ -324,28 +344,24 @@ public class RouteGuideGrpc {
     }
   }
 
-  private static final int METHODID_GET_FEATURE = 0;
-  private static final int METHODID_LIST_FEATURES = 1;
-  private static final int METHODID_RECORD_ROUTE = 2;
-  private static final int METHODID_ROUTE_CHAT = 3;
-
-  private static class MethodHandlers<Req, Resp> implements
-      io.grpc.stub.ServerCalls.UnaryMethod<Req, Resp>,
-      io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
-      io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
-      io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
+  private static class MethodHandlers implements
+      io.grpc.ServerCallHandler,
+      io.grpc.stub.ServerCalls.UnaryMethod,
+      io.grpc.stub.ServerCalls.ServerStreamingMethod,
+      io.grpc.stub.ServerCalls.ClientStreamingMethod,
+      io.grpc.stub.ServerCalls.BidiStreamingMethod {
     private final RouteGuide serviceImpl;
-    private final int methodId;
 
-    public MethodHandlers(RouteGuide serviceImpl, int methodId) {
+    public MethodHandlers(RouteGuide serviceImpl) {
       this.serviceImpl = serviceImpl;
-      this.methodId = methodId;
+
     }
 
     @java.lang.Override
     @java.lang.SuppressWarnings("unchecked")
-    public void invoke(Req request, io.grpc.stub.StreamObserver<Resp> responseObserver) {
-      switch (methodId) {
+    public void invoke(MethodDescriptor methodDescriptor,
+        Object request, io.grpc.stub.StreamObserver responseObserver) {
+      switch (methodDescriptor.getServiceIndex()) {
         case METHODID_GET_FEATURE:
           serviceImpl.getFeature((io.grpc.examples.routeguide.Point) request,
               (io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.Feature>) responseObserver);
@@ -361,52 +377,48 @@ public class RouteGuideGrpc {
 
     @java.lang.Override
     @java.lang.SuppressWarnings("unchecked")
-    public io.grpc.stub.StreamObserver<Req> invoke(
-        io.grpc.stub.StreamObserver<Resp> responseObserver) {
-      switch (methodId) {
+    public io.grpc.stub.StreamObserver invoke(
+        MethodDescriptor methodDescriptor,
+        io.grpc.stub.StreamObserver responseObserver) {
+      switch (methodDescriptor.getServiceIndex()) {
         case METHODID_RECORD_ROUTE:
-          return (io.grpc.stub.StreamObserver<Req>) serviceImpl.recordRoute(
+          return (io.grpc.stub.StreamObserver) serviceImpl.recordRoute(
               (io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.RouteSummary>) responseObserver);
         case METHODID_ROUTE_CHAT:
-          return (io.grpc.stub.StreamObserver<Req>) serviceImpl.routeChat(
+          return (io.grpc.stub.StreamObserver) serviceImpl.routeChat(
               (io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.RouteNote>) responseObserver);
         default:
           throw new AssertionError();
       }
     }
+
+    @Override
+    public Listener startCall(MethodDescriptor method, ServerCall call, Metadata headers) {
+      switch (method.getServiceIndex()) {
+        case METHODID_GET_FEATURE:
+          return asyncUnaryCall(this, method, call, headers);
+        case METHODID_LIST_FEATURES:
+          return asyncServerStreamingCall(this, method, call, headers);
+        case METHODID_RECORD_ROUTE:
+          return asyncClientStreamingCall(this, method, call, headers);
+        case METHODID_ROUTE_CHAT:
+          return asyncBidiStreamingCall(this, method, call, headers);
+        default: throw new AssertionError();
+      }
+    }
   }
 
-  public static io.grpc.ServerServiceDefinition bindService(
-      final RouteGuide serviceImpl) {
-    return io.grpc.ServerServiceDefinition.builder(SERVICE_NAME)
-        .addMethod(
-          METHOD_GET_FEATURE,
-          asyncUnaryCall(
-            new MethodHandlers<
-              io.grpc.examples.routeguide.Point,
-              io.grpc.examples.routeguide.Feature>(
-                serviceImpl, METHODID_GET_FEATURE)))
-        .addMethod(
-          METHOD_LIST_FEATURES,
-          asyncServerStreamingCall(
-            new MethodHandlers<
-              io.grpc.examples.routeguide.Rectangle,
-              io.grpc.examples.routeguide.Feature>(
-                serviceImpl, METHODID_LIST_FEATURES)))
-        .addMethod(
-          METHOD_RECORD_ROUTE,
-          asyncClientStreamingCall(
-            new MethodHandlers<
-              io.grpc.examples.routeguide.Point,
-              io.grpc.examples.routeguide.RouteSummary>(
-                serviceImpl, METHODID_RECORD_ROUTE)))
-        .addMethod(
-          METHOD_ROUTE_CHAT,
-          asyncBidiStreamingCall(
-            new MethodHandlers<
-              io.grpc.examples.routeguide.RouteNote,
-              io.grpc.examples.routeguide.RouteNote>(
-                serviceImpl, METHODID_ROUTE_CHAT)))
-        .build();
+  public static io.grpc.ServiceDescriptor getDescriptor() {
+    ArrayList<MethodDescriptor> tmpList = new ArrayList<MethodDescriptor>();
+    tmpList.add(METHOD_GET_FEATURE);
+    tmpList.add(METHOD_LIST_FEATURES);
+    tmpList.add(METHOD_RECORD_ROUTE);
+    tmpList.add(METHOD_ROUTE_CHAT);
+    return new ServiceDescriptor(SERVICE_NAME, Collections.unmodifiableList(tmpList));
+  }
+
+
+  public static io.grpc.ServerServiceDefinition bindService(final RouteGuide serviceImpl) {
+    return new ServerServiceDefinition(getDescriptor(),  new MethodHandlers(serviceImpl));
   }
 }

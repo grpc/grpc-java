@@ -15,6 +15,8 @@ import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
 import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
 
+import io.grpc.MethodDescriptor;
+
 /**
  */
 @javax.annotation.Generated(
@@ -35,7 +37,8 @@ public class LoadBalancerGrpc {
           generateFullMethodName(
               "grpc.lb.v1.LoadBalancer", "BalanceLoad"),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.grpclb.LoadBalanceRequest.getDefaultInstance()),
-          io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.grpclb.LoadBalanceResponse.getDefaultInstance()));
+          io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.grpclb.LoadBalanceResponse.getDefaultInstance()),
+          0);
 
   /**
    * Creates a new async stub that supports all call types for the service
@@ -175,7 +178,7 @@ public class LoadBalancerGrpc {
 
     @java.lang.Override
     @java.lang.SuppressWarnings("unchecked")
-    public void invoke(Req request, io.grpc.stub.StreamObserver<Resp> responseObserver) {
+    public void invoke(MethodDescriptor<Req, Resp> methodDe Req request, io.grpc.stub.StreamObserver<Resp> responseObserver) {
       switch (methodId) {
         default:
           throw new AssertionError();

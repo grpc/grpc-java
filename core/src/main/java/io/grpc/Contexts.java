@@ -64,7 +64,7 @@ public class Contexts {
         MethodDescriptor<ReqT, RespT> method,
         ServerCall<RespT> call,
         Metadata headers,
-        ServerCallHandler<ReqT, RespT> next) {
+        ServerCallHandler next) {
     Context previous = context.attach();
     try {
       return new ContextualizedServerCallListener<ReqT>(

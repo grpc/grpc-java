@@ -34,7 +34,6 @@ package io.grpc.util;
 import io.grpc.ExperimentalApi;
 import io.grpc.HandlerRegistry;
 import io.grpc.MethodDescriptor;
-import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 
 import java.util.concurrent.ConcurrentHashMap;
@@ -57,11 +56,11 @@ public final class MutableHandlerRegistry extends HandlerRegistry {
 
   @Nullable
   public ServerServiceDefinition addService(ServerServiceDefinition service) {
-    return services.put(service.getName(), service);
+    return services.put(service.getDescriptor().getName(), service);
   }
 
   public boolean removeService(ServerServiceDefinition service) {
-    return services.remove(service.getName(), service);
+    return services.remove(service.getDescriptor().getName(), service);
   }
 
   /**
@@ -69,7 +68,7 @@ public final class MutableHandlerRegistry extends HandlerRegistry {
    */
   @Override
   @Nullable
-  public ServerMethodDefinition<?, ?> lookupMethod(String methodName, @Nullable String authority) {
+  public RegisteredMethod lookupMethod(String methodName, @Nullable String authority) {
     String serviceName = MethodDescriptor.extractFullServiceName(methodName);
     if (serviceName == null) {
       return null;
@@ -78,6 +77,8 @@ public final class MutableHandlerRegistry extends HandlerRegistry {
     if (service == null) {
       return null;
     }
-    return service.getMethod(methodName);
+    return new RegisteredMethod(
+        service.getDescriptor().getMethod(methodName),
+        service.getCallHandler());
   }
 }

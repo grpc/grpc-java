@@ -38,13 +38,17 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.times;
 
+import com.google.common.collect.ImmutableList;
+
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerServiceDefinition;
+import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
@@ -64,6 +68,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Method;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -80,12 +85,16 @@ public class ServerCallsTest {
   static final MethodDescriptor<Integer, Integer> STREAMING_METHOD = MethodDescriptor.create(
       MethodDescriptor.MethodType.BIDI_STREAMING,
       "some/method",
-      new IntegerMarshaller(), new IntegerMarshaller());
+      new IntegerMarshaller(),
+      new IntegerMarshaller(),
+      0);
 
   static final MethodDescriptor<Integer, Integer> UNARY_METHOD = MethodDescriptor.create(
       MethodDescriptor.MethodType.UNARY,
       "some/unarymethod",
-      new IntegerMarshaller(), new IntegerMarshaller());
+      new IntegerMarshaller(),
+      new IntegerMarshaller(),
+      1);
 
   @Mock
   ServerCall<Integer> serverCall;
@@ -102,11 +111,13 @@ public class ServerCallsTest {
     final AtomicBoolean onReadyCalled = new AtomicBoolean();
     final AtomicReference<ServerCallStreamObserver<Integer>> callObserver =
         new AtomicReference<ServerCallStreamObserver<Integer>>();
-    ServerCallHandler<Integer, Integer> callHandler =
+    ServerCall.Listener<Integer> callListener =
         ServerCalls.asyncBidiStreamingCall(
             new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
               @Override
-              public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
+              public StreamObserver<Integer> invoke(
+                  MethodDescriptor<Integer, Integer> methodDescriptor,
+                  StreamObserver<Integer> responseObserver) {
                 assertTrue(responseObserver instanceof ServerCallStreamObserver);
                 ServerCallStreamObserver<Integer> serverCallObserver =
                     (ServerCallStreamObserver<Integer>) responseObserver;
@@ -126,9 +137,7 @@ public class ServerCallsTest {
                 invokeCalled.set(true);
                 return new ServerCalls.NoopStreamObserver<Integer>();
               }
-            });
-    ServerCall.Listener<Integer> callListener =
-        callHandler.startCall(STREAMING_METHOD, serverCall, new Metadata());
+            }, STREAMING_METHOD, serverCall, new Metadata());
     Mockito.when(serverCall.isReady()).thenReturn(true).thenReturn(false);
     Mockito.when(serverCall.isCancelled()).thenReturn(false).thenReturn(true);
     assertTrue(callObserver.get().isReady());
@@ -150,17 +159,17 @@ public class ServerCallsTest {
   public void cannotSetOnCancelHandlerAfterServiceInvocation() throws Exception {
     final AtomicReference<ServerCallStreamObserver<Integer>> callObserver =
         new AtomicReference<ServerCallStreamObserver<Integer>>();
-    ServerCallHandler<Integer, Integer> callHandler =
+    ServerCall.Listener<Integer> callListener =
         ServerCalls.asyncBidiStreamingCall(
             new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
               @Override
-              public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
+              public StreamObserver<Integer> invoke(
+                  MethodDescriptor<Integer, Integer> methodDescriptor,
+                  StreamObserver<Integer> responseObserver) {
                 callObserver.set((ServerCallStreamObserver<Integer>) responseObserver);
                 return new ServerCalls.NoopStreamObserver<Integer>();
               }
-            });
-    ServerCall.Listener<Integer> callListener =
-        callHandler.startCall(STREAMING_METHOD, serverCall, new Metadata());
+            }, STREAMING_METHOD, serverCall, new Metadata());
     callListener.onMessage(1);
     try {
       callObserver.get().setOnCancelHandler(new Runnable() {
@@ -178,17 +187,17 @@ public class ServerCallsTest {
   public void cannotSetOnReadyHandlerAfterServiceInvocation() throws Exception {
     final AtomicReference<ServerCallStreamObserver<Integer>> callObserver =
         new AtomicReference<ServerCallStreamObserver<Integer>>();
-    ServerCallHandler<Integer, Integer> callHandler =
+    ServerCall.Listener<Integer> callListener =
         ServerCalls.asyncBidiStreamingCall(
             new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
               @Override
-              public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
+              public StreamObserver<Integer> invoke(
+                  MethodDescriptor<Integer, Integer> methodDescriptor,
+                  StreamObserver<Integer> responseObserver) {
                 callObserver.set((ServerCallStreamObserver<Integer>) responseObserver);
                 return new ServerCalls.NoopStreamObserver<Integer>();
               }
-            });
-    ServerCall.Listener<Integer> callListener =
-        callHandler.startCall(STREAMING_METHOD, serverCall, new Metadata());
+            }, STREAMING_METHOD, serverCall, new Metadata());
     callListener.onMessage(1);
     try {
       callObserver.get().setOnReadyHandler(new Runnable() {
@@ -206,17 +215,17 @@ public class ServerCallsTest {
   public void cannotDisableAutoFlowControlAfterServiceInvocation() throws Exception {
     final AtomicReference<ServerCallStreamObserver<Integer>> callObserver =
         new AtomicReference<ServerCallStreamObserver<Integer>>();
-    ServerCallHandler<Integer, Integer> callHandler =
+    ServerCall.Listener<Integer> callListener =
         ServerCalls.asyncBidiStreamingCall(
             new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
               @Override
-              public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
+              public StreamObserver<Integer> invoke(
+                  MethodDescriptor<Integer, Integer> methodDescriptor,
+                  StreamObserver<Integer> responseObserver) {
                 callObserver.set((ServerCallStreamObserver<Integer>) responseObserver);
                 return new ServerCalls.NoopStreamObserver<Integer>();
               }
-            });
-    ServerCall.Listener<Integer> callListener =
-        callHandler.startCall(STREAMING_METHOD, serverCall, new Metadata());
+            }, STREAMING_METHOD, serverCall, new Metadata());
     callListener.onMessage(1);
     try {
       callObserver.get().disableAutoInboundFlowControl();
@@ -228,19 +237,19 @@ public class ServerCallsTest {
 
   @Test
   public void disablingInboundAutoFlowControlSuppressesRequestsForMoreMessages() throws Exception {
-    ServerCallHandler<Integer, Integer> callHandler =
+    ServerCall.Listener<Integer> callListener =
         ServerCalls.asyncBidiStreamingCall(
             new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
               @Override
-              public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
+              public StreamObserver<Integer> invoke(
+                  MethodDescriptor<Integer, Integer> methodDescriptor,
+                  StreamObserver<Integer> responseObserver) {
                 ServerCallStreamObserver<Integer> serverCallObserver =
                     (ServerCallStreamObserver<Integer>) responseObserver;
                 serverCallObserver.disableAutoInboundFlowControl();
                 return new ServerCalls.NoopStreamObserver<Integer>();
               }
-            });
-    ServerCall.Listener<Integer> callListener =
-        callHandler.startCall(STREAMING_METHOD, serverCall, new Metadata());
+            }, STREAMING_METHOD, serverCall, new Metadata());
     callListener.onReady();
     // Transport should not call this if nothing has been requested but forcing it here
     // to verify that message delivery does not trigger a call to request(1).
@@ -251,18 +260,18 @@ public class ServerCallsTest {
 
   @Test
   public void disablingInboundAutoFlowControlForUnaryHasNoEffect() throws Exception {
-    ServerCallHandler<Integer, Integer> callHandler =
+    ServerCall.Listener<Integer> callListener =
         ServerCalls.asyncUnaryCall(
             new ServerCalls.UnaryMethod<Integer, Integer>() {
               @Override
-              public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
+              public void invoke(
+                  MethodDescriptor<Integer, Integer> methodDescriptor,
+                  Integer req, StreamObserver<Integer> responseObserver) {
                 ServerCallStreamObserver<Integer> serverCallObserver =
                     (ServerCallStreamObserver<Integer>) responseObserver;
                 serverCallObserver.disableAutoInboundFlowControl();
               }
-            });
-    ServerCall.Listener<Integer> callListener =
-        callHandler.startCall(UNARY_METHOD, serverCall, new Metadata());
+            }, UNARY_METHOD, serverCall, new Metadata());
     // Auto inbound flow-control always requests 2 messages for unary to detect a violation
     // of the unary semantic.
     Mockito.verify(serverCall, times(1)).request(2);
@@ -273,11 +282,13 @@ public class ServerCallsTest {
     final AtomicInteger onReadyCalled = new AtomicInteger();
     final AtomicReference<ServerCallStreamObserver<Integer>> callObserver =
         new AtomicReference<ServerCallStreamObserver<Integer>>();
-    ServerCallHandler<Integer, Integer> callHandler =
+    ServerCall.Listener<Integer> callListener =
         ServerCalls.asyncServerStreamingCall(
             new ServerCalls.ServerStreamingMethod<Integer, Integer>() {
               @Override
-              public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
+              public void invoke(
+                  MethodDescriptor<Integer, Integer> methodDescriptor,
+                  Integer req, StreamObserver<Integer> responseObserver) {
                 ServerCallStreamObserver<Integer> serverCallObserver =
                     (ServerCallStreamObserver<Integer>) responseObserver;
                 serverCallObserver.setOnReadyHandler(new Runnable() {
@@ -287,9 +298,7 @@ public class ServerCallsTest {
                   }
                 });
               }
-            });
-    ServerCall.Listener<Integer> callListener =
-        callHandler.startCall(STREAMING_METHOD, serverCall, new Metadata());
+            }, STREAMING_METHOD, serverCall, new Metadata());
     Mockito.when(serverCall.isReady()).thenReturn(true).thenReturn(false);
     Mockito.when(serverCall.isCancelled()).thenReturn(false).thenReturn(true);
     callListener.onReady();
@@ -309,34 +318,42 @@ public class ServerCallsTest {
   @Test
   public void inprocessTransportManualFlow() throws Exception {
     final Semaphore semaphore = new Semaphore(1);
-    ServerServiceDefinition service = ServerServiceDefinition.builder("some")
-        .addMethod(STREAMING_METHOD, ServerCalls.asyncBidiStreamingCall(
-            new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
-              int iteration;
+    ServerServiceDefinition service = new ServerServiceDefinition(
+        new ServiceDescriptor("some", ImmutableList.<MethodDescriptor>of(STREAMING_METHOD)),
+        new ServerCallHandler() {
+          @Override
+          public Listener startCall(MethodDescriptor method, ServerCall call, Metadata headers) {
+            return ServerCalls.asyncBidiStreamingCall(
+                new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
+                  int iteration;
 
-              @Override
-              public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
-                final ServerCallStreamObserver<Integer> serverCallObserver =
-                    (ServerCallStreamObserver<Integer>) responseObserver;
-                serverCallObserver.setOnReadyHandler(new Runnable() {
                   @Override
-                  public void run() {
-                    while (serverCallObserver.isReady()) {
-                      serverCallObserver.onNext(iteration);
-                    }
-                    iteration++;
-                    semaphore.release();
+                  public StreamObserver<Integer> invoke(
+                      MethodDescriptor<Integer, Integer> methodDescriptor,
+                      StreamObserver<Integer> responseObserver) {
+                    final ServerCallStreamObserver<Integer> serverCallObserver =
+                        (ServerCallStreamObserver<Integer>) responseObserver;
+                    serverCallObserver.setOnReadyHandler(new Runnable() {
+                      @Override
+                      public void run() {
+                        while (serverCallObserver.isReady()) {
+                          serverCallObserver.onNext(iteration);
+                        }
+                        iteration++;
+                        semaphore.release();
+                      }
+                    });
+                    return new ServerCalls.NoopStreamObserver<Integer>() {
+                      @Override
+                      public void onCompleted() {
+                        serverCallObserver.onCompleted();
+                      }
+                    };
                   }
-                });
-                return new ServerCalls.NoopStreamObserver<Integer>() {
-                  @Override
-                  public void onCompleted() {
-                    serverCallObserver.onCompleted();
-                  }
-                };
-              }
-            }))
-        .build();
+                }, method, call, headers);
+          }
+        }
+    );
     long tag = System.nanoTime();
     InProcessServerBuilder.forName("go-with-the-flow" + tag).addService(service).build().start();
     ManagedChannelImpl channel = InProcessChannelBuilder.forName("go-with-the-flow" + tag).build();

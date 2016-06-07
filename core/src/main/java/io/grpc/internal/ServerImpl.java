@@ -45,9 +45,9 @@ import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
+import io.grpc.HandlerRegistry.RegisteredMethod;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
-import io.grpc.ServerMethodDefinition;
 import io.grpc.Status;
 
 import java.io.IOException;
@@ -344,18 +344,18 @@ public final class ServerImpl extends io.grpc.Server {
           public void runInContext() {
             ServerStreamListener listener = NOOP_LISTENER;
             try {
-              ServerMethodDefinition<?, ?> method = registry.lookupMethod(methodName);
-              if (method == null) {
-                method = fallbackRegistry.lookupMethod(methodName);
+              RegisteredMethod registeredMethod = registry.lookupMethod(methodName);
+              if (registeredMethod == null) {
+                registeredMethod = fallbackRegistry.lookupMethod(methodName);
               }
-              if (method == null) {
+              if (registeredMethod == null) {
                 stream.close(
                     Status.UNIMPLEMENTED.withDescription("Method not found: " + methodName),
                     new Metadata());
                 context.cancel(null);
                 return;
               }
-              listener = startCall(stream, methodName, method, headers, context);
+              listener = startCall(stream, registeredMethod, headers, context);
             } catch (RuntimeException e) {
               stream.close(Status.fromThrowable(e), new Metadata());
               context.cancel(null);
@@ -397,18 +397,19 @@ public final class ServerImpl extends io.grpc.Server {
     }
 
     /** Never returns {@code null}. */
-    private <ReqT, RespT> ServerStreamListener startCall(ServerStream stream, String fullMethodName,
-        ServerMethodDefinition<ReqT, RespT> methodDef, Metadata headers,
+    private <ReqT, RespT> ServerStreamListener startCall(ServerStream stream,
+        RegisteredMethod registeredMethod, Metadata headers,
         Context.CancellableContext context) {
       // TODO(ejona86): should we update fullMethodName to have the canonical path of the method?
       ServerCallImpl<ReqT, RespT> call = new ServerCallImpl<ReqT, RespT>(
-          stream, methodDef.getMethodDescriptor(), headers, context, decompressorRegistry,
+          stream, registeredMethod.methodDescriptor, headers, context, decompressorRegistry,
           compressorRegistry);
-      ServerCall.Listener<ReqT> listener = methodDef.getServerCallHandler()
-          .startCall(methodDef.getMethodDescriptor(), call, headers);
+      ServerCall.Listener<ReqT> listener = registeredMethod.callHandler.startCall(
+          registeredMethod.methodDescriptor, call, headers);
       if (listener == null) {
         throw new NullPointerException(
-            "startCall() returned a null listener for method " + fullMethodName);
+            "startCall() returned a null listener for method " +
+                registeredMethod.methodDescriptor.getFullMethodName());
       }
       return call.newServerStreamListener(listener);
     }
