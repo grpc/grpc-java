@@ -117,7 +117,7 @@ class DelayedClientTransport implements ManagedClientTransport {
         // Check again, since it may have changed while waiting for lock
         supplier = transportSupplier;
         if (supplier == null && !shutdown) {
-          if (callOptions.isFailFast() && inBackoffPeriod) {
+          if (inBackoffPeriod && !callOptions.isWaitForReady()) {
             return new FailingClientStream(Status.UNAVAILABLE.withDescription(
                 "Terminated fail fast stream."));
           }
@@ -285,6 +285,7 @@ class DelayedClientTransport implements ManagedClientTransport {
    * fail immediately, and that non-fail fast streams can be created as {@link PendingStream} and
    * should keep pending during this back-off period.
    */
+  @VisibleForTesting
   boolean isInBackoffPeriod() {
     synchronized (lock) {
       return inBackoffPeriod;
@@ -306,14 +307,14 @@ class DelayedClientTransport implements ManagedClientTransport {
    */
   void startBackoff(final Status status) {
     synchronized (lock) {
+      Preconditions.checkState(!inBackoffPeriod);
       inBackoffPeriod = true;
       final ArrayList<PendingStream> failFastPendingStreams = new ArrayList<PendingStream>();
       if (pendingStreams != null && !pendingStreams.isEmpty()) {
-        final Collection<PendingStream> savedPendingStreams = pendingStreams;
-        final Iterator<PendingStream> it = savedPendingStreams.iterator();
+        final Iterator<PendingStream> it = pendingStreams.iterator();
         while (it.hasNext()) {
           PendingStream stream = it.next();
-          if (stream.isFailFast()) {
+          if (!stream.callOptions.isWaitForReady()) {
             failFastPendingStreams.add(stream);
             it.remove();
           }
@@ -366,13 +367,6 @@ class DelayedClientTransport implements ManagedClientTransport {
 
     private void createRealStream(ClientTransport transport) {
       setStream(transport.newStream(method, headers, callOptions));
-    }
-
-    /**
-     * Indicates whether the pending stream is with fail fast call option.
-     */
-    public boolean isFailFast() {
-      return callOptions.isFailFast();
     }
 
     @Override

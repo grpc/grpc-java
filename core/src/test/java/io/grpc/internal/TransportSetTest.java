@@ -98,7 +98,7 @@ public class TransportSetTest {
       MethodDescriptor.MethodType.UNKNOWN, "/service/method",
       new StringMarshaller(), new IntegerMarshaller());
   private final Metadata headers = new Metadata();
-  private final CallOptions nonFailFastCallOptions = CallOptions.DEFAULT.withWaitForReady(true);
+  private final CallOptions nonFailFastCallOptions = CallOptions.DEFAULT.withWaitForReady();
   private final CallOptions failFastCallOptions = CallOptions.DEFAULT;
 
   private TransportSet transportSet;

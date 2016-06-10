@@ -188,14 +188,25 @@ public final class CallOptions {
   }
 
   /**
-   * Sets whether the call is not
-   * <a href="https://github.com/grpc/grpc/blob/master/doc/fail_fast.md">fail fast</a>.
-   * 'Fail fast' is the default option for gRPC calls and 'Wait for ready' is the opposite to it.
+   * Enables 'wait for ready' feature for the call.
+   * <a href="https://github.com/grpc/grpc/blob/master/doc/fail_fast.md">'Fail fast'</a>
+   * is the default option for gRPC calls and 'wait for ready' is the opposite to it.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1915")
-  public CallOptions withWaitForReady(boolean waitForReady) {
+  public CallOptions withWaitForReady() {
     CallOptions newOptions = new CallOptions(this);
-    newOptions.waitForReady = waitForReady;
+    newOptions.waitForReady = true;
+    return newOptions;
+  }
+
+  /**
+   * Disables 'wait for ready' feature for the call.
+   * This method should be rarely used because the default is without 'wait for ready'.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1915")
+  public CallOptions withoutWaitForReady() {
+    CallOptions newOptions = new CallOptions(this);
+    newOptions.waitForReady = false;
     return newOptions;
   }
 
@@ -328,12 +339,13 @@ public final class CallOptions {
   }
 
   /**
-   * Returns whether the call is
-   * <a href="https://github.com/grpc/grpc/blob/master/doc/fail_fast.md">fail fast</a>.
-   * Fail fast is the default option for gRPC calls.
+   * Returns whether 'wait for ready' option is enabled for the call.
+   * <a href="https://github.com/grpc/grpc/blob/master/doc/fail_fast.md">'Fail fast'</a>
+   * is the default option for gRPC calls and 'wait for ready' is the opposite to it.
    */
-  public boolean isFailFast() {
-    return !waitForReady;
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1915")
+  public boolean isWaitForReady() {
+    return waitForReady;
   }
 
   /**
@@ -359,7 +371,7 @@ public final class CallOptions {
     toStringHelper.add("executor", executor != null ? executor.getClass() : null);
     toStringHelper.add("compressorName", compressorName);
     toStringHelper.add("customOptions", Arrays.toString(customOptions));
-    toStringHelper.add("isFailFast", isFailFast());
+    toStringHelper.add("isWaitForReady", isWaitForReady());
 
     return toStringHelper.toString();
   }

@@ -418,13 +418,10 @@ final class TransportSet implements WithLogId {
           closedByServer = !shutdown;
         } else if (activeTransport == delayedTransport) {
           // Continue reconnect if there are still addresses to try.
-          // Fail if all addresses have been tried and failed in a row.
           if (nextAddressIndex == 0) {
             allAddressesFailed = true;
-
             // Initiate backoff
             // Transition to TRANSIENT_FAILURE
-            assert !delayedTransport.isInBackoffPeriod();
             scheduleBackoff(delayedTransport, s);
           } else {
             // Still CONNECTING
