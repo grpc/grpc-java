@@ -371,7 +371,7 @@ public final class CallOptions {
     toStringHelper.add("executor", executor != null ? executor.getClass() : null);
     toStringHelper.add("compressorName", compressorName);
     toStringHelper.add("customOptions", Arrays.toString(customOptions));
-    toStringHelper.add("isWaitForReady", isWaitForReady());
+    toStringHelper.add("waitForReady", isWaitForReady());
 
     return toStringHelper.toString();
   }

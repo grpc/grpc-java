@@ -151,7 +151,7 @@ public class CallOptionsTest {
     String expected = "CallOptions{deadline=null, authority=authority, callCredentials=null, "
         + "affinity={sample=blah}, "
         + "executor=class io.grpc.internal.SerializingExecutor, compressorName=null, "
-        + "customOptions=[], isWaitForReady=false}";
+        + "customOptions=[], waitForReady=false}";
     String actual = allSet
         .withDeadline(null)
         .withExecutor(new SerializingExecutor(directExecutor()))
@@ -165,7 +165,7 @@ public class CallOptionsTest {
   public void toStringMatches_noDeadline() {
     assertThat("CallOptions{deadline=null, authority=null, callCredentials=null, "
         + "affinity={}, executor=null, compressorName=null, customOptions=[], "
-        + "isWaitForReady=false}")
+        + "waitForReady=false}")
         .isEqualTo(CallOptions.DEFAULT.toString());
   }
 

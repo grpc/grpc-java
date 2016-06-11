@@ -285,9 +285,9 @@ public class DelayedClientTransportTest {
   @Test public void startBackOff_ClearsFailFastPendingStreams() {
     final Status cause = Status.UNKNOWN;
     final CallOptions failFastCallOptions = CallOptions.DEFAULT;
-    final CallOptions nonFailFastCallOptions = CallOptions.DEFAULT.withWaitForReady();
+    final CallOptions waitForReadyCallOptions = CallOptions.DEFAULT.withWaitForReady();
     final ClientStream ffStream = delayedTransport.newStream(method, headers, failFastCallOptions);
-    delayedTransport.newStream(method, headers, nonFailFastCallOptions);
+    delayedTransport.newStream(method, headers, waitForReadyCallOptions);
     delayedTransport.newStream(method, headers, failFastCallOptions);
     assertEquals(3, delayedTransport.getPendingStreamsCount());
 
