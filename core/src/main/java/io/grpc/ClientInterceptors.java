@@ -37,6 +37,18 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+
+import static com.google.common.base.MoreObjects.firstNonNull;
+import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
+import io.grpc.internal.IdempotentRetryPolicy;
+import io.grpc.internal.RetryPolicy;
+import io.grpc.internal.SharedResourceHolder;
 
 /**
  * Utility methods for working with {@link ClientInterceptor}s.
@@ -201,6 +213,201 @@ public class ClientInterceptors {
         // about the error through the listener.
         delegate = (ClientCall<ReqT, RespT>) NOOP_CALL;
         responseListener.onClose(Status.fromThrowable(e), new Metadata());
+      }
+    }
+  }
+
+  public static class RetryingInterceptor implements ClientInterceptor {
+    // TODO(lukaszx0) have default logger for this one to give more visibility into when/what gets
+    // retried?
+    // private final Logger logger = Logger.getLogger(RetryingInterceptor.class.getName());
+    private final RetryPolicy.Provider retryPolicyProvider;
+
+    public RetryingInterceptor(RetryPolicy.Provider retryPolicyProvider) {
+      this.retryPolicyProvider = retryPolicyProvider;
+    }
+
+    public RetryingInterceptor() {
+      this.retryPolicyProvider = new IdempotentRetryPolicy.Provider();
+    }
+
+    @Override
+    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+            MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+
+      // Only UNARY calls can be retried, streaming call errors should be handled by user.
+      if (method.getType() != MethodDescriptor.MethodType.UNARY) {
+        return next.newCall(method, callOptions);
+      }
+
+      return new RetryingCall<ReqT, RespT>(retryPolicyProvider, method, callOptions, next, Context.current());
+    }
+
+    private class RetryingCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
+      private final RetryPolicy retryPolicy;
+      private final MethodDescriptor<ReqT, RespT> method;
+      private final CallOptions callOptions;
+      private final Channel channel;
+      private final Context context;
+      private final ScheduledExecutorService scheduledExecutor;
+      private Listener<RespT> responseListener;
+      private Metadata requestHeaders;
+      private ReqT requestMessage;
+      private boolean compressionEnabled;
+      private final Queue<AttemptListener> attemptListeners =
+              new ConcurrentLinkedQueue<AttemptListener>();
+      private volatile AttemptListener latestResponse;
+      private volatile ScheduledFuture<?> retryTask;
+
+      RetryingCall(RetryPolicy.Provider retryPolicyProvider, MethodDescriptor<ReqT, RespT> method,
+                   CallOptions callOptions, Channel channel, Context context) {
+        this.retryPolicy = retryPolicyProvider.get();
+        this.method = method;
+        this.callOptions = callOptions;
+        this.channel = channel;
+        this.context = context;
+
+        this.scheduledExecutor = SharedResourceHolder.get(TIMER_SERVICE);
+      }
+
+      @Override
+      public void start(Listener<RespT> listener, Metadata headers) {
+        checkState(attemptListeners.isEmpty());
+        checkState(responseListener == null);
+        checkState(requestHeaders == null);
+        responseListener = listener;
+        requestHeaders = headers;
+        ClientCall<ReqT, RespT> firstCall = channel.newCall(method, callOptions);
+        AttemptListener attemptListener = new AttemptListener(firstCall);
+        attemptListeners.add(attemptListener);
+        firstCall.start(attemptListener, headers);
+      }
+
+      @Override
+      public void request(int numMessages) {
+        lastCall().request(numMessages);
+      }
+
+      @Override
+      public void cancel() {
+        for (AttemptListener attempt : attemptListeners) {
+          attempt.call.cancel();
+        }
+        if (retryTask != null) {
+          retryTask.cancel(true);
+        }
+      }
+
+      @Override
+      public void halfClose() {
+        lastCall().halfClose();
+      }
+
+      @Override
+      public void sendMessage(ReqT message) {
+        checkState(requestMessage == null);
+        requestMessage = message;
+        lastCall().sendMessage(message);
+      }
+
+      @Override
+      public boolean isReady() {
+        return lastCall().isReady();
+      }
+
+      @Override
+      public void setMessageCompression(boolean enabled) {
+        compressionEnabled = enabled;
+        lastCall().setMessageCompression(enabled);
+      }
+
+      private void maybeRetry(AttemptListener attempt) {
+        Status status = attempt.responseStatus;
+        if (status.isOk() || !retryPolicy.isRetryable(status, method, callOptions)) {
+          useResponse(attempt);
+          return;
+        }
+
+        long nextBackoffMillis = retryPolicy.getNextBackoffMillis();
+        long nextBackoffNano = TimeUnit.MILLISECONDS.toNanos(nextBackoffMillis);
+        long deadlineNanoTime =  firstNonNull(callOptions.getDeadlineNanoTime(), -1).longValue();
+
+        Status.Code code = status.getCode();
+        if (code == Status.Code.CANCELLED || code == Status.Code.DEADLINE_EXCEEDED ||
+            (deadlineNanoTime > -1 && deadlineNanoTime < nextBackoffNano)) {
+          AttemptListener latest = latestResponse;
+          if (latest != null) {
+            useResponse(latest);
+          } else {
+            useResponse(attempt);
+          }
+          return;
+        }
+        latestResponse = attempt;
+        retryTask = scheduledExecutor.schedule(context.wrap(new Runnable() {
+          @Override
+          public void run() {
+            ClientCall<ReqT, RespT> nextCall = channel.newCall(method, callOptions);
+            AttemptListener nextAttemptListener = new AttemptListener(nextCall);
+            attemptListeners.add(nextAttemptListener);
+            nextCall.start(nextAttemptListener, requestHeaders);
+            nextCall.setMessageCompression(compressionEnabled);
+            nextCall.sendMessage(requestMessage);
+            // TODO(lukaszx0): In other places, we're preemptively fetching two requests for
+            // unary calls should we do the same here?
+            nextCall.request(1);
+            nextCall.halfClose();
+          }
+        }), nextBackoffMillis, TimeUnit.MILLISECONDS);
+      }
+
+      private void useResponse(AttemptListener attempt) {
+        responseListener.onHeaders(attempt.responseHeaders);
+        if (attempt.responseMessage != null) {
+          responseListener.onMessage(attempt.responseMessage);
+        }
+        responseListener.onClose(attempt.responseStatus, attempt.responseTrailers);
+      }
+
+      private ClientCall<ReqT, RespT> lastCall() {
+        checkState(!attemptListeners.isEmpty());
+        return attemptListeners.peek().call;
+      }
+
+      private class AttemptListener extends ClientCall.Listener<RespT> {
+        final ClientCall<ReqT, RespT> call;
+        Metadata responseHeaders;
+        RespT responseMessage;
+        Status responseStatus;
+        Metadata responseTrailers;
+
+        AttemptListener(ClientCall<ReqT, RespT> call) {
+          this.call = call;
+        }
+
+        @Override
+        public void onHeaders(Metadata headers) {
+          responseHeaders = headers;
+        }
+
+        @Override
+        public void onMessage(RespT message) {
+          responseMessage = message;
+        }
+
+        @Override
+        public void onClose(Status status, Metadata trailers) {
+          responseStatus = status;
+          responseTrailers = trailers;
+          maybeRetry(this);
+        }
+
+        @Override
+        public void onReady() {
+          // Pass-through to original listener.
+          // TODO(lukaszx0): Maybe only on first attempt?
+          responseListener.onReady();
+        }
       }
     }
   }
