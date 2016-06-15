@@ -174,7 +174,7 @@ public class OkHttpChannelBuilder extends
    *         If {@code connectionSpec} is not with TLS
    */
   public final OkHttpChannelBuilder connectionSpec(ConnectionSpec connectionSpec) {
-    Preconditions.checkArgument(connectionSpec.isTls(), "plaintext connection is not accepted");
+    Preconditions.checkArgument(connectionSpec.isTls(), "plaintext ConnectionSpec is not accepted");
     this.connectionSpec = connectionSpec;
     return this;
   }

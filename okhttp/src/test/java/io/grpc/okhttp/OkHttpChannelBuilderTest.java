@@ -93,7 +93,7 @@ public class OkHttpChannelBuilderTest {
   @Test
   public void failForUsingClearTextSpecDirectly() {
     thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("plaintext connection is not accepted");
+    thrown.expectMessage("plaintext ConnectionSpec is not accepted");
 
     OkHttpChannelBuilder.forAddress("host", 1234).connectionSpec(ConnectionSpec.CLEARTEXT);
   }

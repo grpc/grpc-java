@@ -74,7 +74,7 @@ class Utils {
    *         If {@code spec} is not with TLS
    */
   static ConnectionSpec convertSpec(com.squareup.okhttp.ConnectionSpec spec) {
-    Preconditions.checkArgument(spec.isTls(), "plaintext connection is not accepted");
+    Preconditions.checkArgument(spec.isTls(), "plaintext ConnectionSpec is not accepted");
 
     List<com.squareup.okhttp.TlsVersion> tlsVersionList = spec.tlsVersions();
     String[] tlsVersions = new String[tlsVersionList.size()];

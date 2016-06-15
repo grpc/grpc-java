@@ -59,7 +59,7 @@ public class UtilsTest {
   public void convertSpecRejectsPlaintext() {
     com.squareup.okhttp.ConnectionSpec plaintext = com.squareup.okhttp.ConnectionSpec.CLEARTEXT;
     thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("plaintext connection is not accepted");
+    thrown.expectMessage("plaintext ConnectionSpec is not accepted");
     Utils.convertSpec(plaintext);
   }
 
