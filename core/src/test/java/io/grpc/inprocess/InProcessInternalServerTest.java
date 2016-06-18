@@ -38,11 +38,11 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
-public class InProcessServerTest {
+public class InProcessInternalServerTest {
 
   @Test
   public void getPort_notStarted() throws Exception {
-    InProcessServer s = new InProcessServer("name");
+    InProcessInternalServer s = new InProcessInternalServer("name");
 
     Truth.assertThat(s.getPort()).isEqualTo(-1);
   }

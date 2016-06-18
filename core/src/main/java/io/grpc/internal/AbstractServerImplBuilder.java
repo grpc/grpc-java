@@ -41,6 +41,7 @@ import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
 import io.grpc.Internal;
+import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerServiceDefinition.ServerMethodDefinition;
@@ -122,8 +123,11 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   }
 
   @Override
-  public ServerImpl build() {
-    io.grpc.internal.InternalServer transportServer = buildTransportServer();
+  public Server build() {
+    return build(buildTransportServer());
+  }
+
+  protected ServerImpl build(InternalServer transportServer) {
     return new ServerImpl(executor, registryBuilder.build(),
         firstNonNull(fallbackRegistry, EMPTY_FALLBACK_REGISTRY), transportServer,
         Context.ROOT, firstNonNull(decompressorRegistry, DecompressorRegistry.getDefaultInstance()),

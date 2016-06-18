@@ -31,7 +31,7 @@
 
 package io.grpc.inprocess;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import com.google.common.base.Preconditions;
 
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -70,6 +70,7 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
   private static final Logger log = Logger.getLogger(InProcessTransport.class.getName());
 
   private final String name;
+  private final InProcessInternalServer anonServer;
   private ServerTransportListener serverTransportListener;
   private final Attributes serverStreamAttributes;
   private ManagedClientTransport.Listener clientTransportListener;
@@ -82,17 +83,22 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
   @GuardedBy("this")
   private Set<InProcessStream> streams = new HashSet<InProcessStream>();
 
-  public InProcessTransport(String name) {
-    this.name = name;
+  public InProcessTransport(InProcessSocketAddress address, InProcessInternalServer anonServer) {
+    Preconditions.checkArgument(address.getName() != null || anonServer != null);
+    this.name = address.getName();
+    this.anonServer = anonServer;
     this.serverStreamAttributes = Attributes.newBuilder()
-        .set(ServerCall.REMOTE_ADDR_KEY, new InProcessSocketAddress(name))
+        .set(ServerCall.REMOTE_ADDR_KEY, address)
         .build();
   }
 
   @Override
   public synchronized void start(ManagedClientTransport.Listener listener) {
     this.clientTransportListener = listener;
-    InProcessServer server = InProcessServer.findServer(name);
+    InProcessInternalServer server = anonServer;
+    if (server == null) {
+      server = InProcessInternalServer.findServer(name);
+    }
     if (server != null) {
       serverTransportListener = server.register(this);
     }
@@ -183,7 +189,7 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
 
   @Override
   public void shutdownNow(Status reason) {
-    checkNotNull(reason, "reason");
+    Preconditions.checkNotNull(reason, "reason");
     List<InProcessStream> streamsCopy;
     synchronized (this) {
       shutdown();
@@ -238,8 +244,8 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
     private MethodDescriptor<?, ?> method;
 
     private InProcessStream(MethodDescriptor<?, ?> method, Metadata headers) {
-      this.method = checkNotNull(method);
-      this.headers = checkNotNull(headers);
+      this.method = Preconditions.checkNotNull(method);
+      this.headers = Preconditions.checkNotNull(headers);
 
     }
 

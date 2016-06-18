@@ -57,14 +57,22 @@ public class InProcessChannelBuilder extends
    * @return a new builder
    */
   public static InProcessChannelBuilder forName(String name) {
-    return new InProcessChannelBuilder(name);
+    return new InProcessChannelBuilder(new InProcessSocketAddress(name), null);
   }
 
-  private final String name;
+  static InProcessChannelBuilder forAnonymous(InProcessSocketAddress address,
+      InProcessInternalServer internalServer) {
+    return new InProcessChannelBuilder(address, internalServer);
+  }
 
-  private InProcessChannelBuilder(String name) {
-    super(new InProcessSocketAddress(name), "localhost");
-    this.name = Preconditions.checkNotNull(name);
+  private final InProcessSocketAddress address;
+  private final InProcessInternalServer anonServer;
+
+  private InProcessChannelBuilder(
+      InProcessSocketAddress address, InProcessInternalServer anonServer) {
+    super(address, "localhost");
+    this.address = Preconditions.checkNotNull(address);
+    this.anonServer = anonServer;
   }
 
   /**
@@ -77,7 +85,7 @@ public class InProcessChannelBuilder extends
 
   @Override
   protected ClientTransportFactory buildTransportFactory() {
-    return new InProcessClientTransportFactory(name);
+    return new InProcessClientTransportFactory(address, anonServer);
   }
 
   /**
@@ -85,12 +93,15 @@ public class InProcessChannelBuilder extends
    */
   @Internal
   static final class InProcessClientTransportFactory implements ClientTransportFactory {
-    private final String name;
+    private final InProcessSocketAddress address;
+    private final InProcessInternalServer anonServer;
 
     private boolean closed;
 
-    private InProcessClientTransportFactory(String name) {
-      this.name = name;
+    private InProcessClientTransportFactory(
+        InProcessSocketAddress address, InProcessInternalServer anonServer) {
+      this.address = address;
+      this.anonServer = anonServer;
     }
 
     @Override
@@ -99,7 +110,7 @@ public class InProcessChannelBuilder extends
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
       }
-      return new InProcessTransport(name);
+      return new InProcessTransport(address, anonServer);
     }
 
     @Override

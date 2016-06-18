@@ -31,21 +31,56 @@
 
 package io.grpc.inprocess;
 
+import com.google.common.base.Preconditions;
+
 import java.net.SocketAddress;
+
+import javax.annotation.Nullable;
 
 /**
  * Custom SocketAddress class for {@link InProcessTransport}.
  */
-public class InProcessSocketAddress extends SocketAddress {
+public final class InProcessSocketAddress extends SocketAddress {
   private static final long serialVersionUID = -2803441206326023474L;
 
   private final String name;
 
-  public InProcessSocketAddress(String name) {
-    this.name = name;
+  /** Creates an anonymous address. */
+  public InProcessSocketAddress() {
+    this.name = null;
   }
 
+  /** Creates a named address. */
+  public InProcessSocketAddress(String name) {
+    this.name = Preconditions.checkNotNull(name, "name");
+  }
+
+  /** Returns {@code null} if anonymous. */
+  @Nullable
   public String getName() {
     return name;
+  }
+
+  /**
+   * True if {@code this} and {@code o} are named and share the same name, or if both are anonymous
+   * and are the same reference.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (o == null || this.getClass() != o.getClass()) {
+      return false;
+    }
+    if (name == null) {
+      return this == o;
+    }
+    return name.equals(((InProcessSocketAddress) o).name);
+  }
+
+  @Override
+  public int hashCode() {
+    if (name == null) {
+      super.hashCode();
+    }
+    return name.hashCode();
   }
 }
