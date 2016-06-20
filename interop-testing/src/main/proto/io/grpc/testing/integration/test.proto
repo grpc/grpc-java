@@ -70,6 +70,12 @@ service TestService {
   // first request.
   rpc HalfDuplexCall(stream StreamingOutputCallRequest)
       returns (stream StreamingOutputCallResponse);
+
+  // A new RPC method added to the proto used for testing extensibility.
+  // This should not break the existing test code that was based old version
+  // generated code.
+  rpc Extension(stream StreamingOutputCallRequest)
+      returns (stream StreamingOutputCallResponse);
 }
 
 // A simple service NOT implemented at servers so clients can test for

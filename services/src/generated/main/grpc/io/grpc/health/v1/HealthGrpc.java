@@ -62,49 +62,31 @@ public class HealthGrpc {
 
   /**
    */
-  public static interface Health {
+  public static abstract class HealthImplBase implements io.grpc.BindableService {
 
     /**
      */
-    public void check(io.grpc.health.v1.HealthCheckRequest request,
-        io.grpc.stub.StreamObserver<io.grpc.health.v1.HealthCheckResponse> responseObserver);
-  }
-
-  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1469")
-  public static abstract class AbstractHealth implements Health, io.grpc.BindableService {
-
-    @java.lang.Override
     public void check(io.grpc.health.v1.HealthCheckRequest request,
         io.grpc.stub.StreamObserver<io.grpc.health.v1.HealthCheckResponse> responseObserver) {
       asyncUnimplementedUnaryCall(METHOD_CHECK, responseObserver);
     }
 
-    @java.lang.Override public io.grpc.ServerServiceDefinition bindService() {
-      return HealthGrpc.bindService(this);
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+          .addMethod(
+            METHOD_CHECK,
+            asyncUnaryCall(
+              new MethodHandlers<
+                io.grpc.health.v1.HealthCheckRequest,
+                io.grpc.health.v1.HealthCheckResponse>(
+                  this, METHODID_CHECK)))
+          .build();
     }
   }
 
   /**
    */
-  public static interface HealthBlockingClient {
-
-    /**
-     */
-    public io.grpc.health.v1.HealthCheckResponse check(io.grpc.health.v1.HealthCheckRequest request);
-  }
-
-  /**
-   */
-  public static interface HealthFutureClient {
-
-    /**
-     */
-    public com.google.common.util.concurrent.ListenableFuture<io.grpc.health.v1.HealthCheckResponse> check(
-        io.grpc.health.v1.HealthCheckRequest request);
-  }
-
-  public static class HealthStub extends io.grpc.stub.AbstractStub<HealthStub>
-      implements Health {
+  public static final class HealthStub extends io.grpc.stub.AbstractStub<HealthStub> {
     private HealthStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -120,7 +102,8 @@ public class HealthGrpc {
       return new HealthStub(channel, callOptions);
     }
 
-    @java.lang.Override
+    /**
+     */
     public void check(io.grpc.health.v1.HealthCheckRequest request,
         io.grpc.stub.StreamObserver<io.grpc.health.v1.HealthCheckResponse> responseObserver) {
       asyncUnaryCall(
@@ -128,8 +111,9 @@ public class HealthGrpc {
     }
   }
 
-  public static class HealthBlockingStub extends io.grpc.stub.AbstractStub<HealthBlockingStub>
-      implements HealthBlockingClient {
+  /**
+   */
+  public static final class HealthBlockingStub extends io.grpc.stub.AbstractStub<HealthBlockingStub> {
     private HealthBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -145,15 +129,17 @@ public class HealthGrpc {
       return new HealthBlockingStub(channel, callOptions);
     }
 
-    @java.lang.Override
+    /**
+     */
     public io.grpc.health.v1.HealthCheckResponse check(io.grpc.health.v1.HealthCheckRequest request) {
       return blockingUnaryCall(
           getChannel(), METHOD_CHECK, getCallOptions(), request);
     }
   }
 
-  public static class HealthFutureStub extends io.grpc.stub.AbstractStub<HealthFutureStub>
-      implements HealthFutureClient {
+  /**
+   */
+  public static final class HealthFutureStub extends io.grpc.stub.AbstractStub<HealthFutureStub> {
     private HealthFutureStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -169,7 +155,8 @@ public class HealthGrpc {
       return new HealthFutureStub(channel, callOptions);
     }
 
-    @java.lang.Override
+    /**
+     */
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.health.v1.HealthCheckResponse> check(
         io.grpc.health.v1.HealthCheckRequest request) {
       return futureUnaryCall(
@@ -184,10 +171,10 @@ public class HealthGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final Health serviceImpl;
+    private final HealthImplBase serviceImpl;
     private final int methodId;
 
-    public MethodHandlers(Health serviceImpl, int methodId) {
+    public MethodHandlers(HealthImplBase serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -221,16 +208,76 @@ public class HealthGrpc {
         METHOD_CHECK);
   }
 
-  public static io.grpc.ServerServiceDefinition bindService(
-      final Health serviceImpl) {
-    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-        .addMethod(
-          METHOD_CHECK,
-          asyncUnaryCall(
-            new MethodHandlers<
-              io.grpc.health.v1.HealthCheckRequest,
-              io.grpc.health.v1.HealthCheckResponse>(
-                serviceImpl, METHODID_CHECK)))
-        .build();
-  }
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements Health} with {@code extends HealthImplBase};</li>
+   *   <li> replace usage of {@code Health} with {@code HealthImplBase};</li>
+   *   <li> replace usage of {@code AbstractHealth} with {@link HealthImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(HealthGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code HealthBlockingClient} with {@link HealthBlockingStub};</li>
+   *   <li> replace {@code HealthFutureClient} with {@link HealthFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final class Health {}
+
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements Health} with {@code extends HealthImplBase};</li>
+   *   <li> replace usage of {@code Health} with {@code HealthImplBase};</li>
+   *   <li> replace usage of {@code AbstractHealth} with {@link HealthImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(HealthGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code HealthBlockingClient} with {@link HealthBlockingStub};</li>
+   *   <li> replace {@code HealthFutureClient} with {@link HealthFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final class HealthBlockingClient {}
+
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements Health} with {@code extends HealthImplBase};</li>
+   *   <li> replace usage of {@code Health} with {@code HealthImplBase};</li>
+   *   <li> replace usage of {@code AbstractHealth} with {@link HealthImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(HealthGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code HealthBlockingClient} with {@link HealthBlockingStub};</li>
+   *   <li> replace {@code HealthFutureClient} with {@link HealthFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final class HealthFutureClient {}
+
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements Health} with {@code extends HealthImplBase};</li>
+   *   <li> replace usage of {@code Health} with {@code HealthImplBase};</li>
+   *   <li> replace usage of {@code AbstractHealth} with {@link HealthImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(HealthGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code HealthBlockingClient} with {@link HealthBlockingStub};</li>
+   *   <li> replace {@code HealthFutureClient} with {@link HealthFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final void bindService(Object o) {}
+
 }

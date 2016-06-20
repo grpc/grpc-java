@@ -71,7 +71,7 @@ public class BenchmarkServiceGrpc {
 
   /**
    */
-  public static interface BenchmarkService {
+  public static abstract class BenchmarkServiceImplBase implements io.grpc.BindableService {
 
     /**
      * <pre>
@@ -79,68 +79,45 @@ public class BenchmarkServiceGrpc {
      * The server returns the client payload as-is.
      * </pre>
      */
-    public void unaryCall(io.grpc.benchmarks.proto.Messages.SimpleRequest request,
-        io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver);
-
-    /**
-     * <pre>
-     * One request followed by one response.
-     * The server returns the client payload as-is.
-     * </pre>
-     */
-    public io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleRequest> streamingCall(
-        io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver);
-  }
-
-  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1469")
-  public static abstract class AbstractBenchmarkService implements BenchmarkService, io.grpc.BindableService {
-
-    @java.lang.Override
     public void unaryCall(io.grpc.benchmarks.proto.Messages.SimpleRequest request,
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
       asyncUnimplementedUnaryCall(METHOD_UNARY_CALL, responseObserver);
     }
 
-    @java.lang.Override
+    /**
+     * <pre>
+     * One request followed by one response.
+     * The server returns the client payload as-is.
+     * </pre>
+     */
     public io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleRequest> streamingCall(
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
       return asyncUnimplementedStreamingCall(METHOD_STREAMING_CALL, responseObserver);
     }
 
-    @java.lang.Override public io.grpc.ServerServiceDefinition bindService() {
-      return BenchmarkServiceGrpc.bindService(this);
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+          .addMethod(
+            METHOD_UNARY_CALL,
+            asyncUnaryCall(
+              new MethodHandlers<
+                io.grpc.benchmarks.proto.Messages.SimpleRequest,
+                io.grpc.benchmarks.proto.Messages.SimpleResponse>(
+                  this, METHODID_UNARY_CALL)))
+          .addMethod(
+            METHOD_STREAMING_CALL,
+            asyncBidiStreamingCall(
+              new MethodHandlers<
+                io.grpc.benchmarks.proto.Messages.SimpleRequest,
+                io.grpc.benchmarks.proto.Messages.SimpleResponse>(
+                  this, METHODID_STREAMING_CALL)))
+          .build();
     }
   }
 
   /**
    */
-  public static interface BenchmarkServiceBlockingClient {
-
-    /**
-     * <pre>
-     * One request followed by one response.
-     * The server returns the client payload as-is.
-     * </pre>
-     */
-    public io.grpc.benchmarks.proto.Messages.SimpleResponse unaryCall(io.grpc.benchmarks.proto.Messages.SimpleRequest request);
-  }
-
-  /**
-   */
-  public static interface BenchmarkServiceFutureClient {
-
-    /**
-     * <pre>
-     * One request followed by one response.
-     * The server returns the client payload as-is.
-     * </pre>
-     */
-    public com.google.common.util.concurrent.ListenableFuture<io.grpc.benchmarks.proto.Messages.SimpleResponse> unaryCall(
-        io.grpc.benchmarks.proto.Messages.SimpleRequest request);
-  }
-
-  public static class BenchmarkServiceStub extends io.grpc.stub.AbstractStub<BenchmarkServiceStub>
-      implements BenchmarkService {
+  public static final class BenchmarkServiceStub extends io.grpc.stub.AbstractStub<BenchmarkServiceStub> {
     private BenchmarkServiceStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -156,14 +133,24 @@ public class BenchmarkServiceGrpc {
       return new BenchmarkServiceStub(channel, callOptions);
     }
 
-    @java.lang.Override
+    /**
+     * <pre>
+     * One request followed by one response.
+     * The server returns the client payload as-is.
+     * </pre>
+     */
     public void unaryCall(io.grpc.benchmarks.proto.Messages.SimpleRequest request,
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
       asyncUnaryCall(
           getChannel().newCall(METHOD_UNARY_CALL, getCallOptions()), request, responseObserver);
     }
 
-    @java.lang.Override
+    /**
+     * <pre>
+     * One request followed by one response.
+     * The server returns the client payload as-is.
+     * </pre>
+     */
     public io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleRequest> streamingCall(
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
       return asyncBidiStreamingCall(
@@ -171,8 +158,9 @@ public class BenchmarkServiceGrpc {
     }
   }
 
-  public static class BenchmarkServiceBlockingStub extends io.grpc.stub.AbstractStub<BenchmarkServiceBlockingStub>
-      implements BenchmarkServiceBlockingClient {
+  /**
+   */
+  public static final class BenchmarkServiceBlockingStub extends io.grpc.stub.AbstractStub<BenchmarkServiceBlockingStub> {
     private BenchmarkServiceBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -188,15 +176,21 @@ public class BenchmarkServiceGrpc {
       return new BenchmarkServiceBlockingStub(channel, callOptions);
     }
 
-    @java.lang.Override
+    /**
+     * <pre>
+     * One request followed by one response.
+     * The server returns the client payload as-is.
+     * </pre>
+     */
     public io.grpc.benchmarks.proto.Messages.SimpleResponse unaryCall(io.grpc.benchmarks.proto.Messages.SimpleRequest request) {
       return blockingUnaryCall(
           getChannel(), METHOD_UNARY_CALL, getCallOptions(), request);
     }
   }
 
-  public static class BenchmarkServiceFutureStub extends io.grpc.stub.AbstractStub<BenchmarkServiceFutureStub>
-      implements BenchmarkServiceFutureClient {
+  /**
+   */
+  public static final class BenchmarkServiceFutureStub extends io.grpc.stub.AbstractStub<BenchmarkServiceFutureStub> {
     private BenchmarkServiceFutureStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -212,7 +206,12 @@ public class BenchmarkServiceGrpc {
       return new BenchmarkServiceFutureStub(channel, callOptions);
     }
 
-    @java.lang.Override
+    /**
+     * <pre>
+     * One request followed by one response.
+     * The server returns the client payload as-is.
+     * </pre>
+     */
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.benchmarks.proto.Messages.SimpleResponse> unaryCall(
         io.grpc.benchmarks.proto.Messages.SimpleRequest request) {
       return futureUnaryCall(
@@ -228,10 +227,10 @@ public class BenchmarkServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final BenchmarkService serviceImpl;
+    private final BenchmarkServiceImplBase serviceImpl;
     private final int methodId;
 
-    public MethodHandlers(BenchmarkService serviceImpl, int methodId) {
+    public MethodHandlers(BenchmarkServiceImplBase serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -269,23 +268,76 @@ public class BenchmarkServiceGrpc {
         METHOD_STREAMING_CALL);
   }
 
-  public static io.grpc.ServerServiceDefinition bindService(
-      final BenchmarkService serviceImpl) {
-    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-        .addMethod(
-          METHOD_UNARY_CALL,
-          asyncUnaryCall(
-            new MethodHandlers<
-              io.grpc.benchmarks.proto.Messages.SimpleRequest,
-              io.grpc.benchmarks.proto.Messages.SimpleResponse>(
-                serviceImpl, METHODID_UNARY_CALL)))
-        .addMethod(
-          METHOD_STREAMING_CALL,
-          asyncBidiStreamingCall(
-            new MethodHandlers<
-              io.grpc.benchmarks.proto.Messages.SimpleRequest,
-              io.grpc.benchmarks.proto.Messages.SimpleResponse>(
-                serviceImpl, METHODID_STREAMING_CALL)))
-        .build();
-  }
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements BenchmarkService} with {@code extends BenchmarkServiceImplBase};</li>
+   *   <li> replace usage of {@code BenchmarkService} with {@code BenchmarkServiceImplBase};</li>
+   *   <li> replace usage of {@code AbstractBenchmarkService} with {@link BenchmarkServiceImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(BenchmarkServiceGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code BenchmarkServiceBlockingClient} with {@link BenchmarkServiceBlockingStub};</li>
+   *   <li> replace {@code BenchmarkServiceFutureClient} with {@link BenchmarkServiceFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final class BenchmarkService {}
+
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements BenchmarkService} with {@code extends BenchmarkServiceImplBase};</li>
+   *   <li> replace usage of {@code BenchmarkService} with {@code BenchmarkServiceImplBase};</li>
+   *   <li> replace usage of {@code AbstractBenchmarkService} with {@link BenchmarkServiceImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(BenchmarkServiceGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code BenchmarkServiceBlockingClient} with {@link BenchmarkServiceBlockingStub};</li>
+   *   <li> replace {@code BenchmarkServiceFutureClient} with {@link BenchmarkServiceFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final class BenchmarkServiceBlockingClient {}
+
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements BenchmarkService} with {@code extends BenchmarkServiceImplBase};</li>
+   *   <li> replace usage of {@code BenchmarkService} with {@code BenchmarkServiceImplBase};</li>
+   *   <li> replace usage of {@code AbstractBenchmarkService} with {@link BenchmarkServiceImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(BenchmarkServiceGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code BenchmarkServiceBlockingClient} with {@link BenchmarkServiceBlockingStub};</li>
+   *   <li> replace {@code BenchmarkServiceFutureClient} with {@link BenchmarkServiceFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final class BenchmarkServiceFutureClient {}
+
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements BenchmarkService} with {@code extends BenchmarkServiceImplBase};</li>
+   *   <li> replace usage of {@code BenchmarkService} with {@code BenchmarkServiceImplBase};</li>
+   *   <li> replace usage of {@code AbstractBenchmarkService} with {@link BenchmarkServiceImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(BenchmarkServiceGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code BenchmarkServiceBlockingClient} with {@link BenchmarkServiceBlockingStub};</li>
+   *   <li> replace {@code BenchmarkServiceFutureClient} with {@link BenchmarkServiceFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final void bindService(Object o) {}
+
 }

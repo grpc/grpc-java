@@ -215,7 +215,7 @@ public class ConcurrencyTest {
 
     return NettyServerBuilder.forPort(port)
         .sslContext(sslContext)
-        .addService(TestServiceGrpc.bindService(new TestServiceImpl(serverExecutor)))
+        .addService(new TestServiceImpl(serverExecutor))
         .build()
         .start();
   }

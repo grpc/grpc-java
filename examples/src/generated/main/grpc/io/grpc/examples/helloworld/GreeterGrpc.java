@@ -68,28 +68,28 @@ public class GreeterGrpc {
    * The greeting service definition.
    * </pre>
    */
-  public static interface Greeter {
+  public static abstract class GreeterImplBase implements io.grpc.BindableService {
 
     /**
      * <pre>
      * Sends a greeting
      * </pre>
      */
-    public void sayHello(io.grpc.examples.helloworld.HelloRequest request,
-        io.grpc.stub.StreamObserver<io.grpc.examples.helloworld.HelloReply> responseObserver);
-  }
-
-  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1469")
-  public static abstract class AbstractGreeter implements Greeter, io.grpc.BindableService {
-
-    @java.lang.Override
     public void sayHello(io.grpc.examples.helloworld.HelloRequest request,
         io.grpc.stub.StreamObserver<io.grpc.examples.helloworld.HelloReply> responseObserver) {
       asyncUnimplementedUnaryCall(METHOD_SAY_HELLO, responseObserver);
     }
 
-    @java.lang.Override public io.grpc.ServerServiceDefinition bindService() {
-      return GreeterGrpc.bindService(this);
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+          .addMethod(
+            METHOD_SAY_HELLO,
+            asyncUnaryCall(
+              new MethodHandlers<
+                io.grpc.examples.helloworld.HelloRequest,
+                io.grpc.examples.helloworld.HelloReply>(
+                  this, METHODID_SAY_HELLO)))
+          .build();
     }
   }
 
@@ -98,34 +98,7 @@ public class GreeterGrpc {
    * The greeting service definition.
    * </pre>
    */
-  public static interface GreeterBlockingClient {
-
-    /**
-     * <pre>
-     * Sends a greeting
-     * </pre>
-     */
-    public io.grpc.examples.helloworld.HelloReply sayHello(io.grpc.examples.helloworld.HelloRequest request);
-  }
-
-  /**
-   * <pre>
-   * The greeting service definition.
-   * </pre>
-   */
-  public static interface GreeterFutureClient {
-
-    /**
-     * <pre>
-     * Sends a greeting
-     * </pre>
-     */
-    public com.google.common.util.concurrent.ListenableFuture<io.grpc.examples.helloworld.HelloReply> sayHello(
-        io.grpc.examples.helloworld.HelloRequest request);
-  }
-
-  public static class GreeterStub extends io.grpc.stub.AbstractStub<GreeterStub>
-      implements Greeter {
+  public static final class GreeterStub extends io.grpc.stub.AbstractStub<GreeterStub> {
     private GreeterStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -141,7 +114,11 @@ public class GreeterGrpc {
       return new GreeterStub(channel, callOptions);
     }
 
-    @java.lang.Override
+    /**
+     * <pre>
+     * Sends a greeting
+     * </pre>
+     */
     public void sayHello(io.grpc.examples.helloworld.HelloRequest request,
         io.grpc.stub.StreamObserver<io.grpc.examples.helloworld.HelloReply> responseObserver) {
       asyncUnaryCall(
@@ -149,8 +126,12 @@ public class GreeterGrpc {
     }
   }
 
-  public static class GreeterBlockingStub extends io.grpc.stub.AbstractStub<GreeterBlockingStub>
-      implements GreeterBlockingClient {
+  /**
+   * <pre>
+   * The greeting service definition.
+   * </pre>
+   */
+  public static final class GreeterBlockingStub extends io.grpc.stub.AbstractStub<GreeterBlockingStub> {
     private GreeterBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -166,15 +147,23 @@ public class GreeterGrpc {
       return new GreeterBlockingStub(channel, callOptions);
     }
 
-    @java.lang.Override
+    /**
+     * <pre>
+     * Sends a greeting
+     * </pre>
+     */
     public io.grpc.examples.helloworld.HelloReply sayHello(io.grpc.examples.helloworld.HelloRequest request) {
       return blockingUnaryCall(
           getChannel(), METHOD_SAY_HELLO, getCallOptions(), request);
     }
   }
 
-  public static class GreeterFutureStub extends io.grpc.stub.AbstractStub<GreeterFutureStub>
-      implements GreeterFutureClient {
+  /**
+   * <pre>
+   * The greeting service definition.
+   * </pre>
+   */
+  public static final class GreeterFutureStub extends io.grpc.stub.AbstractStub<GreeterFutureStub> {
     private GreeterFutureStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -190,7 +179,11 @@ public class GreeterGrpc {
       return new GreeterFutureStub(channel, callOptions);
     }
 
-    @java.lang.Override
+    /**
+     * <pre>
+     * Sends a greeting
+     * </pre>
+     */
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.examples.helloworld.HelloReply> sayHello(
         io.grpc.examples.helloworld.HelloRequest request) {
       return futureUnaryCall(
@@ -205,10 +198,10 @@ public class GreeterGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final Greeter serviceImpl;
+    private final GreeterImplBase serviceImpl;
     private final int methodId;
 
-    public MethodHandlers(Greeter serviceImpl, int methodId) {
+    public MethodHandlers(GreeterImplBase serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -242,16 +235,76 @@ public class GreeterGrpc {
         METHOD_SAY_HELLO);
   }
 
-  public static io.grpc.ServerServiceDefinition bindService(
-      final Greeter serviceImpl) {
-    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-        .addMethod(
-          METHOD_SAY_HELLO,
-          asyncUnaryCall(
-            new MethodHandlers<
-              io.grpc.examples.helloworld.HelloRequest,
-              io.grpc.examples.helloworld.HelloReply>(
-                serviceImpl, METHODID_SAY_HELLO)))
-        .build();
-  }
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements Greeter} with {@code extends GreeterImplBase};</li>
+   *   <li> replace usage of {@code Greeter} with {@code GreeterImplBase};</li>
+   *   <li> replace usage of {@code AbstractGreeter} with {@link GreeterImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(GreeterGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code GreeterBlockingClient} with {@link GreeterBlockingStub};</li>
+   *   <li> replace {@code GreeterFutureClient} with {@link GreeterFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final class Greeter {}
+
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements Greeter} with {@code extends GreeterImplBase};</li>
+   *   <li> replace usage of {@code Greeter} with {@code GreeterImplBase};</li>
+   *   <li> replace usage of {@code AbstractGreeter} with {@link GreeterImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(GreeterGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code GreeterBlockingClient} with {@link GreeterBlockingStub};</li>
+   *   <li> replace {@code GreeterFutureClient} with {@link GreeterFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final class GreeterBlockingClient {}
+
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements Greeter} with {@code extends GreeterImplBase};</li>
+   *   <li> replace usage of {@code Greeter} with {@code GreeterImplBase};</li>
+   *   <li> replace usage of {@code AbstractGreeter} with {@link GreeterImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(GreeterGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code GreeterBlockingClient} with {@link GreeterBlockingStub};</li>
+   *   <li> replace {@code GreeterFutureClient} with {@link GreeterFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final class GreeterFutureClient {}
+
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements Greeter} with {@code extends GreeterImplBase};</li>
+   *   <li> replace usage of {@code Greeter} with {@code GreeterImplBase};</li>
+   *   <li> replace usage of {@code AbstractGreeter} with {@link GreeterImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(GreeterGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code GreeterBlockingClient} with {@link GreeterBlockingStub};</li>
+   *   <li> replace {@code GreeterFutureClient} with {@link GreeterFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final void bindService(Object o) {}
+
 }
