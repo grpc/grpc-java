@@ -60,6 +60,7 @@ import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
 import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
 import io.netty.handler.codec.http2.DefaultHttp2HeadersDecoder;
 import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
+import io.netty.handler.codec.http2.DefaultHttp2RemoteFlowController;
 import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
@@ -99,6 +100,11 @@ class NettyServerHandler extends AbstractNettyHandler {
   private Throwable connectionError;
   private boolean teWarningLogged;
   private WriteQueue serverWriteQueue;
+  int dataSinceLastPing = 0;
+  private boolean pinging;
+  int pingcount = 0;
+  int pingreturn = 0;
+  
 
   static NettyServerHandler newHandler(ServerTransportListener transportListener,
                                        int maxStreams,
@@ -133,6 +139,8 @@ class NettyServerHandler extends AbstractNettyHandler {
     connection.local().flowController(new DefaultHttp2LocalFlowController(connection,
             DEFAULT_WINDOW_UPDATE_RATIO, true));
 
+    connection.remote().flowController(new DefaultHttp2RemoteFlowController(connection));
+    
     Http2ConnectionEncoder encoder = new DefaultHttp2ConnectionEncoder(connection, frameWriter);
     Http2ConnectionDecoder decoder = new DefaultHttp2ConnectionDecoder(connection, encoder,
         frameReader);
@@ -211,7 +219,8 @@ class NettyServerHandler extends AbstractNettyHandler {
     }
   }
 
-  private void onDataRead(int streamId, ByteBuf data, boolean endOfStream) throws Http2Exception {
+  private void onDataRead(int streamId, ByteBuf data, int padding, boolean endOfStream) throws Http2Exception {
+    dataSinceLastPing += data.readableBytes() + padding;
     try {
       NettyServerStream.TransportState stream = serverStream(requireHttp2Stream(streamId));
       stream.inboundDataReceived(data, endOfStream);
@@ -220,8 +229,32 @@ class NettyServerHandler extends AbstractNettyHandler {
       // Throw an exception that will get handled by onStreamError.
       throw newStreamException(streamId, e);
     }
+    
+    if (!pinging){
+      pinging = true;
+      sendDataPing(ctx());
+    }
   }
 
+  private void sendDataPing(ChannelHandlerContext ctx){
+    dataSinceLastPing = 0;
+    ChannelPromise promise = ctx.newPromise();
+    long pingData = 1234;
+    ByteBuf buffer = ctx.alloc().buffer(8);
+    buffer.writeLong(pingData);
+    
+    encoder().writePing(ctx, false, buffer, promise);
+    pingcount++;
+    
+    promise.addListener(new ChannelFutureListener(){
+      @Override
+      public void operationComplete(ChannelFuture future) throws Exception {
+        if(!future.isSuccess()){
+          pinging = false;
+        }
+      }
+    });
+  }
   private void onRstStreamRead(int streamId) throws Http2Exception {
     try {
       NettyServerStream.TransportState stream = serverStream(connection().stream(streamId));
@@ -425,7 +458,8 @@ class NettyServerHandler extends AbstractNettyHandler {
           "Header '%s'='%s', while '%s' is expected", header, headers.get(header), expectedValue);
     }
   }
-
+ 
+  
   /**
    * Returns the server stream associated to the given HTTP/2 stream object.
    */
@@ -443,7 +477,7 @@ class NettyServerHandler extends AbstractNettyHandler {
     @Override
     public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding,
         boolean endOfStream) throws Http2Exception {
-      NettyServerHandler.this.onDataRead(streamId, data, endOfStream);
+      NettyServerHandler.this.onDataRead(streamId, data, padding, endOfStream);
       return padding;
     }
 
@@ -463,6 +497,31 @@ class NettyServerHandler extends AbstractNettyHandler {
     public void onRstStreamRead(ChannelHandlerContext ctx, int streamId, long errorCode)
         throws Http2Exception {
       NettyServerHandler.this.onRstStreamRead(streamId);
+    }
+    
+    @Override
+    public void onPingAckRead(ChannelHandlerContext ctx, ByteBuf data)
+        throws Http2Exception {
+      if (data.readLong() == 1234){
+        pinging = false;
+        pingreturn++;
+        int target = 2*dataSinceLastPing;
+        int window = decoder().flowController().initialWindowSize(connection().connectionStream());
+        if (target > window){
+          int increase = target - window;
+          window = target;
+          Http2Settings settings = new Http2Settings();
+          decoder().flowController().incrementWindowSize(connection().connectionStream(), increase);
+          settings.pushEnabled(false);
+          settings.initialWindowSize(target);
+          settings.maxConcurrentStreams(0);
+          frameWriter().writeSettings(ctx(),settings, ctx().newPromise());
+        }
+      }
+      else{
+        //unexpected ping ack
+        logger.warning("Received unexpected ping ack. No ping outstanding");
+      }
     }
   }
 }

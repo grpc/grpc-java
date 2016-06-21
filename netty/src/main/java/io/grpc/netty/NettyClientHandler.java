@@ -60,6 +60,7 @@ import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
 import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
 import io.netty.handler.codec.http2.DefaultHttp2HeadersDecoder;
 import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
+import io.netty.handler.codec.http2.DefaultHttp2RemoteFlowController;
 import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2ConnectionAdapter;
@@ -110,6 +111,12 @@ class NettyClientHandler extends AbstractNettyHandler {
   private final Random random = new Random();
   private WriteQueue clientWriteQueue;
   private Http2Ping ping;
+  private boolean pinging = false; 
+  int dataSinceLastPing = 0;
+  public int pingcount = 0;
+  public int pingreturn = 0;
+  int framecount = 0;
+  int currinc;
 
   static NettyClientHandler newHandler(ClientTransportLifecycleManager lifecycleManager,
                                        int flowControlWindow, int maxHeaderListSize,
@@ -146,7 +153,7 @@ class NettyClientHandler extends AbstractNettyHandler {
 
     // Create the local flow controller configured to auto-refill the connection window.
     connection.local().flowController(new DefaultHttp2LocalFlowController(connection,
-            DEFAULT_WINDOW_UPDATE_RATIO, true));
+            (float) .5 , true));
 
     Http2ConnectionDecoder decoder = new DefaultHttp2ConnectionDecoder(connection, encoder,
         frameReader);
@@ -234,11 +241,45 @@ class NettyClientHandler extends AbstractNettyHandler {
   /**
    * Handler for an inbound HTTP/2 DATA frame.
    */
-  private void onDataRead(int streamId, ByteBuf data, boolean endOfStream) {
+  
+  private void onDataRead(int streamId, ByteBuf data, int padding, 
+      boolean endOfStream) {
+    
+    dataSinceLastPing += data.readableBytes() + padding;
+    
     NettyClientStream stream = clientStream(requireHttp2Stream(streamId));
     stream.transportDataReceived(data, endOfStream);
+    
+    //increment data and send a new ping if there isn't already one in progress 
+    if (!pinging){
+      pinging = true;
+      sendDataPing(ctx());
+    } 
+      
   }
-
+  
+  private void sendDataPing(ChannelHandlerContext ctx){
+    dataSinceLastPing = 0;
+    ChannelPromise promise = ctx.newPromise();
+    long pingData = 1234;
+    ByteBuf buffer = ctx.alloc().buffer(8);
+    buffer.writeLong(pingData);
+    
+    encoder().writePing(ctx, false, buffer, promise);
+    //ctx.flush();
+    pingcount++;
+    
+    //set ping to null if it fails, increment ping counter on success 
+    promise.addListener(new ChannelFutureListener(){
+      @Override
+      public void operationComplete(ChannelFuture future) throws Exception {
+        if(!future.isSuccess()){
+          pinging = false;
+        }
+      }
+    });
+  }
+     
   /**
    * Handler for an inbound HTTP/2 RST_STREAM frame, terminating a stream.
    */
@@ -532,7 +573,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     }
     return status;
   }
-
+  
   /**
    * Gets the client stream associated to the given HTTP/2 stream object.
    */
@@ -573,7 +614,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     @Override
     public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding,
         boolean endOfStream) throws Http2Exception {
-      NettyClientHandler.this.onDataRead(streamId, data, endOfStream);
+      NettyClientHandler.this.onDataRead(streamId, data, padding, endOfStream);
       return padding;
     }
 
@@ -607,7 +648,23 @@ class NettyClientHandler extends AbstractNettyHandler {
           logger.log(Level.WARNING, String.format("Received unexpected ping ack. "
               + "Expecting %d, got %d", p.payload(), ackPayload));
         }
-      } else {
+      }
+      else if (data.readLong() == 1234){     
+        pingreturn++;
+        int target = dataSinceLastPing * 2;
+        pinging = false;
+        int window = decoder().flowController().initialWindowSize(connection().connectionStream());
+        if (target > window){
+          int increase = target - window;
+          decoder().flowController().incrementWindowSize(connection().connectionStream(), increase);
+          Http2Settings settings = new Http2Settings();
+          settings.pushEnabled(false);
+          settings.initialWindowSize(target);
+          settings.maxConcurrentStreams(0);
+          frameWriter().writeSettings(ctx(),settings, ctx().newPromise());
+        } 
+      }
+      else {
         logger.warning("Received unexpected ping ack. No ping outstanding");
       }
     }
