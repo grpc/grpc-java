@@ -506,9 +506,9 @@ class NettyServerHandler extends AbstractNettyHandler {
         throws Http2Exception {
       if (data.readLong() == 1234){
         try{
-        pinging = false;
         pingreturn++;
         int target = 2*dataSinceLastPing;
+        pinging = false;
         System.out.println("OBDP: " + dataSinceLastPing);
         int window = decoder().flowController().initialWindowSize(connection().connectionStream());
         if (target > window){
@@ -516,9 +516,8 @@ class NettyServerHandler extends AbstractNettyHandler {
           window = target;
           Http2Settings settings = new Http2Settings();
           decoder().flowController().incrementWindowSize(connection().connectionStream(), increase);
-          settings.pushEnabled(false);
           settings.initialWindowSize(target);
-          settings.maxConcurrentStreams(0);
+          settings.maxConcurrentStreams(maxConcurrentStreams);
           frameWriter().writeSettings(ctx(),settings, ctx().newPromise());
         }
         }catch (Http2Exception e){
