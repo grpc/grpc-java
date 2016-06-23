@@ -104,6 +104,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   private boolean pinging;
   int pingcount = 0;
   int pingreturn = 0;
+  private static int maxConcurrentStreams;
   
 
   static NettyServerHandler newHandler(ServerTransportListener transportListener,
@@ -133,6 +134,7 @@ class NettyServerHandler extends AbstractNettyHandler {
     Preconditions.checkArgument(flowControlWindow > 0, "flowControlWindow must be positive");
     Preconditions.checkArgument(maxMessageSize > 0, "maxMessageSize must be positive");
 
+    maxConcurrentStreams = maxStreams;
     Http2Connection connection = new DefaultHttp2Connection(true);
 
     // Create the local flow controller configured to auto-refill the connection window.
@@ -503,9 +505,11 @@ class NettyServerHandler extends AbstractNettyHandler {
     public void onPingAckRead(ChannelHandlerContext ctx, ByteBuf data)
         throws Http2Exception {
       if (data.readLong() == 1234){
+        try{
         pinging = false;
         pingreturn++;
         int target = 2*dataSinceLastPing;
+        System.out.println("OBDP: " + dataSinceLastPing);
         int window = decoder().flowController().initialWindowSize(connection().connectionStream());
         if (target > window){
           int increase = target - window;
@@ -516,6 +520,9 @@ class NettyServerHandler extends AbstractNettyHandler {
           settings.initialWindowSize(target);
           settings.maxConcurrentStreams(0);
           frameWriter().writeSettings(ctx(),settings, ctx().newPromise());
+        }
+        }catch (Http2Exception e){
+          //do nothing
         }
       }
       else{

@@ -154,7 +154,8 @@ class NettyClientHandler extends AbstractNettyHandler {
     // Create the local flow controller configured to auto-refill the connection window.
     connection.local().flowController(new DefaultHttp2LocalFlowController(connection,
             (float) .5 , true));
-
+    connection.remote().flowController(new DefaultHttp2RemoteFlowController(connection));
+    
     Http2ConnectionDecoder decoder = new DefaultHttp2ConnectionDecoder(connection, encoder,
         frameReader);
 
@@ -652,6 +653,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       else if (data.readLong() == 1234){     
         pingreturn++;
         int target = dataSinceLastPing * 2;
+        System.out.println("OBDP: " + dataSinceLastPing);
         pinging = false;
         int window = decoder().flowController().initialWindowSize(connection().connectionStream());
         if (target > window){
