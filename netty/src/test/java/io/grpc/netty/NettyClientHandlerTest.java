@@ -57,6 +57,16 @@ import static org.mockito.Mockito.when;
 import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.MoreExecutors;
 
+import org.junit.Before;
+import org.junit.Ignore;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusException;
@@ -79,16 +89,6 @@ import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
 
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
-import org.mockito.ArgumentCaptor;
-import org.mockito.InOrder;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-
 /**
  * Tests for {@link NettyClientHandler}.
  */
@@ -105,6 +105,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   private int streamId = 3;
   private ClientTransportLifecycleManager lifecycleManager;
 
+  private int BDP_MEASUREMENT_PING = 1234;
   @Mock
   private NettyClientTransport.Listener listener;
 
@@ -458,32 +459,30 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   @Test
-  public void dataPingSentOnDataRecieved() throws Exception{
+  public void dataPingSentOnDataRecieved() throws Exception {
     createStream();
-    ByteBuf frame = dataFrame(3, false); 
-    channelRead(frame);
-    assertEquals(1, handler().pingcount);
+
+    channelRead(dataFrame(3, false));
+
+    assertEquals(1, handler().getPingCount());
   }
-  
-  @Test 
-  public void dataPingAckIsRecognized() throws Exception{
+
+  @Test
+  public void dataPingAckIsRecognized() throws Exception {
     createStream();
-    //ping
-    ByteBuf frame = dataFrame(3, false); 
-    assertEquals(0, handler().pingcount);
-    channelRead(frame);
-    
-    //ack
-    long pingdata = 1234;
+
+    channelRead(dataFrame(3, false));
+    long pingdata = BDP_MEASUREMENT_PING;
     ByteBuf buffer = handler().ctx().alloc().buffer(8);
     buffer.writeLong(pingdata);
     channelRead(pingFrame(true, buffer));
-    assertEquals(1, handler().pingcount);
-    assertEquals(1, handler().pingreturn);  
+
+    assertEquals(1, handler().getPingCount());
+    assertEquals(1, handler().getPingReturn());
   }
-  
-  @Test 
-  public void dataSinceLastPingAccumulates() throws Exception{
+
+  @Test
+  public void dataSizeSincePingAccumulates() throws Exception {
     createStream();
     long frameData = 123456;
     ByteBuf buff = ctx().alloc().buffer(16);
@@ -493,105 +492,99 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     channelRead(dataFrame(3, false, buff.copy()));
     channelRead(dataFrame(3, false, buff.copy()));
     channelRead(dataFrame(3, false, buff.copy()));
-    assertEquals(length*2, handler().dataSinceLastPing);
-  
-    //send ack
-    long pingdata = 1234;
+
+    assertEquals(length * 2, handler().dataSizeSincePing);
+
+    long pingdata = BDP_MEASUREMENT_PING;
     ByteBuf buffer = handler().ctx().alloc().buffer(8);
     buffer.writeLong(pingdata);
     channelRead(pingFrame(true, buffer));
-    assertEquals(1, handler().pingreturn); 
-    
-    //new data frame resets data
     channelRead(dataFrame(3, false));
-    assertEquals(2, handler().pingcount);
-    assertEquals(0, handler().dataSinceLastPing);
-    
-    
+
+    assertEquals(2, handler().getPingCount());
+    assertEquals(0, handler().dataSizeSincePing);
   }
-  
+
   @Test
-  public void windowUpdateMatchesTarget() throws Exception{
-   
+  public void windowUpdateMatchesTarget() throws Exception {
     Http2Stream connectionStream = connection().connectionStream();
     Http2LocalFlowController localFlowController = connection().local().flowController();
     createStream();
     ByteBuf data = ctx().alloc().buffer(1 * 1024);
-    while(data.isWritable()){
+    while(data.isWritable()) {
       data.writeLong(1111);
-    } 
+    }
     int length = data.readableBytes();
-    //ping
-    ByteBuf frame1 = dataFrame(3, false, data.copy());
-    channelRead(frame1);
-    //send 40 1 kB frames 
+    ByteBuf frame = dataFrame(3, false, data.copy());
+
+    channelRead(frame);
     int accumulator = 0;
-    for(int i = 0; i < 40; i++){
+    for(int i = 0; i < 40; i++ ){
      channelRead(dataFrame(3, false, data.copy()));
      accumulator += length;
     }
-    assertEquals(accumulator, handler().dataSinceLastPing);    
-    //ack
-    long pingdata = 1234;
+    long pingdata = BDP_MEASUREMENT_PING;
     ByteBuf buffer = handler().ctx().alloc().buffer(8);
     buffer.writeLong(pingdata);
     channelRead(pingFrame(true, buffer));
-    assertEquals(2*accumulator, localFlowController.initialWindowSize(connectionStream));
+    accumulator += buffer.readableBytes();
+
+    assertEquals(accumulator, handler().dataSizeSincePing);
+    assertEquals(2 * accumulator, localFlowController.initialWindowSize(connectionStream));
   }
-  
-  @Test 
-  public void windowShouldNotDecrease() throws Exception{
+
+  @Test
+  public void windowShouldNotDecrease() throws Exception {
     createStream();
     int initWindow = 1048576;
     Http2Stream connectionStream = connection().connectionStream();
     Http2LocalFlowController localFlowController = connection().local().flowController();
     localFlowController.incrementWindowSize(connectionStream, (initWindow - flowControlWindow));
-    
+
     localFlowController.initialWindowSize(initWindow);
     ByteBuf data = ctx().alloc().buffer(16 * 1024);
-    while(data.isWritable()){
+    while(data.isWritable()) {
       data.writeLong(1111);
-    } 
-    int length = data.readableBytes();
-    ByteBuf frame1 = dataFrame(3, false, data.copy());
-    channelRead(frame1);
-    int accumulator = 0;
-    for(int i = 0; i < 10; i++){
-      channelRead(dataFrame(3, false, data.copy()));
-      accumulator +=length;
     }
-    assertEquals(accumulator, handler().dataSinceLastPing); 
-    long pingdata = 1234;
+    int length = data.readableBytes();
+    ByteBuf frame = dataFrame(3, false, data.copy());
+    channelRead(frame);
+    int accumulator = 0;
+    for(int i = 0; i < 10; i++) {
+      channelRead(dataFrame(3, false, data.copy()));
+      accumulator += length;
+    }
+    long pingdata = BDP_MEASUREMENT_PING;
     ByteBuf buffer = handler().ctx().alloc().buffer(8);
     buffer.writeLong(pingdata);
     channelRead(pingFrame(true, buffer));
+    accumulator += buffer.readableBytes();
+
+    assertEquals(accumulator, handler().dataSizeSincePing);
     assertEquals(initWindow, localFlowController.initialWindowSize(connectionStream));
-  } 
-  
+  }
+
   public void consecutiveUpdates() throws Exception {
     createStream();
+
     channelRead(dataFrame(3, false));
-    handler().dataSinceLastPing = 40000;
-    
-    //ack
-    long pingdata = 1234;
+    handler().dataSizeSincePing = 40000;
+    long pingdata = BDP_MEASUREMENT_PING;
     ByteBuf buffer = handler().ctx().alloc().buffer(8);
     buffer.writeLong(pingdata);
     channelRead(pingFrame(true, buffer));
-    
-    assertEquals(80000, 
+
+    assertEquals(80000,
         connection().local().flowController().initialWindowSize(connection().connectionStream()));
-    
+
     channelRead(dataFrame(3, false));
-    handler().dataSinceLastPing = 70000;
-    
-    //ack
+    handler().dataSizeSincePing = 70000;
     channelRead(pingFrame(true, buffer));
-    
-    assertEquals(140000, 
+
+    assertEquals(140000,
         connection().local().flowController().initialWindowSize(connection().connectionStream()));
   }
-  
+
   @Test
   public void exceptionCaughtShouldCloseConnection() throws Exception {
     handler().exceptionCaught(ctx(), new RuntimeException("fake exception"));
