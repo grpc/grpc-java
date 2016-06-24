@@ -95,7 +95,7 @@ public class RouteGuideGrpc {
    * Interface exported by the server.
    * </pre>
    */
-  public static interface RouteGuide {
+  public static abstract class RouteGuideImplBase implements io.grpc.BindableService {
 
     /**
      * <pre>
@@ -106,7 +106,9 @@ public class RouteGuideGrpc {
      * </pre>
      */
     public void getFeature(io.grpc.examples.routeguide.Point request,
-        io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.Feature> responseObserver);
+        io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.Feature> responseObserver) {
+      asyncUnimplementedUnaryCall(METHOD_GET_FEATURE, responseObserver);
+    }
 
     /**
      * <pre>
@@ -118,7 +120,9 @@ public class RouteGuideGrpc {
      * </pre>
      */
     public void listFeatures(io.grpc.examples.routeguide.Rectangle request,
-        io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.Feature> responseObserver);
+        io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.Feature> responseObserver) {
+      asyncUnimplementedUnaryCall(METHOD_LIST_FEATURES, responseObserver);
+    }
 
     /**
      * <pre>
@@ -128,7 +132,9 @@ public class RouteGuideGrpc {
      * </pre>
      */
     public io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.Point> recordRoute(
-        io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.RouteSummary> responseObserver);
+        io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.RouteSummary> responseObserver) {
+      return asyncUnimplementedStreamingCall(METHOD_RECORD_ROUTE, responseObserver);
+    }
 
     /**
      * <pre>
@@ -138,38 +144,41 @@ public class RouteGuideGrpc {
      * </pre>
      */
     public io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.RouteNote> routeChat(
-        io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.RouteNote> responseObserver);
-  }
-
-  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1469")
-  public static abstract class AbstractRouteGuide implements RouteGuide, io.grpc.BindableService {
-
-    @java.lang.Override
-    public void getFeature(io.grpc.examples.routeguide.Point request,
-        io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.Feature> responseObserver) {
-      asyncUnimplementedUnaryCall(METHOD_GET_FEATURE, responseObserver);
-    }
-
-    @java.lang.Override
-    public void listFeatures(io.grpc.examples.routeguide.Rectangle request,
-        io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.Feature> responseObserver) {
-      asyncUnimplementedUnaryCall(METHOD_LIST_FEATURES, responseObserver);
-    }
-
-    @java.lang.Override
-    public io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.Point> recordRoute(
-        io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.RouteSummary> responseObserver) {
-      return asyncUnimplementedStreamingCall(METHOD_RECORD_ROUTE, responseObserver);
-    }
-
-    @java.lang.Override
-    public io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.RouteNote> routeChat(
         io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.RouteNote> responseObserver) {
       return asyncUnimplementedStreamingCall(METHOD_ROUTE_CHAT, responseObserver);
     }
 
-    @java.lang.Override public io.grpc.ServerServiceDefinition bindService() {
-      return RouteGuideGrpc.bindService(this);
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+          .addMethod(
+            METHOD_GET_FEATURE,
+            asyncUnaryCall(
+              new MethodHandlers<
+                io.grpc.examples.routeguide.Point,
+                io.grpc.examples.routeguide.Feature>(
+                  this, METHODID_GET_FEATURE)))
+          .addMethod(
+            METHOD_LIST_FEATURES,
+            asyncServerStreamingCall(
+              new MethodHandlers<
+                io.grpc.examples.routeguide.Rectangle,
+                io.grpc.examples.routeguide.Feature>(
+                  this, METHODID_LIST_FEATURES)))
+          .addMethod(
+            METHOD_RECORD_ROUTE,
+            asyncClientStreamingCall(
+              new MethodHandlers<
+                io.grpc.examples.routeguide.Point,
+                io.grpc.examples.routeguide.RouteSummary>(
+                  this, METHODID_RECORD_ROUTE)))
+          .addMethod(
+            METHOD_ROUTE_CHAT,
+            asyncBidiStreamingCall(
+              new MethodHandlers<
+                io.grpc.examples.routeguide.RouteNote,
+                io.grpc.examples.routeguide.RouteNote>(
+                  this, METHODID_ROUTE_CHAT)))
+          .build();
     }
   }
 
@@ -178,52 +187,7 @@ public class RouteGuideGrpc {
    * Interface exported by the server.
    * </pre>
    */
-  public static interface RouteGuideBlockingClient {
-
-    /**
-     * <pre>
-     * A simple RPC.
-     * Obtains the feature at a given position.
-     * A feature with an empty name is returned if there's no feature at the given
-     * position.
-     * </pre>
-     */
-    public io.grpc.examples.routeguide.Feature getFeature(io.grpc.examples.routeguide.Point request);
-
-    /**
-     * <pre>
-     * A server-to-client streaming RPC.
-     * Obtains the Features available within the given Rectangle.  Results are
-     * streamed rather than returned at once (e.g. in a response message with a
-     * repeated field), as the rectangle may cover a large area and contain a
-     * huge number of features.
-     * </pre>
-     */
-    public java.util.Iterator<io.grpc.examples.routeguide.Feature> listFeatures(
-        io.grpc.examples.routeguide.Rectangle request);
-  }
-
-  /**
-   * <pre>
-   * Interface exported by the server.
-   * </pre>
-   */
-  public static interface RouteGuideFutureClient {
-
-    /**
-     * <pre>
-     * A simple RPC.
-     * Obtains the feature at a given position.
-     * A feature with an empty name is returned if there's no feature at the given
-     * position.
-     * </pre>
-     */
-    public com.google.common.util.concurrent.ListenableFuture<io.grpc.examples.routeguide.Feature> getFeature(
-        io.grpc.examples.routeguide.Point request);
-  }
-
-  public static class RouteGuideStub extends io.grpc.stub.AbstractStub<RouteGuideStub>
-      implements RouteGuide {
+  public static final class RouteGuideStub extends io.grpc.stub.AbstractStub<RouteGuideStub> {
     private RouteGuideStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -239,28 +203,55 @@ public class RouteGuideGrpc {
       return new RouteGuideStub(channel, callOptions);
     }
 
-    @java.lang.Override
+    /**
+     * <pre>
+     * A simple RPC.
+     * Obtains the feature at a given position.
+     * A feature with an empty name is returned if there's no feature at the given
+     * position.
+     * </pre>
+     */
     public void getFeature(io.grpc.examples.routeguide.Point request,
         io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.Feature> responseObserver) {
       asyncUnaryCall(
           getChannel().newCall(METHOD_GET_FEATURE, getCallOptions()), request, responseObserver);
     }
 
-    @java.lang.Override
+    /**
+     * <pre>
+     * A server-to-client streaming RPC.
+     * Obtains the Features available within the given Rectangle.  Results are
+     * streamed rather than returned at once (e.g. in a response message with a
+     * repeated field), as the rectangle may cover a large area and contain a
+     * huge number of features.
+     * </pre>
+     */
     public void listFeatures(io.grpc.examples.routeguide.Rectangle request,
         io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.Feature> responseObserver) {
       asyncServerStreamingCall(
           getChannel().newCall(METHOD_LIST_FEATURES, getCallOptions()), request, responseObserver);
     }
 
-    @java.lang.Override
+    /**
+     * <pre>
+     * A client-to-server streaming RPC.
+     * Accepts a stream of Points on a route being traversed, returning a
+     * RouteSummary when traversal is completed.
+     * </pre>
+     */
     public io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.Point> recordRoute(
         io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.RouteSummary> responseObserver) {
       return asyncClientStreamingCall(
           getChannel().newCall(METHOD_RECORD_ROUTE, getCallOptions()), responseObserver);
     }
 
-    @java.lang.Override
+    /**
+     * <pre>
+     * A Bidirectional streaming RPC.
+     * Accepts a stream of RouteNotes sent while a route is being traversed,
+     * while receiving other RouteNotes (e.g. from other users).
+     * </pre>
+     */
     public io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.RouteNote> routeChat(
         io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.RouteNote> responseObserver) {
       return asyncBidiStreamingCall(
@@ -268,8 +259,12 @@ public class RouteGuideGrpc {
     }
   }
 
-  public static class RouteGuideBlockingStub extends io.grpc.stub.AbstractStub<RouteGuideBlockingStub>
-      implements RouteGuideBlockingClient {
+  /**
+   * <pre>
+   * Interface exported by the server.
+   * </pre>
+   */
+  public static final class RouteGuideBlockingStub extends io.grpc.stub.AbstractStub<RouteGuideBlockingStub> {
     private RouteGuideBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -285,13 +280,28 @@ public class RouteGuideGrpc {
       return new RouteGuideBlockingStub(channel, callOptions);
     }
 
-    @java.lang.Override
+    /**
+     * <pre>
+     * A simple RPC.
+     * Obtains the feature at a given position.
+     * A feature with an empty name is returned if there's no feature at the given
+     * position.
+     * </pre>
+     */
     public io.grpc.examples.routeguide.Feature getFeature(io.grpc.examples.routeguide.Point request) {
       return blockingUnaryCall(
           getChannel(), METHOD_GET_FEATURE, getCallOptions(), request);
     }
 
-    @java.lang.Override
+    /**
+     * <pre>
+     * A server-to-client streaming RPC.
+     * Obtains the Features available within the given Rectangle.  Results are
+     * streamed rather than returned at once (e.g. in a response message with a
+     * repeated field), as the rectangle may cover a large area and contain a
+     * huge number of features.
+     * </pre>
+     */
     public java.util.Iterator<io.grpc.examples.routeguide.Feature> listFeatures(
         io.grpc.examples.routeguide.Rectangle request) {
       return blockingServerStreamingCall(
@@ -299,8 +309,12 @@ public class RouteGuideGrpc {
     }
   }
 
-  public static class RouteGuideFutureStub extends io.grpc.stub.AbstractStub<RouteGuideFutureStub>
-      implements RouteGuideFutureClient {
+  /**
+   * <pre>
+   * Interface exported by the server.
+   * </pre>
+   */
+  public static final class RouteGuideFutureStub extends io.grpc.stub.AbstractStub<RouteGuideFutureStub> {
     private RouteGuideFutureStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -316,7 +330,14 @@ public class RouteGuideGrpc {
       return new RouteGuideFutureStub(channel, callOptions);
     }
 
-    @java.lang.Override
+    /**
+     * <pre>
+     * A simple RPC.
+     * Obtains the feature at a given position.
+     * A feature with an empty name is returned if there's no feature at the given
+     * position.
+     * </pre>
+     */
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.examples.routeguide.Feature> getFeature(
         io.grpc.examples.routeguide.Point request) {
       return futureUnaryCall(
@@ -334,10 +355,10 @@ public class RouteGuideGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final RouteGuide serviceImpl;
+    private final RouteGuideImplBase serviceImpl;
     private final int methodId;
 
-    public MethodHandlers(RouteGuide serviceImpl, int methodId) {
+    public MethodHandlers(RouteGuideImplBase serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -384,37 +405,76 @@ public class RouteGuideGrpc {
         METHOD_ROUTE_CHAT);
   }
 
-  public static io.grpc.ServerServiceDefinition bindService(
-      final RouteGuide serviceImpl) {
-    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-        .addMethod(
-          METHOD_GET_FEATURE,
-          asyncUnaryCall(
-            new MethodHandlers<
-              io.grpc.examples.routeguide.Point,
-              io.grpc.examples.routeguide.Feature>(
-                serviceImpl, METHODID_GET_FEATURE)))
-        .addMethod(
-          METHOD_LIST_FEATURES,
-          asyncServerStreamingCall(
-            new MethodHandlers<
-              io.grpc.examples.routeguide.Rectangle,
-              io.grpc.examples.routeguide.Feature>(
-                serviceImpl, METHODID_LIST_FEATURES)))
-        .addMethod(
-          METHOD_RECORD_ROUTE,
-          asyncClientStreamingCall(
-            new MethodHandlers<
-              io.grpc.examples.routeguide.Point,
-              io.grpc.examples.routeguide.RouteSummary>(
-                serviceImpl, METHODID_RECORD_ROUTE)))
-        .addMethod(
-          METHOD_ROUTE_CHAT,
-          asyncBidiStreamingCall(
-            new MethodHandlers<
-              io.grpc.examples.routeguide.RouteNote,
-              io.grpc.examples.routeguide.RouteNote>(
-                serviceImpl, METHODID_ROUTE_CHAT)))
-        .build();
-  }
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements RouteGuide} with {@code extends RouteGuideImplBase};</li>
+   *   <li> replace usage of {@code RouteGuide} with {@code RouteGuideImplBase};</li>
+   *   <li> replace usage of {@code AbstractRouteGuide} with {@link RouteGuideImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(RouteGuideGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code RouteGuideBlockingClient} with {@link RouteGuideBlockingStub};</li>
+   *   <li> replace {@code RouteGuideFutureClient} with {@link RouteGuideFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final class RouteGuide {}
+
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements RouteGuide} with {@code extends RouteGuideImplBase};</li>
+   *   <li> replace usage of {@code RouteGuide} with {@code RouteGuideImplBase};</li>
+   *   <li> replace usage of {@code AbstractRouteGuide} with {@link RouteGuideImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(RouteGuideGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code RouteGuideBlockingClient} with {@link RouteGuideBlockingStub};</li>
+   *   <li> replace {@code RouteGuideFutureClient} with {@link RouteGuideFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final class RouteGuideBlockingClient {}
+
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements RouteGuide} with {@code extends RouteGuideImplBase};</li>
+   *   <li> replace usage of {@code RouteGuide} with {@code RouteGuideImplBase};</li>
+   *   <li> replace usage of {@code AbstractRouteGuide} with {@link RouteGuideImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(RouteGuideGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code RouteGuideBlockingClient} with {@link RouteGuideBlockingStub};</li>
+   *   <li> replace {@code RouteGuideFutureClient} with {@link RouteGuideFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final class RouteGuideFutureClient {}
+
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements RouteGuide} with {@code extends RouteGuideImplBase};</li>
+   *   <li> replace usage of {@code RouteGuide} with {@code RouteGuideImplBase};</li>
+   *   <li> replace usage of {@code AbstractRouteGuide} with {@link RouteGuideImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(RouteGuideGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code RouteGuideBlockingClient} with {@link RouteGuideBlockingStub};</li>
+   *   <li> replace {@code RouteGuideFutureClient} with {@link RouteGuideFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final void bindService(Object o) {}
+
 }

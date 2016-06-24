@@ -427,100 +427,58 @@ enum CallType {
   FUTURE_CALL = 2
 };
 
+static void PrintBindServiceMethod(const ServiceDescriptor* service,
+                                   map<string, string>* vars,
+                                   Printer* p,
+                                   bool generate_nano);
+
 // Prints a client interface or implementation class, or a server interface.
 static void PrintStub(
     const ServiceDescriptor* service,
     map<string, string>* vars,
     Printer* p, StubType type, bool generate_nano) {
   (*vars)["service_name"] = service->name();
-  (*vars)["abstract_name"] = "Abstract" + service->name();
-  string interface_name = service->name();
+  (*vars)["abstract_name"] = service->name() + "ImplBase";
   string impl_name = service->name();
-  bool abstract = false;
+  bool impl_base = false;
+  CallType call_type;
   switch (type) {
     case ABSTRACT_CLASS:
-      abstract = true;
+      impl_base = true;
+      call_type = ASYNC_CALL;
       break;
-    case ASYNC_INTERFACE:
     case ASYNC_CLIENT_IMPL:
       impl_name += "Stub";
+      call_type = ASYNC_CALL;
       break;
-    case BLOCKING_CLIENT_INTERFACE:
     case BLOCKING_CLIENT_IMPL:
-      interface_name += "BlockingClient";
       impl_name += "BlockingStub";
+      call_type = BLOCKING_CALL;
       break;
-    case FUTURE_CLIENT_INTERFACE:
     case FUTURE_CLIENT_IMPL:
-      interface_name += "FutureClient";
       impl_name += "FutureStub";
-      break;
-    case BLOCKING_SERVER_INTERFACE:
-      interface_name += "BlockingServer";
+      call_type = FUTURE_CALL;
       break;
     default:
       GRPC_CODEGEN_FAIL << "Cannot determine class name for StubType: " << type;
   }
-  CallType call_type;
-  bool impl = false;
-  switch (type) {
-    case ABSTRACT_CLASS:
-    case ASYNC_INTERFACE:
-      call_type = ASYNC_CALL;
-      impl = false;
-      break;
-    case BLOCKING_CLIENT_INTERFACE:
-    case BLOCKING_SERVER_INTERFACE:
-      call_type = BLOCKING_CALL;
-      impl = false;
-      break;
-    case FUTURE_CLIENT_INTERFACE:
-      call_type = FUTURE_CALL;
-      impl = false;
-      break;
-    case ASYNC_CLIENT_IMPL:
-      call_type = ASYNC_CALL;
-      impl = true;
-      break;
-    case BLOCKING_CLIENT_IMPL:
-      call_type = BLOCKING_CALL;
-      impl = true;
-      break;
-    case FUTURE_CLIENT_IMPL:
-      call_type = FUTURE_CALL;
-      impl = true;
-      break;
-    default:
-      GRPC_CODEGEN_FAIL << "Cannot determine call type for StubType: " << type;
-  }
-  (*vars)["interface_name"] = interface_name;
   (*vars)["impl_name"] = impl_name;
 
-  bool interface = !abstract && !impl;
   // Class head
-  if (abstract) {
+  GrpcWriteServiceDocComment(p, service);
+  if (impl_base) {
     p->Print(
         *vars,
-        "@$ExperimentalApi$(\"https://github.com/grpc/grpc-java/issues/1469\")\n"
-        "public static abstract class $abstract_name$ implements $service_name$, "
-        "$BindableService$ {\n");
-  } else if (interface) {
-    // TODO(nmittler): Replace with WriteServiceDocComment when included in protobuf distribution.
-    // Print the service-level javadoc when we define the interface.
-    GrpcWriteServiceDocComment(p, service);
-    p->Print(
-        *vars,
-        "public static interface $interface_name$ {\n");
+        "public static abstract class $abstract_name$ implements $BindableService$ {\n");
   } else {
     p->Print(
         *vars,
-        "public static class $impl_name$ extends $AbstractStub$<$impl_name$>\n"
-        "    implements $interface_name$ {\n");
+        "public static final class $impl_name$ extends $AbstractStub$<$impl_name$> {\n");
   }
   p->Indent();
 
   // Constructor and build() method
-  if (impl) {
+  if (!impl_base) {
     p->Print(
         *vars,
         "private $impl_name$($Channel$ channel) {\n");
@@ -573,20 +531,11 @@ static void PrintStub(
 
     // Method signature
     p->Print("\n");
-    if (interface) {
-      // TODO(nmittler): Replace with WriteMethodDocComment once included by the protobuf distro.
-      GrpcWriteMethodDocComment(p, method);
-    } else {
-      p->Print(
-          *vars,
-          "@$Override$\n");
-    }
+    // TODO(nmittler): Replace with WriteMethodDocComment once included by the protobuf distro.
+    GrpcWriteMethodDocComment(p, method);
     p->Print("public ");
     switch (call_type) {
       case BLOCKING_CALL:
-        // TODO(zhangkun83): decide the blocking server interface
-        GRPC_CODEGEN_CHECK(type != BLOCKING_SERVER_INTERFACE)
-            << "Blocking server interface is not available";
         GRPC_CODEGEN_CHECK(!client_streaming)
             << "Blocking client interface with client streaming is unavailable";
         if (server_streaming) {
@@ -629,17 +578,11 @@ static void PrintStub(
         break;
     }
 
-    if (!(abstract || impl)) {
-      // Interface method - there will be no body, close method.
-      p->Print(";\n");
-      continue;
-    }
-
     // Method body for abstract stub & client impls.
     p->Print(" {\n");
     p->Indent();
 
-    if (abstract) {
+    if (impl_base) {
       switch (call_type) {
         // NB: Skipping validation of service methods. If something is wrong, we wouldn't get to
         // this point as compiler would return errors when generating service interface.
@@ -657,7 +600,7 @@ static void PrintStub(
         default:
           break;
       }
-    } else if (impl) {
+    } else {
       switch (call_type) {
         case BLOCKING_CALL:
           GRPC_CODEGEN_CHECK(!client_streaming)
@@ -715,17 +658,9 @@ static void PrintStub(
     p->Print("}\n");
   }
 
-  if (abstract) {
+  if (impl_base) {
     p->Print("\n");
-    p->Print(*vars,
-             "@$Override$ public $ServerServiceDefinition$ bindService() {\n"
-             );
-    p->Indent();
-    p->Print(*vars,
-             "return $service_class_name$.bindService(this);\n"
-             );
-    p->Outdent();
-    p->Print("}\n");
+    PrintBindServiceMethod(service, vars, p, generate_nano);
   }
 
   p->Outdent();
@@ -760,7 +695,7 @@ static void PrintMethodHandlerClass(const ServiceDescriptor* service,
         "private static final int $method_id_name$ = $method_id$;\n");
   }
   p->Print("\n");
-  (*vars)["service_name"] = service->name();
+  (*vars)["service_name"] = service->name() + "ImplBase";
   p->Print(
       *vars,
       "private static class MethodHandlers<Req, Resp> implements\n"
@@ -880,11 +815,9 @@ static void PrintBindServiceMethod(const ServiceDescriptor* service,
                                    map<string, string>* vars,
                                    Printer* p,
                                    bool generate_nano) {
-  (*vars)["service_name"] = service->name();
-  p->Print(
-      *vars,
-      "public static $ServerServiceDefinition$ bindService(\n"
-      "    final $service_name$ serviceImpl) {\n");
+  p->Print(*vars,
+           "@$Override$ public final $ServerServiceDefinition$ bindService() {\n"
+          );
   p->Indent();
   p->Print(*vars,
            "return "
@@ -927,7 +860,7 @@ static void PrintBindServiceMethod(const ServiceDescriptor* service,
         "new MethodHandlers<\n"
         "  $input_type$,\n"
         "  $output_type$>(\n"
-        "    serviceImpl, $method_id_name$)))\n");
+        "    this, $method_id_name$)))\n");
     p->Outdent();
     p->Outdent();
   }
@@ -936,6 +869,54 @@ static void PrintBindServiceMethod(const ServiceDescriptor* service,
   p->Outdent();
   p->Outdent();
   p->Print("}\n");
+}
+
+// TODO(zdapeng): remove PrintDeprecatedDocComment once all our customers complete v0.15 upgrade.
+static void PrintDeprecatedDocComment(const ServiceDescriptor* service,
+                                      map<string, string>* vars,
+                                      Printer* p) {
+  p->Print(
+      *vars,
+      "/**\n"
+      " * This can not be used any more since v0.15.\n"
+      " * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,\n"
+      " * the following are suggested:\n"
+      " * <ul>\n"
+      " *   <li> replace {@code extends/implements $service_name$}"
+      " with {@code extends $service_name$ImplBase};</li>\n"
+      " *   <li> replace usage of {@code $service_name$} with {@code $service_name$ImplBase};"
+      "</li>\n"
+      " *   <li> replace usage of {@code Abstract$service_name$}"
+      " with {@link $service_name$ImplBase};</li>\n"
+      " *   <li> replace"
+      " {@code serverBuilder.addService($service_class_name$.bindService(serviceImpl))}\n"
+      " *        with {@code serverBuilder.addService(serviceImpl)};</li>\n"
+      " *   <li> if you are mocking stubs using mockito, please do not mock them."
+      " See the documentation\n"
+      " *        on testing with gRPC-java;</li>\n"
+      " *   <li> replace {@code $service_name$BlockingClient}"
+      " with {@link $service_name$BlockingStub};</li>\n"
+      " *   <li> replace {@code $service_name$FutureClient}"
+      " with {@link $service_name$FutureStub}.</li>\n"
+      " * </ul>\n"
+      " */\n");
+}
+
+// TODO(zdapeng): remove PrintDeprecated once all our customers complete v0.15 upgrade.
+static void PrintDeprecated(const ServiceDescriptor* service,
+                            map<string, string>* vars,
+                            Printer* p) {
+  (*vars)["service_name"] = service->name();
+  PrintDeprecatedDocComment(service, vars, p);
+  p->Print(*vars, "@Deprecated public static final class $service_name$ {}\n\n");
+  PrintDeprecatedDocComment(service, vars, p);
+  p->Print(*vars, "@Deprecated public static final class $service_name$BlockingClient {}\n\n");
+  PrintDeprecatedDocComment(service, vars, p);
+  p->Print(*vars, "@Deprecated public static final class $service_name$FutureClient {}\n\n");
+  PrintDeprecatedDocComment(service, vars, p);
+  p->Print(*vars,
+           "@Deprecated public static final"
+           " void bindService(Object o) {}\n\n");
 }
 
 static void PrintService(const ServiceDescriptor* service,
@@ -1011,16 +992,14 @@ static void PrintService(const ServiceDescriptor* service,
   p->Print("}\n\n");
 
   bool generate_nano = flavor == ProtoFlavor::NANO;
-  PrintStub(service, vars, p, ASYNC_INTERFACE, generate_nano);
   PrintStub(service, vars, p, ABSTRACT_CLASS, generate_nano);
-  PrintStub(service, vars, p, BLOCKING_CLIENT_INTERFACE, generate_nano);
-  PrintStub(service, vars, p, FUTURE_CLIENT_INTERFACE, generate_nano);
   PrintStub(service, vars, p, ASYNC_CLIENT_IMPL, generate_nano);
   PrintStub(service, vars, p, BLOCKING_CLIENT_IMPL, generate_nano);
   PrintStub(service, vars, p, FUTURE_CLIENT_IMPL, generate_nano);
   PrintMethodHandlerClass(service, vars, p, generate_nano);
   PrintGetServiceDescriptorMethod(service, vars, p, generate_nano);
-  PrintBindServiceMethod(service, vars, p, generate_nano);
+  // TODO(zdapeng): remove PrintDeprecated once all our customers complete v0.15 upgrade.
+  PrintDeprecated(service, vars, p);
   p->Outdent();
   p->Print("}\n");
 }

@@ -62,7 +62,7 @@ public class LoadBalancerGrpc {
 
   /**
    */
-  public static interface LoadBalancer {
+  public static abstract class LoadBalancerImplBase implements io.grpc.BindableService {
 
     /**
      * <pre>
@@ -70,35 +70,26 @@ public class LoadBalancerGrpc {
      * </pre>
      */
     public io.grpc.stub.StreamObserver<io.grpc.grpclb.LoadBalanceRequest> balanceLoad(
-        io.grpc.stub.StreamObserver<io.grpc.grpclb.LoadBalanceResponse> responseObserver);
-  }
-
-  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1469")
-  public static abstract class AbstractLoadBalancer implements LoadBalancer, io.grpc.BindableService {
-
-    @java.lang.Override
-    public io.grpc.stub.StreamObserver<io.grpc.grpclb.LoadBalanceRequest> balanceLoad(
         io.grpc.stub.StreamObserver<io.grpc.grpclb.LoadBalanceResponse> responseObserver) {
       return asyncUnimplementedStreamingCall(METHOD_BALANCE_LOAD, responseObserver);
     }
 
-    @java.lang.Override public io.grpc.ServerServiceDefinition bindService() {
-      return LoadBalancerGrpc.bindService(this);
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+          .addMethod(
+            METHOD_BALANCE_LOAD,
+            asyncBidiStreamingCall(
+              new MethodHandlers<
+                io.grpc.grpclb.LoadBalanceRequest,
+                io.grpc.grpclb.LoadBalanceResponse>(
+                  this, METHODID_BALANCE_LOAD)))
+          .build();
     }
   }
 
   /**
    */
-  public static interface LoadBalancerBlockingClient {
-  }
-
-  /**
-   */
-  public static interface LoadBalancerFutureClient {
-  }
-
-  public static class LoadBalancerStub extends io.grpc.stub.AbstractStub<LoadBalancerStub>
-      implements LoadBalancer {
+  public static final class LoadBalancerStub extends io.grpc.stub.AbstractStub<LoadBalancerStub> {
     private LoadBalancerStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -114,7 +105,11 @@ public class LoadBalancerGrpc {
       return new LoadBalancerStub(channel, callOptions);
     }
 
-    @java.lang.Override
+    /**
+     * <pre>
+     * Bidirectional rpc to get a list of servers.
+     * </pre>
+     */
     public io.grpc.stub.StreamObserver<io.grpc.grpclb.LoadBalanceRequest> balanceLoad(
         io.grpc.stub.StreamObserver<io.grpc.grpclb.LoadBalanceResponse> responseObserver) {
       return asyncBidiStreamingCall(
@@ -122,8 +117,9 @@ public class LoadBalancerGrpc {
     }
   }
 
-  public static class LoadBalancerBlockingStub extends io.grpc.stub.AbstractStub<LoadBalancerBlockingStub>
-      implements LoadBalancerBlockingClient {
+  /**
+   */
+  public static final class LoadBalancerBlockingStub extends io.grpc.stub.AbstractStub<LoadBalancerBlockingStub> {
     private LoadBalancerBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -140,8 +136,9 @@ public class LoadBalancerGrpc {
     }
   }
 
-  public static class LoadBalancerFutureStub extends io.grpc.stub.AbstractStub<LoadBalancerFutureStub>
-      implements LoadBalancerFutureClient {
+  /**
+   */
+  public static final class LoadBalancerFutureStub extends io.grpc.stub.AbstractStub<LoadBalancerFutureStub> {
     private LoadBalancerFutureStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -165,10 +162,10 @@ public class LoadBalancerGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final LoadBalancer serviceImpl;
+    private final LoadBalancerImplBase serviceImpl;
     private final int methodId;
 
-    public MethodHandlers(LoadBalancer serviceImpl, int methodId) {
+    public MethodHandlers(LoadBalancerImplBase serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -201,16 +198,76 @@ public class LoadBalancerGrpc {
         METHOD_BALANCE_LOAD);
   }
 
-  public static io.grpc.ServerServiceDefinition bindService(
-      final LoadBalancer serviceImpl) {
-    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-        .addMethod(
-          METHOD_BALANCE_LOAD,
-          asyncBidiStreamingCall(
-            new MethodHandlers<
-              io.grpc.grpclb.LoadBalanceRequest,
-              io.grpc.grpclb.LoadBalanceResponse>(
-                serviceImpl, METHODID_BALANCE_LOAD)))
-        .build();
-  }
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements LoadBalancer} with {@code extends LoadBalancerImplBase};</li>
+   *   <li> replace usage of {@code LoadBalancer} with {@code LoadBalancerImplBase};</li>
+   *   <li> replace usage of {@code AbstractLoadBalancer} with {@link LoadBalancerImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(LoadBalancerGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code LoadBalancerBlockingClient} with {@link LoadBalancerBlockingStub};</li>
+   *   <li> replace {@code LoadBalancerFutureClient} with {@link LoadBalancerFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final class LoadBalancer {}
+
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements LoadBalancer} with {@code extends LoadBalancerImplBase};</li>
+   *   <li> replace usage of {@code LoadBalancer} with {@code LoadBalancerImplBase};</li>
+   *   <li> replace usage of {@code AbstractLoadBalancer} with {@link LoadBalancerImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(LoadBalancerGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code LoadBalancerBlockingClient} with {@link LoadBalancerBlockingStub};</li>
+   *   <li> replace {@code LoadBalancerFutureClient} with {@link LoadBalancerFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final class LoadBalancerBlockingClient {}
+
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements LoadBalancer} with {@code extends LoadBalancerImplBase};</li>
+   *   <li> replace usage of {@code LoadBalancer} with {@code LoadBalancerImplBase};</li>
+   *   <li> replace usage of {@code AbstractLoadBalancer} with {@link LoadBalancerImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(LoadBalancerGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code LoadBalancerBlockingClient} with {@link LoadBalancerBlockingStub};</li>
+   *   <li> replace {@code LoadBalancerFutureClient} with {@link LoadBalancerFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final class LoadBalancerFutureClient {}
+
+  /**
+   * This can not be used any more since v0.15.
+   * If your code using earlier version of gRPC-java is breaking when upgrading to v0.15,
+   * the following are suggested:
+   * <ul>
+   *   <li> replace {@code extends/implements LoadBalancer} with {@code extends LoadBalancerImplBase};</li>
+   *   <li> replace usage of {@code LoadBalancer} with {@code LoadBalancerImplBase};</li>
+   *   <li> replace usage of {@code AbstractLoadBalancer} with {@link LoadBalancerImplBase};</li>
+   *   <li> replace {@code serverBuilder.addService(LoadBalancerGrpc.bindService(serviceImpl))}
+   *        with {@code serverBuilder.addService(serviceImpl)};</li>
+   *   <li> if you are mocking stubs using mockito, please do not mock them. See the documentation
+   *        on testing with gRPC-java;</li>
+   *   <li> replace {@code LoadBalancerBlockingClient} with {@link LoadBalancerBlockingStub};</li>
+   *   <li> replace {@code LoadBalancerFutureClient} with {@link LoadBalancerFutureStub}.</li>
+   * </ul>
+   */
+  @Deprecated public static final void bindService(Object o) {}
+
 }

@@ -71,7 +71,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class CascadingTest {
 
   @Mock
-  TestServiceGrpc.TestService service;
+  TestServiceGrpc.TestServiceImplBase service;
   private ManagedChannelImpl channel;
   private ServerImpl server;
   private AtomicInteger nodeCount;
@@ -202,7 +202,7 @@ public class CascadingTest {
   private void startChainingServer(final int depthThreshold)
       throws IOException {
     server = InProcessServerBuilder.forName("channel").executor(otherWork).addService(
-        ServerInterceptors.intercept(TestServiceGrpc.bindService(service),
+        ServerInterceptors.intercept(service,
             new ServerInterceptor() {
               @Override
               public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
@@ -258,7 +258,7 @@ public class CascadingTest {
   private void startCallTreeServer(int depthThreshold) throws IOException {
     final AtomicInteger nodeCount = new AtomicInteger((2 << depthThreshold) - 1);
     server = InProcessServerBuilder.forName("channel").executor(otherWork).addService(
-        ServerInterceptors.intercept(TestServiceGrpc.bindService(service),
+        ServerInterceptors.intercept(service,
             new ServerInterceptor() {
               @Override
               public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
