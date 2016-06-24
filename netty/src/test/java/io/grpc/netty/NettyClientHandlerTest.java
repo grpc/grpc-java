@@ -106,6 +106,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   private ClientTransportLifecycleManager lifecycleManager;
 
   private int BDP_MEASUREMENT_PING = 1234;
+  private int MAX_WINDOW_SIZE = 8 * 1024 * 1024;
   @Mock
   private NettyClientTransport.Listener listener;
 
@@ -562,6 +563,19 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
     assertEquals(accumulator, handler().dataSizeSincePing);
     assertEquals(initWindow, localFlowController.initialWindowSize(connectionStream));
+  }
+
+  public void windowShouldNotExceedMaxWindowSize() throws Exception {
+    createStream();
+    Http2Stream connectionStream = connection().connectionStream();
+    Http2LocalFlowController localFlowController = connection().local().flowController();
+
+    handler().dataSizeSincePing = MAX_WINDOW_SIZE / 2 + 1024 * 1024;
+    ByteBuf buffer = handler().ctx().alloc().buffer(8);
+    buffer.writeLong( BDP_MEASUREMENT_PING);
+    channelRead(pingFrame(true, buffer));
+
+    assertEquals(MAX_WINDOW_SIZE, localFlowController.initialWindowSize(connectionStream));
   }
 
   public void consecutiveUpdates() throws Exception {

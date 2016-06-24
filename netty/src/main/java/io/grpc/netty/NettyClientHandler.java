@@ -268,7 +268,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     promise.addListener(new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
-        if(!future.isSuccess()){
+        if (!future.isSuccess()) {
           pinging = false;
         }
       }
@@ -661,7 +661,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         pinging = false;
         logger.log(Level.FINER, String.format("OBDP: %d", dataSizeSincePing));
         if(target > MAX_WINDOW_SIZE) {
-          target = 0;
+          target = MAX_WINDOW_SIZE;
         }
         int window = decoder().flowController().initialWindowSize(connection().connectionStream());
         if (target > window) {
