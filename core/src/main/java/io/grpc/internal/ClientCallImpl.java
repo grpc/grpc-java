@@ -466,6 +466,12 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
             closed = true;
             cancelListenersShouldBeRemoved = true;
             observer.onClose(savedStatus, savedTrailers);
+          } catch (RuntimeException e) {
+            // TODO(carl-mastrangelo): should this log, or should the executor log it.  Maybe the
+            // client executor has special handling?
+            throw e;
+          } catch (Error e) {
+            throw e;
           } finally {
             removeContextListenerAndCancelDeadlineFuture();
           }
@@ -478,7 +484,12 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       callExecutor.execute(new ContextRunnable(context) {
         @Override
         public final void runInContext() {
-          observer.onReady();
+          try {
+            observer.onReady();
+          } catch (Throwable t) {
+            stream.cancel(Status.CANCELLED.withCause(t).withDescription("Failed to call onReady."));
+            return;
+          }
         }
       });
     }
