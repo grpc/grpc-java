@@ -511,11 +511,16 @@ class NettyServerHandler extends AbstractNettyHandler {
         int target = dataSinceLastPing * 2;
         pinging = false;
         logger.log(Level.FINE, "OBDP: " + dataSinceLastPing);
+        if (target > 8000000){
+          target = 0;
+        }
+        System.out.println(dataSinceLastPing);
         int window = decoder().flowController().initialWindowSize(connection().connectionStream());
         if (target > window){
           logger.log(Level.FINER, "Window Update: " + target);
-          int increase = target - window;
+          final int increase = target - window;
           decoder().flowController().incrementWindowSize(connection().connectionStream(), increase);
+          decoder().flowController().initialWindowSize(target);
           Http2Settings settings = new Http2Settings();
           settings.initialWindowSize(target);
           frameWriter().writeSettings(ctx(),settings, ctx().newPromise());

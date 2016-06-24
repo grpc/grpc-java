@@ -648,6 +648,9 @@ class NettyClientHandler extends AbstractNettyHandler {
       else if (data.readLong() == 1234){     
         pingreturn++;
         int target = dataSinceLastPing * 2;
+        if(target > 8000000){
+          target = 0;
+        }
         pinging = false;
         logger.log(Level.FINER, "OBDP: " + dataSinceLastPing);
         int window = decoder().flowController().initialWindowSize(connection().connectionStream());
@@ -655,6 +658,7 @@ class NettyClientHandler extends AbstractNettyHandler {
           logger.log(Level.FINE, "Window Update: " + target);
           int increase = target - window;
           decoder().flowController().incrementWindowSize(connection().connectionStream(), increase);
+          decoder().flowController().initialWindowSize(target);
           Http2Settings settings = new Http2Settings();
           settings.initialWindowSize(target);
           frameWriter().writeSettings(ctx(),settings, ctx().newPromise());
