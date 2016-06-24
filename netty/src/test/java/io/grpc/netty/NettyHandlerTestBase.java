@@ -99,7 +99,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
 
     writeQueue = initWriteQueue();
   }
-
+  
   protected final T handler() {
     return handler;
   }

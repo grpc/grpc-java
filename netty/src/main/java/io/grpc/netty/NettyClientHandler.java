@@ -112,11 +112,13 @@ class NettyClientHandler extends AbstractNettyHandler {
   private WriteQueue clientWriteQueue;
   private Http2Ping ping;
   private boolean pinging = false; 
+  
+  @VisibleForTesting
   int dataSinceLastPing = 0;
+  @VisibleForTesting
   public int pingcount = 0;
+  @VisibleForTesting
   public int pingreturn = 0;
-  int framecount = 0;
-  int currinc;
 
   static NettyClientHandler newHandler(ClientTransportLifecycleManager lifecycleManager,
                                        int flowControlWindow, int maxHeaderListSize,
@@ -153,8 +155,8 @@ class NettyClientHandler extends AbstractNettyHandler {
 
     // Create the local flow controller configured to auto-refill the connection window.
     connection.local().flowController(new DefaultHttp2LocalFlowController(connection,
-            (float) .5 , true));
-    connection.remote().flowController(new DefaultHttp2RemoteFlowController(connection));
+            DEFAULT_WINDOW_UPDATE_RATIO , true));
+    
     
     Http2ConnectionDecoder decoder = new DefaultHttp2ConnectionDecoder(connection, encoder,
         frameReader);
@@ -245,18 +247,13 @@ class NettyClientHandler extends AbstractNettyHandler {
   
   private void onDataRead(int streamId, ByteBuf data, int padding, 
       boolean endOfStream) {
-    
     dataSinceLastPing += data.readableBytes() + padding;
-    
     NettyClientStream stream = clientStream(requireHttp2Stream(streamId));
     stream.transportDataReceived(data, endOfStream);
-    
-    //increment data and send a new ping if there isn't already one in progress 
     if (!pinging){
       pinging = true;
       sendDataPing(ctx());
-    } 
-      
+    }    
   }
   
   private void sendDataPing(ChannelHandlerContext ctx){
@@ -266,11 +263,9 @@ class NettyClientHandler extends AbstractNettyHandler {
     ByteBuf buffer = ctx.alloc().buffer(8);
     buffer.writeLong(pingData);
     
-    encoder().writePing(ctx, false, buffer, promise);
-    //ctx.flush();
+    encoder().writePing(ctx, false, buffer, promise); 
     pingcount++;
     
-    //set ping to null if it fails, increment ping counter on success 
     promise.addListener(new ChannelFutureListener(){
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
@@ -653,16 +648,15 @@ class NettyClientHandler extends AbstractNettyHandler {
       else if (data.readLong() == 1234){     
         pingreturn++;
         int target = dataSinceLastPing * 2;
-        System.out.println("OBDP: " + dataSinceLastPing);
         pinging = false;
+        logger.log(Level.FINER, "OBDP: " + dataSinceLastPing);
         int window = decoder().flowController().initialWindowSize(connection().connectionStream());
         if (target > window){
+          logger.log(Level.FINE, "Window Update: " + target);
           int increase = target - window;
           decoder().flowController().incrementWindowSize(connection().connectionStream(), increase);
           Http2Settings settings = new Http2Settings();
-          settings.pushEnabled(false);
           settings.initialWindowSize(target);
-          settings.maxConcurrentStreams(0);
           frameWriter().writeSettings(ctx(),settings, ctx().newPromise());
         } 
       }

@@ -100,11 +100,14 @@ class NettyServerHandler extends AbstractNettyHandler {
   private Throwable connectionError;
   private boolean teWarningLogged;
   private WriteQueue serverWriteQueue;
-  int dataSinceLastPing = 0;
   private boolean pinging;
+  
+  @VisibleForTesting
+  int dataSinceLastPing = 0;
+  @VisibleForTesting
   int pingcount = 0;
+  @VisibleForTesting
   int pingreturn = 0;
-  private static int maxConcurrentStreams;
   
 
   static NettyServerHandler newHandler(ServerTransportListener transportListener,
@@ -134,14 +137,12 @@ class NettyServerHandler extends AbstractNettyHandler {
     Preconditions.checkArgument(flowControlWindow > 0, "flowControlWindow must be positive");
     Preconditions.checkArgument(maxMessageSize > 0, "maxMessageSize must be positive");
 
-    maxConcurrentStreams = maxStreams;
     Http2Connection connection = new DefaultHttp2Connection(true);
 
     // Create the local flow controller configured to auto-refill the connection window.
     connection.local().flowController(new DefaultHttp2LocalFlowController(connection,
             DEFAULT_WINDOW_UPDATE_RATIO, true));
 
-    connection.remote().flowController(new DefaultHttp2RemoteFlowController(connection));
     
     Http2ConnectionEncoder encoder = new DefaultHttp2ConnectionEncoder(connection, frameWriter);
     Http2ConnectionDecoder decoder = new DefaultHttp2ConnectionDecoder(connection, encoder,
@@ -247,7 +248,6 @@ class NettyServerHandler extends AbstractNettyHandler {
     
     encoder().writePing(ctx, false, buffer, promise);
     pingcount++;
-    
     promise.addListener(new ChannelFutureListener(){
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
@@ -257,6 +257,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       }
     });
   }
+  
+  
   private void onRstStreamRead(int streamId) throws Http2Exception {
     try {
       NettyServerStream.TransportState stream = serverStream(connection().stream(streamId));
@@ -505,23 +507,18 @@ class NettyServerHandler extends AbstractNettyHandler {
     public void onPingAckRead(ChannelHandlerContext ctx, ByteBuf data)
         throws Http2Exception {
       if (data.readLong() == 1234){
-        try{
         pingreturn++;
-        int target = 2*dataSinceLastPing;
+        int target = dataSinceLastPing * 2;
         pinging = false;
-        System.out.println("OBDP: " + dataSinceLastPing);
+        logger.log(Level.FINE, "OBDP: " + dataSinceLastPing);
         int window = decoder().flowController().initialWindowSize(connection().connectionStream());
         if (target > window){
+          logger.log(Level.FINER, "Window Update: " + target);
           int increase = target - window;
-          window = target;
-          Http2Settings settings = new Http2Settings();
           decoder().flowController().incrementWindowSize(connection().connectionStream(), increase);
+          Http2Settings settings = new Http2Settings();
           settings.initialWindowSize(target);
-          settings.maxConcurrentStreams(maxConcurrentStreams);
           frameWriter().writeSettings(ctx(),settings, ctx().newPromise());
-        }
-        }catch (Http2Exception e){
-          //do nothing
         }
       }
       else{
