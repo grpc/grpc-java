@@ -58,6 +58,7 @@ import com.google.common.util.concurrent.SettableFuture;
 
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.ServerBuilder;
 import io.grpc.Status;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
@@ -100,15 +101,20 @@ public abstract class AbstractTransportTest {
 
   /**
    * Returns a new server that when started will be able to be connected to from the client. Each
-   * returned instance should be new and yet be accessible by new client transports. This
-   * effectively means that each instance should listen on the same port, or similar.
+   * returned instance should be new and yet be accessible by new client transports.
    */
   protected abstract InternalServer newServer();
 
   /**
-   * Returns a new transport that when started will be able to connect to the server.
+   * Builds a new server using a {@link ServerBuilder} with the same attributes
+   * as the given server instance has.
    */
-  protected abstract ManagedClientTransport newClientTransport();
+  protected abstract InternalServer newServer(InternalServer server);
+
+  /**
+   * Returns a new transport that when started will be able to connect to {@code server}.
+   */
+  protected abstract ManagedClientTransport newClientTransport(InternalServer server);
 
   /**
    * When non-null, will be shut down during tearDown(). However, it _must_ have been started with
@@ -141,7 +147,7 @@ public abstract class AbstractTransportTest {
   @Before
   public void setUp() {
     server = newServer();
-    client = newClientTransport();
+    //client = newClientTransport();
   }
 
   @After
@@ -177,6 +183,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void frameAfterRstStreamShouldNotBreakClientChannel() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     MockServerTransportListener serverTransportListener
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -218,8 +225,14 @@ public abstract class AbstractTransportTest {
   }
 
   @Test
-  public void serverNotListening() {
+  public void serverNotListening() throws Exception {
+    // Start server to just acquire a port.
+    server.start(serverListener);
+    client = newClientTransport(server);
+    server.shutdown();
+    assertTrue(serverListener.waitForShutdown(TIMEOUT_MS, TimeUnit.MILLISECONDS));
     server = null;
+
     InOrder inOrder = inOrder(mockClientTransportListener);
     client.start(mockClientTransportListener);
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportTerminated();
@@ -233,6 +246,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void clientStartStop() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     InOrder inOrder = inOrder(mockClientTransportListener);
     client.start(mockClientTransportListener);
     client.shutdown();
@@ -246,6 +260,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void clientStartAndStopOnceConnected() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     InOrder inOrder = inOrder(mockClientTransportListener);
     client.start(mockClientTransportListener);
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportReady();
@@ -266,7 +281,7 @@ public abstract class AbstractTransportTest {
   public void serverAlreadyListening() throws Exception {
     client = null;
     server.start(serverListener);
-    InternalServer server2 = newServer();
+    InternalServer server2 = newServer(server);
     thrown.expect(IOException.class);
     server2.start(new MockServerListener());
   }
@@ -274,6 +289,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void openStreamPreventsTermination() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     MockServerTransportListener serverTransportListener
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -290,7 +306,6 @@ public abstract class AbstractTransportTest {
     client.shutdown();
     client = null;
     server.shutdown();
-    server = null;
     serverTransport.shutdown();
     serverTransport = null;
 
@@ -301,7 +316,7 @@ public abstract class AbstractTransportTest {
     // resources. There may be cases this is impossible in the future, but for now it is a useful
     // property.
     serverListener = new MockServerListener();
-    server = newServer();
+    server = newServer(server);
     server.start(serverListener);
 
     // Try to "flush" out any listener notifications on client and server. This also ensures that
@@ -325,6 +340,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void shutdownNowKillsClientStream() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     MockServerTransportListener serverTransportListener
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -356,6 +372,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void shutdownNowKillsServerStream() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     MockServerTransportListener serverTransportListener
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -389,6 +406,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void ping() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     ClientTransport.PingCallback mockPingCallback = mock(ClientTransport.PingCallback.class);
     try {
@@ -404,6 +422,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void ping_duringShutdown() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     // Stream prevents termination
     ClientStream stream = client.newStream(methodDescriptor, new Metadata());
@@ -424,6 +443,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void ping_afterTermination() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportReady();
     client.shutdown();
@@ -443,6 +463,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void newStream_duringShutdown() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     // Stream prevents termination
     ClientStream stream = client.newStream(methodDescriptor, new Metadata());
@@ -473,6 +494,7 @@ public abstract class AbstractTransportTest {
     // We expect the same general behavior as duringShutdown, but for some transports (e.g., Netty)
     // dealing with afterTermination is harder than duringShutdown.
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportReady();
     client.shutdown();
@@ -489,6 +511,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void transportInUse_normalClose() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     ClientStream stream1 = client.newStream(methodDescriptor, new Metadata());
     stream1.start(mockClientStreamListener);
@@ -516,6 +539,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void transportInUse_clientCancel() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     ClientStream stream1 = client.newStream(methodDescriptor, new Metadata());
     stream1.start(mockClientStreamListener);
@@ -535,6 +559,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void basicStream() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     MockServerTransportListener serverTransportListener
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -612,6 +637,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void zeroMessageStream() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     MockServerTransportListener serverTransportListener
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -643,6 +669,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void earlyServerClose_withServerHeaders() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     MockServerTransportListener serverTransportListener
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -672,6 +699,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void earlyServerClose_noServerHeaders() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     MockServerTransportListener serverTransportListener
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -708,6 +736,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void earlyServerClose_serverFailure() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     MockServerTransportListener serverTransportListener
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -735,6 +764,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void clientCancel() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     MockServerTransportListener serverTransportListener
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -765,6 +795,7 @@ public abstract class AbstractTransportTest {
   @Test(timeout = 5000)
   public void clientCancelFromWithinMessageRead() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     MockServerTransportListener serverTransportListener
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -818,6 +849,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void serverCancel() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     MockServerTransportListener serverTransportListener
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -854,6 +886,7 @@ public abstract class AbstractTransportTest {
   @Test
   public void flowControlPushBack() throws Exception {
     server.start(serverListener);
+    client = newClientTransport(server);
     client.start(mockClientTransportListener);
     MockServerTransportListener serverTransportListener
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -1016,7 +1049,7 @@ public abstract class AbstractTransportTest {
    * on faster machines and more reliable on slower machines.
    */
   private void doPingPong(MockServerListener serverListener) throws InterruptedException {
-    ManagedClientTransport client = newClientTransport();
+    ManagedClientTransport client = newClientTransport(server);
     client.start(mock(ManagedClientTransport.Listener.class));
     ClientStream clientStream = client.newStream(methodDescriptor, new Metadata());
     ClientStreamListener mockClientStreamListener = mock(ClientStreamListener.class);

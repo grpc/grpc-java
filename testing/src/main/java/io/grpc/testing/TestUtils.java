@@ -49,7 +49,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
 import java.net.UnknownHostException;
 import java.security.KeyStore;
 import java.security.NoSuchAlgorithmException;
@@ -144,20 +143,6 @@ public class TestUtils {
         return next.startCall(method, call, requestHeaders);
       }
     };
-  }
-
-  /**
-   * Picks an unused port.
-   */
-  public static int pickUnusedPort() {
-    try {
-      ServerSocket serverSocket = new ServerSocket(0);
-      int port = serverSocket.getLocalPort();
-      serverSocket.close();
-      return port;
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
   }
 
   /**
