@@ -35,7 +35,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 import io.grpc.Context;
+import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
+import io.grpc.Server;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
@@ -44,8 +46,6 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
-import io.grpc.internal.ManagedChannelImpl;
-import io.grpc.internal.ServerImpl;
 import io.grpc.stub.StreamObserver;
 
 import org.junit.After;
@@ -72,8 +72,8 @@ public class CascadingTest {
 
   @Mock
   TestServiceGrpc.TestService service;
-  private ManagedChannelImpl channel;
-  private ServerImpl server;
+  private ManagedChannel channel;
+  private Server server;
   private AtomicInteger nodeCount;
   private CountDownLatch observedCancellations;
   private CountDownLatch receivedCancellations;
