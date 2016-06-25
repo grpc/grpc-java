@@ -93,8 +93,8 @@ import javax.annotation.Nullable;
 class NettyServerHandler extends AbstractNettyHandler {
   private static Logger logger = Logger.getLogger(NettyServerHandler.class.getName());
 
-  private int BDP_MEASUREMENT_PING = 1234;
-  private int MAX_WINDOW_SIZE = 8 * 1024 * 1024;
+  private static final int BDP_MEASUREMENT_PING = 1234;
+  private static final int MAX_WINDOW_SIZE = 8 * 1024 * 1024;
 
   private final Http2Connection.PropertyKey streamKey;
   private final ServerTransportListener transportListener;
@@ -180,6 +180,14 @@ class NettyServerHandler extends AbstractNettyHandler {
     super.handlerAdded(ctx);
   }
 
+  public int getPingCount() {
+    return pingcount;
+  }
+
+  public int getPingReturn() {
+    return pingreturn;
+  }
+
   private void onHeadersRead(ChannelHandlerContext ctx, int streamId, Http2Headers headers)
       throws Http2Exception {
     if (!teWarningLogged && !TE_TRAILERS.equals(headers.get(TE_HEADER))) {
@@ -222,6 +230,10 @@ class NettyServerHandler extends AbstractNettyHandler {
   }
 
   private void onDataRead(int streamId, ByteBuf data, int padding, boolean endOfStream) throws Http2Exception {
+    if (!pinging) {
+      pinging = true;
+      sendDataPing(ctx());
+    }
     dataSizeSincePing += data.readableBytes() + padding;
     try {
       NettyServerStream.TransportState stream = serverStream(requireHttp2Stream(streamId));
@@ -230,11 +242,6 @@ class NettyServerHandler extends AbstractNettyHandler {
       logger.log(Level.WARNING, "Exception in onDataRead()", e);
       // Throw an exception that will get handled by onStreamError.
       throw newStreamException(streamId, e);
-    }
-
-    if (!pinging) {
-      pinging = true;
-      sendDataPing(ctx());
     }
   }
 
@@ -255,14 +262,6 @@ class NettyServerHandler extends AbstractNettyHandler {
         }
       }
     });
-  }
-
-  public int getPingCount() {
-    return pingcount;
-  }
-
-  public int getPingReturn() {
-    return pingreturn;
   }
 
   private void onRstStreamRead(int streamId) throws Http2Exception {
@@ -515,21 +514,19 @@ class NettyServerHandler extends AbstractNettyHandler {
         pingreturn++;
         data.readerIndex(0);
         dataSizeSincePing += data.readableBytes();
-        //Calculate new window size by doubling the OBDP
-        int target = dataSizeSincePing * 2;
+        // Calculate new window size by doubling the observed BDP, but cap at max window
+        int targetWindow = Math.min(dataSizeSincePing * 2, MAX_WINDOW_SIZE);
         pinging = false;
-        logger.log(Level.FINE, String.format("OBDP: %d", dataSizeSincePing));
-        if (target > MAX_WINDOW_SIZE) {
-          target = MAX_WINDOW_SIZE;
-        }
-        int window = decoder().flowController().initialWindowSize(connection().connectionStream());
-        if (target > window) {
-          logger.log(Level.FINER, String.format("Window Update: ", target));
-          int increase = target - window;
+        logger.log(Level.FINE, String.format("OBDP: {0}", dataSizeSincePing));
+        int currentWindow =
+            decoder().flowController().initialWindowSize(connection().connectionStream());
+        if (targetWindow > currentWindow) {
+          logger.log(Level.FINER, String.format("Window Update: {0}", targetWindow));
+          int increase = targetWindow - currentWindow;
           decoder().flowController().incrementWindowSize(connection().connectionStream(), increase);
-          decoder().flowController().initialWindowSize(target);
+          decoder().flowController().initialWindowSize(targetWindow);
           Http2Settings settings = new Http2Settings();
-          settings.initialWindowSize(target);
+          settings.initialWindowSize(targetWindow);
           frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
         }
       }

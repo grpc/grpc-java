@@ -104,8 +104,8 @@ class NettyClientHandler extends AbstractNettyHandler {
   private static final Status EXHAUSTED_STREAMS_STATUS =
           Status.UNAVAILABLE.withDescription("Stream IDs have been exhausted");
 
-  private int BDP_MEASUREMENT_PING = 1234;
-  private int MAX_WINDOW_SIZE = 8 * 1024 * 1024;
+  private static final int BDP_MEASUREMENT_PING = 1234;
+  private static final int MAX_WINDOW_SIZE = 8 * 1024 * 1024;
 
   private final Http2Connection.PropertyKey streamKey;
   private final ClientTransportLifecycleManager lifecycleManager;
@@ -217,6 +217,14 @@ class NettyClientHandler extends AbstractNettyHandler {
     }
   }
 
+  public int getPingCount() {
+    return pingcount;
+  }
+
+  public int getPingReturn() {
+    return pingreturn;
+  }
+
   void startWriteQueue(Channel channel) {
     clientWriteQueue = new WriteQueue(channel);
   }
@@ -246,13 +254,13 @@ class NettyClientHandler extends AbstractNettyHandler {
    */
 
   private void onDataRead(int streamId, ByteBuf data, int padding, boolean endOfStream) {
-    dataSizeSincePing += data.readableBytes() + padding;
-    NettyClientStream stream = clientStream(requireHttp2Stream(streamId));
-    stream.transportDataReceived(data, endOfStream);
     if (!pinging) {
       pinging = true;
       sendDataPing(ctx());
     }
+    dataSizeSincePing += data.readableBytes() + padding;
+    NettyClientStream stream = clientStream(requireHttp2Stream(streamId));
+    stream.transportDataReceived(data, endOfStream);
   }
 
   private void sendDataPing(ChannelHandlerContext ctx) {
@@ -264,7 +272,6 @@ class NettyClientHandler extends AbstractNettyHandler {
 
     encoder().writePing(ctx, false, buffer, promise);
     pingcount++;
-
     promise.addListener(new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
@@ -273,14 +280,6 @@ class NettyClientHandler extends AbstractNettyHandler {
         }
       }
     });
-  }
-
-  public int getPingCount() {
-    return pingcount;
-  }
-
-  public int getPingReturn() {
-    return pingreturn;
   }
 
   /**
@@ -656,21 +655,19 @@ class NettyClientHandler extends AbstractNettyHandler {
         pingreturn++;
         data.readerIndex(0);
         dataSizeSincePing += data.readableBytes();
-        //Calculate new window size by doubling the OBDP
-        int target = dataSizeSincePing * 2;
+        // Calculate new window size by doubling the observed BDP, but cap at max window
+        int targetWindow = Math.min(dataSizeSincePing * 2, MAX_WINDOW_SIZE);
         pinging = false;
-        logger.log(Level.FINER, String.format("OBDP: %d", dataSizeSincePing));
-        if(target > MAX_WINDOW_SIZE) {
-          target = MAX_WINDOW_SIZE;
-        }
-        int window = decoder().flowController().initialWindowSize(connection().connectionStream());
-        if (target > window) {
-          logger.log(Level.FINE, String.format("Window Update: %d", target));
-          int increase = target - window;
+        logger.log(Level.FINER, String.format("OBDP: {0}", dataSizeSincePing));
+        int currentWindow =
+            decoder().flowController().initialWindowSize(connection().connectionStream());
+        if (targetWindow > currentWindow) {
+          logger.log(Level.FINE, String.format("Window Update: {0}", targetWindow));
+          int increase = targetWindow - currentWindow;
           decoder().flowController().incrementWindowSize(connection().connectionStream(), increase);
-          decoder().flowController().initialWindowSize(target);
+          decoder().flowController().initialWindowSize(targetWindow);
           Http2Settings settings = new Http2Settings();
-          settings.initialWindowSize(target);
+          settings.initialWindowSize(targetWindow);
           frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
         }
       }

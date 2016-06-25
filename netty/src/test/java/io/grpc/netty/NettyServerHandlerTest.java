@@ -97,6 +97,8 @@ import java.io.InputStream;
 @RunWith(JUnit4.class)
 public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHandler> {
 
+  private static final int BDP_MEASUREMENT_PING = 1234;
+  private static final int MAX_WINDOW_SIZE = 8 * 1024 * 1024;
   private static final int STREAM_ID = 3;
 
   @Mock
@@ -109,9 +111,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   private int flowControlWindow = DEFAULT_WINDOW_SIZE;
   private int maxConcurrentStreams = Integer.MAX_VALUE;
-
-  private int BDP_MEASUREMENT_PING = 1234;
-  private int MAX_WINDOW_SIZE = 8 * 1024 * 1024;
 
   @Before
   public void setUp() throws Exception {
@@ -332,16 +331,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     channelRead(dataFrame(3, false, buff.copy()));
     channelRead(dataFrame(3, false, buff.copy()));
 
-    assertEquals(length * 2, handler().dataSizeSincePing);
-
-    long pingdata = BDP_MEASUREMENT_PING;
-    ByteBuf buffer = handler().ctx().alloc().buffer(8);
-    buffer.writeLong(pingdata);
-    channelRead(pingFrame(true, buffer));
-    channelRead(dataFrame(3, false));
-
-    assertEquals(2, handler().getPingCount());
-    assertEquals(0, handler().dataSizeSincePing);
+    assertEquals(length * 3, handler().dataSizeSincePing);
   }
 
   @Test
@@ -349,15 +339,15 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     Http2Stream connectionStream = connection().connectionStream();
     Http2LocalFlowController localFlowController = connection().local().flowController();
     createStream();
+
     ByteBuf data = ctx().alloc().buffer(1024);
     while(data.isWritable()) {
       data.writeLong(1111);
     }
     int length = data.readableBytes();
     ByteBuf frame = dataFrame(3, false, data.copy());
-
     channelRead(frame);
-    int accumulator = 0;
+    int accumulator = length;
     for(int i = 0; i < 40 ; i++) {
      channelRead(dataFrame(3, false, data.copy()));
      accumulator += length;
@@ -380,15 +370,15 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     Http2LocalFlowController localFlowController = connection().local().flowController();
     localFlowController.incrementWindowSize(connectionStream, (initWindow - flowControlWindow));
     localFlowController.initialWindowSize(initWindow);
+
     ByteBuf data = ctx().alloc().buffer(16 * 1024);
     while(data.isWritable()) {
       data.writeLong(1111);
     }
     int length = data.readableBytes();
     ByteBuf frame = dataFrame(3, false, data.copy());
-
     channelRead(frame);
-    int accumulator = 0;
+    int accumulator = length;
     for(int i = 0; i < 10; i++) {
       channelRead(dataFrame(3, false, data.copy()));
       accumulator += length;
@@ -403,6 +393,21 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     assertEquals(initWindow, localFlowController.initialWindowSize(connectionStream));
   }
 
+  @Test
+  public void windowShouldNotExceedMaxWindowSize() throws Exception {
+    createStream();
+    Http2Stream connectionStream = connection().connectionStream();
+    Http2LocalFlowController localFlowController = connection().local().flowController();
+
+    handler().dataSizeSincePing = MAX_WINDOW_SIZE;
+    ByteBuf buffer = handler().ctx().alloc().buffer(8);
+    buffer.writeLong(BDP_MEASUREMENT_PING);
+    channelRead(pingFrame(true, buffer));
+
+    assertEquals(MAX_WINDOW_SIZE, localFlowController.initialWindowSize(connectionStream));
+  }
+
+  @Test
   public void consecutiveUpdates() throws Exception {
     createStream();
 
@@ -411,30 +416,18 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     long pingdata = BDP_MEASUREMENT_PING;
     ByteBuf buffer = handler().ctx().alloc().buffer(8);
     buffer.writeLong(pingdata);
+    int pingDataLength = buffer.readableBytes();
     channelRead(pingFrame(true, buffer));
 
-    assertEquals(80000,
+    assertEquals(80000 + 2 * pingDataLength,
         connection().local().flowController().initialWindowSize(connection().connectionStream()));
 
     channelRead(dataFrame(3, false));
     handler().dataSizeSincePing = 70000;
     channelRead(pingFrame(true, buffer));
 
-    assertEquals(140000,
+    assertEquals(140000 + 2 * pingDataLength,
         connection().local().flowController().initialWindowSize(connection().connectionStream()));
-  }
-
-  public void windowShouldNotExceedMaxWindowSize() throws Exception {
-    createStream();
-    Http2Stream connectionStream = connection().connectionStream();
-    Http2LocalFlowController localFlowController = connection().local().flowController();
-
-    handler().dataSizeSincePing = MAX_WINDOW_SIZE / 2 + 1024 * 1024;
-    ByteBuf buffer = handler().ctx().alloc().buffer(8);
-    buffer.writeLong( BDP_MEASUREMENT_PING);
-    channelRead(pingFrame(true, buffer));
-
-    assertEquals(MAX_WINDOW_SIZE, localFlowController.initialWindowSize(connectionStream));
   }
 
   private void createStream() throws Exception {
