@@ -113,10 +113,10 @@ class NettyClientHandler extends AbstractNettyHandler {
   private final Random random = new Random();
   private WriteQueue clientWriteQueue;
   private Http2Ping ping;
-  private boolean pinging = false;
+  private boolean pinging;
   private int pingcount;
   private int pingreturn;
-  private int dataSizeSincePing = 0;
+  private int dataSizeSincePing;
 
   static NettyClientHandler newHandler(ClientTransportLifecycleManager lifecycleManager,
                                        int flowControlWindow, int maxHeaderListSize,
@@ -268,13 +268,14 @@ class NettyClientHandler extends AbstractNettyHandler {
       pinging = true;
       sendDataPing(ctx());
     }
-    dataSizeSincePing += data.readableBytes() + padding;
+    int currentDataSize = getDataSizeSincePing();
+    setDataSizeSincePing(currentDataSize + data.readableBytes() + padding);
     NettyClientStream stream = clientStream(requireHttp2Stream(streamId));
     stream.transportDataReceived(data, endOfStream);
   }
 
   private void sendDataPing(ChannelHandlerContext ctx) {
-    dataSizeSincePing = 0;
+    setDataSizeSincePing(0);
     long pingData = BDP_MEASUREMENT_PING;
     ByteBuf buffer = ctx.alloc().buffer(8);
     buffer.writeLong(pingData);
@@ -653,7 +654,8 @@ class NettyClientHandler extends AbstractNettyHandler {
       } else if (data.readLong() == BDP_MEASUREMENT_PING) {
         pingreturn++;
         data.readerIndex(0);
-        dataSizeSincePing += data.readableBytes();
+        int currentDataSize = getDataSizeSincePing();
+        setDataSizeSincePing(currentDataSize + data.readableBytes());
         // Calculate new window size by doubling the observed BDP, but cap at max window
         int targetWindow = Math.min(dataSizeSincePing * 2, MAX_WINDOW_SIZE);
         pinging = false;
