@@ -97,8 +97,6 @@ import java.io.InputStream;
 @RunWith(JUnit4.class)
 public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHandler> {
 
-  private static final int BDP_MEASUREMENT_PING = 1234;
-  private static final int MAX_WINDOW_SIZE = 8 * 1024 * 1024;
   private static final int STREAM_ID = 3;
 
   @Mock
@@ -302,7 +300,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     channelRead(dataFrame(3, false));
 
-    assertEquals(1, handler().getPingCount());
+    assertEquals(1, handler().flowControlPinger().getPingCount());
   }
 
   @Test
@@ -310,13 +308,13 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     createStream();
 
     channelRead(dataFrame(3, false));
-    long pingdata = BDP_MEASUREMENT_PING;
+    long pingdata = handler().flowControlPinger().payload();
     ByteBuf payload = handler().ctx().alloc().buffer(8);
     payload.writeLong(pingdata);
     channelRead(pingFrame(true, payload));
 
-    assertEquals(1, handler().getPingCount());
-    assertEquals(1, handler().getPingReturn());
+    assertEquals(1, handler().flowControlPinger().getPingCount());
+    assertEquals(1, handler().flowControlPinger().getPingReturn());
   }
 
   @Test
@@ -331,7 +329,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     channelRead(dataFrame(3, false, buff.copy()));
     channelRead(dataFrame(3, false, buff.copy()));
 
-    assertEquals(length * 3, handler().getDataSizeSincePing());
+    assertEquals(length * 3, handler().flowControlPinger().getDataSincePing());
   }
 
   @Test
@@ -352,13 +350,13 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
       channelRead(dataFrame(3, false, data.copy()));
       accumulator += length;
     }
-    long pingdata = BDP_MEASUREMENT_PING;
+    long pingdata = handler().flowControlPinger().payload();
     ByteBuf buffer = handler().ctx().alloc().buffer(8);
     buffer.writeLong(pingdata);
     channelRead(pingFrame(true, buffer));
     accumulator += buffer.readableBytes();
 
-    assertEquals(accumulator, handler().getDataSizeSincePing());
+    assertEquals(accumulator, handler().flowControlPinger().getDataSincePing());
     assertEquals(2 * accumulator, localFlowController.initialWindowSize(connectionStream));
   }
 
@@ -383,13 +381,13 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
       channelRead(dataFrame(3, false, data.copy()));
       accumulator += length;
     }
-    long pingdata = BDP_MEASUREMENT_PING;
+    long pingdata = handler().flowControlPinger().payload();
     ByteBuf buffer = handler().ctx().alloc().buffer(8);
     buffer.writeLong(pingdata);
     channelRead(pingFrame(true, buffer));
     accumulator += buffer.readableBytes();
 
-    assertEquals(accumulator, handler().getDataSizeSincePing());
+    assertEquals(accumulator, handler().flowControlPinger().getDataSincePing());
     assertEquals(initWindow, localFlowController.initialWindowSize(connectionStream));
   }
 
@@ -398,13 +396,15 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     createStream();
     Http2Stream connectionStream = connection().connectionStream();
     Http2LocalFlowController localFlowController = connection().local().flowController();
+    int maxWindow = handler().flowControlPinger().maxWindow();
 
-    handler().setDataSizeSincePing(MAX_WINDOW_SIZE);
+    handler().flowControlPinger().setDataSizeSincePing(maxWindow);
+    int payload = handler().flowControlPinger().payload();
     ByteBuf buffer = handler().ctx().alloc().buffer(8);
-    buffer.writeLong(BDP_MEASUREMENT_PING);
+    buffer.writeLong(payload);
     channelRead(pingFrame(true, buffer));
 
-    assertEquals(MAX_WINDOW_SIZE, localFlowController.initialWindowSize(connectionStream));
+    assertEquals(maxWindow, localFlowController.initialWindowSize(connectionStream));
   }
 
   @Test
@@ -412,8 +412,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     createStream();
 
     channelRead(dataFrame(3, false));
-    handler().setDataSizeSincePing(40000);
-    long pingdata = BDP_MEASUREMENT_PING;
+    handler().flowControlPinger().setDataSizeSincePing(40000);
+    long pingdata = handler().flowControlPinger().payload();
     ByteBuf buffer = handler().ctx().alloc().buffer(8);
     buffer.writeLong(pingdata);
     int pingDataLength = buffer.readableBytes();
@@ -423,7 +423,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         connection().local().flowController().initialWindowSize(connection().connectionStream()));
 
     channelRead(dataFrame(3, false));
-    handler().setDataSizeSincePing(70000);
+    handler().flowControlPinger().setDataSizeSincePing(70000);
     channelRead(pingFrame(true, buffer));
 
     assertEquals(140000 + 2 * pingDataLength,

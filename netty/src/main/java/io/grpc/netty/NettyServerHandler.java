@@ -93,19 +93,13 @@ import javax.annotation.Nullable;
 class NettyServerHandler extends AbstractNettyHandler {
   private static Logger logger = Logger.getLogger(NettyServerHandler.class.getName());
 
-  private static final int BDP_MEASUREMENT_PING = 1234;
-  private static final int MAX_WINDOW_SIZE = 8 * 1024 * 1024;
-
   private final Http2Connection.PropertyKey streamKey;
   private final ServerTransportListener transportListener;
   private final int maxMessageSize;
   private Throwable connectionError;
   private boolean teWarningLogged;
   private WriteQueue serverWriteQueue;
-  private boolean pinging;
-  private int pingcount;
-  private int pingreturn;
-  private int dataSizeSincePing;
+  private FlowControlPinger flowControlPing = new FlowControlPinger();
 
   static NettyServerHandler newHandler(ServerTransportListener transportListener,
                                        int maxStreams,
@@ -179,23 +173,8 @@ class NettyServerHandler extends AbstractNettyHandler {
   }
 
   @VisibleForTesting
-  int getPingCount() {
-    return pingcount;
-  }
-
-  @VisibleForTesting
-  int getPingReturn() {
-    return pingreturn;
-  }
-
-  @VisibleForTesting
-  int getDataSizeSincePing() {
-    return dataSizeSincePing;
-  }
-
-  @VisibleForTesting
-  void setDataSizeSincePing(int dataSize) {
-    dataSizeSincePing = dataSize;
+  FlowControlPinger flowControlPinger() {
+    return flowControlPing;
   }
 
   private void onHeadersRead(ChannelHandlerContext ctx, int streamId, Http2Headers headers)
@@ -241,12 +220,11 @@ class NettyServerHandler extends AbstractNettyHandler {
 
   private void onDataRead(int streamId, ByteBuf data, int padding, boolean endOfStream)
       throws Http2Exception {
-    if (!pinging) {
-      pinging = true;
-      sendDataPing(ctx());
+    if (!flowControlPing.isPinging()) {
+      flowControlPing.setPinging(true);
+      flowControlPing.sendPing(ctx());
     }
-    int currentDataSize = getDataSizeSincePing();
-    setDataSizeSincePing(currentDataSize + data.readableBytes() + padding);
+    flowControlPing.incrementDataSincePing(data.readableBytes() + padding);
     try {
       NettyServerStream.TransportState stream = serverStream(requireHttp2Stream(streamId));
       stream.inboundDataReceived(data, endOfStream);
@@ -255,15 +233,6 @@ class NettyServerHandler extends AbstractNettyHandler {
       // Throw an exception that will get handled by onStreamError.
       throw newStreamException(streamId, e);
     }
-  }
-
-  private void sendDataPing(ChannelHandlerContext ctx) {
-    setDataSizeSincePing(0);
-    long pingData = BDP_MEASUREMENT_PING;
-    ByteBuf buffer = ctx.alloc().buffer(8);
-    buffer.writeLong(pingData);
-    encoder().writePing(ctx, false, buffer, ctx.newPromise());
-    pingcount++;
   }
 
   private void onRstStreamRead(int streamId) throws Http2Exception {
@@ -512,26 +481,11 @@ class NettyServerHandler extends AbstractNettyHandler {
 
     @Override
     public void onPingAckRead(ChannelHandlerContext ctx, ByteBuf data) throws Http2Exception {
-      if (data.readLong() == BDP_MEASUREMENT_PING) {
-        pingreturn++;
+      if (data.readLong() == flowControlPing.payload()) {
         data.readerIndex(0);
-        int currentDataSize = getDataSizeSincePing();
-        setDataSizeSincePing(currentDataSize + data.readableBytes());
-        // Calculate new window size by doubling the observed BDP, but cap at max window
-        int targetWindow = Math.min(dataSizeSincePing * 2, MAX_WINDOW_SIZE);
-        pinging = false;
-        logger.log(Level.FINE, String.format("OBDP: {0}", dataSizeSincePing));
-        int currentWindow =
-            decoder().flowController().initialWindowSize(connection().connectionStream());
-        if (targetWindow > currentWindow) {
-          logger.log(Level.FINER, String.format("Window Update: {0}", targetWindow));
-          int increase = targetWindow - currentWindow;
-          decoder().flowController().incrementWindowSize(connection().connectionStream(), increase);
-          decoder().flowController().initialWindowSize(targetWindow);
-          Http2Settings settings = new Http2Settings();
-          settings.initialWindowSize(targetWindow);
-          frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
-        }
+        flowControlPing.incrementDataSincePing(data.readableBytes());
+        flowControlPing.updateWindow();
+        logger.log(Level.FINE, String.format("OBDP: {0}", flowControlPing.getDataSincePing()));
       } else {
         logger.warning("Received unexpected ping ack. No ping outstanding");
       }
