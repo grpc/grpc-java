@@ -116,9 +116,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   private boolean pinging = false;
   private int pingcount;
   private int pingreturn;
-
-  @VisibleForTesting
-  int dataSizeSincePing = 0;
+  private int dataSizeSincePing = 0;
 
   static NettyClientHandler newHandler(ClientTransportLifecycleManager lifecycleManager,
                                        int flowControlWindow, int maxHeaderListSize,
@@ -154,8 +152,8 @@ class NettyClientHandler extends AbstractNettyHandler {
         new DefaultHttp2ConnectionEncoder(connection, frameWriter));
 
     // Create the local flow controller configured to auto-refill the connection window.
-    connection.local().flowController(new DefaultHttp2LocalFlowController(connection,
-        DEFAULT_WINDOW_UPDATE_RATIO , true));
+    connection.local().flowController(
+        new DefaultHttp2LocalFlowController(connection, DEFAULT_WINDOW_UPDATE_RATIO, true));
 
 
     Http2ConnectionDecoder decoder = new DefaultHttp2ConnectionDecoder(connection, encoder,
@@ -217,12 +215,24 @@ class NettyClientHandler extends AbstractNettyHandler {
     }
   }
 
-  public int getPingCount() {
+  @VisibleForTesting
+  int getPingCount() {
     return pingcount;
   }
 
-  public int getPingReturn() {
+  @VisibleForTesting
+  int getPingReturn() {
     return pingreturn;
+  }
+
+  @VisibleForTesting
+  int getDataSizeSincePing() {
+    return dataSizeSincePing;
+  }
+
+  @VisibleForTesting
+  void setDataSizeSincePing(int dataSize) {
+    dataSizeSincePing = dataSize;
   }
 
   void startWriteQueue(Channel channel) {
@@ -265,21 +275,11 @@ class NettyClientHandler extends AbstractNettyHandler {
 
   private void sendDataPing(ChannelHandlerContext ctx) {
     dataSizeSincePing = 0;
-    ChannelPromise promise = ctx.newPromise();
     long pingData = BDP_MEASUREMENT_PING;
     ByteBuf buffer = ctx.alloc().buffer(8);
     buffer.writeLong(pingData);
-
-    encoder().writePing(ctx, false, buffer, promise);
+    encoder().writePing(ctx, false, buffer, ctx.newPromise());
     pingcount++;
-    promise.addListener(new ChannelFutureListener() {
-      @Override
-      public void operationComplete(ChannelFuture future) throws Exception {
-        if (!future.isSuccess()) {
-          pinging = false;
-        }
-      }
-    });
   }
 
   /**
