@@ -650,8 +650,7 @@ class NettyClientHandler extends AbstractNettyHandler {
           logger.log(Level.WARNING, String.format("Received unexpected ping ack. "
               + "Expecting %d, got %d", p.payload(), ackPayload));
         }
-      }
-      else if (data.readLong() == BDP_MEASUREMENT_PING) {
+      } else if (data.readLong() == BDP_MEASUREMENT_PING) {
         pingreturn++;
         data.readerIndex(0);
         dataSizeSincePing += data.readableBytes();
@@ -670,8 +669,7 @@ class NettyClientHandler extends AbstractNettyHandler {
           settings.initialWindowSize(targetWindow);
           frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
         }
-      }
-      else {
+      } else {
         logger.warning("Received unexpected ping ack. No ping outstanding");
       }
     }

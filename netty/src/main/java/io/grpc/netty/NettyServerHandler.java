@@ -229,7 +229,8 @@ class NettyServerHandler extends AbstractNettyHandler {
     }
   }
 
-  private void onDataRead(int streamId, ByteBuf data, int padding, boolean endOfStream) throws Http2Exception {
+  private void onDataRead(int streamId, ByteBuf data, int padding, boolean endOfStream)
+      throws Http2Exception {
     if (!pinging) {
       pinging = true;
       sendDataPing(ctx());
@@ -529,8 +530,7 @@ class NettyServerHandler extends AbstractNettyHandler {
           settings.initialWindowSize(targetWindow);
           frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
         }
-      }
-      else {
+      } else {
         logger.warning("Received unexpected ping ack. No ping outstanding");
       }
     }
