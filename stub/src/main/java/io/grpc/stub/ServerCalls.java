@@ -162,7 +162,7 @@ public class ServerCalls {
 
           @Override
           public void onCancel() {
-            responseObserver.cancelled = true;
+            responseObserver.cancelledException = Status.CANCELLED.asRuntimeException();
             if (responseObserver.onCancelHandler != null) {
               responseObserver.onCancelHandler.run();
             }
@@ -219,12 +219,12 @@ public class ServerCalls {
 
           @Override
           public void onCancel() {
-            responseObserver.cancelled = true;
+            responseObserver.cancelledException = Status.CANCELLED.asRuntimeException();
             if (responseObserver.onCancelHandler != null) {
               responseObserver.onCancelHandler.run();
             }
             if (!halfClosed) {
-              requestObserver.onError(Status.CANCELLED.asException());
+              requestObserver.onError(responseObserver.cancelledException);
             }
           }
 
@@ -250,7 +250,7 @@ public class ServerCalls {
   private static final class ServerCallStreamObserverImpl<ReqT, RespT>
       extends ServerCallStreamObserver<RespT> {
     final ServerCall<ReqT, RespT> call;
-    volatile boolean cancelled;
+    volatile RuntimeException cancelledException;
     private boolean frozen;
     private boolean autoFlowControlEnabled = true;
     private boolean sentHeaders;
@@ -277,8 +277,8 @@ public class ServerCalls {
 
     @Override
     public void onNext(RespT response) {
-      if (cancelled) {
-        throw Status.CANCELLED.asRuntimeException();
+      if (cancelledException != null) {
+        throw cancelledException;
       }
       if (!sentHeaders) {
         call.sendHeaders(new Metadata());
@@ -298,8 +298,8 @@ public class ServerCalls {
 
     @Override
     public void onCompleted() {
-      if (cancelled) {
-        throw Status.CANCELLED.asRuntimeException();
+      if (cancelledException != null) {
+        throw cancelledException;
       } else {
         call.close(Status.OK, new Metadata());
       }
