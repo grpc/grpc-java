@@ -58,7 +58,6 @@ import com.google.common.util.concurrent.SettableFuture;
 
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.ServerBuilder;
 import io.grpc.Status;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
@@ -106,8 +105,7 @@ public abstract class AbstractTransportTest {
   protected abstract InternalServer newServer();
 
   /**
-   * Builds a new server using a {@link ServerBuilder} with the same attributes
-   * as the given server instance has.
+   * Builds a new server that is listening on the same location as the given server instance does.
    */
   protected abstract InternalServer newServer(InternalServer server);
 
@@ -147,7 +145,6 @@ public abstract class AbstractTransportTest {
   @Before
   public void setUp() {
     server = newServer();
-    //client = newClientTransport();
   }
 
   @After
