@@ -33,15 +33,18 @@ package io.grpc.netty;
 
 import io.grpc.internal.AbstractStream2;
 import io.grpc.internal.Stream;
+import io.netty.channel.ChannelPromise;
 
 /**
  * Command which requests messages from the deframer.
  */
-class RequestMessagesCommand {
+class RequestMessagesCommand extends WriteQueue.AbstractQueuedCommand {
 
   private final int numMessages;
   private final Stream stream;
   private final AbstractStream2.TransportState state;
+
+  private ChannelPromise promise;
 
   public RequestMessagesCommand(Stream stream, int numMessages) {
     this.state = null;

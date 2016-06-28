@@ -33,15 +33,18 @@ package io.grpc.netty;
 
 import com.google.common.base.Preconditions;
 
+import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.Http2Headers;
 
 /**
  * A command to create a new stream. This is created by {@link NettyClientStream} and passed to the
  * {@link NettyClientHandler} for processing in the Channel thread.
  */
-class CreateStreamCommand {
+class CreateStreamCommand extends WriteQueue.AbstractQueuedCommand {
   private final Http2Headers headers;
   private final NettyClientStream stream;
+
+  private ChannelPromise promise;
 
   CreateStreamCommand(Http2Headers headers,
                       NettyClientStream stream) {

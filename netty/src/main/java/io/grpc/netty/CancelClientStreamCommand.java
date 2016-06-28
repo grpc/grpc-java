@@ -34,13 +34,16 @@ package io.grpc.netty;
 import com.google.common.base.Preconditions;
 
 import io.grpc.Status;
+import io.netty.channel.ChannelPromise;
 
 /**
  * Command sent from a Netty client stream to the handler to cancel the stream.
  */
-class CancelClientStreamCommand {
+class CancelClientStreamCommand extends WriteQueue.AbstractQueuedCommand {
   private final NettyClientStream stream;
   private final Status reason;
+
+  private ChannelPromise promise;
 
   CancelClientStreamCommand(NettyClientStream stream, Status reason) {
     this.stream = Preconditions.checkNotNull(stream, "stream");

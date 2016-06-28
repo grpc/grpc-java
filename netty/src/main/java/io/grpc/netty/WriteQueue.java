@@ -31,6 +31,9 @@
 
 package io.grpc.netty;
 
+import static java.lang.Math.min;
+
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
 import io.netty.channel.Channel;
@@ -49,6 +52,9 @@ class WriteQueue {
 
   private static final int DEQUE_CHUNK_SIZE = 128;
 
+  @VisibleForTesting
+  static final int MAX_WRITES_BEFORE_FLUSH = 8192;
+
   /**
    * {@link Runnable} used to schedule work onto the tail of the event loop.
    */
@@ -60,18 +66,18 @@ class WriteQueue {
   };
 
   private final Channel channel;
-  private final BlockingQueue<Runnable> queue;
+  private final BlockingQueue<QueuedCommand> queue;
   private final AtomicBoolean scheduled = new AtomicBoolean();
 
   /**
    * ArrayDeque to copy queue into when flushing in event loop.
    */
-  private final ArrayDeque<Runnable> writeChunk =
-      new ArrayDeque<Runnable>(DEQUE_CHUNK_SIZE);
+  private final ArrayDeque<QueuedCommand> writeChunk =
+      new ArrayDeque<QueuedCommand>(DEQUE_CHUNK_SIZE);
 
   public WriteQueue(Channel channel) {
     this.channel = Preconditions.checkNotNull(channel, "channel");
-    queue = new LinkedBlockingQueue<Runnable>();
+    queue = new LinkedBlockingQueue<QueuedCommand>();
   }
 
   /**
@@ -106,7 +112,14 @@ class WriteQueue {
    *              enqueue will schedule the flush.
    */
   ChannelFuture enqueue(Object command, ChannelPromise promise, boolean flush) {
-    queue.add(new QueuedCommand(command, promise));
+    final QueuedCommand queuedCommand;
+    if (command instanceof QueuedCommand) {
+      queuedCommand = (QueuedCommand) command;
+      queuedCommand.promise(promise);
+    } else {
+      queuedCommand = new InternalQueuedCommand(command, promise);
+    }
+    queue.add(queuedCommand);
     if (flush) {
       scheduleFlush();
     }
@@ -120,15 +133,25 @@ class WriteQueue {
   private void flush() {
     try {
       boolean flushed = false;
+      // We can't just call flush after having completely drained the queue, as new objects might
+      // be added to the queue continuously and so it may never get empty. If we never flushed in
+      // that case we would be guaranteed to OOM.
+      // However, we also don't want to flush too often as flushing invokes expensive system
+      // calls and we want to feed Netty with enough data so as to maximize the data written per
+      // system call.
+      int writesBeforeFlush = min(queue.size(), MAX_WRITES_BEFORE_FLUSH);
+      // Always dequeue in chunks, in order to not acquire the queue's lock too often.
       while (queue.drainTo(writeChunk, DEQUE_CHUNK_SIZE) > 0) {
-        while (writeChunk.size() > 0) {
-          writeChunk.poll().run();
+        writesBeforeFlush -= writeChunk.size();
+        while (!writeChunk.isEmpty()) {
+          QueuedCommand cmd = writeChunk.poll();
+          channel.write(cmd.command(), cmd.promise());
         }
-        // Flush each chunk so we are releasing buffers periodically. In theory this loop
-        // might never end as new events are continuously added to the queue, if we never
-        // flushed in that case we would be guaranteed to OOM.
-        flushed = true;
-        channel.flush();
+        if (writesBeforeFlush <= 0) {
+          writesBeforeFlush = min(queue.size(), MAX_WRITES_BEFORE_FLUSH);
+          flushed = true;
+          channel.flush();
+        }
       }
       if (!flushed) {
         // Must flush at least once
@@ -143,22 +166,57 @@ class WriteQueue {
     }
   }
 
-  /**
-   * Simple wrapper type around a command and its optional completion listener.
-   */
-  private final class QueuedCommand implements Runnable {
-    private final Object command;
-    private final ChannelPromise promise;
+  static class AbstractQueuedCommand implements QueuedCommand {
 
-    private QueuedCommand(Object command, ChannelPromise promise) {
-      this.command = command;
+    private ChannelPromise promise;
+
+    @Override
+    public Object command() {
+      return this;
+    }
+
+    @Override
+    public final void promise(ChannelPromise promise) {
       this.promise = promise;
     }
 
     @Override
-    public void run() {
-      channel.write(command, promise);
+    public final ChannelPromise promise() {
+      return promise;
+    }
+  }
+
+  /**
+   * Simple wrapper type around a command and its optional completion listener.
+   */
+  interface QueuedCommand {
+    /**
+     * Returns the object to write to the channel.
+     */
+    Object command();
+
+    /**
+     * Returns the promise beeing notified of the success/failure of the write.
+     */
+    ChannelPromise promise();
+
+    /**
+     * Sets the promise.
+     */
+    void promise(ChannelPromise promise);
+  }
+
+  private static final class InternalQueuedCommand extends AbstractQueuedCommand {
+    private final Object command;
+
+    private InternalQueuedCommand(Object command, ChannelPromise promise) {
+      this.command = command;
+      promise(promise);
+    }
+
+    @Override
+    public Object command() {
+      return command;
     }
   }
 }
-
