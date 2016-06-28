@@ -73,4 +73,9 @@ public abstract class ManagedChannel extends Channel {
    * @return whether the channel is terminated, as would be done by {@link #isTerminated()}.
    */
   public abstract boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException;
+
+  /**
+   * Waits for the channel to become terminated.
+   */
+  public abstract void awaitTermination() throws InterruptedException;
 }

@@ -361,6 +361,15 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   }
 
   @Override
+  public void awaitTermination() throws InterruptedException {
+    synchronized (lock) {
+      while (!terminated) {
+        lock.wait();
+      }
+    }
+  }
+
+  @Override
   public boolean isTerminated() {
     synchronized (lock) {
       return terminated;
