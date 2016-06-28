@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, Google Inc. All rights reserved.
+ * Copyright 2015, Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -32,24 +32,61 @@
 package io.grpc.inprocess;
 
 import io.grpc.internal.InternalServer;
-import io.grpc.internal.ManagedClientTransport;
-import io.grpc.internal.testing.AbstractTransportTest;
+import io.grpc.internal.ServerListener;
+import io.grpc.internal.ServerTransportListener;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import java.io.IOException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
-/** Unit tests for {@link InProcessTransport}. */
-@RunWith(JUnit4.class)
-public class InProcessTransportTest extends AbstractTransportTest {
-  private static final String transportName = "perfect-for-testing";
+import javax.annotation.concurrent.ThreadSafe;
 
-  @Override
-  protected InternalServer newServer() {
-    return new InProcessInternalServer(transportName);
+@ThreadSafe
+class InProcessInternalServer implements InternalServer {
+  private static final ConcurrentMap<String, InProcessInternalServer> registry
+      = new ConcurrentHashMap<String, InProcessInternalServer>();
+
+  static InProcessInternalServer findServer(String name) {
+    return registry.get(name);
+  }
+
+  private final String name;
+  private ServerListener listener;
+  private boolean shutdown;
+
+  InProcessInternalServer(String name) {
+    this.name = name;
   }
 
   @Override
-  protected ManagedClientTransport newClientTransport() {
-    return new InProcessTransport(new InProcessSocketAddress(transportName), null);
+  public void start(ServerListener serverListener) throws IOException {
+    this.listener = serverListener;
+    // Must be last, as channels can start connecting after this point.
+    if (name != null && registry.putIfAbsent(name, this) != null) {
+      throw new IOException("name already registered: " + name);
+    }
+  }
+
+  @Override
+  public int getPort() {
+    return -1;
+  }
+
+  @Override
+  public void shutdown() {
+    if (name != null && !registry.remove(name, this)) {
+      throw new AssertionError();
+    }
+    synchronized (this) {
+      shutdown = true;
+      listener.serverShutdown();
+    }
+  }
+
+  synchronized ServerTransportListener register(InProcessTransport transport) {
+    if (shutdown) {
+      return null;
+    }
+    return listener.transportCreated(transport);
   }
 }

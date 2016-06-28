@@ -54,18 +54,33 @@ public final class InProcessServerBuilder
    * @return a new builder
    */
   public static InProcessServerBuilder forName(String name) {
-    return new InProcessServerBuilder(name);
+    Preconditions.checkNotNull(name, "name");
+    return new InProcessServerBuilder(new InProcessSocketAddress(name));
   }
 
-  private final String name;
+  /**
+   * Creates an unnamed server builder. Although the server will not be registered to a global
+   * registry, it must still be shut down properly to prevent leaking resources.
+   */
+  public static InProcessServerBuilder newAnonymous() {
+    return new InProcessServerBuilder(new InProcessSocketAddress());
+  }
 
-  private InProcessServerBuilder(String name) {
-    this.name = Preconditions.checkNotNull(name, "name");
+  private final InProcessSocketAddress address;
+
+  private InProcessServerBuilder(InProcessSocketAddress address) {
+    this.address = address;
   }
 
   @Override
-  protected InProcessServer buildTransportServer() {
-    return new InProcessServer(name);
+  protected InProcessInternalServer buildTransportServer() {
+    return new InProcessInternalServer(address.getName());
+  }
+
+  @Override
+  public InProcessServer build() {
+    InProcessInternalServer server = buildTransportServer();
+    return new InProcessServer(super.build(server), address, server);
   }
 
   @Override

@@ -29,27 +29,78 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.inprocess;
+package io.grpc.internal;
 
 import com.google.common.base.Preconditions;
 
 import io.grpc.Server;
-import io.grpc.internal.ForwardingServer.SimpleForwardingServer;
 
-/** A Server that also aids creating channels to communicate with it. */
-public final class InProcessServer extends SimpleForwardingServer<InProcessServer> {
-  private final InProcessSocketAddress address;
-  private final InProcessInternalServer internalServer;
+import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 
-  InProcessServer(Server delegate, InProcessSocketAddress address,
-      InProcessInternalServer internalServer) {
-    super(delegate);
-    this.address = Preconditions.checkNotNull(address, "address");
-    this.internalServer = Preconditions.checkNotNull(internalServer, "internalServer");
+/** Server implementation that delegates to another implementation. */
+public abstract class ForwardingServer<T extends ForwardingServer<T>> extends Server {
+  protected abstract Server delegate();
+
+  @SuppressWarnings("unchecked")
+  private T thisT() {
+    return (T) this;
   }
 
-  /** Creates a new channel builder for this server's address. */
-  public InProcessChannelBuilder newChannelBuilder() {
-    return InProcessChannelBuilder.forAnonymous(address, internalServer);
+  @Override
+  public T start() throws IOException {
+    delegate().start();
+    return thisT();
+  }
+
+  @Override
+  public int getPort() {
+    return delegate().getPort();
+  }
+
+  @Override
+  public T shutdown() {
+    delegate().shutdown();
+    return thisT();
+  }
+
+  @Override
+  public T shutdownNow() {
+    delegate().shutdownNow();
+    return thisT();
+  }
+
+  @Override
+  public boolean isShutdown() {
+    return delegate().isShutdown();
+  }
+
+  @Override
+  public boolean isTerminated() {
+    return delegate().isTerminated();
+  }
+
+  @Override
+  public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
+    return delegate().awaitTermination(timeout, unit);
+  }
+
+  @Override
+  public void awaitTermination() throws InterruptedException {
+    delegate().awaitTermination();
+  }
+
+  public static class SimpleForwardingServer<T extends SimpleForwardingServer<T>>
+      extends ForwardingServer<T> {
+    private final Server server;
+
+    public SimpleForwardingServer(Server server) {
+      this.server = Preconditions.checkNotNull(server, "server");
+    }
+
+    @Override
+    protected Server delegate() {
+      return server;
+    }
   }
 }
