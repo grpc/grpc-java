@@ -593,6 +593,30 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   @Test
+  public void oustandingUserPingShouldNotInteractWithDataPing() throws Exception {
+    createStream();
+
+    PingCallbackImpl callback = new PingCallbackImpl();
+    sendPing(callback);
+    ArgumentCaptor<ByteBuf> captor = ArgumentCaptor.forClass(ByteBuf.class);
+    verifyWrite().writePing(eq(ctx()), eq(false), captor.capture(), any(ChannelPromise.class));
+    ByteBuf payload = captor.getValue();
+    channelRead(dataFrame(3, false));
+    long pingdata = handler().flowControlPinger().payload();
+    ByteBuf buffer = handler().ctx().alloc().buffer(8);
+    buffer.writeLong(pingdata);
+    channelRead(pingFrame(true, buffer));
+
+    assertEquals(1, handler().flowControlPinger().getPingReturn());
+    assertEquals(0, callback.invocationCount);
+
+    channelRead(pingFrame(true, payload));
+
+    assertEquals(1, handler().flowControlPinger().getPingReturn());
+    assertEquals(1, callback.invocationCount);
+  }
+
+  @Test
   public void exceptionCaughtShouldCloseConnection() throws Exception {
     handler().exceptionCaught(ctx(), new RuntimeException("fake exception"));
 

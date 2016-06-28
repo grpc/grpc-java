@@ -614,20 +614,21 @@ class NettyClientHandler extends AbstractNettyHandler {
     @Override
     public void onPingAckRead(ChannelHandlerContext ctx, ByteBuf data) throws Http2Exception {
       Http2Ping p = ping;
-      if (p != null) {
+      if (data.readLong() == flowControlPing.payload()) {
+        data.readerIndex(0);
+        flowControlPing.incrementDataSincePing(data.readableBytes());
+        flowControlPing.updateWindow();
+        logger.log(Level.FINE, String.format("OBDP: {0}", flowControlPing.getDataSincePing()));
+      } else if (p != null) {
+        data.readerIndex(0);
         long ackPayload = data.readLong();
         if (p.payload() == ackPayload) {
           p.complete();
           ping = null;
         } else {
-          logger.log(Level.WARNING, String.format("Received unexpected ping ack. "
-              + "Expecting %d, got %d", p.payload(), ackPayload));
+        logger.log(Level.WARNING, String.format("Received unexpected ping ack. "
+            + "Expecting %d, got %d", p.payload(), ackPayload));
         }
-      } else if (data.readLong() == flowControlPing.payload()) {
-        data.readerIndex(0);
-        flowControlPing.incrementDataSincePing(data.readableBytes());
-        flowControlPing.updateWindow();
-        logger.log(Level.FINE, String.format("OBDP: {0}", flowControlPing.getDataSincePing()));
       } else {
         logger.warning("Received unexpected ping ack. No ping outstanding");
       }

@@ -42,6 +42,7 @@ import io.netty.handler.codec.http2.Http2ConnectionDecoder;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2ConnectionHandler;
 import io.netty.handler.codec.http2.Http2Exception;
+import io.netty.handler.codec.http2.Http2LocalFlowController;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 
@@ -112,6 +113,9 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
     }
   }
 
+  /**
+   * Class for handling flow control pinging and flow control window updates as necessary
+   */
   protected class FlowControlPinger {
 
     private static final int BDP_MEASUREMENT_PING = 1234;
@@ -143,15 +147,15 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
 
     public void updateWindow() throws Http2Exception {
       pingReturn++;
+      Http2LocalFlowController fc = decoder().flowController();
       // Calculate new window size by doubling the observed BDP, but cap at max window
       int targetWindow = Math.min(getDataSincePing() * 2, MAX_WINDOW_SIZE);
       setPinging(false);
-      int currentWindow =
-          decoder().flowController().initialWindowSize(connection().connectionStream());
+      int currentWindow = fc.initialWindowSize(connection().connectionStream());
       if (targetWindow > currentWindow) {
         int increase = targetWindow - currentWindow;
-        decoder().flowController().incrementWindowSize(connection().connectionStream(), increase);
-        decoder().flowController().initialWindowSize(targetWindow);
+        fc.incrementWindowSize(connection().connectionStream(), increase);
+        fc.initialWindowSize(targetWindow);
         Http2Settings settings = new Http2Settings();
         settings.initialWindowSize(targetWindow);
         frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
@@ -170,6 +174,7 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
     public int maxWindow() {
       return MAX_WINDOW_SIZE;
     }
+
     @VisibleForTesting
     int getPingCount() {
       return pingCount;
