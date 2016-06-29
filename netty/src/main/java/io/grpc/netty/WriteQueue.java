@@ -99,7 +99,7 @@ class WriteQueue {
    * @param flush true if a flush of the write should be schedule, false if a later call to
    *              enqueue will schedule the flush.
    */
-  ChannelFuture enqueue(Object command, boolean flush) {
+  ChannelFuture enqueue(QueuedCommand command, boolean flush) {
     return enqueue(command, channel.newPromise(), flush);
   }
 
@@ -111,15 +111,12 @@ class WriteQueue {
    * @param flush true if a flush of the write should be schedule, false if a later call to
    *              enqueue will schedule the flush.
    */
-  ChannelFuture enqueue(Object command, ChannelPromise promise, boolean flush) {
-    final QueuedCommand queuedCommand;
-    if (command instanceof QueuedCommand) {
-      queuedCommand = (QueuedCommand) command;
-      queuedCommand.promise(promise);
-    } else {
-      queuedCommand = new InternalQueuedCommand(command, promise);
-    }
-    queue.add(queuedCommand);
+  ChannelFuture enqueue(QueuedCommand command, ChannelPromise promise, boolean flush) {
+    // Detect errornous code that tries to reuse command objects.
+    Preconditions.checkNotNull(command.promise() == null, "promise must not be set on command");
+
+    command.promise(promise);
+    queue.add(command);
     if (flush) {
       scheduleFlush();
     }
@@ -131,6 +128,8 @@ class WriteQueue {
    * called in the event loop
    */
   private void flush() {
+    assert channel.eventLoop().inEventLoop();
+
     try {
       boolean flushed = false;
       // We can't just call flush after having completely drained the queue, as new objects might
@@ -145,7 +144,7 @@ class WriteQueue {
         writesBeforeFlush -= writeChunk.size();
         while (!writeChunk.isEmpty()) {
           QueuedCommand cmd = writeChunk.poll();
-          channel.write(cmd.command(), cmd.promise());
+          channel.write(cmd, cmd.promise());
         }
         if (writesBeforeFlush <= 0) {
           writesBeforeFlush = min(queue.size(), MAX_WRITES_BEFORE_FLUSH);
@@ -153,8 +152,11 @@ class WriteQueue {
           channel.flush();
         }
       }
+
+      assert writesBeforeFlush == 0;
+
       if (!flushed) {
-        // Must flush at least once
+        // In case there were no items in the queue, we must flush at least once
         channel.flush();
       }
     } finally {
@@ -166,14 +168,9 @@ class WriteQueue {
     }
   }
 
-  static class AbstractQueuedCommand implements QueuedCommand {
+  abstract static class AbstractQueuedCommand implements QueuedCommand {
 
     private ChannelPromise promise;
-
-    @Override
-    public Object command() {
-      return this;
-    }
 
     @Override
     public final void promise(ChannelPromise promise) {
@@ -191,11 +188,6 @@ class WriteQueue {
    */
   interface QueuedCommand {
     /**
-     * Returns the object to write to the channel.
-     */
-    Object command();
-
-    /**
      * Returns the promise beeing notified of the success/failure of the write.
      */
     ChannelPromise promise();
@@ -204,19 +196,5 @@ class WriteQueue {
      * Sets the promise.
      */
     void promise(ChannelPromise promise);
-  }
-
-  private static final class InternalQueuedCommand extends AbstractQueuedCommand {
-    private final Object command;
-
-    private InternalQueuedCommand(Object command, ChannelPromise promise) {
-      this.command = command;
-      promise(promise);
-    }
-
-    @Override
-    public Object command() {
-      return command;
-    }
   }
 }

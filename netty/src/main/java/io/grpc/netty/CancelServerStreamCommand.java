@@ -36,7 +36,6 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 
 import io.grpc.Status;
-import io.netty.channel.ChannelPromise;
 
 /**
  * Command sent from a Netty server stream to the handler to cancel the stream.
@@ -44,8 +43,6 @@ import io.netty.channel.ChannelPromise;
 class CancelServerStreamCommand extends WriteQueue.AbstractQueuedCommand {
   private final NettyServerStream.TransportState stream;
   private final Status reason;
-
-  private ChannelPromise promise;
 
   CancelServerStreamCommand(NettyServerStream.TransportState stream, Status reason) {
     this.stream = Preconditions.checkNotNull(stream);

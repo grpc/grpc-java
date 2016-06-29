@@ -121,11 +121,6 @@ class SendGrpcFrameCommand extends DefaultByteBufHolder implements WriteQueue.Qu
   }
 
   @Override
-  public Object command() {
-    return this;
-  }
-
-  @Override
   public ChannelPromise promise() {
     return promise;
   }

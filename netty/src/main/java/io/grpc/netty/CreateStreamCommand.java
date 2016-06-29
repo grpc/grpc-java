@@ -33,7 +33,6 @@ package io.grpc.netty;
 
 import com.google.common.base.Preconditions;
 
-import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.Http2Headers;
 
 /**
@@ -43,8 +42,6 @@ import io.netty.handler.codec.http2.Http2Headers;
 class CreateStreamCommand extends WriteQueue.AbstractQueuedCommand {
   private final Http2Headers headers;
   private final NettyClientStream stream;
-
-  private ChannelPromise promise;
 
   CreateStreamCommand(Http2Headers headers,
                       NettyClientStream stream) {

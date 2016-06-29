@@ -31,14 +31,16 @@
 
 package io.grpc.netty;
 
+import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.grpc.netty.WriteQueue.QueuedCommand;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoop;
 import org.junit.Before;
@@ -51,6 +53,9 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 @RunWith(JUnit4.class)
 public class WriteQueueTest {
 
@@ -59,6 +64,13 @@ public class WriteQueueTest {
 
   @Mock
   public ChannelPromise promise;
+
+
+  private QueuedCommand command = new WriteQueue.AbstractQueuedCommand() {
+  };
+
+  private long flushCalledNanos;
+  private long writeCalledNanos;
 
   /**
    * Set up for test.
@@ -77,17 +89,38 @@ public class WriteQueueTest {
         return null;
       }
     }).when(eventLoop).execute(any(Runnable.class));
-
+    when(eventLoop.inEventLoop()).thenReturn(true);
     when(channel.eventLoop()).thenReturn(eventLoop);
+
+    when(channel.flush()).thenAnswer(new Answer<Channel>() {
+      @Override
+      public Channel answer(InvocationOnMock invocation) throws Throwable {
+        flushCalledNanos = System.nanoTime();
+        if (flushCalledNanos == writeCalledNanos) {
+          flushCalledNanos += 1;
+        }
+        return channel;
+      }
+    });
+
+    when(channel.write(command, promise)).thenAnswer(new Answer<ChannelFuture>() {
+      @Override
+      public ChannelFuture answer(InvocationOnMock invocation) throws Throwable {
+        writeCalledNanos = System.nanoTime();
+        if (writeCalledNanos == flushCalledNanos) {
+          writeCalledNanos += 1;
+        }
+        return promise;
+      }
+    });
   }
 
   @Test
   public void singleWriteShouldWork() {
     WriteQueue queue = new WriteQueue(channel);
-    Object command = new Object();
     queue.enqueue(command, true);
 
-    verify(channel).write(eq(command), eq(promise));
+    verify(channel).write(command, promise);
     verify(channel).flush();
   }
 
@@ -95,26 +128,80 @@ public class WriteQueueTest {
   public void multipleWritesShouldBeBatched() {
     WriteQueue queue = new WriteQueue(channel);
     for (int i = 0; i < 5; i++) {
-      queue.enqueue(new Object(), false);
+      queue.enqueue(command, false);
     }
     queue.scheduleFlush();
 
-    verify(channel, times(5)).write(any(Object.class), eq(promise));
+    verify(channel, times(5)).write(command, promise);
     verify(channel).flush();
   }
 
   @Test
-  public void maxWritesShouldBeCapped() {
+  public void maxWritesBeforeFlushShouldBeEnforced() {
     WriteQueue queue = new WriteQueue(channel);
     int writes = WriteQueue.MAX_WRITES_BEFORE_FLUSH + 10;
-    Object command = new Object();
     for (int i = 0; i < writes; i++) {
       queue.enqueue(command, false);
     }
     queue.scheduleFlush();
 
-    verify(channel, times(writes)).write(eq(command), eq(promise));
+    verify(channel, times(writes)).write(command, promise);
     verify(channel, times(2)).flush();
   }
-  
+
+  @Test(timeout = 10000)
+  public void concurrentWriteAndFlush() throws Throwable {
+    final WriteQueue queue = new WriteQueue(channel);
+    final CountDownLatch flusherStarted = new CountDownLatch(1);
+    final AtomicBoolean doneWriting = new AtomicBoolean();
+    Thread flusher = new Thread(new Runnable() {
+      @Override
+      public void run() {
+        flusherStarted.countDown();
+        while (!doneWriting.get()) {
+          queue.scheduleFlush();
+          assertFlushCalledAfterWrites();
+        }
+        // No more writes, so this flush should drain all writes from the queue
+        queue.scheduleFlush();
+        assertFlushCalledAfterWrites();
+      }
+
+      void assertFlushCalledAfterWrites() {
+        if (flushCalledNanos - writeCalledNanos <= 0) {
+          fail("flush must be called after all writes");
+        }
+      }
+    });
+
+    class ExceptionHandler implements Thread.UncaughtExceptionHandler {
+      private Throwable throwable;
+
+      @Override
+      public void uncaughtException(Thread t, Throwable e) {
+        throwable = e;
+      }
+
+      void checkException() throws Throwable {
+        if (throwable != null) {
+          throw throwable;
+        }
+      }
+    }
+
+    ExceptionHandler exHandler = new ExceptionHandler();
+    flusher.setUncaughtExceptionHandler(exHandler);
+
+    flusher.start();
+    flusherStarted.await();
+    int writes = 2 * WriteQueue.MAX_WRITES_BEFORE_FLUSH;
+    for (int i = 0; i < writes; i++) {
+      queue.enqueue(command, false);
+    }
+    doneWriting.set(true);
+    flusher.join();
+
+    exHandler.checkException();
+    verify(channel, times(writes)).write(command, promise);
+  }
 }

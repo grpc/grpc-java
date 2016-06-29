@@ -32,7 +32,6 @@
 package io.grpc.netty;
 
 import io.grpc.Status;
-import io.netty.channel.ChannelPromise;
 
 /**
  * A command to trigger close. It is buffered differently than normal close and also includes
@@ -40,8 +39,6 @@ import io.netty.channel.ChannelPromise;
  */
 class GracefulCloseCommand extends WriteQueue.AbstractQueuedCommand {
   private final Status status;
-
-  private ChannelPromise promise;
 
   public GracefulCloseCommand(Status status) {
     this.status = status;

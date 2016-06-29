@@ -33,7 +33,6 @@ package io.grpc.netty;
 
 import com.google.common.base.Preconditions;
 
-import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.Http2Headers;
 
 /**
@@ -43,8 +42,6 @@ class SendResponseHeadersCommand extends WriteQueue.AbstractQueuedCommand {
   private final StreamIdHolder stream;
   private final Http2Headers headers;
   private final boolean endOfStream;
-
-  private ChannelPromise promise;
 
   SendResponseHeadersCommand(StreamIdHolder stream, Http2Headers headers, boolean endOfStream) {
     this.stream = Preconditions.checkNotNull(stream);
