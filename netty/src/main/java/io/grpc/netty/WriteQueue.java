@@ -31,8 +31,6 @@
 
 package io.grpc.netty;
 
-import static java.lang.Math.min;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
@@ -138,7 +136,7 @@ class WriteQueue {
       // However, we also don't want to flush too often as flushing invokes expensive system
       // calls and we want to feed Netty with enough data so as to maximize the data written per
       // system call.
-      int writesBeforeFlush = min(queue.size(), MAX_WRITES_BEFORE_FLUSH);
+      int writesBeforeFlush = MAX_WRITES_BEFORE_FLUSH;
       // Always dequeue in chunks, in order to not acquire the queue's lock too often.
       while (queue.drainTo(writeChunk, DEQUE_CHUNK_SIZE) > 0) {
         writesBeforeFlush -= writeChunk.size();
@@ -146,14 +144,13 @@ class WriteQueue {
           QueuedCommand cmd = writeChunk.poll();
           channel.write(cmd, cmd.promise());
         }
+        flushed = false;
         if (writesBeforeFlush <= 0) {
-          writesBeforeFlush = min(queue.size(), MAX_WRITES_BEFORE_FLUSH);
+          writesBeforeFlush = MAX_WRITES_BEFORE_FLUSH;
           flushed = true;
           channel.flush();
         }
       }
-
-      assert writesBeforeFlush == 0;
 
       if (!flushed) {
         // In case there were no items in the queue, we must flush at least once
