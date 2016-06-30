@@ -50,6 +50,14 @@ public class WriteCombiningHandler extends ChannelOutboundHandlerAdapter {
   }
 
   @Override
+  public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
+    if (buffer != null) {
+      ReferenceCountUtil.safeRelease(buffer);
+      buffer = null;
+    }
+  }
+
+  @Override
   public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
     ByteBuf data = (ByteBuf) msg;
     if (buffer == null) {
@@ -79,4 +87,6 @@ public class WriteCombiningHandler extends ChannelOutboundHandlerAdapter {
     }
     ctx.flush();
   }
+
+
 }
