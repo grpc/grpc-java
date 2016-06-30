@@ -203,7 +203,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
 
   /**
    * Sets the maximum message size allowed to be received on the server. If not called,
-   * defaults to 100 MiB.
+   * defaults to 4 MiB.
    */
   public NettyServerBuilder maxMessageSize(int maxMessageSize) {
     checkArgument(maxMessageSize >= 0, "maxMessageSize must be >= 0");
