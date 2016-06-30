@@ -54,11 +54,12 @@ abstract class ResettableTimer {
   private final long timeoutNanos;
   private final ScheduledExecutorService executor;
   private final Stopwatch stopwatch;
+  private final Object lock = new Object();
 
   private final Runnable runnable = new LogExceptionRunnable(new Runnable() {
       @Override
       public void run() {
-        synchronized (getLock()) {
+        synchronized (lock) {
           scheduledTask = null;
           if (!stopwatch.isRunning()) {
             return;
@@ -66,10 +67,10 @@ abstract class ResettableTimer {
           long leftNanos = timeoutNanos - stopwatch.elapsed(TimeUnit.NANOSECONDS);
           if (leftNanos > 0) {
             scheduledTask = executor.schedule(runnable, leftNanos, TimeUnit.NANOSECONDS);
-          } else {
-            timerExpired();
+            return;
           }
         }
+        timerExpired();
       }
 
       @Override
@@ -78,7 +79,7 @@ abstract class ResettableTimer {
       }
     });
 
-  @GuardedBy("getLock()")
+  @GuardedBy("lock")
   @Nullable
   private ScheduledFuture<?> scheduledTask;
 
@@ -89,14 +90,11 @@ abstract class ResettableTimer {
     this.stopwatch = checkNotNull(stopwatch);
   }
 
-  abstract Object getLock();
-
   /**
    * Handler to run when timer expired.
    *
-   * <p>It doesn't restart the timer automatically.
+   * <p>Timer won't restart automatically.
    */
-  @GuardedBy("getLock()")
   abstract void timerExpired();
 
   /**
@@ -104,7 +102,7 @@ abstract class ResettableTimer {
    * {@link #resetAndStart} or {@link #stop} is called before that.
    */
   final void resetAndStart() {
-    synchronized (getLock()) {
+    synchronized (lock) {
       stopwatch.reset().start();
       if (scheduledTask == null) {
         scheduledTask = executor.schedule(runnable, timeoutNanos, TimeUnit.NANOSECONDS);
@@ -116,7 +114,7 @@ abstract class ResettableTimer {
    * Stop the timer.
    */
   final void stop() {
-    synchronized (getLock()) {
+    synchronized (lock) {
       if (scheduledTask != null) {
         stopwatch.stop();
       }

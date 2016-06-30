@@ -52,11 +52,6 @@ public class ResettableTimerTest {
   private final ResettableTimer timer = new ResettableTimer(TIMEOUT_NANOS, TimeUnit.NANOSECONDS,
       timerService.scheduledExecutorService, Stopwatch.createUnstarted(timerService.ticker)) {
       @Override
-      Object getLock() {
-        return this;
-      }
-
-      @Override
       void timerExpired() {
         expireCount++;
       }
