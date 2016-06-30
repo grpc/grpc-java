@@ -192,6 +192,12 @@ class NettyClientHandler extends AbstractNettyHandler {
     });
   }
 
+  @Override
+  public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+    ctx.pipeline().addBefore(ctx.executor(), ctx.name(), null, new WriteCombiningHandler());
+    super.handlerAdded(ctx);
+  }
+
   /**
    * Handler for commands sent from the stream.
    */
