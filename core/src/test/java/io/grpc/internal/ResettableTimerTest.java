@@ -138,6 +138,28 @@ public class ResettableTimerTest {
   }
 
   @Test
+  public void shutdownAfterStopped() {
+    timer.resetAndStart();
+    assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS - 1, TimeUnit.NANOSECONDS));
+    timer.stop();
+    timer.shutdown();
+    assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS * 2, TimeUnit.NANOSECONDS));
+    assertEquals(0, expireCount);
+  }
+
+  @Test
+  public void stopThenRestart() {
+    timer.resetAndStart();
+    assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS - 1, TimeUnit.NANOSECONDS));
+    timer.stop();
+    timer.resetAndStart();
+    assertEquals(1, timerService.forwardTime(TIMEOUT_NANOS - 1, TimeUnit.NANOSECONDS));
+    assertEquals(0, expireCount);
+    assertEquals(1, timerService.forwardTime(1, TimeUnit.NANOSECONDS));
+    assertEquals(1, expireCount);
+  }
+
+  @Test
   public void resetWhileRunning() {
     final CountDownLatch timerLatch = new CountDownLatch(1);
     final CountDownLatch resetterLatch = new CountDownLatch(1);

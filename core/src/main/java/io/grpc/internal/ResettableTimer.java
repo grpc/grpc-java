@@ -133,6 +133,7 @@ abstract class ResettableTimer {
       synchronized (lock) {
         if (!stopwatch.isRunning()) {
           // stop() has been called
+          currentTask = null;
           return;
         }
         long leftNanos = timeoutNanos - stopwatch.elapsed(TimeUnit.NANOSECONDS);
@@ -223,9 +224,10 @@ abstract class ResettableTimer {
   final void stop() {
     synchronized (lock) {
       if (currentTask != null) {
-        stopwatch.stop();
+        if (stopwatch.isRunning()) {
+          stopwatch.stop();
+        }
         currentTask.state.cancelled = true;
-        currentTask = null;
       }
     }
   }
