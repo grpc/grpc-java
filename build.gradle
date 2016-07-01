@@ -19,7 +19,7 @@ subprojects {
     apply plugin: "com.google.osdetector"
 
     group = "io.grpc"
-    version = "0.15.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.0.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     sourceCompatibility = 1.6
     targetCompatibility = 1.6
@@ -59,7 +59,7 @@ subprojects {
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
         guavaVersion = '19.0'
-        protobufVersion = '3.0.0-beta-2'
+        protobufVersion = '3.0.0-beta-3'
         protobufNanoVersion = '3.0.0-alpha-5'
 
         configureProtoCompilation = {
@@ -123,6 +123,11 @@ subprojects {
               }
             }
           }
+
+          compileJava {
+            // Protobuf-generated code produces some warnings.
+            options.compilerArgs = compileJava.options.compilerArgs + ["-Xlint:-deprecation"]
+          }
         }
 
         def epoll_suffix = "";
@@ -134,7 +139,8 @@ subprojects {
                 guava: "com.google.guava:guava:${guavaVersion}",
                 hpack: 'com.twitter:hpack:0.10.1',
                 jsr305: 'com.google.code.findbugs:jsr305:3.0.0',
-                oauth_client: 'com.google.auth:google-auth-library-oauth2-http:0.3.0',
+                oauth_client: 'com.google.auth:google-auth-library-oauth2-http:0.4.0',
+                google_auth_credentials: 'com.google.auth:google-auth-library-credentials:0.4.0',
                 okhttp: 'com.squareup.okhttp:okhttp:2.5.0',
                 okio: 'com.squareup.okio:okio:1.6.0',
                 protobuf: "com.google.protobuf:protobuf-java:${protobufVersion}",
@@ -142,9 +148,9 @@ subprojects {
                 protobuf_plugin: 'com.google.protobuf:protobuf-gradle-plugin:0.7.7',
                 protobuf_util: "com.google.protobuf:protobuf-java-util:${protobufVersion}",
 
-                netty: 'io.netty:netty-codec-http2:[4.1.0.Final]',
-                netty_epoll: 'io.netty:netty-transport-native-epoll:4.1.0.Final' + epoll_suffix,
-                netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:1.1.33.Fork15:' + osdetector.classifier,
+                netty: 'io.netty:netty-codec-http2:[4.1.1.Final]',
+                netty_epoll: 'io.netty:netty-transport-native-epoll:4.1.1.Final' + epoll_suffix,
+                netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:1.1.33.Fork17',
 
                 // Test dependencies.
                 junit: 'junit:junit:4.11',

@@ -29,7 +29,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.examples.helloworld;
+package io.grpc.examples.advanced;
 
 import static io.grpc.stub.ClientCalls.blockingUnaryCall;
 
@@ -39,6 +39,10 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
 import io.grpc.StatusRuntimeException;
+import io.grpc.examples.helloworld.GreeterGrpc;
+import io.grpc.examples.helloworld.HelloReply;
+import io.grpc.examples.helloworld.HelloRequest;
+import io.grpc.examples.helloworld.HelloWorldClient;
 import io.grpc.protobuf.ProtoUtils;
 import io.grpc.stub.AbstractStub;
 
@@ -46,11 +50,20 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/**
+ * Advanced example of how to swap out the serialization logic.  Normal users do not need to do
+ * this.  This code is not intended to be a production-ready implementation, since JSON encoding
+ * is slow.  Additionally, JSON serialization as implemented may be not resilient to malicious
+ * input.
+ *
+ * <p>If you are considering implementing your own serialization logic, contact the grpc team at
+ * https://groups.google.com/forum/#!forum/grpc-io
+ */
 public final class HelloJsonClient {
   private static final Logger logger = Logger.getLogger(HelloWorldClient.class.getName());
 
   private final ManagedChannel channel;
-  private final GreeterGrpc.GreeterBlockingClient blockingStub;
+  private final HelloJsonStub blockingStub;
 
   /** Construct client connecting to HelloWorld server at {@code host:port}. */
   public HelloJsonClient(String host, int port) {
@@ -96,8 +109,7 @@ public final class HelloJsonClient {
     }
   }
 
-  static final class HelloJsonStub extends AbstractStub<HelloJsonStub>
-      implements GreeterGrpc.GreeterBlockingClient {
+  static final class HelloJsonStub extends AbstractStub<HelloJsonStub> {
 
     static final MethodDescriptor<HelloRequest, HelloReply> METHOD_SAY_HELLO =
         MethodDescriptor.create(
@@ -119,7 +131,6 @@ public final class HelloJsonClient {
       return new HelloJsonStub(channel, callOptions);
     }
 
-    @Override
     public HelloReply sayHello(HelloRequest request) {
       return blockingUnaryCall(
           getChannel(), METHOD_SAY_HELLO, getCallOptions(), request);

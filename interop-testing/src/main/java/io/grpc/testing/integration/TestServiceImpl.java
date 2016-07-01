@@ -36,6 +36,7 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.EmptyProtos;
 
 import io.grpc.Status;
+import io.grpc.internal.LogExceptionRunnable;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.PayloadType;
@@ -59,7 +60,7 @@ import java.util.concurrent.TimeUnit;
  * Implementation of the business logic for the TestService. Uses an executor to schedule chunks
  * sent in response streams.
  */
-public class TestServiceImpl implements TestServiceGrpc.TestService {
+public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   private static final String UNCOMPRESSABLE_FILE =
       "/io/grpc/testing/integration/testdata/uncompressable.bin";
   private final Random random = new Random();
@@ -98,11 +99,9 @@ public class TestServiceImpl implements TestServiceGrpc.TestService {
           // fallthrough, just use gzip
         case GZIP:
           obs.setCompression("gzip");
-          obs.setMessageCompression(true);
           break;
         case NONE:
           obs.setCompression("identity");
-          obs.setMessageCompression(false);
           break;
         case UNRECOGNIZED:
           // fallthrough
@@ -336,7 +335,8 @@ public class TestServiceImpl implements TestServiceGrpc.TestService {
         Chunk nextChunk = chunks.peek();
         if (nextChunk != null) {
           scheduled = true;
-          executor.schedule(dispatchTask, nextChunk.delayMicroseconds, TimeUnit.MICROSECONDS);
+          executor.schedule(new LogExceptionRunnable(dispatchTask),
+              nextChunk.delayMicroseconds, TimeUnit.MICROSECONDS);
           return;
         }
       }

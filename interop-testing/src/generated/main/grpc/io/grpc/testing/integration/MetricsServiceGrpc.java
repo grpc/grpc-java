@@ -18,7 +18,7 @@ import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
 /**
  */
 @javax.annotation.Generated(
-    value = "by gRPC proto compiler (version 0.15.0-SNAPSHOT)",
+    value = "by gRPC proto compiler (version 1.0.0-SNAPSHOT)",
     comments = "Source: io/grpc/testing/integration/metrics.proto")
 public class MetricsServiceGrpc {
 
@@ -27,7 +27,7 @@ public class MetricsServiceGrpc {
   public static final String SERVICE_NAME = "grpc.testing.MetricsService";
 
   // Static method descriptors that strictly reflect the proto.
-  @io.grpc.ExperimentalApi
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.testing.integration.Metrics.EmptyMessage,
       io.grpc.testing.integration.Metrics.GaugeResponse> METHOD_GET_ALL_GAUGES =
       io.grpc.MethodDescriptor.create(
@@ -36,7 +36,7 @@ public class MetricsServiceGrpc {
               "grpc.testing.MetricsService", "GetAllGauges"),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.testing.integration.Metrics.EmptyMessage.getDefaultInstance()),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.testing.integration.Metrics.GaugeResponse.getDefaultInstance()));
-  @io.grpc.ExperimentalApi
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.testing.integration.Metrics.GaugeRequest,
       io.grpc.testing.integration.Metrics.GaugeResponse> METHOD_GET_GAUGE =
       io.grpc.MethodDescriptor.create(
@@ -71,7 +71,7 @@ public class MetricsServiceGrpc {
 
   /**
    */
-  public static interface MetricsService {
+  @java.lang.Deprecated public static interface MetricsService {
 
     /**
      * <pre>
@@ -91,8 +91,8 @@ public class MetricsServiceGrpc {
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Metrics.GaugeResponse> responseObserver);
   }
 
-  @io.grpc.ExperimentalApi
-  public static abstract class AbstractMetricsService implements MetricsService, io.grpc.BindableService {
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1469")
+  public static abstract class MetricsServiceImplBase implements MetricsService, io.grpc.BindableService {
 
     @java.lang.Override
     public void getAllGauges(io.grpc.testing.integration.Metrics.EmptyMessage request,
@@ -113,7 +113,7 @@ public class MetricsServiceGrpc {
 
   /**
    */
-  public static interface MetricsServiceBlockingClient {
+  @java.lang.Deprecated public static interface MetricsServiceBlockingClient {
 
     /**
      * <pre>
@@ -134,7 +134,7 @@ public class MetricsServiceGrpc {
 
   /**
    */
-  public static interface MetricsServiceFutureClient {
+  @java.lang.Deprecated public static interface MetricsServiceFutureClient {
 
     /**
      * <pre>
@@ -233,6 +233,8 @@ public class MetricsServiceGrpc {
     }
   }
 
+  @java.lang.Deprecated public static abstract class AbstractMetricsService extends MetricsServiceImplBase {}
+
   private static final int METHODID_GET_ALL_GAUGES = 0;
   private static final int METHODID_GET_GAUGE = 1;
 
@@ -277,9 +279,15 @@ public class MetricsServiceGrpc {
     }
   }
 
-  public static io.grpc.ServerServiceDefinition bindService(
+  public static io.grpc.ServiceDescriptor getServiceDescriptor() {
+    return new io.grpc.ServiceDescriptor(SERVICE_NAME,
+        METHOD_GET_ALL_GAUGES,
+        METHOD_GET_GAUGE);
+  }
+
+  @java.lang.Deprecated public static io.grpc.ServerServiceDefinition bindService(
       final MetricsService serviceImpl) {
-    return io.grpc.ServerServiceDefinition.builder(SERVICE_NAME)
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           METHOD_GET_ALL_GAUGES,
           asyncServerStreamingCall(

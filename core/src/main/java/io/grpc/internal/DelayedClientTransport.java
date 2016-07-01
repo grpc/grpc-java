@@ -36,12 +36,14 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Supplier;
 import com.google.common.base.Suppliers;
 
+import io.grpc.CallOptions;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.concurrent.Executor;
 
@@ -75,6 +77,19 @@ class DelayedClientTransport implements ManagedClientTransport {
   @GuardedBy("lock")
   private boolean shutdown;
 
+  /**
+   * The delayed client transport will come into a back-off interval if it fails to establish a real
+   * transport for all addresses, namely the channel is in TRANSIENT_FAILURE. When in a back-off
+   * interval, {@code backoffStatus != null}.
+   *
+   * <p>If the transport is in a back-off interval, then all fail fast streams (including the
+   * pending as well as new ones) will fail immediately. New non-fail fast streams can be created as
+   * {@link PendingStream} and will keep pending during this back-off period.
+   */
+  @GuardedBy("lock")
+  @Nullable
+  private Status backoffStatus;
+
   DelayedClientTransport(Executor streamCreationExecutor) {
     this.streamCreationExecutor = streamCreationExecutor;
   }
@@ -84,24 +99,47 @@ class DelayedClientTransport implements ManagedClientTransport {
     this.listener = Preconditions.checkNotNull(listener, "listener");
   }
 
+  /**
+   * If the transport has acquired a transport {@link Supplier}, then returned stream is delegated
+   * from its supplier.
+   *
+   * <p>If the new stream to be created is with fail fast call option and the delayed transport is
+   * in a back-off interval, then a {@link FailingClientStream} is returned.
+   *
+   * <p>If it is not the above cases and the delayed transport is not shutdown, then a
+   * {@link PendingStream} is returned; if the transport is shutdown, then a
+   * {@link FailingClientStream} is returned.
+   */
   @Override
-  public ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers) {
+  public ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers, CallOptions
+      callOptions) {
     Supplier<ClientTransport> supplier = transportSupplier;
     if (supplier == null) {
       synchronized (lock) {
         // Check again, since it may have changed while waiting for lock
         supplier = transportSupplier;
         if (supplier == null && !shutdown) {
-          PendingStream pendingStream = new PendingStream(method, headers);
+          if (backoffStatus != null && !callOptions.isWaitForReady()) {
+            return new FailingClientStream(backoffStatus);
+          }
+          PendingStream pendingStream = new PendingStream(method, headers, callOptions);
           pendingStreams.add(pendingStream);
+          if (pendingStreams.size() == 1) {
+            listener.transportInUse(true);
+          }
           return pendingStream;
         }
       }
     }
     if (supplier != null) {
-      return supplier.get().newStream(method, headers);
+      return supplier.get().newStream(method, headers, callOptions);
     }
     return new FailingClientStream(Status.UNAVAILABLE.withDescription("transport shutdown"));
+  }
+
+  @Override
+  public ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers) {
+    return newStream(method, headers, CallOptions.DEFAULT);
   }
 
   @Override
@@ -133,7 +171,7 @@ class DelayedClientTransport implements ManagedClientTransport {
   /**
    * Prevents creating any new streams until {@link #setTransport} is called. Buffered streams are
    * not failed, so if {@link #shutdown} is called when {@link #setTransport} has not been called,
-   * you still need to call {@link setTransport} to make this transport terminated.
+   * you still need to call {@link #setTransport} to make this transport terminated.
    */
   @Override
   public void shutdown() {
@@ -183,6 +221,8 @@ class DelayedClientTransport implements ManagedClientTransport {
    * transport is {@link #shutdown}.
    */
   public void setTransport(ClientTransport transport) {
+    Preconditions.checkArgument(this != transport,
+        "delayed transport calling setTransport on itself");
     setTransportSupplier(Suppliers.ofInstance(transport));
   }
 
@@ -220,6 +260,15 @@ class DelayedClientTransport implements ManagedClientTransport {
               for (final PendingStream stream : savedPendingStreams) {
                 stream.createRealStream(supplier.get());
               }
+              // TODO(zhangkun83): some transports (e.g., netty) may have a short delay between
+              // stream.start() and transportInUse(true). If netty's transportInUse(true) is called
+              // after the delayed transport's transportInUse(false), the channel may have a brief
+              // period where all transports are not in-use, and may go to IDLE mode unexpectedly if
+              // the IDLE timeout is shorter (e.g., 0) than that brief period. Maybe we should
+              // have a minimum IDLE timeout?
+              synchronized (lock) {
+                listener.transportInUse(false);
+              }
             }
         });
       }
@@ -243,6 +292,69 @@ class DelayedClientTransport implements ManagedClientTransport {
     }
   }
 
+  /**
+   * True return value indicates that the delayed transport is in a back-off interval (in
+   * TRANSIENT_FAILURE), that all fail fast streams (including pending as well as new ones) should
+   * fail immediately, and that non-fail fast streams can be created as {@link PendingStream} and
+   * should keep pending during this back-off period.
+   */
+  @VisibleForTesting
+  boolean isInBackoffPeriod() {
+    synchronized (lock) {
+      return backoffStatus != null;
+    }
+  }
+
+  /**
+   * Is only called at the beginning of {@link TransportSet#scheduleBackoff}.
+   *
+   * <p>Does jobs at the beginning of the back-off:
+   *
+   * <p>sets {@link #backoffStatus};
+   *
+   * <p>sets all pending streams with a fail fast call option of the delayed transport as
+   * {@link FailingClientStream}s, and removes them from the list of pending streams of the
+   * transport.
+   *
+   * @param status the causal status for triggering back-off.
+   */
+  void startBackoff(final Status status) {
+    synchronized (lock) {
+      Preconditions.checkState(backoffStatus == null);
+      backoffStatus = Status.UNAVAILABLE.withDescription("Channel in TRANSIENT_FAILURE state")
+          .withCause(status.asRuntimeException());
+      final ArrayList<PendingStream> failFastPendingStreams = new ArrayList<PendingStream>();
+      if (pendingStreams != null && !pendingStreams.isEmpty()) {
+        final Iterator<PendingStream> it = pendingStreams.iterator();
+        while (it.hasNext()) {
+          PendingStream stream = it.next();
+          if (!stream.callOptions.isWaitForReady()) {
+            failFastPendingStreams.add(stream);
+            it.remove();
+          }
+        }
+        streamCreationExecutor.execute(new Runnable() {
+          @Override
+          public void run() {
+            for (PendingStream stream : failFastPendingStreams) {
+              stream.setStream(new FailingClientStream(status));
+            }
+          }
+        });
+      }
+    }
+  }
+
+  /**
+   * Is only called at the beginning of the callback function of {@code endOfCurrentBackoff} in the
+   * {@link TransportSet#scheduleBackoff} method.
+   */
+  void endBackoff() {
+    synchronized (lock) {
+      backoffStatus = null;
+    }
+  }
+
   @Override
   public String getLogId() {
     return GrpcUtil.getLogId(this);
@@ -257,14 +369,17 @@ class DelayedClientTransport implements ManagedClientTransport {
   private class PendingStream extends DelayedStream {
     private final MethodDescriptor<?, ?> method;
     private final Metadata headers;
+    private final CallOptions callOptions;
 
-    private PendingStream(MethodDescriptor<?, ?> method, Metadata headers) {
+    private PendingStream(MethodDescriptor<?, ?> method, Metadata headers,
+        CallOptions callOptions) {
       this.method = method;
       this.headers = headers;
+      this.callOptions = callOptions;
     }
 
     private void createRealStream(ClientTransport transport) {
-      setStream(transport.newStream(method, headers));
+      setStream(transport.newStream(method, headers, callOptions));
     }
 
     @Override
@@ -272,10 +387,13 @@ class DelayedClientTransport implements ManagedClientTransport {
       super.cancel(reason);
       synchronized (lock) {
         if (pendingStreams != null) {
-          pendingStreams.remove(this);
-          if (shutdown && pendingStreams.isEmpty()) {
-            pendingStreams = null;
-            listener.transportTerminated();
+          boolean justRemovedAnElement = pendingStreams.remove(this);
+          if (pendingStreams.isEmpty() && justRemovedAnElement) {
+            listener.transportInUse(false);
+            if (shutdown) {
+              pendingStreams = null;
+              listener.transportTerminated();
+            }
           }
         }
       }

@@ -18,7 +18,7 @@ import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
 /**
  */
 @javax.annotation.Generated(
-    value = "by gRPC proto compiler (version 0.15.0-SNAPSHOT)",
+    value = "by gRPC proto compiler (version 1.0.0-SNAPSHOT)",
     comments = "Source: services.proto")
 public class BenchmarkServiceGrpc {
 
@@ -27,7 +27,7 @@ public class BenchmarkServiceGrpc {
   public static final String SERVICE_NAME = "grpc.testing.BenchmarkService";
 
   // Static method descriptors that strictly reflect the proto.
-  @io.grpc.ExperimentalApi
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest,
       io.grpc.benchmarks.proto.Messages.SimpleResponse> METHOD_UNARY_CALL =
       io.grpc.MethodDescriptor.create(
@@ -36,7 +36,7 @@ public class BenchmarkServiceGrpc {
               "grpc.testing.BenchmarkService", "UnaryCall"),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.benchmarks.proto.Messages.SimpleRequest.getDefaultInstance()),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.benchmarks.proto.Messages.SimpleResponse.getDefaultInstance()));
-  @io.grpc.ExperimentalApi
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest,
       io.grpc.benchmarks.proto.Messages.SimpleResponse> METHOD_STREAMING_CALL =
       io.grpc.MethodDescriptor.create(
@@ -71,7 +71,7 @@ public class BenchmarkServiceGrpc {
 
   /**
    */
-  public static interface BenchmarkService {
+  @java.lang.Deprecated public static interface BenchmarkService {
 
     /**
      * <pre>
@@ -92,8 +92,8 @@ public class BenchmarkServiceGrpc {
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver);
   }
 
-  @io.grpc.ExperimentalApi
-  public static abstract class AbstractBenchmarkService implements BenchmarkService, io.grpc.BindableService {
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1469")
+  public static abstract class BenchmarkServiceImplBase implements BenchmarkService, io.grpc.BindableService {
 
     @java.lang.Override
     public void unaryCall(io.grpc.benchmarks.proto.Messages.SimpleRequest request,
@@ -114,7 +114,7 @@ public class BenchmarkServiceGrpc {
 
   /**
    */
-  public static interface BenchmarkServiceBlockingClient {
+  @java.lang.Deprecated public static interface BenchmarkServiceBlockingClient {
 
     /**
      * <pre>
@@ -127,7 +127,7 @@ public class BenchmarkServiceGrpc {
 
   /**
    */
-  public static interface BenchmarkServiceFutureClient {
+  @java.lang.Deprecated public static interface BenchmarkServiceFutureClient {
 
     /**
      * <pre>
@@ -220,6 +220,8 @@ public class BenchmarkServiceGrpc {
     }
   }
 
+  @java.lang.Deprecated public static abstract class AbstractBenchmarkService extends BenchmarkServiceImplBase {}
+
   private static final int METHODID_UNARY_CALL = 0;
   private static final int METHODID_STREAMING_CALL = 1;
 
@@ -263,9 +265,15 @@ public class BenchmarkServiceGrpc {
     }
   }
 
-  public static io.grpc.ServerServiceDefinition bindService(
+  public static io.grpc.ServiceDescriptor getServiceDescriptor() {
+    return new io.grpc.ServiceDescriptor(SERVICE_NAME,
+        METHOD_UNARY_CALL,
+        METHOD_STREAMING_CALL);
+  }
+
+  @java.lang.Deprecated public static io.grpc.ServerServiceDefinition bindService(
       final BenchmarkService serviceImpl) {
-    return io.grpc.ServerServiceDefinition.builder(SERVICE_NAME)
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           METHOD_UNARY_CALL,
           asyncUnaryCall(

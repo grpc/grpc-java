@@ -34,7 +34,6 @@ package io.grpc.testing;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
-import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
@@ -49,7 +48,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
 import java.net.UnknownHostException;
 import java.security.KeyStore;
 import java.security.NoSuchAlgorithmException;
@@ -85,12 +83,10 @@ public class TestUtils {
     return new ServerInterceptor() {
       @Override
       public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-          MethodDescriptor<ReqT, RespT> method,
-          ServerCall<RespT> call,
+          ServerCall<ReqT, RespT> call,
           final Metadata requestHeaders,
           ServerCallHandler<ReqT, RespT> next) {
-        return next.startCall(method,
-            new SimpleForwardingServerCall<RespT>(call) {
+        return next.startCall(new SimpleForwardingServerCall<ReqT, RespT>(call) {
               @Override
               public void sendHeaders(Metadata responseHeaders) {
                 responseHeaders.merge(requestHeaders, keySet);
@@ -117,12 +113,11 @@ public class TestUtils {
     return new ServerInterceptor() {
       @Override
       public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-          MethodDescriptor<ReqT, RespT> method,
-          ServerCall<RespT> call,
+          ServerCall<ReqT, RespT> call,
           Metadata requestHeaders,
           ServerCallHandler<ReqT, RespT> next) {
         headersCapture.set(requestHeaders);
-        return next.startCall(method, call, requestHeaders);
+        return next.startCall(call, requestHeaders);
       }
     };
   }
@@ -132,32 +127,17 @@ public class TestUtils {
    * {@link ServerCall#attributes()}
    */
   public static ServerInterceptor recordServerCallInterceptor(
-      final AtomicReference<ServerCall<?>> serverCallCapture) {
+      final AtomicReference<ServerCall<?, ?>> serverCallCapture) {
     return new ServerInterceptor() {
       @Override
       public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-          MethodDescriptor<ReqT, RespT> method,
-          ServerCall<RespT> call,
+          ServerCall<ReqT, RespT> call,
           Metadata requestHeaders,
           ServerCallHandler<ReqT, RespT> next) {
         serverCallCapture.set(call);
-        return next.startCall(method, call, requestHeaders);
+        return next.startCall(call, requestHeaders);
       }
     };
-  }
-
-  /**
-   * Picks an unused port.
-   */
-  public static int pickUnusedPort() {
-    try {
-      ServerSocket serverSocket = new ServerSocket(0);
-      int port = serverSocket.getLocalPort();
-      serverSocket.close();
-      return port;
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
   }
 
   /**

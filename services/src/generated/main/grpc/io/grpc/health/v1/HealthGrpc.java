@@ -18,7 +18,7 @@ import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
 /**
  */
 @javax.annotation.Generated(
-    value = "by gRPC proto compiler (version 0.15.0-SNAPSHOT)",
+    value = "by gRPC proto compiler (version 1.0.0-SNAPSHOT)",
     comments = "Source: health.proto")
 public class HealthGrpc {
 
@@ -27,7 +27,7 @@ public class HealthGrpc {
   public static final String SERVICE_NAME = "grpc.health.v1.Health";
 
   // Static method descriptors that strictly reflect the proto.
-  @io.grpc.ExperimentalApi
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.health.v1.HealthCheckRequest,
       io.grpc.health.v1.HealthCheckResponse> METHOD_CHECK =
       io.grpc.MethodDescriptor.create(
@@ -62,7 +62,7 @@ public class HealthGrpc {
 
   /**
    */
-  public static interface Health {
+  @java.lang.Deprecated public static interface Health {
 
     /**
      */
@@ -70,8 +70,8 @@ public class HealthGrpc {
         io.grpc.stub.StreamObserver<io.grpc.health.v1.HealthCheckResponse> responseObserver);
   }
 
-  @io.grpc.ExperimentalApi
-  public static abstract class AbstractHealth implements Health, io.grpc.BindableService {
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1469")
+  public static abstract class HealthImplBase implements Health, io.grpc.BindableService {
 
     @java.lang.Override
     public void check(io.grpc.health.v1.HealthCheckRequest request,
@@ -86,7 +86,7 @@ public class HealthGrpc {
 
   /**
    */
-  public static interface HealthBlockingClient {
+  @java.lang.Deprecated public static interface HealthBlockingClient {
 
     /**
      */
@@ -95,7 +95,7 @@ public class HealthGrpc {
 
   /**
    */
-  public static interface HealthFutureClient {
+  @java.lang.Deprecated public static interface HealthFutureClient {
 
     /**
      */
@@ -177,6 +177,8 @@ public class HealthGrpc {
     }
   }
 
+  @java.lang.Deprecated public static abstract class AbstractHealth extends HealthImplBase {}
+
   private static final int METHODID_CHECK = 0;
 
   private static class MethodHandlers<Req, Resp> implements
@@ -216,9 +218,14 @@ public class HealthGrpc {
     }
   }
 
-  public static io.grpc.ServerServiceDefinition bindService(
+  public static io.grpc.ServiceDescriptor getServiceDescriptor() {
+    return new io.grpc.ServiceDescriptor(SERVICE_NAME,
+        METHOD_CHECK);
+  }
+
+  @java.lang.Deprecated public static io.grpc.ServerServiceDefinition bindService(
       final Health serviceImpl) {
-    return io.grpc.ServerServiceDefinition.builder(SERVICE_NAME)
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           METHOD_CHECK,
           asyncUnaryCall(

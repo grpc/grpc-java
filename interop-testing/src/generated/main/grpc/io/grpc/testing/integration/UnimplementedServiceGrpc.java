@@ -22,7 +22,7 @@ import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
  * </pre>
  */
 @javax.annotation.Generated(
-    value = "by gRPC proto compiler (version 0.15.0-SNAPSHOT)",
+    value = "by gRPC proto compiler (version 1.0.0-SNAPSHOT)",
     comments = "Source: io/grpc/testing/integration/test.proto")
 public class UnimplementedServiceGrpc {
 
@@ -31,7 +31,7 @@ public class UnimplementedServiceGrpc {
   public static final String SERVICE_NAME = "grpc.testing.UnimplementedService";
 
   // Static method descriptors that strictly reflect the proto.
-  @io.grpc.ExperimentalApi
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<com.google.protobuf.EmptyProtos.Empty,
       com.google.protobuf.EmptyProtos.Empty> METHOD_UNIMPLEMENTED_CALL =
       io.grpc.MethodDescriptor.create(
@@ -70,7 +70,7 @@ public class UnimplementedServiceGrpc {
    * that case.
    * </pre>
    */
-  public static interface UnimplementedService {
+  @java.lang.Deprecated public static interface UnimplementedService {
 
     /**
      * <pre>
@@ -81,8 +81,8 @@ public class UnimplementedServiceGrpc {
         io.grpc.stub.StreamObserver<com.google.protobuf.EmptyProtos.Empty> responseObserver);
   }
 
-  @io.grpc.ExperimentalApi
-  public static abstract class AbstractUnimplementedService implements UnimplementedService, io.grpc.BindableService {
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1469")
+  public static abstract class UnimplementedServiceImplBase implements UnimplementedService, io.grpc.BindableService {
 
     @java.lang.Override
     public void unimplementedCall(com.google.protobuf.EmptyProtos.Empty request,
@@ -101,7 +101,7 @@ public class UnimplementedServiceGrpc {
    * that case.
    * </pre>
    */
-  public static interface UnimplementedServiceBlockingClient {
+  @java.lang.Deprecated public static interface UnimplementedServiceBlockingClient {
 
     /**
      * <pre>
@@ -117,7 +117,7 @@ public class UnimplementedServiceGrpc {
    * that case.
    * </pre>
    */
-  public static interface UnimplementedServiceFutureClient {
+  @java.lang.Deprecated public static interface UnimplementedServiceFutureClient {
 
     /**
      * <pre>
@@ -202,6 +202,8 @@ public class UnimplementedServiceGrpc {
     }
   }
 
+  @java.lang.Deprecated public static abstract class AbstractUnimplementedService extends UnimplementedServiceImplBase {}
+
   private static final int METHODID_UNIMPLEMENTED_CALL = 0;
 
   private static class MethodHandlers<Req, Resp> implements
@@ -241,9 +243,14 @@ public class UnimplementedServiceGrpc {
     }
   }
 
-  public static io.grpc.ServerServiceDefinition bindService(
+  public static io.grpc.ServiceDescriptor getServiceDescriptor() {
+    return new io.grpc.ServiceDescriptor(SERVICE_NAME,
+        METHOD_UNIMPLEMENTED_CALL);
+  }
+
+  @java.lang.Deprecated public static io.grpc.ServerServiceDefinition bindService(
       final UnimplementedService serviceImpl) {
-    return io.grpc.ServerServiceDefinition.builder(SERVICE_NAME)
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           METHOD_UNIMPLEMENTED_CALL,
           asyncUnaryCall(

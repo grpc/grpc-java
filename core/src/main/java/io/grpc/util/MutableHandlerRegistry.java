@@ -57,11 +57,11 @@ public final class MutableHandlerRegistry extends HandlerRegistry {
 
   @Nullable
   public ServerServiceDefinition addService(ServerServiceDefinition service) {
-    return services.put(service.getName(), service);
+    return services.put(service.getServiceDescriptor().getName(), service);
   }
 
   public boolean removeService(ServerServiceDefinition service) {
-    return services.remove(service.getName(), service);
+    return services.remove(service.getServiceDescriptor().getName(), service);
   }
 
   /**

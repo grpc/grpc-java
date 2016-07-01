@@ -332,7 +332,7 @@ static void PrintMethodFields(
           *vars,
           "private static final int ARG_IN_$method_field_name$ = $arg_in_id$;\n"
           "private static final int ARG_OUT_$method_field_name$ = $arg_out_id$;\n"
-          "@$ExperimentalApi$\n"
+          "@$ExperimentalApi$(\"https://github.com/grpc/grpc-java/issues/1901\")\n"
           "public static final $MethodDescriptor$<$input_type$,\n"
           "    $output_type$> $method_field_name$ =\n"
           "    $MethodDescriptor$.create(\n"
@@ -352,7 +352,7 @@ static void PrintMethodFields(
       }
       p->Print(
           *vars,
-          "@$ExperimentalApi$\n"
+          "@$ExperimentalApi$(\"https://github.com/grpc/grpc-java/issues/1901\")\n"
           "public static final $MethodDescriptor$<$input_type$,\n"
           "    $output_type$> $method_field_name$ =\n"
           "    $MethodDescriptor$.create(\n"
@@ -433,7 +433,7 @@ static void PrintStub(
     map<string, string>* vars,
     Printer* p, StubType type, bool generate_nano) {
   (*vars)["service_name"] = service->name();
-  (*vars)["abstract_name"] = "Abstract" + service->name();
+  (*vars)["abstract_name"] = service->name() + "ImplBase";
   string interface_name = service->name();
   string impl_name = service->name();
   bool abstract = false;
@@ -501,7 +501,7 @@ static void PrintStub(
   if (abstract) {
     p->Print(
         *vars,
-        "@$ExperimentalApi$\n"
+        "@$ExperimentalApi$(\"https://github.com/grpc/grpc-java/issues/1469\")\n"
         "public static abstract class $abstract_name$ implements $service_name$, "
         "$BindableService$ {\n");
   } else if (interface) {
@@ -510,7 +510,7 @@ static void PrintStub(
     GrpcWriteServiceDocComment(p, service);
     p->Print(
         *vars,
-        "public static interface $interface_name$ {\n");
+        "@$Deprecated$ public static interface $interface_name$ {\n");
   } else {
     p->Print(
         *vars,
@@ -851,6 +851,31 @@ static void PrintMethodHandlerClass(const ServiceDescriptor* service,
   p->Print("}\n\n");
 }
 
+static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
+                                   map<string, string>* vars,
+                                   Printer* p,
+                                   bool generate_nano) {
+  (*vars)["service_name"] = service->name();
+  p->Print(
+      *vars,
+      "public static $ServiceDescriptor$ getServiceDescriptor() {\n");
+  p->Indent();
+  p->Print(*vars,
+           "return new $ServiceDescriptor$(SERVICE_NAME");
+  p->Indent();
+  p->Indent();
+  for (int i = 0; i < service->method_count(); ++i) {
+    const MethodDescriptor* method = service->method(i);
+    (*vars)["method_field_name"] = MethodPropertiesFieldName(method);
+    p->Print(*vars, ",\n$method_field_name$");
+  }
+  p->Print(");\n");
+  p->Outdent();
+  p->Outdent();
+  p->Outdent();
+  p->Print("}\n\n");
+}
+
 static void PrintBindServiceMethod(const ServiceDescriptor* service,
                                    map<string, string>* vars,
                                    Printer* p,
@@ -858,12 +883,12 @@ static void PrintBindServiceMethod(const ServiceDescriptor* service,
   (*vars)["service_name"] = service->name();
   p->Print(
       *vars,
-      "public static $ServerServiceDefinition$ bindService(\n"
+      "@$Deprecated$ public static $ServerServiceDefinition$ bindService(\n"
       "    final $service_name$ serviceImpl) {\n");
   p->Indent();
   p->Print(*vars,
            "return "
-           "$ServerServiceDefinition$.builder(SERVICE_NAME)\n");
+           "$ServerServiceDefinition$.builder(getServiceDescriptor())\n");
   p->Indent();
   p->Indent();
   for (int i = 0; i < service->method_count(); ++i) {
@@ -993,7 +1018,11 @@ static void PrintService(const ServiceDescriptor* service,
   PrintStub(service, vars, p, ASYNC_CLIENT_IMPL, generate_nano);
   PrintStub(service, vars, p, BLOCKING_CLIENT_IMPL, generate_nano);
   PrintStub(service, vars, p, FUTURE_CLIENT_IMPL, generate_nano);
+  p->Print(*vars,
+           "@$Deprecated$ public static abstract class Abstract$service_name$"
+           " extends $service_name$ImplBase {}\n\n");
   PrintMethodHandlerClass(service, vars, p, generate_nano);
+  PrintGetServiceDescriptorMethod(service, vars, p, generate_nano);
   PrintBindServiceMethod(service, vars, p, generate_nano);
   p->Outdent();
   p->Print("}\n");
@@ -1042,6 +1071,7 @@ void GenerateService(const ServiceDescriptor* service,
   map<string, string> vars;
   vars["String"] = "java.lang.String";
   vars["Override"] = "java.lang.Override";
+  vars["Deprecated"] = "java.lang.Deprecated";
   vars["Channel"] = "io.grpc.Channel";
   vars["CallOptions"] = "io.grpc.CallOptions";
   vars["MethodType"] = "io.grpc.MethodDescriptor.MethodType";
@@ -1050,6 +1080,8 @@ void GenerateService(const ServiceDescriptor* service,
   vars["BindableService"] = "io.grpc.BindableService";
   vars["ServerServiceDefinition"] =
       "io.grpc.ServerServiceDefinition";
+  vars["ServiceDescriptor"] =
+      "io.grpc.ServiceDescriptor";
   vars["AbstractStub"] = "io.grpc.stub.AbstractStub";
   vars["ImmutableList"] = "com.google.common.collect.ImmutableList";
   vars["Collection"] = "java.util.Collection";

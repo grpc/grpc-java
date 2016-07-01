@@ -48,7 +48,7 @@ import com.google.auth.oauth2.ComputeEngineCredentials;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.auth.oauth2.OAuth2Credentials;
 import com.google.auth.oauth2.ServiceAccountCredentials;
-import com.google.auth.oauth2.ServiceAccountJwtAccessCredentials;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.net.HostAndPort;
@@ -66,7 +66,7 @@ import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
-import io.grpc.auth.ClientAuthInterceptor;
+import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.protobuf.ProtoUtils;
 import io.grpc.stub.MetadataUtils;
@@ -111,8 +111,8 @@ public abstract class AbstractInteropTest {
 
   public static final Metadata.Key<Messages.SimpleContext> METADATA_KEY =
       ProtoUtils.keyForProto(Messages.SimpleContext.getDefaultInstance());
-  private static final AtomicReference<ServerCall<?>> serverCallCapture =
-      new AtomicReference<ServerCall<?>>();
+  private static final AtomicReference<ServerCall<?, ?>> serverCallCapture =
+      new AtomicReference<ServerCall<?, ?>>();
   private static final AtomicReference<Metadata> requestHeadersCapture =
       new AtomicReference<Metadata>();
   private static ScheduledExecutorService testServiceExecutor;
@@ -130,7 +130,7 @@ public abstract class AbstractInteropTest {
         .build();
 
     builder.addService(ServerInterceptors.intercept(
-        TestServiceGrpc.bindService(new TestServiceImpl(testServiceExecutor)),
+        new TestServiceImpl(testServiceExecutor),
         allInterceptors));
     try {
       server = builder.build().start();
@@ -144,9 +144,14 @@ public abstract class AbstractInteropTest {
     testServiceExecutor.shutdown();
   }
 
+  @VisibleForTesting
+  static int getPort() {
+    return server.getPort();
+  }
+
   protected ManagedChannel channel;
   protected TestServiceGrpc.TestServiceBlockingStub blockingStub;
-  protected TestServiceGrpc.TestService asyncStub;
+  protected TestServiceGrpc.TestServiceStub asyncStub;
 
   /**
    * Must be called by the subclass setup method if overridden.
@@ -771,7 +776,7 @@ public abstract class AbstractInteropTest {
   /** Start a fullDuplexCall which the server will not respond, and verify the deadline expires. */
   @Test(timeout = 10000)
   public void timeoutOnSleepingServer() {
-    TestServiceGrpc.TestService stub = TestServiceGrpc.newStub(channel)
+    TestServiceGrpc.TestServiceStub stub = TestServiceGrpc.newStub(channel)
         .withDeadlineAfter(1, TimeUnit.MILLISECONDS);
     @SuppressWarnings("unchecked")
     StreamObserver<StreamingOutputCallResponse> responseObserver = mock(StreamObserver.class);
@@ -802,8 +807,7 @@ public abstract class AbstractInteropTest {
         ServiceAccountCredentials.class.cast(GoogleCredentials.fromStream(credentialsStream));
     credentials = credentials.createScoped(Arrays.<String>asList(authScope));
     TestServiceGrpc.TestServiceBlockingStub stub = blockingStub
-        .withInterceptors(new ClientAuthInterceptor(credentials,
-            Executors.newSingleThreadExecutor()));
+        .withCallCredentials(MoreCallCredentials.from(credentials));
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setFillUsername(true)
         .setFillOauthScope(true)
@@ -835,8 +839,7 @@ public abstract class AbstractInteropTest {
   public void computeEngineCreds(String serviceAccount, String oauthScope) throws Exception {
     ComputeEngineCredentials credentials = new ComputeEngineCredentials();
     TestServiceGrpc.TestServiceBlockingStub stub = blockingStub
-        .withInterceptors(new ClientAuthInterceptor(credentials,
-            Executors.newSingleThreadExecutor()));
+        .withCallCredentials(MoreCallCredentials.from(credentials));
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setFillUsername(true)
         .setFillOauthScope(true)
@@ -872,16 +875,12 @@ public abstract class AbstractInteropTest {
         .setFillUsername(true)
         .build();
 
-    ServiceAccountCredentials origCreds = (ServiceAccountCredentials)
+    ServiceAccountCredentials credentials = (ServiceAccountCredentials)
         GoogleCredentials.fromStream(serviceAccountJson);
-    ServiceAccountJwtAccessCredentials credentials = new ServiceAccountJwtAccessCredentials(
-        origCreds.getClientId(), origCreds.getClientEmail(), origCreds.getPrivateKey(),
-        origCreds.getPrivateKeyId());
     TestServiceGrpc.TestServiceBlockingStub stub = blockingStub
-        .withInterceptors(new ClientAuthInterceptor(credentials,
-            Executors.newSingleThreadExecutor()));
+        .withCallCredentials(MoreCallCredentials.from(credentials));
     SimpleResponse response = stub.unaryCall(request);
-    assertEquals(origCreds.getClientEmail(), response.getUsername());
+    assertEquals(credentials.getClientEmail(), response.getUsername());
     assertEquals(314159, response.getPayload().getBody().size());
   }
 
@@ -904,8 +903,7 @@ public abstract class AbstractInteropTest {
     };
 
     TestServiceGrpc.TestServiceBlockingStub stub = blockingStub
-        .withInterceptors(new ClientAuthInterceptor(credentials,
-            Executors.newSingleThreadExecutor()));
+        .withCallCredentials(MoreCallCredentials.from(credentials));
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setFillUsername(true)
         .setFillOauthScope(true)

@@ -62,7 +62,6 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
 import io.grpc.stub.StreamObserver;
-import io.grpc.testing.TestUtils;
 import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
@@ -199,8 +198,7 @@ public class CompressionTest {
       serverCompressors.register(serverCodec);
     }
 
-    int serverPort = TestUtils.pickUnusedPort();
-    server = ServerBuilder.forPort(serverPort)
+    server = ServerBuilder.forPort(0)
         .addService(
             ServerInterceptors.intercept(new LocalServer(), new ServerCompressorInterceptor()))
         .compressorRegistry(serverCompressors)
@@ -208,7 +206,7 @@ public class CompressionTest {
         .build()
         .start();
 
-    channel = ManagedChannelBuilder.forAddress("localhost", serverPort)
+    channel = ManagedChannelBuilder.forAddress("localhost", server.getPort())
         .decompressorRegistry(clientDecompressors)
         .compressorRegistry(clientCompressors)
         .intercept(new ClientCompressorInterceptor())
@@ -264,7 +262,7 @@ public class CompressionTest {
     }
   }
 
-  private static final class LocalServer extends TestServiceGrpc.AbstractTestService {
+  private static final class LocalServer extends TestServiceGrpc.TestServiceImplBase {
     @Override
     public void unaryCall(SimpleRequest request, StreamObserver<SimpleResponse> responseObserver) {
       responseObserver.onNext(SimpleResponse.newBuilder()
@@ -278,11 +276,13 @@ public class CompressionTest {
   private class ServerCompressorInterceptor implements ServerInterceptor {
     @Override
     public <ReqT, RespT> io.grpc.ServerCall.Listener<ReqT> interceptCall(
-        MethodDescriptor<ReqT, RespT> method, ServerCall<RespT> call, Metadata headers,
-        ServerCallHandler<ReqT, RespT> next) {
+        ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+      if (serverEncoding) {
+        call.setCompression("fzip");
+      }
       call.setMessageCompression(enableServerMessageCompression);
       serverResponseHeaders = headers;
-      return next.startCall(method, call, headers);
+      return next.startCall(call, headers);
     }
   }
 

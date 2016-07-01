@@ -63,6 +63,7 @@ import java.io.InputStream;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -79,12 +80,12 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
 
   private final MethodDescriptor<ReqT, RespT> method;
   private final Executor callExecutor;
-  private final Context parentContext;
-  private volatile Context context;
+  private final Context context;
+  private volatile ScheduledFuture<?> deadlineCancellationFuture;
   private final boolean unaryRequest;
   private final CallOptions callOptions;
   private ClientStream stream;
-  private volatile boolean contextListenerShouldBeRemoved;
+  private volatile boolean cancelListenersShouldBeRemoved;
   private boolean cancelCalled;
   private boolean halfCloseCalled;
   private final ClientTransportProvider clientTransportProvider;
@@ -103,7 +104,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
         ? new SerializeReentrantCallsDirectExecutor()
         : new SerializingExecutor(executor);
     // Propagate the context from the thread which initiated the call to all callbacks.
-    this.parentContext = Context.current();
+    this.context = Context.current();
     this.unaryRequest = method.getType() == MethodType.UNARY
         || method.getType() == MethodType.SERVER_STREAMING;
     this.callOptions = callOptions;
@@ -157,14 +158,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
     checkNotNull(observer, "observer");
     checkNotNull(headers, "headers");
 
-    // Create the context
-    final Deadline effectiveDeadline = min(callOptions.getDeadline(), parentContext.getDeadline());
-    if (effectiveDeadline != parentContext.getDeadline()) {
-      context = parentContext.withDeadline(effectiveDeadline, deadlineCancellationExecutor);
-    } else {
-      context = parentContext.withCancellation();
-    }
-
     if (context.isCancelled()) {
       // Context is already cancelled so no need to create a real stream, just notify the observer
       // of cancellation via callback on the executor
@@ -200,12 +193,13 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
 
     prepareHeaders(headers, decompressorRegistry, compressor);
 
-    final boolean deadlineExceeded = effectiveDeadline != null && effectiveDeadline.isExpired();
+    Deadline effectiveDeadline = effectiveDeadline();
+    boolean deadlineExceeded = effectiveDeadline != null && effectiveDeadline.isExpired();
     if (!deadlineExceeded) {
       updateTimeoutHeaders(effectiveDeadline, callOptions.getDeadline(),
-          parentContext.getDeadline(), headers);
+          context.getDeadline(), headers);
       ClientTransport transport = clientTransportProvider.get(callOptions);
-      stream = transport.newStream(method, headers);
+      stream = transport.newStream(method, headers, callOptions);
     } else {
       stream = new FailingClientStream(DEADLINE_EXCEEDED);
     }
@@ -214,22 +208,24 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       stream.setAuthority(callOptions.getAuthority());
     }
     stream.setCompressor(compressor);
-
     stream.start(new ClientStreamListenerImpl(observer));
-    if (compressor != Codec.Identity.NONE) {
-      stream.setMessageCompression(true);
-    }
 
     // Delay any sources of cancellation after start(), because most of the transports are broken if
     // they receive cancel before start. Issue #1343 has more details
 
     // Propagate later Context cancellation to the remote side.
     context.addListener(this, directExecutor());
-    if (contextListenerShouldBeRemoved) {
+    if (effectiveDeadline != null
+        // If the context has the effective deadline, we don't need to schedule an extra task.
+        && context.getDeadline() != effectiveDeadline) {
+      deadlineCancellationFuture = startDeadlineTimer(effectiveDeadline);
+    }
+    if (cancelListenersShouldBeRemoved) {
       // Race detected! ClientStreamListener.closed may have been called before
-      // deadlineCancellationFuture was set, thereby preventing the future from being cancelled.
-      // Go ahead and cancel again, just to be sure it was cancelled.
-      context.removeListener(this);
+      // deadlineCancellationFuture was set / context listener added, thereby preventing the future
+      // and listener from being cancelled. Go ahead and cancel again, just to be sure it
+      // was cancelled.
+      removeContextListenerAndCancelDeadlineFuture();
     }
   }
 
@@ -271,6 +267,33 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
     log.info(builder.toString());
   }
 
+  private void removeContextListenerAndCancelDeadlineFuture() {
+    context.removeListener(this);
+    ScheduledFuture<?> f = deadlineCancellationFuture;
+    if (f != null) {
+      f.cancel(false);
+    }
+  }
+
+  private ScheduledFuture<?> startDeadlineTimer(Deadline deadline) {
+    return deadlineCancellationExecutor.schedule(new LogExceptionRunnable(
+        new Runnable() {
+          @Override
+          public void run() {
+            // DelayedStream.cancel() is safe to call from a thread that is different from where the
+            // stream is created.
+            stream.cancel(DEADLINE_EXCEEDED);
+          }
+        }), deadline.timeRemaining(TimeUnit.NANOSECONDS), TimeUnit.NANOSECONDS);
+  }
+
+  @Nullable
+  private Deadline effectiveDeadline() {
+    // Call options and context are immutable, so we don't need to cache the deadline.
+    return min(callOptions.getDeadline(), context.getDeadline());
+  }
+
+  @Nullable
   private static Deadline min(@Nullable Deadline deadline0, @Nullable Deadline deadline1) {
     if (deadline0 == null) {
       return deadline1;
@@ -314,9 +337,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
         stream.cancel(status);
       }
     } finally {
-      if (context != null) {
-        context.removeListener(ClientCallImpl.this);
-      }
+      removeContextListenerAndCancelDeadlineFuture();
     }
   }
 
@@ -393,8 +414,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
 
             observer.onHeaders(headers);
           } catch (Throwable t) {
-            stream.cancel(Status.CANCELLED.withCause(t).withDescription("Failed to read headers"));
-            return;
+            Status status =
+                Status.CANCELLED.withCause(t).withDescription("Failed to read headers");
+            stream.cancel(status);
+            close(status, new Metadata());
           }
         }
       });
@@ -416,16 +439,31 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
               message.close();
             }
           } catch (Throwable t) {
-            stream.cancel(Status.CANCELLED.withCause(t).withDescription("Failed to read message."));
-            return;
+            Status status =
+                Status.CANCELLED.withCause(t).withDescription("Failed to read message.");
+            stream.cancel(status);
+            close(status, new Metadata());
           }
         }
       });
     }
 
+    /**
+     * Must be called from application thread.
+     */
+    private void close(Status status, Metadata trailers) {
+      closed = true;
+      cancelListenersShouldBeRemoved = true;
+      try {
+        observer.onClose(status, trailers);
+      } finally {
+        removeContextListenerAndCancelDeadlineFuture();
+      }
+    }
+
     @Override
     public void closed(Status status, Metadata trailers) {
-      Deadline deadline = context.getDeadline();
+      Deadline deadline = effectiveDeadline();
       if (status.getCode() == Status.Code.CANCELLED && deadline != null) {
         // When the server's deadline expires, it can only reset the stream with CANCEL and no
         // description. Since our timer may be delayed in firing, we double-check the deadline and
@@ -441,13 +479,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       callExecutor.execute(new ContextRunnable(context) {
         @Override
         public final void runInContext() {
-          try {
-            closed = true;
-            contextListenerShouldBeRemoved = true;
-            observer.onClose(savedStatus, savedTrailers);
-          } finally {
-            context.removeListener(ClientCallImpl.this);
+          if (closed) {
+            // We intentionally don't keep the status or metadata from the server.
+            return;
           }
+          close(savedStatus, savedTrailers);
         }
       });
     }
@@ -457,7 +493,14 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       callExecutor.execute(new ContextRunnable(context) {
         @Override
         public final void runInContext() {
-          observer.onReady();
+          try {
+            observer.onReady();
+          } catch (Throwable t) {
+            Status status =
+                Status.CANCELLED.withCause(t).withDescription("Failed to call onReady.");
+            stream.cancel(status);
+            close(status, new Metadata());
+          }
         }
       });
     }

@@ -41,12 +41,12 @@ import io.grpc.Attributes;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
+import io.grpc.DummyLoadBalancerFactory;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
-import io.grpc.NameResolverRegistry;
+import io.grpc.NameResolverProvider;
 import io.grpc.ResolvedServerInfo;
-import io.grpc.SimpleLoadBalancerFactory;
 
 import java.net.SocketAddress;
 import java.net.URI;
@@ -211,9 +211,9 @@ public abstract class AbstractManagedChannelImplBuilder
         target,
         // TODO(carl-mastrangelo): Allow clients to pass this in
         new ExponentialBackoffPolicy.Provider(),
-        firstNonNull(nameResolverFactory, NameResolverRegistry.getDefaultRegistry()),
+        firstNonNull(nameResolverFactory, NameResolverProvider.asFactory()),
         getNameResolverParams(),
-        firstNonNull(loadBalancerFactory, SimpleLoadBalancerFactory.getInstance()),
+        firstNonNull(loadBalancerFactory, DummyLoadBalancerFactory.getInstance()),
         transportFactory,
         firstNonNull(decompressorRegistry, DecompressorRegistry.getDefaultInstance()),
         firstNonNull(compressorRegistry, CompressorRegistry.getDefaultInstance()),
@@ -248,7 +248,7 @@ public abstract class AbstractManagedChannelImplBuilder
     }
 
     @Override
-    public ManagedClientTransport newClientTransport(SocketAddress serverAddress,
+    public ConnectionClientTransport newClientTransport(SocketAddress serverAddress,
         String authority, @Nullable String userAgent) {
       return factory.newClientTransport(serverAddress, authorityOverride, userAgent);
     }
@@ -279,7 +279,8 @@ public abstract class AbstractManagedChannelImplBuilder
         @Override
         public void start(final Listener listener) {
           listener.onUpdate(
-              Collections.singletonList(new ResolvedServerInfo(address, Attributes.EMPTY)),
+              Collections.singletonList(
+                  Collections.singletonList(new ResolvedServerInfo(address, Attributes.EMPTY))),
               Attributes.EMPTY);
         }
 

@@ -148,8 +148,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   /*
    * Provides a custom {@link NameResolver.Factory} for the channel.
    *
-   * <p>If this method is not called, the builder will look up in the global resolver registry for
-   * a factory for the provided target.
+   * <p>If this method is not called, the builder will try the providers listed by {@link
+   * NameResolverProvider#providers()} for the given target.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public abstract T nameResolverFactory(NameResolver.Factory resolverFactory);
@@ -157,8 +157,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   /**
    * Provides a custom {@link LoadBalancer.Factory} for the channel.
    *
-   * <p>If this method is not called, the builder will use {@link SimpleLoadBalancerFactory} for the
-   * channel.
+   * <p>If this method is not called, the builder will use {@link DummyLoadBalancerFactory}
+   * for the channel.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract T loadBalancerFactory(LoadBalancer.Factory loadBalancerFactory);

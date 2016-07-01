@@ -55,7 +55,6 @@ import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.testing.TestUtils;
 import io.grpc.testing.integration.Messages.CompressionType;
 import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.PayloadType;
@@ -81,7 +80,6 @@ import java.io.OutputStream;
 @RunWith(JUnit4.class)
 public class TransportCompressionTest extends AbstractInteropTest {
 
-  private static int serverPort = TestUtils.pickUnusedPort();
   // Masquerade as identity.
   private static final Fzip FZIPPER = new Fzip("gzip", new Codec.Gzip());
   private volatile boolean expectFzip;
@@ -103,14 +101,14 @@ public class TransportCompressionTest extends AbstractInteropTest {
     compressors.register(FZIPPER);
     compressors.register(Codec.Identity.NONE);
     startStaticServer(
-        ServerBuilder.forPort(serverPort)
+        ServerBuilder.forPort(0)
             .compressorRegistry(compressors)
             .decompressorRegistry(decompressors),
         new ServerInterceptor() {
           @Override
-          public <ReqT, RespT> Listener<ReqT> interceptCall(MethodDescriptor<ReqT, RespT> method,
-              ServerCall<RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-            Listener<ReqT> listener = next.startCall(method, call, headers);
+          public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+              Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+            Listener<ReqT> listener = next.startCall(call, headers);
             // TODO(carl-mastrangelo): check that encoding was set.
             call.setMessageCompression(true);
             return listener;
@@ -149,7 +147,7 @@ public class TransportCompressionTest extends AbstractInteropTest {
 
   @Override
   protected ManagedChannel createChannel() {
-    return ManagedChannelBuilder.forAddress("localhost", serverPort)
+    return ManagedChannelBuilder.forAddress("localhost", getPort())
         .decompressorRegistry(decompressors)
         .compressorRegistry(compressors)
         .intercept(new ClientInterceptor() {

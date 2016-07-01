@@ -36,7 +36,7 @@ import java.net.SocketAddress;
 
 import javax.annotation.Nullable;
 
-/** Pre-configured factory for creating {@link ManagedClientTransport} instances. */
+/** Pre-configured factory for creating {@link ConnectionClientTransport} instances. */
 public interface ClientTransportFactory extends Closeable {
   /**
    * Creates an unstarted transport for exclusive use.
@@ -44,7 +44,7 @@ public interface ClientTransportFactory extends Closeable {
    * @param serverAddress the address that the transport is connected to
    * @param authority the HTTP/2 authority of the server
    */
-  ManagedClientTransport newClientTransport(SocketAddress serverAddress, String authority,
+  ConnectionClientTransport newClientTransport(SocketAddress serverAddress, String authority,
       @Nullable String userAgent);
 
   /**

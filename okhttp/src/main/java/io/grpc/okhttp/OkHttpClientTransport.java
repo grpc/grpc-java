@@ -39,14 +39,16 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.SettableFuture;
 
+import io.grpc.Attributes;
+import io.grpc.CallOptions;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
-import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.framed.ErrorCode;
@@ -87,9 +89,9 @@ import javax.annotation.concurrent.GuardedBy;
 import javax.net.ssl.SSLSocketFactory;
 
 /**
- * A okhttp-based {@link ManagedClientTransport} implementation.
+ * A okhttp-based {@link ConnectionClientTransport} implementation.
  */
-class OkHttpClientTransport implements ManagedClientTransport {
+class OkHttpClientTransport implements ConnectionClientTransport {
   private static final Map<ErrorCode, Status> ERROR_CODE_TO_STATUS = buildErrorCodeToStatusMap();
   private static final Logger log = Logger.getLogger(OkHttpClientTransport.class.getName());
   private static final OkHttpClientStream[] EMPTY_STREAM_ARRAY = new OkHttpClientStream[0];
@@ -156,6 +158,8 @@ class OkHttpClientTransport implements ManagedClientTransport {
   private Http2Ping ping;
   @GuardedBy("lock")
   private boolean stopped;
+  @GuardedBy("lock")
+  private boolean inUse;
   private SSLSocketFactory sslSocketFactory;
   private Socket socket;
   @GuardedBy("lock")
@@ -246,11 +250,18 @@ class OkHttpClientTransport implements ManagedClientTransport {
   }
 
   @Override
-  public OkHttpClientStream newStream(final MethodDescriptor<?, ?> method, final Metadata headers) {
+  public OkHttpClientStream newStream(final MethodDescriptor<?, ?> method, final Metadata
+      headers, CallOptions callOptions) {
     Preconditions.checkNotNull(method, "method");
     Preconditions.checkNotNull(headers, "headers");
     return new OkHttpClientStream(method, headers, frameWriter, OkHttpClientTransport.this,
         outboundFlow, lock, maxMessageSize, defaultAuthority, userAgent);
+  }
+
+  @Override
+  public OkHttpClientStream newStream(final MethodDescriptor<?, ?> method, final Metadata
+      headers) {
+    return newStream(method, headers, CallOptions.DEFAULT);
   }
 
   @GuardedBy("lock")
@@ -260,6 +271,7 @@ class OkHttpClientTransport implements ManagedClientTransport {
         clientStream.transportReportStatus(goAwayStatus, true, new Metadata());
       } else if (streams.size() >= maxConcurrentStreams) {
         pendingStreams.add(clientStream);
+        setInUse();
       } else {
         startStream(clientStream);
       }
@@ -270,6 +282,7 @@ class OkHttpClientTransport implements ManagedClientTransport {
   private void startStream(OkHttpClientStream stream) {
     Preconditions.checkState(stream.id() == null, "StreamId already assigned");
     streams.put(nextStreamId, stream);
+    setInUse();
     stream.start(nextStreamId);
     stream.allocated();
     // For unary and server streaming, there will be a data frame soon, no need to flush the header.
@@ -308,6 +321,7 @@ class OkHttpClientTransport implements ManagedClientTransport {
   @GuardedBy("lock")
   void removePendingStream(OkHttpClientStream pendingStream) {
     pendingStreams.remove(pendingStream);
+    maybeClearInUse();
   }
 
   @Override
@@ -467,9 +481,16 @@ class OkHttpClientTransport implements ManagedClientTransport {
         stream.transportReportStatus(reason, true, new Metadata());
       }
       pendingStreams.clear();
+      maybeClearInUse();
 
       stopIfNecessary();
     }
+  }
+
+  @Override
+  public Attributes getAttrs() {
+    // TODO(zhangkun83): fill channel security attributes
+    return Attributes.EMPTY;
   }
 
   /**
@@ -537,6 +558,7 @@ class OkHttpClientTransport implements ManagedClientTransport {
         stream.transportReportStatus(status, true, new Metadata());
       }
       pendingStreams.clear();
+      maybeClearInUse();
 
       stopIfNecessary();
     }
@@ -569,6 +591,7 @@ class OkHttpClientTransport implements ManagedClientTransport {
         }
         if (!startPendingStreams()) {
           stopIfNecessary();
+          maybeClearInUse();
         }
       }
     }
@@ -602,6 +625,24 @@ class OkHttpClientTransport implements ManagedClientTransport {
     // We will close the underlying socket in the writing thread to break out the reader
     // thread, which will close the frameReader and notify the listener.
     frameWriter.close();
+  }
+
+  @GuardedBy("lock")
+  private void maybeClearInUse() {
+    if (inUse) {
+      if (pendingStreams.isEmpty() && streams.isEmpty()) {
+        inUse = false;
+        listener.transportInUse(false);
+      }
+    }
+  }
+
+  @GuardedBy("lock")
+  private void setInUse() {
+    if (!inUse) {
+      inUse = true;
+      listener.transportInUse(true);
+    }
   }
 
   private Throwable getPingFailure() {

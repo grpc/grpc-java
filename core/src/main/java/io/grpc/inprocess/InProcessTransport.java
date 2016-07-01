@@ -34,6 +34,7 @@ package io.grpc.inprocess;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.Attributes;
+import io.grpc.CallOptions;
 import io.grpc.Compressor;
 import io.grpc.Decompressor;
 import io.grpc.Metadata;
@@ -42,6 +43,7 @@ import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
+import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.NoopClientStream;
@@ -64,7 +66,7 @@ import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 @ThreadSafe
-class InProcessTransport implements ServerTransport, ManagedClientTransport {
+class InProcessTransport implements ServerTransport, ConnectionClientTransport {
   private static final Logger log = Logger.getLogger(InProcessTransport.class.getName());
 
   private final String name;
@@ -126,7 +128,7 @@ class InProcessTransport implements ServerTransport, ManagedClientTransport {
 
   @Override
   public synchronized ClientStream newStream(
-      final MethodDescriptor<?, ?> method, final Metadata headers) {
+      final MethodDescriptor<?, ?> method, final Metadata headers, final CallOptions callOptions) {
     if (shutdownStatus != null) {
       final Status capturedStatus = shutdownStatus;
       return new NoopClientStream() {
@@ -138,6 +140,12 @@ class InProcessTransport implements ServerTransport, ManagedClientTransport {
     }
 
     return new InProcessStream(method, headers).clientStream;
+  }
+
+  @Override
+  public synchronized ClientStream newStream(
+      final MethodDescriptor<?, ?> method, final Metadata headers) {
+    return newStream(method, headers, CallOptions.DEFAULT);
   }
 
   @Override
@@ -199,6 +207,11 @@ class InProcessTransport implements ServerTransport, ManagedClientTransport {
     return GrpcUtil.getLogId(this);
   }
 
+  @Override
+  public Attributes getAttrs() {
+    return Attributes.EMPTY;
+  }
+
   private synchronized void notifyShutdown(Status s) {
     if (shutdown) {
       return;
@@ -234,8 +247,11 @@ class InProcessTransport implements ServerTransport, ManagedClientTransport {
     private void streamClosed() {
       synchronized (InProcessTransport.this) {
         boolean justRemovedAnElement = streams.remove(this);
-        if (shutdown && streams.isEmpty() && justRemovedAnElement) {
-          notifyTerminated();
+        if (streams.isEmpty() && justRemovedAnElement) {
+          clientTransportListener.transportInUse(false);
+          if (shutdown) {
+            notifyTerminated();
+          }
         }
       }
     }
@@ -535,6 +551,9 @@ class InProcessTransport implements ServerTransport, ManagedClientTransport {
               serverStream, method.getFullMethodName(), headers);
           clientStream.setListener(serverStreamListener);
           streams.add(InProcessTransport.InProcessStream.this);
+          if (streams.size() == 1) {
+            clientTransportListener.transportInUse(true);
+          }
         }
       }
 

@@ -21,7 +21,7 @@ import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
  * </pre>
  */
 @javax.annotation.Generated(
-    value = "by gRPC proto compiler (version 0.15.0-SNAPSHOT)",
+    value = "by gRPC proto compiler (version 1.0.0-SNAPSHOT)",
     comments = "Source: route_guide.proto")
 public class RouteGuideGrpc {
 
@@ -30,7 +30,7 @@ public class RouteGuideGrpc {
   public static final String SERVICE_NAME = "routeguide.RouteGuide";
 
   // Static method descriptors that strictly reflect the proto.
-  @io.grpc.ExperimentalApi
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.examples.routeguide.Point,
       io.grpc.examples.routeguide.Feature> METHOD_GET_FEATURE =
       io.grpc.MethodDescriptor.create(
@@ -39,7 +39,7 @@ public class RouteGuideGrpc {
               "routeguide.RouteGuide", "GetFeature"),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.Point.getDefaultInstance()),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.Feature.getDefaultInstance()));
-  @io.grpc.ExperimentalApi
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.examples.routeguide.Rectangle,
       io.grpc.examples.routeguide.Feature> METHOD_LIST_FEATURES =
       io.grpc.MethodDescriptor.create(
@@ -48,7 +48,7 @@ public class RouteGuideGrpc {
               "routeguide.RouteGuide", "ListFeatures"),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.Rectangle.getDefaultInstance()),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.Feature.getDefaultInstance()));
-  @io.grpc.ExperimentalApi
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.examples.routeguide.Point,
       io.grpc.examples.routeguide.RouteSummary> METHOD_RECORD_ROUTE =
       io.grpc.MethodDescriptor.create(
@@ -57,7 +57,7 @@ public class RouteGuideGrpc {
               "routeguide.RouteGuide", "RecordRoute"),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.Point.getDefaultInstance()),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.examples.routeguide.RouteSummary.getDefaultInstance()));
-  @io.grpc.ExperimentalApi
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.examples.routeguide.RouteNote,
       io.grpc.examples.routeguide.RouteNote> METHOD_ROUTE_CHAT =
       io.grpc.MethodDescriptor.create(
@@ -95,7 +95,7 @@ public class RouteGuideGrpc {
    * Interface exported by the server.
    * </pre>
    */
-  public static interface RouteGuide {
+  @java.lang.Deprecated public static interface RouteGuide {
 
     /**
      * <pre>
@@ -141,8 +141,8 @@ public class RouteGuideGrpc {
         io.grpc.stub.StreamObserver<io.grpc.examples.routeguide.RouteNote> responseObserver);
   }
 
-  @io.grpc.ExperimentalApi
-  public static abstract class AbstractRouteGuide implements RouteGuide, io.grpc.BindableService {
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1469")
+  public static abstract class RouteGuideImplBase implements RouteGuide, io.grpc.BindableService {
 
     @java.lang.Override
     public void getFeature(io.grpc.examples.routeguide.Point request,
@@ -178,7 +178,7 @@ public class RouteGuideGrpc {
    * Interface exported by the server.
    * </pre>
    */
-  public static interface RouteGuideBlockingClient {
+  @java.lang.Deprecated public static interface RouteGuideBlockingClient {
 
     /**
      * <pre>
@@ -208,7 +208,7 @@ public class RouteGuideGrpc {
    * Interface exported by the server.
    * </pre>
    */
-  public static interface RouteGuideFutureClient {
+  @java.lang.Deprecated public static interface RouteGuideFutureClient {
 
     /**
      * <pre>
@@ -324,6 +324,8 @@ public class RouteGuideGrpc {
     }
   }
 
+  @java.lang.Deprecated public static abstract class AbstractRouteGuide extends RouteGuideImplBase {}
+
   private static final int METHODID_GET_FEATURE = 0;
   private static final int METHODID_LIST_FEATURES = 1;
   private static final int METHODID_RECORD_ROUTE = 2;
@@ -376,9 +378,17 @@ public class RouteGuideGrpc {
     }
   }
 
-  public static io.grpc.ServerServiceDefinition bindService(
+  public static io.grpc.ServiceDescriptor getServiceDescriptor() {
+    return new io.grpc.ServiceDescriptor(SERVICE_NAME,
+        METHOD_GET_FEATURE,
+        METHOD_LIST_FEATURES,
+        METHOD_RECORD_ROUTE,
+        METHOD_ROUTE_CHAT);
+  }
+
+  @java.lang.Deprecated public static io.grpc.ServerServiceDefinition bindService(
       final RouteGuide serviceImpl) {
-    return io.grpc.ServerServiceDefinition.builder(SERVICE_NAME)
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           METHOD_GET_FEATURE,
           asyncUnaryCall(

@@ -29,14 +29,18 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.examples.helloworld;
+package io.grpc.examples.advanced;
 
 import static io.grpc.stub.ServerCalls.asyncUnaryCall;
 
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerServiceDefinition;
-import io.grpc.examples.helloworld.GreeterGrpc.Greeter;
+import io.grpc.examples.helloworld.GreeterGrpc;
+import io.grpc.examples.helloworld.GreeterGrpc.GreeterImplBase;
+import io.grpc.examples.helloworld.HelloReply;
+import io.grpc.examples.helloworld.HelloRequest;
+import io.grpc.examples.helloworld.HelloWorldServer;
 import io.grpc.stub.ServerCalls.UnaryMethod;
 import io.grpc.stub.StreamObserver;
 
@@ -45,6 +49,14 @@ import java.util.logging.Logger;
 
 /**
  * Server that manages startup/shutdown of a {@code Greeter} server.
+ *
+ * <p>This is an advanced example of how to swap out the serialization logic.  Normal users do not
+ * need to do this.  This code is not intended to be a production-ready implementation, since JSON
+ * encoding is slow.  Additionally, JSON serialization as implemented may be not resilient to
+ * malicious input.
+ *
+ * <p>If you are considering implementing your own serialization logic, contact the grpc team at
+ * https://groups.google.com/forum/#!forum/grpc-io
  */
 public class HelloJsonServer {
   private static final Logger logger = Logger.getLogger(HelloWorldServer.class.getName());
@@ -94,7 +106,7 @@ public class HelloJsonServer {
     server.blockUntilShutdown();
   }
 
-  private class GreeterImpl implements GreeterGrpc.Greeter {
+  private static class GreeterImpl extends GreeterImplBase {
 
     @Override
     public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
@@ -104,11 +116,11 @@ public class HelloJsonServer {
     }
   }
 
-  private ServerServiceDefinition bindService(final Greeter serviceImpl) {
-    return io.grpc.ServerServiceDefinition.builder(GreeterGrpc.SERVICE_NAME)
-        .addMethod(
-          HelloJsonClient.HelloJsonStub.METHOD_SAY_HELLO,
-          asyncUnaryCall(
+  private ServerServiceDefinition bindService(final GreeterImplBase serviceImpl) {
+    return io.grpc.ServerServiceDefinition
+        .builder(GreeterGrpc.getServiceDescriptor())
+        .addMethod(HelloJsonClient.HelloJsonStub.METHOD_SAY_HELLO,
+            asyncUnaryCall(
               new UnaryMethod<HelloRequest, HelloReply>() {
                 @Override
                 public void invoke(

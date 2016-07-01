@@ -43,8 +43,8 @@ import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.ClientTransportFactory;
+import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.SharedResourceHolder;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoopGroup;
@@ -170,8 +170,11 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
    * GrpcSslContexts}, but options could have been overridden.
    */
   public final NettyChannelBuilder sslContext(SslContext sslContext) {
-    checkArgument(sslContext == null || sslContext.isClient(),
-        "Server SSL context can not be used for client channel");
+    if (sslContext != null) {
+      checkArgument(sslContext.isClient(),
+          "Server SSL context can not be used for client channel");
+      GrpcSslContexts.ensureAlpnAndH2Enabled(sslContext.applicationProtocolNegotiator());
+    }
     this.sslContext = sslContext;
     return this;
   }
@@ -310,7 +313,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
     }
 
     @Override
-    public ManagedClientTransport newClientTransport(
+    public ConnectionClientTransport newClientTransport(
         SocketAddress serverAddress, String authority, @Nullable String userAgent) {
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
@@ -321,7 +324,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
     }
 
     @Internal  // This is strictly for internal use.  Depend on this at your own peril.
-    public ManagedClientTransport newClientTransport(SocketAddress serverAddress,
+    public ConnectionClientTransport newClientTransport(SocketAddress serverAddress,
         String authority, String userAgent, ProtocolNegotiator negotiator) {
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");

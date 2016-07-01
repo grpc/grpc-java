@@ -29,12 +29,15 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc;
+package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
-import io.grpc.internal.SharedResourceHolder;
+import io.grpc.Attributes;
+import io.grpc.NameResolver;
+import io.grpc.ResolvedServerInfo;
+import io.grpc.Status;
 import io.grpc.internal.SharedResourceHolder.Resource;
 
 import java.net.InetAddress;
@@ -42,6 +45,8 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -148,20 +153,22 @@ class DnsNameResolver extends NameResolver {
               }
               // Because timerService is the single-threaded GrpcUtil.TIMER_SERVICE in production,
               // we need to delegate the blocking work to the executor
-              resolutionTask = timerService.schedule(resolutionRunnableOnExecutor,
-                  1, TimeUnit.MINUTES);
+              resolutionTask =
+                  timerService.schedule(new LogExceptionRunnable(resolutionRunnableOnExecutor),
+                      1, TimeUnit.MINUTES);
             }
             savedListener.onError(Status.UNAVAILABLE.withCause(e));
             return;
           }
-          ArrayList<ResolvedServerInfo> servers =
+          List<ResolvedServerInfo> servers =
               new ArrayList<ResolvedServerInfo>(inetAddrs.length);
           for (int i = 0; i < inetAddrs.length; i++) {
             InetAddress inetAddr = inetAddrs[i];
             servers.add(
                 new ResolvedServerInfo(new InetSocketAddress(inetAddr, port), Attributes.EMPTY));
           }
-          savedListener.onUpdate(servers, Attributes.EMPTY);
+          savedListener.onUpdate(
+              Collections.singletonList(servers), Attributes.EMPTY);
         } finally {
           synchronized (DnsNameResolver.this) {
             resolving = false;

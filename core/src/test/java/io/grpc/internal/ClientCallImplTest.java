@@ -42,6 +42,8 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
+import static org.mockito.Matchers.same;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
@@ -57,6 +59,7 @@ import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.Codec;
 import io.grpc.Context;
+import io.grpc.Deadline;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
@@ -73,6 +76,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.Matchers;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -80,8 +84,11 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -135,12 +142,110 @@ public class ClientCallImplTest {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     when(provider.get(any(CallOptions.class))).thenReturn(transport);
-    when(transport.newStream(any(MethodDescriptor.class), any(Metadata.class))).thenReturn(stream);
+    when(transport.newStream(any(MethodDescriptor.class), any(Metadata.class),
+        any(CallOptions.class))).thenReturn(stream);
   }
 
   @After
   public void tearDown() {
     Context.ROOT.attach();
+  }
+
+  @Test
+  public void exceptionInOnMessageTakesPrecedenceOverServer() {
+    DelayedExecutor executor = new DelayedExecutor();
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+        method,
+        executor,
+        CallOptions.DEFAULT,
+        provider,
+        deadlineCancellationExecutor);
+    call.start(callListener, new Metadata());
+    verify(stream).start(listenerArgumentCaptor.capture());
+    final ClientStreamListener streamListener = listenerArgumentCaptor.getValue();
+    streamListener.headersRead(new Metadata());
+
+    RuntimeException failure = new RuntimeException("bad");
+    doThrow(failure).when(callListener).onMessage(any(Void.class));
+
+    /*
+     * In unary calls, the server closes the call right after responding, so the onClose call is
+     * queued to run.  When messageRead is called, an exception will occur and attempt to cancel the
+     * stream.  However, since the server closed it "first" the second exception is lost leading to
+     * the call being counted as successful.
+     */
+    streamListener.messageRead(new ByteArrayInputStream(new byte[]{}));
+    streamListener.closed(Status.OK, new Metadata());
+    executor.release();
+
+    verify(callListener).onClose(statusArgumentCaptor.capture(), Matchers.isA(Metadata.class));
+    assertThat(statusArgumentCaptor.getValue().getCode()).isEqualTo(Status.Code.CANCELLED);
+    assertThat(statusArgumentCaptor.getValue().getCause()).isSameAs(failure);
+    verify(stream).cancel(statusArgumentCaptor.getValue());
+  }
+
+  @Test
+  public void exceptionInOnHeadersTakesPrecedenceOverServer() {
+    DelayedExecutor executor = new DelayedExecutor();
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+        method,
+        executor,
+        CallOptions.DEFAULT,
+        provider,
+        deadlineCancellationExecutor);
+    call.start(callListener, new Metadata());
+    verify(stream).start(listenerArgumentCaptor.capture());
+    final ClientStreamListener streamListener = listenerArgumentCaptor.getValue();
+
+    RuntimeException failure = new RuntimeException("bad");
+    doThrow(failure).when(callListener).onHeaders(any(Metadata.class));
+
+    /*
+     * In unary calls, the server closes the call right after responding, so the onClose call is
+     * queued to run.  When headersRead is called, an exception will occur and attempt to cancel the
+     * stream.  However, since the server closed it "first" the second exception is lost leading to
+     * the call being counted as successful.
+     */
+    streamListener.headersRead(new Metadata());
+    streamListener.closed(Status.OK, new Metadata());
+    executor.release();
+
+    verify(callListener).onClose(statusArgumentCaptor.capture(), Matchers.isA(Metadata.class));
+    assertThat(statusArgumentCaptor.getValue().getCode()).isEqualTo(Status.Code.CANCELLED);
+    assertThat(statusArgumentCaptor.getValue().getCause()).isSameAs(failure);
+    verify(stream).cancel(statusArgumentCaptor.getValue());
+  }
+
+  @Test
+  public void exceptionInOnReadyTakesPrecedenceOverServer() {
+    DelayedExecutor executor = new DelayedExecutor();
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+        method,
+        executor,
+        CallOptions.DEFAULT,
+        provider,
+        deadlineCancellationExecutor);
+    call.start(callListener, new Metadata());
+    verify(stream).start(listenerArgumentCaptor.capture());
+    final ClientStreamListener streamListener = listenerArgumentCaptor.getValue();
+
+    RuntimeException failure = new RuntimeException("bad");
+    doThrow(failure).when(callListener).onReady();
+
+    /*
+     * In unary calls, the server closes the call right after responding, so the onClose call is
+     * queued to run.  When onReady is called, an exception will occur and attempt to cancel the
+     * stream.  However, since the server closed it "first" the second exception is lost leading to
+     * the call being counted as successful.
+     */
+    streamListener.onReady();
+    streamListener.closed(Status.OK, new Metadata());
+    executor.release();
+
+    verify(callListener).onClose(statusArgumentCaptor.capture(), Matchers.isA(Metadata.class));
+    assertThat(statusArgumentCaptor.getValue().getCode()).isEqualTo(Status.Code.CANCELLED);
+    assertThat(statusArgumentCaptor.getValue().getCause()).isSameAs(failure);
+    verify(stream).cancel(statusArgumentCaptor.getValue());
   }
 
   @Test
@@ -156,7 +261,7 @@ public class ClientCallImplTest {
     call.start(callListener, new Metadata());
 
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
-    verify(transport).newStream(eq(method), metadataCaptor.capture());
+    verify(transport).newStream(eq(method), metadataCaptor.capture(), same(CallOptions.DEFAULT));
     Metadata actual = metadataCaptor.getValue();
 
     Set<String> acceptedEncodings =
@@ -176,6 +281,23 @@ public class ClientCallImplTest {
 
     call.start(callListener, new Metadata());
     verify(stream).setAuthority("overridden-authority");
+  }
+
+  @Test
+  public void callOptionsPropagatedToTransport() {
+    final CallOptions callOptions = CallOptions.DEFAULT.withAuthority("dummy_value");
+    final ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+        method,
+        MoreExecutors.directExecutor(),
+        callOptions,
+        provider,
+        deadlineCancellationExecutor)
+        .setDecompressorRegistry(decompressorRegistry);
+    final Metadata metadata = new Metadata();
+
+    call.start(callListener, metadata);
+
+    verify(transport).newStream(same(method), same(metadata), same(callOptions));
   }
 
   @Test
@@ -516,6 +638,68 @@ public class ClientCallImplTest {
     assertTimeoutBetween(timeout, callOptsNanos - deltaNanos, callOptsNanos);
   }
 
+  @Test
+  public void expiredDeadlineCancelsStream_CallOptions() {
+    fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+        DESCRIPTOR,
+        MoreExecutors.directExecutor(),
+        CallOptions.DEFAULT.withDeadline(Deadline.after(1000, TimeUnit.MILLISECONDS)),
+        provider,
+        deadlineCancellationExecutor);
+
+    call.start(callListener, new Metadata());
+
+    fakeClock.forwardMillis(1001);
+
+    verify(stream, times(1)).cancel(statusCaptor.capture());
+    assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
+  }
+
+  @Test
+  public void expiredDeadlineCancelsStream_Context() {
+    fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
+
+    Context.current()
+        .withDeadlineAfter(1000, TimeUnit.MILLISECONDS, deadlineCancellationExecutor)
+        .attach();
+
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+        DESCRIPTOR,
+        MoreExecutors.directExecutor(),
+        CallOptions.DEFAULT,
+        provider,
+        deadlineCancellationExecutor);
+
+    call.start(callListener, new Metadata());
+
+    fakeClock.forwardMillis(TimeUnit.SECONDS.toMillis(1001));
+
+    verify(stream, times(1)).cancel(statusCaptor.capture());
+    assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
+  }
+
+  @Test
+  public void streamCancelAbortsDeadlineTimer() {
+    fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
+
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+        DESCRIPTOR,
+        MoreExecutors.directExecutor(),
+        CallOptions.DEFAULT.withDeadline(Deadline.after(1000, TimeUnit.MILLISECONDS)),
+        provider,
+        deadlineCancellationExecutor);
+    call.start(callListener, new Metadata());
+    call.cancel("canceled", null);
+
+    // Run the deadline timer, which should have been cancelled by the previous call to cancel()
+    fakeClock.forwardMillis(1001);
+
+    verify(stream, times(1)).cancel(statusCaptor.capture());
+
+    assertEquals(Status.CANCELLED.getCode(), statusCaptor.getValue().getCode());
+  }
+
   /**
    * Without a context or call options deadline,
    * a timeout should not be set in metadata.
@@ -586,5 +770,19 @@ public class ClientCallImplTest {
     assertTrue("timeout: " + timeout + " ns", timeout >= from);
   }
 
+  private static final class DelayedExecutor implements Executor {
+    private final BlockingQueue<Runnable> commands = new LinkedBlockingQueue<Runnable>();
+
+    @Override
+    public void execute(Runnable command) {
+      commands.add(command);
+    }
+
+    void release() {
+      while (!commands.isEmpty()) {
+        commands.poll().run();
+      }
+    }
+  }
 }
 

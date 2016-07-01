@@ -57,7 +57,7 @@ final class InternalHandlerRegistry {
         new HashMap<String, ServerServiceDefinition>();
 
     Builder addService(ServerServiceDefinition service) {
-      services.put(service.getName(), service);
+      services.put(service.getServiceDescriptor().getName(), service);
       return this;
     }
 

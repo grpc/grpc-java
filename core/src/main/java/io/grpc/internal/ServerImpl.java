@@ -201,7 +201,7 @@ public final class ServerImpl extends io.grpc.Server {
     }
     // Short-circuiting not strictly necessary, but prevents transports from needing to handle
     // multiple shutdownNow invocations, between here and the serverShutdown callback.
-    if (serverShutdownCallbackInvoked) {
+    if (savedServerShutdownCallbackInvoked) {
       // Have to call shutdownNow, because serverShutdown callback only called shutdown, not
       // shutdownNow
       for (ServerTransport transport : transportsCopy) {
@@ -404,8 +404,8 @@ public final class ServerImpl extends io.grpc.Server {
       ServerCallImpl<ReqT, RespT> call = new ServerCallImpl<ReqT, RespT>(
           stream, methodDef.getMethodDescriptor(), headers, context, decompressorRegistry,
           compressorRegistry);
-      ServerCall.Listener<ReqT> listener = methodDef.getServerCallHandler()
-          .startCall(methodDef.getMethodDescriptor(), call, headers);
+      ServerCall.Listener<ReqT> listener =
+          methodDef.getServerCallHandler().startCall(call, headers);
       if (listener == null) {
         throw new NullPointerException(
             "startCall() returned a null listener for method " + fullMethodName);

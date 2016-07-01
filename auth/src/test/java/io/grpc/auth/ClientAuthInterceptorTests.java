@@ -75,6 +75,7 @@ import java.util.concurrent.Executor;
  * Tests for {@link ClientAuthInterceptor}.
  */
 @RunWith(JUnit4.class)
+@Deprecated
 public class ClientAuthInterceptorTests {
 
   private static final Metadata.Key<String> AUTHORIZATION = Metadata.Key.of("Authorization",

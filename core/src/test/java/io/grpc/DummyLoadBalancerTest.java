@@ -55,13 +55,14 @@ import org.mockito.MockitoAnnotations;
 
 import java.net.SocketAddress;
 import java.util.ArrayList;
+import java.util.List;
 
-/** Unit test for {@link SimpleLoadBalancerFactory}. */
+/** Unit test for {@link DummyLoadBalancerFactory}. */
 @RunWith(JUnit4.class)
-public class SimpleLoadBalancerTest {
+public class DummyLoadBalancerTest {
   private LoadBalancer<Transport> loadBalancer;
 
-  private ArrayList<ResolvedServerInfo> servers;
+  private List<List<ResolvedServerInfo>> servers;
   private EquivalentAddressGroup addressGroup;
 
   @Mock private TransportManager<Transport> mockTransportManager;
@@ -73,13 +74,14 @@ public class SimpleLoadBalancerTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    loadBalancer = SimpleLoadBalancerFactory.getInstance().newLoadBalancer(
+    loadBalancer = DummyLoadBalancerFactory.getInstance().newLoadBalancer(
         "fakeservice", mockTransportManager);
-    servers = new ArrayList<ResolvedServerInfo>();
+    servers = new ArrayList<List<ResolvedServerInfo>>();
+    servers.add(new ArrayList<ResolvedServerInfo>());
     ArrayList<SocketAddress> addresses = new ArrayList<SocketAddress>();
     for (int i = 0; i < 3; i++) {
       SocketAddress addr = new FakeSocketAddress("server" + i);
-      servers.add(new ResolvedServerInfo(addr, Attributes.EMPTY));
+      servers.get(0).add(new ResolvedServerInfo(addr, Attributes.EMPTY));
       addresses.add(addr);
     }
     addressGroup = new EquivalentAddressGroup(addresses);
@@ -105,6 +107,42 @@ public class SimpleLoadBalancerTest {
     }
     verify(mockTransportManager, times(2)).getTransport(eq(addressGroup));
     verifyNoMoreInteractions(mockTransportManager);
+    verifyNoMoreInteractions(mockInterimTransport);
+  }
+
+  @Test
+  public void pickBeforeNameResolutionError() {
+    Transport t1 = loadBalancer.pickTransport(null);
+    Transport t2 = loadBalancer.pickTransport(null);
+    assertSame(mockInterimTransportAsTransport, t1);
+    assertSame(mockInterimTransportAsTransport, t2);
+    verify(mockTransportManager).createInterimTransport();
+    verify(mockTransportManager, never()).getTransport(any(EquivalentAddressGroup.class));
+    verify(mockInterimTransport, times(2)).transport();
+
+    loadBalancer.handleNameResolutionError(Status.UNAVAILABLE);
+    verify(mockInterimTransport).closeWithError(any(Status.class));
+    // Ensure a shutdown after error closes without incident
+    loadBalancer.shutdown();
+    // Ensure a name resolution error after shutdown does nothing
+    loadBalancer.handleNameResolutionError(Status.UNAVAILABLE);
+    verifyNoMoreInteractions(mockInterimTransport);
+  }
+
+  @Test
+  public void pickBeforeShutdown() {
+    Transport t1 = loadBalancer.pickTransport(null);
+    Transport t2 = loadBalancer.pickTransport(null);
+    assertSame(mockInterimTransportAsTransport, t1);
+    assertSame(mockInterimTransportAsTransport, t2);
+    verify(mockTransportManager).createInterimTransport();
+    verify(mockTransportManager, never()).getTransport(any(EquivalentAddressGroup.class));
+    verify(mockInterimTransport, times(2)).transport();
+
+    loadBalancer.shutdown();
+    verify(mockInterimTransport).closeWithError(any(Status.class));
+    // Ensure double shutdown just returns immediately without closing again.
+    loadBalancer.shutdown();
     verifyNoMoreInteractions(mockInterimTransport);
   }
 

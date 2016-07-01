@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Google Inc. All rights reserved.
+ * Copyright 2016, Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -29,48 +29,58 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc;
+package io.grpc.util;
 
 import com.google.common.base.Supplier;
 
+import io.grpc.Attributes;
+import io.grpc.EquivalentAddressGroup;
+import io.grpc.ExperimentalApi;
+import io.grpc.LoadBalancer;
+import io.grpc.NameResolver;
+import io.grpc.ResolvedServerInfo;
+import io.grpc.Status;
+import io.grpc.TransportManager;
 import io.grpc.TransportManager.InterimTransport;
+import io.grpc.internal.RoundRobinServerList;
 
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.List;
-
 import javax.annotation.concurrent.GuardedBy;
 
+
 /**
- * A {@link LoadBalancer} that provides simple round-robin and pick-first routing mechanism over the
- * addresses from the {@link NameResolver}.
+ * A {@link LoadBalancer} that provides round-robin load balancing mechanism over the
+ * addresses from the {@link NameResolver}.  The sub-lists received from the name resolver
+ * are considered to be an {@link EquivalentAddressGroup} and each of these sub-lists is
+ * what is then balanced across.
  */
-// TODO(zhangkun83): Only pick-first is implemented. We need to implement round-robin.
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
-public final class SimpleLoadBalancerFactory extends LoadBalancer.Factory {
+public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
 
-  private static final SimpleLoadBalancerFactory instance = new SimpleLoadBalancerFactory();
+  private static final RoundRobinLoadBalancerFactory instance = new RoundRobinLoadBalancerFactory();
 
-  private SimpleLoadBalancerFactory() {
+  private RoundRobinLoadBalancerFactory() {
   }
 
-  public static SimpleLoadBalancerFactory getInstance() {
+  public static RoundRobinLoadBalancerFactory getInstance() {
     return instance;
   }
 
   @Override
   public <T> LoadBalancer<T> newLoadBalancer(String serviceName, TransportManager<T> tm) {
-    return new SimpleLoadBalancer<T>(tm);
+    return new RoundRobinLoadBalancer<T>(tm);
   }
 
-  private static class SimpleLoadBalancer<T> extends LoadBalancer<T> {
+  private static class RoundRobinLoadBalancer<T> extends LoadBalancer<T> {
     private static final Status SHUTDOWN_STATUS =
-        Status.UNAVAILABLE.augmentDescription("SimpleLoadBalancer has shut down");
+        Status.UNAVAILABLE.augmentDescription("RoundRobinLoadBalancer has shut down");
 
     private final Object lock = new Object();
 
     @GuardedBy("lock")
-    private EquivalentAddressGroup addresses;
+    private RoundRobinServerList<T> addresses;
     @GuardedBy("lock")
     private InterimTransport<T> interimTransport;
     @GuardedBy("lock")
@@ -80,19 +90,18 @@ public final class SimpleLoadBalancerFactory extends LoadBalancer.Factory {
 
     private final TransportManager<T> tm;
 
-    private SimpleLoadBalancer(TransportManager<T> tm) {
+    private RoundRobinLoadBalancer(TransportManager<T> tm) {
       this.tm = tm;
     }
 
     @Override
     public T pickTransport(Attributes affinity) {
-      EquivalentAddressGroup addressesCopy;
+      final RoundRobinServerList<T> addressesCopy;
       synchronized (lock) {
         if (closed) {
           return tm.createFailingTransport(SHUTDOWN_STATUS);
         }
-        addressesCopy = addresses;
-        if (addressesCopy == null) {
+        if (addresses == null) {
           if (nameResolutionError != null) {
             return tm.createFailingTransport(nameResolutionError);
           }
@@ -101,29 +110,34 @@ public final class SimpleLoadBalancerFactory extends LoadBalancer.Factory {
           }
           return interimTransport.transport();
         }
+        addressesCopy = addresses;
       }
-      return tm.getTransport(addressesCopy);
+      return addressesCopy.getTransportForNextServer();
     }
 
     @Override
     public void handleResolvedAddresses(
-        List<ResolvedServerInfo> updatedServers, Attributes config) {
-      InterimTransport<T> savedInterimTransport;
-      final EquivalentAddressGroup newAddresses;
+        List<? extends List<ResolvedServerInfo>> updatedServers, Attributes config) {
+      final InterimTransport<T> savedInterimTransport;
+      final RoundRobinServerList<T> addressesCopy;
       synchronized (lock) {
         if (closed) {
           return;
         }
-        ArrayList<SocketAddress> newAddressList =
-            new ArrayList<SocketAddress>(updatedServers.size());
-        for (ResolvedServerInfo server : updatedServers) {
-          newAddressList.add(server.getAddress());
+        RoundRobinServerList.Builder<T> listBuilder = new RoundRobinServerList.Builder<T>(tm);
+        for (List<ResolvedServerInfo> servers : updatedServers) {
+          if (servers.isEmpty()) {
+            continue;
+          }
+
+          final List<SocketAddress> socketAddresses = new ArrayList<SocketAddress>(servers.size());
+          for (ResolvedServerInfo server : servers) {
+            socketAddresses.add(server.getAddress());
+          }
+          listBuilder.addList(socketAddresses);
         }
-        newAddresses = new EquivalentAddressGroup(newAddressList);
-        if (newAddresses.equals(addresses)) {
-          return;
-        }
-        addresses = newAddresses;
+        addresses = listBuilder.build();
+        addressesCopy = addresses;
         nameResolutionError = null;
         savedInterimTransport = interimTransport;
         interimTransport = null;
@@ -131,7 +145,7 @@ public final class SimpleLoadBalancerFactory extends LoadBalancer.Factory {
       if (savedInterimTransport != null) {
         savedInterimTransport.closeWithRealTransports(new Supplier<T>() {
             @Override public T get() {
-              return tm.getTransport(newAddresses);
+              return addressesCopy.getTransportForNextServer();
             }
           });
       }

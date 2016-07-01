@@ -49,9 +49,10 @@ import javax.net.ssl.SSLSession;
  *
  * <p>Methods are guaranteed to be non-blocking. Implementations are not required to be thread-safe.
  *
+ * @param <ReqT> parsed type of request message.
  * @param <RespT> parsed type of response message.
  */
-public abstract class ServerCall<RespT> {
+public abstract class ServerCall<ReqT, RespT> {
   /**
    * {@link Attributes.Key} for the remote address of server call attributes
    * {@link ServerCall#attributes()}
@@ -194,7 +195,8 @@ public abstract class ServerCall<RespT> {
 
   /**
    * Enables per-message compression, if an encoding type has been negotiated.  If no message
-   * encoding has been negotiated, this is a no-op.
+   * encoding has been negotiated, this is a no-op. By default per-message compression is enabled,
+   * but may not have any effect if compression is not enabled on the call.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
   public void setMessageCompression(boolean enabled) {
@@ -225,4 +227,10 @@ public abstract class ServerCall<RespT> {
   public Attributes attributes() {
     return Attributes.EMPTY;
   }
+
+
+  /**
+   * The {@link MethodDescriptor} for the call.
+   */
+  public abstract MethodDescriptor<ReqT, RespT> getMethodDescriptor();
 }

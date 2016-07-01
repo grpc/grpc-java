@@ -133,8 +133,8 @@ public class AsyncServer {
           @SuppressWarnings("unchecked")
           Class<? extends ServerChannel> channelClass = (Class<? extends ServerChannel>)
               Class.forName("io.netty.channel.epoll.EpollServerSocketChannel");
-          boss = (EventLoopGroup) groupClass.newInstance();
-          worker = (EventLoopGroup) groupClass.newInstance();
+          boss = (EventLoopGroup) groupClass.getConstructor().newInstance();
+          worker = (EventLoopGroup) groupClass.getConstructor().newInstance();
           channelType = channelClass;
           break;
         } catch (Exception e) {
@@ -148,8 +148,8 @@ public class AsyncServer {
           @SuppressWarnings("unchecked")
           Class<? extends ServerChannel> channelClass = (Class<? extends ServerChannel>)
               Class.forName("io.netty.channel.epoll.EpollServerDomainSocketChannel");
-          boss = (EventLoopGroup) groupClass.newInstance();
-          worker = (EventLoopGroup) groupClass.newInstance();
+          boss = (EventLoopGroup) groupClass.getConstructor().newInstance();
+          worker = (EventLoopGroup) groupClass.getConstructor().newInstance();
           channelType = channelClass;
           break;
         } catch (Exception e) {
@@ -167,7 +167,7 @@ public class AsyncServer {
         .bossEventLoopGroup(boss)
         .workerEventLoopGroup(worker)
         .channelType(channelType)
-        .addService(BenchmarkServiceGrpc.bindService(new BenchmarkServiceImpl()))
+        .addService(new BenchmarkServiceImpl())
         .sslContext(sslContext)
         .flowControlWindow(config.flowControlWindow);
     if (config.directExecutor) {
@@ -177,7 +177,7 @@ public class AsyncServer {
     return builder.build();
   }
 
-  public static class BenchmarkServiceImpl implements BenchmarkServiceGrpc.BenchmarkService {
+  public static class BenchmarkServiceImpl extends BenchmarkServiceGrpc.BenchmarkServiceImplBase {
 
     @Override
     public void unaryCall(SimpleRequest request, StreamObserver<SimpleResponse> responseObserver) {

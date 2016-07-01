@@ -37,32 +37,39 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.collect.ImmutableMap;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Definition of a service to be exposed via a Server. */
 public final class ServerServiceDefinition {
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1774")
+  /** Convenience that constructs a {@link ServiceDescriptor} simultaneously. */
   public static Builder builder(String serviceName) {
     return new Builder(serviceName);
   }
 
-  private final String name;
+  public static Builder builder(ServiceDescriptor serviceDescriptor) {
+    return new Builder(serviceDescriptor);
+  }
+
+  private final ServiceDescriptor serviceDescriptor;
   private final ImmutableMap<String, ServerMethodDefinition<?, ?>> methods;
 
   private ServerServiceDefinition(
-      String name, Map<String, ServerMethodDefinition<?, ?>> methods) {
-    this.name = checkNotNull(name);
+      ServiceDescriptor serviceDescriptor, Map<String, ServerMethodDefinition<?, ?>> methods) {
+    this.serviceDescriptor = checkNotNull(serviceDescriptor);
     this.methods = ImmutableMap.copyOf(methods);
   }
 
-  /** Simple name of the service. It is not an absolute path. */
-  public String getName() {
-    return name;
+  /**
+   * The descriptor for the service.
+   */
+  public ServiceDescriptor getServiceDescriptor() {
+    return serviceDescriptor;
   }
 
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1774")
   public Collection<ServerMethodDefinition<?, ?>> getMethods() {
     return methods.values();
   }
@@ -70,21 +77,30 @@ public final class ServerServiceDefinition {
   /**
    * Look up a method by its fully qualified name.
    *
-   * @param name the fully qualified name without leading slash. E.g., "com.foo.Foo/Bar"
+   * @param methodName the fully qualified name without leading slash. E.g., "com.foo.Foo/Bar"
    */
   @Internal
-  public ServerMethodDefinition<?, ?> getMethod(String name) {
-    return methods.get(name);
+  public ServerMethodDefinition<?, ?> getMethod(String methodName) {
+    return methods.get(methodName);
   }
 
-  /** Builder for constructing Service instances. */
+  /**
+   * Builder for constructing Service instances.
+   */
   public static final class Builder {
     private final String serviceName;
+    private final ServiceDescriptor serviceDescriptor;
     private final Map<String, ServerMethodDefinition<?, ?>> methods =
         new HashMap<String, ServerMethodDefinition<?, ?>>();
 
     private Builder(String serviceName) {
-      this.serviceName = serviceName;
+      this.serviceName = checkNotNull(serviceName, "serviceName");
+      this.serviceDescriptor = null;
+    }
+
+    private Builder(ServiceDescriptor serviceDescriptor) {
+      this.serviceDescriptor = checkNotNull(serviceDescriptor, "serviceDescriptor");
+      this.serviceName = serviceDescriptor.getName();
     }
 
     /**
@@ -93,7 +109,6 @@ public final class ServerServiceDefinition {
      * @param method the {@link MethodDescriptor} of this method.
      * @param handler handler for incoming calls
      */
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1774")
     public <ReqT, RespT> Builder addMethod(
         MethodDescriptor<ReqT, RespT> method, ServerCallHandler<ReqT, RespT> handler) {
       return addMethod(ServerMethodDefinition.create(
@@ -102,22 +117,52 @@ public final class ServerServiceDefinition {
     }
 
     /** Add a method to be supported by the service. */
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1774")
     public <ReqT, RespT> Builder addMethod(ServerMethodDefinition<ReqT, RespT> def) {
       MethodDescriptor<ReqT, RespT> method = def.getMethodDescriptor();
       checkArgument(
           serviceName.equals(MethodDescriptor.extractFullServiceName(method.getFullMethodName())),
           "Service name mismatch. Expected service name: '%s'. Actual method name: '%s'.",
-          this.serviceName, method.getFullMethodName());
+          serviceName, method.getFullMethodName());
       String name = method.getFullMethodName();
       checkState(!methods.containsKey(name), "Method by same name already registered: %s", name);
       methods.put(name, def);
       return this;
     }
 
-    /** Construct new ServerServiceDefinition. */
+    /**
+     * Construct new ServerServiceDefinition.
+     */
     public ServerServiceDefinition build() {
-      return new ServerServiceDefinition(serviceName, methods);
+      ServiceDescriptor serviceDescriptor = this.serviceDescriptor;
+      if (serviceDescriptor == null) {
+        List<MethodDescriptor<?, ?>> methodDescriptors
+            = new ArrayList<MethodDescriptor<?, ?>>(methods.size());
+        for (ServerMethodDefinition<?, ?> serverMethod : methods.values()) {
+          methodDescriptors.add(serverMethod.getMethodDescriptor());
+        }
+        serviceDescriptor = new ServiceDescriptor(serviceName, methodDescriptors);
+      }
+      Map<String, ServerMethodDefinition<?, ?>> tmpMethods =
+          new HashMap<String, ServerMethodDefinition<?, ?>>(methods);
+      for (MethodDescriptor<?, ?> descriptorMethod : serviceDescriptor.getMethods()) {
+        ServerMethodDefinition<?, ?> removed = tmpMethods.remove(
+            descriptorMethod.getFullMethodName());
+        if (removed == null) {
+          throw new IllegalStateException(
+              "No method bound for descriptor entry " + descriptorMethod.getFullMethodName());
+        }
+        if (removed.getMethodDescriptor() != descriptorMethod) {
+          throw new IllegalStateException(
+              "Bound method for " + descriptorMethod.getFullMethodName()
+                  + " not same instance as method in service descriptor");
+        }
+      }
+      if (tmpMethods.size() > 0) {
+        throw new IllegalStateException(
+            "No entry in descriptor matching bound method "
+                + tmpMethods.values().iterator().next().getMethodDescriptor().getFullMethodName());
+      }
+      return new ServerServiceDefinition(serviceDescriptor, methods);
     }
   }
 }

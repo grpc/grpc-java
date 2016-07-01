@@ -94,7 +94,7 @@ final class TransportSet implements WithLogId {
   private ScheduledFuture<?> reconnectTask;
 
   /**
-   * All transports that are not terminated. At the very least the value of {@link activeTransport}
+   * All transports that are not terminated. At the very least the value of {@link #activeTransport}
    * will be present, but previously used transports that still have streams or are stopping may
    * also be present.
    */
@@ -107,7 +107,7 @@ final class TransportSet implements WithLogId {
    */
   @GuardedBy("lock")
   @Nullable
-  private ManagedClientTransport pendingTransport;
+  private ConnectionClientTransport pendingTransport;
 
   private final LoadBalancer<ClientTransport> loadBalancer;
 
@@ -195,7 +195,7 @@ final class TransportSet implements WithLogId {
       nextAddressIndex = 0;
     }
 
-    ManagedClientTransport transport =
+    ConnectionClientTransport transport =
         transportFactory.newClientTransport(address, authority, userAgent);
     if (log.isLoggable(Level.FINE)) {
       log.log(Level.FINE, "[{0}] Created {1} for {2}",
@@ -207,10 +207,12 @@ final class TransportSet implements WithLogId {
   }
 
   /**
-   * Only called after all addresses attempted and failed.
+   * Only called after all addresses attempted and failed (TRANSIENT_FAILURE).
+   * @param status the causal status when the channel begins transition to
+   *     TRANSIENT_FAILURE.
    */
   @GuardedBy("lock")
-  private void scheduleBackoff(final DelayedClientTransport delayedTransport) {
+  private void scheduleBackoff(final DelayedClientTransport delayedTransport, Status status) {
     Preconditions.checkState(reconnectTask == null, "previous reconnectTask is not done");
 
     if (reconnectPolicy == null) {
@@ -222,10 +224,12 @@ final class TransportSet implements WithLogId {
       log.log(Level.FINE, "[{0}] Scheduling backoff for {1} ms",
           new Object[]{getLogId(), delayMillis});
     }
+    delayedTransport.startBackoff(status);
     Runnable endOfCurrentBackoff = new Runnable() {
       @Override
       public void run() {
         try {
+          delayedTransport.endBackoff();
           boolean shutdownDelayedTransport = false;
           synchronized (lock) {
             reconnectTask = null;
@@ -255,7 +259,7 @@ final class TransportSet implements WithLogId {
       }
     };
     reconnectTask = scheduledExecutor.schedule(
-        endOfCurrentBackoff, delayMillis, TimeUnit.MILLISECONDS);
+        new LogExceptionRunnable(endOfCurrentBackoff), delayMillis, TimeUnit.MILLISECONDS);
   }
 
   /**
@@ -265,7 +269,7 @@ final class TransportSet implements WithLogId {
    */
   final void shutdown() {
     ManagedClientTransport savedActiveTransport;
-    ManagedClientTransport savedPendingTransport;
+    ConnectionClientTransport savedPendingTransport;
     boolean runCallback = false;
     synchronized (lock) {
       if (shutdown) {
@@ -326,6 +330,9 @@ final class TransportSet implements WithLogId {
 
     @Override
     public void transportReady() {}
+
+    @Override
+    public void transportInUse(boolean inUse) {}
 
     @Override
     public void transportShutdown(Status status) {}
@@ -414,17 +421,11 @@ final class TransportSet implements WithLogId {
           closedByServer = !shutdown;
         } else if (activeTransport == delayedTransport) {
           // Continue reconnect if there are still addresses to try.
-          // Fail if all addresses have been tried and failed in a row.
           if (nextAddressIndex == 0) {
             allAddressesFailed = true;
-
             // Initiate backoff
             // Transition to TRANSIENT_FAILURE
-            DelayedClientTransport newDelayedTransport = new DelayedClientTransport(appExecutor);
-            transports.add(newDelayedTransport);
-            newDelayedTransport.start(new BaseTransportListener(newDelayedTransport));
-            activeTransport = newDelayedTransport;
-            scheduleBackoff(newDelayedTransport);
+            scheduleBackoff(delayedTransport, s);
           } else {
             // Still CONNECTING
             startNewTransport(delayedTransport);
@@ -433,8 +434,6 @@ final class TransportSet implements WithLogId {
       }
       loadBalancer.handleTransportShutdown(addressGroup, s);
       if (allAddressesFailed) {
-        delayedTransport.setTransport(new FailingClientTransport(s));
-        delayedTransport.shutdown();
         callback.onAllAddressesFailed();
       }
       if (closedByServer) {

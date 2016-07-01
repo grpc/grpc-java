@@ -34,7 +34,6 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.internal.GrpcUtil.ACCEPT_ENCODING_JOINER;
 import static io.grpc.internal.GrpcUtil.ACCEPT_ENCODING_SPLITER;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
@@ -58,9 +57,8 @@ import io.grpc.Status;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
-import java.util.Set;
 
-final class ServerCallImpl<ReqT, RespT> extends ServerCall<RespT> {
+final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private final ServerStream stream;
   private final MethodDescriptor<ReqT, RespT> method;
   private final Context.CancellableContext context;
@@ -109,16 +107,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<RespT> {
     headers.removeAll(MESSAGE_ENCODING_KEY);
     if (compressor == null) {
       compressor = Codec.Identity.NONE;
-      if (inboundHeaders.containsKey(MESSAGE_ACCEPT_ENCODING_KEY)) {
-        String acceptEncodings = inboundHeaders.get(MESSAGE_ACCEPT_ENCODING_KEY);
-        for (String acceptEncoding : ACCEPT_ENCODING_SPLITER.split(acceptEncodings)) {
-          Compressor c = compressorRegistry.lookupCompressor(acceptEncoding);
-          if (c != null) {
-            compressor = c;
-            break;
-          }
-        }
-      }
     } else {
       if (inboundHeaders.containsKey(MESSAGE_ACCEPT_ENCODING_KEY)) {
         String acceptEncodings = inboundHeaders.get(MESSAGE_ACCEPT_ENCODING_KEY);
@@ -139,9 +127,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<RespT> {
     stream.setCompressor(compressor);
 
     headers.removeAll(MESSAGE_ACCEPT_ENCODING_KEY);
-    Set<String> acceptEncodings = decompressorRegistry.getAdvertisedMessageEncodings();
-    if (!acceptEncodings.isEmpty()) {
-      headers.put(MESSAGE_ACCEPT_ENCODING_KEY, ACCEPT_ENCODING_JOINER.join(acceptEncodings));
+    String advertisedEncodings = decompressorRegistry.getRawAdvertisedMessageEncodings();
+    if (!advertisedEncodings.isEmpty()) {
+      headers.put(MESSAGE_ACCEPT_ENCODING_KEY, advertisedEncodings);
     }
 
     // Don't check if sendMessage has been called, since it requires that sendHeaders was already
@@ -206,6 +194,11 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<RespT> {
   @Override
   public Attributes attributes() {
     return stream.attributes();
+  }
+
+  @Override
+  public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
+    return method;
   }
 
   /**
