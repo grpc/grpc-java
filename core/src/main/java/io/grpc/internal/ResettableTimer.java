@@ -32,11 +32,11 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.base.Stopwatch;
 
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
@@ -48,6 +48,73 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>When a scheduled timer is cancelled or reset, it doesn't cancel the task from the scheduled
  * executor. Instead, when the task is run, it checks the current state and may schedule a new task
  * for the new expiration time.
+ *
+ * <h3>Threading considerations</h3>
+ *
+ * <p>The callback method {@link #timerExpired} is not called under any lock, which makes it
+ * possible for {@link #stop} or {@link #resetAndStart} to proceed in the middle of {@link
+ * #timerExpired}. In some cases, you may want to use {@link TimerState} to decide whether the run
+ * should proceed.
+ *
+ * <p>For example, consider we want to bookkeep the idleness of a system. If {@code onActive()} has
+ * not been called for TIMEOUT, the system goes to idle state. Here is a <strong>seemingly</strong>
+ * correct implementation:
+ *
+ * <p><pre>
+ * boolean idle;
+ *
+ * ResettableTimer idleTimer = new ResettableTimer(TIMEOUT, ...) {
+ *   void timerExpired(TimerState state) {
+ *     synchronized (mylock) {
+ *       idle = true;
+ *     }
+ *   }
+ * };
+ *
+ * void onActive() {
+ *   synchronized (mylock) {
+ *     idle = false;
+ *     idleTimer.resetAndStart();
+ *   }
+ * }
+ * </pre>
+ *
+ * <p>The pathological scenario is:
+ * <ol>
+ * <li>{@code timerExpired()} starts, but hasn't entered the synchronized block.</li>
+ * <li>{@code onActive()} enters and exits synchronized block. Since {@code timerExpired} has
+ * already started, it won't be stopped.</li>
+ * <li>{@code timerExpired()} enters synchronized block, and set idle to true.</li>
+ * </ol>
+ *
+ * <p>The end result is, the system is now in idle state despite that {@code onActive} has just been
+ * called.
+ *
+ * <p>Following is the correct implementation. {@code resetAndStart()} will make {@code
+ * state.isCancelled()} return {@code false} in the forementioned scenario, which stops {@code idle}
+ * from being unexpectedlly set.
+ *
+ * <p><pre>
+ * boolean idle;
+ *
+ * ResettableTimer idleTimer = new ResettableTimer(TIMEOUT, ...) {
+ *   void timerExpired(TimerState state) {
+ *     synchronized (mylock) {
+ *       if (state.isCancelled()) {
+ *         return;
+ *       }
+ *       idle = true;
+ *     }
+ *   }
+ * };
+ *
+ * void onActive() {
+ *   synchronized (mylock) {
+ *     idle = false;
+ *     idleTimer.resetAndStart();  // makes state.isCancelled() return true
+ *   }
+ * }
+ * </pre>
  */
 @ThreadSafe
 abstract class ResettableTimer {
@@ -56,32 +123,55 @@ abstract class ResettableTimer {
   private final Stopwatch stopwatch;
   private final Object lock = new Object();
 
-  private final Runnable runnable = new LogExceptionRunnable(new Runnable() {
-      @Override
-      public void run() {
+  private class Task implements Runnable {
+    final TimerState state = new TimerState();
+
+    @Override
+    public void run() {
+      synchronized (lock) {
+        if (!stopwatch.isRunning()) {
+          // stop() has been called
+          return;
+        }
+        long leftNanos = timeoutNanos - stopwatch.elapsed(TimeUnit.NANOSECONDS);
+        if (leftNanos > 0) {
+          currentTask = null;
+          scheduleTask(leftNanos);
+          return;
+        }
+        callbackRunning = true;
+      }
+      try {
+        // We explicitly don't run the callback under the lock, so that the callback can have its
+        // own synchronization and have the freedom to do something outside of any lock.
+        timerExpired(state);
+      } finally {
         synchronized (lock) {
-          scheduledTask = null;
-          if (!stopwatch.isRunning()) {
-            return;
-          }
-          long leftNanos = timeoutNanos - stopwatch.elapsed(TimeUnit.NANOSECONDS);
-          if (leftNanos > 0) {
-            scheduledTask = executor.schedule(runnable, leftNanos, TimeUnit.NANOSECONDS);
-            return;
+          callbackRunning = false;
+          currentTask = null;
+          if (schedulePending) {
+            schedulePending = false;
+            scheduleTask(timeoutNanos);
           }
         }
-        timerExpired();
       }
+    }
 
-      @Override
-      public String toString() {
-        return ResettableTimer.this.toString();
-      }
-    });
+    @Override
+    public String toString() {
+      return ResettableTimer.this.toString();
+    }
+  }
 
   @GuardedBy("lock")
   @Nullable
-  private ScheduledFuture<?> scheduledTask;
+  private Task currentTask;
+
+  @GuardedBy("lock")
+  private boolean callbackRunning;
+
+  @GuardedBy("lock")
+  private boolean schedulePending;
 
   protected ResettableTimer(long timeout, TimeUnit unit, ScheduledExecutorService executor,
       Stopwatch stopwatch) {
@@ -94,8 +184,11 @@ abstract class ResettableTimer {
    * Handler to run when timer expired.
    *
    * <p>Timer won't restart automatically.
+   *
+   * @param state gives the handler the chance to check whether the timer is cancelled in the middle
+   *              of the run
    */
-  abstract void timerExpired();
+  abstract void timerExpired(TimerState state);
 
   /**
    * Reset the timer and start it. {@link #timerExpired} will be run after timeout from now unless
@@ -104,8 +197,15 @@ abstract class ResettableTimer {
   final void resetAndStart() {
     synchronized (lock) {
       stopwatch.reset().start();
-      if (scheduledTask == null) {
-        scheduledTask = executor.schedule(runnable, timeoutNanos, TimeUnit.NANOSECONDS);
+      if (currentTask == null) {
+        scheduleTask(timeoutNanos);
+      } else {
+        currentTask.state.cancelled = true;
+        if (callbackRunning) {
+          // currentTask has not been cleared yet, will let Task.run() schedule the timer after it's
+          // done.
+          schedulePending = true;
+        }
       }
     }
   }
@@ -115,8 +215,34 @@ abstract class ResettableTimer {
    */
   final void stop() {
     synchronized (lock) {
-      if (scheduledTask != null) {
+      if (currentTask != null) {
         stopwatch.stop();
+        currentTask.state.cancelled = true;
+      }
+    }
+  }
+
+  @GuardedBy("lock")
+  private void scheduleTask(long nanos) {
+    checkState(currentTask == null, "task already scheduled or running");
+    currentTask = new Task();
+    executor.schedule(new LogExceptionRunnable(currentTask), nanos, TimeUnit.NANOSECONDS);
+  }
+
+  /**
+   * Holds the most up-to-date states of the timer.
+   */
+  final class TimerState {
+    @GuardedBy("lock")
+    private boolean cancelled;
+
+    /**
+     * Returns {@code true} if the current run is cancelled (either by {@link #stop} or {@link
+     * #resetAndStart}).
+     */
+    boolean isCancelled() {
+      synchronized (lock) {
+        return cancelled;
       }
     }
   }

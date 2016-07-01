@@ -32,6 +32,8 @@
 package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import com.google.common.base.Stopwatch;
 
@@ -40,6 +42,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -52,7 +55,8 @@ public class ResettableTimerTest {
   private final ResettableTimer timer = new ResettableTimer(TIMEOUT_NANOS, TimeUnit.NANOSECONDS,
       timerService.scheduledExecutorService, Stopwatch.createUnstarted(timerService.ticker)) {
       @Override
-      void timerExpired() {
+      void timerExpired(TimerState state) {
+        assertFalse(state.isCancelled());
         expireCount++;
       }
     };
@@ -103,5 +107,93 @@ public class ResettableTimerTest {
     timer.stop();
     assertEquals(1, timerService.forwardTime(TIMEOUT_NANOS * 2, TimeUnit.NANOSECONDS));
     assertEquals(0, expireCount);
+  }
+
+  @Test
+  public void resetWhileRunning() {
+    final CountDownLatch timerLatch = new CountDownLatch(1);
+    final CountDownLatch resetterLatch = new CountDownLatch(1);
+    final ResettableTimer awareTimer = new ResettableTimer(TIMEOUT_NANOS, TimeUnit.NANOSECONDS,
+        timerService.scheduledExecutorService, Stopwatch.createUnstarted(timerService.ticker)) {
+        @Override
+        void timerExpired(TimerState state) {
+          try {
+            assertFalse(state.isCancelled());
+            resetterLatch.countDown();
+            assertTrue(timerLatch.await(10, TimeUnit.SECONDS));
+            if (expireCount == 0) {
+              assertTrue(state.isCancelled());
+            } else {
+              assertFalse(state.isCancelled());
+            }
+            expireCount++;
+          } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+          }
+        }
+      };
+    new Thread() {
+      @Override
+      public void run() {
+        try {
+          assertTrue(resetterLatch.await(10, TimeUnit.SECONDS));
+          awareTimer.resetAndStart();
+          timerLatch.countDown();
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }.start();
+    awareTimer.resetAndStart();
+    assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS - 1, TimeUnit.NANOSECONDS));
+    assertEquals(0, expireCount);
+    assertEquals(1, timerService.forwardTime(1, TimeUnit.NANOSECONDS));
+    assertEquals(1, expireCount);
+
+    // The timer has been reset in the other thread
+    assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS - 1, TimeUnit.NANOSECONDS));
+    assertEquals(1, expireCount);
+    assertEquals(1, timerService.forwardTime(1, TimeUnit.NANOSECONDS));
+    assertEquals(2, expireCount);
+  }
+
+  @Test
+  public void stopWhileRunning() {
+    final CountDownLatch timerLatch = new CountDownLatch(1);
+    final CountDownLatch resetterLatch = new CountDownLatch(1);
+    final ResettableTimer awareTimer = new ResettableTimer(TIMEOUT_NANOS, TimeUnit.NANOSECONDS,
+        timerService.scheduledExecutorService, Stopwatch.createUnstarted(timerService.ticker)) {
+        @Override
+        void timerExpired(TimerState state) {
+          try {
+            assertFalse(state.isCancelled());
+            resetterLatch.countDown();
+            assertTrue(timerLatch.await(10, TimeUnit.SECONDS));
+            assertTrue(state.isCancelled());
+            expireCount++;
+          } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+          }
+        }
+      };
+    new Thread() {
+      @Override
+      public void run() {
+        try {
+          assertTrue(resetterLatch.await(10, TimeUnit.SECONDS));
+          awareTimer.stop();
+          timerLatch.countDown();
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }.start();
+    awareTimer.resetAndStart();
+    assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS - 1, TimeUnit.NANOSECONDS));
+    assertEquals(0, expireCount);
+    assertEquals(1, timerService.forwardTime(1, TimeUnit.NANOSECONDS));
+    assertEquals(1, expireCount);
+    assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS * 2, TimeUnit.NANOSECONDS));
+    assertEquals(1, expireCount);
   }
 }
