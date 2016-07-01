@@ -219,6 +219,23 @@ abstract class ResettableTimer {
   }
 
   /**
+   * Start the timer, if it has not started yet.
+   *
+   * @return {@code false} if the timer has already started
+   */
+  final boolean start() {
+    synchronized (lock) {
+      checkState(!shutdown, "already shutdown");
+      if (currentTask == null) {
+        resetAndStart();
+        return true;
+      } else {
+        return false;
+      }
+    }
+  }
+
+  /**
    * Stop the timer.
    */
   final void stop() {

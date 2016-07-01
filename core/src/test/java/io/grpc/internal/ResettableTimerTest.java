@@ -109,6 +109,22 @@ public class ResettableTimerTest {
   }
 
   @Test
+  public void startBeforeExpired() {
+    assertTrue(timer.start());
+    assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS - 1, TimeUnit.NANOSECONDS));
+
+    assertFalse(timer.start());
+    assertEquals(1, timerService.forwardTime(1, TimeUnit.NANOSECONDS));
+    assertEquals(1, expireCount);
+
+    assertTrue(timer.start());
+    assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS - 1, TimeUnit.NANOSECONDS));
+    assertEquals(1, expireCount);
+    assertEquals(1, timerService.forwardTime(1, TimeUnit.NANOSECONDS));
+    assertEquals(2, expireCount);
+  }
+
+  @Test
   public void stopBeforeExpired() {
     timer.resetAndStart();
     assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS - 1, TimeUnit.NANOSECONDS));
