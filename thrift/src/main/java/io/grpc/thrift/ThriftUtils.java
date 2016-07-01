@@ -33,6 +33,8 @@ package io.grpc.thrift;
 
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor.Marshaller;
+import io.grpc.Status;
+
 import org.apache.commons.io.IOUtils;
 import org.apache.thrift.TBase;
 import org.apache.thrift.TDeserializer;
@@ -46,8 +48,7 @@ import java.io.InputStream;
 public class ThriftUtils {
 
   /** Create a {@code Marshaller} for thrifts of the same type as {@code defaultInstance}. */
-  @SuppressWarnings("rawtypes")
-  public static <T extends TBase> Marshaller<T> marshaller(final T defaultInstance) {
+  public static <T extends TBase<T,?>> Marshaller<T> marshaller(final T defaultInstance) {
 
     return new Marshaller<T>() {
 
@@ -60,9 +61,9 @@ public class ThriftUtils {
           InputStream is = new ByteArrayInputStream(bytes);
           return is;
         } catch (TException e) {
-          e.printStackTrace();
+          throw Status.INTERNAL.withDescription("Error in serializing Thrift Message")
+              .withCause(e).asRuntimeException();
         }
-        return null;
       }
 
       @Override
@@ -75,18 +76,19 @@ public class ThriftUtils {
           deserializer.deserialize(message,bytes);
           return message;
         } catch (TException e) {
-          e.printStackTrace();
+          throw Status.INTERNAL.withDescription("Invalid Thrift Byte Sequence")
+              .withCause(e).asRuntimeException();
         } catch (IOException e) {
           // TODO Auto-generated catch block
-          e.printStackTrace();
+          throw Status.INTERNAL.withDescription("Error in reading stream to bytes")
+              .withCause(e).asRuntimeException();
         }
-        return null;
       }
     };
   }
 
   /** Produce a metadata marshaller for a Thrift type. */
-  public static <T extends TBase> Metadata.BinaryMarshaller<T> metadataMarshaller(
+  public static <T extends TBase<T,?>> Metadata.BinaryMarshaller<T> metadataMarshaller(
       final T instance) {
     return new Metadata.BinaryMarshaller<T>() {
 
@@ -97,9 +99,9 @@ public class ThriftUtils {
           TSerializer serializer = new TSerializer();
           return serializer.serialize(value);
         } catch (TException e) {
-          e.printStackTrace();
+          throw Status.INTERNAL.withDescription("Error in serializing Thrift Message")
+              .withCause(e).asRuntimeException();
         }
-        return null;
       }
 
       @Override
@@ -111,9 +113,9 @@ public class ThriftUtils {
           deserializer.deserialize(message,serialized);
           return message;
         } catch (TException e) {
-          e.printStackTrace();
+          throw Status.INTERNAL.withDescription("Invalid Thrift Byte Sequence")
+              .withCause(e).asRuntimeException();
         }
-        return null;
       }
     };
   }
