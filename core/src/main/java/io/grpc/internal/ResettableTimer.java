@@ -57,7 +57,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * #timerExpired}. In some cases, you may want to use {@link TimerState} to decide whether the run
  * should proceed.
  *
- * <p>For example, consider we want to bookkeep the idleness of a system. If {@code onActive()} has
+ * <p>For example, suppose we want to bookkeep the idleness of a system. If {@code onActive()} has
  * not been called for TIMEOUT, the system goes to idle state. Here is a <strong>seemingly</strong>
  * correct implementation:
  *
@@ -112,7 +112,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * void onActive() {
  *   synchronized (mylock) {
  *     idle = false;
- *     idleTimer.resetAndStart();  // makes state.isCancelled() return true
+ *     idleTimer.resetAndStart();  // makes state.isCancelled() true if timerExpired() has started
  *   }
  * }
  * </pre>
@@ -208,8 +208,8 @@ abstract class ResettableTimer {
       if (currentTask == null) {
         scheduleTask(timeoutNanos);
       } else {
-        currentTask.state.cancelled = true;
         if (callbackRunning) {
+          currentTask.state.cancelled = true;
           // currentTask has not been cleared yet, will let Task.run() schedule the timer after it's
           // done.
           schedulePending = true;
@@ -227,7 +227,9 @@ abstract class ResettableTimer {
         if (stopwatch.isRunning()) {
           stopwatch.stop();
         }
-        currentTask.state.cancelled = true;
+        if (callbackRunning) {
+          currentTask.state.cancelled = true;
+        }
       }
     }
   }
