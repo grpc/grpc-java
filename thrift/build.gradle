@@ -2,9 +2,6 @@ description = 'gRPC: Thrift'
 
 dependencies {
     compile project(':grpc-core'),
-            libraries.guava,
-            files('./libs/libthrift-0.9.3.jar',
-            './libs/libthrift-0.9.3-javadoc.jar',
-            './libs/commons-io-2.5.jar',
-            './libs/commons-io-2.5-javadoc.jar')
+            'org.apache.thrift:libthrift:0.9.3',
+            'commons-io:commons-io:2.5'
 }
