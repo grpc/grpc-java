@@ -107,6 +107,15 @@ public class ResettableTimerTest {
     timer.stop();
     assertEquals(1, timerService.forwardTime(TIMEOUT_NANOS * 2, TimeUnit.NANOSECONDS));
     assertEquals(0, expireCount);
+
+    // Check that it's still usable
+    timer.resetAndStart();
+    assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS - 1, TimeUnit.NANOSECONDS));
+    assertEquals(0, expireCount);
+    assertEquals(1, timerService.forwardTime(1, TimeUnit.NANOSECONDS));
+    assertEquals(1, expireCount);
+    assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS * 2, TimeUnit.NANOSECONDS));
+    assertEquals(1, expireCount);
   }
 
   @Test

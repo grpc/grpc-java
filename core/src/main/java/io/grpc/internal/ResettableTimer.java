@@ -218,6 +218,7 @@ abstract class ResettableTimer {
       if (currentTask != null) {
         stopwatch.stop();
         currentTask.state.cancelled = true;
+        currentTask = null;
       }
     }
   }
