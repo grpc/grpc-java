@@ -72,6 +72,10 @@ public class ResettableTimerTest {
   public void unstarted() {
     assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS * 2, TimeUnit.NANOSECONDS));
     assertEquals(0, expireCount);
+
+    timer.stop();
+    assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS * 2, TimeUnit.NANOSECONDS));
+    assertEquals(0, expireCount);
   }
 
   @Test
@@ -81,6 +85,10 @@ public class ResettableTimerTest {
     assertEquals(0, expireCount);
     assertEquals(1, timerService.forwardTime(1, TimeUnit.NANOSECONDS));
     assertEquals(1, expireCount);
+    assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS * 2, TimeUnit.NANOSECONDS));
+    assertEquals(1, expireCount);
+
+    timer.stop();
     assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS * 2, TimeUnit.NANOSECONDS));
     assertEquals(1, expireCount);
   }
@@ -107,6 +115,7 @@ public class ResettableTimerTest {
     timer.stop();
     assertEquals(1, timerService.forwardTime(TIMEOUT_NANOS * 2, TimeUnit.NANOSECONDS));
     assertEquals(0, expireCount);
+    assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS * 2, TimeUnit.NANOSECONDS));
 
     // Check that it's still usable
     timer.resetAndStart();
@@ -116,6 +125,16 @@ public class ResettableTimerTest {
     assertEquals(1, expireCount);
     assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS * 2, TimeUnit.NANOSECONDS));
     assertEquals(1, expireCount);
+  }
+
+  @Test
+  public void shutdownBeforeExpired() {
+    timer.resetAndStart();
+    assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS - 1, TimeUnit.NANOSECONDS));
+    timer.shutdown();
+    // The task is removed from the scheduled executor
+    assertEquals(0, timerService.forwardTime(TIMEOUT_NANOS * 2, TimeUnit.NANOSECONDS));
+    assertEquals(0, expireCount);
   }
 
   @Test

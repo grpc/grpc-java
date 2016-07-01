@@ -37,6 +37,7 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.base.Stopwatch;
 
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
@@ -125,6 +126,7 @@ abstract class ResettableTimer {
 
   private class Task implements Runnable {
     final TimerState state = new TimerState();
+    ScheduledFuture<?> handle;
 
     @Override
     public void run() {
@@ -173,6 +175,9 @@ abstract class ResettableTimer {
   @GuardedBy("lock")
   private boolean schedulePending;
 
+  @GuardedBy("lock")
+  private boolean shutdown;
+
   protected ResettableTimer(long timeout, TimeUnit unit, ScheduledExecutorService executor,
       Stopwatch stopwatch) {
     this.timeoutNanos = unit.toNanos(timeout);
@@ -187,6 +192,7 @@ abstract class ResettableTimer {
    *
    * @param state gives the handler the chance to check whether the timer is cancelled in the middle
    *              of the run
+
    */
   abstract void timerExpired(TimerState state);
 
@@ -196,6 +202,7 @@ abstract class ResettableTimer {
    */
   final void resetAndStart() {
     synchronized (lock) {
+      checkState(!shutdown, "already shutdown");
       stopwatch.reset().start();
       if (currentTask == null) {
         scheduleTask(timeoutNanos);
@@ -223,11 +230,28 @@ abstract class ResettableTimer {
     }
   }
 
+  /**
+   * Shutdown this timer permanently. {@link #resetAndStart} won't be allowed after this.
+   */
+  final void shutdown() {
+    synchronized (lock) {
+      if (shutdown) {
+        return;
+      }
+      shutdown = true;
+      if (currentTask != null) {
+        currentTask.handle.cancel(false);
+        stop();
+      }
+    }
+  }
+
   @GuardedBy("lock")
   private void scheduleTask(long nanos) {
     checkState(currentTask == null, "task already scheduled or running");
     currentTask = new Task();
-    executor.schedule(new LogExceptionRunnable(currentTask), nanos, TimeUnit.NANOSECONDS);
+    currentTask.handle = executor.schedule(
+        new LogExceptionRunnable(currentTask), nanos, TimeUnit.NANOSECONDS);
   }
 
   /**
