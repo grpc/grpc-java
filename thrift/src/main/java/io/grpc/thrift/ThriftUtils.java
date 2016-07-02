@@ -34,10 +34,7 @@ package io.grpc.thrift;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.Status;
-
-import org.apache.commons.io.IOUtils;
 import org.apache.thrift.TBase;
-import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 
@@ -55,34 +52,20 @@ public class ThriftUtils {
       @Override
       public InputStream stream(T value) {
         // TODO Auto-generated method stub
-        try {
-          TSerializer serializer = new TSerializer();
-          byte[] bytes = serializer.serialize(value);
-          InputStream is = new ByteArrayInputStream(bytes);
-          return is;
-        } catch (TException e) {
-          throw Status.INTERNAL.withDescription("Error in serializing Thrift Message")
-              .withCause(e).asRuntimeException();
-        }
+        return new ThriftInputStream(value);
       }
 
       @Override
       public T parse(InputStream stream) {
         // TODO Auto-generated method stub
-        try {
-          byte[] bytes = IOUtils.toByteArray(stream);
-          TDeserializer deserializer = new TDeserializer();
-          T message = null;
-          deserializer.deserialize(message,bytes);
+        if (stream instanceof ThriftInputStream) {
+          ThriftInputStream thriftStream = (ThriftInputStream) stream;
+          @SuppressWarnings("unchecked")
+          T message = (T) thriftStream.message();
           return message;
-        } catch (TException e) {
-          throw Status.INTERNAL.withDescription("Invalid Thrift Byte Sequence")
-              .withCause(e).asRuntimeException();
-        } catch (IOException e) {
-          // TODO Auto-generated catch block
-          throw Status.INTERNAL.withDescription("Error in reading stream to bytes")
-              .withCause(e).asRuntimeException();
         }
+        throw Status.INTERNAL.withDescription("Invalid Stream")
+            .asRuntimeException();
       }
     };
   }
@@ -108,11 +91,15 @@ public class ThriftUtils {
       public T parseBytes(byte[] serialized) {
         // TODO Auto-generated method stub
         try {
-          TDeserializer deserializer = new TDeserializer();
-          T message = null;
-          deserializer.deserialize(message,serialized);
+          // Inefficient involves conversion of byte[] to InputStream and
+          // reconversion of InputStream to byte[]
+          InputStream is = new ByteArrayInputStream(serialized);
+          ThriftInputStream thriftStream = (ThriftInputStream) is;
+          @SuppressWarnings("unchecked")
+          T message = (T) thriftStream.message();
+          is.close();
           return message;
-        } catch (TException e) {
+        } catch (IOException e) {
           throw Status.INTERNAL.withDescription("Invalid Thrift Byte Sequence")
               .withCause(e).asRuntimeException();
         }
