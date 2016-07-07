@@ -34,6 +34,7 @@ package io.grpc.netty;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
+import static org.mockito.Matchers.isA;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -118,7 +119,7 @@ public class WriteQueueTest {
     WriteQueue queue = new WriteQueue(channel);
     queue.enqueue(new CuteCommand(), true);
 
-    verify(channel).write(any(QueuedCommand.class), eq(promise));
+    verify(channel).write(isA(QueuedCommand.class), eq(promise));
     verify(channel).flush();
   }
 
@@ -130,7 +131,7 @@ public class WriteQueueTest {
     }
     queue.scheduleFlush();
 
-    verify(channel, times(5)).write(any(QueuedCommand.class), eq(promise));
+    verify(channel, times(5)).write(isA(QueuedCommand.class), eq(promise));
     verify(channel).flush();
   }
 
@@ -143,7 +144,7 @@ public class WriteQueueTest {
     }
     queue.scheduleFlush();
 
-    verify(channel, times(writes)).write(any(CuteCommand.class), eq(promise));
+    verify(channel, times(writes)).write(isA(QueuedCommand.class), eq(promise));
     verify(channel, times(2)).flush();
   }
 
@@ -200,7 +201,7 @@ public class WriteQueueTest {
     flusher.join();
 
     exHandler.checkException();
-    verify(channel, times(writes)).write(any(CuteCommand.class), eq(promise));
+    verify(channel, times(writes)).write(isA(CuteCommand.class), eq(promise));
   }
 
   static class CuteCommand extends WriteQueue.AbstractQueuedCommand {
