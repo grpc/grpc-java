@@ -57,7 +57,7 @@ public final class FakeClock {
   public final ScheduledExecutorService scheduledExecutorService = new ScheduledExecutorImpl();
   final Ticker ticker = new Ticker() {
       @Override public long read() {
-        return TimeUnit.MILLISECONDS.toNanos(currentTimeNanos);
+        return currentTimeNanos;
       }
     };
 
