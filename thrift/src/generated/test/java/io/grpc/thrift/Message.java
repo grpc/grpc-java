@@ -41,7 +41,6 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
   private static final org.apache.thrift.protocol.TField I_FIELD_DESC = new org.apache.thrift.protocol.TField("i", org.apache.thrift.protocol.TType.I32, (short)1);
   private static final org.apache.thrift.protocol.TField B_FIELD_DESC = new org.apache.thrift.protocol.TField("b", org.apache.thrift.protocol.TType.BOOL, (short)2);
   private static final org.apache.thrift.protocol.TField S_FIELD_DESC = new org.apache.thrift.protocol.TField("s", org.apache.thrift.protocol.TType.STRING, (short)3);
-  private static final org.apache.thrift.protocol.TField BS_FIELD_DESC = new org.apache.thrift.protocol.TField("bs", org.apache.thrift.protocol.TType.BYTE, (short)4);
 
   private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
   static {
@@ -52,14 +51,12 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
   public int i; // required
   public boolean b; // required
   public String s; // required
-  public byte bs; // required
 
   /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
   public enum _Fields implements org.apache.thrift.TFieldIdEnum {
     I((short)1, "i"),
     B((short)2, "b"),
-    S((short)3, "s"),
-    BS((short)4, "bs");
+    S((short)3, "s");
 
     private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -80,8 +77,6 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
           return B;
         case 3: // S
           return S;
-        case 4: // BS
-          return BS;
         default:
           return null;
       }
@@ -124,7 +119,6 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
   // isset id assignments
   private static final int __I_ISSET_ID = 0;
   private static final int __B_ISSET_ID = 1;
-  private static final int __BS_ISSET_ID = 2;
   private byte __isset_bitfield = 0;
   public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
   static {
@@ -135,8 +129,6 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
         new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.BOOL)));
     tmpMap.put(_Fields.S, new org.apache.thrift.meta_data.FieldMetaData("s", org.apache.thrift.TFieldRequirementType.DEFAULT, 
         new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
-    tmpMap.put(_Fields.BS, new org.apache.thrift.meta_data.FieldMetaData("bs", org.apache.thrift.TFieldRequirementType.DEFAULT, 
-        new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.BYTE)));
     metaDataMap = Collections.unmodifiableMap(tmpMap);
     org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(Message.class, metaDataMap);
   }
@@ -147,8 +139,7 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
   public Message(
     int i,
     boolean b,
-    String s,
-    byte bs)
+    String s)
   {
     this();
     this.i = i;
@@ -156,8 +147,6 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
     this.b = b;
     setBIsSet(true);
     this.s = s;
-    this.bs = bs;
-    setBsIsSet(true);
   }
 
   /**
@@ -170,7 +159,6 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
     if (other.isSetS()) {
       this.s = other.s;
     }
-    this.bs = other.bs;
   }
 
   public Message deepCopy() {
@@ -184,8 +172,6 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
     setBIsSet(false);
     this.b = false;
     this.s = null;
-    setBsIsSet(false);
-    this.bs = 0;
   }
 
   public int getI() {
@@ -258,29 +244,6 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
     }
   }
 
-  public byte getBs() {
-    return this.bs;
-  }
-
-  public Message setBs(byte bs) {
-    this.bs = bs;
-    setBsIsSet(true);
-    return this;
-  }
-
-  public void unsetBs() {
-    __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __BS_ISSET_ID);
-  }
-
-  /** Returns true if field bs is set (has been assigned a value) and false otherwise */
-  public boolean isSetBs() {
-    return EncodingUtils.testBit(__isset_bitfield, __BS_ISSET_ID);
-  }
-
-  public void setBsIsSet(boolean value) {
-    __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __BS_ISSET_ID, value);
-  }
-
   public void setFieldValue(_Fields field, Object value) {
     switch (field) {
     case I:
@@ -307,14 +270,6 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
       }
       break;
 
-    case BS:
-      if (value == null) {
-        unsetBs();
-      } else {
-        setBs((Byte)value);
-      }
-      break;
-
     }
   }
 
@@ -328,9 +283,6 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
 
     case S:
       return getS();
-
-    case BS:
-      return getBs();
 
     }
     throw new IllegalStateException();
@@ -349,8 +301,6 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
       return isSetB();
     case S:
       return isSetS();
-    case BS:
-      return isSetBs();
     }
     throw new IllegalStateException();
   }
@@ -395,15 +345,6 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
         return false;
     }
 
-    boolean this_present_bs = true;
-    boolean that_present_bs = true;
-    if (this_present_bs || that_present_bs) {
-      if (!(this_present_bs && that_present_bs))
-        return false;
-      if (this.bs != that.bs)
-        return false;
-    }
-
     return true;
   }
 
@@ -425,11 +366,6 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
     list.add(present_s);
     if (present_s)
       list.add(s);
-
-    boolean present_bs = true;
-    list.add(present_bs);
-    if (present_bs)
-      list.add(bs);
 
     return list.hashCode();
   }
@@ -472,16 +408,6 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
         return lastComparison;
       }
     }
-    lastComparison = Boolean.valueOf(isSetBs()).compareTo(other.isSetBs());
-    if (lastComparison != 0) {
-      return lastComparison;
-    }
-    if (isSetBs()) {
-      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.bs, other.bs);
-      if (lastComparison != 0) {
-        return lastComparison;
-      }
-    }
     return 0;
   }
 
@@ -516,10 +442,6 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
     } else {
       sb.append(this.s);
     }
-    first = false;
-    if (!first) sb.append(", ");
-    sb.append("bs:");
-    sb.append(this.bs);
     first = false;
     sb.append(")");
     return sb.toString();
@@ -590,14 +512,6 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
-          case 4: // BS
-            if (schemeField.type == org.apache.thrift.protocol.TType.BYTE) {
-              struct.bs = iprot.readByte();
-              struct.setBsIsSet(true);
-            } else { 
-              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
-            }
-            break;
           default:
             org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
         }
@@ -624,9 +538,6 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
         oprot.writeString(struct.s);
         oprot.writeFieldEnd();
       }
-      oprot.writeFieldBegin(BS_FIELD_DESC);
-      oprot.writeByte(struct.bs);
-      oprot.writeFieldEnd();
       oprot.writeFieldStop();
       oprot.writeStructEnd();
     }
@@ -654,10 +565,7 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
       if (struct.isSetS()) {
         optionals.set(2);
       }
-      if (struct.isSetBs()) {
-        optionals.set(3);
-      }
-      oprot.writeBitSet(optionals, 4);
+      oprot.writeBitSet(optionals, 3);
       if (struct.isSetI()) {
         oprot.writeI32(struct.i);
       }
@@ -667,15 +575,12 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
       if (struct.isSetS()) {
         oprot.writeString(struct.s);
       }
-      if (struct.isSetBs()) {
-        oprot.writeByte(struct.bs);
-      }
     }
 
     @Override
     public void read(org.apache.thrift.protocol.TProtocol prot, Message struct) throws org.apache.thrift.TException {
       TTupleProtocol iprot = (TTupleProtocol) prot;
-      BitSet incoming = iprot.readBitSet(4);
+      BitSet incoming = iprot.readBitSet(3);
       if (incoming.get(0)) {
         struct.i = iprot.readI32();
         struct.setIIsSet(true);
@@ -687,10 +592,6 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
       if (incoming.get(2)) {
         struct.s = iprot.readString();
         struct.setSIsSet(true);
-      }
-      if (incoming.get(3)) {
-        struct.bs = iprot.readByte();
-        struct.setBsIsSet(true);
       }
     }
   }
