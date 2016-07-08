@@ -130,6 +130,24 @@ subprojects {
           }
         }
 
+        configureThriftCompilation = {
+          String generatedSourcePath = "${projectDir}/src/generated"
+          project.sourceSets {
+            main {
+              java {
+                srcDir "${generatedSourcePath}/main/java"
+                srcDir "${generatedSourcePath}/main/grpc"
+              }
+            }
+            test {
+              java {
+                srcDir "${generatedSourcePath}/test/java"
+                srcDir "${generatedSourcePath}/test/grpc"
+              }
+            }
+          }
+        }
+
         def epoll_suffix = "";
         if (osdetector.classifier in ["linux-x86_64"]) {
             // The native code is only pre-compiled on certain platforms.
@@ -282,7 +300,7 @@ subprojects {
             }
         }
         if (!(project.name in
-            ["grpc-stub", "grpc-protobuf", "grpc-protobuf-lite", "grpc-protobuf-nano"])) {
+            ["grpc-stub", "grpc-protobuf", "grpc-protobuf-lite", "grpc-protobuf-nano", "grpc-thrift"])) {
           def core = pom.dependencies.find {dep -> dep.artifactId == 'grpc-core'}
           if (core != null) {
             // Depend on specific version of grpc-core because internal package is unstable

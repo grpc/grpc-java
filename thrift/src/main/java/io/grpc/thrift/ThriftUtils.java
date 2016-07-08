@@ -34,7 +34,9 @@ package io.grpc.thrift;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.Status;
+import org.apache.commons.io.IOUtils;
 import org.apache.thrift.TBase;
+import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 
@@ -45,34 +47,47 @@ import java.io.InputStream;
 public class ThriftUtils {
 
   /** Create a {@code Marshaller} for thrifts of the same type as {@code defaultInstance}. */
-  public static <T extends TBase<T,?>> Marshaller<T> marshaller(final T defaultInstance) {
+  public static <T extends TBase<T,?>> Marshaller<T> marshaller(final MessageFactory<T> factory) {
 
     return new Marshaller<T>() {
 
       @Override
       public InputStream stream(T value) {
         // TODO Auto-generated method stub
-        return new ThriftInputStream(value);
+        try {
+          TSerializer serializer = new TSerializer();
+          byte[] bytes = serializer.serialize(value);
+          InputStream is = new ByteArrayInputStream(bytes);
+          return is;
+        } catch (TException e) {
+          throw Status.INTERNAL.withDescription("failed to serialize message")
+              .withCause(e).asRuntimeException();
+        }
       }
 
       @Override
       public T parse(InputStream stream) {
         // TODO Auto-generated method stub
-        if (stream instanceof ThriftInputStream) {
-          ThriftInputStream thriftStream = (ThriftInputStream) stream;
-          @SuppressWarnings("unchecked")
-          T message = (T) thriftStream.message();
+        try {
+          byte[] bytes = IOUtils.toByteArray(stream);
+          TDeserializer deserializer = new TDeserializer();
+          T message = factory.newInstance();
+          deserializer.deserialize(message, bytes);
           return message;
+        } catch (TException e) {
+          throw Status.INTERNAL.withDescription("Invalid Stream")
+              .withCause(e).asRuntimeException();
+        } catch (IOException e) {
+          throw Status.INTERNAL.withDescription("failed to read stream")
+              .withCause(e).asRuntimeException();
         }
-        throw Status.INTERNAL.withDescription("Invalid Stream")
-            .asRuntimeException();
       }
     };
   }
 
   /** Produce a metadata marshaller for a Thrift type. */
   public static <T extends TBase<T,?>> Metadata.BinaryMarshaller<T> metadataMarshaller(
-      final T instance) {
+      final MessageFactory<T> factory) {
     return new Metadata.BinaryMarshaller<T>() {
 
       @Override
@@ -91,16 +106,12 @@ public class ThriftUtils {
       public T parseBytes(byte[] serialized) {
         // TODO Auto-generated method stub
         try {
-          // Inefficient involves conversion of byte[] to InputStream and
-          // reconversion of InputStream to byte[]
-          InputStream is = new ByteArrayInputStream(serialized);
-          ThriftInputStream thriftStream = (ThriftInputStream) is;
-          @SuppressWarnings("unchecked")
-          T message = (T) thriftStream.message();
-          is.close();
+          TDeserializer deserializer = new TDeserializer();
+          T message = factory.newInstance();
+          deserializer.deserialize(message, serialized);
           return message;
-        } catch (IOException e) {
-          throw Status.INTERNAL.withDescription("Invalid Thrift Byte Sequence")
+        } catch (TException e) {
+          throw Status.INTERNAL.withDescription("Invalid thrift Byte Sequence")
               .withCause(e).asRuntimeException();
         }
       }

@@ -5,3 +5,10 @@ dependencies {
             'org.apache.thrift:libthrift:0.9.3',
             'commons-io:commons-io:2.5'
 }
+
+configureThriftCompilation()
+idea {
+    module {
+        sourceDirs += file("${projectDir}/src/generated/test/java");
+    }
+}
