@@ -29,22 +29,62 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.netty;
+package io.grpc.internal;
 
-import io.grpc.Status;
+import java.util.HashSet;
+
+import javax.annotation.concurrent.GuardedBy;
 
 /**
- * A command to trigger close and close all streams. It is buffered differently than normal close
- * and also includes reason for closure.
+ * Aggregates the in-use state of a set of objects.
  */
-class ForcefulCloseCommand extends WriteQueue.AbstractQueuedCommand {
-  private final Status status;
+abstract class InUseStateAggregator<T> {
 
-  public ForcefulCloseCommand(Status status) {
-    this.status = status;
+  @GuardedBy("getLock()")
+  private final HashSet<T> inUseObjects = new HashSet<T>();
+
+  /**
+   * Update the in-use state of an object. Initially no object is in use.
+   */
+  final void updateObjectInUse(T object, boolean inUse) {
+    synchronized (getLock()) {
+      int origSize = inUseObjects.size();
+      if (inUse) {
+        inUseObjects.add(object);
+        if (origSize == 0) {
+          handleInUse();
+        }
+      } else {
+        boolean removed = inUseObjects.remove(object);
+        if (removed && origSize == 1) {
+          handleNotInUse();
+        }
+      }
+    }
   }
 
-  public Status getStatus() {
-    return status;
+  final boolean isInUse() {
+    synchronized (getLock()) {
+      return !inUseObjects.isEmpty();
+    }
   }
+
+  abstract Object getLock();
+
+  /**
+   * Called when the aggregated in-use state has changed to true, which means at least one object is
+   * in use.
+   *
+   * <p>This method is called under the lock returned by {@link #getLock}.
+   */
+  @GuardedBy("getLock()")
+  abstract void handleInUse();
+
+  /**
+   * Called when the aggregated in-use state has changed to false, which means no object is in use.
+   *
+   * <p>This method is called under the lock returned by {@link #getLock}.
+   */
+  @GuardedBy("getLock()")
+  abstract void handleNotInUse();
 }

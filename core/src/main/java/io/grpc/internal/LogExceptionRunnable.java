@@ -59,4 +59,9 @@ public final class LogExceptionRunnable implements Runnable {
       throw t instanceof RuntimeException ? (RuntimeException) t : new RuntimeException(t);
     }
   }
+
+  @Override
+  public String toString() {
+    return "LogExceptionRunnable(" + task + ")";
+  }
 }
