@@ -33,5 +33,5 @@ struct Message {
 	1:i32 i,
 	2:bool b,
 	3:string s,
-	4:byte[] bs
+	4:list<i32> l
 }

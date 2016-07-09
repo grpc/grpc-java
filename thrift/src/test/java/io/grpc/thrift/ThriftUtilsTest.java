@@ -46,6 +46,8 @@ import org.junit.runners.JUnit4;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Collections;
 
 /** Unit tests for {@link ThriftUtils}. */
 @RunWith(JUnit4.class)
@@ -82,5 +84,15 @@ public class ThriftUtilsTest {
       assertEquals(Status.Code.INTERNAL, ex.getStatus().getCode());
       assertTrue(ex.getCause() instanceof TException);
     }
+  }
+  
+  @Test
+  public void testLarge() throws Exception {
+    Message m = new Message();
+    // list size 640 MB
+    m.l = new ArrayList<Integer>(Collections.nCopies(20 * 1024 * 1024, 1000000007));
+    Message m2 = marshaller.parse(marshaller.stream(m));
+    assertNotSame(m, m2);
+    assertEquals(m.l.size(), m2.l.size());
   }
 }
