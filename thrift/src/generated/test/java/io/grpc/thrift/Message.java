@@ -41,6 +41,7 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
   private static final org.apache.thrift.protocol.TField I_FIELD_DESC = new org.apache.thrift.protocol.TField("i", org.apache.thrift.protocol.TType.I32, (short)1);
   private static final org.apache.thrift.protocol.TField B_FIELD_DESC = new org.apache.thrift.protocol.TField("b", org.apache.thrift.protocol.TType.BOOL, (short)2);
   private static final org.apache.thrift.protocol.TField S_FIELD_DESC = new org.apache.thrift.protocol.TField("s", org.apache.thrift.protocol.TType.STRING, (short)3);
+  private static final org.apache.thrift.protocol.TField L_FIELD_DESC = new org.apache.thrift.protocol.TField("l", org.apache.thrift.protocol.TType.LIST, (short)4);
 
   private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
   static {
@@ -51,12 +52,14 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
   public int i; // required
   public boolean b; // required
   public String s; // required
+  public List<Integer> l; // required
 
   /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
   public enum _Fields implements org.apache.thrift.TFieldIdEnum {
     I((short)1, "i"),
     B((short)2, "b"),
-    S((short)3, "s");
+    S((short)3, "s"),
+    L((short)4, "l");
 
     private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -77,6 +80,8 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
           return B;
         case 3: // S
           return S;
+        case 4: // L
+          return L;
         default:
           return null;
       }
@@ -129,6 +134,9 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
         new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.BOOL)));
     tmpMap.put(_Fields.S, new org.apache.thrift.meta_data.FieldMetaData("s", org.apache.thrift.TFieldRequirementType.DEFAULT, 
         new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
+    tmpMap.put(_Fields.L, new org.apache.thrift.meta_data.FieldMetaData("l", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+        new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST, 
+            new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I32))));
     metaDataMap = Collections.unmodifiableMap(tmpMap);
     org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(Message.class, metaDataMap);
   }
@@ -139,7 +147,8 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
   public Message(
     int i,
     boolean b,
-    String s)
+    String s,
+    List<Integer> l)
   {
     this();
     this.i = i;
@@ -147,6 +156,7 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
     this.b = b;
     setBIsSet(true);
     this.s = s;
+    this.l = l;
   }
 
   /**
@@ -158,6 +168,10 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
     this.b = other.b;
     if (other.isSetS()) {
       this.s = other.s;
+    }
+    if (other.isSetL()) {
+      List<Integer> __this__l = new ArrayList<Integer>(other.l);
+      this.l = __this__l;
     }
   }
 
@@ -172,6 +186,7 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
     setBIsSet(false);
     this.b = false;
     this.s = null;
+    this.l = null;
   }
 
   public int getI() {
@@ -244,6 +259,45 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
     }
   }
 
+  public int getLSize() {
+    return (this.l == null) ? 0 : this.l.size();
+  }
+
+  public java.util.Iterator<Integer> getLIterator() {
+    return (this.l == null) ? null : this.l.iterator();
+  }
+
+  public void addToL(int elem) {
+    if (this.l == null) {
+      this.l = new ArrayList<Integer>();
+    }
+    this.l.add(elem);
+  }
+
+  public List<Integer> getL() {
+    return this.l;
+  }
+
+  public Message setL(List<Integer> l) {
+    this.l = l;
+    return this;
+  }
+
+  public void unsetL() {
+    this.l = null;
+  }
+
+  /** Returns true if field l is set (has been assigned a value) and false otherwise */
+  public boolean isSetL() {
+    return this.l != null;
+  }
+
+  public void setLIsSet(boolean value) {
+    if (!value) {
+      this.l = null;
+    }
+  }
+
   public void setFieldValue(_Fields field, Object value) {
     switch (field) {
     case I:
@@ -270,6 +324,14 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
       }
       break;
 
+    case L:
+      if (value == null) {
+        unsetL();
+      } else {
+        setL((List<Integer>)value);
+      }
+      break;
+
     }
   }
 
@@ -283,6 +345,9 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
 
     case S:
       return getS();
+
+    case L:
+      return getL();
 
     }
     throw new IllegalStateException();
@@ -301,6 +366,8 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
       return isSetB();
     case S:
       return isSetS();
+    case L:
+      return isSetL();
     }
     throw new IllegalStateException();
   }
@@ -345,6 +412,15 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
         return false;
     }
 
+    boolean this_present_l = true && this.isSetL();
+    boolean that_present_l = true && that.isSetL();
+    if (this_present_l || that_present_l) {
+      if (!(this_present_l && that_present_l))
+        return false;
+      if (!this.l.equals(that.l))
+        return false;
+    }
+
     return true;
   }
 
@@ -366,6 +442,11 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
     list.add(present_s);
     if (present_s)
       list.add(s);
+
+    boolean present_l = true && (isSetL());
+    list.add(present_l);
+    if (present_l)
+      list.add(l);
 
     return list.hashCode();
   }
@@ -408,6 +489,16 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
         return lastComparison;
       }
     }
+    lastComparison = Boolean.valueOf(isSetL()).compareTo(other.isSetL());
+    if (lastComparison != 0) {
+      return lastComparison;
+    }
+    if (isSetL()) {
+      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.l, other.l);
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+    }
     return 0;
   }
 
@@ -441,6 +532,14 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
       sb.append("null");
     } else {
       sb.append(this.s);
+    }
+    first = false;
+    if (!first) sb.append(", ");
+    sb.append("l:");
+    if (this.l == null) {
+      sb.append("null");
+    } else {
+      sb.append(this.l);
     }
     first = false;
     sb.append(")");
@@ -512,6 +611,24 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
+          case 4: // L
+            if (schemeField.type == org.apache.thrift.protocol.TType.LIST) {
+              {
+                org.apache.thrift.protocol.TList _list0 = iprot.readListBegin();
+                struct.l = new ArrayList<Integer>(_list0.size);
+                int _elem1;
+                for (int _i2 = 0; _i2 < _list0.size; ++_i2)
+                {
+                  _elem1 = iprot.readI32();
+                  struct.l.add(_elem1);
+                }
+                iprot.readListEnd();
+              }
+              struct.setLIsSet(true);
+            } else { 
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+            }
+            break;
           default:
             org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
         }
@@ -536,6 +653,18 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
       if (struct.s != null) {
         oprot.writeFieldBegin(S_FIELD_DESC);
         oprot.writeString(struct.s);
+        oprot.writeFieldEnd();
+      }
+      if (struct.l != null) {
+        oprot.writeFieldBegin(L_FIELD_DESC);
+        {
+          oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.I32, struct.l.size()));
+          for (int _iter3 : struct.l)
+          {
+            oprot.writeI32(_iter3);
+          }
+          oprot.writeListEnd();
+        }
         oprot.writeFieldEnd();
       }
       oprot.writeFieldStop();
@@ -565,7 +694,10 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
       if (struct.isSetS()) {
         optionals.set(2);
       }
-      oprot.writeBitSet(optionals, 3);
+      if (struct.isSetL()) {
+        optionals.set(3);
+      }
+      oprot.writeBitSet(optionals, 4);
       if (struct.isSetI()) {
         oprot.writeI32(struct.i);
       }
@@ -575,12 +707,21 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
       if (struct.isSetS()) {
         oprot.writeString(struct.s);
       }
+      if (struct.isSetL()) {
+        {
+          oprot.writeI32(struct.l.size());
+          for (int _iter4 : struct.l)
+          {
+            oprot.writeI32(_iter4);
+          }
+        }
+      }
     }
 
     @Override
     public void read(org.apache.thrift.protocol.TProtocol prot, Message struct) throws org.apache.thrift.TException {
       TTupleProtocol iprot = (TTupleProtocol) prot;
-      BitSet incoming = iprot.readBitSet(3);
+      BitSet incoming = iprot.readBitSet(4);
       if (incoming.get(0)) {
         struct.i = iprot.readI32();
         struct.setIIsSet(true);
@@ -592,6 +733,19 @@ public class Message implements org.apache.thrift.TBase<Message, Message._Fields
       if (incoming.get(2)) {
         struct.s = iprot.readString();
         struct.setSIsSet(true);
+      }
+      if (incoming.get(3)) {
+        {
+          org.apache.thrift.protocol.TList _list5 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.I32, iprot.readI32());
+          struct.l = new ArrayList<Integer>(_list5.size);
+          int _elem6;
+          for (int _i7 = 0; _i7 < _list5.size; ++_i7)
+          {
+            _elem6 = iprot.readI32();
+            struct.l.add(_elem6);
+          }
+        }
+        struct.setLIsSet(true);
       }
     }
   }
