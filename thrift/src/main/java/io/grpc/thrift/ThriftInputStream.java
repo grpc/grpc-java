@@ -48,18 +48,17 @@ import java.io.OutputStream;
 import javax.annotation.Nullable;
 
 // InputStream for Thrift
-public class ThriftInputStream extends InputStream implements Drainable, KnownLength {
+public final class ThriftInputStream extends InputStream implements Drainable, KnownLength {
 
   // ThriftInput stream is initialized with a *message* , *serializer*
   // *partial* is initially null
   @Nullable private TBase<?,?> message;
   @Nullable private ByteArrayInputStream partial;
-  TSerializer serializer;
+  private final TSerializer serializer = new TSerializer();
 
   // initialize message with @param message
   public ThriftInputStream(TBase<?,?> message) {
     this.message = message;
-    serializer = new TSerializer();
   }
 
   @Override
@@ -73,7 +72,7 @@ public class ThriftInputStream extends InputStream implements Drainable, KnownLe
         target.write(bytes);
         message = null;
       } catch (TException e) {
-        Status.INTERNAL.withDescription("failed to serialize thrift message")
+        throw Status.INTERNAL.withDescription("failed to serialize thrift message")
             .withCause(e).asRuntimeException();
       }
     } else if (partial != null) {
@@ -93,7 +92,7 @@ public class ThriftInputStream extends InputStream implements Drainable, KnownLe
         partial = new ByteArrayInputStream(serializer.serialize(message));
         message = null;
       } catch (TException e) {
-        Status.INTERNAL.withDescription("failed to serialize thrift message")
+        throw Status.INTERNAL.withDescription("failed to serialize thrift message")
             .withCause(e).asRuntimeException();
       }
     }

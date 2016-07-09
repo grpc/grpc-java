@@ -43,7 +43,7 @@ import org.apache.thrift.TSerializer;
 import java.io.IOException;
 import java.io.InputStream;
 
-public class ThriftUtils {
+public final class ThriftUtils {
 
   /** Create a {@code Marshaller} for thrifts of the same type as {@code defaultInstance}. */
   public static <T extends TBase<T,?>> Marshaller<T> marshaller(final MessageFactory<T> factory) {

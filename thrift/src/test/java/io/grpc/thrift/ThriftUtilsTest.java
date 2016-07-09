@@ -67,11 +67,8 @@ public class ThriftUtilsTest {
     m.b = true;
     m.s = "string";
     Message m2 = marshaller.parse(marshaller.stream(m));
-    assertNotSame(m,m2);
-    assertEquals(2,m2.i);
-    assertEquals(true, m2.b);
-    assertEquals("string", m2.s);
-    assertTrue(m.equals(m2));
+    assertNotSame(m, m2);
+    assertTrue(m.equals( m2 ));
   }
 
   @Test
