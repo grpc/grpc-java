@@ -130,24 +130,6 @@ subprojects {
           }
         }
 
-        configureThriftCompilation = {
-          String generatedSourcePath = "${projectDir}/src/generated"
-          project.sourceSets {
-            main {
-              java {
-                srcDir "${generatedSourcePath}/main/java"
-                srcDir "${generatedSourcePath}/main/grpc"
-              }
-            }
-            test {
-              java {
-                srcDir "${generatedSourcePath}/test/java"
-                srcDir "${generatedSourcePath}/test/grpc"
-              }
-            }
-          }
-        }
-
         def epoll_suffix = "";
         if (osdetector.classifier in ["linux-x86_64"]) {
             // The native code is only pre-compiled on certain platforms.
