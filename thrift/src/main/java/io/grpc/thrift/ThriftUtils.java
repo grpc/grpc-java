@@ -40,7 +40,6 @@ import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -54,15 +53,7 @@ public class ThriftUtils {
       @Override
       public InputStream stream(T value) {
         // TODO Auto-generated method stub
-        try {
-          TSerializer serializer = new TSerializer();
-          byte[] bytes = serializer.serialize(value);
-          InputStream is = new ByteArrayInputStream(bytes);
-          return is;
-        } catch (TException e) {
-          throw Status.INTERNAL.withDescription("failed to serialize message")
-              .withCause(e).asRuntimeException();
-        }
+        return new ThriftInputStream(value);
       }
 
       @Override
@@ -85,14 +76,13 @@ public class ThriftUtils {
     };
   }
 
-  /** Produce a metadata marshaller for a Thrift type. */
+  /** Produce a metadata marshaller. */
   public static <T extends TBase<T,?>> Metadata.BinaryMarshaller<T> metadataMarshaller(
       final MessageFactory<T> factory) {
     return new Metadata.BinaryMarshaller<T>() {
 
       @Override
       public byte[] toBytes(T value) {
-        // TODO Auto-generated method stub
         try {
           TSerializer serializer = new TSerializer();
           return serializer.serialize(value);
@@ -104,7 +94,6 @@ public class ThriftUtils {
 
       @Override
       public T parseBytes(byte[] serialized) {
-        // TODO Auto-generated method stub
         try {
           TDeserializer deserializer = new TDeserializer();
           T message = factory.newInstance();
