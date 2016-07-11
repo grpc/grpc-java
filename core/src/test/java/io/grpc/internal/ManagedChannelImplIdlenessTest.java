@@ -58,7 +58,6 @@ import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
 import io.grpc.ResolvedServerInfo;
 import io.grpc.StringMarshaller;
-import io.grpc.TransportManager.InterimTransport;
 import io.grpc.TransportManager.OobTransportProvider;
 import io.grpc.TransportManager;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
@@ -205,7 +204,7 @@ public class ManagedChannelImplIdlenessTest {
     newTransports.drainTo(transports);
     assertEquals(addressGroupList.size(), transports.size());
 
-    InterimTransport<ClientTransport> interimTransport = channel.tm.createInterimTransport();
+    channel.tm.createInterimTransport();
 
     // Without actually using these transports, will eventually enter idle mode
     walkIntoIdleMode(transports);
@@ -213,7 +212,6 @@ public class ManagedChannelImplIdlenessTest {
 
   @Test
   public void interimTransportHoldsOffIdleness() throws Exception {
-    final EquivalentAddressGroup addressGroup = addressGroupList.get(1);
     doAnswer(new Answer<ClientTransport>() {
         @Override
         public ClientTransport answer(InvocationOnMock invocation) throws Throwable {

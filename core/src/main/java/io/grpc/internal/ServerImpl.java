@@ -81,7 +81,7 @@ public final class ServerImpl extends io.grpc.Server {
 
   /** Executor for application processing. */
   private Executor executor;
-  @GuardedBy("lock") private boolean usingSharedExecutor;
+  private boolean usingSharedExecutor;
   private final InternalHandlerRegistry registry;
   private final HandlerRegistry fallbackRegistry;
   @GuardedBy("lock") private boolean started;
