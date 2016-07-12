@@ -1,0 +1,39 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+apply plugin: 'application'
+
+description = "Thrift Examples"
+
+buildscript {
+    dependencies {
+        compile project(':grpc-thrift')
+    }
+}
+
+String generatedSourcePath = "${projectDir}/src/generated"
+project.sourceSets {
+  main {
+    java {
+      srcDir "${generatedSourcePath}/main/java"
+      srcDir "${generatedSourcePath}/main/grpc"
+    }
+  }
+}
+
+task thriftHelloWorldServer(type: CreateStartScripts) {
+    mainClassName - "io.thrift.examples.helloworld.HelloWorldServer"
+    applicationName = "thrift-hello-world-server"
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = jar.outputs.files + project.configurations.runtime
+}
+
+applicationDistribution.into("bin") {
+    from(thriftHelloWorldServer)
+    fileMode = 0755
+}
+
+idea {
+    module {
+        sourceDirs += file("${projectDir}/src/generated/main/java");
+        sourceDirs += file("${projectDir}/src/generated/main/grpc");
+    }
+}
