@@ -19,7 +19,7 @@ subprojects {
     apply plugin: "com.google.osdetector"
 
     group = "io.grpc"
-    version = "1.0.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.1.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     sourceCompatibility = 1.6
     targetCompatibility = 1.6
@@ -32,6 +32,9 @@ subprojects {
     [compileJava, compileTestJava].each() {
         it.options.compilerArgs += ["-Xlint:all", "-Xlint:-options"]
         it.options.encoding = "UTF-8"
+        if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
+            it.options.compilerArgs += ["-Werror"]
+        }
     }
 
     compileTestJava {
@@ -148,9 +151,9 @@ subprojects {
                 protobuf_plugin: 'com.google.protobuf:protobuf-gradle-plugin:0.7.7',
                 protobuf_util: "com.google.protobuf:protobuf-java-util:${protobufVersion}",
 
-                netty: 'io.netty:netty-codec-http2:[4.1.1.Final]',
-                netty_epoll: 'io.netty:netty-transport-native-epoll:4.1.1.Final' + epoll_suffix,
-                netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:1.1.33.Fork17',
+                netty: 'io.netty:netty-codec-http2:[4.1.2.Final]',
+                netty_epoll: 'io.netty:netty-transport-native-epoll:4.1.2.Final' + epoll_suffix,
+                netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:1.1.33.Fork18',
 
                 // Test dependencies.
                 junit: 'junit:junit:4.11',

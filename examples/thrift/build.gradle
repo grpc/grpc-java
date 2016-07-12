@@ -3,12 +3,6 @@ apply plugin: 'application'
 
 description = "Thrift Examples"
 
-buildscript {
-    dependencies {
-        compile project(':grpc-thrift')
-    }
-}
-
 String generatedSourcePath = "${projectDir}/src/generated"
 project.sourceSets {
   main {
@@ -20,7 +14,7 @@ project.sourceSets {
 }
 
 task thriftHelloWorldServer(type: CreateStartScripts) {
-    mainClassName - "io.thrift.examples.helloworld.HelloWorldServer"
+    mainClassName = "io.thrift.examples.helloworld.HelloWorldServer"
     applicationName = "thrift-hello-world-server"
     outputDir = new File(project.buildDir, 'tmp')
     classpath = jar.outputs.files + project.configurations.runtime
