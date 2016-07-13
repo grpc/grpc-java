@@ -59,10 +59,39 @@ public class GreeterGrpc {
 
   }
 
+  private static final int ARG_IN_METHOD_sayHello = 1;
+  private static final int ARG_OUT_METHOD_sayHello = 2;
+
+  private static final class ThriftMessageFactory<T extends org.apache.thrift.TBase<T,?>>
+      implements io.grpc.thrift.MessageFactory<T> {
+    private final int id;
+
+
+    ThriftMessageFactory(int id) {
+      this.id = id;
+    }
+    @java.lang.Override
+    public T newInstance() {
+      Object o;
+      switch (id) {
+      case ARG_IN_METHOD_sayHello:
+        o = new sayHello_args();
+        break;
+      case ARG_OUT_METHOD_sayHello:
+       o = new sayHello_result();
+        break;
+      default:
+  throw new AssertionError();
+}
+      @java.lang.SuppressWarnings("unchecked")
+      T t = (T) o;
+return t;
+    }
+  }
   public static abstract class GreeterImplBase implements Greeter, io.grpc.BindableService {
     @java.lang.Override
     public void sayHello(sayHello_args request, 
-        io.grpc.StreamObserver<sayHello_result> responseObserver) {
+        io.grpc.stub.StreamObserver<sayHello_result> responseObserver) {
       asyncUnimplementedUnaryCall(METHOD_sayHello, responseObserver);
     }
 
@@ -72,7 +101,7 @@ public class GreeterGrpc {
 
   }
 
-  @java.lang.Deprecated public static class AbstractGreeter extends GreeterImplBase () {}
+  @java.lang.Deprecated public static abstract class AbstractGreeter extends GreeterImplBase {}
 
   public static class sayHello_args implements org.apache.thrift.TBase<sayHello_args, sayHello_args._Fields>, java.io.Serializable, Cloneable, Comparable<sayHello_args>   {
     private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("sayHello_args");
@@ -447,7 +476,7 @@ public class GreeterGrpc {
     private static final SchemeFactory STANDARD_SCHEME_FACTORY = new sayHello_resultStandardSchemeFactory();
     private static final SchemeFactory TUPLE_SCHEME_FACTORY = new sayHello_resultTupleSchemeFactory();
 
-    public HelloRequest success; // required
+    public HelloResponse success; // required
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements org.apache.thrift.TFieldIdEnum {
@@ -512,7 +541,7 @@ public class GreeterGrpc {
     static {
       Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
       tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
-          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, HelloRequest.class)));
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, HelloResponse.class)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
       org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(sayHello_result.class, metaDataMap);
     }
@@ -521,7 +550,7 @@ public class GreeterGrpc {
     }
 
     public sayHello_result(
-      HelloRequest success)
+      HelloResponse success)
     {
       this();
       this.success = success;
@@ -532,7 +561,7 @@ public class GreeterGrpc {
      */
     public sayHello_result(sayHello_result other) {
       if (other.isSetSuccess()) {
-        this.success = new HelloRequest(other.success);
+        this.success = new HelloResponse(other.success);
       }
     }
 
@@ -545,11 +574,11 @@ public class GreeterGrpc {
       this.success = null;
     }
 
-    public HelloRequest getSuccess() {
+    public HelloResponse getSuccess() {
       return this.success;
     }
 
-    public sayHello_result setSuccess(HelloRequest success) {
+    public sayHello_result setSuccess(HelloResponse success) {
       this.success = success;
       return this;
     }
@@ -575,7 +604,7 @@ public class GreeterGrpc {
         if (value == null) {
           unsetSuccess();
         } else {
-          setSuccess((HelloRequest)value);
+          setSuccess((HelloResponse)value);
         }
         break;
 
@@ -733,7 +762,7 @@ public class GreeterGrpc {
           switch (schemeField.id) {
             case 0: // SUCCESS
               if (schemeField.type == org.apache.thrift.protocol.TType.STRUCT) {
-                struct.success = new HelloRequest();
+                struct.success = new HelloResponse();
                 struct.success.read(iprot);
                 struct.setSuccessIsSet(true);
               } else { 
@@ -792,7 +821,7 @@ public class GreeterGrpc {
         TTupleProtocol iprot = (TTupleProtocol) prot;
         BitSet incoming = iprot.readBitSet(1);
         if (incoming.get(0)) {
-          struct.success = new HelloRequest();
+          struct.success = new HelloResponse();
           struct.success.read(iprot);
           struct.setSuccessIsSet(true);
         }
@@ -809,8 +838,10 @@ public class GreeterGrpc {
       io.grpc.MethodDescriptor.create(
         io.grpc.MethodDescriptor.MethodType.UNARY,
         generateFullMethodName("io.thrift.examples.helloworld.Greeter" , "sayHello"),
-        io.grpc.thrift.ThriftUtils.marshaller(sayHello_args.getDefaultInstance()),
-        io.grpc.thrift.ThriftUtils.marshaller(sayHello_result.getDefaultInstance()));
+        io.grpc.thrift.ThriftUtils.marshaller(
+        new ThriftMessageFactory<sayHello_args>( ARG_IN_METHOD_sayHello)),
+        io.grpc.thrift.ThriftUtils.marshaller(
+        new ThriftMessageFactory<sayHello_result>( ARG_OUT_METHOD_sayHello)));
 
   public static GreeterStub newStub(io.grpc.Channel channel) {
     return new GreeterStub(channel);
@@ -914,7 +945,7 @@ public class GreeterGrpc {
 
   }
 
-  private static final int METHODID_sayHello = 0
+  private static final int METHODID_sayHello = 0;
 
   private static class MethodHandlers<Req, Resp> implements
       io.grpc.stub.ServerCalls.UnaryMethod<Req, Resp>,
@@ -934,8 +965,8 @@ public class GreeterGrpc {
     public void invoke(Req request, io.grpc.stub.StreamObserver<Resp> responseObserver) {
       switch (methodId) {
         case METHODID_sayHello:
-          serviceImpl.sayHello(sayHello_args request,
-              io.grpc.stub.StreamObserver<sayHello_result> responseObserver);
+          serviceImpl.sayHello((sayHello_args) request,
+              (io.grpc.stub.StreamObserver<sayHello_result>) responseObserver);
           break;
 
         default:
@@ -955,7 +986,7 @@ public class GreeterGrpc {
 
   }
 
-  public static io.grpc.ServiceDescriptor getServiceDescriptor(
+  public static io.grpc.ServiceDescriptor getServiceDescriptor() {
     return new io.grpc.ServiceDescriptor(SERVICE_NAME    ,
         METHOD_sayHello);
   }

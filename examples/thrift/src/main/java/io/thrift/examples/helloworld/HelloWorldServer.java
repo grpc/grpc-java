@@ -84,9 +84,9 @@ public class HelloWorldServer {
 
   private class GreeterImpl extends GreeterGrpc.GreeterImplBase {
     @Override
-    public void SayHello(SayHello_args req, StreamObserver<SayHello_result> responseObserver) {
-      SayHello_result reply = new SayHello_result();
-      reply.message = "Hello ";
+    public void sayHello(GreeterGrpc.sayHello_args req, StreamObserver<GreeterGrpc.sayHello_result> responseObserver) {
+      GreeterGrpc.sayHello_result reply = new GreeterGrpc.sayHello_result();
+      reply.success = new HelloResponse("Hello " + req.request.name);
       responseObserver.onNext(reply);
       responseObserver.onCompleted();
     }

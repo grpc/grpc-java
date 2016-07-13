@@ -9,5 +9,5 @@ struct HelloResponse {
 }
 
 service Greeter {
-	HelloRequest sayHello(1:HelloRequest request);
+	HelloResponse sayHello(1:HelloRequest request);
 }

@@ -102,4 +102,19 @@ public final class ThriftInputStream extends InputStream implements Drainable, K
     return -1;
   }
 
+  @Override
+  public int available() throws IOException {
+    if (message != null) {
+      try {
+        return serializer.serialize(message).length;
+      } catch (TException e) {
+        throw Status.INTERNAL.withDescription("failed to serialize thrift message")
+            .withCause(e).asRuntimeException();
+      }
+    } else if (partial != null) {
+      return partial.available();
+    }
+    return 0;
+  }
+
 }
