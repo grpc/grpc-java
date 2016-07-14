@@ -2,8 +2,7 @@ description = 'gRPC: Thrift'
 
 dependencies {
     compile project(':grpc-core'),
-            'org.apache.thrift:libthrift:0.9.3',
-            'commons-io:commons-io:2.5'
+            'org.apache.thrift:libthrift:0.9.3'
 }
 
 

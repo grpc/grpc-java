@@ -34,7 +34,7 @@ package io.grpc.thrift;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.Status;
-import org.apache.commons.io.IOUtils;
+import io.grpc.util.IoUtils;
 import org.apache.thrift.TBase;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
@@ -60,7 +60,7 @@ public final class ThriftUtils {
       public T parse(InputStream stream) {
         // TODO Auto-generated method stub
         try {
-          byte[] bytes = IOUtils.toByteArray(stream);
+          byte[] bytes = IoUtils.toByteArray(stream);
           TDeserializer deserializer = new TDeserializer();
           T message = factory.newInstance();
           deserializer.deserialize(message, bytes);
