@@ -47,6 +47,8 @@ import java.util.concurrent.TimeUnit;
 public class KeepAliveManager {
   private static final SystemTicker SYSTEM_TICKER = new SystemTicker();
   private static final long MIN_KEEPALIVE_DELAY_NANOS = TimeUnit.MINUTES.toNanos(1);
+  // This prevents we delay the current ping and reschedule another one in the very near future.
+  private static final long MIN_KEEPALIVE_RESCHEDULE_INTERVAL = TimeUnit.MILLISECONDS.toNanos(100);
 
   private final ScheduledExecutorService scheduler;
   private final ManagedClientTransport transport;
@@ -100,6 +102,7 @@ public class KeepAliveManager {
   private final KeepAlivePingCallback pingCallback = new KeepAlivePingCallback();
   private long keepAliveDelayInNanos;
   private long keepAliveTimeoutInNanos;
+  private long minRescheduleIntervalNanos;
 
   private enum State {
     /*
@@ -140,17 +143,20 @@ public class KeepAliveManager {
     // Set a minimum cap on keepalive dealy.
     this.keepAliveDelayInNanos = Math.max(MIN_KEEPALIVE_DELAY_NANOS, keepAliveDelayInNanos);
     this.keepAliveTimeoutInNanos = keepAliveTimeoutInNanos;
+    this.minRescheduleIntervalNanos = MIN_KEEPALIVE_RESCHEDULE_INTERVAL;
     nextKeepaliveTime = ticker.read() + keepAliveDelayInNanos;
   }
 
   @VisibleForTesting
   KeepAliveManager(ManagedClientTransport transport, ScheduledExecutorService scheduler,
-                   Ticker ticker, long keepAliveDelayInNanos, long keepAliveTimeoutInNanos) {
+                   Ticker ticker, long keepAliveDelayInNanos, long keepAliveTimeoutInNanos,
+                   long minRescheduleIntervalNanos) {
     this.transport = Preconditions.checkNotNull(transport, "transport");
     this.scheduler = Preconditions.checkNotNull(scheduler, "scheduler");
     this.ticker = Preconditions.checkNotNull(ticker, "ticker");
     this.keepAliveDelayInNanos = keepAliveDelayInNanos;
     this.keepAliveTimeoutInNanos = keepAliveTimeoutInNanos;
+    this.minRescheduleIntervalNanos = minRescheduleIntervalNanos;
     nextKeepaliveTime = ticker.read() + keepAliveDelayInNanos;
   }
 
@@ -158,12 +164,16 @@ public class KeepAliveManager {
    * Transport has received some data so that we can delay sending keepalives.
    */
   public synchronized void onDataReceived() {
-    nextKeepaliveTime = ticker.read() + keepAliveDelayInNanos;
-    // We do not cancel the ping future here. This avoids constantly scheduling and cancellation in
-    // a busy transport. Instead, we update the status here and reschedule later. So we actually
-    // keep one sendPing task always in flight when there're active rpcs.
-    if (state == State.PING_SCHEDULED) {
-      state = State.PING_DELAYED;
+    long newTime = ticker.read() + keepAliveDelayInNanos;
+    // Only delay the ping if the difference is large enough.
+    if (newTime >= nextKeepaliveTime + minRescheduleIntervalNanos) {
+      nextKeepaliveTime = newTime;
+      // We do not cancel the ping future here. This avoids constantly scheduling and cancellation
+      // in a busy transport. Instead, we update the status here and reschedule later. So we
+      // actually keep one sendPing task always in flight when there're active rpcs.
+      if (state == State.PING_SCHEDULED) {
+        state = State.PING_DELAYED;
+      }
     }
   }
 
