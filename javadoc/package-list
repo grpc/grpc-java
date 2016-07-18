@@ -7,3 +7,4 @@ io.grpc.protobuf
 io.grpc.protobuf.lite
 io.grpc.protobuf.nano
 io.grpc.stub
+io.grpc.util
