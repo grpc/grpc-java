@@ -1,20 +1,22 @@
+package flowsim;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
 
-public class SimulationClock extends SimulationListener {
+public class SimulationClock {
   private int currentTime;
-  private HashMap<Integer, List<ClockExecutable>> eventQueue;
+  private HashMap<Integer, List<Visitor>> eventQueue;
   private Set<ClockListener> listeners;
 
 
 
   public SimulationClock() {
     currentTime = 0;
-    eventQueue = new HashMap<Integer, List<ClockExecutable>>();
+    eventQueue = new HashMap<Integer, List<Visitor>>();
     listeners = new HashSet<ClockListener>();
   }
 
@@ -29,34 +31,32 @@ public class SimulationClock extends SimulationListener {
    * @param howLong
    * @throws InterruptedException
    */
-  public void Run(int howLong) throws InterruptedException {
-    for (int i = 0; i < howLong + 40; i++) {
-      if (i < howLong) {
-        tick(i);
-      }
-      if (i > 0) {
-        if (eventQueue.get(i - 1) != null) {
-          for (ClockExecutable e : eventQueue.get(i - 1)) {
-          e.execute(i);
-        }
+  public void run(int howLong) throws InterruptedException {
+    for (int i = 0; i < howLong; i++) {
+      tick(i);
+      if (i >= 0) {
+        if (eventQueue.get(i) != null) {
+          for (Visitor e : eventQueue.get(i)) {
+            e.visit();
+          }
         }
       }
     }
   }
 
-  public void addEvent(int timeStep, ClockExecutable event) {
-    ArrayList<ClockExecutable> eventlist;
+  public void addEvent(int timeStep, Visitor event) {
+    List<Visitor> eventlist;
     if (!eventQueue.containsKey(timeStep)) {
-      eventlist = new ArrayList<ClockExecutable>();
+      eventlist = new ArrayList<Visitor>();
     } else {
-      eventlist = (ArrayList<ClockExecutable>) eventQueue.get(timeStep);
+      eventlist = eventQueue.get(timeStep);
     }
     eventlist.add(event);
     eventQueue.put(timeStep, eventlist);
   }
 
-  public void addListener(ClockListener l) {
-    listeners.add(l);
+  public void addListener(ClockListener listener) {
+    listeners.add(listener);
   }
 
   public void tick(int time) {
@@ -64,7 +64,6 @@ public class SimulationClock extends SimulationListener {
     for (ClockListener l : listeners) {
       l.tick(time);
     }
-    doTickActions(this);
   }
 
   private void advanceClock() {
@@ -72,9 +71,11 @@ public class SimulationClock extends SimulationListener {
   }
 }
 
+
 interface ClockExecutable {
   public void execute(int t);
 }
+
 
 class ClockEvent {
   int delay;

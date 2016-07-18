@@ -1,9 +1,11 @@
+package flowsim;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Set;
 
-public class Connection extends SimulationListener implements ClockListener {
+public abstract class Connection implements ClockListener {
 
-  private HashMap<Integer, Stream> streams;
+  private HashMap<Integer, Stream> streams = new HashMap<Integer, Stream>();
   private int initialWindow;
   private int availableWindow;
   private int publishedWindow;
@@ -12,22 +14,29 @@ public class Connection extends SimulationListener implements ClockListener {
   private int latency;
   private int bandwidth;
 
-  public Connection(SimulationClock clock, int initWindow, int latency, int bandwidth) {
-    streams = new HashMap<Integer, Stream>();
+  public abstract void connectionOnData();
+
+  public abstract void connectionOnHeader();
+
+  public abstract void connectionOnTick();
+
+  public abstract Connection getInstance();
+
+  void setParams(SimulationClock clock, int initWindow, int latency, int bandwidth) {
     controller = clock;
     controller.addListener(this);
     initialWindow = initWindow;
     availableWindow = initWindow;
+    publishedWindow = initWindow;
     this.latency = latency;
     this.bandwidth = bandwidth;
-    bandwidthAvailable = this.bandwidth;
+    bandwidthAvailable = bandwidth;
   }
 
   @Override
   public void tick(int time) {
     bandwidthAvailable = bandwidth;
-    refillWindow();
-    doTickActions(controller);
+    connectionOnTick();
   }
 
   public int intialWindow() {
@@ -50,8 +59,12 @@ public class Connection extends SimulationListener implements ClockListener {
     return latency;
   }
 
-  public HashMap<Integer, Stream> streams() {
-    return streams;
+  public Stream getStream(int id) {
+    return streams.get(id);
+  }
+
+  public Set<Integer> streams() {
+    return streams.keySet();
   }
 
   /**
@@ -63,9 +76,11 @@ public class Connection extends SimulationListener implements ClockListener {
   public void initialWindow(int timeStep, int newWindow) {
     int oldWindow = initialWindow;
     initialWindow = Math.max(0, newWindow);
-    availableWindow += (initialWindow - oldWindow);
-    // schedule the published window to be updated in Latency steps:
-    controller.addEvent(timeStep + latency, ((int t) -> doWindowUpdate(initialWindow - oldWindow)));
+    publishedWindow += (initialWindow - oldWindow);
+    publishedWindow = Math.max(availableWindow, 0);
+    int delta = initialWindow - oldWindow;
+    controller.addEvent(timeStep + latency, new WindowVisitor(Util.AVAILABLE, delta));
+    refillWindow(timeStep);
   }
 
   /**
@@ -92,8 +107,9 @@ public class Connection extends SimulationListener implements ClockListener {
    * @param size
    */
   public void consumeWindow(int timeStep, int size) {
-    controller.addEvent(timeStep + latency, (int t) -> availableWindow -= size);
-    controller.addEvent(timeStep + latency, (int t) -> doWindowUpdate(-size));
+    availableWindow -= size;
+    controller.addEvent(timeStep + latency, new WindowVisitor(Util.PUBLISHED, -size));
+    refillWindow(timeStep);
   }
 
   /**
@@ -105,15 +121,39 @@ public class Connection extends SimulationListener implements ClockListener {
     streams.put(s.id(), s);
   }
 
-  private void doWindowUpdate(int delta) {
-    publishedWindow += delta;
+  void setClock(SimulationClock clock) {
+    this.controller = clock;
+    clock.addListener(this);
   }
 
-  private void refillWindow() {
-    if ((double) availableWindow / (double) initialWindow < .5) {
-      availableWindow = initialWindow;
+  private void refillWindow(int time) {
+    int delta = initialWindow - availableWindow;
+    if (availableWindow < initialWindow / 2) {
+      publishedWindow = initialWindow;
+      controller.addEvent(time + latency, new WindowVisitor(Util.AVAILABLE, delta));
     }
   }
 
+  private class WindowVisitor implements Visitor {
+    private String window;
+    private int delta;
+
+    public WindowVisitor(String window, int delta) {
+      this.window = window;
+      this.delta = delta;
+    }
+
+    @Override
+    public void visit() {
+      switch (window) {
+        case Util.PUBLISHED:
+          publishedWindow += delta;
+          break;
+        case Util.AVAILABLE:
+          availableWindow += delta;
+          break;
+      }
+    }
+  }
 
 }
