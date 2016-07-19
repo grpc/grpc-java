@@ -41,8 +41,10 @@ import io.netty.channel.ChannelPromise;
 import org.jctools.queues.MpscLinkedQueue8;
 
 import java.util.Queue;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Logger;
 
 /**
  * A queue of pending writes to a {@link Channel} that is flushed as a single unit.
@@ -51,7 +53,7 @@ class WriteQueue {
 
   // Dequeue in chunks, so we don't have to acquire the queue's log too often.
   @VisibleForTesting
-  static final int DEQUE_CHUNK_SIZE = 512;
+  static final int DEQUE_CHUNK_SIZE = 128;
 
   /**
    * {@link Runnable} used to schedule work onto the tail of the event loop.
@@ -70,7 +72,7 @@ class WriteQueue {
   private final AtomicBoolean scheduled = new AtomicBoolean();
 
   private final AtomicInteger flushes = new AtomicInteger();
-  private volatile int prevFlushes = 0;
+  private int prevFlushes = 0;
 
   public WriteQueue(Channel channel) {
     this.channel = Preconditions.checkNotNull(channel, "channel");
@@ -103,6 +105,7 @@ class WriteQueue {
     Preconditions.checkArgument(command.promise() == null, "promise must not be set on command");
 
     command.promise(promise);
+
     channel.write(command, promise);
     if (flush) {
       scheduleFlush();
@@ -119,6 +122,8 @@ class WriteQueue {
     }
   }
 
+
+
   private final Runnable flush2Later = new Runnable() {
 
     @Override
@@ -127,17 +132,29 @@ class WriteQueue {
       int sfrs = prevFlushes;
       assert frs >= sfrs;
       if (frs == sfrs || frs > DEQUE_CHUNK_SIZE) {
-        channel.flush();
+
 
         prevFlushes = 0;
+        flushes.set(0);
+
+
+        //long start = System.nanoTime();
+        channel.flush();
+        //long end = System.nanoTime();
+        //if (new Random().nextDouble() < .0001) {
+        //  Logger.getLogger(getClass().getName()).info("Flush1: " + (end - start) + " for " + frs);
+        //}
+        //prevFlushes = 0;
+        /*
         long currentFlushCount = flushes.getAndSet(0);
         if (currentFlushCount != 0) {
           channel.eventLoop().execute(flush2Later);
         }
-        /*
-        if (currentFlushCount > 40) {
-          Logger.getLogger(getClass().getName()).info("Flush: " + currentFlushCount);
-        }*/
+
+        if (currentFlushCount > DEQUE_CHUNK_SIZE) {
+          Logger.getLogger(getClass().getName()).info("Flush2: " + currentFlushCount);
+        }
+        */
       } else {
         prevFlushes = frs;
         channel.eventLoop().execute(flush2Later);
