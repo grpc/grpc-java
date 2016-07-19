@@ -59,6 +59,8 @@ import io.netty.channel.local.LocalServerChannel;
 
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.Group;
+import org.openjdk.jmh.annotations.GroupThreads;
 import org.openjdk.jmh.annotations.Mode;
 import org.openjdk.jmh.annotations.OutputTimeUnit;
 import org.openjdk.jmh.annotations.Param;
@@ -77,7 +79,7 @@ public class TransportBenchmark {
     INPROCESS, NETTY, NETTY_LOCAL, NETTY_EPOLL, OKHTTP
   }
 
-  @Param({"INPROCESS", "NETTY", "NETTY_LOCAL", "OKHTTP"})
+  @Param({"NETTY"})
   public Transport transport;
   @Param({"true", "false"})
   public boolean direct;
@@ -201,6 +203,8 @@ public class TransportBenchmark {
   @Benchmark
   @BenchmarkMode(Mode.SampleTime)
   @OutputTimeUnit(TimeUnit.NANOSECONDS)
+  @Group("g")
+  @GroupThreads(10)
   public SimpleResponse unaryCall1024() {
     return stub.unaryCall(simpleRequest);
   }
