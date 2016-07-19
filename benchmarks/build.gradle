@@ -27,7 +27,9 @@ jmh {
     warmupIterations = 10
     iterations = 10
     fork = 1
-    jvmArgs = "-server -Xms2g -Xmx2g"
+    include = "Transport"
+    profilers = ["perfasm"]
+    jvmArgs = "-server -Xms2g -Xmx2g -XX:+UnlockDiagnosticVMOptions -XX:+PrintAssembly -XX:+PreserveFramePointer -XX:+PrintCompilation -XX:+PrintInterpreter -XX:+PrintInlining -XX:+PrintSignatureHandlers"
 }
 
 dependencies {

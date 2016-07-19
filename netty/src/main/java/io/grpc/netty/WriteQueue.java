@@ -38,9 +38,13 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelPromise;
 
+import org.jctools.queues.MpscLinkedQueue8;
+
 import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Logger;
 
 /**
  * A queue of pending writes to a {@link Channel} that is flushed as a single unit.
@@ -61,26 +65,21 @@ class WriteQueue {
     }
   };
 
+  Queue<QueuedCommand> qqq = new MpscLinkedQueue8<WriteQueue.QueuedCommand>();
+
   private final Channel channel;
-  private final Queue<QueuedCommand> queue;
+  //private final Queue<QueuedCommand> queue;
   private final AtomicBoolean scheduled = new AtomicBoolean();
+
+  private final AtomicInteger flushes = new AtomicInteger();
+  private int prevFlushes = 0;
 
   public WriteQueue(Channel channel) {
     this.channel = Preconditions.checkNotNull(channel, "channel");
-    queue = new ConcurrentLinkedQueue<QueuedCommand>();
+    //queue = new ConcurrentLinkedQueue<QueuedCommand>();
   }
 
-  /**
-   * Schedule a flush on the channel.
-   */
-  void scheduleFlush() {
-    if (scheduled.compareAndSet(false, true)) {
-      // Add the queue to the tail of the event loop so writes will be executed immediately
-      // inside the event loop. Note DO NOT do channel.write outside the event loop as
-      // it will not wake up immediately without a flush.
-      channel.eventLoop().execute(later);
-    }
-  }
+
 
   /**
    * Enqueue a write command on the channel.
@@ -106,12 +105,64 @@ class WriteQueue {
     Preconditions.checkArgument(command.promise() == null, "promise must not be set on command");
 
     command.promise(promise);
-    queue.add(command);
+
+    channel.write(command, promise);
     if (flush) {
       scheduleFlush();
     }
     return promise;
   }
+
+  /**
+   * Schedule a flush on the channel.
+   */
+  void scheduleFlush() {
+    if (flushes.incrementAndGet() == 1) {
+      channel.eventLoop().execute(flush2Later);
+    }
+  }
+
+
+
+  private final Runnable flush2Later = new Runnable() {
+
+    @Override
+    public void run() {
+      int frs = flushes.get();
+      int sfrs = prevFlushes;
+      assert frs >= sfrs;
+      if (frs == sfrs || frs > DEQUE_CHUNK_SIZE) {
+
+
+        prevFlushes = 0;
+        flushes.set(0);
+
+
+        //long start = System.nanoTime();
+        channel.flush();
+        //long end = System.nanoTime();
+        //if (new Random().nextDouble() < .0001) {
+        //  Logger.getLogger(getClass().getName()).info("Flush1: " + (end - start) + " for " + frs);
+        //}
+        //prevFlushes = 0;
+        /*
+        long currentFlushCount = flushes.getAndSet(0);
+        if (currentFlushCount != 0) {
+          channel.eventLoop().execute(flush2Later);
+        }
+
+        if (currentFlushCount > DEQUE_CHUNK_SIZE) {
+          Logger.getLogger(getClass().getName()).info("Flush2: " + currentFlushCount);
+        }
+        */
+      } else {
+        prevFlushes = frs;
+        channel.eventLoop().execute(flush2Later);
+      }
+
+
+    }
+  };
 
   /**
    * Process the queue of commands and dispatch them to the stream. This method is only
@@ -121,7 +172,7 @@ class WriteQueue {
     try {
       QueuedCommand cmd;
       int i = 0;
-      while ((cmd = queue.poll()) != null) {
+      while ((cmd = qqq.poll()) != null) {
         channel.write(cmd, cmd.promise());
         if (++i == DEQUE_CHUNK_SIZE) {
           i = 0;
@@ -138,7 +189,7 @@ class WriteQueue {
     } finally {
       // Mark the write as done, if the queue is non-empty after marking trigger a new write.
       scheduled.set(false);
-      if (!queue.isEmpty()) {
+      if (!qqq.isEmpty()) {
         scheduleFlush();
       }
     }
