@@ -97,7 +97,7 @@ import java.util.concurrent.TimeoutException;
 /** Standard unit tests for {@link ClientTransport}s and {@link ServerTransport}s. */
 @RunWith(JUnit4.class)
 public abstract class AbstractTransportTest {
-  private static int TIMEOUT_MS = 1000;
+  private static int TIMEOUT_MS = 1000000;
 
   /**
    * Returns a new server that when started will be able to be connected to from the client. Each
