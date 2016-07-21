@@ -465,10 +465,11 @@ public class TestServiceGrpc {
 
   /**
    * This will be removed in the next release.
-   * If your code is migrated to gRPC-java v0.15.0 or higher already,
+   * If your code has been using gRPC-java v0.15.0 or higher already,
    * the following changes to your code are suggested:
    * <ul>
-   *   <li> replace {@code extends/implements TestService} with {@code extends TestServiceImplBase};</li>
+   *   <li> replace {@code extends/implements TestService} with {@code extends TestServiceImplBase} for server side;</li>
+   *   <li> replace {@code TestService} with {@code TestServiceStub} for client side;</li>
    *   <li> replace usage of {@code TestService} with {@code TestServiceImplBase};</li>
    *   <li> replace usage of {@code AbstractTestService} with {@link TestServiceImplBase};</li>
    *   <li> replace {@code serverBuilder.addService(TestServiceGrpc.bindService(serviceImpl))}
@@ -499,10 +500,11 @@ public class TestServiceGrpc {
 
   /**
    * This will be removed in the next release.
-   * If your code is migrated to gRPC-java v0.15.0 or higher already,
+   * If your code has been using gRPC-java v0.15.0 or higher already,
    * the following changes to your code are suggested:
    * <ul>
-   *   <li> replace {@code extends/implements TestService} with {@code extends TestServiceImplBase};</li>
+   *   <li> replace {@code extends/implements TestService} with {@code extends TestServiceImplBase} for server side;</li>
+   *   <li> replace {@code TestService} with {@code TestServiceStub} for client side;</li>
    *   <li> replace usage of {@code TestService} with {@code TestServiceImplBase};</li>
    *   <li> replace usage of {@code AbstractTestService} with {@link TestServiceImplBase};</li>
    *   <li> replace {@code serverBuilder.addService(TestServiceGrpc.bindService(serviceImpl))}
@@ -523,10 +525,11 @@ public class TestServiceGrpc {
 
   /**
    * This will be removed in the next release.
-   * If your code is migrated to gRPC-java v0.15.0 or higher already,
+   * If your code has been using gRPC-java v0.15.0 or higher already,
    * the following changes to your code are suggested:
    * <ul>
-   *   <li> replace {@code extends/implements TestService} with {@code extends TestServiceImplBase};</li>
+   *   <li> replace {@code extends/implements TestService} with {@code extends TestServiceImplBase} for server side;</li>
+   *   <li> replace {@code TestService} with {@code TestServiceStub} for client side;</li>
    *   <li> replace usage of {@code TestService} with {@code TestServiceImplBase};</li>
    *   <li> replace usage of {@code AbstractTestService} with {@link TestServiceImplBase};</li>
    *   <li> replace {@code serverBuilder.addService(TestServiceGrpc.bindService(serviceImpl))}
@@ -545,10 +548,11 @@ public class TestServiceGrpc {
 
   /**
    * This will be removed in the next release.
-   * If your code is migrated to gRPC-java v0.15.0 or higher already,
+   * If your code has been using gRPC-java v0.15.0 or higher already,
    * the following changes to your code are suggested:
    * <ul>
-   *   <li> replace {@code extends/implements TestService} with {@code extends TestServiceImplBase};</li>
+   *   <li> replace {@code extends/implements TestService} with {@code extends TestServiceImplBase} for server side;</li>
+   *   <li> replace {@code TestService} with {@code TestServiceStub} for client side;</li>
    *   <li> replace usage of {@code TestService} with {@code TestServiceImplBase};</li>
    *   <li> replace usage of {@code AbstractTestService} with {@link TestServiceImplBase};</li>
    *   <li> replace {@code serverBuilder.addService(TestServiceGrpc.bindService(serviceImpl))}
@@ -563,10 +567,11 @@ public class TestServiceGrpc {
 
   /**
    * This will be removed in the next release.
-   * If your code is migrated to gRPC-java v0.15.0 or higher already,
+   * If your code has been using gRPC-java v0.15.0 or higher already,
    * the following changes to your code are suggested:
    * <ul>
-   *   <li> replace {@code extends/implements TestService} with {@code extends TestServiceImplBase};</li>
+   *   <li> replace {@code extends/implements TestService} with {@code extends TestServiceImplBase} for server side;</li>
+   *   <li> replace {@code TestService} with {@code TestServiceStub} for client side;</li>
    *   <li> replace usage of {@code TestService} with {@code TestServiceImplBase};</li>
    *   <li> replace usage of {@code AbstractTestService} with {@link TestServiceImplBase};</li>
    *   <li> replace {@code serverBuilder.addService(TestServiceGrpc.bindService(serviceImpl))}
