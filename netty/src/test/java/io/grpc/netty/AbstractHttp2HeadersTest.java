@@ -29,59 +29,48 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.internal;
+package io.grpc.netty;
 
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
-import io.grpc.Attributes;
-import io.grpc.NameResolverProvider;
+import com.google.common.base.Defaults;
+
+import io.netty.handler.codec.http2.Http2Headers;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-import java.net.URI;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 
-/** Unit tests for {@link DnsNameResolverProvider}. */
+/** Unit tests for {@link AbstractHttp2Headers}. */
 @RunWith(JUnit4.class)
-public class DnsNameResolverProviderTest {
-  private DnsNameResolverProvider provider = new DnsNameResolverProvider();
-
+public class AbstractHttp2HeadersTest {
   @Test
-  public void provided() {
-    for (NameResolverProvider current
-        : NameResolverProvider.getCandidatesViaServiceLoader(getClass().getClassLoader())) {
-      if (current instanceof DnsNameResolverProvider) {
-        return;
+  public void allMethodsAreUnsupported() {
+    Http2Headers headers = new AbstractHttp2Headers() {};
+    for (Method method : Http2Headers.class.getMethods()) {
+      // Avoid Java 8 default methods, without requiring Java 8 with isDefault()
+      if (!Modifier.isAbstract(method.getModifiers())) {
+        continue;
+      }
+      Class<?>[] params = method.getParameterTypes();
+      Object[] args = new Object[params.length];
+      for (int i = 0; i < params.length; i++) {
+        args[i] = Defaults.defaultValue(params[i]);
+      }
+      try {
+        method.invoke(headers, args);
+        fail("Expected exception for method: " + method);
+      } catch (InvocationTargetException ex) {
+        assertEquals("For method: " + method,
+            UnsupportedOperationException.class, ex.getCause().getClass());
+      } catch (Throwable t) {
+        throw new RuntimeException("Failure with method: " + method, t);
       }
     }
-    fail("DnsNameResolverProvider not registered");
-  }
-
-  @Test
-  public void providedHardCoded() {
-    for (NameResolverProvider current
-        : NameResolverProvider.getCandidatesViaHardCoded(getClass().getClassLoader())) {
-      if (current instanceof DnsNameResolverProvider) {
-        return;
-      }
-    }
-    fail("DnsNameResolverProvider not registered");
-  }
-
-  @Test
-  public void isAvailable() {
-    assertTrue(provider.isAvailable());
-  }
-
-  @Test
-  public void newNameResolver() {
-    assertSame(DnsNameResolver.class,
-        provider.newNameResolver(URI.create("dns:///localhost:443"), Attributes.EMPTY).getClass());
-    assertNull(
-        provider.newNameResolver(URI.create("notdns:///localhost:443"), Attributes.EMPTY));
   }
 }

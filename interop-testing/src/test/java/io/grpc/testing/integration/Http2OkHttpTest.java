@@ -45,6 +45,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
+import io.grpc.okhttp.internal.Platform;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.StreamRecorder;
 import io.grpc.testing.TestUtils;
@@ -86,7 +87,7 @@ public class Http2OkHttpTest extends AbstractInteropTest {
       contextBuilder.ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE);
       startStaticServer(NettyServerBuilder.forPort(0)
           .flowControlWindow(65 * 1024)
-          .maxMessageSize(16 * 1024 * 1024)
+          .maxMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
           .sslContext(contextBuilder.build()));
     } catch (IOException ex) {
       throw new RuntimeException(ex);
@@ -101,7 +102,7 @@ public class Http2OkHttpTest extends AbstractInteropTest {
   @Override
   protected ManagedChannel createChannel() {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("127.0.0.1", getPort())
-        .maxMessageSize(16 * 1024 * 1024)
+        .maxMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .connectionSpec(new ConnectionSpec.Builder(OkHttpChannelBuilder.DEFAULT_CONNECTION_SPEC)
             .cipherSuites(TestUtils.preferredTestCiphers().toArray(new String[0]))
             .tlsVersions(ConnectionSpec.MODERN_TLS.tlsVersions().toArray(new TlsVersion[0]))
@@ -109,7 +110,8 @@ public class Http2OkHttpTest extends AbstractInteropTest {
         .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
             TestUtils.TEST_SERVER_HOST, getPort()));
     try {
-      builder.sslSocketFactory(TestUtils.newSslSocketFactoryForCa(TestUtils.loadCert("ca.pem")));
+      builder.sslSocketFactory(TestUtils.newSslSocketFactoryForCa(Platform.get().getProvider(),
+              TestUtils.loadCert("ca.pem")));
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -149,7 +151,8 @@ public class Http2OkHttpTest extends AbstractInteropTest {
         .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
             "I.am.a.bad.hostname", getPort()));
     ManagedChannel channel = builder.sslSocketFactory(
-        TestUtils.newSslSocketFactoryForCa(TestUtils.loadCert("ca.pem"))).build();
+        TestUtils.newSslSocketFactoryForCa(Platform.get().getProvider(),
+            TestUtils.loadCert("ca.pem"))).build();
     TestServiceGrpc.TestServiceBlockingStub blockingStub =
         TestServiceGrpc.newBlockingStub(channel);
 
