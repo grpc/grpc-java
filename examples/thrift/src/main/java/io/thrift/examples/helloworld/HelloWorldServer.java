@@ -42,7 +42,7 @@ import java.util.logging.Logger;
 public class HelloWorldServer {
   private static final Logger logger = Logger.getLogger(HelloWorldServer.class.getName());
 
-  /** port on which the server should run. */
+  /** Port on which the server should run. */
   private int port = 50051;
   private Server server;
 
@@ -74,7 +74,7 @@ public class HelloWorldServer {
     }
   }
 
-  /** main function to launch server from cmd. */
+  /** Main function to launch server from cmd. */
   public static void main(String[] args) throws IOException, InterruptedException {
     final HelloWorldServer server = new HelloWorldServer();
     server.start();
