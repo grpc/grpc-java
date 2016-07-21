@@ -4,7 +4,7 @@
  * DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
  *  @generated
  */
-package io.thrift.examples.helloworld;
+package io.grpc.examples.thrift.helloworld;
 
 import org.apache.thrift.scheme.IScheme;
 import org.apache.thrift.scheme.SchemeFactory;
@@ -51,7 +51,7 @@ public class GreeterGrpc {
 
   private GreeterGrpc() {}
 
-  public static final String SERVICE_NAME = "io.thrift.examples.helloworld.Greeter";
+  public static final String SERVICE_NAME = "io.grpc.examples.thrift.helloworld.Greeter";
 
   @java.lang.Deprecated public static interface Greeter {
     public void sayHello(sayHello_args request,
@@ -837,7 +837,7 @@ return t;
       sayHello_result> METHOD_sayHello = 
       io.grpc.MethodDescriptor.create(
         io.grpc.MethodDescriptor.MethodType.UNARY,
-        generateFullMethodName("io.thrift.examples.helloworld.Greeter" , "sayHello"),
+        generateFullMethodName("io.grpc.examples.thrift.helloworld.Greeter" , "sayHello"),
         io.grpc.thrift.ThriftUtils.marshaller(
         new ThriftMessageFactory<sayHello_args>( ARG_IN_METHOD_sayHello)),
         io.grpc.thrift.ThriftUtils.marshaller(

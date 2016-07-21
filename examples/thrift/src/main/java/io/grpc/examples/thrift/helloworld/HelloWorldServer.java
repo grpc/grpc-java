@@ -29,7 +29,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.thrift.examples.helloworld;
+package io.grpc.examples.thrift.helloworld;
 
 import io.grpc.Server;
 import io.grpc.ServerBuilder;

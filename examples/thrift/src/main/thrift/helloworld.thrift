@@ -1,4 +1,4 @@
-namespace java io.thrift.examples.helloworld
+namespace java io.grpc.examples.thrift.helloworld
 
 struct HelloRequest {
 	1:string name
