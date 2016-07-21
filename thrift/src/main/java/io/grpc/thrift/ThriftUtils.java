@@ -34,7 +34,7 @@ package io.grpc.thrift;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.Status;
-import io.grpc.util.IoUtils;
+import io.grpc.internal.IoUtils;
 import org.apache.thrift.TBase;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
@@ -45,20 +45,18 @@ import java.io.InputStream;
 
 public final class ThriftUtils {
 
-  /** Create a {@code Marshaller} for thrifts of the same type as {@code defaultInstance}. */
+  /** Create a {@code Marshaller} for thrift messages. */
   public static <T extends TBase<T,?>> Marshaller<T> marshaller(final MessageFactory<T> factory) {
 
     return new Marshaller<T>() {
 
       @Override
       public InputStream stream(T value) {
-        // TODO Auto-generated method stub
         return new ThriftInputStream(value);
       }
 
       @Override
       public T parse(InputStream stream) {
-        // TODO Auto-generated method stub
         try {
           byte[] bytes = IoUtils.toByteArray(stream);
           TDeserializer deserializer = new TDeserializer();

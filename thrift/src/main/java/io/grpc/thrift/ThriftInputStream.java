@@ -47,23 +47,24 @@ import java.io.OutputStream;
 
 import javax.annotation.Nullable;
 
-// InputStream for Thrift
-public final class ThriftInputStream extends InputStream implements Drainable, KnownLength {
+/** InputStream for Thrift. */
+final class ThriftInputStream extends InputStream implements Drainable, KnownLength {
 
-  // ThriftInput stream is initialized with a *message* , *serializer*
-  // *partial* is initially null
+  /**
+   * ThriftInput stream is initialized with a *message* , *serializer*
+   * *partial* is initially null.
+   */
   @Nullable private TBase<?,?> message;
   @Nullable private ByteArrayInputStream partial;
   private final TSerializer serializer = new TSerializer();
 
-  // initialize message with @param message
+  /** Initialize message with @param message. */
   public ThriftInputStream(TBase<?,?> message) {
     this.message = message;
   }
 
   @Override
   public int drainTo(OutputStream target) throws IOException {
-    // TODO Auto-generated method stub
     int written = 0;
     if (message != null) {
       try {
@@ -86,7 +87,6 @@ public final class ThriftInputStream extends InputStream implements Drainable, K
 
   @Override
   public int read() throws IOException {
-    // TODO Auto-generated method stub
     if (message != null) {
       try {
         partial = new ByteArrayInputStream(serializer.serialize(message));
@@ -106,7 +106,9 @@ public final class ThriftInputStream extends InputStream implements Drainable, K
   public int available() throws IOException {
     if (message != null) {
       try {
-        return serializer.serialize(message).length;
+        partial = new ByteArrayInputStream(serializer.serialize(message));
+        message = null;
+        return partial.available();
       } catch (TException e) {
         throw Status.INTERNAL.withDescription("failed to serialize thrift message")
             .withCause(e).asRuntimeException();

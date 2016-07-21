@@ -38,11 +38,11 @@ import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.util.logging.Logger;
 
-// Server that manages startup/ shutdown of a {Greeter} server
+/** Server that manages startup/ shutdown of a Greeter server. */
 public class HelloWorldServer {
   private static final Logger logger = Logger.getLogger(HelloWorldServer.class.getName());
 
-  // port on which the server should run
+  /** port on which the server should run. */
   private int port = 50051;
   private Server server;
 
@@ -55,7 +55,6 @@ public class HelloWorldServer {
     Runtime.getRuntime().addShutdownHook(new Thread() {
       @Override
       public void run() {
-        // Use stderr to print logs
         System.err.println("*** Shutting down gRPC server since JVM is shutting down");
         HelloWorldServer.this.stop();
         System.err.println("*** Server shut down");
@@ -75,7 +74,7 @@ public class HelloWorldServer {
     }
   }
 
-  // main function to launch server from cmd
+  /** main function to launch server from cmd. */
   public static void main(String[] args) throws IOException, InterruptedException {
     final HelloWorldServer server = new HelloWorldServer();
     server.start();

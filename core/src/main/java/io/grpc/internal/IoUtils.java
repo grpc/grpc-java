@@ -29,16 +29,16 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.util;
+package io.grpc.internal;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-// Common IoUtils for thrift and nanopb to convert inputstream to bytes
+/** Common IoUtils for thrift and nanopb to convert inputstream to bytes. */
 public final class IoUtils {
 
-  // maximum buffer to be read is 16 KB
+  /** maximum buffer to be read is 16 KB. */
   private static final int MAX_BUFFER_LENGTH = 16384; 
   
   /** Returns the byte array. */
@@ -47,7 +47,7 @@ public final class IoUtils {
     int nRead;
     byte[] bytes = new byte[MAX_BUFFER_LENGTH];
 
-    while ((nRead = is.read(bytes, 0, MAX_BUFFER_LENGTH)) != -1) {
+    while ((nRead = is.read(bytes, 0, bytes.length)) != -1) {
       buffer.write(bytes, 0, nRead);
     }
 

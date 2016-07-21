@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-// simple client that requests a greeting from HelloWorldServer
+/** Simple client that requests a greeting from {@link HelloWorldServer}. */
 public class HelloWorldClient {
   private static final Logger logger = Logger.getLogger(HelloWorldClient.class.getName());
 
@@ -57,23 +57,23 @@ public class HelloWorldClient {
     channel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
   }
 
-  // Say Hello to Server
+  /** Say Hello to Server. */
   public void greet(String name) {
-  	logger.info("Will try to greet " + name + " ...");
-  	HelloRequest hellorequest = new HelloRequest(name);
-  	GreeterGrpc.sayHello_args request = new GreeterGrpc.sayHello_args(hellorequest);
-  
-  	GreeterGrpc.sayHello_result response;
-  	try {
-  	  response = blockingStub.sayHello(request);
-  	} catch (StatusRuntimeException e) {
+    logger.info("Will try to greet " + name + " ...");
+    HelloRequest hellorequest = new HelloRequest(name);
+    GreeterGrpc.sayHello_args request = new GreeterGrpc.sayHello_args(hellorequest);
+
+    GreeterGrpc.sayHello_result response;
+    try {
+      response = blockingStub.sayHello(request);
+    } catch (StatusRuntimeException e) {
       logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
       return;
-  	}
-  	logger.info("Greeting: " + response.success.message);
+    }
+    logger.info("Greeting: " + response.success.message);
   }
 
-  // Greet Server
+  /** Greet Server. */
   public static void main(String[] args) throws Exception {
     HelloWorldClient client = new HelloWorldClient("localhost" , 50051);
     try {

@@ -33,8 +33,8 @@ package io.grpc.thrift;
 
 import org.apache.thrift.TBase;
 
-/** produce new Message Instances. 
- *  Used by Marshaller to deserialize incoming Messages 
+/** 
+ *  Produce new Message Instances. Used by Marshaller to deserialize incoming messages. 
  */
 public interface MessageFactory<T extends TBase<T,?>> {
   T newInstance();
