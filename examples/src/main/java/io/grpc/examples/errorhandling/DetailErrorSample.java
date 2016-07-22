@@ -53,6 +53,7 @@ import io.grpc.examples.helloworld.GreeterGrpc.GreeterFutureStub;
 import io.grpc.examples.helloworld.GreeterGrpc.GreeterStub;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
+import io.grpc.protobuf.ProtoUtils;
 import io.grpc.stub.StreamObserver;
 
 import java.util.concurrent.CountDownLatch;
@@ -65,8 +66,9 @@ import javax.annotation.Nullable;
  * Shows how to setting and reading RPC error details
  */
 public class DetailErrorSample {
-  static final Metadata.Key<byte[]>
-    DEBUG_INFO_TRAILER_KEY = Metadata.Key.of("debug-info-bin", Metadata.BINARY_BYTE_MARSHALLER);
+  static final Metadata.Key<DebugInfo>
+    DEBUG_INFO_TRAILER_KEY = ProtoUtils.keyForProto(DebugInfo.getDefaultInstance());
+
   static final DebugInfo DEBUG_INFO =
     DebugInfo.newBuilder()
       .addStackEntries("stack_entry_1")
@@ -86,7 +88,7 @@ public class DetailErrorSample {
       @Override
       public void sayHello(HelloRequest request, StreamObserver<HelloReply> responseObserver) {
         Metadata trailers = new Metadata();
-        trailers.put(DEBUG_INFO_TRAILER_KEY, DEBUG_INFO.toByteArray());
+        trailers.put(DEBUG_INFO_TRAILER_KEY, DEBUG_INFO);
         responseObserver.onError(Status.INTERNAL.asRuntimeException(trailers));
       }
     }).build().start();
@@ -111,8 +113,8 @@ public class DetailErrorSample {
     Verify.verify(status.getCode() == Status.Code.INTERNAL);
     Verify.verify(trailers.containsKey(DEBUG_INFO_TRAILER_KEY));
     try {
-      Verify.verify(DebugInfo.parseFrom(trailers.get(DEBUG_INFO_TRAILER_KEY)).equals(DEBUG_INFO));
-    } catch (InvalidProtocolBufferException i) {
+      Verify.verify(trailers.get(DEBUG_INFO_TRAILER_KEY).equals(DEBUG_INFO));
+    } catch (IllegalArgumentException i) {
       throw new VerifyException(i);
     }
   }
@@ -213,9 +215,8 @@ public class DetailErrorSample {
         Verify.verify(status.getCode() == Status.Code.INTERNAL);
         Verify.verify(trailers.containsKey(DEBUG_INFO_TRAILER_KEY));
         try {
-          Verify.verify(
-            DebugInfo.parseFrom(trailers.get(DEBUG_INFO_TRAILER_KEY)).equals(DEBUG_INFO));
-        } catch (InvalidProtocolBufferException i) {
+          Verify.verify(trailers.get(DEBUG_INFO_TRAILER_KEY).equals(DEBUG_INFO));
+        } catch (IllegalArgumentException i) {
           throw new VerifyException(i);
         }
 
