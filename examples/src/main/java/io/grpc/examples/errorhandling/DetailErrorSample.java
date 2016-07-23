@@ -76,6 +76,8 @@ public class DetailErrorSample {
       .addStackEntries("stack_entry_3")
       .setDetail("detailed error info.").build();
 
+  static final String DEBUG_DESC = "detailed error description";
+
   public static void main(String[] args) throws Exception {
     new DetailErrorSample().run();
   }
@@ -89,7 +91,8 @@ public class DetailErrorSample {
       public void sayHello(HelloRequest request, StreamObserver<HelloReply> responseObserver) {
         Metadata trailers = new Metadata();
         trailers.put(DEBUG_INFO_TRAILER_KEY, DEBUG_INFO);
-        responseObserver.onError(Status.INTERNAL.asRuntimeException(trailers));
+        responseObserver.onError(Status.INTERNAL.withDescription(DEBUG_DESC)
+          .asRuntimeException(trailers));
       }
     }).build().start();
     channel =
@@ -112,6 +115,7 @@ public class DetailErrorSample {
     Metadata trailers = Status.trailersFromThrowable(t);
     Verify.verify(status.getCode() == Status.Code.INTERNAL);
     Verify.verify(trailers.containsKey(DEBUG_INFO_TRAILER_KEY));
+    Verify.verify(status.getDescription().equals(DEBUG_DESC));
     try {
       Verify.verify(trailers.get(DEBUG_INFO_TRAILER_KEY).equals(DEBUG_INFO));
     } catch (IllegalArgumentException i) {
