@@ -37,7 +37,7 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.Uninterruptibles;
-import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.rpc.DebugInfo;
 
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
