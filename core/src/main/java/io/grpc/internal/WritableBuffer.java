@@ -31,6 +31,8 @@
 
 package io.grpc.internal;
 
+import javax.annotation.Nullable;
+
 /**
  * An interface for a byte buffer that can only be written to.
  * {@link WritableBuffer}s are a generic way to transfer bytes to
@@ -70,4 +72,13 @@ public interface WritableBuffer {
    * this buffer is no longer used and its resources can be reused.
    */
   void release();
+
+  /**
+   * Creates a new Writable buffer derived from this buffer.  The new buffer represents the
+   * remaining space available for reuse.  After calling snip(), the current buffer may not be
+   * written to.
+   *
+   * @returns a new WritableBuffer or {@code null} if there is not enough remaining space.
+   */
+  @Nullable WritableBuffer snip();
 }

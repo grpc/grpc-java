@@ -394,6 +394,11 @@ public class MessageFramerTest {
     }
 
     @Override
+    public WritableBuffer snip() {
+      return null;
+    }
+
+    @Override
     public boolean equals(Object buffer) {
       if (!(buffer instanceof ByteWritableBuffer)) {
         return false;

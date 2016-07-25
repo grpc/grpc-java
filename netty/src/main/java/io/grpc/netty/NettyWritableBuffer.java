@@ -73,4 +73,15 @@ class NettyWritableBuffer implements WritableBuffer {
   ByteBuf bytebuf() {
     return bytebuf;
   }
+
+  @Override
+  public WritableBuffer snip() {
+    // If there isn't much room left, don't bother.
+    if (bytebuf.writableBytes() < 16) {
+      return null;
+    }
+    ByteBuf remaining = bytebuf.slice(bytebuf.writerIndex(), bytebuf.writableBytes()).retain();
+    remaining.writerIndex(0);
+    return new NettyWritableBuffer(remaining);
+  }
 }

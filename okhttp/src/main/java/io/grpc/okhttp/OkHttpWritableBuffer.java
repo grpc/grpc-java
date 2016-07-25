@@ -77,4 +77,10 @@ class OkHttpWritableBuffer implements WritableBuffer {
   Buffer buffer() {
     return buffer;
   }
+
+  @Override
+  public WritableBuffer snip() {
+    // not yet implemented.
+    return null;
+  }
 }

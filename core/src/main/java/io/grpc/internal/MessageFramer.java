@@ -79,6 +79,7 @@ public class MessageFramer {
   private static final byte COMPRESSED = 1;
 
   private final Sink sink;
+  /** buffer is the currently used buffer or null if none is in use. */
   private WritableBuffer buffer;
   private Compressor compressor = Codec.Identity.NONE;
   private boolean messageCompression = true;
@@ -275,8 +276,9 @@ public class MessageFramer {
   public void close() {
     if (!isClosed()) {
       closed = true;
-      // With the current code we don't expect readableBytes > 0 to be possible here, added
-      // defensively to prevent buffer leak issues if the framer code changes later.
+      // buffer may have readable bytes if the framer is not flushed, as is common in unary calls.
+      // Unary calls typically call writePayload followed by halfClose, which leaves data inside of
+      // buffer.  Only release the buffer if there is nothing left to read.
       if (buffer != null && buffer.readableBytes() == 0) {
         releaseBuffer();
       }
@@ -302,7 +304,9 @@ public class MessageFramer {
 
   private void commitToSink(boolean endOfStream, boolean flush) {
     WritableBuffer buf = buffer;
-    buffer = null;
+    if (buf != null && !isClosed()) {
+      buffer = buf.snip();
+    }
     sink.deliverFrame(buf, endOfStream, flush);
   }
 
