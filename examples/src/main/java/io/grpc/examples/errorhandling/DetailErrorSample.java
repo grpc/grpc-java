@@ -70,15 +70,15 @@ import javax.annotation.Nullable;
  * level error.
  */
 public class DetailErrorSample {
-  static final Metadata.Key<DebugInfo>
-    DEBUG_INFO_TRAILER_KEY = ProtoUtils.keyForProto(DebugInfo.getDefaultInstance());
+  static final Metadata.Key<DebugInfo> DEBUG_INFO_TRAILER_KEY =
+      ProtoUtils.keyForProto(DebugInfo.getDefaultInstance());
 
   static final DebugInfo DEBUG_INFO =
-    DebugInfo.newBuilder()
-      .addStackEntries("stack_entry_1")
-      .addStackEntries("stack_entry_2")
-      .addStackEntries("stack_entry_3")
-      .setDetail("detailed error info.").build();
+      DebugInfo.newBuilder()
+          .addStackEntries("stack_entry_1")
+          .addStackEntries("stack_entry_2")
+          .addStackEntries("stack_entry_3")
+          .setDetail("detailed error info.").build();
 
   static final String DEBUG_DESC = "detailed error description";
 
@@ -96,11 +96,11 @@ public class DetailErrorSample {
         Metadata trailers = new Metadata();
         trailers.put(DEBUG_INFO_TRAILER_KEY, DEBUG_INFO);
         responseObserver.onError(Status.INTERNAL.withDescription(DEBUG_DESC)
-          .asRuntimeException(trailers));
+            .asRuntimeException(trailers));
       }
     }).build().start();
     channel =
-      ManagedChannelBuilder.forAddress("localhost", server.getPort()).usePlaintext(true).build();
+        ManagedChannelBuilder.forAddress("localhost", server.getPort()).usePlaintext(true).build();
 
     blockingCall();
     futureCallDirect();
@@ -139,7 +139,7 @@ public class DetailErrorSample {
   void futureCallDirect() {
     GreeterFutureStub stub = GreeterGrpc.newFutureStub(channel);
     ListenableFuture<HelloReply> response =
-      stub.sayHello(HelloRequest.newBuilder().build());
+        stub.sayHello(HelloRequest.newBuilder().build());
 
     try {
       response.get();
@@ -154,7 +154,7 @@ public class DetailErrorSample {
   void futureCallCallback() {
     GreeterFutureStub stub = GreeterGrpc.newFutureStub(channel);
     ListenableFuture<HelloReply> response =
-      stub.sayHello(HelloRequest.newBuilder().build());
+        stub.sayHello(HelloRequest.newBuilder().build());
 
     final CountDownLatch latch = new CountDownLatch(1);
 
@@ -212,7 +212,7 @@ public class DetailErrorSample {
    */
   void advancedAsyncCall() {
     ClientCall<HelloRequest, HelloReply> call =
-      channel.newCall(GreeterGrpc.METHOD_SAY_HELLO, CallOptions.DEFAULT);
+        channel.newCall(GreeterGrpc.METHOD_SAY_HELLO, CallOptions.DEFAULT);
 
     final CountDownLatch latch = new CountDownLatch(1);
 
