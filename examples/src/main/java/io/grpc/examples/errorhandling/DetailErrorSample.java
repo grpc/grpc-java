@@ -63,7 +63,11 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
- * Shows how to setting and reading RPC error details
+ * Shows how to setting and reading RPC error details.
+ * Proto used here is just an example proto, but the pattern sending
+ * application error information as an application-specific binary protos
+ * in the response trailers is the recommended way to return application
+ * level error.
  */
 public class DetailErrorSample {
   static final Metadata.Key<DebugInfo>
