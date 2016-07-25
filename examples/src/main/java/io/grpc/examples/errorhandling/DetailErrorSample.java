@@ -122,8 +122,8 @@ public class DetailErrorSample {
     Verify.verify(status.getDescription().equals(DEBUG_DESC));
     try {
       Verify.verify(trailers.get(DEBUG_INFO_TRAILER_KEY).equals(DEBUG_INFO));
-    } catch (IllegalArgumentException i) {
-      throw new VerifyException(i);
+    } catch (IllegalArgumentException e) {
+      throw new VerifyException(e);
     }
   }
 
@@ -224,8 +224,8 @@ public class DetailErrorSample {
         Verify.verify(trailers.containsKey(DEBUG_INFO_TRAILER_KEY));
         try {
           Verify.verify(trailers.get(DEBUG_INFO_TRAILER_KEY).equals(DEBUG_INFO));
-        } catch (IllegalArgumentException i) {
-          throw new VerifyException(i);
+        } catch (IllegalArgumentException e) {
+          throw new VerifyException(e);
         }
 
         latch.countDown();
