@@ -70,17 +70,17 @@ import javax.annotation.Nullable;
  * level error.
  */
 public class DetailErrorSample {
-  static final Metadata.Key<DebugInfo> DEBUG_INFO_TRAILER_KEY =
+  private static final Metadata.Key<DebugInfo> DEBUG_INFO_TRAILER_KEY =
       ProtoUtils.keyForProto(DebugInfo.getDefaultInstance());
 
-  static final DebugInfo DEBUG_INFO =
+  private static final DebugInfo DEBUG_INFO =
       DebugInfo.newBuilder()
           .addStackEntries("stack_entry_1")
           .addStackEntries("stack_entry_2")
           .addStackEntries("stack_entry_3")
           .setDetail("detailed error info.").build();
 
-  static final String DEBUG_DESC = "detailed error description";
+  private static final String DEBUG_DESC = "detailed error description";
 
   public static void main(String[] args) throws Exception {
     new DetailErrorSample().run();
