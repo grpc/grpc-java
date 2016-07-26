@@ -304,6 +304,8 @@ public class MessageFramer {
 
   private void commitToSink(boolean endOfStream, boolean flush) {
     WritableBuffer buf = buffer;
+    // If we have a buffer still and we are not trying to do the last flush on a close() call,
+    // try and reuse the remainder of the buffer.
     if (buf != null && !isClosed()) {
       buffer = buf.snip();
     }
