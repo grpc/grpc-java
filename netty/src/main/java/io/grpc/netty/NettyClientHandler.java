@@ -110,6 +110,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   private final Random random = new Random();
   private WriteQueue clientWriteQueue;
   private Http2Ping ping;
+  private FlowControlPinger flowControlPing = new FlowControlPinger();
 
   static NettyClientHandler newHandler(ClientTransportLifecycleManager lifecycleManager,
                                        int flowControlWindow, int maxHeaderListSize,
@@ -120,6 +121,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     Http2FrameReader frameReader = new DefaultHttp2FrameReader(headersDecoder);
     Http2FrameWriter frameWriter = new DefaultHttp2FrameWriter();
     Http2Connection connection = new DefaultHttp2Connection(false);
+
     return newHandler(
         connection, frameReader, frameWriter, lifecycleManager, flowControlWindow, ticker);
   }
@@ -145,8 +147,9 @@ class NettyClientHandler extends AbstractNettyHandler {
         new DefaultHttp2ConnectionEncoder(connection, frameWriter));
 
     // Create the local flow controller configured to auto-refill the connection window.
-    connection.local().flowController(new DefaultHttp2LocalFlowController(connection,
-            DEFAULT_WINDOW_UPDATE_RATIO, true));
+    connection.local().flowController(
+        new DefaultHttp2LocalFlowController(connection, DEFAULT_WINDOW_UPDATE_RATIO, true));
+
 
     Http2ConnectionDecoder decoder = new DefaultHttp2ConnectionDecoder(connection, encoder,
         frameReader);
@@ -172,6 +175,7 @@ class NettyClientHandler extends AbstractNettyHandler {
 
     Http2Connection connection = encoder.connection();
     streamKey = connection.newKey();
+
     connection.addListener(new Http2ConnectionAdapter() {
       @Override
       public void onGoAwayReceived(int lastStreamId, long errorCode, ByteBuf debugData) {
@@ -219,6 +223,11 @@ class NettyClientHandler extends AbstractNettyHandler {
     }
   }
 
+  @VisibleForTesting
+  FlowControlPinger flowControlPinger() {
+    return flowControlPing;
+  }
+
   void startWriteQueue(Channel channel) {
     clientWriteQueue = new WriteQueue(channel);
   }
@@ -246,10 +255,17 @@ class NettyClientHandler extends AbstractNettyHandler {
   /**
    * Handler for an inbound HTTP/2 DATA frame.
    */
-  private void onDataRead(int streamId, ByteBuf data, boolean endOfStream) {
+
+  private void onDataRead(int streamId, ByteBuf data, int padding, boolean endOfStream) {
+    if (!flowControlPing.isPinging()) {
+      flowControlPing.setPinging(true);
+      flowControlPing.sendPing(ctx());
+    }
+    flowControlPing.incrementDataSincePing(data.readableBytes() + padding);
     NettyClientStream stream = clientStream(requireHttp2Stream(streamId));
     stream.transportDataReceived(data, endOfStream);
   }
+
 
   /**
    * Handler for an inbound HTTP/2 RST_STREAM frame, terminating a stream.
@@ -585,7 +601,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     @Override
     public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding,
         boolean endOfStream) throws Http2Exception {
-      NettyClientHandler.this.onDataRead(streamId, data, endOfStream);
+      NettyClientHandler.this.onDataRead(streamId, data, padding, endOfStream);
       return padding;
     }
 
@@ -607,17 +623,23 @@ class NettyClientHandler extends AbstractNettyHandler {
       NettyClientHandler.this.onRstStreamRead(streamId, errorCode);
     }
 
-    @Override public void onPingAckRead(ChannelHandlerContext ctx, ByteBuf data)
-        throws Http2Exception {
+    @Override
+    public void onPingAckRead(ChannelHandlerContext ctx, ByteBuf data) throws Http2Exception {
       Http2Ping p = ping;
-      if (p != null) {
+      if (data.readLong() == flowControlPing.payload()) {
+        data.readerIndex(0);
+        flowControlPing.incrementDataSincePing(data.readableBytes());
+        flowControlPing.updateWindow();
+        logger.log(Level.FINE, String.format("OBDP: {0}", flowControlPing.getDataSincePing()));
+      } else if (p != null) {
+        data.readerIndex(0);
         long ackPayload = data.readLong();
         if (p.payload() == ackPayload) {
           p.complete();
           ping = null;
         } else {
-          logger.log(Level.WARNING, String.format("Received unexpected ping ack. "
-              + "Expecting %d, got %d", p.payload(), ackPayload));
+        logger.log(Level.WARNING, String.format("Received unexpected ping ack. "
+            + "Expecting %d, got %d", p.payload(), ackPayload));
         }
       } else {
         logger.warning("Received unexpected ping ack. No ping outstanding");

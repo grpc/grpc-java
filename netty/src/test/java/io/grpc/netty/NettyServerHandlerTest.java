@@ -54,6 +54,15 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.io.ByteStreams;
 
+import org.junit.Before;
+import org.junit.Ignore;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -78,15 +87,6 @@ import io.netty.handler.codec.http2.Http2LocalFlowController;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
-
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -292,6 +292,142 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     channelRead(headersFrame);
     verifyWrite().writeRstStream(eq(ctx()), eq(STREAM_ID), eq(Http2Error.REFUSED_STREAM.code()),
         any(ChannelPromise.class));
+  }
+
+  @Test
+  public void dataPingSentOnHeaderRecieved() throws Exception {
+    createStream();
+
+    channelRead(dataFrame(3, false));
+
+    assertEquals(1, handler().flowControlPinger().getPingCount());
+  }
+
+  @Test
+  public void dataPingAckIsRecognized() throws Exception {
+    createStream();
+
+    channelRead(dataFrame(3, false));
+    long pingdata = handler().flowControlPinger().payload();
+    ByteBuf payload = handler().ctx().alloc().buffer(8);
+    payload.writeLong(pingdata);
+    channelRead(pingFrame(true, payload));
+
+    assertEquals(1, handler().flowControlPinger().getPingCount());
+    assertEquals(1, handler().flowControlPinger().getPingReturn());
+  }
+
+  @Test
+  public void dataSizeSincePingAccumulates() throws Exception {
+    createStream();
+    long frameData = 123456;
+    ByteBuf buff = ctx().alloc().buffer(16);
+    buff.writeLong(frameData);
+    int length = buff.readableBytes();
+
+    channelRead(dataFrame(3, false, buff.copy()));
+    channelRead(dataFrame(3, false, buff.copy()));
+    channelRead(dataFrame(3, false, buff.copy()));
+
+    assertEquals(length * 3, handler().flowControlPinger().getDataSincePing());
+  }
+
+  @Test
+  public void windowUpdateMatchesTarget() throws Exception {
+    Http2Stream connectionStream = connection().connectionStream();
+    Http2LocalFlowController localFlowController = connection().local().flowController();
+    createStream();
+
+    ByteBuf data = ctx().alloc().buffer(1024);
+    while (data.isWritable()) {
+      data.writeLong(1111);
+    }
+    int length = data.readableBytes();
+    ByteBuf frame = dataFrame(3, false, data.copy());
+    channelRead(frame);
+    int accumulator = length;
+    for (int i = 0; i < 40; i++) {
+      channelRead(dataFrame(3, false, data.copy()));
+      accumulator += length;
+    }
+    long pingdata = handler().flowControlPinger().payload();
+    ByteBuf buffer = handler().ctx().alloc().buffer(8);
+    buffer.writeLong(pingdata);
+    channelRead(pingFrame(true, buffer));
+    accumulator += buffer.readableBytes();
+
+    assertEquals(accumulator, handler().flowControlPinger().getDataSincePing());
+    assertEquals(2 * accumulator, localFlowController.initialWindowSize(connectionStream));
+  }
+
+  @Test
+  public void windowShouldNotDecrease() throws Exception {
+    createStream();
+    int initWindow = 1048576;
+    Http2Stream connectionStream = connection().connectionStream();
+    Http2LocalFlowController localFlowController = connection().local().flowController();
+    localFlowController.incrementWindowSize(connectionStream, (initWindow - flowControlWindow));
+    localFlowController.initialWindowSize(initWindow);
+
+    ByteBuf data = ctx().alloc().buffer(16 * 1024);
+    while (data.isWritable()) {
+      data.writeLong(1111);
+    }
+    int length = data.readableBytes();
+    ByteBuf frame = dataFrame(3, false, data.copy());
+    channelRead(frame);
+    int accumulator = length;
+    for (int i = 0; i < 10; i++) {
+      channelRead(dataFrame(3, false, data.copy()));
+      accumulator += length;
+    }
+    long pingdata = handler().flowControlPinger().payload();
+    ByteBuf buffer = handler().ctx().alloc().buffer(8);
+    buffer.writeLong(pingdata);
+    channelRead(pingFrame(true, buffer));
+    accumulator += buffer.readableBytes();
+
+    assertEquals(accumulator, handler().flowControlPinger().getDataSincePing());
+    assertEquals(initWindow, localFlowController.initialWindowSize(connectionStream));
+  }
+
+  @Test
+  public void windowShouldNotExceedMaxWindowSize() throws Exception {
+    createStream();
+    Http2Stream connectionStream = connection().connectionStream();
+    Http2LocalFlowController localFlowController = connection().local().flowController();
+    int maxWindow = handler().flowControlPinger().maxWindow();
+
+    handler().flowControlPinger().setDataSizeSincePing(maxWindow);
+    int payload = handler().flowControlPinger().payload();
+    ByteBuf buffer = handler().ctx().alloc().buffer(8);
+    buffer.writeLong(payload);
+    channelRead(pingFrame(true, buffer));
+
+    assertEquals(maxWindow, localFlowController.initialWindowSize(connectionStream));
+  }
+
+  @Test
+  public void consecutiveUpdates() throws Exception {
+    createStream();
+
+    channelRead(dataFrame(3, false));
+    handler().flowControlPinger().setDataSizeSincePing(40000);
+    long pingdata = handler().flowControlPinger().payload();
+    ByteBuf buffer = handler().ctx().alloc().buffer(8);
+    buffer.writeLong(pingdata);
+    int pingDataLength = buffer.readableBytes();
+    channelRead(pingFrame(true, buffer));
+
+    assertEquals(80000 + 2 * pingDataLength,
+        connection().local().flowController().initialWindowSize(connection().connectionStream()));
+
+    channelRead(dataFrame(3, false));
+    handler().flowControlPinger().setDataSizeSincePing(70000);
+    channelRead(pingFrame(true, buffer));
+
+    assertEquals(140000 + 2 * pingDataLength,
+        connection().local().flowController().initialWindowSize(connection().connectionStream()));
   }
 
   private void createStream() throws Exception {
