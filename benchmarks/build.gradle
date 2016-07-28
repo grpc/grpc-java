@@ -24,10 +24,11 @@ run.enabled = false
 
 jmh {
     jmhVersion = '1.12'
-    warmupIterations = 10
-    iterations = 10
+    warmupIterations = 5
+    iterations = 1
     fork = 1
     jvmArgs = "-server -Xms2g -Xmx2g"
+    include = "io.grpc.benchmarks.netty.WriteBenchmark"
 }
 
 dependencies {

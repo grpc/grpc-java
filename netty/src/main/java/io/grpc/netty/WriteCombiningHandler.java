@@ -30,63 +30,122 @@
  */
 package io.grpc.netty;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+import static io.netty.util.ReferenceCountUtil.safeRelease;
+
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.EmptyByteBuf;
+import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
-import io.netty.util.ReferenceCountUtil;
+import io.netty.channel.DefaultChannelPromise;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.FutureListener;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class WriteCombiningHandler extends ChannelOutboundHandlerAdapter {
 
-  private static final int BUFFER_SIZE = 4096;
+  private static final int INITIAL_BUFFER_SIZE = 4096;
+  private static final int MAX_COPY_BUFFER_SIZE = 256;
 
-  private ByteBuf buffer;
-  private ByteBufAllocator allocator;
+  private static final ByteBuf EMPTY_BUFFER = new EmptyByteBuf(UnpooledByteBufAllocator.DEFAULT);
+
+  private ByteBuf buffer = EMPTY_BUFFER;
+  private CollectivePromise bufferPromise;
+
+  private ChannelHandlerContext ctx;
 
   @Override
   public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-    allocator = ctx.channel().alloc();
+    assert buffer == EMPTY_BUFFER;
+    this.ctx = ctx;
   }
 
   @Override
   public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
-    if (buffer != null) {
-      ReferenceCountUtil.safeRelease(buffer);
-      buffer = null;
-    }
+    safeRelease(buffer);
+    buffer = EMPTY_BUFFER;
+    this.ctx = null;
   }
 
   @Override
   public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
-    ByteBuf data = (ByteBuf) msg;
-    if (buffer == null) {
-      buffer = allocator.directBuffer(BUFFER_SIZE, BUFFER_SIZE);
+    if (!(msg instanceof ByteBuf)) {
+      writeBuffer();
+      ctx.write(msg, promise);
+      return;
     }
-
-    if (buffer.writableBytes() >= data.readableBytes()) {
-      buffer.writeBytes(data);
-      promise.setSuccess();
-      ReferenceCountUtil.safeRelease(data);
+    final ByteBuf data = (ByteBuf) msg;
+    if (data.readableBytes() > MAX_COPY_BUFFER_SIZE) {
+      writeBuffer();
+      ctx.write(data, promise);
+    } else if (data.readableBytes() > buffer.writableBytes()) {
+      writeBuffer();
+      newBufferAndPromise();
+      copyBytes(data, promise);
     } else {
-      ctx.write(buffer);
-      buffer = null;
-      if (data.readableBytes() < BUFFER_SIZE) {
-        write(ctx, msg, promise);
-      } else {
-        ctx.write(msg, promise);
-      }
+      copyBytes(data, promise);
     }
   }
 
   @Override
   public void flush(ChannelHandlerContext ctx) throws Exception {
-    if (buffer != null && buffer.readableBytes() > 0) {
-      ctx.write(buffer, ctx.voidPromise());
-      buffer = null;
-    }
+    writeBuffer();
+    newBufferAndPromise();
     ctx.flush();
   }
 
+  private void writeBuffer() {
+    if (!buffer.isReadable()) {
+      return;
+    }
+    ctx.write(buffer.retainedSlice(), bufferPromise);
+  }
 
+  private void newBufferAndPromise() {
+    if (buffer.writableBytes() > MAX_COPY_BUFFER_SIZE * 2) {
+      buffer = buffer.slice(buffer.writerIndex(), buffer.writableBytes());
+    } else {
+      safeRelease(buffer);
+      buffer = ctx.alloc().directBuffer(INITIAL_BUFFER_SIZE, INITIAL_BUFFER_SIZE);
+    }
+    bufferPromise = new CollectivePromise(ctx);
+  }
+
+  private void copyBytes(ByteBuf buf, ChannelPromise promise) {
+    buffer.writeBytes(buf);
+    bufferPromise.add(promise);
+    safeRelease(buf);
+  }
+
+  private static final class CollectivePromise extends DefaultChannelPromise
+      implements FutureListener<Void> {
+
+    private final List<ChannelPromise> promises = new ArrayList<ChannelPromise>();
+
+    CollectivePromise(ChannelHandlerContext ctx) {
+      super(ctx.channel(), ctx.executor());
+    }
+
+    void add(ChannelPromise promise) {
+      checkNotNull(promise);
+      promises.add(promise);
+    }
+
+    @Override
+    public void operationComplete(Future<Void> future) throws Exception {
+      final boolean isSuccess = future.isSuccess();
+      for (int i = 0; i < promises.size(); i++) {
+        ChannelPromise promise = promises.get(i);
+        if (isSuccess) {
+          promise.trySuccess();
+        } else {
+          promise.tryFailure(future.cause());
+        }
+      }
+    }
+  }
 }
