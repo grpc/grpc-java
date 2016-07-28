@@ -1,0 +1,19 @@
+group 'io.grpc.benchmarks'
+version '1.0-SNAPSHOT'
+
+apply plugin: 'java'
+apply plugin: 'application'
+
+mainClassName = "io.grpc.benchmarks.HttpJsonServer"
+
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testCompile group: 'junit', name: 'junit', version: '4.11'
+    compile "com.sparkjava:spark-core:2.5"
+    compile "org.slf4j:slf4j-nop:1.7.21"
+}

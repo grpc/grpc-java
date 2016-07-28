@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<android.support.v7.widget.CardView
+        xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:card_view="http://schemas.android.com/apk/res-auto"
+        android:id="@+id/protobuf_cv"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        card_view:cardBackgroundColor="@android:color/white"
+        card_view:cardCornerRadius="2dp"
+        card_view:contentPadding="8dp">
+    <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+        <TextView
+                android:id="@+id/protobuf_benchmark_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="16dp"
+                android:layout_marginEnd="16dp"
+                android:layout_alignParentLeft="true"
+                android:layout_alignParentStart="true"
+                android:layout_alignParentTop="true"
+                android:layout_toLeftOf="@+id/protobuf_benchmark_progress"
+                android:layout_toStartOf="@+id/protobuf_benchmark_progress"
+                android:textSize="24sp"
+                android:textColor="@android:color/primary_text_light"
+                android:text="Benchmark Title Here"
+        />
+
+        <TextView
+                android:id="@+id/protobuf_benchmark_description"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="16dp"
+                android:layout_marginEnd="16dp"
+                android:layout_alignParentLeft="true"
+                android:layout_alignParentStart="true"
+                android:layout_below="@+id/protobuf_benchmark_title"
+                android:layout_toLeftOf="@+id/protobuf_benchmark_progress"
+                android:layout_toStartOf="@+id/protobuf_benchmark_progress"
+                android:textSize="18sp"
+                android:textColor="@android:color/secondary_text_light"
+                android:text="Results go here"
+        />
+
+        <ProgressBar
+                android:id="@+id/protobuf_benchmark_progress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentRight="true"
+                android:layout_alignParentEnd="true"
+                android:layout_margin="8dp"
+                android:layout_centerVertical="true"
+                style="@android:style/Widget.ProgressBar.Small.Inverse"
+                android:visibility="invisible" />
+
+        <ImageButton
+                android:id="@+id/protobuf_benchmark_start"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentRight="true"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:src="@android:drawable/ic_media_play"
+                android:background="@color/clear"
+                android:contentDescription="Start benchmark button"
+        />
+
+    </RelativeLayout>
+</android.support.v7.widget.CardView>

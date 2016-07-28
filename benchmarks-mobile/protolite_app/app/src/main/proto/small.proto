@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "io.grpc.benchmarks";
+option java_outer_classname = "SmallBenchmarkProto";
+
+package benchmarks;
+
+message SmallRequest {
+  string name = 1;
+}
+
+message SmallReply {
+  string message = 1;
+}

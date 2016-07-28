@@ -1,0 +1,92 @@
+syntax = "proto3";
+package benchmarks;
+
+option java_multiple_files = true;
+option java_package = "io.grpc.benchmarks";
+option java_outer_classname = "LargeProtos";
+
+message Thing1 {
+    int32 int1 = 1;
+    int32 int2 = 2;
+    int32 int3 = 3;
+    float float1 = 4;
+    float float2 = 5;
+    float float3 = 6;
+    string string1 = 7;
+    string string2 = 8;
+    string string3 = 9;
+    bool bool1 = 11;
+    bool bool2 = 12;
+    bool bool3 = 13;
+    double double1 = 14;
+    double double2 = 15;
+    double double3 = 16;
+
+    repeated Thing2 things2 = 10;
+
+    message Thing2 {
+        int32 int1 = 1;
+        int32 int2 = 2;
+        int32 int3 = 3;
+        float float1 = 4;
+        float float2 = 5;
+        float float3 = 6;
+        string string1 = 7;
+        string string2 = 8;
+        string string3 = 9;
+        bool bool1 = 11;
+        bool bool2 = 12;
+        bool bool3 = 13;
+        double double1 = 14;
+        double double2 = 15;
+        double double3 = 16;
+        EnumType type = 17;
+        enum EnumType {
+            VALUE0 = 0;
+            VALUE1 = 1;
+            VALUE2 = 2;
+            VALUE3 = 3;
+            VALUE4 = 4;
+            VALUE5 = 5;
+        }
+
+        repeated Thing3 things3 = 10;
+
+        message Thing3 {
+            int32 int1 = 1;
+            int32 int2 = 2;
+            int32 int3 = 3;
+            float float1 = 4;
+            float float2 = 5;
+            float float3 = 6;
+            string string1 = 7;
+            string string2 = 8;
+            string string3 = 9;
+            bool bool1 = 11;
+            bool bool2 = 12;
+            bool bool3 = 13;
+            double double1 = 14;
+            double double2 = 15;
+            double double3 = 16;
+        }
+    }
+}
+
+message Things {
+    int32 int1 = 1;
+    int32 int2 = 2;
+    int32 int3 = 3;
+    float float1 = 4;
+    float float2 = 5;
+    float float3 = 6;
+    string string1 = 7;
+    string string2 = 8;
+    string string3 = 9;
+    bool bool1 = 11;
+    bool bool2 = 12;
+    bool bool3 = 13;
+    double double1 = 14;
+    double double2 = 15;
+    double double3 = 16;
+    repeated Thing1 things = 10;
+}

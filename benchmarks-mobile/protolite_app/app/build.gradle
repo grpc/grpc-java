@@ -1,0 +1,98 @@
+apply plugin: 'com.android.application'
+apply plugin: 'com.google.protobuf'
+
+android {
+    compileSdkVersion 23
+    buildToolsVersion "23.0.3"
+
+    // This is for metrics, no workaround for now?
+//    useLibrary 'org.apache.http.legacy'
+
+    sourceSets {
+        main {
+            proto {
+                srcDir 'src/main/benchmarkProtos'
+            }
+        }
+    }
+
+    defaultConfig {
+        applicationId "io.grpc.grpcbenchmarks"
+        minSdkVersion 9
+        targetSdkVersion 23
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+
+        multiDexEnabled true
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            debuggable true
+        }
+    }
+    lintOptions {
+        disable 'InvalidPackage', 'HardcodedText'
+        textReport true
+        textOutput "stdout"
+        abortOnError false
+    }
+}
+
+protobuf {
+    protoc {
+        artifact = 'com.google.protobuf:protoc:3.0.0-beta-3'
+    }
+    plugins {
+        grpc {
+            artifact = 'io.grpc:protoc-gen-grpc-java:0.15.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+        }
+    }
+    generateProtoTasks {
+        all().each { task ->
+            task.builtins {
+                remove javanano
+                java {
+                    option 'lite'
+                }
+            }
+
+            task.plugins {
+                grpc {
+                    // Options added to --grpc_out
+                    option 'lite'
+                }
+            }
+        }
+    }
+}
+
+dependencies {
+    compile fileTree(dir: 'libs', include: ['*.jar'])
+    testCompile 'junit:junit:4.12'
+
+    // UI libraries
+    compile 'com.android.support:cardview-v7:23.4.0'
+    compile 'com.android.support:appcompat-v7:23.4.0'
+
+    // for grpc benchmarks
+    compile 'io.grpc:grpc-protobuf:0.15.0-SNAPSHOT'
+    compile 'io.grpc:grpc-protobuf-lite:0.15.0-SNAPSHOT'
+    compile 'io.grpc:grpc-okhttp:0.15.0-SNAPSHOT'
+    compile 'io.grpc:grpc-stub:0.15.0-SNAPSHOT'
+    compile 'javax.annotation:javax.annotation-api:1.2'
+    compile 'com.google.protobuf:protobuf-java:3.0.0-beta-3'
+    compile 'com.google.protobuf:protobuf-java-util:3.0.0-beta-3'
+    compile 'org.hdrhistogram:HdrHistogram:2.1.8'
+    compile 'org.apache.directory.studio:org.apache.commons.io:2.4'
+
+    androidTestCompile 'com.android.support:support-annotations:23.4.0'
+    androidTestCompile 'com.android.support.test:runner:0.5'
+    androidTestCompile 'com.android.support.test:rules:0.5'
+
+    compile 'com.android.support:multidex:1.0.0'
+}
