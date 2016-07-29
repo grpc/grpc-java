@@ -51,23 +51,23 @@ public class WriteCombiningHandler extends ChannelOutboundHandlerAdapter {
   private static final int INITIAL_BUFFER_SIZE = 4096;
   private static final int MAX_COPY_BUFFER_SIZE = 256;
 
-  private static final ByteBuf EMPTY_BUFFER = new EmptyByteBuf(UnpooledByteBufAllocator.DEFAULT);
-
-  private ByteBuf buffer = EMPTY_BUFFER;
+  private ByteBuf buffer;
   private CollectivePromise bufferPromise;
 
   private ChannelHandlerContext ctx;
 
   @Override
   public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-    assert buffer == EMPTY_BUFFER;
+    buffer = ctx.alloc().directBuffer(INITIAL_BUFFER_SIZE, INITIAL_BUFFER_SIZE);
+    bufferPromise = new CollectivePromise(ctx);
     this.ctx = ctx;
   }
 
   @Override
   public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
     safeRelease(buffer);
-    buffer = EMPTY_BUFFER;
+    buffer = null;
+    bufferPromise = null;
     this.ctx = null;
   }
 
@@ -84,7 +84,6 @@ public class WriteCombiningHandler extends ChannelOutboundHandlerAdapter {
       ctx.write(data, promise);
     } else if (data.readableBytes() > buffer.writableBytes()) {
       writeBuffer();
-      newBufferAndPromise();
       copyBytes(data, promise);
     } else {
       copyBytes(data, promise);
@@ -94,7 +93,6 @@ public class WriteCombiningHandler extends ChannelOutboundHandlerAdapter {
   @Override
   public void flush(ChannelHandlerContext ctx) throws Exception {
     writeBuffer();
-    newBufferAndPromise();
     ctx.flush();
   }
 
@@ -103,13 +101,16 @@ public class WriteCombiningHandler extends ChannelOutboundHandlerAdapter {
       return;
     }
     ctx.write(buffer.retainedSlice(), bufferPromise);
+    newBufferAndPromise();
   }
 
   private void newBufferAndPromise() {
     if (buffer.writableBytes() > MAX_COPY_BUFFER_SIZE * 2) {
       buffer = buffer.slice(buffer.writerIndex(), buffer.writableBytes());
+      buffer.writerIndex(0);
     } else {
       safeRelease(buffer);
+      assert buffer.refCnt() == 0;
       buffer = ctx.alloc().directBuffer(INITIAL_BUFFER_SIZE, INITIAL_BUFFER_SIZE);
     }
     bufferPromise = new CollectivePromise(ctx);
@@ -128,6 +129,7 @@ public class WriteCombiningHandler extends ChannelOutboundHandlerAdapter {
 
     CollectivePromise(ChannelHandlerContext ctx) {
       super(ctx.channel(), ctx.executor());
+      addListener(this);
     }
 
     void add(ChannelPromise promise) {

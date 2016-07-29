@@ -30,9 +30,6 @@
  */
 package io.grpc.netty;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.embedded.EmbeddedChannel;
@@ -40,6 +37,8 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.net.InetSocketAddress;
+
+import static org.junit.Assert.*;
 
 /**
  * Tests for {@link WriteCombiningHandler}
@@ -49,29 +48,82 @@ public class WriteCombiningHandlerTest {
   private EmbeddedChannel channel;
 
   @Before
-  public void setup() {
+  public void setup() throws InterruptedException {
     channel = new EmbeddedChannel();
-    channel.connect(new InetSocketAddress(0));
+    channel.connect(new InetSocketAddress(0)).sync();
     channel.pipeline().addLast(new WriteCombiningHandler());
   }
 
   @Test
-  public void basicFunctioning() {
+  public void basicWriteCombining() {
     ChannelPromise p1 = channel.newPromise();
     ChannelPromise p2 = channel.newPromise();
-    channel.write(buf(10), p1);
-    channel.write(buf(10), p2);
-    channel.flush();
+    ChannelPromise p3 = channel.newPromise();
+    ChannelPromise p4 = channel.newPromise();
 
-    ByteBuf combined = channel.readInbound();
-    assertEquals(20, combined.readableBytes());
+    channel.write(buf(50), p1);
+    channel.write(buf(5), p2);
+    channel.write(buf(95), p3);
+    assertNull(channel.readOutbound());
+    channel.flush();
+    channel.write(buf(10), p4);
+
+    ByteBuf combined = channel.readOutbound();
+    assertNull(channel.readOutbound());
+    assertEquals(150, combined.readableBytes());
     assertTrue(p1.isSuccess());
     assertTrue(p2.isSuccess());
+    assertTrue(p3.isSuccess());
+    assertFalse(p4.isSuccess());
+
+    channel.flush();
+    combined = channel.readOutbound();
+    assertEquals(10, combined.readableBytes());
+    assertTrue(p4.isSuccess());
+  }
+
+  @Test
+  public void largeWritesShouldNotBeCombined() {
+    ChannelPromise p1 = channel.newPromise();
+    ChannelPromise p2 = channel.newPromise();
+    channel.write(buf(1024), p1);
+    channel.write(buf(2048), p2);
+    channel.flush();
+    ByteBuf b = channel.readOutbound();
+    assertEquals(1024, b.readableBytes());
+    assertTrue(p1.isSuccess());
+    b = channel.readOutbound();
+    assertEquals(2048, b.readableBytes());
+    assertTrue(p2.isSuccess());
+  }
+
+  @Test
+  public void mixingLargeAndCombinedWritesShouldWork() {
+    ChannelPromise p1 = channel.newPromise();
+    ChannelPromise p2 = channel.newPromise();
+    ChannelPromise p3 = channel.newPromise();
+    ChannelPromise p4 = channel.newPromise();
+
+    channel.write(buf(10), p1);
+    channel.write(buf(100), p2);
+    channel.write(buf(1024), p3);
+    channel.write(buf(10), p4);
+    channel.flush();
+
+    ByteBuf b = channel.readOutbound();
+    assertEquals(110, b.readableBytes());
+    b = channel.readOutbound();
+    assertEquals(1024, b.readableBytes());
+    b = channel.readOutbound();
+    assertEquals(10, b.readableBytes());
+
+    assertTrue(p1.isSuccess());
+    assertTrue(p2.isSuccess());
+    assertTrue(p3.isSuccess());
+    assertTrue(p4.isSuccess());
   }
 
   ByteBuf buf(int size) {
     return channel.alloc().directBuffer(size, size).writeZero(size);
   }
-
-
 }
