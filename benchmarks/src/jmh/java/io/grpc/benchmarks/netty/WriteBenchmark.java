@@ -55,8 +55,11 @@ import org.HdrHistogram.Histogram;
 import org.HdrHistogram.HistogramIterationValue;
 import org.openjdk.jmh.annotations.AuxCounters;
 import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
+import org.openjdk.jmh.annotations.Level;
 import org.openjdk.jmh.annotations.Measurement;
+import org.openjdk.jmh.annotations.Mode;
 import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
@@ -71,7 +74,8 @@ import java.util.concurrent.TimeUnit;
  */
 @State(Scope.Thread)
 @Warmup(iterations = 1)
-@Measurement(iterations = 1)
+@Measurement(iterations = 1, time = 1)
+@BenchmarkMode(Mode.Throughput)
 @Fork(1)
 public class WriteBenchmark {
 
@@ -81,7 +85,7 @@ public class WriteBenchmark {
   private Channel channel;
 
   private WriteTask writeTask;
-  private int numIterations = 100 * 1000;
+  private final int numIterations = 10 * 1000;
 
   @Param
   public ClientHandler clientHandler;
@@ -97,7 +101,7 @@ public class WriteBenchmark {
     ChannelHandler handler = NO_HANDLER.equals(clientHandler)
         ? new ChannelHandlerAdapter() { }
         : new WriteCombiningHandler();
-    setupChannelAndEventLoop(new WriteCombiningHandler());
+    setupChannelAndEventLoop(handler);
 
     int[] bufferSizes = new int[numWrites];
     for (int i = 0; i < bufferSizes.length; i++) {
@@ -139,17 +143,13 @@ public class WriteBenchmark {
    */
   @Benchmark
   public void writeAndFlush(LatencyCounters counters) throws InterruptedException {
-    Histogram hist = new Histogram(60000000L, 3);
-    writeTask.histogram(hist);
-    counters.histogram(hist);
+    writeTask.histogram(counters.histogram());
     for (int i = 0; i < numIterations; i++) {
       eventLoop.execute(writeTask);
     }
 
-    int i = 0;
-    while (i < 20 && numIterations != hist.getTotalCount()) {
-      Thread.sleep(500);
-      i++;
+    while (numIterations != counters.histogram().getTotalCount()) {
+      Thread.sleep(1000);
     }
 
     assert serverHandler.bytesDiscarded > 0;
@@ -159,10 +159,15 @@ public class WriteBenchmark {
   @State(Scope.Thread)
   public static class LatencyCounters {
 
-    private Histogram hist;
+    private Histogram hist = new Histogram(60000000L, 3);
 
-    void histogram(Histogram hist) {
-      this.hist = hist;
+    Histogram histogram() {
+      return hist;
+    }
+
+    @Setup(Level.Iteration)
+    public void clean() {
+      hist.reset();
     }
 
     public long pctl10_nanos() {
@@ -226,7 +231,7 @@ public class WriteBenchmark {
         @Override
         public void operationComplete(Future<? super Void> future) throws Exception {
           long durationNanos = System.nanoTime() - startNanos;
-          hist.recordValue(durationNanos);
+          hist.recordValue(100);
         }
       });
     }
