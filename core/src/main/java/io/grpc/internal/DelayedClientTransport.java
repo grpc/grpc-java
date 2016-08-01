@@ -95,8 +95,9 @@ class DelayedClientTransport implements ManagedClientTransport {
   }
 
   @Override
-  public void start(Listener listener) {
+  public Runnable start(Listener listener) {
     this.listener = Preconditions.checkNotNull(listener, "listener");
+    return null;
   }
 
   /**

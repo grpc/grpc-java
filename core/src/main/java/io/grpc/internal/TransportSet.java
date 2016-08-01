@@ -174,25 +174,32 @@ final class TransportSet implements WithLogId {
     if (savedTransport != null) {
       return savedTransport;
     }
+    Runnable runnable;
     synchronized (lock) {
       // Check again, since it could have changed before acquiring the lock
-      if (activeTransport == null) {
-        if (shutdown) {
-          return SHUTDOWN_TRANSPORT;
-        }
-        // Transition to CONNECTING
-        DelayedClientTransport delayedTransport = new DelayedClientTransport(appExecutor);
-        transports.add(delayedTransport);
-        delayedTransport.start(new BaseTransportListener(delayedTransport));
-        activeTransport = delayedTransport;
-        startNewTransport(delayedTransport);
+      savedTransport = activeTransport;
+      if (savedTransport != null) {
+        return savedTransport;
       }
-      return activeTransport;
+      if (shutdown) {
+        return SHUTDOWN_TRANSPORT;
+      }
+      // Transition to CONNECTING
+      DelayedClientTransport delayedTransport = new DelayedClientTransport(appExecutor);
+      transports.add(delayedTransport);
+      delayedTransport.start(new BaseTransportListener(delayedTransport));
+      savedTransport = activeTransport = delayedTransport;
+      runnable = startNewTransport(delayedTransport);
     }
+    if (runnable != null) {
+      runnable.run();
+    }
+    return savedTransport;
   }
 
+  @CheckReturnValue
   @GuardedBy("lock")
-  private void startNewTransport(DelayedClientTransport delayedTransport) {
+  private Runnable startNewTransport(DelayedClientTransport delayedTransport) {
     Preconditions.checkState(reconnectTask == null, "Should have no reconnectTask scheduled");
 
     if (nextAddressIndex == 0) {
@@ -212,7 +219,7 @@ final class TransportSet implements WithLogId {
     }
     pendingTransport = transport;
     transports.add(transport);
-    transport.start(new TransportListener(transport, delayedTransport, address));
+    return transport.start(new TransportListener(transport, delayedTransport, address));
   }
 
   /**
@@ -241,16 +248,20 @@ final class TransportSet implements WithLogId {
         try {
           delayedTransport.endBackoff();
           boolean shutdownDelayedTransport = false;
+          Runnable runnable = null;
           synchronized (lock) {
             reconnectTask = null;
             if (delayedTransport.hasPendingStreams()) {
               // Transition directly to CONNECTING
-              startNewTransport(delayedTransport);
+              runnable = startNewTransport(delayedTransport);
             } else {
               // Transition to IDLE (or already SHUTDOWN)
               activeTransport = null;
               shutdownDelayedTransport = true;
             }
+          }
+          if (runnable != null) {
+            runnable.run();
           }
           if (shutdownDelayedTransport) {
             delayedTransport.setTransportSupplier(new Supplier<ClientTransport>() {
@@ -453,7 +464,7 @@ final class TransportSet implements WithLogId {
             runnable = scheduleBackoff(delayedTransport, s);
           } else {
             // Still CONNECTING
-            startNewTransport(delayedTransport);
+            runnable = startNewTransport(delayedTransport);
           }
         }
       }
