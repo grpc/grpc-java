@@ -23,9 +23,9 @@
         <activity
                 android:name=".ProtobufBenchmarksActivity"
                 android:label="@string/protobufBenchmarksName"/>
-        <activity android:name=".RpcBenchmarksActivity"
-                  android:label="@string/rpcBenchmarksName">
-        </activity>
+        <!--<activity android:name=".RpcBenchmarksActivity"-->
+                  <!--android:label="@string/rpcBenchmarksName">-->
+        <!--</activity>-->
     </application>
 
 </manifest>
