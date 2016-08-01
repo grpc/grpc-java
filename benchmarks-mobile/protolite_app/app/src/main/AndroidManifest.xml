@@ -20,9 +20,9 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <activity
-                android:name=".ProtobufBenchmarksActivity"
-                android:label="@string/protobufBenchmarksName"/>
+        <!--<activity-->
+                <!--android:name=".ProtobufBenchmarksActivity"-->
+                <!--android:label="@string/protobufBenchmarksName"/>-->
         <activity android:name=".RpcBenchmarksActivity"
                   android:label="@string/rpcBenchmarksName">
         </activity>
