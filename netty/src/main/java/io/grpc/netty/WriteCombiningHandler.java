@@ -34,8 +34,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.netty.util.ReferenceCountUtil.safeRelease;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.EmptyByteBuf;
-import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
@@ -46,6 +44,9 @@ import io.netty.util.concurrent.FutureListener;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * A handler that combines small writes into a larger {@link ByteBuf}
+ */
 public class WriteCombiningHandler extends ChannelOutboundHandlerAdapter {
 
   private static final int INITIAL_BUFFER_SIZE = 4096;
@@ -65,10 +66,17 @@ public class WriteCombiningHandler extends ChannelOutboundHandlerAdapter {
 
   @Override
   public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
+    writeBuffer();
     safeRelease(buffer);
     buffer = null;
     bufferPromise = null;
     this.ctx = null;
+  }
+
+  @Override
+  public void close(ChannelHandlerContext ctx, ChannelPromise promise) {
+    writeBuffer();
+    ctx.close(promise);
   }
 
   @Override
@@ -97,7 +105,7 @@ public class WriteCombiningHandler extends ChannelOutboundHandlerAdapter {
   }
 
   private void writeBuffer() {
-    if (!buffer.isReadable()) {
+    if (buffer == null || !buffer.isReadable()) {
       return;
     }
     ctx.write(buffer.retainedSlice(), bufferPromise);
