@@ -34,12 +34,17 @@ package io.grpc.benchmarks;
 import com.google.protobuf.nano.CodedOutputByteBufferNano;
 import com.google.protobuf.nano.MessageNano;
 
+import android.os.Handler;
+import android.os.Looper;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -89,13 +94,13 @@ public class ProtobufBenchmarker {
 
     public static BenchmarkResult serializeJsonToByteArray(final String jsonString, boolean gzip)
             throws Exception {
-        final int serializedSize = jsonString.getBytes().length;
+        final int serializedSize = jsonString.getBytes("UTF-8").length;
         final JSONObject jsonObject = new JSONObject(jsonString);
 
         if (gzip) {
             ByteArrayOutputStream bos = new ByteArrayOutputStream(serializedSize);
-            GZIPOutputStream gos = new GZIPOutputStream(bos);
-            gos.write(jsonString.getBytes());
+            BestGZIPOutputStream gos = new BestGZIPOutputStream(bos);
+            gos.write(jsonString.getBytes("UTF-8"));
             gos.close();
             bos.close();
 
@@ -104,8 +109,8 @@ public class ProtobufBenchmarker {
                 @Override
                 public void execute() throws IOException {
                     ByteArrayOutputStream bos = new ByteArrayOutputStream(serializedSize);
-                    GZIPOutputStream gos = new GZIPOutputStream(bos);
-                    gos.write(jsonObject.toString().getBytes());
+                    BestGZIPOutputStream gos = new BestGZIPOutputStream(bos);
+                    gos.write(jsonObject.toString().getBytes("UTF-8"));
                     gos.close();
                     bos.close();
                     bos.toByteArray();
@@ -116,8 +121,8 @@ public class ProtobufBenchmarker {
         } else {
             return benchmark("JSON serialize to byte array", serializedSize, new Action() {
                 @Override
-                public void execute() throws JSONException {
-                    jsonObject.toString().getBytes();
+                public void execute() throws JSONException, UnsupportedEncodingException {
+                    jsonObject.toString().getBytes("UTF-8");
                 }
             });
         }
@@ -125,12 +130,12 @@ public class ProtobufBenchmarker {
 
     public static BenchmarkResult deserializeJsonfromByteArray(final String jsonString,
                                                                boolean gzip) throws Exception {
-        final int serializedSize = jsonString.getBytes().length;
+        final int serializedSize = jsonString.getBytes("UTF-8").length;
 
         if (gzip) {
             ByteArrayOutputStream bos = new ByteArrayOutputStream(serializedSize);
-            GZIPOutputStream gos = new GZIPOutputStream(bos);
-            gos.write(jsonString.getBytes());
+            BestGZIPOutputStream gos = new BestGZIPOutputStream(bos);
+            gos.write(jsonString.getBytes("UTF-8"));
             gos.close();
             bos.close();
             final byte[] compressedData = bos.toByteArray();
@@ -151,7 +156,7 @@ public class ProtobufBenchmarker {
             res.compressedSize = compressedData.length;
             return res;
         } else {
-            final byte[] jsonData = jsonString.getBytes();
+            final byte[] jsonData = jsonString.getBytes("UTF-8");
             return benchmark("JSON deserialize from byte array", serializedSize, new Action() {
                 @Override
                 public void execute() throws JSONException {
@@ -167,34 +172,42 @@ public class ProtobufBenchmarker {
      * benchmark time.
      */
     private static BenchmarkResult benchmark(String name, long dataSize, Action action) throws Exception {
-        // Do some warmup to make sure the JVM is JIT'd.
+        // TODO: do an actual warmup, much more complicated than originally thought
         for (int i = 0; i < 100; ++i) {
             action.execute();
         }
 
-        int iterations = 1;
-        long elapsed = timeAction(action, iterations);
-        while (elapsed < MIN_SAMPLE_TIME_MS) {
-            iterations *= 2;
-            elapsed = timeAction(action, iterations);
+        final AtomicBoolean dead = new AtomicBoolean();
+        Handler handler = new Handler(Looper.getMainLooper());
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                dead.set(true);
+            }
+        }, MIN_SAMPLE_TIME_MS);
+
+        int iterations = 0;
+        for (; !dead.get(); ++iterations) {
+            action.execute();
         }
 
-        iterations = (int) ((TARGET_TIME_MS / (double) elapsed) * iterations);
-        elapsed = timeAction(action, iterations);
-        float mbps = (iterations * dataSize) / (elapsed * 1024 * 1024 / 1000f);
+        iterations = (int) ((TARGET_TIME_MS / MIN_SAMPLE_TIME_MS) * iterations);
+        long elapsed = timeAction(action, iterations);
+        System.out.println("Elapsed: " + elapsed / 1000000000L * 1024 * 1024);
+        float mbps = (iterations * dataSize) / (elapsed / 1000000000f * 1024 * 1024);
         return new BenchmarkResult(name, iterations, elapsed, mbps, dataSize);
     }
 
     /**
-     * Returns the time it took for an Action to run for the provided number of iterations.
+     * Returns the time in nano seconds it took for an Action to run for
+     * the provided number of iterations.
      */
     private static long timeAction(Action action, int iterations) throws Exception {
-        System.gc();
-        long start = System.currentTimeMillis();
+        long start = System.nanoTime();
         for (int i = 0; i < iterations; i++) {
             action.execute();
         }
-        long end = System.currentTimeMillis();
+        long end = System.nanoTime();
         return end - start;
     }
 

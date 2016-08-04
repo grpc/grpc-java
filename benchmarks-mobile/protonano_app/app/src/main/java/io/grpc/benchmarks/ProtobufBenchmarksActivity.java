@@ -84,11 +84,16 @@ public class ProtobufBenchmarksActivity extends Activity implements AdapterView.
 
     private void initializeBenchmarkCards() {
         List<Benchmark> benchmarks = new ArrayList<>();
-        benchmarks.add(new Benchmark("Serialize to byte array", 0));
-        benchmarks.add(new Benchmark("Serialize to CodedOutputByteBufferNano", 1));
-        benchmarks.add(new Benchmark("Deserialize from byte array", 2));
-        benchmarks.add(new Benchmark("JSON serialize to byte array", 3));
-        benchmarks.add(new Benchmark("JSON deserialize from byte array", 4));
+        benchmarks.add(new Benchmark("Serialize to byte array",
+                MethodEnum.SERIAL_BYTE_ARRAY));
+        benchmarks.add(new Benchmark("Serialize to CodedOutputByteBufferNano",
+                MethodEnum.SERIAL_CODED_OUTPUT));
+        benchmarks.add(new Benchmark("Deserialize from byte array",
+                MethodEnum.DESERIAL_BYTE_ARRAY));
+        benchmarks.add(new Benchmark("JSON serialize to byte array",
+                MethodEnum.SERIAL_JSON_BYTE_ARRAY));
+        benchmarks.add(new Benchmark("JSON deserialize from byte array",
+                MethodEnum.DESERIAL_JSON_BYTE_ARRAY));
 
         LayoutInflater inflater = LayoutInflater.from(getApplicationContext());
         LinearLayout l = (LinearLayout) findViewById(R.id.protobuf_benchmark_cardlayoutlinear);

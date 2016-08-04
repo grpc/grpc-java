@@ -32,35 +32,12 @@
 package io.grpc.benchmarks;
 
 /**
- * Returned by a benchmark method, provides results of the benchmark.
+ * Enum for method to benchmark.
  */
-public class BenchmarkResult {
-    public String name;
-    // number of iterations in the target time
-    public int iterations;
-    // elapsed time in nano seconds
-    public long elapsed;
-    // speed of benchmark in MBps
-    public float mbps;
-    // size of message that was serialized in bytes
-    public long size;
-    // compressed size of message if compression was used
-    public long compressedSize;
-
-    public BenchmarkResult(String name, int iters, long elapsed, float mbps, long size) {
-        this.name = name;
-        this.iterations = iters;
-        this.elapsed = elapsed;
-        this.mbps = mbps;
-        this.size = size;
-        this.compressedSize = 0;
-    }
-
-    @Override
-    public String toString() {
-        return name + ": serialized size: " + size + "bytes"
-                + (compressedSize != 0 ? " (" + compressedSize + "bytes gzipped), " : ", ")
-                + iterations + " iterations in " + (elapsed / 1000000000f)
-                + "s, ~" + mbps + "Mb/s.";
-    }
+public enum MethodEnum {
+    SERIAL_BYTE_ARRAY,
+    SERIAL_CODED_OUTPUT,
+    DESERIAL_BYTE_ARRAY,
+    SERIAL_JSON_BYTE_ARRAY,
+    DESERIAL_JSON_BYTE_ARRAY
 }

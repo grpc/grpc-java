@@ -31,36 +31,17 @@
 
 package io.grpc.benchmarks;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.zip.Deflater;
+import java.util.zip.GZIPOutputStream;
+
 /**
- * Returned by a benchmark method, provides results of the benchmark.
+ * Overrides GZIPOutputStream to get best compression level.
  */
-public class BenchmarkResult {
-    public String name;
-    // number of iterations in the target time
-    public int iterations;
-    // elapsed time in nano seconds
-    public long elapsed;
-    // speed of benchmark in MBps
-    public float mbps;
-    // size of message that was serialized in bytes
-    public long size;
-    // compressed size of message if compression was used
-    public long compressedSize;
-
-    public BenchmarkResult(String name, int iters, long elapsed, float mbps, long size) {
-        this.name = name;
-        this.iterations = iters;
-        this.elapsed = elapsed;
-        this.mbps = mbps;
-        this.size = size;
-        this.compressedSize = 0;
-    }
-
-    @Override
-    public String toString() {
-        return name + ": serialized size: " + size + "bytes"
-                + (compressedSize != 0 ? " (" + compressedSize + "bytes gzipped), " : ", ")
-                + iterations + " iterations in " + (elapsed / 1000000000f)
-                + "s, ~" + mbps + "Mb/s.";
+public class BestGZIPOutputStream extends GZIPOutputStream {
+    public BestGZIPOutputStream (OutputStream out) throws IOException {
+        super(out);
+        this.def.setLevel(Deflater.BEST_COMPRESSION);
     }
 }

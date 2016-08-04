@@ -38,26 +38,27 @@ import com.google.protobuf.nano.MessageNano;
  */
 public class Benchmark {
     String title;
+    MethodEnum methodEnum;
     int methodNumber;
 
-    Benchmark(String title, int methodNumber) {
+    public Benchmark(String title, MethodEnum methodEnum) {
         this.title = title;
-        this.methodNumber = methodNumber;
+        this.methodEnum = methodEnum;
     }
 
     public BenchmarkResult run(MessageNano message, String jsonString, boolean useGzip)
             throws Exception
     {
-        switch (methodNumber) {
-            case 0:
+        switch (methodEnum) {
+            case SERIAL_BYTE_ARRAY:
                 return ProtobufBenchmarker.serializeProtobufToByteArray(message);
-            case 1:
+            case SERIAL_CODED_OUTPUT:
                 return ProtobufBenchmarker.serializeProtobufToByteBuffer(message);
-            case 2:
+            case DESERIAL_BYTE_ARRAY:
                 return ProtobufBenchmarker.deserializeProtobufFromByteArray(message);
-            case 3:
+            case SERIAL_JSON_BYTE_ARRAY:
                 return ProtobufBenchmarker.serializeJsonToByteArray(jsonString, useGzip);
-            case 4:
+            case DESERIAL_JSON_BYTE_ARRAY:
                 return ProtobufBenchmarker.deserializeJsonfromByteArray(jsonString, useGzip);
             default:
                 return ProtobufBenchmarker.serializeProtobufToByteArray(message);
