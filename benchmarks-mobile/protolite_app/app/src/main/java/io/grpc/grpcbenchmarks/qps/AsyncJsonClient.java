@@ -1,3 +1,34 @@
+/*
+ * Copyright 2016, Google Inc. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ *    * Redistributions of source code must retain the above copyright
+ * notice, this list of conditions and the following disclaimer.
+ *    * Redistributions in binary form must reproduce the above
+ * copyright notice, this list of conditions and the following disclaimer
+ * in the documentation and/or other materials provided with the
+ * distribution.
+ *
+ *    * Neither the name of Google Inc. nor the names of its
+ * contributors may be used to endorse or promote products derived from
+ * this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 package io.grpc.grpcbenchmarks.qps;
 
 import static io.grpc.grpcbenchmarks.qps.Utils.HISTOGRAM_MAX_VALUE;
@@ -31,7 +62,7 @@ import java.util.zip.GZIPOutputStream;
 import io.grpc.grpcbenchmarks.RpcBenchmarkResult;
 
 /**
- * Created by davidcao on 6/22/16.
+ * Mirror class of AsyncClient for HTTP.
  */
 public class AsyncJsonClient {
     private static final Logger logger = Logger.getLogger(AsyncJsonClient.class.getName());
@@ -51,6 +82,9 @@ public class AsyncJsonClient {
         this.useGzip = useGzip;
     }
 
+    /**
+     * Run the HTTP benchmarks.
+     */
     public RpcBenchmarkResult run(boolean useOkHttp) throws IOException, JSONException {
         String simpleRequest = newJsonRequest();
 
@@ -89,6 +123,9 @@ public class AsyncJsonClient {
                 queriesPerSecond);
     }
 
+    /**
+     * Warmup the benchmarks for a certain duration.
+     */
     private void warmUp(URL url, String simpleRequest, long duration, boolean okHttp)
             throws IOException {
         long warmupEndTime = System.nanoTime() + duration;
@@ -102,6 +139,9 @@ public class AsyncJsonClient {
         System.gc();
     }
 
+    /**
+     * Creates a new JSON string to be sent.
+     */
     private String newJsonRequest() throws JSONException {
         JSONObject simpleRequest = new JSONObject();
         JSONObject payload = new JSONObject();
@@ -125,7 +165,9 @@ public class AsyncJsonClient {
         return histogram;
     }
 
-
+    /**
+     * Actual benchmarks for HTTP POST.
+     */
     private void doPosts(Histogram histogram, URL url, String payload, long endTime)
             throws IOException {
         byte simpleRequest[] = payload.getBytes();
@@ -159,6 +201,9 @@ public class AsyncJsonClient {
         }
     }
 
+    /**
+     * Same as above but using OkHttp.
+     */
     private Histogram doBenchmarksOkHttp(URL url, String simpleRequest, long endTime)
             throws IOException {
         OkHttpClient client = new OkHttpClient();

@@ -56,8 +56,8 @@ public class RpcBenchmarksActivity extends AppCompatActivity {
 
     private void initializeBenchmarkCards() {
         List<RpcBenchmark> benchmarks = new ArrayList<>();
-        benchmarks.add(new RpcBenchmark("gRPC benchmarks", "", 0));
-        benchmarks.add(new RpcBenchmark("HTTP JSON benchmarks", "", 1));
+        benchmarks.add(new RpcBenchmark("gRPC benchmarks", RpcEnum.GRPC));
+        benchmarks.add(new RpcBenchmark("HTTP JSON benchmarks", RpcEnum.HTTP));
 
         LayoutInflater inflater = LayoutInflater.from(getApplicationContext());
         LinearLayout l = (LinearLayout) findViewById(R.id.rpc_benchmark_cardlayoutlinear);
@@ -71,7 +71,6 @@ public class RpcBenchmarksActivity extends AppCompatActivity {
             TextView descrip = (TextView) cv.findViewById(R.id.protobuf_benchmark_description);
             ImageButton button = (ImageButton) cv.findViewById(R.id.protobuf_benchmark_start);
             tv.setText(b.title);
-            descrip.setText(b.description);
             descrip.setTypeface(Typeface.MONOSPACE);
             button.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -175,7 +174,10 @@ public class RpcBenchmarksActivity extends AppCompatActivity {
         protected RpcBenchmarkResult doInBackground(String... args) {
             try {
                 boolean useOkHttp = Boolean.parseBoolean(args[3]);
-                return b.run(useOkHttp, args[0], args[1], args[2]);
+                String url = args[0];
+                int payloadSize = Integer.parseInt(args[1]);
+                boolean useGzip = Boolean.parseBoolean(args[2]);
+                return b.run(useOkHttp, url, payloadSize, useGzip);
             } catch (Exception e) {
                 logger.log(Level.WARNING, "Exception while running benchmarks: " + e);
             }
