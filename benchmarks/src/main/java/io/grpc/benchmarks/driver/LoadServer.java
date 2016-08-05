@@ -52,12 +52,15 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.TestUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
-import io.netty.util.concurrent.DefaultThreadFactory;
 
 import java.io.File;
 import java.lang.management.ManagementFactory;
 import java.util.List;
-import java.util.concurrent.Executors;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ForkJoinPool.ForkJoinWorkerThreadFactory;
+import java.util.concurrent.ForkJoinWorkerThread;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -110,8 +113,7 @@ final class LoadServer {
     // fully async.
     switch (config.getServerType()) {
       case ASYNC_SERVER: {
-        serverBuilder.executor(Executors.newFixedThreadPool(asyncThreads,
-            new DefaultThreadFactory("server-worker", true)));
+        serverBuilder.executor(getExecutor(asyncThreads));
         break;
       }
       case SYNC_SERVER: {
@@ -119,8 +121,7 @@ final class LoadServer {
         break;
       }
       case ASYNC_GENERIC_SERVER: {
-        serverBuilder.executor(Executors.newFixedThreadPool(asyncThreads,
-            new DefaultThreadFactory("server-worker", true)));
+        serverBuilder.executor(getExecutor(asyncThreads));
         // Create buffers for the generic service
         PooledByteBufAllocator alloc = PooledByteBufAllocator.DEFAULT;
         genericResponse = alloc.buffer(config.getPayloadConfig().getBytebufParams().getRespSize());
@@ -158,6 +159,40 @@ final class LoadServer {
     } else {
       osBean = null;
     }
+  }
+
+  /**
+   * When running the higher QPS (>10000) benchmarks, there can sometimes be bad behavior using
+   * the default channel executor.  To address this, we use a fixed sized thread pool, which is
+   * specially made to not have contention on the internal queue of Runnables.  This allows for
+   * better scaling.
+   *
+   * <p>Since we aren't using the blocking API, we pick the parallelism to be equal to the number
+   * of available processors.  We also know that the benchmark client and server are running on
+   * separate machines so we have effectively full control over all the processors.
+   * Additionally, we don't ever join on the ForkJoin tasks, so we run in async mode.
+   *
+   * <p>In order to make sure threads have the right name and don't block shutdown, we use a custom
+   * thread factory.
+   *
+   * <p>Only make these changes if you are certain they are right for you.  We chose them to use
+   * them here after careful testing and benchmarking.
+   *
+   * <p>See https://github.com/grpc/grpc-java/issues/2118 for more details.
+   */
+  private Executor getExecutor(int threadCount) {
+    return new ForkJoinPool(threadCount,
+        new ForkJoinWorkerThreadFactory() {
+          final AtomicInteger num = new AtomicInteger();
+          @Override
+          public ForkJoinWorkerThread newThread(ForkJoinPool pool) {
+            ForkJoinWorkerThread thread =
+                ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
+            thread.setDaemon(true);
+            thread.setName("server-worker-" + "-" + num.getAndIncrement());
+            return thread;
+          }
+        }, Thread.getDefaultUncaughtExceptionHandler(), true /* async */);
   }
 
   int getPort() {
