@@ -66,7 +66,11 @@ import java.io.PrintStream;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.SocketAddress;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ForkJoinPool.ForkJoinWorkerThreadFactory;
+import java.util.concurrent.ForkJoinWorkerThread;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLSocketFactory;
@@ -220,6 +224,38 @@ public final class Utils {
     }
     if (directExecutor) {
       builder.directExecutor();
+    } else {
+      /*
+       * When running the higher QPS (>10000) benchmarks, there can sometimes be bad behavior using
+       * the default channel executor.  To address this, we use a fixed sized thread pool, which is
+       * specially made to not have contention on the internal queue of Runnables.  This allows for
+       * better scaling.
+       *
+       * Since we aren't using the blocking API, we pick the parallelism to be equal to the number
+       * of available processors.  We also know that the benchmark client and server are running on
+       * separate machines so we have effectively full control over all the processors.
+       * Additionally, we don't ever join on the ForkJoin tasks, so we run in async mode.
+       *
+       * In order to make sure threads have the right name and don't block shutdown, we use a custom
+       * thread factory.
+       *
+       * Only make these changes if you are certain they are right for you.  We chose them to use
+       * them here after careful testing and benchmarking.
+       *
+       * See https://github.com/grpc/grpc-java/issues/2118 for more details.
+       */
+      builder.executor(new ForkJoinPool(Runtime.getRuntime().availableProcessors(),
+          new ForkJoinWorkerThreadFactory() {
+            final AtomicInteger num = new AtomicInteger();
+            @Override
+            public ForkJoinWorkerThread newThread(ForkJoinPool pool) {
+              ForkJoinWorkerThread thread =
+                  ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
+              thread.setDaemon(true);
+              thread.setName("grpc-client-app-" + "-" + num.getAndIncrement());
+              return thread;
+            }
+          }, Thread.getDefaultUncaughtExceptionHandler(), true /* async */));
     }
     return builder.build();
   }
