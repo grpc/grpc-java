@@ -44,8 +44,10 @@ import org.json.JSONObject;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.zip.Deflater;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -55,7 +57,7 @@ import java.util.zip.GZIPOutputStream;
  */
 public class ProtobufBenchmarker {
     private static final long MIN_SAMPLE_TIME_MS = 2 * 1000;
-    private static final long TARGET_TIME_MS = 10 * 1000;
+    private static final long TARGET_TIME_NS = 10 * 1000000000L;
 
     public static BenchmarkResult serializeProtobufToByteArray(final MessageLite msg)
             throws Exception {
@@ -162,7 +164,7 @@ public class ProtobufBenchmarker {
                     bos.toByteArray();
                 }
             });
-            res.compressedSize = bos.toByteArray().length;
+            res = res.addCompression(bos.toByteArray().length);
             return res;
         } else {
             return benchmark("JSON serialize to byte array", serializedSize, new Action() {
@@ -200,7 +202,7 @@ public class ProtobufBenchmarker {
                     new JSONObject(new String(inputData));
                 }
             });
-            res.compressedSize = compressedData.length;
+            res = res.addCompression(compressedData.length);
             return res;
         } else {
             final byte[] jsonData = jsonString.getBytes("UTF-8");
@@ -210,6 +212,16 @@ public class ProtobufBenchmarker {
                     new JSONObject(new String(jsonData));
                 }
             });
+        }
+    }
+
+    /**
+     * Overrides GZIPOutputStream in order to get best compression level.
+     */
+    private static class BestGZIPOutputStream extends GZIPOutputStream {
+        public BestGZIPOutputStream(OutputStream out) throws IOException {
+            super(out);
+            def.setLevel(Deflater.BEST_COMPRESSION);
         }
     }
 
@@ -227,6 +239,7 @@ public class ProtobufBenchmarker {
 
         final AtomicBoolean dead = new AtomicBoolean();
         Handler handler = new Handler(Looper.getMainLooper());
+        long start = System.nanoTime();
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
@@ -238,10 +251,10 @@ public class ProtobufBenchmarker {
         for (; !dead.get(); ++iterations) {
             action.execute();
         }
-
-        iterations = (int) ((TARGET_TIME_MS / MIN_SAMPLE_TIME_MS) * iterations);
+        long end = System.nanoTime();
+        iterations = (int) ((TARGET_TIME_NS / (double) (end - start)) * iterations);
         long elapsed = timeAction(action, iterations);
-        float mbps = (iterations * dataSize) / (elapsed / 1000000000f * 1024 * 1024);
+        double mbps = (iterations * dataSize) / (elapsed * 1024 * 1024 / 8 / 1000000000L);
         return new BenchmarkResult(name, iterations, elapsed, mbps, dataSize);
     }
 

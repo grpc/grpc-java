@@ -34,20 +34,20 @@ package io.grpc.grpcbenchmarks;
 /**
  * Returned by a benchmark method, provides results of the benchmark.
  */
-public class BenchmarkResult {
-    public String name;
+public final class BenchmarkResult {
+    public final String name;
     // number of iterations in the target time
-    public int iterations;
+    public final int iterations;
     // elapsed time in nano seconds
-    public long elapsed;
+    public final long elapsed;
     // speed of benchmark in MBps
-    public float mbps;
+    public final double mbps;
     // size of message that was serialized in bytes
-    public long size;
+    public final long size;
     // compressed size of message if compression was used
-    public long compressedSize;
+    public final long compressedSize;
 
-    public BenchmarkResult(String name, int iters, long elapsed, float mbps, long size) {
+    public BenchmarkResult(String name, int iters, long elapsed, double mbps, long size) {
         this.name = name;
         this.iterations = iters;
         this.elapsed = elapsed;
@@ -56,11 +56,25 @@ public class BenchmarkResult {
         this.compressedSize = 0;
     }
 
+    public BenchmarkResult(String name, int iters, long elapsed, double mbps, long size,
+                           long compressedSize) {
+        this.name = name;
+        this.iterations = iters;
+        this.elapsed = elapsed;
+        this.mbps = mbps;
+        this.size = size;
+        this.compressedSize = compressedSize;
+    }
+
+    public BenchmarkResult addCompression(long compressedSize) {
+        return new BenchmarkResult(name, iterations, elapsed, mbps, size, compressedSize);
+    }
+
     @Override
     public String toString() {
         return "Serialized size: " + size + "bytes"
                 + (compressedSize != 0 ? " (" + compressedSize + "bytes gzipped), " : ", ")
-                + iterations + " iterations in " + (elapsed / 1000f)
+                + iterations + " iterations in " + (elapsed / 1000000000d)
                 + "s, ~" + mbps + "Mb/s.";
     }
 
