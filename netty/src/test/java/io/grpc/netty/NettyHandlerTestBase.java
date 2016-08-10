@@ -112,7 +112,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     return ctx;
   }
 
-  protected final Http2FrameWriter frameWriter() {
+  protected Http2FrameWriter frameWriter() {
     return frameWriter;
   }
 
