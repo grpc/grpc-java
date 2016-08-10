@@ -50,6 +50,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
@@ -219,8 +220,10 @@ final class TransportSet implements WithLogId {
    * @param status the causal status when the channel begins transition to
    *     TRANSIENT_FAILURE.
    */
+  @CheckReturnValue
   @GuardedBy("lock")
-  private void scheduleBackoff(final DelayedClientTransport delayedTransport, Status status) {
+  private Runnable scheduleBackoff(
+      final DelayedClientTransport delayedTransport, final Status status) {
     Preconditions.checkState(reconnectTask == null, "previous reconnectTask is not done");
 
     if (reconnectPolicy == null) {
@@ -232,7 +235,6 @@ final class TransportSet implements WithLogId {
       log.log(Level.FINE, "[{0}] Scheduling backoff for {1} ms",
           new Object[]{getLogId(), delayMillis});
     }
-    delayedTransport.startBackoff(status);
     class EndOfCurrentBackoff implements Runnable {
       @Override
       public void run() {
@@ -269,6 +271,16 @@ final class TransportSet implements WithLogId {
 
     reconnectTask = scheduledExecutor.schedule(
         new LogExceptionRunnable(new EndOfCurrentBackoff()), delayMillis, TimeUnit.MILLISECONDS);
+    return new Runnable() {
+      @Override
+      public void run() {
+        // This must be run outside of lock. The TransportSet lock is a channel level lock.
+        // startBackoff() will acquire the delayed transport lock, which is a transport level
+        // lock. Our lock ordering mandates transport lock > channel lock.  Otherwise a deadlock
+        // could happen (https://github.com/grpc/grpc-java/issues/2152).
+        delayedTransport.startBackoff(status);
+      }
+    };
   }
 
   /**
@@ -425,6 +437,7 @@ final class TransportSet implements WithLogId {
             new Object[] {getLogId(), transport.getLogId(), address, s});
       }
       super.transportShutdown(s);
+      Runnable runnable = null;
       synchronized (lock) {
         if (activeTransport == transport) {
           // This is true only if the transport was ready.
@@ -437,12 +450,15 @@ final class TransportSet implements WithLogId {
             allAddressesFailed = true;
             // Initiate backoff
             // Transition to TRANSIENT_FAILURE
-            scheduleBackoff(delayedTransport, s);
+            runnable = scheduleBackoff(delayedTransport, s);
           } else {
             // Still CONNECTING
             startNewTransport(delayedTransport);
           }
         }
+      }
+      if (runnable != null) {
+        runnable.run();
       }
       loadBalancer.handleTransportShutdown(addressGroup, s);
       if (allAddressesFailed) {
