@@ -38,6 +38,7 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.common.util.concurrent.Futures;
 
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -67,10 +68,11 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -114,8 +116,6 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
   private final SharedResourceHolder.Resource<ScheduledExecutorService> timerService;
   private final Supplier<Stopwatch> stopwatchSupplier;
-  private final long idleTimeoutMillis;
-
   /**
    * Executor that runs deadline timers for requests.
    */
@@ -155,90 +155,19 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   private final HashSet<DelayedClientTransport> delayedTransports =
       new HashSet<DelayedClientTransport>();
 
-  @VisibleForTesting
-  final InUseStateAggregator<Object> inUseStateAggregator =
-      new InUseStateAggregator<Object>() {
-        @Override
-        Object getLock() {
-          return lock;
-        }
+  private final Future<?> idleModeTimerFuture;
 
-        @Override
-        @GuardedBy("lock")
-        void handleInUse() {
-          exitIdleMode();
-        }
+  // Set every time a load balancer gets a transport.
+  private volatile boolean isIdle;
 
-        @GuardedBy("lock")
-        @Override
-        void handleNotInUse() {
-          if (shutdown) {
-            return;
-          }
-          rescheduleIdleTimer();
-        }
-      };
-
-  private class IdleModeTimer implements Runnable {
-    @GuardedBy("lock")
-    boolean cancelled;
-
-    @Override
-    public void run() {
-      ArrayList<TransportSet> transportsCopy = new ArrayList<TransportSet>();
-      LoadBalancer<ClientTransport> savedBalancer;
-      NameResolver oldResolver;
-      synchronized (lock) {
-        if (cancelled) {
-          // Race detected: this task started before cancelIdleTimer() could cancel it.
-          return;
-        }
-        // Enter idle mode
-        savedBalancer = loadBalancer;
-        loadBalancer = null;
-        oldResolver = nameResolver;
-        nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
-        transportsCopy.addAll(transports.values());
-        transports.clear();
-        decommissionedTransports.addAll(transportsCopy);
-      }
-      for (TransportSet ts : transportsCopy) {
-        ts.shutdown();
-      }
-      savedBalancer.shutdown();
-      oldResolver.shutdown();
+  LoadBalancer<ClientTransport> getLoadBalancer() {
+    isIdle = false;
+    if (loadBalancer != null) {
+      return loadBalancer;
     }
-  }
-
-  @GuardedBy("lock")
-  @Nullable
-  private ScheduledFuture<?> idleModeTimerFuture;
-  @GuardedBy("lock")
-  @Nullable
-  private IdleModeTimer idleModeTimer;
-
-  /**
-   * Make the channel exit idle mode, if it's in it. Return a LoadBalancer that can be used for
-   * making new requests. Return null if the channel is shutdown.
-   *
-   * <p>May be called under the lock.
-   */
-  @VisibleForTesting
-  LoadBalancer<ClientTransport> exitIdleMode() {
     final LoadBalancer<ClientTransport> balancer;
     final NameResolver resolver;
     synchronized (lock) {
-      if (shutdown) {
-        return null;
-      }
-      if (inUseStateAggregator.isInUse()) {
-        cancelIdleTimer();
-      } else {
-        // exitIdleMode() may be called outside of inUseStateAggregator, which may still in
-        // "not-in-use" state. If it's the case, we start the timer which will be soon cancelled if
-        // the aggregator receives actual uses.
-        rescheduleIdleTimer();
-      }
       if (loadBalancer != null) {
         return loadBalancer;
       }
@@ -264,38 +193,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     return balancer;
   }
 
-  // ErrorProne's GuardedByChecker can't figure out that the idleModeTimer is a nested instance of
-  // this particular instance. It is worried about something like:
-  // ManagedChannelImpl a = ...;
-  // ManagedChannelImpl b = ...;
-  // a.idleModeTimer = b.idleModeTimer;
-  // a.cancelIdleTimer(); // access of b.idleModeTimer is guarded by a.lock, not b.lock
-  //
-  // _We_ know that isn't happening, so we suppress the warning.
-  @SuppressWarnings("GuardedByChecker")
   @GuardedBy("lock")
-  private void cancelIdleTimer() {
-    if (idleModeTimerFuture != null) {
-      idleModeTimerFuture.cancel(false);
-      idleModeTimer.cancelled = true;
-      idleModeTimerFuture = null;
-      idleModeTimer = null;
-    }
-  }
-
-  @GuardedBy("lock")
-  private void rescheduleIdleTimer() {
-    if (idleTimeoutMillis == IDLE_TIMEOUT_MILLIS_DISABLE) {
-      return;
-    }
-    cancelIdleTimer();
-    idleModeTimer = new IdleModeTimer();
-    idleModeTimerFuture = scheduledExecutor.schedule(new LogExceptionRunnable(idleModeTimer),
-        idleTimeoutMillis, TimeUnit.MILLISECONDS);
-  }
-
-  @GuardedBy("lock")
-  private final HashSet<OobTransportProviderImpl> oobTransports =
+  private final Set<OobTransportProviderImpl> oobTransports =
       new HashSet<OobTransportProviderImpl>();
 
   @GuardedBy("lock")
@@ -308,7 +207,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   private final ClientTransportProvider transportProvider = new ClientTransportProvider() {
     @Override
     public ClientTransport get(CallOptions callOptions) {
-      LoadBalancer<ClientTransport> balancer = exitIdleMode();
+      LoadBalancer<ClientTransport> balancer = getLoadBalancer();
       if (balancer == null) {
         return SHUTDOWN_TRANSPORT;
       }
@@ -321,7 +220,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       LoadBalancer.Factory loadBalancerFactory, ClientTransportFactory transportFactory,
       DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
       SharedResourceHolder.Resource<ScheduledExecutorService> timerService,
-      Supplier<Stopwatch> stopwatchSupplier, long idleTimeoutMillis,
+      Supplier<Stopwatch> stopwatchSupplier, Long idleTimeoutMillis,
       @Nullable Executor executor, @Nullable String userAgent,
       List<ClientInterceptor> interceptors) {
     this.target = checkNotNull(target, "target");
@@ -343,15 +242,53 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     this.timerService = timerService;
     this.scheduledExecutor = SharedResourceHolder.get(timerService);
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
-    checkArgument(idleTimeoutMillis > 0 || idleTimeoutMillis == IDLE_TIMEOUT_MILLIS_DISABLE,
-        "invalid idleTimeoutMillis %s", idleTimeoutMillis);
-    this.idleTimeoutMillis = idleTimeoutMillis;
     this.decompressorRegistry = decompressorRegistry;
     this.compressorRegistry = compressorRegistry;
     this.userAgent = userAgent;
 
+    if (idleTimeoutMillis != null) {
+      checkArgument(idleTimeoutMillis > 0, "invalid idleTimeoutMillis %s", idleTimeoutMillis);
+      idleModeTimerFuture = scheduledExecutor.scheduleAtFixedRate(
+          new GoIdle(), idleTimeoutMillis, idleTimeoutMillis /*/ 2 */, TimeUnit.MILLISECONDS);
+    } else {
+      idleModeTimerFuture = Futures.immediateFuture(null);
+    }
+
     if (log.isLoggable(Level.INFO)) {
       log.log(Level.INFO, "[{0}] Created with target {1}", new Object[] {getLogId(), target});
+    }
+  }
+
+  private final class GoIdle implements Runnable {
+    @Override
+    public void run() {
+      if (!isIdle) {
+        isIdle = true;
+        return;
+      }
+      ArrayList<TransportSet> transportsCopy = new ArrayList<TransportSet>();
+      LoadBalancer<ClientTransport> savedBalancer;
+      NameResolver oldResolver;
+      synchronized (lock) {
+        if (!isIdle) {
+          isIdle = true;
+          return;
+        }
+        // Enter idle mode
+        savedBalancer = loadBalancer;
+        loadBalancer = null;
+        oldResolver = nameResolver;
+        nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
+        transportsCopy.addAll(transports.values());
+        transports.clear();
+        decommissionedTransports.addAll(transportsCopy);
+      }
+
+      for (TransportSet ts : transportsCopy) {
+        ts.shutdown();
+      }
+      savedBalancer.shutdown();
+      oldResolver.shutdown();
     }
   }
 
@@ -440,7 +377,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       }
       balancer = loadBalancer;
       resolver = nameResolver;
-      cancelIdleTimer();
+      idleModeTimerFuture.cancel(false);
     }
     if (balancer != null) {
       balancer.shutdown();
@@ -633,12 +570,12 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
                 @Override
                 public void onInUse(TransportSet ts) {
-                  inUseStateAggregator.updateObjectInUse(ts, true);
+                  isIdle = false;
                 }
 
                 @Override
                 public void onNotInUse(TransportSet ts) {
-                  inUseStateAggregator.updateObjectInUse(ts, false);
+                  isIdle = true;
                 }
               });
           if (log.isLoggable(Level.FINE)) {
@@ -723,13 +660,13 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
               delayedTransports.remove(delayedTransport);
               maybeTerminateChannel();
             }
-            inUseStateAggregator.updateObjectInUse(delayedTransport, false);
+            isIdle = true;
           }
 
           @Override public void transportReady() {}
 
           @Override public void transportInUse(boolean inUse) {
-            inUseStateAggregator.updateObjectInUse(delayedTransport, inUse);
+            isIdle = !inUse;
           }
         });
       boolean savedShutdown;
