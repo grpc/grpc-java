@@ -32,13 +32,13 @@
 package io.grpc;
 
 import com.google.common.base.Preconditions;
-
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Set;
-
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
+
+import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * An immutable type-safe container of attributes.
@@ -108,6 +108,10 @@ public final class Attributes {
     return data.toString();
   }
 
+  /**
+   * A builder for {@link Attributes} that can be used exactly once. Attempts to use the builder
+   * after {@link #build()} is invoked will result in {@link IllegalStateException} being thrown.
+   */
   public static final class Builder {
     private Attributes product;
 
@@ -115,12 +119,34 @@ public final class Attributes {
       this.product = new Attributes();
     }
 
+    private void checkIfUsable() {
+      Preconditions.checkState(product != null, "Already built");
+    }
+
+    /**
+     * Sets an attribute value for the given key. If the given key has already been set, it is
+     * overwritten with the given value.
+     *
+     * @param key the attribute key
+     * @param value the value for the given key
+     * @return {@code this}, for method chaining
+     * @throws NullPointerException if the given key is null
+     */
     public <T> Builder set(Key<T> key, T value) {
-      product.data.put(key, value);
+      checkIfUsable();
+      product.data.put(checkNotNull(key), value);
       return this;
     }
 
-    public <T> Builder setAll(Attributes other) {
+    /**
+     * Sets multiple attributes. If any of the keys in the given attribtues have already been set,
+     * they are overwritten with values from the given attributes.
+     *
+     * @param other a set of attributes
+     * @return {@code this}, for method chaining
+     */
+    public Builder setAll(Attributes other) {
+      checkIfUsable();
       product.data.putAll(other.data);
       return this;
     }
@@ -129,7 +155,7 @@ public final class Attributes {
      * Build the attributes. Can only be called once.
      */
     public Attributes build() {
-      Preconditions.checkState(product != null, "Already built");
+      checkIfUsable();
       Attributes result = product;
       product = null;
       return result;

@@ -31,12 +31,14 @@
 
 package io.grpc;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertSame;
-
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.fail;
 
 /** Unit tests for {@link Attributes}. */
 @RunWith(JUnit4.class)
@@ -64,5 +66,44 @@ public class AttributesTest {
   @Test
   public void empty() {
     assertEquals(0, Attributes.EMPTY.keys().size());
+    assertNull(Attributes.EMPTY.get(YOLO_KEY));
+  }
+
+  @Test
+  public void cannotInsertNullKeys() {
+    try {
+      Attributes.newBuilder().set(null, "foo");
+      fail("Null key should not have been allowed");
+    } catch (NullPointerException e) {
+      // expected
+    }
+  }
+
+  @Test
+  public void cannotUseBuilderAgain() {
+    Attributes.Builder b = Attributes.newBuilder();
+    b.build(); // not allowed to use it anymore
+
+    try {
+      b.set(null, "foo");
+      fail("Should not be allowed to use builder after already used");
+    } catch (IllegalStateException e) {
+      // expected
+    }
+
+    Attributes others = Attributes.newBuilder().set(YOLO_KEY, "foo").build();
+    try {
+      b.setAll(others);
+      fail("Should not be allowed to use builder after already used");
+    } catch (IllegalStateException e) {
+      // expected
+    }
+
+    try {
+      b.build();
+      fail("Should not be allowed to use builder after already used");
+    } catch (IllegalStateException e) {
+      // expected
+    }
   }
 }
