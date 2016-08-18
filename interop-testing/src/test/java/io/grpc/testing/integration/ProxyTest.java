@@ -55,7 +55,7 @@ public class ProxyTest {
 
   private int serverPort = 5001;
   private int proxyPort = 5050;
-  private String loopBack = "127.0.0.1";
+  // private String loopBack = "127.0.0.1";
   private static ThreadPoolExecutor executor =
       new ThreadPoolExecutor(1, 4, 1, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
 
@@ -71,14 +71,20 @@ public class ProxyTest {
     Thread serverThread = new Thread(server);
     serverThread.start();
 
-    int latency = (int) TimeUnit.MILLISECONDS.toNanos(10);
+    int latency = (int) TimeUnit.MILLISECONDS.toNanos(50);
     TrafficControlProxy p = new TrafficControlProxy(1024 * 1024, latency, TimeUnit.NANOSECONDS);
     startProxy(p).get();
-    Socket client = new Socket(loopBack, proxyPort);
+    Socket client = new Socket("localhost", proxyPort);
     client.setReuseAddress(true);
     DataOutputStream clientOut = new DataOutputStream(client.getOutputStream());
     DataInputStream clientIn = new DataInputStream(client.getInputStream());
     byte[] message = new byte[1];
+
+    // warmup
+    for (int i = 0; i < 5; i++) {
+      clientOut.write(message, 0, 1);
+    }
+    clientIn.readFully(new byte[5]);
 
     // test
     long start = System.nanoTime();
@@ -104,10 +110,16 @@ public class ProxyTest {
     int latency = (int) TimeUnit.MILLISECONDS.toNanos(250);
     TrafficControlProxy p = new TrafficControlProxy(1024 * 1024, latency, TimeUnit.NANOSECONDS);
     startProxy(p).get();
-    Socket client = new Socket(loopBack, proxyPort);
+    Socket client = new Socket("localhost", proxyPort);
     DataOutputStream clientOut = new DataOutputStream(client.getOutputStream());
     DataInputStream clientIn = new DataInputStream(client.getInputStream());
     byte[] message = new byte[1];
+
+    // warmup
+    for (int i = 0; i < 5; i++) {
+      clientOut.write(message, 0, 1);
+    }
+    clientIn.readFully(new byte[5]);
 
     // test
     long start = System.nanoTime();
@@ -134,7 +146,7 @@ public class ProxyTest {
     int bandwidth = 64 * 1024;
     TrafficControlProxy p = new TrafficControlProxy(bandwidth, 200, TimeUnit.MILLISECONDS);
     startProxy(p).get();
-    Socket client = new Socket(loopBack, proxyPort);
+    Socket client = new Socket("localhost", proxyPort);
     DataOutputStream clientOut = new DataOutputStream(client.getOutputStream());
     DataInputStream clientIn = new DataInputStream(client.getInputStream());
 
@@ -162,7 +174,7 @@ public class ProxyTest {
     int bandwidth = 10 * 1024 * 1024;
     TrafficControlProxy p = new TrafficControlProxy(bandwidth, 200, TimeUnit.MILLISECONDS);
     startProxy(p).get();
-    Socket client = new Socket(loopBack, proxyPort);
+    Socket client = new Socket("localhost", proxyPort);
     DataOutputStream clientOut = new DataOutputStream(client.getOutputStream());
     DataInputStream clientIn = new DataInputStream(client.getInputStream());
 
