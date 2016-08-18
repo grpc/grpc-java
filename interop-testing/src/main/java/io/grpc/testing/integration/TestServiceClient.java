@@ -31,6 +31,7 @@
 
 package io.grpc.testing.integration;
 
+import com.google.census.CensusContextFactory;
 import com.google.common.io.Files;
 
 import io.grpc.ManagedChannel;
@@ -289,7 +290,7 @@ public class TestServiceClient {
 
   private class Tester extends AbstractInteropTest {
     @Override
-    protected ManagedChannel createChannel() {
+    protected ManagedChannel createChannel(CensusContextFactory censusFactory) {
       if (!useOkHttp) {
         InetAddress address;
         try {
@@ -314,6 +315,7 @@ public class TestServiceClient {
             .flowControlWindow(65 * 1024)
             .negotiationType(useTls ? NegotiationType.TLS : NegotiationType.PLAINTEXT)
             .sslContext(sslContext)
+            .censusContextFactory(censusFactory)
             .build();
       } else {
         OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress(serverHost, serverPort);

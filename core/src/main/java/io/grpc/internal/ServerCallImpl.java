@@ -65,6 +65,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private final String messageAcceptEncoding;
   private final DecompressorRegistry decompressorRegistry;
   private final CompressorRegistry compressorRegistry;
+  private final StatsTraceContext statsTraceContext;
 
   // state
   private volatile boolean cancelled;
@@ -74,6 +75,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   ServerCallImpl(ServerStream stream, MethodDescriptor<ReqT, RespT> method,
       Metadata inboundHeaders, Context.CancellableContext context,
+      StatsTraceContext statsTraceContext, 
       DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry) {
     this.stream = stream;
     this.method = method;
@@ -81,6 +83,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     this.messageAcceptEncoding = inboundHeaders.get(MESSAGE_ACCEPT_ENCODING_KEY);
     this.decompressorRegistry = decompressorRegistry;
     this.compressorRegistry = compressorRegistry;
+    this.statsTraceContext = checkNotNull(statsTraceContext, "statsTraceContext");
 
     if (inboundHeaders.containsKey(MESSAGE_ENCODING_KEY)) {
       String encoding = inboundHeaders.get(MESSAGE_ENCODING_KEY);
@@ -186,7 +189,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   }
 
   ServerStreamListener newServerStreamListener(ServerCall.Listener<ReqT> listener) {
-    return new ServerStreamListenerImpl<ReqT>(this, listener, context);
+    return new ServerStreamListenerImpl<ReqT>(this, listener, context, statsTraceContext);
   }
 
   @Override
@@ -208,14 +211,16 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     private final ServerCallImpl<ReqT, ?> call;
     private final ServerCall.Listener<ReqT> listener;
     private final Context.CancellableContext context;
+    private final StatsTraceContext statsTraceContext;
     private boolean messageReceived;
 
     public ServerStreamListenerImpl(
         ServerCallImpl<ReqT, ?> call, ServerCall.Listener<ReqT> listener,
-        Context.CancellableContext context) {
+        Context.CancellableContext context, StatsTraceContext statsTraceContext) {
       this.call = checkNotNull(call, "call");
       this.listener = checkNotNull(listener, "listener must not be null");
       this.context = checkNotNull(context, "context");
+      this.statsTraceContext = checkNotNull(statsTraceContext, "statsTraceContext");
     }
 
     @Override
@@ -263,6 +268,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     @Override
     public void closed(Status status) {
       try {
+        statsTraceContext.callEnded(status);
         if (status.isOk()) {
           listener.onComplete();
         } else {

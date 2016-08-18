@@ -61,6 +61,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.StatsTraceContext;
 import io.grpc.netty.WriteQueue.QueuedCommand;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -442,7 +443,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
 
   private static class TransportStateImpl extends NettyClientStream.TransportState {
     public TransportStateImpl(NettyClientHandler handler, int maxMessageSize) {
-      super(handler, maxMessageSize);
+      super(handler, maxMessageSize, StatsTraceContext.NOOP);
     }
 
     @Override

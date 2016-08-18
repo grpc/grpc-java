@@ -37,6 +37,7 @@ import static java.util.Collections.singletonList;
 import static java.util.concurrent.Executors.newFixedThreadPool;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
+import com.google.census.CensusContextFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
@@ -474,7 +475,7 @@ public class StressTestClient {
 
     class Tester extends AbstractInteropTest {
       @Override
-      protected ManagedChannel createChannel() {
+      protected ManagedChannel createChannel(CensusContextFactory censusFactory) {
         return Worker.this.channel;
       }
 
@@ -483,6 +484,12 @@ public class StressTestClient {
         // Don't enforce a timeout when using the interop tests for the stress test client.
         // Fixes https://github.com/grpc/grpc-java/issues/1812
         return Integer.MAX_VALUE;
+      }
+
+      @Override
+      protected boolean metricsExpected() {
+        // TODO(zhangkun83): we may want to enable the real Census implementation in stress tests.
+        return false;
       }
     }
 

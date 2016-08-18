@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Google Inc. All rights reserved.
+ * Copyright 2016, Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -29,44 +29,62 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.testing.integration;
+package io.grpc.internal;
 
+import com.google.census.CensusContext;
 import com.google.census.CensusContextFactory;
+import com.google.census.MetricMap;
+import com.google.census.TagKey;
+import com.google.census.TagValue;
 
-import io.grpc.ManagedChannel;
-import io.grpc.inprocess.InProcessChannelBuilder;
-import io.grpc.inprocess.InProcessServerBuilder;
+import java.nio.ByteBuffer;
 
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+public final class NoopCensusContextFactory extends CensusContextFactory {
+  private static final ByteBuffer SERIALIZED_BYTES = ByteBuffer.allocate(0);
+  private static final CensusContext DEFAULT_CONTEXT = new NoopCensusContext();
+  private static final CensusContext.Builder BUILDER = new NoopContextBuilder();
 
-/** Unit tests for {@link InProcess}. */
-@RunWith(JUnit4.class)
-public class InProcessTest extends AbstractInteropTest {
-  private static String serverName = "test";
+  public static final CensusContextFactory INSTANCE = new NoopCensusContextFactory();
 
-  /** Starts the in-process server. */
-  @BeforeClass
-  public static void startServer() {
-    startStaticServer(InProcessServerBuilder.forName(serverName));
-  }
-
-  @AfterClass
-  public static void stopServer() {
-    stopStaticServer();
+  private NoopCensusContextFactory() {
   }
 
   @Override
-  protected ManagedChannel createChannel(CensusContextFactory censusFactory) {
-    return InProcessChannelBuilder.forName(serverName).censusContextFactory(censusFactory).build();
+  public CensusContext deserialize(ByteBuffer buffer) {
+    return DEFAULT_CONTEXT;
   }
 
   @Override
-  protected boolean metricsExpected() {
-    // TODO(zhangkun83): InProcessTransport by-passes framer and deframer, thus message sizses are
-    // not counted. (https://github.com/grpc/grpc-java/issues/2284)
-    return false;
+  public CensusContext getDefault() {
+    return DEFAULT_CONTEXT;
+  }
+
+  private static class NoopCensusContext extends CensusContext {
+    @Override
+    public Builder builder() {
+      return BUILDER;
+    }
+
+    @Override
+    public CensusContext record(MetricMap metrics) {
+      return DEFAULT_CONTEXT;
+    }
+
+    @Override
+    public ByteBuffer serialize() {
+      return SERIALIZED_BYTES;
+    }
+  }
+
+  private static class NoopContextBuilder extends CensusContext.Builder {
+    @Override
+    public CensusContext.Builder set(TagKey key, TagValue value) {
+      return this;
+    }
+
+    @Override
+    public CensusContext build() {
+      return DEFAULT_CONTEXT;
+    }
   }
 }

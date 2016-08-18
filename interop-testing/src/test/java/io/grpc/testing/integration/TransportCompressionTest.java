@@ -34,6 +34,7 @@ package io.grpc.testing.integration;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import com.google.census.CensusContextFactory;
 import com.google.protobuf.ByteString;
 
 import io.grpc.CallOptions;
@@ -147,11 +148,12 @@ public class TransportCompressionTest extends AbstractInteropTest {
   }
 
   @Override
-  protected ManagedChannel createChannel() {
+  protected ManagedChannel createChannel(CensusContextFactory censusFactory) {
     return NettyChannelBuilder.forAddress("localhost", getPort())
         .maxMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .decompressorRegistry(decompressors)
         .compressorRegistry(compressors)
+        .censusContextFactory(censusFactory)
         .intercept(new ClientInterceptor() {
           @Override
           public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(

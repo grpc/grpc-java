@@ -90,11 +90,14 @@ public abstract class AbstractServerStream extends AbstractStream2
   }
 
   private final MessageFramer framer;
+  private final StatsTraceContext statsTraceContext;
   private boolean outboundClosed;
   private boolean headersSent;
 
-  protected AbstractServerStream(WritableBufferAllocator bufferAllocator) {
-    framer = new MessageFramer(this, bufferAllocator);
+  protected AbstractServerStream(WritableBufferAllocator bufferAllocator,
+      StatsTraceContext statsTraceContext) {
+    this.statsTraceContext = Preconditions.checkNotNull(statsTraceContext, "statsTraceContext");
+    framer = new MessageFramer(this, bufferAllocator, statsTraceContext);
   }
 
   @Override
@@ -166,14 +169,19 @@ public abstract class AbstractServerStream extends AbstractStream2
     return Attributes.EMPTY;
   }
 
+  @Override
+  public StatsTraceContext statsTraceContext() {
+    return statsTraceContext;
+  }
+
   /** This should only called from the transport thread. */
   protected abstract static class TransportState extends AbstractStream2.TransportState {
     /** Whether listener.closed() has been called. */
     private boolean listenerClosed;
     private ServerStreamListener listener;
 
-    protected TransportState(int maxMessageSize) {
-      super(maxMessageSize);
+    protected TransportState(int maxMessageSize, StatsTraceContext statsTraceContext) {
+      super(maxMessageSize, statsTraceContext);
     }
 
     /**
