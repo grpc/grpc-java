@@ -43,7 +43,6 @@ import static org.mockito.Mockito.when;
 import com.google.common.base.Supplier;
 
 import io.grpc.Attributes;
-import io.grpc.DummyLoadBalancerFactory;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.ResolvedServerInfo;
@@ -66,7 +65,7 @@ import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Unit test for {@link DummyLoadBalancerFactory}. */
+/** Unit test for {@link RoundRobinLoadBalancerTest}. */
 @RunWith(JUnit4.class)
 public class RoundRobinLoadBalancerTest {
   private LoadBalancer<Transport> loadBalancer;
