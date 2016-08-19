@@ -1,16 +1,18 @@
 package io.grpc;
 
-import io.grpc.Attributes.Key;
-import java.net.InetSocketAddress;
-import java.net.SocketAddress;
-import java.util.HashMap;
-import java.util.Map;
-import org.junit.Test;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.fail;
+
+import io.grpc.Attributes.Key;
+
+import org.junit.Test;
+
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.util.HashMap;
+import java.util.Map;
 
 public class ResolvedServerInfoTest {
   private static final Key<String> FOO = Key.of("foo");
@@ -23,8 +25,8 @@ public class ResolvedServerInfoTest {
     assertEquals(addr, server.getAddress());
     assertEquals(ATTRS, server.getAttributes());
 
-    // null attributes treated as empty
-    server = new ResolvedServerInfo(addr, null);
+    // unspecified attributes treated as empty
+    server = new ResolvedServerInfo(addr);
     assertEquals(addr, server.getAddress());
     assertEquals(Attributes.EMPTY, server.getAttributes());
   }
@@ -54,8 +56,9 @@ public class ResolvedServerInfoTest {
     assertEquals(server1.hashCode(), server2.hashCode()); // hash code must be consistent
 
     // empty attributes
-    server1 = new ResolvedServerInfo(InetSocketAddress.createUnresolved("foo", 123), null);
-    server2 = new ResolvedServerInfo(InetSocketAddress.createUnresolved("foo", 123), null);
+    server1 = new ResolvedServerInfo(InetSocketAddress.createUnresolved("foo", 123));
+    server2 = new ResolvedServerInfo(
+        InetSocketAddress.createUnresolved("foo", 123), Attributes.EMPTY);
     assertEquals(server1, server2);
     assertEquals(server1.hashCode(), server2.hashCode());
   }
@@ -99,7 +102,9 @@ public class ResolvedServerInfoTest {
 
   @Test public void testHashCode() {
     checkHashCode(new ResolvedServerInfo(InetSocketAddress.createUnresolved("foo", 123), ATTRS));
-    checkHashCode(new ResolvedServerInfo(InetSocketAddress.createUnresolved("foo", 123), null));
+    checkHashCode(new ResolvedServerInfo(
+        InetSocketAddress.createUnresolved("foo", 123), Attributes.EMPTY));
+    checkHashCode(new ResolvedServerInfo(InetSocketAddress.createUnresolved("foo", 123)));
     checkHashCode(new ResolvedServerInfo(
         InetSocketAddress.createUnresolved("foo", 456),
         Attributes.newBuilder()

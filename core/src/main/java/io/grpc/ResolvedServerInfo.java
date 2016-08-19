@@ -31,14 +31,17 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.base.Objects;
+
 import io.grpc.Attributes.Key;
+
 import java.net.SocketAddress;
-import java.util.Map;
 import java.util.Set;
+
 import javax.annotation.concurrent.Immutable;
 
-import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * The information about a server from a {@link NameResolver}.
@@ -50,15 +53,23 @@ public final class ResolvedServerInfo {
   private final Attributes attributes;
 
   /**
-   * Constructor.
+   * Constructs a new resolved server without attributes.
    *
-   * @param address the address object
+   * @param address the address of the server
+   */
+  public ResolvedServerInfo(SocketAddress address) {
+    this(address, Attributes.EMPTY);
+  }
+
+  /**
+   * Constructs a new resolved server with attributes.
+   *
+   * @param address the address of the server
    * @param attributes attributes associated with this address.
    */
   public ResolvedServerInfo(SocketAddress address, Attributes attributes) {
     this.address = checkNotNull(address);
-    // TODO(jhump): require not null?
-    this.attributes = attributes == null ? Attributes.EMPTY : attributes;
+    this.attributes = checkNotNull(attributes);
   }
 
   /**
@@ -94,15 +105,19 @@ public final class ResolvedServerInfo {
    *
    * @param o an object
    * @return true if the given object is a {@link ResolvedServerInfo} with an equal address and
-   * equal attributes
+   *     equal attributes
    */
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
     ResolvedServerInfo that = (ResolvedServerInfo) o;
-    return Objects.equal(address, that.address) &&
-        areAttributesEqual(attributes, that.attributes);
+    return Objects.equal(address, that.address)
+        && areAttributesEqual(attributes, that.attributes);
   }
 
   /**
@@ -110,9 +125,10 @@ public final class ResolvedServerInfo {
    * address.hashCode() * 31 + hash(attributes)
    * }</pre>
    *
-   * <p>The hash of the attributes is computed as if the attributes were a {@link Map#hashCode()
-   * Map} whose entries consist of all of the attributes' {@linkplain Attributes#keys() keys} and
-   * their associated {@linkplain Attributes#get(Key) values}.
+   * <p>The hash of the attributes is computed as if the attributes were a
+   * {@link java.util.Map#hashCode() Map} whose entries consist of all of the attributes'
+   * {@linkplain Attributes#keys() keys} and their associated {@linkplain Attributes#get(Key)
+   * values}.
    *
    * <p>Note that if a resolver includes mutable values in the attributes, this object's hash code
    * could change over time. So care must be used when putting these objects into a set or using

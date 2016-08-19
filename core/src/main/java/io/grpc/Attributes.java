@@ -31,14 +31,16 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.base.Preconditions;
+
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Set;
+
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
-
-import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * An immutable type-safe container of attributes.
