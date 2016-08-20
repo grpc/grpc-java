@@ -474,7 +474,7 @@ public final class ServerImpl extends io.grpc.Server {
      */
     private void internalClose(Status status, Metadata trailers) {
       // TODO(ejona86): this is not thread-safe :)
-      stream.close(status, trailers);
+      stream.close(status, trailers != null ? trailers : new Metadata());
     }
 
     @Override
@@ -485,10 +485,10 @@ public final class ServerImpl extends io.grpc.Server {
           try {
             getListener().messageRead(message);
           } catch (RuntimeException e) {
-            internalClose(Status.fromThrowable(e), new Metadata());
+            internalClose(Status.fromThrowable(e), Status.trailersFromThrowable(e));
             throw e;
           } catch (Error e) {
-            internalClose(Status.fromThrowable(e), new Metadata());
+            internalClose(Status.fromThrowable(e), Status.trailersFromThrowable(e));
             throw e;
           }
         }
@@ -503,10 +503,10 @@ public final class ServerImpl extends io.grpc.Server {
           try {
             getListener().halfClosed();
           } catch (RuntimeException e) {
-            internalClose(Status.fromThrowable(e), new Metadata());
+            internalClose(Status.fromThrowable(e), Status.trailersFromThrowable(e));
             throw e;
           } catch (Error e) {
-            internalClose(Status.fromThrowable(e), new Metadata());
+            internalClose(Status.fromThrowable(e), Status.trailersFromThrowable(e));
             throw e;
           }
         }
