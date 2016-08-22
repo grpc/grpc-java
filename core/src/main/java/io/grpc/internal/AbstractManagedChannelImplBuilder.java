@@ -42,12 +42,12 @@ import io.grpc.Attributes;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
-import io.grpc.DummyLoadBalancerFactory;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.ResolvedServerInfo;
+import io.grpc.util.RoundRobinLoadBalancerFactory;
 
 import java.net.SocketAddress;
 import java.net.URI;
@@ -254,7 +254,7 @@ public abstract class AbstractManagedChannelImplBuilder
         new ExponentialBackoffPolicy.Provider(),
         nameResolverFactory,
         getNameResolverParams(),
-        firstNonNull(loadBalancerFactory, DummyLoadBalancerFactory.getInstance()),
+        firstNonNull(loadBalancerFactory, RoundRobinLoadBalancerFactory.getInstance()),
         transportFactory,
         firstNonNull(decompressorRegistry, DecompressorRegistry.getDefaultInstance()),
         firstNonNull(compressorRegistry, CompressorRegistry.getDefaultInstance()),

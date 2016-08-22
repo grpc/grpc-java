@@ -64,7 +64,6 @@ import io.grpc.Compressor;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
-import io.grpc.DummyLoadBalancerFactory;
 import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
@@ -75,6 +74,7 @@ import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.TransportManager;
+import io.grpc.util.RoundRobinLoadBalancerFactory;
 
 import org.junit.After;
 import org.junit.Before;
@@ -124,7 +124,7 @@ public class ManagedChannelImplTest {
   private final FakeClock timer = new FakeClock();
   private final FakeClock executor = new FakeClock();
   private SpyingLoadBalancerFactory loadBalancerFactory =
-      new SpyingLoadBalancerFactory(DummyLoadBalancerFactory.getInstance());
+      new SpyingLoadBalancerFactory(RoundRobinLoadBalancerFactory.getInstance());
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
 

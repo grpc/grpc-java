@@ -35,6 +35,8 @@ import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
+import io.grpc.util.RoundRobinLoadBalancerFactory;
+
 /**
  * A builder for {@link ManagedChannel} instances.
  *
@@ -158,7 +160,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   /**
    * Provides a custom {@link LoadBalancer.Factory} for the channel.
    *
-   * <p>If this method is not called, the builder will use {@link DummyLoadBalancerFactory}
+   * <p>If this method is not called, the builder will use {@link RoundRobinLoadBalancerFactory}
    * for the channel.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
