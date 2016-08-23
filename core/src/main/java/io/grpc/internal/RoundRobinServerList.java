@@ -35,9 +35,11 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterators;
 
+import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Status;
 import io.grpc.TransportManager;
+import io.grpc.TransportPicker;
 
 import java.net.SocketAddress;
 import java.util.Collection;
@@ -52,7 +54,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * Manages a list of server addresses to round-robin on.
  */
 @ThreadSafe
-public class RoundRobinServerList<T> {
+public class RoundRobinServerList<T> extends TransportPicker<T> {
   private final TransportManager<T> tm;
   private final List<EquivalentAddressGroup> list;
   private final Iterator<EquivalentAddressGroup> cyclingIter;
@@ -64,6 +66,11 @@ public class RoundRobinServerList<T> {
     this.cyclingIter = Iterators.cycle(list);
     this.requestDroppingTransport =
       tm.createFailingTransport(Status.UNAVAILABLE.withDescription("Throttled by LB"));
+  }
+
+  @Override
+  public T pickTransport(Attributes affinity) {
+    return getTransportForNextServer();
   }
 
   /**
