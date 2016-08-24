@@ -118,7 +118,7 @@ public abstract class NameResolver {
   @ThreadSafe
   public interface Listener {
     /**
-     * Handles updates on resolved addresses and config.
+     * Handles updates on resolved addresses and attributes.
      *
      * <p>Implementations will not modify the given {@code servers}.
      *
