@@ -108,9 +108,9 @@ public final class SingleProducerSerializingExecutor implements Executor {
         // when it discovers tail has changed.
         cachedTail.next = new LinkedRunnable(r);
         if (!tailCompareAndSet(cachedTail, cachedTail.next)) {
-          // 'next' is guaranteed not to be read, since tail hasn't been updated. Clearing the field
-          // has little practice use, other than calling attention to the fact that the field is not
-          // read.
+          // 'next' is guaranteed not to be read, since tail hasn't been updated and TaskRunner does
+          // not go past the current tail. Clearing the field has little practice use, other than
+          // calling attention to the fact that the field is not read.
           cachedTail.next = null;
           // Try again. The only explanation for this failure is TaskRunner exited (or someone is
           // misusing the class via multiple producers).
