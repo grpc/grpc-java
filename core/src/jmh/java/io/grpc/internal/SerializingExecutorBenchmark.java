@@ -49,8 +49,13 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * SerializingExecutor benchmark.
+ *
+ * <p>Since this is a microbenchmark, don't actually believe the numbers in a strict sense. Instead,
+ * it is a gauge that the code is behaving roughly as expected, to increase confidence that our
+ * understanding of the code is correct (and will behave as expected in other cases). Even more
+ * helpfully it pushes the implementation, which should weed out many multithreading bugs.
  */
-@State(Scope.Benchmark)
+@State(Scope.Thread)
 public class SerializingExecutorBenchmark {
 
   @Param({"CLASSIC", "SINGLE_PRODUCER"})

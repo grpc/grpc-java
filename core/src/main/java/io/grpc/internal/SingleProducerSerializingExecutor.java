@@ -52,7 +52,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 @NotThreadSafe
 public final class SingleProducerSerializingExecutor implements Executor {
   private static final Logger log =
-      Logger.getLogger(SerializingExecutor.class.getName());
+      Logger.getLogger(SingleProducerSerializingExecutor.class.getName());
   private static final
       AtomicReferenceFieldUpdater<SingleProducerSerializingExecutor, LinkedRunnable> tailUpdater =
       AtomicReferenceFieldUpdater.newUpdater(
