@@ -54,7 +54,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * Manages a list of server addresses to round-robin on.
  */
 @ThreadSafe
-public class RoundRobinServerList<T> extends TransportPicker<T> {
+public class RoundRobinServerList<T> implements TransportPicker<T> {
   private final TransportManager<T> tm;
   private final List<EquivalentAddressGroup> list;
   private final Iterator<EquivalentAddressGroup> cyclingIter;
@@ -68,8 +68,11 @@ public class RoundRobinServerList<T> extends TransportPicker<T> {
       tm.createFailingTransport(Status.UNAVAILABLE.withDescription("Throttled by LB"));
   }
 
+  /**
+   * Implements {@link TransportPicker} api.
+   */
   @Override
-  public T pickTransport(Attributes affinity) {
+  public T pickTransport(Attributes affinityAttributes) {
     return getTransportForNextServer();
   }
 

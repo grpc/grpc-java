@@ -63,13 +63,14 @@ public final class PickFirstBalancerFactory extends LoadBalancer.Factory {
     }
 
     @Override
-    protected TransportPicker<T> createTransportPicker(List<ResolvedServerInfoGroup> servers) {
+    protected TransportPicker<T> createTransportPicker(List<ResolvedServerInfoGroup> servers,
+        Attributes initialAttributes) {
       final EquivalentAddressGroup equivalentAddressGroup =
           resolvedServerInfoToEquivalentAddressGroup(servers);
-      // Picker in this case is very simple, anonymous class will suffice.
+      // The simplest possible picker, just delegates to transport manager converted server list.
       return new TransportPicker<T>() {
         @Override
-        public T pickTransport(Attributes affinity) {
+        public T pickTransport(Attributes affinityAttributes) {
           return tm.getTransport(equivalentAddressGroup);
         }
       };

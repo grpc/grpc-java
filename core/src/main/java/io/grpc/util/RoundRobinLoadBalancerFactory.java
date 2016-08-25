@@ -32,6 +32,7 @@
 package io.grpc.util;
 
 import io.grpc.AbstractLoadBalancer;
+import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
@@ -72,8 +73,8 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     }
 
     @Override
-    protected TransportPicker<T> createTransportPicker(
-        List<ResolvedServerInfoGroup> updatedServers) {
+    protected TransportPicker<T> createTransportPicker(List<ResolvedServerInfoGroup> updatedServers,
+        Attributes initialAttributes) {
       RoundRobinServerList.Builder<T> listBuilder = new RoundRobinServerList.Builder<T>(tm);
       for (ResolvedServerInfoGroup servers : updatedServers) {
         if (servers.getResolvedServerInfoList().isEmpty()) {

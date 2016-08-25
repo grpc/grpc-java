@@ -31,6 +31,17 @@
 
 package io.grpc;
 
-public abstract class TransportPicker<TransportT> {
-  public abstract TransportT pickTransport(Attributes affinity);
+/**
+ * Provides a simplified abstraction of transport picking used by {@link AbstractLoadBalancer}.
+ *
+ * @param <TransportT> transport type
+ */
+public interface TransportPicker<TransportT> {
+  /**
+   * Pick a transport that Channel will use for next RPC.
+   *
+   * @param affinityAttributes attributes for affinity-based routing.
+   * @return selected transport.
+   */
+  TransportT pickTransport(Attributes affinityAttributes);
 }

@@ -32,12 +32,27 @@
 package io.grpc;
 
 import com.google.common.base.Supplier;
+import com.google.common.collect.ImmutableList;
 
 import java.util.List;
 
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
+/**
+ * Base implementation of {@link LoadBalancer} encapsulating all the boiler plate needed to
+ * implement {@link LoadBalancer} interface.
+ *
+ * <p>The user is required to only provide {@link TransportPicker} instance (responsible for
+ * transport selection) by extending this class and implementing {@link #createTransportPicker(List,
+ * Attributes)}. Base implementation takes care of dealing with interim transports and thread
+ * safety.
+ *
+ * <p>For reference implementations, check very simple {@link PickFirstBalancer} and a bit more
+ * advanced {@link RoundRobinLoadBalancer} using custom structure for to do transport selection. If
+ * more control and flexibility is required, {@link LoadBalancer} interface should be implemented
+ * directly.
+ */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
 @ThreadSafe
 public abstract class AbstractLoadBalancer<TransportT> extends LoadBalancer<TransportT> {
@@ -62,14 +77,25 @@ public abstract class AbstractLoadBalancer<TransportT> extends LoadBalancer<Tran
   }
 
   /**
-   * Factory method which creates and returns {@link TransportPicker}.
+   * Factory method returning {@link TransportPicker} which is responsible for transport selection.
+   *
+   * @param servers immutable list of servers returned from {@link NameResolver}.
+   * @param initialAttributes metadata attributes returned from {@link NameResolver}.
+   * @return TransportPicker object for given transport type.
    */
   protected abstract TransportPicker<TransportT> createTransportPicker(
-      List<ResolvedServerInfoGroup> servers);
+      List<ResolvedServerInfoGroup> servers, Attributes initialAttributes);
 
+  /**
+   * Delegates transport picking duty to {@link TransportPicker} in a thread safe fashion.
+   *
+   * @param affinity attributes passed down to {@link TransportPicker#pickTransport(Attributes)}.
+   * @return transport returned from {@link TransportPicker#pickTransport(Attributes)}.
+   */
   @Override
   public TransportT pickTransport(Attributes affinity) {
     TransportPicker<TransportT> transportPickerCopy;
+    // TODO(lukaszx0) address lock contention issue (https://github.com/grpc/grpc-java/issues/2121)
     synchronized (lock) {
       if (closed) {
         return tm.createFailingTransport(SHUTDOWN_STATUS);
@@ -88,6 +114,15 @@ public abstract class AbstractLoadBalancer<TransportT> extends LoadBalancer<Tran
     return transportPickerCopy.pickTransport(affinity);
   }
 
+  /**
+   * Handles address resolution triggered by {@link NameResolver}.
+   *
+   * <p>On every {@link NameResolver.Listener#onUpdate}, new {@link TransportPicker} is
+   * created with a immutable list of servers returned from name resolver and metadata attributes.
+   *
+   * @param updatedServers list of servers returned from {@link NameResolver}.
+   * @param attributes extra metadata from naming system.
+   */
   @Override
   public void handleResolvedAddresses(final List<ResolvedServerInfoGroup> updatedServers,
       final Attributes attributes) {
@@ -97,7 +132,7 @@ public abstract class AbstractLoadBalancer<TransportT> extends LoadBalancer<Tran
       if (closed) {
         return;
       }
-      transportPicker = createTransportPicker(updatedServers);
+      transportPicker = createTransportPicker(ImmutableList.copyOf(updatedServers), attributes);
       transportPickerCopy = transportPicker;
       nameResolutionError = null;
       savedInterimTransport = interimTransport;
@@ -113,6 +148,11 @@ public abstract class AbstractLoadBalancer<TransportT> extends LoadBalancer<Tran
     }
   }
 
+  /**
+   * Handles name resolution error returned from {@link NameResolver}.
+   *
+   * @param error a non-OK status returned from {@link NameResolver.Listener#onError}.
+   */
   @Override
   public void handleNameResolutionError(Status error) {
     TransportManager.InterimTransport<TransportT> savedInterimTransport;
@@ -130,6 +170,9 @@ public abstract class AbstractLoadBalancer<TransportT> extends LoadBalancer<Tran
     }
   }
 
+  /**
+   * Shuts down load balancer and closes all remaining requests with {@link #SHUTDOWN_STATUS}.
+   */
   @Override
   public void shutdown() {
     TransportManager.InterimTransport<TransportT> savedInterimTransport;
