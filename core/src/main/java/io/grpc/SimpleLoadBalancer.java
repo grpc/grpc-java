@@ -40,22 +40,20 @@ import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Base implementation of {@link LoadBalancer} encapsulating all the boiler plate needed to
+ * Simple implementation of {@link LoadBalancer} encapsulating all the boiler plate needed to
  * implement {@link LoadBalancer} interface.
  *
- * <p>The user is required to only provide {@link TransportPicker} instance (responsible for
- * transport selection) by extending this class and implementing {@link #createTransportPicker(List,
- * Attributes)}. Base implementation takes care of dealing with interim transports and thread
- * safety.
+ * <p>The user is required to only provide {@link TransportPicker} via {@link
+ * TransportPicker.Factory}
  *
- * <p>For reference implementations, check very simple {@link PickFirstBalancer} and a bit more
- * advanced {@link RoundRobinLoadBalancer} using custom structure for to do transport selection. If
- * more control and flexibility is required, {@link LoadBalancer} interface should be implemented
- * directly.
+ * <p>For reference implementations, check very simple PickFirstTransportPickerFactory and a bit
+ * more advanced RoundRobinTransportPickerFactory which uses custom structure to do transport
+ * selection. If more control and flexibility is required, {@link LoadBalancer} interface should be
+ * implemented directly.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
 @ThreadSafe
-public abstract class AbstractLoadBalancer<TransportT> extends LoadBalancer<TransportT> {
+public final class SimpleLoadBalancer<TransportT> extends LoadBalancer<TransportT> {
   private static final Status SHUTDOWN_STATUS =
       Status.UNAVAILABLE.augmentDescription("Load balancer has shut down");
 
@@ -70,21 +68,14 @@ public abstract class AbstractLoadBalancer<TransportT> extends LoadBalancer<Tran
   @GuardedBy("lock")
   private boolean closed;
 
-  protected final TransportManager<TransportT> tm;
+  private final TransportManager<TransportT> tm;
+  private final TransportPicker.Factory<TransportT> transportPickerFactory;
 
-  protected AbstractLoadBalancer(TransportManager<TransportT> tm) {
+  public SimpleLoadBalancer(TransportManager<TransportT> tm,
+      TransportPicker.Factory<TransportT> transportPickerFactory) {
     this.tm = tm;
+    this.transportPickerFactory = transportPickerFactory;
   }
-
-  /**
-   * Factory method returning {@link TransportPicker} which is responsible for transport selection.
-   *
-   * @param servers immutable list of servers returned from {@link NameResolver}.
-   * @param initialAttributes metadata attributes returned from {@link NameResolver}.
-   * @return TransportPicker object for given transport type.
-   */
-  protected abstract TransportPicker<TransportT> createTransportPicker(
-      List<ResolvedServerInfoGroup> servers, Attributes initialAttributes);
 
   /**
    * Delegates transport picking duty to {@link TransportPicker} in a thread safe fashion.
@@ -132,7 +123,8 @@ public abstract class AbstractLoadBalancer<TransportT> extends LoadBalancer<Tran
       if (closed) {
         return;
       }
-      transportPicker = createTransportPicker(ImmutableList.copyOf(updatedServers), attributes);
+      transportPicker = transportPickerFactory.create(ImmutableList.copyOf(updatedServers),
+          attributes);
       transportPickerCopy = transportPicker;
       nameResolutionError = null;
       savedInterimTransport = interimTransport;

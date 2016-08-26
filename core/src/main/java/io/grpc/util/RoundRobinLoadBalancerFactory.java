@@ -31,7 +31,7 @@
 
 package io.grpc.util;
 
-import io.grpc.AbstractLoadBalancer;
+import io.grpc.SimpleLoadBalancer;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
@@ -64,18 +64,21 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
 
   @Override
   public <T> LoadBalancer<T> newLoadBalancer(String serviceName, TransportManager<T> tm) {
-    return new RoundRobinLoadBalancer<T>(tm);
+    return new SimpleLoadBalancer<T>(tm, new RoundRobinTransportPickerFactory<T>(tm));
   }
 
-  private static class RoundRobinLoadBalancer<T> extends AbstractLoadBalancer<T> {
-    private RoundRobinLoadBalancer(TransportManager<T> tm) {
-      super(tm);
+  private static class RoundRobinTransportPickerFactory<T> implements TransportPicker.Factory<T> {
+    private final TransportManager<T> tm;
+
+    public RoundRobinTransportPickerFactory(TransportManager<T> tm) {
+      this.tm = tm;
     }
 
     @Override
-    protected TransportPicker<T> createTransportPicker(List<ResolvedServerInfoGroup> updatedServers,
+    public TransportPicker<T> create(List<ResolvedServerInfoGroup> updatedServers,
         Attributes initialAttributes) {
-      RoundRobinServerList.Builder<T> listBuilder = new RoundRobinServerList.Builder<T>(tm);
+      RoundRobinServerList.Builder<T> listBuilder =
+          new RoundRobinServerList.Builder<T>(tm);
       for (ResolvedServerInfoGroup servers : updatedServers) {
         if (servers.getResolvedServerInfoList().isEmpty()) {
           continue;

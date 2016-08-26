@@ -31,8 +31,10 @@
 
 package io.grpc;
 
+import java.util.List;
+
 /**
- * Provides a simplified abstraction of transport picking used by {@link AbstractLoadBalancer}.
+ * Provides a simplified abstraction of transport picking used by {@link SimpleLoadBalancer}.
  *
  * @param <TransportT> transport type
  */
@@ -44,4 +46,22 @@ public interface TransportPicker<TransportT> {
    * @return selected transport.
    */
   TransportT pickTransport(Attributes affinityAttributes);
+
+  /**
+   * Factory for creating {@link TransportPicker} instances.
+   *
+   * @param <TransportT> transport type.
+   */
+  interface Factory<TransportT> {
+    /**
+     * Factory method returning {@link TransportPicker} which is responsible for transport
+     * selection.
+     *
+     * @param servers immutable list of servers returned from {@link NameResolver}.
+     * @param initialAttributes metadata attributes returned from {@link NameResolver}.
+     * @return TransportPicker object for given transport type.
+     */
+    TransportPicker<TransportT> create(List<ResolvedServerInfoGroup> servers,
+        Attributes initialAttributes);
+  }
 }

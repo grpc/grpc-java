@@ -54,19 +54,21 @@ public final class PickFirstBalancerFactory extends LoadBalancer.Factory {
 
   @Override
   public <T> LoadBalancer<T> newLoadBalancer(String serviceName, TransportManager<T> tm) {
-    return new PickFirstBalancer<T>(tm);
+    return new SimpleLoadBalancer<T>(tm, new PickFirstBalancerFactory.PickFirstTransportPickerFactory<T>(tm));
   }
 
-  private static class PickFirstBalancer<T> extends AbstractLoadBalancer<T> {
-    private PickFirstBalancer(TransportManager<T> tm) {
-      super(tm);
+  private static class PickFirstTransportPickerFactory<T> implements TransportPicker.Factory<T> {
+    private final TransportManager<T> tm;
+
+    public PickFirstTransportPickerFactory(TransportManager<T> tm) {
+      this.tm = tm;
     }
 
     @Override
-    protected TransportPicker<T> createTransportPicker(List<ResolvedServerInfoGroup> servers,
-        Attributes initialAttributes) {
+    public TransportPicker<T> create(List<ResolvedServerInfoGroup> updatedServers,
+        Attributes attributes) {
       final EquivalentAddressGroup equivalentAddressGroup =
-          resolvedServerInfoToEquivalentAddressGroup(servers);
+          resolvedServerInfoToEquivalentAddressGroup(updatedServers);
       // The simplest possible picker, just delegates to transport manager converted server list.
       return new TransportPicker<T>() {
         @Override
