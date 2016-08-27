@@ -31,15 +31,9 @@
 
 package io.grpc;
 
-import com.google.common.base.Supplier;
-
-import io.grpc.TransportManager.InterimTransport;
-
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.List;
-
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A {@link LoadBalancer} that provides no load balancing mechanism over the
@@ -60,123 +54,42 @@ public final class PickFirstBalancerFactory extends LoadBalancer.Factory {
 
   @Override
   public <T> LoadBalancer<T> newLoadBalancer(String serviceName, TransportManager<T> tm) {
-    return new PickFirstBalancer<T>(tm);
+    return new SimpleLoadBalancer<T>(tm, new PickFirstBalancerFactory.PickFirstTransportPickerFactory<T>(tm));
   }
 
-  private static class PickFirstBalancer<T> extends LoadBalancer<T> {
-    private static final Status SHUTDOWN_STATUS =
-        Status.UNAVAILABLE.augmentDescription("PickFirstBalancer has shut down");
-
-    private final Object lock = new Object();
-
-    @GuardedBy("lock")
-    private EquivalentAddressGroup addresses;
-    @GuardedBy("lock")
-    private InterimTransport<T> interimTransport;
-    @GuardedBy("lock")
-    private Status nameResolutionError;
-    @GuardedBy("lock")
-    private boolean closed;
-
+  private static class PickFirstTransportPickerFactory<T> implements TransportPicker.Factory<T> {
     private final TransportManager<T> tm;
 
-    private PickFirstBalancer(TransportManager<T> tm) {
+    public PickFirstTransportPickerFactory(TransportManager<T> tm) {
       this.tm = tm;
     }
 
     @Override
-    public T pickTransport(Attributes affinity) {
-      EquivalentAddressGroup addressesCopy;
-      synchronized (lock) {
-        if (closed) {
-          return tm.createFailingTransport(SHUTDOWN_STATUS);
-        }
-        addressesCopy = addresses;
-        if (addressesCopy == null) {
-          if (nameResolutionError != null) {
-            return tm.createFailingTransport(nameResolutionError);
-          }
-          if (interimTransport == null) {
-            interimTransport = tm.createInterimTransport();
-          }
-          return interimTransport.transport();
-        }
-      }
-      return tm.getTransport(addressesCopy);
-    }
-
-    @Override
-    public void handleResolvedAddresses(List<ResolvedServerInfoGroup> updatedServers,
+    public TransportPicker<T> create(List<ResolvedServerInfoGroup> updatedServers,
         Attributes attributes) {
-      InterimTransport<T> savedInterimTransport;
-      final EquivalentAddressGroup newAddresses;
-      synchronized (lock) {
-        if (closed) {
-          return;
+      final EquivalentAddressGroup equivalentAddressGroup =
+          resolvedServerInfoToEquivalentAddressGroup(updatedServers);
+      // The simplest possible picker, just delegates to transport manager converted server list.
+      return new TransportPicker<T>() {
+        @Override
+        public T pickTransport(Attributes affinityAttributes) {
+          return tm.getTransport(equivalentAddressGroup);
         }
-        newAddresses = resolvedServerInfoGroupsToEquivalentAddressGroup(updatedServers);
-        if (newAddresses.equals(addresses)) {
-          return;
-        }
-        addresses = newAddresses;
-        nameResolutionError = null;
-        savedInterimTransport = interimTransport;
-        interimTransport = null;
-      }
-      if (savedInterimTransport != null) {
-        savedInterimTransport.closeWithRealTransports(new Supplier<T>() {
-            @Override public T get() {
-              return tm.getTransport(newAddresses);
-            }
-          });
-      }
+      };
     }
 
-    @Override
-    public void handleNameResolutionError(Status error) {
-      InterimTransport<T> savedInterimTransport;
-      synchronized (lock) {
-        if (closed) {
-          return;
+    private EquivalentAddressGroup resolvedServerInfoToEquivalentAddressGroup(
+        List<ResolvedServerInfoGroup> updatedServers) {
+      ArrayList<SocketAddress> newAddressList = new ArrayList<SocketAddress>();
+      for (ResolvedServerInfoGroup servers : updatedServers) {
+        if (servers.getResolvedServerInfoList().isEmpty()) {
+          continue;
         }
-        error = error.augmentDescription("Name resolution failed");
-        savedInterimTransport = interimTransport;
-        interimTransport = null;
-        nameResolutionError = error;
-      }
-      if (savedInterimTransport != null) {
-        savedInterimTransport.closeWithError(error);
-      }
-    }
-
-    @Override
-    public void shutdown() {
-      InterimTransport<T> savedInterimTransport;
-      synchronized (lock) {
-        if (closed) {
-          return;
-        }
-        closed = true;
-        savedInterimTransport = interimTransport;
-        interimTransport = null;
-      }
-      if (savedInterimTransport != null) {
-        savedInterimTransport.closeWithError(SHUTDOWN_STATUS);
-      }
-    }
-
-    /**
-     * Converts list of ResolvedServerInfoGroup objects into one EquivalentAddressGroup object.
-     */
-    private static EquivalentAddressGroup resolvedServerInfoGroupsToEquivalentAddressGroup(
-        List<ResolvedServerInfoGroup> groupList) {
-      List<SocketAddress> addrs = new ArrayList<SocketAddress>(groupList.size());
-      for (ResolvedServerInfoGroup group : groupList) {
-        for (ResolvedServerInfo srv : group.getResolvedServerInfoList()) {
-          addrs.add(srv.getAddress());
+        for (ResolvedServerInfo server : servers.getResolvedServerInfoList()) {
+          newAddressList.add(server.getAddress());
         }
       }
-      return new EquivalentAddressGroup(addrs);
+      return new EquivalentAddressGroup(newAddressList);
     }
   }
 }
