@@ -68,17 +68,21 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
+import io.netty.handler.codec.http2.DecoratingHttp2FrameWriter;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
+import io.netty.handler.codec.http2.Http2FrameWriter;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2LocalFlowController;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
 
+import io.netty.util.ReferenceCountUtil;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -107,6 +111,9 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   @Mock
   private NettyClientTransport.Listener listener;
 
+  // Contains the data of the last ping frame sent (if any).
+  private ByteBuf pingData;
+
   /**
    * Set up for test.
    */
@@ -129,6 +136,12 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     // Simulate receipt of initial remote settings.
     ByteBuf serializedSettings = serializeSettings(new Http2Settings());
     channelRead(serializedSettings);
+  }
+
+  @After
+  public void tearDown() {
+    ReferenceCountUtil.safeRelease(pingData);
+    pingData = null;
   }
 
   @Test
@@ -409,14 +422,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     PingCallbackImpl callback2 = new PingCallbackImpl();
     sendPing(callback2);
 
-    ArgumentCaptor<ByteBuf> captor = ArgumentCaptor.forClass(ByteBuf.class);
-    verifyWrite().writePing(eq(ctx()), eq(false), captor.capture(),
-        any(ChannelPromise.class));
-
-    // getting a bad ack won't cause the callback to be invoked
-    ByteBuf pingPayload = captor.getValue();
     // to compute bad payload, read the good payload and subtract one
-    ByteBuf badPingPayload = Unpooled.copyLong(pingPayload.slice().readLong() - 1);
+    ByteBuf badPingPayload = Unpooled.copyLong(pingData.slice().readLong() - 1);
 
     channelRead(pingFrame(true, badPingPayload));
     // operation not complete because ack was wrong
@@ -426,7 +433,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     nanoTime += 10101;
 
     // reading the proper response should complete the future
-    channelRead(pingFrame(true, pingPayload));
+    channelRead(pingFrame(true, pingData.slice()));
     assertEquals(1, callback1.invocationCount);
     assertEquals(10101, callback1.roundTripTime);
     assertNull(callback1.failureCause);
@@ -564,5 +571,18 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
       invocationCount++;
       this.failureCause = cause;
     }
+  }
+
+  @Override
+  protected Http2FrameWriter frameWriter() {
+    return new DecoratingHttp2FrameWriter(super.frameWriter()) {
+      @Override
+      public ChannelFuture writePing(ChannelHandlerContext ctx, boolean ack, ByteBuf data,
+          ChannelPromise promise) {
+        ReferenceCountUtil.safeRelease(pingData);
+        pingData = data.retainedSlice();
+        return super.writePing(ctx, ack, data, promise);
+      }
+    };
   }
 }
