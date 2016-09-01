@@ -964,7 +964,7 @@ public abstract class AbstractInteropTest {
 
     X509Certificate x509cert = (X509Certificate) certificates.get(0);
 
-    assertEquals(1, certificates.size());
+    assertEquals(certificates.toString(), 1, certificates.size());
     assertEquals(tlsInfo, x509cert.getSubjectDN().toString());
   }
 

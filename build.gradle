@@ -160,7 +160,7 @@ subprojects {
 
                 netty: 'io.netty:netty-codec-http2:[4.1.5.Final]',
                 netty_epoll: 'io.netty:netty-transport-native-epoll:4.1.5.Final' + epoll_suffix,
-                netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:1.1.33.Fork19',
+                netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:1.1.33.Fork21',
 
                 // Test dependencies.
                 junit: 'junit:junit:4.11',
