@@ -31,14 +31,11 @@
 
 package io.grpc;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-
-import io.grpc.internal.LogExceptionRunnable;
-
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * An absolute deadline in system time.
@@ -60,9 +57,9 @@ public final class Deadline implements Comparable<Deadline> {
     return after(duration, units, SYSTEM_TICKER);
   }
 
-  @VisibleForTesting
+  // For testing
   static Deadline after(long duration, TimeUnit units, Ticker ticker) {
-    Preconditions.checkNotNull(units);
+    checkNotNull(units, "units");
     return new Deadline(ticker, units.toNanos(duration), true);
   }
 
@@ -148,8 +145,8 @@ public final class Deadline implements Comparable<Deadline> {
    * @return {@link ScheduledFuture} which can be used to cancel execution of the task
    */
   public ScheduledFuture<?> runOnExpiration(Runnable task, ScheduledExecutorService scheduler) {
-    Preconditions.checkNotNull(task, "task");
-    Preconditions.checkNotNull(scheduler, "scheduler");
+    checkNotNull(task, "task");
+    checkNotNull(scheduler, "scheduler");
     return scheduler.schedule(new LogExceptionRunnable(task),
         deadlineNanos - ticker.read(), TimeUnit.NANOSECONDS);
   }
@@ -180,6 +177,44 @@ public final class Deadline implements Comparable<Deadline> {
     @Override
     public long read() {
       return System.nanoTime();
+    }
+  }
+
+  private static <T> T checkNotNull(T reference, Object errorMessage) {
+    if (reference == null) {
+      throw new NullPointerException(String.valueOf(errorMessage));
+    }
+    return reference;
+  }
+
+  private static class LogExceptionRunnable implements Runnable {
+    private static final Logger log = Logger.getLogger(LogExceptionRunnable.class.getName());
+
+    private final Runnable task;
+
+    public LogExceptionRunnable(Runnable task) {
+      this.task = checkNotNull(task, "task");
+    }
+
+    @Override
+    public void run() {
+      try {
+        task.run();
+      } catch (Throwable t) {
+        log.log(Level.SEVERE, "Exception while executing runnable " + task, t);
+        if (t instanceof RuntimeException) {
+          throw (RuntimeException) t;
+        } else if (t instanceof Error) {
+          throw (Error) t;
+        } else {
+          throw new RuntimeException(t);
+        }
+      }
+    }
+
+    @Override
+    public String toString() {
+      return "Deadline.LogExceptionRunnable(" + task + ")";
     }
   }
 }
