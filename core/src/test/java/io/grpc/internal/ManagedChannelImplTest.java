@@ -202,6 +202,15 @@ public class ManagedChannelImplTest {
     assertEquals(0, executor.numPendingTasks());
   }
 
+  @Test(timeout = 1000)
+  public void awaitTermination() throws Exception {
+    ManagedChannel channel = createChannel(
+        new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+    channel.shutdown();
+
+    channel.awaitTermination();
+  }
+
   @Test
   public void immediateDeadlineExceeded() {
     createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
