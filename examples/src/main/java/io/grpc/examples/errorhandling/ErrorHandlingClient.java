@@ -67,11 +67,10 @@ public class ErrorHandlingClient {
     new ErrorHandlingClient().run();
   }
 
-  private Server server;
   private ManagedChannel channel;
 
   void run() throws Exception {
-    server = ServerBuilder.forPort(0).addService(new GreeterGrpc.GreeterImplBase() {
+    Server server = ServerBuilder.forPort(0).addService(new GreeterGrpc.GreeterImplBase() {
       @Override
       public void sayHello(HelloRequest request, StreamObserver<HelloReply> responseObserver) {
         responseObserver.onError(Status.INTERNAL

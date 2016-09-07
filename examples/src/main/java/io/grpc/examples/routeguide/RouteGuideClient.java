@@ -31,6 +31,8 @@
 
 package io.grpc.examples.routeguide;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
@@ -86,7 +88,7 @@ public class RouteGuideClient {
     try {
       feature = blockingStub.getFeature(request);
     } catch (StatusRuntimeException e) {
-      logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
+      warning("RPC failed: {0}", e.getStatus());
       return;
     }
     if (RouteGuideUtil.exists(feature)) {
@@ -116,17 +118,15 @@ public class RouteGuideClient {
     Iterator<Feature> features;
     try {
       features = blockingStub.listFeatures(request);
-    } catch (StatusRuntimeException e) {
-      logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
-      return;
-    }
 
-    StringBuilder responseLog = new StringBuilder("Result: ");
-    while (features.hasNext()) {
-      Feature feature = features.next();
-      responseLog.append(feature);
+      int i = 0;
+      while (features.hasNext()) {
+        Feature feature = features.next();
+        info("Result #" + ++i + ": {0}", feature);
+      }
+    } catch (StatusRuntimeException e) {
+      warning("RPC failed: {0}", e.getStatus());
     }
-    info(responseLog.toString());
   }
 
   /**
@@ -148,7 +148,7 @@ public class RouteGuideClient {
       @Override
       public void onError(Throwable t) {
         Status status = Status.fromThrowable(t);
-        logger.log(Level.WARNING, "RecordRoute Failed: {0}", status);
+        warning("RecordRoute Failed: {0}", status);
         finishLatch.countDown();
       }
 
@@ -164,13 +164,13 @@ public class RouteGuideClient {
       // Send numPoints points randomly selected from the features list.
       Random rand = new Random();
       for (int i = 0; i < numPoints; ++i) {
-        int index = rand.nextInt(features.size());
+        int index = randomIndex(features.size(), rand);
         Point point = features.get(index).getLocation();
         info("Visiting point {0}, {1}", RouteGuideUtil.getLatitude(point),
             RouteGuideUtil.getLongitude(point));
         requestObserver.onNext(point);
         // Sleep for a bit before sending the next one.
-        Thread.sleep(rand.nextInt(1000) + 500);
+        sleep(rand.nextInt(1000) + 500);
         if (finishLatch.getCount() == 0) {
           // RPC completed or errored before we finished sending.
           // Sending further requests won't error, but they will just be thrown away.
@@ -194,7 +194,7 @@ public class RouteGuideClient {
    * chat messages that are sent from the server.
    */
   public void routeChat() throws InterruptedException {
-    info("*** RoutChat");
+    info("*** RouteChat");
     final CountDownLatch finishLatch = new CountDownLatch(1);
     StreamObserver<RouteNote> requestObserver =
         asyncStub.routeChat(new StreamObserver<RouteNote>() {
@@ -207,7 +207,7 @@ public class RouteGuideClient {
           @Override
           public void onError(Throwable t) {
             Status status = Status.fromThrowable(t);
-            logger.log(Level.WARNING, "RouteChat Failed: {0}", status);
+            warning("RouteChat Failed: {0}", status);
             finishLatch.countDown();
           }
 
@@ -271,8 +271,24 @@ public class RouteGuideClient {
     }
   }
 
-  private static void info(String msg, Object... params) {
+  @VisibleForTesting
+  void info(String msg, Object... params) {
     logger.log(Level.INFO, msg, params);
+  }
+
+  @VisibleForTesting
+  void warning(String msg, Object... params) {
+    logger.log(Level.WARNING, msg, params);
+  }
+
+  @VisibleForTesting
+  int randomIndex(int bound, Random random) {
+    return random.nextInt(bound);
+  }
+
+  @VisibleForTesting
+  void sleep(long millis) throws InterruptedException {
+    Thread.sleep(millis);
   }
 
   private RouteNote newNote(String message, int lat, int lon) {

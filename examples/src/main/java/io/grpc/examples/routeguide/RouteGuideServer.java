@@ -188,7 +188,7 @@ public class RouteGuideServer {
         int featureCount;
         int distance;
         Point previous;
-        long startTime = System.nanoTime();
+        final long startTime = System.nanoTime();
 
         @Override
         public void onNext(Point point) {
