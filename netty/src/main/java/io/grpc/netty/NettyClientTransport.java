@@ -45,6 +45,7 @@ import io.grpc.internal.ClientStream;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
+import io.grpc.netty.QueuedCommand.UnionCommand;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -109,7 +110,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       }
     };
     // Write the command requesting the ping
-    handler.getWriteQueue().enqueue(new SendPingCommand(callback, executor), true)
+    handler.getWriteQueue().enqueue(UnionCommand.newSendPingCmd(callback, executor), true)
         .addListener(failureListener);
   }
 
@@ -174,7 +175,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     handler.startWriteQueue(channel);
     // This write will have no effect, yet it will only complete once the negotiationHandler
     // flushes any pending writes.
-    channel.write(NettyClientHandler.NOOP_MESSAGE).addListener(new ChannelFutureListener() {
+    channel.write(UnionCommand.newNoopCmd()).addListener(new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
         if (!future.isSuccess()) {
@@ -202,7 +203,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     if (channel.isOpen()) {
       Status status
           = Status.UNAVAILABLE.withDescription("Channel requested transport to shut down");
-      handler.getWriteQueue().enqueue(new GracefulCloseCommand(status), true);
+      handler.getWriteQueue().enqueue(UnionCommand.newGracefulCloseCmd(status), true);
     }
   }
 
@@ -210,7 +211,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   public void shutdownNow(Status reason) {
     // Notifying of termination is automatically done when the channel closes.
     if (channel != null && channel.isOpen()) {
-      handler.getWriteQueue().enqueue(new ForcefulCloseCommand(reason), true);
+      handler.getWriteQueue().enqueue(UnionCommand.newForcefulCloseCmd(reason), true);
     }
   }
 

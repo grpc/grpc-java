@@ -38,6 +38,8 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.AbstractServerStream;
 import io.grpc.internal.WritableBuffer;
+import io.grpc.netty.QueuedCommand.SendResponseHeadersCmd;
+import io.grpc.netty.QueuedCommand.UnionCommand;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -90,15 +92,15 @@ class NettyServerStream extends AbstractServerStream {
         // Processing data read in the event loop so can call into the deframer immediately
         transportState().requestMessagesFromDeframer(numMessages);
       } else {
-        writeQueue.enqueue(new RequestMessagesCommand(transportState(), numMessages), true);
+        writeQueue.enqueue(UnionCommand.newRequestMessagesCmd(transportState(), numMessages), true);
       }
     }
 
     @Override
     public void writeHeaders(Metadata headers) {
-      writeQueue.enqueue(new SendResponseHeadersCommand(transportState(),
-          Utils.convertServerHeaders(headers), false),
-          true);
+      SendResponseHeadersCmd cmd = UnionCommand.newSendResponseHeadersCmd(
+          transportState(), Utils.convertServerHeaders(headers), false /* eos */);
+      writeQueue.enqueue(cmd, true);
     }
 
     @Override
@@ -112,7 +114,7 @@ class NettyServerStream extends AbstractServerStream {
       // Add the bytes to outbound flow control.
       onSendingBytes(numBytes);
       writeQueue.enqueue(
-          new SendGrpcFrameCommand(transportState(), bytebuf, false),
+          UnionCommand.newSendGrpcFrameCmd(transportState(), bytebuf, false /* eos */),
           channel.newPromise().addListener(new ChannelFutureListener() {
             @Override
             public void operationComplete(ChannelFuture future) throws Exception {
@@ -127,12 +129,13 @@ class NettyServerStream extends AbstractServerStream {
     public void writeTrailers(Metadata trailers, boolean headersSent) {
       Http2Headers http2Trailers = Utils.convertTrailers(trailers, headersSent);
       writeQueue.enqueue(
-          new SendResponseHeadersCommand(transportState(), http2Trailers, true), true);
+          UnionCommand.newSendResponseHeadersCmd(transportState(), http2Trailers, true /* eos */),
+          true);
     }
 
     @Override
     public void cancel(Status status) {
-      writeQueue.enqueue(new CancelServerStreamCommand(transportState(), status), true);
+      writeQueue.enqueue(UnionCommand.newCancelServerStreamCmd(transportState(), status), true);
     }
   }
 
@@ -159,13 +162,14 @@ class NettyServerStream extends AbstractServerStream {
       log.log(Level.WARNING, "Exception processing message", cause);
       Status status = Status.fromThrowable(cause);
       transportReportStatus(status);
-      handler.getWriteQueue().enqueue(new CancelServerStreamCommand(this, status), true);
+      handler.getWriteQueue().enqueue(UnionCommand.newCancelServerStreamCmd(this, status), true);
     }
 
     void inboundDataReceived(ByteBuf frame, boolean endOfStream) {
       super.inboundDataReceived(new NettyReadableBuffer(frame.retain()), endOfStream);
     }
 
+    @Override
     public Integer id() {
       return http2Stream.id();
     }

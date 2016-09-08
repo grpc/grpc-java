@@ -44,7 +44,6 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isA;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -60,7 +59,8 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.netty.WriteQueue.QueuedCommand;
+import io.grpc.netty.QueuedCommand.CancelClientStreamCmd;
+import io.grpc.netty.QueuedCommand.UnionCommand;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -111,6 +111,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     // Force stream creation.
     stream().id(STREAM_ID);
     stream().halfClose();
+
     assertTrue(stream().canReceive());
     assertFalse(stream().canSend());
   }
@@ -120,10 +121,10 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     // Set stream id to indicate it has been created
     stream().id(STREAM_ID);
     stream().cancel(Status.CANCELLED);
-    ArgumentCaptor<CancelClientStreamCommand> commandCaptor =
-        ArgumentCaptor.forClass(CancelClientStreamCommand.class);
+
+    ArgumentCaptor<UnionCommand> commandCaptor = ArgumentCaptor.forClass(UnionCommand.class);
     verify(writeQueue).enqueue(commandCaptor.capture(), eq(true));
-    assertEquals(commandCaptor.getValue().reason(), Status.CANCELLED);
+    assertEquals(commandCaptor.getValue().cancelClientStreamCmdReason(), Status.CANCELLED);
   }
 
   @Test
@@ -131,16 +132,19 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     // Set stream id to indicate it has been created
     stream().id(STREAM_ID);
     stream().cancel(Status.DEADLINE_EXCEEDED);
-    ArgumentCaptor<CancelClientStreamCommand> commandCaptor =
-        ArgumentCaptor.forClass(CancelClientStreamCommand.class);
+
+    ArgumentCaptor<UnionCommand> commandCaptor = ArgumentCaptor.forClass(UnionCommand.class);
     verify(writeQueue).enqueue(commandCaptor.capture(), eq(true));
-    assertEquals(commandCaptor.getValue().reason(), Status.DEADLINE_EXCEEDED);
+    assertEquals(commandCaptor.getValue().cancelClientStreamCmdReason(), Status.DEADLINE_EXCEEDED);
   }
 
   @Test
   public void cancelShouldStillSendCommandIfStreamNotCreatedToCancelCreation() {
     stream().cancel(Status.CANCELLED);
-    verify(writeQueue).enqueue(isA(CancelClientStreamCommand.class), eq(true));
+
+    ArgumentCaptor<UnionCommand> commandCaptor = ArgumentCaptor.forClass(UnionCommand.class);
+    verify(writeQueue).enqueue(commandCaptor.capture(), eq(true));
+    assertEquals(UnionCommand.CmdType.CANCEL_CLIENT_STREAM, commandCaptor.getValue().type());
   }
 
   @Test
@@ -151,7 +155,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     stream.writeMessage(new ByteArrayInputStream(msg));
     stream.flush();
     verify(writeQueue).enqueue(
-        eq(new SendGrpcFrameCommand(stream, messageFrame(MESSAGE), false)),
+        eq(UnionCommand.newSendGrpcFrameCmd(stream, messageFrame(MESSAGE), false)),
         any(ChannelPromise.class),
         eq(true));
   }
@@ -165,11 +169,11 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     stream.flush();
     // Two writes occur, one for the GRPC frame header and the second with the payload
     verify(writeQueue).enqueue(
-            eq(new SendGrpcFrameCommand(stream, messageFrame(MESSAGE).slice(0, 5), false)),
-            any(ChannelPromise.class),
-            eq(false));
+        eq(UnionCommand.newSendGrpcFrameCmd(stream, messageFrame(MESSAGE).slice(0, 5), false)),
+        any(ChannelPromise.class),
+        eq(false));
     verify(writeQueue).enqueue(
-        eq(new SendGrpcFrameCommand(stream, messageFrame(MESSAGE).slice(5, 11), false)),
+        eq(UnionCommand.newSendGrpcFrameCmd(stream, messageFrame(MESSAGE).slice(5, 11), false)),
         any(ChannelPromise.class),
         eq(true));
   }
@@ -261,13 +265,13 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
 
     // We are now waiting for 100 bytes of error context on the stream, cancel has not yet been
     // sent
-    verify(channel, never()).writeAndFlush(any(CancelClientStreamCommand.class));
+    verify(channel, never()).writeAndFlush(any(CancelClientStreamCmd.class));
     stream().transportDataReceived(Unpooled.buffer(100).writeZero(100), false);
-    verify(channel, never()).writeAndFlush(any(CancelClientStreamCommand.class));
+    verify(channel, never()).writeAndFlush(any(CancelClientStreamCmd.class));
     stream().transportDataReceived(Unpooled.buffer(1000).writeZero(1000), false);
 
     // Now verify that cancel is sent and an error is reported to the listener
-    verify(writeQueue).enqueue(any(CancelClientStreamCommand.class), eq(true));
+    verify(writeQueue).enqueue(any(CancelClientStreamCmd.class), eq(true));
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
     verify(listener).closed(captor.capture(), metadataCaptor.capture());
@@ -388,9 +392,9 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         AsciiString.of("good agent"));
     stream.start(listener);
 
-    ArgumentCaptor<CreateStreamCommand> cmdCap = ArgumentCaptor.forClass(CreateStreamCommand.class);
+    ArgumentCaptor<UnionCommand> cmdCap = ArgumentCaptor.forClass(UnionCommand.class);
     verify(writeQueue).enqueue(cmdCap.capture(), eq(false));
-    assertThat(ImmutableListMultimap.copyOf(cmdCap.getValue().headers()))
+    assertThat(ImmutableListMultimap.copyOf(cmdCap.getValue().createStreamCmdHeaders()))
         .containsEntry(Utils.USER_AGENT, AsciiString.of("good agent"));
   }
 

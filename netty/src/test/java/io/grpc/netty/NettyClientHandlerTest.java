@@ -62,6 +62,7 @@ import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.ClientTransport.PingCallback;
+import io.grpc.netty.QueuedCommand.UnionCommand;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
@@ -136,7 +137,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     // Force the stream to be buffered.
     receiveMaxConcurrentStreams(0);
     // Create a new stream with id 3.
-    ChannelFuture createFuture = enqueue(new CreateStreamCommand(grpcHeaders, stream));
+    ChannelFuture createFuture = enqueue(UnionCommand.newCreateStreamCmd(grpcHeaders, stream));
     verify(stream).id(eq(3));
     when(stream.id()).thenReturn(3);
     // Cancel the stream.
@@ -222,7 +223,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     createStream();
 
     // Send a frame and verify that it was written.
-    ChannelFuture future = enqueue(new SendGrpcFrameCommand(stream, content(), true));
+    ChannelFuture future = enqueue(UnionCommand.newSendGrpcFrameCmd(stream, content(), true));
 
     assertTrue(future.isSuccess());
     verifyWrite().writeData(eq(ctx()), eq(3), eq(content()), eq(0), eq(true),
@@ -232,7 +233,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   @Test
   public void sendForUnknownStreamShouldFail() throws Exception {
     when(stream.id()).thenReturn(3);
-    ChannelFuture future = enqueue(new SendGrpcFrameCommand(stream, content(), true));
+    ChannelFuture future = enqueue(UnionCommand.newSendGrpcFrameCmd(stream, content(), true));
     assertTrue(future.isDone());
     assertFalse(future.isSuccess());
   }
@@ -267,7 +268,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   public void receivedGoAwayShouldCancelBufferedStream() throws Exception {
     // Force the stream to be buffered.
     receiveMaxConcurrentStreams(0);
-    ChannelFuture future = enqueue(new CreateStreamCommand(grpcHeaders, stream));
+    ChannelFuture future = enqueue(UnionCommand.newCreateStreamCmd(grpcHeaders, stream));
     channelRead(goAwayFrame(0));
     assertTrue(future.isDone());
     assertFalse(future.isSuccess());
@@ -278,7 +279,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
   @Test
   public void receivedGoAwayShouldFailUnknownStreams() throws Exception {
-    enqueue(new CreateStreamCommand(grpcHeaders, stream));
+    enqueue(UnionCommand.newCreateStreamCmd(grpcHeaders, stream));
 
     // Read a GOAWAY that indicates our stream was never processed by the server.
     channelRead(goAwayFrame(0, 8 /* Cancel */, Unpooled.copiedBuffer("this is a test", UTF_8)));
@@ -294,7 +295,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   public void receivedGoAwayShouldFailUnknownBufferedStreams() throws Exception {
     receiveMaxConcurrentStreams(0);
 
-    ChannelFuture future = enqueue(new CreateStreamCommand(grpcHeaders, stream));
+    ChannelFuture future = enqueue(UnionCommand.newCreateStreamCmd(grpcHeaders, stream));
 
     // Read a GOAWAY that indicates our stream was never processed by the server.
     channelRead(goAwayFrame(0, 8 /* Cancel */, Unpooled.copiedBuffer("this is a test", UTF_8)));
@@ -312,7 +313,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     channelRead(goAwayFrame(0, 8 /* Cancel */, Unpooled.copiedBuffer("this is a test", UTF_8)));
 
     // Now try to create a stream.
-    ChannelFuture future = enqueue(new CreateStreamCommand(grpcHeaders, stream));
+    ChannelFuture future = enqueue(UnionCommand.newCreateStreamCmd(grpcHeaders, stream));
     assertTrue(future.isDone());
     assertFalse(future.isSuccess());
     Status status = Status.fromThrowable(future.cause());
@@ -324,7 +325,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   @Test
   public void cancelStreamShouldCreateAndThenFailBufferedStream() throws Exception {
     receiveMaxConcurrentStreams(0);
-    enqueue(new CreateStreamCommand(grpcHeaders, stream));
+    enqueue(UnionCommand.newCreateStreamCmd(grpcHeaders, stream));
     verify(stream).id(3);
     when(stream.id()).thenReturn(3);
     cancelStream(Status.CANCELLED);
@@ -336,7 +337,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   public void channelShutdownShouldCancelBufferedStreams() throws Exception {
     // Force a stream to get added to the pending queue.
     receiveMaxConcurrentStreams(0);
-    ChannelFuture future = enqueue(new CreateStreamCommand(grpcHeaders, stream));
+    ChannelFuture future = enqueue(UnionCommand.newCreateStreamCmd(grpcHeaders, stream));
 
     handler().channelInactive(ctx());
     assertTrue(future.isDone());
@@ -373,11 +374,11 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   @Test
   public void createIncrementsIdsForActualAndBufferdStreams() throws Exception {
     receiveMaxConcurrentStreams(2);
-    enqueue(new CreateStreamCommand(grpcHeaders, stream));
+    enqueue(UnionCommand.newCreateStreamCmd(grpcHeaders, stream));
     verify(stream).id(eq(3));
-    enqueue(new CreateStreamCommand(grpcHeaders, stream));
+    enqueue(UnionCommand.newCreateStreamCmd(grpcHeaders, stream));
     verify(stream).id(eq(5));
-    enqueue(new CreateStreamCommand(grpcHeaders, stream));
+    enqueue(UnionCommand.newCreateStreamCmd(grpcHeaders, stream));
     verify(stream).id(eq(7));
   }
 
@@ -497,7 +498,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   private ChannelFuture sendPing(PingCallback callback) {
-    return enqueue(new SendPingCommand(callback, MoreExecutors.directExecutor()));
+    return enqueue(UnionCommand.newSendPingCmd(callback, MoreExecutors.directExecutor()));
   }
 
   private void receiveMaxConcurrentStreams(int max) throws Exception {
@@ -510,13 +511,13 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   private ChannelFuture createStream() throws Exception {
-    ChannelFuture future = enqueue(new CreateStreamCommand(grpcHeaders, stream));
+    ChannelFuture future = enqueue(UnionCommand.newCreateStreamCmd(grpcHeaders, stream));
     when(stream.id()).thenReturn(3);
     return future;
   }
 
   private ChannelFuture cancelStream(Status status) throws Exception {
-    return enqueue(new CancelClientStreamCommand(stream, status));
+    return enqueue(UnionCommand.newCancelClientStreamCmd(stream, status));
   }
 
   @Override

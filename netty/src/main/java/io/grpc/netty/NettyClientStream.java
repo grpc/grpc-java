@@ -44,6 +44,7 @@ import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2ClientStream;
 import io.grpc.internal.WritableBuffer;
+import io.grpc.netty.QueuedCommand.UnionCommand;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -122,7 +123,7 @@ abstract class NettyClientStream extends Http2ClientStream implements StreamIdHo
     };
 
     // Write the command requesting the creation of the stream.
-    writeQueue.enqueue(new CreateStreamCommand(http2Headers, this),
+    writeQueue.enqueue(UnionCommand.newCreateStreamCmd(http2Headers, this),
         !method.getType().clientSendsOneMessage()).addListener(failureListener);
   }
 
@@ -143,7 +144,7 @@ abstract class NettyClientStream extends Http2ClientStream implements StreamIdHo
       // Processing data read in the event loop so can call into the deframer immediately
       requestMessagesFromDeframer(numMessages);
     } else {
-      writeQueue.enqueue(new RequestMessagesCommand(this, numMessages), true);
+      writeQueue.enqueue(UnionCommand.newRequestMessagesCmd(this, numMessages), true);
     }
   }
 
@@ -193,7 +194,7 @@ abstract class NettyClientStream extends Http2ClientStream implements StreamIdHo
   @Override
   protected void sendCancel(Status reason) {
     // Send the cancel command to the handler.
-    writeQueue.enqueue(new CancelClientStreamCommand(this, reason), true);
+    writeQueue.enqueue(UnionCommand.newCancelClientStreamCmd(this, reason), true);
   }
 
   @Override
@@ -204,7 +205,7 @@ abstract class NettyClientStream extends Http2ClientStream implements StreamIdHo
       // Add the bytes to outbound flow control.
       onSendingBytes(numBytes);
       writeQueue.enqueue(
-          new SendGrpcFrameCommand(this, bytebuf, endOfStream),
+          UnionCommand.newSendGrpcFrameCmd(this, bytebuf, endOfStream),
           channel.newPromise().addListener(new ChannelFutureListener() {
             @Override
             public void operationComplete(ChannelFuture future) throws Exception {
@@ -215,7 +216,7 @@ abstract class NettyClientStream extends Http2ClientStream implements StreamIdHo
           }), flush);
     } else {
       // The frame is empty and will not impact outbound flow control. Just send it.
-      writeQueue.enqueue(new SendGrpcFrameCommand(this, bytebuf, endOfStream), flush);
+      writeQueue.enqueue(UnionCommand.newSendGrpcFrameCmd(this, bytebuf, endOfStream), flush);
     }
   }
 

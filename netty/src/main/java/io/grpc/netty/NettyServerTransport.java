@@ -36,6 +36,7 @@ import com.google.common.base.Preconditions;
 import io.grpc.Status;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
+import io.grpc.netty.QueuedCommand.UnionCommand;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -99,7 +100,7 @@ class NettyServerTransport implements ServerTransport {
   @Override
   public void shutdownNow(Status reason) {
     if (channel.isOpen()) {
-      channel.writeAndFlush(new ForcefulCloseCommand(reason));
+      channel.writeAndFlush(UnionCommand.newForcefulCloseCmd(reason));
     }
   }
 
