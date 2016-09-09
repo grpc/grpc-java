@@ -328,6 +328,11 @@ interface QueuedCommand {
     public int hashCode() {
       return cmdType.hashCode();
     }
+
+    @Override
+    public String toString() {
+      return cmdType != null ? cmdType.name() : "null";
+    }
   }
 
   interface CancelClientStreamCmd extends QueuedCommand {

@@ -201,12 +201,19 @@ class NettyClientHandler extends AbstractNettyHandler {
   public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
           throws Exception {
     UnionCommand cmd = (UnionCommand) msg;
+    try {
+      writeInternal(ctx, cmd, promise);
+    } finally {
+      cmd.recycle();
+    }
+  }
+
+  public void writeInternal(ChannelHandlerContext ctx, UnionCommand cmd, ChannelPromise promise)
+      throws Exception {
     switch (cmd.type()) {
       case CANCEL_CLIENT_STREAM:
         cancelStream(ctx, cmd, promise);
         return;
-      case CANCEL_SERVER_STREAM:
-        break; // unsupported
       case CREATE_STREAM:
         createStream(cmd, promise);
         return;
@@ -218,7 +225,6 @@ class NettyClientHandler extends AbstractNettyHandler {
         return;
       case REQUEST_MESSAGES:
         cmd.requestMessagesCmdRequestMessages();
-        cmd.recycle();
         return;
       case SEND_GRPC_FRAME:
         sendGrpcFrame(ctx, cmd, promise);
@@ -226,16 +232,12 @@ class NettyClientHandler extends AbstractNettyHandler {
       case SEND_PING:
         sendPingFrame(ctx, cmd, promise);
         return;
-      case SEND_RESPONSE_HEADERS:
-        break; // unsupported
       case NOOP:
         ctx.write(Unpooled.EMPTY_BUFFER, promise);
-        cmd.recycle();
         return;
       default:
-        break;
+        throw new AssertionError("Write called for unexpected type: " + cmd);
     }
-    throw new AssertionError("Write called for unexpected type: " + msg.getClass().getName());
   }
 
   // @VisibleForTesting
@@ -389,7 +391,7 @@ class NettyClientHandler extends AbstractNettyHandler {
 
     final NettyClientStream stream = cmd.createStreamCmdStream();
     final Http2Headers headers = cmd.createStreamCmdHeaders();
-    cmd.recycle();
+    cmd = null; // Don't use again
     stream.id(streamId);
 
     // Create an intermediate promise so that we can intercept the failure reported back to the
@@ -438,7 +440,6 @@ class NettyClientHandler extends AbstractNettyHandler {
       ChannelPromise promise) {
     NettyClientStream stream = cmd.cancelClientStreamCmdStream();
     stream.transportReportStatus(cmd.cancelClientStreamCmdReason(), true, new Metadata());
-    cmd.recycle();
     encoder().writeRstStream(ctx, stream.id(), Http2Error.CANCEL.code(), promise);
   }
 
@@ -456,7 +457,6 @@ class NettyClientHandler extends AbstractNettyHandler {
         0,
         cmd.sendGrpcFrameCmdEndStream(),
         promise);
-    cmd.recycle();
   }
 
   /**
@@ -470,7 +470,7 @@ class NettyClientHandler extends AbstractNettyHandler {
 
     PingCallback callback = cmd.sendPingCmdCallback();
     Executor executor = cmd.sendPingCmdExecutor();
-    cmd.recycle();
+    cmd = null; // Don't use again.
     // we only allow one outstanding ping at a time, so just add the callback to
     // any outstanding operation
     if (ping != null) {
@@ -511,7 +511,6 @@ class NettyClientHandler extends AbstractNettyHandler {
   private void gracefulClose(ChannelHandlerContext ctx, GracefulCloseCmd cmd,
       ChannelPromise promise) throws Exception {
     lifecycleManager.notifyShutdown(cmd.gracefulCloseCmdStatus());
-    cmd.recycle();
     // Explicitly flush to create any buffered streams before sending GOAWAY.
     // TODO(ejona): determine if the need to flush is a bug in Netty
     flush(ctx);
@@ -521,7 +520,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   private void forcefulClose(final ChannelHandlerContext ctx, ForcefulCloseCmd cmd,
       ChannelPromise promise) throws Exception {
     final Status status = cmd.forcefulCloseCmdStatus();
-    cmd.recycle();
+    cmd = null; // Don't use again
     lifecycleManager.notifyShutdown(
         Status.UNAVAILABLE.withDescription("Channel requested transport to shut down"));
     close(ctx, promise);

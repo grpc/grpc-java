@@ -319,41 +319,37 @@ class NettyServerHandler extends AbstractNettyHandler {
   public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
       throws Exception {
     UnionCommand cmd = (UnionCommand) msg;
+    try {
+      writeInternal(ctx, cmd, promise);
+    } finally {
+      cmd.recycle();
+    }
+  }
+
+  private void writeInternal(ChannelHandlerContext ctx, UnionCommand cmd, ChannelPromise promise)
+      throws Exception {
     switch (cmd.type()) {
-      case CANCEL_CLIENT_STREAM:
-        break; // Unsupported
       case CANCEL_SERVER_STREAM:
         cancelStream(ctx, cmd, promise);
         return;
-      case CREATE_STREAM:
-        break; // Unsupported
       case FORCEFUL_CLOSE:
         forcefulClose(ctx, cmd, promise);
         return;
-      case GRACEFUL_CLOSE:
-        break; // Unsupported
-      case NOOP:
-        break; // Unsupported
       case REQUEST_MESSAGES:
         cmd.requestMessagesCmdRequestMessages();
-        cmd.recycle();
         return;
       case SEND_GRPC_FRAME:
         sendGrpcFrame(ctx, cmd, promise);
         return;
-      case SEND_PING:
-        break; // Unsupported
       case SEND_RESPONSE_HEADERS:
         sendResponseHeaders(ctx, cmd, promise);
         return;
       default:
-        break;
+        AssertionError e = new AssertionError("Write called for unexpected type: " + cmd);
+        ReferenceCountUtil.release(cmd);
+        promise.setFailure(e);
+        throw e;
     }
-    AssertionError e =
-        new AssertionError("Write called for unexpected type: " + msg.getClass().getName());
-    ReferenceCountUtil.release(msg);
-    promise.setFailure(e);
-    throw e;
   }
 
   /**
@@ -393,7 +389,6 @@ class NettyServerHandler extends AbstractNettyHandler {
         0,
         cmd.sendGrpcFrameCmdEndStream(),
         promise);
-    cmd.recycle();
   }
 
   /**
@@ -411,7 +406,6 @@ class NettyServerHandler extends AbstractNettyHandler {
         0,
         cmd.sendResponseHeadersCmdEndOfStream(),
         promise);
-    cmd.recycle();
   }
 
   private void cancelStream(ChannelHandlerContext ctx, CancelServerStreamCmd cmd,
@@ -422,14 +416,13 @@ class NettyServerHandler extends AbstractNettyHandler {
     // Terminate the stream.
     encoder().writeRstStream(
         ctx, cmd.cancelServerStreamCmdTransportState().id(), Http2Error.CANCEL.code(), promise);
-    cmd.recycle();
   }
 
   private void forcefulClose(final ChannelHandlerContext ctx, ForcefulCloseCmd cmd,
       ChannelPromise promise) throws Exception {
     close(ctx, promise);
     final Status status = cmd.forcefulCloseCmdStatus();
-    cmd.recycle();
+    cmd = null; // Don't use again.
     connection().forEachActiveStream(new Http2StreamVisitor() {
       @Override
       public boolean visit(Http2Stream stream) throws Http2Exception {
