@@ -40,7 +40,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import io.grpc.netty.WriteQueue.QueuedCommand;
+import io.grpc.netty.QueuedCommand.UnionCommand;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelPromise;
@@ -124,7 +124,7 @@ public class WriteQueueTest {
   @Test
   public void singleWriteShouldWork() {
     WriteQueue queue = new WriteQueue(channel);
-    queue.enqueue(new CuteCommand(), true);
+    queue.enqueue(UnionCommand.newNoopCmd(), true);
 
     verify(channel).write(isA(QueuedCommand.class), eq(promise));
     verify(channel).flush();
@@ -134,7 +134,7 @@ public class WriteQueueTest {
   public void multipleWritesShouldBeBatched() {
     WriteQueue queue = new WriteQueue(channel);
     for (int i = 0; i < 5; i++) {
-      queue.enqueue(new CuteCommand(), false);
+      queue.enqueue(UnionCommand.newNoopCmd(), false);
     }
     queue.scheduleFlush();
 
@@ -147,7 +147,7 @@ public class WriteQueueTest {
     WriteQueue queue = new WriteQueue(channel);
     int writes = WriteQueue.DEQUE_CHUNK_SIZE + 10;
     for (int i = 0; i < writes; i++) {
-      queue.enqueue(new CuteCommand(), false);
+      queue.enqueue(UnionCommand.newNoopCmd(), false);
     }
     queue.scheduleFlush();
 
@@ -204,16 +204,12 @@ public class WriteQueueTest {
     flusherStarted.await();
     int writes = 10 * WriteQueue.DEQUE_CHUNK_SIZE;
     for (int i = 0; i < writes; i++) {
-      queue.enqueue(new CuteCommand(), false);
+      queue.enqueue(UnionCommand.newNoopCmd(), false);
     }
     doneWriting.set(true);
     flusher.join();
 
     exHandler.checkException();
-    verify(channel, times(writes)).write(isA(CuteCommand.class), eq(promise));
-  }
-
-  static class CuteCommand extends WriteQueue.AbstractQueuedCommand {
-
+    verify(channel, times(writes)).write(isA(QueuedCommand.NoopCmd.class), eq(promise));
   }
 }

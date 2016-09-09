@@ -145,34 +145,4 @@ class WriteQueue {
       }
     }
   }
-
-  abstract static class AbstractQueuedCommand implements QueuedCommand {
-
-    private ChannelPromise promise;
-
-    @Override
-    public final void promise(ChannelPromise promise) {
-      this.promise = promise;
-    }
-
-    @Override
-    public final ChannelPromise promise() {
-      return promise;
-    }
-  }
-
-  /**
-   * Simple wrapper type around a command and its optional completion listener.
-   */
-  interface QueuedCommand {
-    /**
-     * Returns the promise beeing notified of the success/failure of the write.
-     */
-    ChannelPromise promise();
-
-    /**
-     * Sets the promise.
-     */
-    void promise(ChannelPromise promise);
-  }
 }

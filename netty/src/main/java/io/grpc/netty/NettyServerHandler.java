@@ -50,6 +50,11 @@ import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransportListener;
+import io.grpc.netty.QueuedCommand.CancelServerStreamCmd;
+import io.grpc.netty.QueuedCommand.ForcefulCloseCmd;
+import io.grpc.netty.QueuedCommand.SendGrpcFrameCmd;
+import io.grpc.netty.QueuedCommand.SendResponseHeadersCmd;
+import io.grpc.netty.QueuedCommand.UnionCommand;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -313,23 +318,42 @@ class NettyServerHandler extends AbstractNettyHandler {
   @Override
   public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
       throws Exception {
-    if (msg instanceof SendGrpcFrameCommand) {
-      sendGrpcFrame(ctx, (SendGrpcFrameCommand) msg, promise);
-    } else if (msg instanceof SendResponseHeadersCommand) {
-      sendResponseHeaders(ctx, (SendResponseHeadersCommand) msg, promise);
-    } else if (msg instanceof RequestMessagesCommand) {
-      ((RequestMessagesCommand) msg).requestMessages();
-    } else if (msg instanceof CancelServerStreamCommand) {
-      cancelStream(ctx, (CancelServerStreamCommand) msg, promise);
-    } else if (msg instanceof ForcefulCloseCommand) {
-      forcefulClose(ctx, (ForcefulCloseCommand) msg, promise);
-    } else {
-      AssertionError e =
-          new AssertionError("Write called for unexpected type: " + msg.getClass().getName());
-      ReferenceCountUtil.release(msg);
-      promise.setFailure(e);
-      throw e;
+    UnionCommand cmd = (UnionCommand) msg;
+    switch (cmd.type()) {
+      case CANCEL_CLIENT_STREAM:
+        break; // Unsupported
+      case CANCEL_SERVER_STREAM:
+        cancelStream(ctx, cmd, promise);
+        return;
+      case CREATE_STREAM:
+        break; // Unsupported
+      case FORCEFUL_CLOSE:
+        forcefulClose(ctx, cmd, promise);
+        return;
+      case GRACEFUL_CLOSE:
+        break; // Unsupported
+      case NOOP:
+        break; // Unsupported
+      case REQUEST_MESSAGES:
+        cmd.requestMessagesCmdRequestMessages();
+        cmd.recycle();
+        return;
+      case SEND_GRPC_FRAME:
+        sendGrpcFrame(ctx, cmd, promise);
+        return;
+      case SEND_PING:
+        break; // Unsupported
+      case SEND_RESPONSE_HEADERS:
+        sendResponseHeaders(ctx, cmd, promise);
+        return;
+      default:
+        break;
     }
+    AssertionError e =
+        new AssertionError("Write called for unexpected type: " + msg.getClass().getName());
+    ReferenceCountUtil.release(msg);
+    promise.setFailure(e);
+    throw e;
   }
 
   /**
@@ -343,7 +367,7 @@ class NettyServerHandler extends AbstractNettyHandler {
     }
   }
 
-  private void closeStreamWhenDone(ChannelPromise promise, int streamId) throws Http2Exception {
+  private void closeStreamWhenDone(ChannelPromise promise, int streamId) {
     final NettyServerStream.TransportState stream = serverStream(requireHttp2Stream(streamId));
     promise.addListener(new ChannelFutureListener() {
       @Override
@@ -356,43 +380,62 @@ class NettyServerHandler extends AbstractNettyHandler {
   /**
    * Sends the given gRPC frame to the client.
    */
-  private void sendGrpcFrame(ChannelHandlerContext ctx, SendGrpcFrameCommand cmd,
-      ChannelPromise promise) throws Http2Exception {
-    if (cmd.endStream()) {
-      closeStreamWhenDone(promise, cmd.streamId());
+  private void sendGrpcFrame(ChannelHandlerContext ctx, SendGrpcFrameCmd cmd,
+      ChannelPromise promise) {
+    if (cmd.sendGrpcFrameCmdEndStream()) {
+      closeStreamWhenDone(promise, cmd.sendGrpcFrameCmdStreamId());
     }
     // Call the base class to write the HTTP/2 DATA frame.
-    encoder().writeData(ctx, cmd.streamId(), cmd.content(), 0, cmd.endStream(), promise);
+    encoder().writeData(
+        ctx,
+        cmd.sendGrpcFrameCmdStreamId(),
+        cmd.sendGrpcFrameCmdContent(),
+        0,
+        cmd.sendGrpcFrameCmdEndStream(),
+        promise);
+    cmd.recycle();
   }
 
   /**
    * Sends the response headers to the client.
    */
-  private void sendResponseHeaders(ChannelHandlerContext ctx, SendResponseHeadersCommand cmd,
-      ChannelPromise promise) throws Http2Exception {
-    if (cmd.endOfStream()) {
-      closeStreamWhenDone(promise, cmd.stream().id());
+  private void sendResponseHeaders(ChannelHandlerContext ctx, SendResponseHeadersCmd cmd,
+      ChannelPromise promise) {
+    if (cmd.sendResponseHeadersCmdEndOfStream()) {
+      closeStreamWhenDone(promise, cmd.sendResponseHeadersCmdStream().id());
     }
-    encoder().writeHeaders(ctx, cmd.stream().id(), cmd.headers(), 0, cmd.endOfStream(), promise);
+    encoder().writeHeaders(
+        ctx,
+        cmd.sendResponseHeadersCmdStream().id(),
+        cmd.sendResponseHeadersCmdHeaders(),
+        0,
+        cmd.sendResponseHeadersCmdEndOfStream(),
+        promise);
+    cmd.recycle();
   }
 
-  private void cancelStream(ChannelHandlerContext ctx, CancelServerStreamCommand cmd,
+  private void cancelStream(ChannelHandlerContext ctx, CancelServerStreamCmd cmd,
       ChannelPromise promise) {
     // Notify the listener if we haven't already.
-    cmd.stream().transportReportStatus(cmd.reason());
+    cmd.cancelServerStreamCmdTransportState().transportReportStatus(
+        cmd.cancelServerStreamCmdReason());
     // Terminate the stream.
-    encoder().writeRstStream(ctx, cmd.stream().id(), Http2Error.CANCEL.code(), promise);
+    encoder().writeRstStream(
+        ctx, cmd.cancelServerStreamCmdTransportState().id(), Http2Error.CANCEL.code(), promise);
+    cmd.recycle();
   }
 
-  private void forcefulClose(final ChannelHandlerContext ctx, final ForcefulCloseCommand msg,
+  private void forcefulClose(final ChannelHandlerContext ctx, ForcefulCloseCmd cmd,
       ChannelPromise promise) throws Exception {
     close(ctx, promise);
+    final Status status = cmd.forcefulCloseCmdStatus();
+    cmd.recycle();
     connection().forEachActiveStream(new Http2StreamVisitor() {
       @Override
       public boolean visit(Http2Stream stream) throws Http2Exception {
         NettyServerStream.TransportState serverStream = serverStream(stream);
         if (serverStream != null) {
-          serverStream.transportReportStatus(msg.getStatus());
+          serverStream.transportReportStatus(status);
           resetStream(ctx, stream.id(), Http2Error.CANCEL.code(), ctx.newPromise());
         }
         stream.close();

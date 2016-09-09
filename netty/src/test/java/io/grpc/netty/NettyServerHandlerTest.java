@@ -63,6 +63,7 @@ import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.WritableBuffer;
+import io.grpc.netty.QueuedCommand.UnionCommand;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufUtil;
@@ -135,7 +136,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     // Send a frame and verify that it was written.
     ChannelFuture future = enqueue(
-        new SendGrpcFrameCommand(stream.transportState(), content(), false));
+        UnionCommand.newSendGrpcFrameCmd(stream.transportState(), content(), false));
     assertTrue(future.isSuccess());
     verifyWrite().writeData(eq(ctx()), eq(STREAM_ID), eq(content()), eq(0), eq(false),
         any(ChannelPromise.class));
@@ -277,7 +278,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   @Test
   public void cancelShouldSendRstStream() throws Exception {
     createStream();
-    enqueue(new CancelServerStreamCommand(stream.transportState(), Status.DEADLINE_EXCEEDED));
+
+    enqueue(
+        UnionCommand.newCancelServerStreamCmd(stream.transportState(), Status.DEADLINE_EXCEEDED));
     verifyWrite().writeRstStream(eq(ctx()), eq(stream.transportState().id()),
         eq(Http2Error.CANCEL.code()), any(ChannelPromise.class));
   }
