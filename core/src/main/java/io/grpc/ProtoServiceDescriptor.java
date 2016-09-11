@@ -33,49 +33,54 @@ package io.grpc;
 
 import com.google.common.base.Preconditions;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
-
-import javax.annotation.Nullable;
 
 /**
- * Descriptor for a service.
+ * Descriptor for a service defined in a proto file.
  */
-public class ServiceDescriptor {
+public class ProtoServiceDescriptor extends ServiceDescriptor {
+  private final String fileDescriptor;
+  private final String filename;
 
-  private final String name;
-  private final Collection<MethodDescriptor<?, ?>> methods;
-
-  public ServiceDescriptor(String name, MethodDescriptor<?, ?>... methods) {
-    this(name, Arrays.asList(methods));
-  }
-
-  public ServiceDescriptor(String name, Collection<MethodDescriptor<?, ?>> methods) {
-    this.name = Preconditions.checkNotNull(name, "name");
-    this.methods = Collections.unmodifiableList(new ArrayList<MethodDescriptor<?, ?>>(methods));
-  }
-
-  /** Simple name of the service. It is not an absolute path. */
-  public String getName() {
-    return name;
-  }
-
-  /**
-   * Returns a ProtoServiceDescriptor only if this service is defined in a proto file. Otherwise
-   * returns null.
+  /** 
+   * @param name service name.
+   * @param fileDescriptor serialized protobuf file descriptor.
+   * @param filename the name of the proto file where this service is defined.
+   * @param methods method descriptors.
    */
-  @Nullable
+  public ProtoServiceDescriptor(String name, String fileDescriptor, String filename,
+      MethodDescriptor<?, ?>... methods) {
+    super(name, Arrays.asList(methods));
+    this.fileDescriptor = Preconditions.checkNotNull(fileDescriptor, "fileDescriptor");
+    this.filename = Preconditions.checkNotNull(filename, "filename");
+  }
+
+  /** 
+   * @param name service name.
+   * @param fileDescriptor serialized protobuf file descriptor.
+   * @param filename the name of the proto file where this service is defined.
+   * @param methods method descriptors.
+   */
+  public ProtoServiceDescriptor(String name, String fileDescriptor, String filename,
+      Collection<MethodDescriptor<?, ?>> methods) {
+    super(name, methods);
+    this.fileDescriptor = Preconditions.checkNotNull(fileDescriptor, "fileDescriptor");
+    this.filename = Preconditions.checkNotNull(filename, "filename");
+  }
+
+  /** Returns this ProtoServiceDescriptor. */
   public ProtoServiceDescriptor getProtoServiceDescriptor() {
-    return null;
+    return this;
+  }
+  
+  /** Returns the file name where this service is defined. */
+  public String getFilename() {
+    return filename;
   }
 
-  /**
-   * A collection of {@link MethodDescriptor} instances describing the methods exposed by the
-   * service.
-   */
-  public Collection<MethodDescriptor<?, ?>> getMethods() {
-    return methods;
+  /** Returns a serialized proto file descriptor. */
+  public String getFileDescriptor() {
+    return fileDescriptor;
   }
 }
