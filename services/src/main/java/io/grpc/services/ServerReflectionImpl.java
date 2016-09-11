@@ -101,7 +101,7 @@ public class ServerReflectionImpl extends ServerReflectionGrpc.ServerReflectionI
             listServices(request);
             break;
           default:
-            sendErrorResponse(Status.INVALID_ARGUMENT,
+            sendErrorResponse(request, Status.INVALID_ARGUMENT,
                 "invalid MessageRequest: " + request.getMessageRequestCase());
         }
       }
