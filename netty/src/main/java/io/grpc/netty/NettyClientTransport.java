@@ -99,6 +99,8 @@ class NettyClientTransport implements ConnectionClientTransport {
 
   @Override
   public void ping(final PingCallback callback, final Executor executor) {
+    // The promise and listener always succeed in NettyClientHandler. So this listener handles the
+    // error case, when the channel is closed and the NettyClientHandler no longer in the pipeline.
     ChannelFutureListener failureListener = new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
@@ -238,13 +240,11 @@ class NettyClientTransport implements ConnectionClientTransport {
   private Status statusFromFailedFuture(ChannelFuture f) {
     Throwable t = f.cause();
     if (t instanceof ClosedChannelException) {
-      synchronized (this) {
-        Status shutdownStatus = lifecycleManager.getShutdownStatus();
-        if (shutdownStatus == null) {
-          return Status.UNKNOWN.withDescription("Channel closed but for unknown reason");
-        }
-        return shutdownStatus;
+      Status shutdownStatus = lifecycleManager.getShutdownStatus();
+      if (shutdownStatus == null) {
+        return Status.UNKNOWN.withDescription("Channel closed but for unknown reason");
       }
+      return shutdownStatus;
     }
     return Utils.statusFromThrowable(t);
   }
