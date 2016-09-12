@@ -147,7 +147,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       new ConcurrentHashMap<EquivalentAddressGroup, TransportSet>(16, .75f, 1);
 
   /**
-   * TransportSets that are shutdown (but not yet terminated) due to channel idleness.
+   * TransportSets that are shutdown (but not yet terminated) due to channel idleness or channel
+   * shut down.
    */
   @GuardedBy("lock")
   private final HashSet<TransportSet> decommissionedTransports = new HashSet<TransportSet>();
