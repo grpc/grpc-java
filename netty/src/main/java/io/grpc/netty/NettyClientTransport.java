@@ -236,6 +236,8 @@ class NettyClientTransport implements ConnectionClientTransport {
    * Convert ChannelFuture.cause() to a Status, taking into account that all handlers are removed
    * from the pipeline when the channel is closed. Since handlers are removed, you may get an
    * unhelpful exception like ClosedChannelException.
+   *
+   * <p>This method must only be called on the event loop.
    */
   private Status statusFromFailedFuture(ChannelFuture f) {
     Throwable t = f.cause();
