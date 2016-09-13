@@ -135,8 +135,9 @@ class NettyClientTransport implements ConnectionClientTransport {
       }
     };
     // Write the command requesting the ping
-    handler.getWriteQueue().enqueue(new SendPingCommand(callback, executor), true)
-        .addListener(failureListener);
+    handler.getWriteQueue().enqueue(new SendPingCommand(callback, executor),
+        channel.newPromise().addListener(failureListener),
+        true);
   }
 
   @Override

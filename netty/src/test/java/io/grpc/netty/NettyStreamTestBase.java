@@ -55,6 +55,7 @@ import io.netty.channel.DefaultChannelPromise;
 import io.netty.channel.EventLoop;
 import io.netty.handler.codec.http2.Http2Stream;
 
+import io.netty.util.concurrent.GenericFutureListener;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -94,6 +95,9 @@ public abstract class NettyStreamTestBase<T extends Stream> {
   protected ChannelPromise promise;
 
   @Mock
+  protected ChannelPromise voidPromise;
+
+  @Mock
   protected Http2Stream http2Stream;
 
   @Mock
@@ -103,6 +107,7 @@ public abstract class NettyStreamTestBase<T extends Stream> {
 
   /** Set up for test. */
   @Before
+  @SuppressWarnings("unchecked")
   public void setUp() {
     MockitoAnnotations.initMocks(this);
 
@@ -112,8 +117,15 @@ public abstract class NettyStreamTestBase<T extends Stream> {
     when(channel.alloc()).thenReturn(UnpooledByteBufAllocator.DEFAULT);
     when(channel.pipeline()).thenReturn(pipeline);
     when(channel.eventLoop()).thenReturn(eventLoop);
-    when(channel.newPromise()).thenReturn(new DefaultChannelPromise(channel));
-    when(channel.voidPromise()).thenReturn(new DefaultChannelPromise(channel));
+    when(channel.newPromise()).then(new Answer<ChannelPromise>() {
+      @Override
+      public ChannelPromise answer(InvocationOnMock invocation) throws Throwable {
+        return new DefaultChannelPromise(channel);
+      }
+    });
+    when(channel.voidPromise()).thenReturn(voidPromise);
+    when(voidPromise.isVoid()).thenReturn(true);
+    when(voidPromise.addListener(any(GenericFutureListener.class))).thenThrow(AssertionError.class);
     when(pipeline.firstContext()).thenReturn(ctx);
     when(eventLoop.inEventLoop()).thenReturn(true);
     when(http2Stream.id()).thenReturn(STREAM_ID);

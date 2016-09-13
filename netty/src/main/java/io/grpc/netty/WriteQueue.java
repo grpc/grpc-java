@@ -90,7 +90,7 @@ class WriteQueue {
    *              enqueue will schedule the flush.
    */
   ChannelFuture enqueue(QueuedCommand command, boolean flush) {
-    return enqueue(command, channel.newPromise(), flush);
+    return enqueue(command, channel.voidPromise(), flush);
   }
 
   /**

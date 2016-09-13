@@ -377,7 +377,8 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     metadata.put(GrpcUtil.USER_AGENT_KEY, "bad agent");
     listener = mock(ClientStreamListener.class);
     Mockito.reset(writeQueue);
-    when(writeQueue.enqueue(any(QueuedCommand.class), any(boolean.class))).thenReturn(future);
+    when(writeQueue.enqueue(any(QueuedCommand.class), any(ChannelPromise.class),
+        any(boolean.class))).thenReturn(future);
 
     stream = new NettyClientStream(new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE),
         methodDescriptor, new Metadata(), channel, AsciiString.of("localhost"),
@@ -385,7 +386,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     stream.start(listener);
 
     ArgumentCaptor<CreateStreamCommand> cmdCap = ArgumentCaptor.forClass(CreateStreamCommand.class);
-    verify(writeQueue).enqueue(cmdCap.capture(), eq(false));
+    verify(writeQueue).enqueue(cmdCap.capture(), any(ChannelPromise.class), eq(false));
     assertThat(ImmutableListMultimap.copyOf(cmdCap.getValue().headers()))
         .containsEntry(Utils.USER_AGENT, AsciiString.of("good agent"));
   }
@@ -396,10 +397,11 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     doAnswer(new Answer<Object>() {
       @Override
       public Object answer(InvocationOnMock invocation) throws Throwable {
+        ChannelPromise promise = (ChannelPromise) invocation.getArguments()[1];
         if (future.isDone()) {
-          ((ChannelPromise) invocation.getArguments()[1]).trySuccess();
+          promise.trySuccess();
         }
-        return null;
+        return promise;
       }
     }).when(writeQueue).enqueue(any(QueuedCommand.class), any(ChannelPromise.class), anyBoolean());
     when(writeQueue.enqueue(any(QueuedCommand.class), anyBoolean())).thenReturn(future);

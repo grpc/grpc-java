@@ -186,7 +186,7 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
         fc.initialWindowSize(targetWindow);
         Http2Settings settings = new Http2Settings();
         settings.initialWindowSize(targetWindow);
-        frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
+        frameWriter().writeSettings(ctx(), settings, ctx().voidPromise());
       }
 
     }
@@ -202,7 +202,7 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     private void sendPing(ChannelHandlerContext ctx) {
       setDataSizeSincePing(0);
       lastPingTime = System.nanoTime();
-      encoder().writePing(ctx, false, payloadBuf.slice(), ctx.newPromise());
+      encoder().writePing(ctx, false, payloadBuf.slice(), ctx.voidPromise());
       pingCount++;
     }
 

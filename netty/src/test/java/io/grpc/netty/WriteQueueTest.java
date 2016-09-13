@@ -31,6 +31,7 @@
 
 package io.grpc.netty;
 
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
@@ -38,6 +39,7 @@ import static org.mockito.Matchers.isA;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import io.grpc.netty.WriteQueue.QueuedCommand;
@@ -46,6 +48,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoop;
 
+import io.netty.util.concurrent.GenericFutureListener;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -66,9 +69,8 @@ public class WriteQueueTest {
 
   @Mock
   public Channel channel;
-
   @Mock
-  public ChannelPromise promise;
+  public ChannelPromise voidPromise;
 
   private long writeCalledNanos;
   private long flushCalledNanos = writeCalledNanos;
@@ -77,10 +79,12 @@ public class WriteQueueTest {
    * Set up for test.
    */
   @Before
+  @SuppressWarnings("unchecked")
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
-    when(channel.newPromise()).thenReturn(promise);
-
+    when(voidPromise.isVoid()).thenReturn(true);
+    when(voidPromise.addListener(any(GenericFutureListener.class))).thenThrow(AssertionError.class);
+    when(channel.voidPromise()).thenReturn(voidPromise);
     EventLoop eventLoop = Mockito.mock(EventLoop.class);
     doAnswer(new Answer<Void>() {
       @Override
@@ -106,7 +110,7 @@ public class WriteQueueTest {
       }
     });
 
-    when(channel.write(any(QueuedCommand.class), eq(promise))).thenAnswer(
+    when(channel.write(any(QueuedCommand.class), eq(voidPromise))).thenAnswer(
         new Answer<ChannelFuture>() {
           @Override
           public ChannelFuture answer(InvocationOnMock invocation) throws Throwable {
@@ -116,7 +120,7 @@ public class WriteQueueTest {
                 writeCalledNanos += 1;
               }
             }
-            return promise;
+            return voidPromise;
           }
         });
   }
@@ -126,7 +130,7 @@ public class WriteQueueTest {
     WriteQueue queue = new WriteQueue(channel);
     queue.enqueue(new CuteCommand(), true);
 
-    verify(channel).write(isA(QueuedCommand.class), eq(promise));
+    verify(channel).write(isA(QueuedCommand.class), eq(voidPromise));
     verify(channel).flush();
   }
 
@@ -138,7 +142,7 @@ public class WriteQueueTest {
     }
     queue.scheduleFlush();
 
-    verify(channel, times(5)).write(isA(QueuedCommand.class), eq(promise));
+    verify(channel, times(5)).write(isA(QueuedCommand.class), eq(voidPromise));
     verify(channel).flush();
   }
 
@@ -151,8 +155,16 @@ public class WriteQueueTest {
     }
     queue.scheduleFlush();
 
-    verify(channel, times(writes)).write(isA(QueuedCommand.class), eq(promise));
+    verify(channel, times(writes)).write(isA(QueuedCommand.class), eq(voidPromise));
     verify(channel, times(2)).flush();
+  }
+
+  @Test
+  public void enqueueUsesVoidPromise() {
+    WriteQueue queue = new WriteQueue(channel);
+    assertTrue(queue.enqueue(new CuteCommand(), false).isVoid());
+    verify(channel).voidPromise();
+    verifyNoMoreInteractions(channel);
   }
 
   @Test(timeout = 10000)
@@ -210,7 +222,7 @@ public class WriteQueueTest {
     flusher.join();
 
     exHandler.checkException();
-    verify(channel, times(writes)).write(isA(CuteCommand.class), eq(promise));
+    verify(channel, times(writes)).write(isA(CuteCommand.class), eq(voidPromise));
   }
 
   static class CuteCommand extends WriteQueue.AbstractQueuedCommand {
