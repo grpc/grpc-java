@@ -46,6 +46,9 @@ import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.PrototypeMarshaller;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.util.ReferenceCountUtil;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -125,39 +128,51 @@ public class ProtoLiteUtils {
           }
         }
         CodedInputStream cis = null;
+        ByteBuf heapBuf = null;
         try {
-          if (stream instanceof KnownLength) {
-            int size = stream.available();
-            if (size > 0 && size <= GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE) {
-              byte[] buf = new byte[size];
-              int chunkSize;
-              int position = 0;
-              while ((chunkSize = stream.read(buf, position, buf.length - position)) != -1) {
-                position += chunkSize;
+          try {
+            if (stream instanceof KnownLength) {
+              int size = stream.available();
+              if (size > 0 && size <= GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE) {
+                final PooledByteBufAllocator alloc = PooledByteBufAllocator.DEFAULT;
+                heapBuf = alloc.heapBuffer(size, size);
+                final byte[] buf = heapBuf.array();
+                final int arrayLen = heapBuf.writableBytes();
+                final int arrayOffset = heapBuf.arrayOffset();
+                int chunkSize;
+                int position = 0;
+                while ((chunkSize = stream.read(buf, arrayOffset + position,
+                    arrayLen - position)) != -1) {
+                  position += chunkSize;
+                }
+                if (arrayLen != position) {
+                  throw new RuntimeException("size inaccurate: " + buf.length + " != " + position);
+                }
+                cis = CodedInputStream.newInstance(buf, arrayOffset, arrayLen);
+              } else if (size == 0) {
+                return defaultInstance;
               }
-              if (buf.length != position) {
-                throw new RuntimeException("size inaccurate: " + buf.length + " != " + position);
-              }
-              cis = CodedInputStream.newInstance(buf);
-            } else if (size == 0) {
-              return defaultInstance;
             }
+          } catch (IOException e) {
+            throw new RuntimeException(e);
           }
-        } catch (IOException e) {
-          throw new RuntimeException(e);
-        }
-        if (cis == null) {
-          cis = CodedInputStream.newInstance(stream);
-        }
-        // Pre-create the CodedInputStream so that we can remove the size limit restriction
-        // when parsing.
-        cis.setSizeLimit(Integer.MAX_VALUE);
+          if (cis == null) {
+            cis = CodedInputStream.newInstance(stream);
+          }
+          // Pre-create the CodedInputStream so that we can remove the size limit restriction
+          // when parsing.
+          cis.setSizeLimit(Integer.MAX_VALUE);
 
-        try {
-          return parseFrom(cis);
-        } catch (InvalidProtocolBufferException ipbe) {
-          throw Status.INTERNAL.withDescription("Invalid protobuf byte sequence")
-            .withCause(ipbe).asRuntimeException();
+          try {
+            return parseFrom(cis);
+          } catch (InvalidProtocolBufferException ipbe) {
+            throw Status.INTERNAL.withDescription("Invalid protobuf byte sequence")
+                .withCause(ipbe).asRuntimeException();
+          }
+        } finally {
+          if (heapBuf != null) {
+            ReferenceCountUtil.safeRelease(heapBuf);
+          }
         }
       }
 
