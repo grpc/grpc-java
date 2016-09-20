@@ -50,8 +50,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.util.ReferenceCountUtil;
 
-import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Method;
 
 /**
  * Utility methods for using protobuf with grpc.
@@ -59,8 +59,20 @@ import java.io.InputStream;
 @ExperimentalApi("Experimental until Lite is stable in protobuf")
 public class ProtoLiteUtils {
 
+  private static final Method NEW_CODEDINPUTSTREAM;
+
   private static volatile ExtensionRegistryLite globalRegistry =
       ExtensionRegistryLite.getEmptyRegistry();
+
+  static {
+    try {
+      NEW_CODEDINPUTSTREAM = CodedInputStream.class
+          .getDeclaredMethod("newInstance", byte[].class, int.class, int.class, boolean.class);
+      NEW_CODEDINPUTSTREAM.setAccessible(true);
+    } catch (NoSuchMethodException e) {
+      throw new RuntimeException(e);
+    }
+  }
 
   /**
    * Sets the global registry for proto marshalling shared across all servers and clients.
@@ -148,12 +160,15 @@ public class ProtoLiteUtils {
                 if (arrayLen != position) {
                   throw new RuntimeException("size inaccurate: " + buf.length + " != " + position);
                 }
-                cis = CodedInputStream.newInstance(buf, arrayOffset, arrayLen);
+
+                cis = (CodedInputStream)
+                    NEW_CODEDINPUTSTREAM.invoke(null, buf, arrayOffset, arrayLen, true /* evil */);
+                cis.enableAliasing(true);
               } else if (size == 0) {
                 return defaultInstance;
               }
             }
-          } catch (IOException e) {
+          } catch (Throwable e) {
             throw new RuntimeException(e);
           }
           if (cis == null) {
