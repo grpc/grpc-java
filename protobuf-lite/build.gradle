@@ -19,7 +19,8 @@ description = 'gRPC: Protobuf Lite'
 dependencies {
     compile project(':grpc-core'),
             libraries.protobuf_lite,
-            libraries.guava
+            libraries.guava,
+            libraries.netty
 
     testProtobuf libraries.protobuf
 }
