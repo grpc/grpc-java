@@ -32,6 +32,7 @@
 package io.grpc.netty;
 
 import static com.google.common.base.Charsets.UTF_8;
+import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.netty.Utils.CONTENT_TYPE_GRPC;
 import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
@@ -58,7 +59,6 @@ import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.Status.Code;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransportListener;
@@ -73,14 +73,12 @@ import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2Error;
+import io.netty.handler.codec.http2.Http2FrameCodecBuilder;
 import io.netty.handler.codec.http2.Http2Headers;
-import io.netty.handler.codec.http2.Http2LocalFlowController;
+import io.netty.handler.codec.http2.Http2HeadersDecoder;
 import io.netty.handler.codec.http2.Http2Settings;
-import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
-
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -123,7 +121,11 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .thenReturn(streamListener);
     when(transportListener.transportReady(any(Attributes.class))).thenReturn(Attributes.EMPTY);
 
-    initChannel(new GrpcHttp2ServerHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
+    Http2HeadersDecoder headersDecoder = new GrpcHttp2ServerHeadersDecoder();
+    headersDecoder.configuration().headerTable()
+        .maxHeaderListSize(DEFAULT_MAX_HEADER_LIST_SIZE);
+
+    initChannel(headersDecoder);
 
     // Simulate receipt of the connection preface
     channelRead(Http2CodecUtil.connectionPrefaceBuf());
@@ -140,8 +142,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     ChannelFuture future = enqueue(
         new SendGrpcFrameCommand(stream.transportState(), content(), false));
     assertTrue(future.isSuccess());
-    verifyWrite().writeData(eq(ctx()), eq(STREAM_ID), eq(content()), eq(0), eq(false),
-        any(ChannelPromise.class));
+    verifyWrite().writeData(any(ChannelHandlerContext.class), eq(STREAM_ID), eq(content()), eq(0),
+        eq(false), any(ChannelPromise.class));
   }
 
   @Test
@@ -225,8 +227,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   public void closeShouldCloseChannel() throws Exception {
     handler().close(ctx(), newPromise());
 
-    verifyWrite().writeGoAway(eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()),
-        eq(Unpooled.EMPTY_BUFFER), any(ChannelPromise.class));
+    verifyWrite().writeGoAway(any(ChannelHandlerContext.class), eq(0),
+        eq(Http2Error.NO_ERROR.code()), eq(Unpooled.EMPTY_BUFFER), any(ChannelPromise.class));
 
     // Verify that the channel was closed.
     assertFalse(channel().isOpen());
@@ -265,24 +267,12 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  @Ignore("Re-enable once https://github.com/grpc/grpc-java/issues/1175 is fixed")
-  public void connectionWindowShouldBeOverridden() throws Exception {
-    flowControlWindow = 1048576; // 1MiB
-    setUp();
-
-    Http2Stream connectionStream = connection().connectionStream();
-    Http2LocalFlowController localFlowController = connection().local().flowController();
-    int actualInitialWindowSize = localFlowController.initialWindowSize(connectionStream);
-    int actualWindowSize = localFlowController.windowSize(connectionStream);
-    assertEquals(flowControlWindow, actualWindowSize);
-    assertEquals(flowControlWindow, actualInitialWindowSize);
-  }
-
-  @Test
   public void cancelShouldSendRstStream() throws Exception {
     createStream();
-    enqueue(new CancelServerStreamCommand(stream.transportState(), Status.DEADLINE_EXCEEDED));
-    verifyWrite().writeRstStream(eq(ctx()), eq(stream.transportState().id()),
+    enqueue(new CancelServerStreamCommand(stream.transportState().http2Stream(),
+        Status.DEADLINE_EXCEEDED));
+    verifyWrite().writeRstStream(any(ChannelHandlerContext.class),
+        eq(stream.transportState().http2Stream().id()),
         eq(Http2Error.CANCEL.code()), any(ChannelPromise.class));
   }
 
@@ -295,8 +285,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
             .path(new AsciiString("/foo/bar"));
     ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
     channelRead(headersFrame);
-    verifyWrite().writeRstStream(eq(ctx()), eq(STREAM_ID), eq(Http2Error.REFUSED_STREAM.code()),
-        any(ChannelPromise.class));
+    verifyWrite().writeRstStream(any(ChannelHandlerContext.class), eq(STREAM_ID),
+        eq(Http2Error.REFUSED_STREAM.code()), any(ChannelPromise.class));
   }
 
   @Test
@@ -345,8 +335,13 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   @Override
   protected NettyServerHandler newHandler() {
-    return NettyServerHandler.newHandler(frameReader(), frameWriter(), transportListener,
-        maxConcurrentStreams, flowControlWindow, DEFAULT_MAX_MESSAGE_SIZE);
+    Http2FrameCodecBuilder frameCodecBuilder = Http2FrameCodecBuilder.forServer()
+        .frameReader(frameReader())
+        .frameWriter(frameWriter());
+
+    return NettyServerHandler.newHandler(frameCodecBuilder, transportListener,
+        maxConcurrentStreams, flowControlWindow, DEFAULT_MAX_HEADER_LIST_SIZE,
+        DEFAULT_MAX_MESSAGE_SIZE);
   }
 
   @Override

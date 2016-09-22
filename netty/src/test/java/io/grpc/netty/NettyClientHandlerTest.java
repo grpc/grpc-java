@@ -45,12 +45,12 @@ import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.notNull;
+
 import static org.mockito.Mockito.verify;
 
 import com.google.common.base.Ticker;
@@ -78,13 +78,12 @@ import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
-import io.netty.handler.codec.http2.Http2LocalFlowController;
+import io.netty.handler.codec.http2.Http2HeadersDecoder;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
 
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -99,7 +98,9 @@ import java.io.InputStream;
  */
 @RunWith(JUnit4.class)
 public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHandler> {
+
   private NettyClientStream.TransportState streamTransportState;
+
   private Http2Headers grpcHeaders;
   private long nanoTime; // backs a ticker, for testing ping round-trip time measurement
   private int flowControlWindow = DEFAULT_WINDOW_SIZE;
@@ -117,9 +118,15 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   @Before
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
+
     lifecycleManager = new ClientTransportLifecycleManager(listener);
 
-    initChannel(new GrpcHttp2ClientHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
+    Http2HeadersDecoder headersDecoder = new GrpcHttp2ClientHeadersDecoder();
+    headersDecoder.configuration().headerTable()
+        .maxHeaderListSize(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE);
+
+    initChannel(headersDecoder);
+
     streamTransportState = new TransportStateImpl(handler(), DEFAULT_MAX_MESSAGE_SIZE);
     streamTransportState.setListener(streamListener);
 
@@ -141,6 +148,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   public void cancelBufferedStreamShouldChangeClientStreamStatus() throws Exception {
     // Force the stream to be buffered.
     receiveMaxConcurrentStreams(0);
+
     // Create a new stream with id 3.
     ChannelFuture createFuture = enqueue(
         new CreateStreamCommand(grpcHeaders, streamTransportState));
@@ -155,7 +163,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   @Test
   public void createStreamShouldSucceed() throws Exception {
     createStream();
-    verifyWrite().writeHeaders(eq(ctx()), eq(3), eq(grpcHeaders), eq(0),
+    verifyWrite().writeHeaders(any(ChannelHandlerContext.class), eq(3), eq(grpcHeaders), eq(0),
         eq(DEFAULT_PRIORITY_WEIGHT), eq(false), eq(0), eq(false), any(ChannelPromise.class));
   }
 
@@ -164,8 +172,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     createStream();
     cancelStream(Status.CANCELLED);
 
-    verifyWrite().writeRstStream(eq(ctx()), eq(3), eq(Http2Error.CANCEL.code()),
-        any(ChannelPromise.class));
+    verifyWrite().writeRstStream(any(ChannelHandlerContext.class), eq(3),
+        eq(Http2Error.CANCEL.code()), any(ChannelPromise.class));
   }
 
   @Test
@@ -173,8 +181,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     createStream();
     cancelStream(Status.DEADLINE_EXCEEDED);
 
-    verifyWrite().writeRstStream(eq(ctx()), eq(3), eq(Http2Error.CANCEL.code()),
-        any(ChannelPromise.class));
+    verifyWrite().writeRstStream(any(ChannelHandlerContext.class), eq(3),
+        eq(Http2Error.CANCEL.code()), any(ChannelPromise.class));
   }
 
   @Test
@@ -215,8 +223,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
     cancelStream(Status.DEADLINE_EXCEEDED);
 
-    verifyWrite().writeRstStream(eq(ctx()), eq(3), eq(Http2Error.CANCEL.code()),
-        any(ChannelPromise.class));
+    verifyWrite().writeRstStream(any(ChannelHandlerContext.class), eq(3),
+        eq(Http2Error.CANCEL.code()), any(ChannelPromise.class));
 
     ChannelFuture future = cancelStream(Status.CANCELLED);
     assertTrue(future.isSuccess());
@@ -230,7 +238,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     ChannelFuture future = enqueue(new SendGrpcFrameCommand(streamTransportState, content(), true));
 
     assertTrue(future.isSuccess());
-    verifyWrite().writeData(eq(ctx()), eq(3), eq(content()), eq(0), eq(true),
+    verifyWrite().writeData(any(ChannelHandlerContext.class), eq(3), eq(content()), eq(0), eq(true),
         any(ChannelPromise.class));
   }
 
@@ -340,7 +348,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     receiveMaxConcurrentStreams(0);
     ChannelFuture future = enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
 
-    handler().channelInactive(ctx());
+    channel().pipeline().fireChannelInactive();
+
     assertTrue(future.isDone());
     assertFalse(future.isSuccess());
   }
@@ -356,58 +365,6 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   @Test
-  @Ignore("Re-enable once https://github.com/grpc/grpc-java/issues/1175 is fixed")
-  public void connectionWindowShouldBeOverridden() throws Exception {
-    flowControlWindow = 1048576; // 1MiB
-    setUp();
-
-    Http2Stream connectionStream = connection().connectionStream();
-    Http2LocalFlowController localFlowController = connection().local().flowController();
-    int actualInitialWindowSize = localFlowController.initialWindowSize(connectionStream);
-    int actualWindowSize = localFlowController.windowSize(connectionStream);
-    assertEquals(flowControlWindow, actualWindowSize);
-    assertEquals(flowControlWindow, actualInitialWindowSize);
-    assertEquals(1048576, actualWindowSize);
-  }
-
-  @Test
-  public void createIncrementsIdsForActualAndBufferdStreams() throws Exception {
-    receiveMaxConcurrentStreams(2);
-    enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
-    assertEquals(3, streamTransportState.id());
-
-    streamTransportState = new TransportStateImpl(handler(), DEFAULT_MAX_MESSAGE_SIZE);
-    streamTransportState.setListener(streamListener);
-    enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
-    assertEquals(5, streamTransportState.id());
-
-    streamTransportState = new TransportStateImpl(handler(), DEFAULT_MAX_MESSAGE_SIZE);
-    streamTransportState.setListener(streamListener);
-    enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
-    assertEquals(7, streamTransportState.id());
-  }
-
-  @Test
-  public void exhaustedStreamsShouldFail() throws Exception {
-    streamId = Integer.MAX_VALUE;
-    setUp();
-
-    assertNull(lifecycleManager.getShutdownStatus());
-    // Create the MAX_INT stream.
-    ChannelFuture future = createStream();
-    assertTrue(future.isSuccess());
-
-    // This should fail - out of stream IDs.
-    future = createStream();
-    assertTrue(future.isDone());
-    assertFalse(future.isSuccess());
-    Status status = lifecycleManager.getShutdownStatus();
-    assertNotNull(status);
-    assertTrue("status does not reference 'exhausted': " + status,
-        status.getDescription().contains("exhausted"));
-  }
-
-  @Test
   public void ping() throws Exception {
     PingCallbackImpl callback1 = new PingCallbackImpl();
     sendPing(callback1);
@@ -416,7 +373,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     sendPing(callback2);
 
     ArgumentCaptor<ByteBuf> captor = ArgumentCaptor.forClass(ByteBuf.class);
-    verifyWrite().writePing(eq(ctx()), eq(false), captor.capture(),
+    verifyWrite().writePing(any(ChannelHandlerContext.class), eq(false), captor.capture(),
         any(ChannelPromise.class));
 
     // getting a bad ack won't cause the callback to be invoked
@@ -469,7 +426,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     PingCallbackImpl callback = new PingCallbackImpl();
     sendPing(callback);
     ArgumentCaptor<ByteBuf> captor = ArgumentCaptor.forClass(ByteBuf.class);
-    verifyWrite().writePing(eq(ctx()), eq(false), captor.capture(), any(ChannelPromise.class));
+    verifyWrite().writePing(any(ChannelHandlerContext.class), eq(false), captor.capture(),
+        any(ChannelPromise.class));
     ByteBuf payload = captor.getValue();
     channelRead(grpcDataFrame(3, false, contentAsArray()));
     long pingData = handler().flowControlPing().payload();
@@ -536,7 +494,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     };
 
     return NettyClientHandler.newHandler(connection, frameReader(), frameWriter(),
-        lifecycleManager, flowControlWindow, ticker);
+        lifecycleManager, flowControlWindow, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, ticker);
   }
 
   @Override

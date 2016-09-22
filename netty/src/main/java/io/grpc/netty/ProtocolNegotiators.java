@@ -90,7 +90,7 @@ public final class ProtocolNegotiators {
   public static ProtocolNegotiator serverPlaintext() {
     return new ProtocolNegotiator() {
       @Override
-      public Handler newHandler(final GrpcHttp2ConnectionHandler handler) {
+      public Handler newHandler(final AbstractNettyHandler handler) {
         class PlaintextHandler extends ChannelHandlerAdapter implements Handler {
           @Override
           public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
@@ -116,7 +116,7 @@ public final class ProtocolNegotiators {
     Preconditions.checkNotNull(sslContext, "sslContext");
     return new ProtocolNegotiator() {
       @Override
-      public Handler newHandler(GrpcHttp2ConnectionHandler handler) {
+      public Handler newHandler(AbstractNettyHandler handler) {
         return new ServerTlsHandler(sslContext, handler);
       }
     };
@@ -125,10 +125,10 @@ public final class ProtocolNegotiators {
   @VisibleForTesting
   static final class ServerTlsHandler extends ChannelInboundHandlerAdapter
           implements ProtocolNegotiator.Handler {
-    private final GrpcHttp2ConnectionHandler grpcHandler;
+    private final AbstractNettyHandler grpcHandler;
     private final SslContext sslContext;
 
-    ServerTlsHandler(SslContext sslContext, GrpcHttp2ConnectionHandler grpcHandler) {
+    ServerTlsHandler(SslContext sslContext, AbstractNettyHandler grpcHandler) {
       this.sslContext = sslContext;
       this.grpcHandler = grpcHandler;
     }
@@ -238,7 +238,7 @@ public final class ProtocolNegotiators {
     }
 
     @Override
-    public Handler newHandler(GrpcHttp2ConnectionHandler handler) {
+    public Handler newHandler(AbstractNettyHandler handler) {
       ChannelHandler sslBootstrap = new ChannelHandlerAdapter() {
         @Override
         public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
@@ -262,9 +262,10 @@ public final class ProtocolNegotiators {
 
   static final class PlaintextUpgradeNegotiator implements ProtocolNegotiator {
     @Override
-    public Handler newHandler(GrpcHttp2ConnectionHandler handler) {
+    public Handler newHandler(AbstractNettyHandler handler) {
       // Register the plaintext upgrader
-      Http2ClientUpgradeCodec upgradeCodec = new Http2ClientUpgradeCodec(handler);
+      Http2ClientUpgradeCodec upgradeCodec =
+          new Http2ClientUpgradeCodec(handler.frameCodec(), handler);
       HttpClientCodec httpClientCodec = new HttpClientCodec();
       final HttpClientUpgradeHandler upgrader =
           new HttpClientUpgradeHandler(httpClientCodec, upgradeCodec, 1000);
@@ -283,7 +284,7 @@ public final class ProtocolNegotiators {
 
   static final class PlaintextNegotiator implements ProtocolNegotiator {
     @Override
-    public Handler newHandler(GrpcHttp2ConnectionHandler handler) {
+    public Handler newHandler(AbstractNettyHandler handler) {
       return new BufferUntilChannelActiveHandler(handler);
     }
   }

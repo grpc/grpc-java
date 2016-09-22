@@ -55,6 +55,7 @@ import io.netty.channel.DefaultChannelPromise;
 import io.netty.channel.EventLoop;
 import io.netty.handler.codec.http2.Http2Stream;
 
+import io.netty.handler.codec.http2.Http2Stream2;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -229,6 +230,44 @@ public abstract class NettyStreamTestBase<T extends Stream> {
     when(future.awaitUninterruptibly(anyLong(), any(TimeUnit.class))).thenReturn(true);
     if (!succeeded) {
       when(future.cause()).thenReturn(new Exception("fake"));
+    }
+  }
+
+  static final class Http2Stream2Impl implements Http2Stream2 {
+
+    private int id = -1;
+    private Object managedState;
+    private final ChannelPromise closeFuture;
+
+    Http2Stream2Impl(Channel ch) {
+      closeFuture = new DefaultChannelPromise(ch);
+    }
+
+    @Override
+    public Http2Stream2 id(int id) {
+      this.id = id;
+      return this;
+    }
+
+    @Override
+    public int id() {
+      return id;
+    }
+
+    @Override
+    public Http2Stream2 managedState(Object state) {
+      managedState = state;
+      return this;
+    }
+
+    @Override
+    public Object managedState() {
+      return managedState;
+    }
+
+    @Override
+    public ChannelFuture closeFuture() {
+      return closeFuture;
     }
   }
 }

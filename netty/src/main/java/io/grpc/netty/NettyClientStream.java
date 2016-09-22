@@ -31,7 +31,6 @@
 
 package io.grpc.netty;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
@@ -51,8 +50,10 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
+import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2Stream;
+import io.netty.handler.codec.http2.Http2Stream2;
 import io.netty.util.AsciiString;
 
 import javax.annotation.Nullable;
@@ -178,11 +179,9 @@ class NettyClientStream extends AbstractClientStream2 {
   }
 
   /** This should only called from the transport thread. */
-  public abstract static class TransportState extends Http2ClientStreamTransportState
-      implements StreamIdHolder {
+  public abstract static class TransportState extends Http2ClientStreamTransportState {
     private final NettyClientHandler handler;
-    private int id;
-    private Http2Stream http2Stream;
+    private Http2Stream2 http2Stream;
 
     public TransportState(NettyClientHandler handler, int maxMessageSize,
         StatsTraceContext statsTraceCtx) {
@@ -190,24 +189,16 @@ class NettyClientStream extends AbstractClientStream2 {
       this.handler = checkNotNull(handler, "handler");
     }
 
-    @Override
     public int id() {
-      return id;
+      return http2Stream == null ? -1 : http2Stream.id();
     }
 
-    public void setId(int id) {
-      checkArgument(id > 0, "id must be positive");
-      this.id = id;
-    }
+    void onStreamActive() {
+      checkState(http2Stream != null, "http2Stream not set.");
 
-    /**
-     * Sets the underlying Netty {@link Http2Stream} for this stream. This must be called in the
-     * context of the transport thread.
-     */
-    public void setHttp2Stream(Http2Stream http2Stream) {
-      checkNotNull(http2Stream, "http2Stream");
-      checkState(this.http2Stream == null, "Can only set http2Stream once");
-      this.http2Stream = http2Stream;
+      if (!Http2CodecUtil.isStreamIdValid(http2Stream.id())) {
+        throw new IllegalStateException("An allocated stream must have its stream identifier set.");
+      }
 
       // Now that the stream has actually been initialized, call the listener's onReady callback if
       // appropriate.
@@ -218,8 +209,20 @@ class NettyClientStream extends AbstractClientStream2 {
      * Gets the underlying Netty {@link Http2Stream} for this stream.
      */
     @Nullable
-    public Http2Stream http2Stream() {
+    public Http2Stream2 http2Stream() {
       return http2Stream;
+    }
+
+    /**
+     * Sets the underlying Netty {@link Http2Stream2} for this stream. This must be called in the
+     * context of the transport thread.
+     */
+    void setHttp2Stream(Http2Stream2 http2Stream) {
+      checkNotNull(http2Stream, "http2Stream");
+      checkState(this.http2Stream == null, "Can only set http2Stream once");
+
+      this.http2Stream = http2Stream;
+      http2Stream.managedState(this);
     }
 
     /**

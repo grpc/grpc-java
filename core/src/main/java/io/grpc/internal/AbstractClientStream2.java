@@ -169,6 +169,10 @@ public abstract class AbstractClientStream2 extends AbstractStream2
       super(maxMessageSize, statsTraceCtx);
     }
 
+    public boolean isClosed() {
+      return listenerClosed;
+    }
+
     @VisibleForTesting
     public final void setListener(ClientStreamListener listener) {
       Preconditions.checkState(this.listener == null, "Already called setListener");

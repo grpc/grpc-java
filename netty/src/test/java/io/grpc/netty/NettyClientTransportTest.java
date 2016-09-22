@@ -64,10 +64,9 @@ import io.grpc.testing.TestUtils;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.http2.Http2Exception;
+
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SupportedCipherSuiteFilter;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -242,45 +241,6 @@ public class NettyClientTransportTest {
       } catch (ExecutionException e) {
         // Expected.
       }
-    }
-  }
-
-  @Test
-  public void maxHeaderListSizeShouldBeEnforcedOnClient() throws Exception {
-    startServer();
-
-    NettyClientTransport transport =
-        newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE, 1, null);
-    transport.start(clientTransportListener);
-
-    try {
-      // Send a single RPC and wait for the response.
-      new Rpc(transport, new Metadata()).halfClose().waitForResponse();
-      fail("The stream should have been failed due to client received header exceeds header list"
-          + " size limit!");
-    } catch (Exception e) {
-      Throwable rootCause = getRootCause(e);
-      assertTrue(rootCause instanceof Http2Exception);
-      assertEquals("Header size exceeded max allowed size (1)", rootCause.getMessage());
-    }
-  }
-
-  @Test
-  public void maxHeaderListSizeShouldBeEnforcedOnServer()  throws Exception {
-    startServer(100, 1);
-
-    NettyClientTransport transport = newTransport(newNegotiator());
-    transport.start(clientTransportListener);
-
-    try {
-      // Send a single RPC and wait for the response.
-      new Rpc(transport, new Metadata()).halfClose().waitForResponse();
-      fail("The stream should have been failed due to server received header exceeds header list"
-          + " size limit!");
-    } catch (Exception e) {
-      Throwable rootCause = getRootCause(e);
-      assertTrue(rootCause.getMessage(),
-          rootCause.getMessage().contains("Header size exceeded max allowed size (1)"));
     }
   }
 

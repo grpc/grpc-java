@@ -39,18 +39,20 @@ import io.netty.handler.codec.http2.Http2Headers;
  * Command sent from the transport to the Netty channel to send response headers to the client.
  */
 class SendResponseHeadersCommand extends WriteQueue.AbstractQueuedCommand {
-  private final StreamIdHolder stream;
+  private final NettyServerStream.TransportState transportState;
   private final Http2Headers headers;
   private final boolean endOfStream;
 
-  SendResponseHeadersCommand(StreamIdHolder stream, Http2Headers headers, boolean endOfStream) {
-    this.stream = Preconditions.checkNotNull(stream, "stream");
+  // replace with transportstate
+  SendResponseHeadersCommand(NettyServerStream.TransportState transportState, Http2Headers headers,
+      boolean endOfStream) {
+    this.transportState = Preconditions.checkNotNull(transportState, "transportState");
     this.headers = Preconditions.checkNotNull(headers, "headers");
     this.endOfStream = endOfStream;
   }
 
-  StreamIdHolder stream() {
-    return stream;
+  NettyServerStream.TransportState transportState() {
+    return transportState;
   }
 
   Http2Headers headers() {
@@ -67,19 +69,19 @@ class SendResponseHeadersCommand extends WriteQueue.AbstractQueuedCommand {
       return false;
     }
     SendResponseHeadersCommand thatCmd = (SendResponseHeadersCommand) that;
-    return thatCmd.stream.equals(stream)
+    return thatCmd.transportState.equals(transportState)
         && thatCmd.headers.equals(headers)
         && thatCmd.endOfStream == endOfStream;
   }
 
   @Override
   public String toString() {
-    return getClass().getSimpleName() + "(stream=" + stream.id() + ", headers=" + headers
-        + ", endOfStream=" + endOfStream + ")";
+    return getClass().getSimpleName() + "(stream=" + transportState().http2Stream() + ", "
+        + "headers=" + headers + ", endOfStream=" + endOfStream + ")";
   }
 
   @Override
   public int hashCode() {
-    return stream.hashCode();
+    return transportState().hashCode();
   }
 }

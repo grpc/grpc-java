@@ -33,93 +33,67 @@ package io.grpc.netty;
 
 import static io.netty.buffer.Unpooled.directBuffer;
 import static io.netty.buffer.Unpooled.unreleasableBuffer;
-import static io.netty.handler.codec.http2.Http2CodecUtil.getEmbeddedHttp2Exception;
+import static io.netty.handler.codec.http2.Http2Stream2.CONNECTION_STREAM;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import io.grpc.Attributes;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.http2.Http2ConnectionDecoder;
-import io.netty.handler.codec.http2.Http2ConnectionEncoder;
-import io.netty.handler.codec.http2.Http2Exception;
-import io.netty.handler.codec.http2.Http2LocalFlowController;
+import io.netty.handler.codec.http2.DefaultHttp2PingFrame;
+import io.netty.handler.codec.http2.DefaultHttp2SettingsFrame;
+import io.netty.handler.codec.http2.DefaultHttp2WindowUpdateFrame;
+import io.netty.handler.codec.http2.Http2ChannelDuplexHandler;
+import io.netty.handler.codec.http2.Http2FrameCodec;
+import io.netty.handler.codec.http2.Http2FrameCodecBuilder;
 import io.netty.handler.codec.http2.Http2Settings;
-import io.netty.handler.codec.http2.Http2Stream;
-
-import java.util.concurrent.TimeUnit;
 
 /**
  * Base class for all Netty gRPC handlers. This class standardizes exception handling (always
  * shutdown the connection) as well as sending the initial connection window at startup.
  */
-abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
-  private static long GRACEFUL_SHUTDOWN_TIMEOUT = SECONDS.toMillis(5);
-  private boolean autoTuneFlowControlOn = false;
-  private int initialConnectionWindow;
+abstract class AbstractNettyHandler extends Http2ChannelDuplexHandler {
+  private static final long GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS = 5;
+  private boolean autoTuneFlowControlOn;
   private ChannelHandlerContext ctx;
-  private final FlowControlPinger flowControlPing = new FlowControlPinger();
+  private final FlowControlPinger flowControlPing;
+  private final Http2FrameCodec frameCodec;
 
   private static final int BDP_MEASUREMENT_PING = 1234;
   private static final ByteBuf payloadBuf =
       unreleasableBuffer(directBuffer(8).writeLong(BDP_MEASUREMENT_PING));
 
-  AbstractNettyHandler(Http2ConnectionDecoder decoder,
-                       Http2ConnectionEncoder encoder,
-                       Http2Settings initialSettings) {
-    super(decoder, encoder, initialSettings);
-
-    // Set the timeout for graceful shutdown.
-    gracefulShutdownTimeoutMillis(GRACEFUL_SHUTDOWN_TIMEOUT);
-
-    // Extract the connection window from the settings if it was set.
-    this.initialConnectionWindow = initialSettings.initialWindowSize() == null ? -1 :
-            initialSettings.initialWindowSize();
+  AbstractNettyHandler(Http2FrameCodecBuilder frameCodecBuilder, int initialConnectionWindow) {
+    frameCodecBuilder.gracefulShutdownTimeout(GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS, SECONDS);
+    frameCodec = frameCodecBuilder.build();
+    flowControlPing = new FlowControlPinger(initialConnectionWindow);
   }
 
   @Override
   public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
     this.ctx = ctx;
-    // Sends the connection preface if we haven't already.
+    ctx.pipeline().addBefore(ctx.executor(), ctx.name(), null, frameCodec);
     super.handlerAdded(ctx);
-    sendInitialConnectionWindow();
   }
 
-  @Override
-  public void channelActive(ChannelHandlerContext ctx) throws Exception {
-    // Sends connection preface if we haven't already.
-    super.channelActive(ctx);
-    sendInitialConnectionWindow();
+  /**
+   * Triggered on protocol negotiation completion.
+   *
+   * <p>It must me called after negotiation is completed but before given handler is added to the
+   * channel.
+   *
+   * @param attrs arbitrary attributes passed after protocol negotiation (eg. SSLSession).
+   */
+  public void handleProtocolNegotiationCompleted(Attributes attrs) {
   }
 
-  @Override
-  public final void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-    Http2Exception embedded = getEmbeddedHttp2Exception(cause);
-    if (embedded == null) {
-      // There was no embedded Http2Exception, assume it's a connection error. Subclasses are
-      // responsible for storing the appropriate status and shutting down the connection.
-      onError(ctx, cause);
-    } else {
-      super.exceptionCaught(ctx, cause);
-    }
+  Http2FrameCodec frameCodec() {
+    return frameCodec;
   }
 
   protected final ChannelHandlerContext ctx() {
     return ctx;
-  }
-
-  /**
-   * Sends initial connection window to the remote endpoint if necessary.
-   */
-  private void sendInitialConnectionWindow() throws Http2Exception {
-    if (ctx.channel().isActive() && initialConnectionWindow > 0) {
-      Http2Stream connectionStream = connection().connectionStream();
-      int currentSize = connection().local().flowController().windowSize(connectionStream);
-      int delta = initialConnectionWindow - currentSize;
-      decoder().flowController().incrementWindowSize(connectionStream, delta);
-      initialConnectionWindow = -1;
-      ctx.flush();
-    }
   }
 
   @VisibleForTesting
@@ -145,6 +119,12 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     private float lastBandwidth; // bytes per second
     private long lastPingTime;
 
+    private int initialConnectionWindow;
+
+    FlowControlPinger(int initialConnectionWindow) {
+      this.initialConnectionWindow = initialConnectionWindow;
+    }
+
     public int payload() {
       return BDP_MEASUREMENT_PING;
     }
@@ -159,36 +139,35 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
       }
       if (!isPinging()) {
         setPinging(true);
-        sendPing(ctx());
+        sendPing();
       }
       incrementDataSincePing(dataLength + paddingLength);
     }
 
-    public void updateWindow() throws Http2Exception {
+    public void updateWindow() {
       if (!autoTuneFlowControlOn) {
         return;
       }
       pingReturn++;
-      long elapsedTime = (System.nanoTime() - lastPingTime);
+      long elapsedTime = System.nanoTime() - lastPingTime;
       if (elapsedTime == 0) {
         elapsedTime = 1;
       }
-      long bandwidth = (getDataSincePing() * TimeUnit.SECONDS.toNanos(1)) / elapsedTime;
-      Http2LocalFlowController fc = decoder().flowController();
+      long bandwidth = getDataSincePing() * SECONDS.toNanos(1) / elapsedTime;
       // Calculate new window size by doubling the observed BDP, but cap at max window
       int targetWindow = Math.min(getDataSincePing() * 2, MAX_WINDOW_SIZE);
       setPinging(false);
-      int currentWindow = fc.initialWindowSize(connection().connectionStream());
-      if (targetWindow > currentWindow && bandwidth > lastBandwidth) {
+      if (targetWindow > initialConnectionWindow && bandwidth > lastBandwidth) {
         lastBandwidth = bandwidth;
-        int increase = targetWindow - currentWindow;
-        fc.incrementWindowSize(connection().connectionStream(), increase);
-        fc.initialWindowSize(targetWindow);
-        Http2Settings settings = new Http2Settings();
-        settings.initialWindowSize(targetWindow);
-        frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
-      }
+        int increase = targetWindow - initialConnectionWindow;
 
+        ctx().write(new DefaultHttp2WindowUpdateFrame(increase).stream(CONNECTION_STREAM));
+        Http2Settings updateInitialWindowSize = new Http2Settings().initialWindowSize(targetWindow);
+        ctx().write(new DefaultHttp2SettingsFrame(updateInitialWindowSize));
+
+        // TODO(buchgr): Only set this on settings ack?
+        initialConnectionWindow = targetWindow;
+      }
     }
 
     private boolean isPinging() {
@@ -199,16 +178,20 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
       pinging = pingOut;
     }
 
-    private void sendPing(ChannelHandlerContext ctx) {
+    private void sendPing() {
       setDataSizeSincePing(0);
       lastPingTime = System.nanoTime();
-      encoder().writePing(ctx, false, payloadBuf.slice(), ctx.newPromise());
+      ctx().write(new DefaultHttp2PingFrame(payloadBuf.slice(), false));
       pingCount++;
     }
 
     private void incrementDataSincePing(int increase) {
       int currentSize = getDataSincePing();
       setDataSizeSincePing(currentSize + increase);
+    }
+
+    int initialConnectionWindow() {
+      return initialConnectionWindow;
     }
 
     @VisibleForTesting

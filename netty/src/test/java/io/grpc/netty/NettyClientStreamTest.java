@@ -110,7 +110,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
   @Test
   public void closeShouldSucceed() {
     // Force stream creation.
-    stream().transportState().setId(STREAM_ID);
+    stream().transportState().http2Stream().id(STREAM_ID);
     stream().halfClose();
     verifyNoMoreInteractions(listener);
   }
@@ -118,23 +118,23 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
   @Test
   public void cancelShouldSendCommand() {
     // Set stream id to indicate it has been created
-    stream().transportState().setId(STREAM_ID);
+    stream().transportState().http2Stream().id(STREAM_ID);
     stream().cancel(Status.CANCELLED);
     ArgumentCaptor<CancelClientStreamCommand> commandCaptor =
         ArgumentCaptor.forClass(CancelClientStreamCommand.class);
     verify(writeQueue).enqueue(commandCaptor.capture(), eq(true));
-    assertEquals(commandCaptor.getValue().reason(), Status.CANCELLED);
+    assertEquals(Status.CANCELLED, commandCaptor.getValue().reason());
   }
 
   @Test
   public void deadlineExceededCancelShouldSendCommand() {
     // Set stream id to indicate it has been created
-    stream().transportState().setId(STREAM_ID);
+    stream().transportState().http2Stream().id(STREAM_ID);
     stream().cancel(Status.DEADLINE_EXCEEDED);
     ArgumentCaptor<CancelClientStreamCommand> commandCaptor =
         ArgumentCaptor.forClass(CancelClientStreamCommand.class);
     verify(writeQueue).enqueue(commandCaptor.capture(), eq(true));
-    assertEquals(commandCaptor.getValue().reason(), Status.DEADLINE_EXCEEDED);
+    assertEquals(Status.DEADLINE_EXCEEDED, commandCaptor.getValue().reason());
   }
 
   @Test
@@ -146,7 +146,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
   @Test
   public void writeMessageShouldSendRequest() throws Exception {
     // Force stream creation.
-    stream().transportState().setId(STREAM_ID);
+    stream().transportState().http2Stream().id(STREAM_ID);
     byte[] msg = smallMessage();
     stream.writeMessage(new ByteArrayInputStream(msg));
     stream.flush();
@@ -159,7 +159,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
   @Test
   public void writeMessageShouldSendRequestUnknownLength() throws Exception {
     // Force stream creation.
-    stream().transportState().setId(STREAM_ID);
+    stream().transportState().http2Stream().id(STREAM_ID);
     byte[] msg = smallMessage();
     stream.writeMessage(new BufferedInputStream(new ByteArrayInputStream(msg)));
     stream.flush();
@@ -178,7 +178,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
 
   @Test
   public void setStatusWithOkShouldCloseStream() {
-    stream().transportState().setId(STREAM_ID);
+    stream().transportState().http2Stream().id(STREAM_ID);
     stream().transportState().transportReportStatus(Status.OK, true, new Metadata());
     verify(listener).closed(same(Status.OK), any(Metadata.class));
   }
@@ -211,14 +211,14 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
   @Test
   public void inboundMessageShouldCallListener() throws Exception {
     // Receive headers first so that it's a valid GRPC response.
-    stream().transportState().setId(STREAM_ID);
+    stream().transportState().http2Stream().id(STREAM_ID);
     stream().transportState().transportHeadersReceived(grpcResponseHeaders(), false);
     super.inboundMessageShouldCallListener();
   }
 
   @Test
   public void inboundHeadersShouldCallListenerHeadersRead() throws Exception {
-    stream().transportState().setId(STREAM_ID);
+    stream().transportState().http2Stream().id(STREAM_ID);
     Http2Headers headers = grpcResponseHeaders();
     stream().transportState().transportHeadersReceived(headers, false);
     verify(listener).headersRead(any(Metadata.class));
@@ -226,7 +226,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
 
   @Test
   public void inboundTrailersClosesCall() throws Exception {
-    stream().transportState().setId(STREAM_ID);
+    stream().transportState().http2Stream().id(STREAM_ID);
     stream().transportState().transportHeadersReceived(grpcResponseHeaders(), false);
     super.inboundMessageShouldCallListener();
     stream().transportState().transportHeadersReceived(grpcResponseTrailers(Status.OK), true);
@@ -234,7 +234,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
 
   @Test
   public void inboundStatusShouldSetStatus() throws Exception {
-    stream().transportState().setId(STREAM_ID);
+    stream().transportState().http2Stream().id(STREAM_ID);
 
     // Receive headers first so that it's a valid GRPC response.
     stream().transportState().transportHeadersReceived(grpcResponseHeaders(), false);
@@ -247,7 +247,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
 
   @Test
   public void invalidInboundHeadersCancelStream() throws Exception {
-    stream().transportState().setId(STREAM_ID);
+    stream().transportState().http2Stream().id(STREAM_ID);
     Http2Headers headers = grpcResponseHeaders();
     headers.set("random", "4");
     headers.remove(CONTENT_TYPE_HEADER);
@@ -277,7 +277,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
   @Test
   public void invalidInboundContentTypeShouldCancelStream() {
     // Set stream id to indicate it has been created
-    stream().transportState().setId(STREAM_ID);
+    stream().transportState().http2Stream().id(STREAM_ID);
     Http2Headers headers = new DefaultHttp2Headers().status(STATUS_OK).set(CONTENT_TYPE_HEADER,
             new AsciiString("application/bad", UTF_8));
     stream().transportState().transportHeadersReceived(headers, false);
@@ -304,7 +304,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
 
   @Test
   public void deframedDataAfterCancelShouldBeIgnored() throws Exception {
-    stream().transportState().setId(STREAM_ID);
+    stream().transportState().http2Stream().id(STREAM_ID);
     // Receive headers first so that it's a valid GRPC response.
     stream().transportState().transportHeadersReceived(grpcResponseHeaders(), false);
 
@@ -338,7 +338,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
 
   @Test
   public void dataFrameWithEosShouldDeframeAndThenFail() {
-    stream().transportState().setId(STREAM_ID);
+    stream().transportState().http2Stream().id(STREAM_ID);
     stream().request(1);
 
     // Receive headers first so that it's a valid GRPC response.
@@ -356,17 +356,17 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
   }
 
   @Test
-  public void setHttp2StreamShouldNotifyReady() {
+  public void setHttp2StreamAndStreamActiveShouldNotifyReady() {
     listener = mock(ClientStreamListener.class);
 
     stream = new NettyClientStream(new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE),
         methodDescriptor, new Metadata(), channel, AsciiString.of("localhost"),
         AsciiString.of("http"), AsciiString.of("agent"), StatsTraceContext.NOOP);
     stream.start(listener);
-    stream().transportState().setId(STREAM_ID);
     verify(listener, never()).onReady();
     assertFalse(stream.isReady());
-    stream().transportState().setHttp2Stream(http2Stream);
+    stream().transportState().setHttp2Stream(new Http2Stream2Impl(channel).id(STREAM_ID));
+    stream().transportState().onStreamActive();
     verify(listener).onReady();
     assertTrue(stream.isReady());
   }
@@ -408,8 +408,8 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         channel, AsciiString.of("localhost"), AsciiString.of("http"), AsciiString.of("agent"),
         StatsTraceContext.NOOP);
     stream.start(listener);
-    stream.transportState().setId(STREAM_ID);
-    stream.transportState().setHttp2Stream(http2Stream);
+    stream.transportState().setHttp2Stream(new Http2Stream2Impl(channel).id(STREAM_ID));
+    stream.transportState().onStreamActive();
     reset(listener);
     return stream;
   }

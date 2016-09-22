@@ -32,7 +32,6 @@
 package io.grpc.netty;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 
 /**
  * Allows autoFlowControl to be turned on and off from interop testing and flow control windows to
@@ -63,16 +62,10 @@ public final class HandlerSettings {
   }
 
   public static int getLatestClientWindow() {
-    return getLatestWindow(clientHandler);
+    return clientHandler.flowControlPing().initialConnectionWindow();
   }
 
   public static int getLatestServerWindow() {
-    return getLatestWindow(serverHandler);
-  }
-
-  private static int getLatestWindow(AbstractNettyHandler handler) {
-    Preconditions.checkNotNull(handler);
-    return handler.decoder().flowController()
-        .initialWindowSize(handler.connection().connectionStream());
+    return serverHandler.flowControlPing().initialConnectionWindow();
   }
 }

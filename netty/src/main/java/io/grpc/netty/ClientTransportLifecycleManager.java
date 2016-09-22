@@ -39,7 +39,7 @@ final class ClientTransportLifecycleManager {
   private final ManagedClientTransport.Listener listener;
   private boolean transportReady;
   private boolean transportShutdown;
-  private boolean transportInUse;
+  private int transportUsers;
   /** null iff !transportShutdown. */
   private Status shutdownStatus;
   /** null iff !transportShutdown. */
@@ -68,12 +68,23 @@ final class ClientTransportLifecycleManager {
     listener.transportShutdown(s);
   }
 
-  public void notifyInUse(boolean inUse) {
-    if (inUse == transportInUse) {
-      return;
+  public void notifyNewUser() {
+    transportUsers++;
+    if (transportUsers == 1) {
+      listener.transportInUse(true);
     }
-    transportInUse = inUse;
-    listener.transportInUse(inUse);
+  }
+
+  public void notifyLostUser() {
+    transportUsers--;
+
+    if (transportUsers < 0) {
+      throw new AssertionError();
+    }
+
+    if (transportUsers == 0) {
+      listener.transportInUse(false);
+    }
   }
 
   public void notifyTerminated(Status s) {

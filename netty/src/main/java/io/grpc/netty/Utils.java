@@ -50,6 +50,7 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
+import io.netty.handler.codec.http2.Http2Stream2Exception;
 import io.netty.util.AsciiString;
 import io.netty.util.concurrent.DefaultThreadFactory;
 
@@ -164,7 +165,7 @@ class Utils {
     if (t instanceof IOException) {
       return Status.UNAVAILABLE.withCause(t);
     }
-    if (t instanceof Http2Exception) {
+    if (t instanceof Http2Exception || t instanceof Http2Stream2Exception) {
       return Status.INTERNAL.withCause(t);
     }
     return s;

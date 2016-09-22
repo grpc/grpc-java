@@ -31,7 +31,8 @@
 
 package io.grpc.netty;
 
-import static io.netty.handler.codec.http2.DefaultHttp2LocalFlowController.DEFAULT_WINDOW_UPDATE_RATIO;
+import static io.netty.buffer.Unpooled.directBuffer;
+import static io.netty.buffer.Unpooled.unreleasableBuffer;
 import static io.netty.util.CharsetUtil.UTF_8;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -41,7 +42,6 @@ import com.google.common.base.Ticker;
 
 import io.grpc.Metadata;
 import io.grpc.Status;
-import io.grpc.StatusException;
 import io.grpc.internal.ClientTransport.PingCallback;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
@@ -55,29 +55,38 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
-import io.netty.handler.codec.http2.DefaultHttp2ConnectionDecoder;
-import io.netty.handler.codec.http2.DefaultHttp2ConnectionEncoder;
+import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
 import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
 import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
-import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
+import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
+import io.netty.handler.codec.http2.DefaultHttp2PingFrame;
+import io.netty.handler.codec.http2.DefaultHttp2ResetFrame;
+import io.netty.handler.codec.http2.DefaultHttp2WindowUpdateFrame;
 import io.netty.handler.codec.http2.Http2Connection;
-import io.netty.handler.codec.http2.Http2ConnectionAdapter;
-import io.netty.handler.codec.http2.Http2ConnectionDecoder;
+import io.netty.handler.codec.http2.Http2DataFrame;
 import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
-import io.netty.handler.codec.http2.Http2FrameAdapter;
+import io.netty.handler.codec.http2.Http2FrameCodecBuilder;
 import io.netty.handler.codec.http2.Http2FrameLogger;
 import io.netty.handler.codec.http2.Http2FrameReader;
 import io.netty.handler.codec.http2.Http2FrameWriter;
+import io.netty.handler.codec.http2.Http2GoAwayFrame;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2HeadersDecoder;
+import io.netty.handler.codec.http2.Http2HeadersFrame;
 import io.netty.handler.codec.http2.Http2InboundFrameLogger;
+import io.netty.handler.codec.http2.Http2NoMoreStreamIdsException;
 import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
+import io.netty.handler.codec.http2.Http2PingFrame;
+import io.netty.handler.codec.http2.Http2ResetFrame;
 import io.netty.handler.codec.http2.Http2Settings;
-import io.netty.handler.codec.http2.Http2Stream;
-import io.netty.handler.codec.http2.Http2StreamVisitor;
+import io.netty.handler.codec.http2.Http2SettingsFrame;
+import io.netty.handler.codec.http2.Http2Stream2;
+import io.netty.handler.codec.http2.Http2Stream2Exception;
+import io.netty.handler.codec.http2.Http2Stream2Visitor;
 import io.netty.handler.codec.http2.StreamBufferingEncoder;
 import io.netty.handler.logging.LogLevel;
+import io.netty.util.internal.PlatformDependent;
 
 import java.nio.channels.ClosedChannelException;
 import java.util.concurrent.Executor;
@@ -104,23 +113,41 @@ class NettyClientHandler extends AbstractNettyHandler {
           Status.UNAVAILABLE.withDescription("Stream IDs have been exhausted");
   private static final long USER_PING_PAYLOAD = 1111;
 
-  private final Http2Connection.PropertyKey streamKey;
+  private static final ByteBuf userPayloadBuf =
+      unreleasableBuffer(directBuffer(8).writeLong(USER_PING_PAYLOAD));
+
+  private final ChannelFutureListener onStreamClosedListener = new ChannelFutureListener() {
+    @Override
+    public void operationComplete(ChannelFuture future) throws Exception {
+      lifecycleManager.notifyLostUser();
+    }
+  };
+
   private final ClientTransportLifecycleManager lifecycleManager;
   private final Ticker ticker;
   private WriteQueue clientWriteQueue;
   private Http2Ping ping;
+  private boolean firstSettings = true;
 
   static NettyClientHandler newHandler(ClientTransportLifecycleManager lifecycleManager,
                                        int flowControlWindow, int maxHeaderListSize,
                                        Ticker ticker) {
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive");
-    Http2HeadersDecoder headersDecoder = new GrpcHttp2ClientHeadersDecoder(maxHeaderListSize);
+    Http2HeadersDecoder headersDecoder = new GrpcHttp2ClientHeadersDecoder();
+
+    try {
+      headersDecoder.configuration().headerTable().maxHeaderListSize(maxHeaderListSize);
+    } catch (Http2Exception e) {
+      PlatformDependent.throwException(e);
+    }
+
     Http2FrameReader frameReader = new DefaultHttp2FrameReader(headersDecoder);
     Http2FrameWriter frameWriter = new DefaultHttp2FrameWriter();
     Http2Connection connection = new DefaultHttp2Connection(false);
 
     return newHandler(
-        connection, frameReader, frameWriter, lifecycleManager, flowControlWindow, ticker);
+        connection, frameReader, frameWriter, lifecycleManager, flowControlWindow,
+        maxHeaderListSize, ticker);
   }
 
   @VisibleForTesting
@@ -129,6 +156,7 @@ class NettyClientHandler extends AbstractNettyHandler {
                                        Http2FrameWriter frameWriter,
                                        ClientTransportLifecycleManager lifecycleManager,
                                        int flowControlWindow,
+                                       int maxHeaderListSize,
                                        Ticker ticker) {
     Preconditions.checkNotNull(connection, "connection");
     Preconditions.checkNotNull(frameReader, "frameReader");
@@ -140,56 +168,29 @@ class NettyClientHandler extends AbstractNettyHandler {
     frameReader = new Http2InboundFrameLogger(frameReader, frameLogger);
     frameWriter = new Http2OutboundFrameLogger(frameWriter, frameLogger);
 
-    StreamBufferingEncoder encoder = new StreamBufferingEncoder(
-        new DefaultHttp2ConnectionEncoder(connection, frameWriter));
-
-    // Create the local flow controller configured to auto-refill the connection window.
-    connection.local().flowController(
-        new DefaultHttp2LocalFlowController(connection, DEFAULT_WINDOW_UPDATE_RATIO, true));
-
-    Http2ConnectionDecoder decoder = new DefaultHttp2ConnectionDecoder(connection, encoder,
-        frameReader);
-
     Http2Settings settings = new Http2Settings();
     settings.pushEnabled(false);
     settings.initialWindowSize(flowControlWindow);
     settings.maxConcurrentStreams(0);
+    settings.maxHeaderListSize(maxHeaderListSize);
 
-    return new NettyClientHandler(decoder, encoder, settings, lifecycleManager, ticker);
+    Http2FrameCodecBuilder frameCodecBuilder = Http2FrameCodecBuilder
+        .forClient()
+        .frameLogger(frameLogger)
+        .frameReader(frameReader)
+        .frameWriter(frameWriter)
+        .bufferOutgoingStreams(true)
+        .initialSettings(settings);
+
+    return new NettyClientHandler(frameCodecBuilder, flowControlWindow, lifecycleManager, ticker);
   }
 
-  private NettyClientHandler(Http2ConnectionDecoder decoder,
-                             StreamBufferingEncoder encoder, Http2Settings settings,
+  private NettyClientHandler(Http2FrameCodecBuilder frameCodecBuilder, int initalWindowSize,
                              ClientTransportLifecycleManager lifecycleManager,
                              Ticker ticker) {
-    super(decoder, encoder, settings);
+    super(frameCodecBuilder, initalWindowSize);
     this.lifecycleManager = lifecycleManager;
     this.ticker = ticker;
-
-    // Set the frame listener on the decoder.
-    decoder().frameListener(new FrameListener());
-
-    Http2Connection connection = encoder.connection();
-    streamKey = connection.newKey();
-
-    connection.addListener(new Http2ConnectionAdapter() {
-      @Override
-      public void onGoAwayReceived(int lastStreamId, long errorCode, ByteBuf debugData) {
-        goingAway(statusFromGoAway(errorCode, ByteBufUtil.getBytes(debugData)));
-      }
-
-      @Override
-      public void onStreamAdded(Http2Stream stream) {
-        NettyClientHandler.this.lifecycleManager.notifyInUse(true);
-      }
-
-      @Override
-      public void onStreamRemoved(Http2Stream stream) {
-        if (connection().numActiveStreams() == 0) {
-          NettyClientHandler.this.lifecycleManager.notifyInUse(false);
-        }
-      }
-    });
   }
 
   /**
@@ -235,39 +236,42 @@ class NettyClientHandler extends AbstractNettyHandler {
   /**
    * Returns the given processed bytes back to inbound flow control.
    */
-  void returnProcessedBytes(Http2Stream stream, int bytes) {
-    try {
-      decoder().flowController().consumeBytes(stream, bytes);
-    } catch (Http2Exception e) {
-      throw new RuntimeException(e);
-    }
+  void returnProcessedBytes(Http2Stream2 http2Stream, int bytes) {
+    ctx().write(new DefaultHttp2WindowUpdateFrame(bytes).stream(http2Stream));
   }
 
-  private void onHeadersRead(int streamId, Http2Headers headers, boolean endStream) {
-    NettyClientStream.TransportState stream = clientStream(requireHttp2Stream(streamId));
-    stream.transportHeadersReceived(headers, endStream);
+  private static NettyClientStream.TransportState requireTransportState(Http2Stream2 http2Stream) {
+    if (!(http2Stream.managedState() instanceof NettyClientStream.TransportState)) {
+      throw new IllegalStateException("Must never happen.");
+    }
+    return (NettyClientStream.TransportState) http2Stream.managedState();
+  }
+
+  /**
+   * Handler for an inbound HTTP/2 HEADERS frame.
+   */
+  private static void onHeadersRead(Http2HeadersFrame headers) {
+    NettyClientStream.TransportState transportState = requireTransportState(headers.stream());
+    transportState.transportHeadersReceived(headers.headers(), headers.endStream());
   }
 
   /**
    * Handler for an inbound HTTP/2 DATA frame.
    */
-  private void onDataRead(int streamId, ByteBuf data, int padding, boolean endOfStream) {
-    flowControlPing().onDataRead(data.readableBytes(), padding);
-    NettyClientStream.TransportState stream = clientStream(requireHttp2Stream(streamId));
-    stream.transportDataReceived(data, endOfStream);
+  private void onDataRead(Http2DataFrame data) {
+    flowControlPing().onDataRead(data.content().readableBytes(), data.padding());
+    NettyClientStream.TransportState transportState = requireTransportState(data.stream());
+    transportState.transportDataReceived(data.content(), data.endStream());
   }
-
 
   /**
    * Handler for an inbound HTTP/2 RST_STREAM frame, terminating a stream.
    */
-  private void onRstStreamRead(int streamId, long errorCode) {
-    NettyClientStream.TransportState stream = clientStream(connection().stream(streamId));
-    if (stream != null) {
-      Status status = GrpcUtil.Http2Error.statusForCode((int) errorCode)
-          .augmentDescription("Received Rst Stream");
-      stream.transportReportStatus(status, false /*stop delivery*/, new Metadata());
-    }
+  private static void onRstStreamRead(Http2ResetFrame reset) {
+    NettyClientStream.TransportState transportState = requireTransportState(reset.stream());
+    Status status = GrpcUtil.Http2Error.statusForCode((int) reset.errorCode())
+        .augmentDescription("Received Rst Stream");
+    transportState.transportReportStatus(status, false /*stop delivery*/, new Metadata());
   }
 
   @Override
@@ -289,10 +293,10 @@ class NettyClientHandler extends AbstractNettyHandler {
           Status.UNAVAILABLE.withDescription("Network closed for unknown reason"));
       cancelPing(lifecycleManager.getShutdownThrowable());
       // Report status to the application layer for any open streams
-      connection().forEachActiveStream(new Http2StreamVisitor() {
+      forEachActiveStream(new Http2Stream2Visitor() {
         @Override
-        public boolean visit(Http2Stream stream) throws Http2Exception {
-          NettyClientStream.TransportState clientStream = clientStream(stream);
+        public boolean visit(Http2Stream2 http2Stream) {
+          NettyClientStream .TransportState clientStream = requireTransportState(http2Stream);
           if (clientStream != null) {
             clientStream.transportReportStatus(
                 lifecycleManager.getShutdownStatus(), false, new Metadata());
@@ -307,34 +311,20 @@ class NettyClientHandler extends AbstractNettyHandler {
   }
 
   @Override
-  protected void onConnectionError(ChannelHandlerContext ctx, Throwable cause,
-      Http2Exception http2Ex) {
-    logger.log(Level.FINE, "Caught a connection error", cause);
-    lifecycleManager.notifyShutdown(Utils.statusFromThrowable(cause));
-    // Parent class will shut down the Channel
-    super.onConnectionError(ctx, cause, http2Ex);
-  }
+  public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+    if (cause instanceof Http2Stream2Exception) {
+      Http2Stream2Exception http2Exception = (Http2Stream2Exception) cause;
 
-  @Override
-  protected void onStreamError(ChannelHandlerContext ctx, Throwable cause,
-      Http2Exception.StreamException http2Ex) {
-    // Close the stream with a status that contains the cause.
-    NettyClientStream.TransportState stream = clientStream(connection().stream(http2Ex.streamId()));
-    if (stream != null) {
-      stream.transportReportStatus(Utils.statusFromThrowable(cause), false, new Metadata());
+      NettyClientStream.TransportState clientStream = (NettyClientStream.TransportState)
+          http2Exception.stream().managedState();
+      clientStream.transportReportStatus(Utils.statusFromThrowable(cause), false, new Metadata());
+      ctx.write(
+          new DefaultHttp2ResetFrame(http2Exception.error()).stream(http2Exception.stream()));
     } else {
-      logger.log(Level.FINE, "Stream error for unknown stream " + http2Ex.streamId(), cause);
+      logger.log(Level.FINE, "Caught a connection error", cause);
+      lifecycleManager.notifyShutdown(Utils.statusFromThrowable(cause));
+      close(ctx(), ctx().newPromise());
     }
-
-    // Delegate to the base class to send a RST_STREAM.
-    super.onStreamError(ctx, cause, http2Ex);
-  }
-
-  @Override
-  protected boolean isGracefulShutdownComplete() {
-    // Only allow graceful shutdown to complete after all pending streams have completed.
-    return super.isGracefulShutdownComplete()
-        && ((StreamBufferingEncoder) encoder()).numBufferedStreams() == 0;
   }
 
   /**
@@ -349,85 +339,74 @@ class NettyClientHandler extends AbstractNettyHandler {
       return;
     }
 
-    // Get the stream ID for the new stream.
-    final int streamId;
-    try {
-      streamId = incrementAndGetNextStreamId();
-    } catch (StatusException e) {
-      // Stream IDs have been exhausted for this connection. Fail the promise immediately.
-      promise.setFailure(e);
-
-      // Initiate a graceful shutdown if we haven't already.
-      if (!connection().goAwaySent()) {
-        logger.fine("Stream IDs have been exhausted for this connection. "
-                + "Initiating graceful shutdown of the connection.");
-        lifecycleManager.notifyShutdown(e.getStatus());
-        close(ctx(), ctx().newPromise());
-      }
-      return;
-    }
-
     final NettyClientStream.TransportState stream = command.stream();
+    final Http2Stream2 http2Stream = newStream();
+    stream.setHttp2Stream(http2Stream);
     final Http2Headers headers = command.headers();
-    stream.setId(streamId);
 
     // Create an intermediate promise so that we can intercept the failure reported back to the
     // application.
     ChannelPromise tempPromise = ctx().newPromise();
-    encoder().writeHeaders(ctx(), streamId, headers, 0, false, tempPromise)
-            .addListener(new ChannelFutureListener() {
-              @Override
-              public void operationComplete(ChannelFuture future) throws Exception {
-                if (future.isSuccess()) {
-                  // The http2Stream will be null in case a stream buffered in the encoder
-                  // was canceled via RST_STREAM.
-                  Http2Stream http2Stream = connection().stream(streamId);
-                  if (http2Stream != null) {
-                    http2Stream.setProperty(streamKey, stream);
-
-                    // Attach the client stream to the HTTP/2 stream object as user data.
-                    stream.setHttp2Stream(http2Stream);
-                  }
-                  // Otherwise, the stream has been cancelled and Netty is sending a
-                  // RST_STREAM frame which causes it to purge pending writes from the
-                  // flow-controller and delete the http2Stream. The stream listener has already
-                  // been notified of cancellation so there is nothing to do.
-
-                  // Just forward on the success status to the original promise.
-                  promise.setSuccess();
-                } else {
-                  final Throwable cause = future.cause();
-                  if (cause instanceof StreamBufferingEncoder.Http2GoAwayException) {
-                    StreamBufferingEncoder.Http2GoAwayException e =
-                        (StreamBufferingEncoder.Http2GoAwayException) cause;
-                    lifecycleManager.notifyShutdown(statusFromGoAway(e.errorCode(), e.debugData()));
-                    promise.setFailure(lifecycleManager.getShutdownThrowable());
-                  } else {
-                    promise.setFailure(cause);
-                  }
-                }
+    ctx().write(new DefaultHttp2HeadersFrame(headers).stream(http2Stream), tempPromise)
+        .addListener(new ChannelFutureListener() {
+          @Override
+          public void operationComplete(ChannelFuture future) throws Exception {
+            if (future.isSuccess()) {
+              // Stream might have been buffered and cancelled in the meantime.
+              if (!stream.isClosed()) {
+                lifecycleManager.notifyNewUser();
+                stream.onStreamActive();
+                http2Stream.closeFuture().addListener(onStreamClosedListener);
               }
-            });
+
+              // Just forward on the success status to the original promise.
+              promise.setSuccess();
+              return;
+            }
+
+            final Throwable cause = future.cause();
+
+            if (cause instanceof Http2NoMoreStreamIdsException) {
+              logger.fine("Stream IDs have been exhausted for this connection. "
+                  + "Initiating graceful shutdown of the connection.");
+              lifecycleManager.notifyShutdown(EXHAUSTED_STREAMS_STATUS);
+              promise.setFailure(lifecycleManager.getShutdownThrowable());
+              close(ctx(), ctx().newPromise());
+              return;
+            }
+
+            if (cause instanceof StreamBufferingEncoder.Http2GoAwayException) {
+              StreamBufferingEncoder.Http2GoAwayException e =
+                  (StreamBufferingEncoder.Http2GoAwayException) cause;
+              lifecycleManager.notifyShutdown(statusFromGoAway(e.errorCode(), e.debugData()));
+              promise.setFailure(lifecycleManager.getShutdownThrowable());
+              return;
+            }
+
+            promise.setFailure(cause);
+          }
+        });
   }
 
   /**
    * Cancels this stream.
    */
-  private void cancelStream(ChannelHandlerContext ctx, CancelClientStreamCommand cmd,
+  private static void cancelStream(ChannelHandlerContext ctx, CancelClientStreamCommand cmd,
       ChannelPromise promise) {
     NettyClientStream.TransportState stream = cmd.stream();
     stream.transportReportStatus(cmd.reason(), true, new Metadata());
-    encoder().writeRstStream(ctx, stream.id(), Http2Error.CANCEL.code(), promise);
+
+    ctx.write(new DefaultHttp2ResetFrame(Http2Error.CANCEL).stream(stream.http2Stream()), promise);
   }
 
   /**
    * Sends the given GRPC frame for the stream.
    */
-  private void sendGrpcFrame(ChannelHandlerContext ctx, SendGrpcFrameCommand cmd,
+  private static void sendGrpcFrame(ChannelHandlerContext ctx, SendGrpcFrameCommand cmd,
       ChannelPromise promise) {
-    // Call the base class to write the HTTP/2 DATA frame.
     // Note: no need to flush since this is handled by the outbound flow controller.
-    encoder().writeData(ctx, cmd.streamId(), cmd.content(), 0, cmd.endStream(), promise);
+    ctx.write(new DefaultHttp2DataFrame(cmd.content(), cmd.endStream())
+        .stream(cmd.clientTransportState().http2Stream()), promise);
   }
 
   /**
@@ -456,14 +435,11 @@ class NettyClientHandler extends AbstractNettyHandler {
     promise.setSuccess();
     promise = ctx().newPromise();
     // set outstanding operation
-    long data = USER_PING_PAYLOAD;
-    ByteBuf buffer = ctx.alloc().buffer(8);
-    buffer.writeLong(data);
     Stopwatch stopwatch = Stopwatch.createStarted(ticker);
-    ping = new Http2Ping(data, stopwatch);
+    ping = new Http2Ping(USER_PING_PAYLOAD, stopwatch);
     ping.addCallback(callback, executor);
     // and then write the ping
-    encoder().writePing(ctx, false, buffer, promise);
+    ctx.write(new DefaultHttp2PingFrame(userPayloadBuf.slice(), false), promise);
     ctx.flush();
     final Http2Ping finalPing = ping;
     promise.addListener(new ChannelFutureListener() {
@@ -501,38 +477,34 @@ class NettyClientHandler extends AbstractNettyHandler {
     lifecycleManager.notifyShutdown(
         Status.UNAVAILABLE.withDescription("Channel requested transport to shut down"));
     close(ctx, promise);
-    connection().forEachActiveStream(new Http2StreamVisitor() {
+    forEachActiveStream(new Http2Stream2Visitor() {
       @Override
-      public boolean visit(Http2Stream stream) throws Http2Exception {
-        NettyClientStream.TransportState clientStream = clientStream(stream);
-        if (clientStream != null) {
-          clientStream.transportReportStatus(msg.getStatus(), true, new Metadata());
-          resetStream(ctx, stream.id(), Http2Error.CANCEL.code(), ctx.newPromise());
-        }
-        stream.close();
+      public boolean visit(Http2Stream2 http2Stream) {
+        NettyClientStream.TransportState clientStream = requireTransportState(http2Stream);
+        clientStream.transportReportStatus(msg.getStatus(), true, new Metadata());
+        ctx.write(new DefaultHttp2ResetFrame(Http2Error.CANCEL).stream(http2Stream));
         return true;
       }
     });
   }
 
   /**
-   * Handler for a GOAWAY being either sent or received. Fails any streams created after the
-   * last known stream.
+   * Handler for a GOAWAY being received. Fails any streams created after the last known stream.
    */
-  private void goingAway(Status status) {
+  private void onGoAwayRead(Http2GoAwayFrame goAway) {
+    Status status = statusFromGoAway(goAway.errorCode(), ByteBufUtil.getBytes(goAway.content()));
     lifecycleManager.notifyShutdown(status);
     final Status goAwayStatus = lifecycleManager.getShutdownStatus();
-    final int lastKnownStream = connection().local().lastStreamKnownByPeer();
     try {
-      connection().forEachActiveStream(new Http2StreamVisitor() {
+      final int lastStreamId = goAway.lastStreamId();
+      forEachActiveStream(new Http2Stream2Visitor() {
         @Override
-        public boolean visit(Http2Stream stream) throws Http2Exception {
-          if (stream.id() > lastKnownStream) {
-            NettyClientStream.TransportState clientStream = clientStream(stream);
+        public boolean visit(Http2Stream2 http2Stream) {
+          if (http2Stream.id() > lastStreamId) {
+            NettyClientStream.TransportState clientStream = requireTransportState(http2Stream);
             if (clientStream != null) {
               clientStream.transportReportStatus(goAwayStatus, false, new Metadata());
             }
-            stream.close();
           }
           return true;
         }
@@ -549,7 +521,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     }
   }
 
-  private Status statusFromGoAway(long errorCode, byte[] debugData) {
+  private static Status statusFromGoAway(long errorCode, byte[] debugData) {
     Status status = GrpcUtil.Http2Error.statusForCode((int) errorCode)
         .augmentDescription("Received Goaway");
     if (debugData != null && debugData.length > 0) {
@@ -560,89 +532,54 @@ class NettyClientHandler extends AbstractNettyHandler {
     return status;
   }
 
-  /**
-   * Gets the client stream associated to the given HTTP/2 stream object.
-   */
-  private NettyClientStream.TransportState clientStream(Http2Stream stream) {
-    return stream == null ? null : (NettyClientStream.TransportState) stream.getProperty(streamKey);
-  }
-
-  private int incrementAndGetNextStreamId() throws StatusException {
-    int nextStreamId = connection().local().incrementAndGetNextStreamId();
-    if (nextStreamId < 0) {
-      logger.fine("Stream IDs have been exhausted for this connection. "
-              + "Initiating graceful shutdown of the connection.");
-      throw EXHAUSTED_STREAMS_STATUS.asException();
-    }
-    return nextStreamId;
-  }
-
-  private Http2Stream requireHttp2Stream(int streamId) {
-    Http2Stream stream = connection().stream(streamId);
-    if (stream == null) {
-      // This should never happen.
-      throw new AssertionError("Stream does not exist: " + streamId);
-    }
-    return stream;
-  }
-
-  private class FrameListener extends Http2FrameAdapter {
-    private boolean firstSettings = true;
-
-    @Override
-    public void onSettingsRead(ChannelHandlerContext ctx, Http2Settings settings) {
-      if (firstSettings) {
-        firstSettings = false;
-        lifecycleManager.notifyReady();
+  @Override
+  public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+    if (msg instanceof Http2HeadersFrame) {
+      onHeadersRead((Http2HeadersFrame) msg);
+    } else if (msg instanceof Http2DataFrame) {
+      onDataRead((Http2DataFrame) msg);
+    } else if (msg instanceof Http2ResetFrame) {
+      onRstStreamRead((Http2ResetFrame) msg);
+    } else if (msg instanceof Http2PingFrame) {
+      Http2PingFrame pingFrame = (Http2PingFrame) msg;
+      if (pingFrame.ack()) {
+        onPingAckRead(pingFrame.content());
       }
+    } else if (msg instanceof Http2SettingsFrame) {
+      onSettingsRead();
+    } else if (msg instanceof Http2GoAwayFrame) {
+      onGoAwayRead((Http2GoAwayFrame) msg);
     }
+    super.channelRead(ctx, msg);
+  }
 
-    @Override
-    public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding,
-        boolean endOfStream) throws Http2Exception {
-      NettyClientHandler.this.onDataRead(streamId, data, padding, endOfStream);
-      return padding;
+
+  private void onSettingsRead() {
+    if (firstSettings) {
+      firstSettings = false;
+      lifecycleManager.notifyReady();
     }
+  }
 
-    @Override
-    public void onHeadersRead(ChannelHandlerContext ctx,
-        int streamId,
-        Http2Headers headers,
-        int streamDependency,
-        short weight,
-        boolean exclusive,
-        int padding,
-        boolean endStream) throws Http2Exception {
-      NettyClientHandler.this.onHeadersRead(streamId, headers, endStream);
-    }
-
-    @Override
-    public void onRstStreamRead(ChannelHandlerContext ctx, int streamId, long errorCode)
-        throws Http2Exception {
-      NettyClientHandler.this.onRstStreamRead(streamId, errorCode);
-    }
-
-    @Override
-    public void onPingAckRead(ChannelHandlerContext ctx, ByteBuf data) throws Http2Exception {
-      Http2Ping p = ping;
-      if (data.getLong(data.readerIndex()) == flowControlPing().payload()) {
-        flowControlPing().updateWindow();
-        if (logger.isLoggable(Level.FINE)) {
-          logger.log(Level.FINE, String.format("Window: %d",
-              decoder().flowController().initialWindowSize(connection().connectionStream())));
-        }
-      } else if (p != null) {
-        long ackPayload = data.readLong();
-        if (p.payload() == ackPayload) {
-          p.complete();
-          ping = null;
-        } else {
-          logger.log(Level.WARNING, String.format(
-              "Received unexpected ping ack. Expecting %d, got %d", p.payload(), ackPayload));
-        }
+  private void onPingAckRead(ByteBuf data) {
+    Http2Ping p = ping;
+    if (data.getLong(data.readerIndex()) == flowControlPing().payload()) {
+      flowControlPing().updateWindow();
+      if (logger.isLoggable(Level.FINE)) {
+        logger.log(Level.FINE, String.format("Window: %d",
+            flowControlPing().initialConnectionWindow()));
+      }
+    } else if (p != null) {
+      long ackPayload = data.readLong();
+      if (p.payload() == ackPayload) {
+        p.complete();
+        ping = null;
       } else {
-        logger.warning("Received unexpected ping ack. No ping outstanding");
+        logger.log(Level.WARNING, String.format(
+            "Received unexpected ping ack. Expecting %d, got %d", p.payload(), ackPayload));
       }
+    } else {
+      logger.warning("Received unexpected ping ack. No ping outstanding");
     }
   }
 }

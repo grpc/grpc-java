@@ -31,7 +31,6 @@
 
 package io.grpc.netty;
 
-import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_HEADER_TABLE_SIZE;
 import static io.netty.util.AsciiString.of;
 import static org.junit.Assert.assertEquals;
 
@@ -68,9 +67,9 @@ public class GrpcHttp2HeadersDecoderTest {
 
   @Test
   public void decode_requestHeaders() throws Http2Exception {
-    Http2HeadersDecoder decoder = new GrpcHttp2ServerHeadersDecoder(8192);
+    Http2HeadersDecoder decoder = new GrpcHttp2ServerHeadersDecoder();
     Http2HeadersEncoder encoder =
-        new DefaultHttp2HeadersEncoder(DEFAULT_HEADER_TABLE_SIZE, NEVER_SENSITIVE);
+        new DefaultHttp2HeadersEncoder(NEVER_SENSITIVE);
 
     Http2Headers headers = new DefaultHttp2Headers(false);
     headers.add(of(":scheme"), of("https")).add(of(":method"), of("GET"))
@@ -79,7 +78,7 @@ public class GrpcHttp2HeadersDecoderTest {
     ByteBuf encodedHeaders = ReferenceCountUtil.releaseLater(Unpooled.buffer());
     encoder.encodeHeaders(headers, encodedHeaders);
 
-    Http2Headers decodedHeaders = decoder.decodeHeaders(encodedHeaders);
+    Http2Headers decodedHeaders = decoder.decodeHeaders(3, encodedHeaders);
     assertEquals(headers.get(of(":scheme")), decodedHeaders.scheme());
     assertEquals(headers.get(of(":method")), decodedHeaders.method());
     assertEquals(headers.get(of(":path")), decodedHeaders.path());
@@ -90,16 +89,16 @@ public class GrpcHttp2HeadersDecoderTest {
 
   @Test
   public void decode_responseHeaders() throws Http2Exception {
-    Http2HeadersDecoder decoder = new GrpcHttp2ClientHeadersDecoder(8192);
+    Http2HeadersDecoder decoder = new GrpcHttp2ClientHeadersDecoder();
     Http2HeadersEncoder encoder =
-        new DefaultHttp2HeadersEncoder(DEFAULT_HEADER_TABLE_SIZE, NEVER_SENSITIVE);
+        new DefaultHttp2HeadersEncoder(NEVER_SENSITIVE);
 
     Http2Headers headers = new DefaultHttp2Headers(false);
     headers.add(of(":status"), of("200")).add(of("custom"), of("header"));
     ByteBuf encodedHeaders = ReferenceCountUtil.releaseLater(Unpooled.buffer());
     encoder.encodeHeaders(headers, encodedHeaders);
 
-    Http2Headers decodedHeaders = decoder.decodeHeaders(encodedHeaders);
+    Http2Headers decodedHeaders = decoder.decodeHeaders(3, encodedHeaders);
     assertEquals(headers.get(of(":status")), decodedHeaders.get(of(":status")));
     assertEquals(headers.get(of("custom")), decodedHeaders.get(of("custom")));
     assertEquals(headers.size(), decodedHeaders.size());
