@@ -23,11 +23,13 @@ repositories {
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
 def grpcVersion = '1.1.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protobufVersion = '3.0.0'
 
 dependencies {
   compile "io.grpc:grpc-netty:${grpcVersion}"
   compile "io.grpc:grpc-protobuf:${grpcVersion}"
   compile "io.grpc:grpc-stub:${grpcVersion}"
+  compile "com.google.protobuf:protobuf-java:${protobufVersion}"
 }
 
 protobuf {
@@ -35,7 +37,7 @@ protobuf {
     // The version of protoc must match protobuf-java. If you don't depend on
     // protobuf-java directly, you will be transitively depending on the
     // protobuf-java version that grpc depends on.
-    artifact = 'com.google.protobuf:protoc:3.0.0'
+    artifact = "com.google.protobuf:protoc:${protobufVersion}"
   }
   plugins {
     grpc {
