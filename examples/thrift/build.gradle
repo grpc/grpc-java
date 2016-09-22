@@ -15,6 +15,7 @@ dependencies {
   compile "io.grpc:grpc-stub:${grpcVersion}"
   compile "io.grpc:grpc-thrift:${grpcVersion}"
   compile "io.grpc:grpc-netty:${grpcVersion}"
+  compile "org.apache.thrift:libthrift:0.9.3"
 }
 
 String generatedSourcePath = "${projectDir}/src/generated"
