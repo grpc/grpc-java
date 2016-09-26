@@ -187,7 +187,7 @@ public final class GrpcUtil {
     }
     if (httpStatusCode < 300) {
       // 2xx
-      return Status.OK;
+      return Status.UNKNOWN;
     }
     return Status.UNKNOWN;
   }
