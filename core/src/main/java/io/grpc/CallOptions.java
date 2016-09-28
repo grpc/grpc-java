@@ -38,6 +38,7 @@ import java.util.Arrays;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
+import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
@@ -87,6 +88,7 @@ public final class CallOptions {
    * TLS certificate.</em>
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1767")
+  @CheckReturnValue
   public CallOptions withAuthority(@Nullable String authority) {
     CallOptions newOptions = new CallOptions(this);
     newOptions.authority = authority;
@@ -97,6 +99,7 @@ public final class CallOptions {
    * Returns a new {@code CallOptions} with the given call credentials.
    */
   @ExperimentalApi("https//github.com/grpc/grpc-java/issues/1914")
+  @CheckReturnValue
   public CallOptions withCallCredentials(@Nullable CallCredentials credentials) {
     CallOptions newOptions = new CallOptions(this);
     newOptions.credentials = credentials;
@@ -108,6 +111,7 @@ public final class CallOptions {
    * {@link CompressorRegistry}.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
+  @CheckReturnValue
   public CallOptions withCompression(@Nullable String compressorName) {
     CallOptions newOptions = new CallOptions(this);
     newOptions.compressorName = compressorName;
@@ -122,6 +126,7 @@ public final class CallOptions {
    *
    * @param deadline the deadline or {@code null} for unsetting the deadline.
    */
+  @CheckReturnValue
   public CallOptions withDeadline(@Nullable Deadline deadline) {
     CallOptions newOptions = new CallOptions(this);
     newOptions.deadline = deadline;
@@ -140,6 +145,7 @@ public final class CallOptions {
    * @deprecated  Use {@link #withDeadline(Deadline)} instead.
    */
   @Deprecated
+  @CheckReturnValue
   public CallOptions withDeadlineNanoTime(@Nullable Long deadlineNanoTime) {
     Deadline deadline = deadlineNanoTime != null
         ? Deadline.after(deadlineNanoTime - System.nanoTime(), TimeUnit.NANOSECONDS)
@@ -151,6 +157,7 @@ public final class CallOptions {
    * Returns a new {@code CallOptions} with a deadline that is after the given {@code duration} from
    * now.
    */
+  @CheckReturnValue
   public CallOptions withDeadlineAfter(long duration, TimeUnit unit) {
     return withDeadline(Deadline.after(duration, unit));
   }
@@ -162,6 +169,7 @@ public final class CallOptions {
    * @deprecated  Use {@link #getDeadline()} instead.
    */
   @Deprecated
+  @CheckReturnValue
   public Long getDeadlineNanoTime() {
     if (getDeadline() == null) {
       return null;
@@ -173,6 +181,7 @@ public final class CallOptions {
    * Returns the deadline or {@code null} if the deadline is not set.
    */
   @Nullable
+  @CheckReturnValue
   public Deadline getDeadline() {
     return deadline;
   }
@@ -181,6 +190,7 @@ public final class CallOptions {
    * Returns a new {@code CallOptions} with attributes for affinity-based routing.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1766")
+  @CheckReturnValue
   public CallOptions withAffinity(Attributes affinity) {
     CallOptions newOptions = new CallOptions(this);
     newOptions.affinity = Preconditions.checkNotNull(affinity, "affinity");
@@ -193,6 +203,7 @@ public final class CallOptions {
    * is the default option for gRPC calls and 'wait for ready' is the opposite to it.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1915")
+  @CheckReturnValue
   public CallOptions withWaitForReady() {
     CallOptions newOptions = new CallOptions(this);
     newOptions.waitForReady = true;
@@ -204,6 +215,7 @@ public final class CallOptions {
    * This method should be rarely used because the default is without 'wait for ready'.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1915")
+  @CheckReturnValue
   public CallOptions withoutWaitForReady() {
     CallOptions newOptions = new CallOptions(this);
     newOptions.waitForReady = false;
@@ -214,6 +226,7 @@ public final class CallOptions {
    * Returns the attributes for affinity-based routing.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1766")
+  @CheckReturnValue
   public Attributes getAffinity() {
     return affinity;
   }
@@ -223,6 +236,7 @@ public final class CallOptions {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
   @Nullable
+  @CheckReturnValue
   public String getCompressor() {
     return compressorName;
   }
@@ -238,6 +252,7 @@ public final class CallOptions {
    */
   @Nullable
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1767")
+  @CheckReturnValue
   public String getAuthority() {
     return authority;
   }
@@ -247,6 +262,7 @@ public final class CallOptions {
    */
   @ExperimentalApi("https//github.com/grpc/grpc-java/issues/1914")
   @Nullable
+  @CheckReturnValue
   public CallCredentials getCredentials() {
     return credentials;
   }
@@ -255,6 +271,7 @@ public final class CallOptions {
    * Returns a new {@code CallOptions} with {@code executor} to be used instead of the default
    * executor specified with {@link ManagedChannelBuilder#executor}.
    */
+  @CheckReturnValue
   public CallOptions withExecutor(Executor executor) {
     CallOptions newOptions = new CallOptions(this);
     newOptions.executor = executor;
@@ -271,11 +288,13 @@ public final class CallOptions {
       this.defaultValue = defaultValue;
     }
 
+    @CheckReturnValue
     public T getDefault() {
       return defaultValue;
     }
 
     @Override
+    @CheckReturnValue
     public String toString() {
       return name;
     }
@@ -288,6 +307,7 @@ public final class CallOptions {
      * @param <T> Key type
      * @return Key object
      */
+    @CheckReturnValue
     public static <T> Key<T> of(String name, T defaultValue) {
       Preconditions.checkNotNull(name, "name");
       return new Key<T>(name, defaultValue);
@@ -301,6 +321,7 @@ public final class CallOptions {
    * @param value The option value.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1869")
+  @CheckReturnValue
   public <T> CallOptions withOption(Key<T> key, T value) {
     Preconditions.checkNotNull(key, "key");
     Preconditions.checkNotNull(value, "value");
@@ -334,6 +355,7 @@ public final class CallOptions {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1869")
   @SuppressWarnings("unchecked")
+  @CheckReturnValue
   public <T> T getOption(Key<T> key) {
     Preconditions.checkNotNull(key, "key");
     for (int i = 0; i < customOptions.length; i++) {
@@ -345,6 +367,7 @@ public final class CallOptions {
   }
 
   @Nullable
+  @CheckReturnValue
   public Executor getExecutor() {
     return executor;
   }
@@ -358,6 +381,7 @@ public final class CallOptions {
    * is the default option for gRPC calls and 'wait for ready' is the opposite to it.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1915")
+  @CheckReturnValue
   public boolean isWaitForReady() {
     return waitForReady;
   }
@@ -377,6 +401,7 @@ public final class CallOptions {
   }
 
   @Override
+  @CheckReturnValue
   public String toString() {
     MoreObjects.ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
     toStringHelper.add("deadline", deadline);

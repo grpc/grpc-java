@@ -44,6 +44,8 @@ import io.grpc.Status;
 
 import java.util.concurrent.atomic.AtomicReference;
 
+import javax.annotation.CheckReturnValue;
+
 /**
  * Utility functions for binding and receiving headers.
  */
@@ -59,6 +61,7 @@ public final class MetadataUtils {
    * @return an implementation of the stub with {@code extraHeaders} bound to each call.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1789")
+  @CheckReturnValue
   public static <T extends AbstractStub<T>> T attachHeaders(
       T stub,
       final Metadata extraHeaders) {
@@ -71,6 +74,7 @@ public final class MetadataUtils {
    * @param extraHeaders the headers to be passed by each call that is processed by the returned
    *                     interceptor
    */
+  @CheckReturnValue
   public static ClientInterceptor newAttachHeadersInterceptor(final Metadata extraHeaders) {
     return new ClientInterceptor() {
       @Override
@@ -99,6 +103,7 @@ public final class MetadataUtils {
    *         headers and trailers via {@code headersCapture} and {@code trailersCapture}.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1789")
+  @CheckReturnValue
   public static <T extends AbstractStub<T>> T captureMetadata(
       T stub,
       AtomicReference<Metadata> headersCapture,
@@ -114,6 +119,7 @@ public final class MetadataUtils {
    * @param trailersCapture to record the last received trailers
    * @return an implementation of the channel with captures installed.
    */
+  @CheckReturnValue
   public static ClientInterceptor newCaptureMetadataInterceptor(
       final AtomicReference<Metadata> headersCapture,
       final AtomicReference<Metadata> trailersCapture) {
