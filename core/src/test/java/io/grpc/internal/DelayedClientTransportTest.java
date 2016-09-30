@@ -50,7 +50,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
-import io.grpc.testing.FakeClock;
 
 import org.junit.After;
 import org.junit.Before;

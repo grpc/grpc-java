@@ -66,7 +66,6 @@ import io.grpc.TransportManager.InterimTransport;
 import io.grpc.TransportManager.OobTransportProvider;
 import io.grpc.TransportManager;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
-import io.grpc.testing.FakeClock;
 
 import org.junit.After;
 import org.junit.Before;

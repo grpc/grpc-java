@@ -78,7 +78,6 @@ import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.TransportManager;
-import io.grpc.testing.FakeClock;
 
 import org.junit.After;
 import org.junit.Before;

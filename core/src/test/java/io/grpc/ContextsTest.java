@@ -44,7 +44,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
-import io.grpc.testing.FakeClock;
+import io.grpc.internal.FakeClock;
 import io.grpc.testing.NoopServerCall;
 
 import org.junit.Test;

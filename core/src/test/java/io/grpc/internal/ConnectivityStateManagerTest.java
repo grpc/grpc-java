@@ -36,7 +36,6 @@ import static org.junit.Assert.assertEquals;
 import com.google.common.util.concurrent.MoreExecutors;
 
 import io.grpc.ConnectivityState;
-import io.grpc.testing.FakeClock;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;

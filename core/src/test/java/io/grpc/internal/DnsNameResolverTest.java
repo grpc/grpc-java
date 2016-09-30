@@ -47,7 +47,6 @@ import io.grpc.NameResolver;
 import io.grpc.ResolvedServerInfoGroup;
 import io.grpc.Status;
 import io.grpc.internal.SharedResourceHolder.Resource;
-import io.grpc.testing.FakeClock;
 
 import org.junit.After;
 import org.junit.Before;

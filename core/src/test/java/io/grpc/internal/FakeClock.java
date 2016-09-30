@@ -29,14 +29,12 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.testing;
+package io.grpc.internal;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.AbstractFuture;
-
-import io.grpc.ExperimentalApi;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -57,7 +55,6 @@ import java.util.concurrent.TimeUnit;
  * method to run all due tasks. {@link #forwardTime} and {@link #forwardMillis} call {@link
  * #runDueTasks} automatically.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/2317")
 public final class FakeClock {
 
   private final ScheduledExecutorService scheduledExecutorService = new ScheduledExecutorImpl();

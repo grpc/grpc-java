@@ -68,7 +68,6 @@ import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
-import io.grpc.testing.FakeClock;
 
 import org.junit.After;
 import org.junit.Before;
