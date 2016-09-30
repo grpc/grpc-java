@@ -68,6 +68,7 @@ import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
+import io.grpc.testing.FakeClock;
 
 import org.junit.After;
 import org.junit.Before;
@@ -107,7 +108,7 @@ public class ClientCallImplTest {
 
   private final FakeClock fakeClock = new FakeClock();
   private final ScheduledExecutorService deadlineCancellationExecutor =
-      fakeClock.scheduledExecutorService;
+      fakeClock.getScheduledExecutorService();
   private final DecompressorRegistry decompressorRegistry =
       DecompressorRegistry.getDefaultInstance().with(new Codec.Gzip(), true);
   private final MethodDescriptor<Void, Void> method = MethodDescriptor.create(

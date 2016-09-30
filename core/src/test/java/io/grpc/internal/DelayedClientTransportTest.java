@@ -50,6 +50,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
+import io.grpc.testing.FakeClock;
 
 import org.junit.After;
 import org.junit.Before;
@@ -97,7 +98,7 @@ public class DelayedClientTransportTest {
 
   private final FakeClock fakeExecutor = new FakeClock();
   private final DelayedClientTransport delayedTransport = new DelayedClientTransport(
-      fakeExecutor.scheduledExecutorService);
+      fakeExecutor.getScheduledExecutorService());
 
   @Before public void setUp() {
     MockitoAnnotations.initMocks(this);

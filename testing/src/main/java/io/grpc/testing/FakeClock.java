@@ -29,12 +29,14 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.internal;
+package io.grpc.testing;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.AbstractFuture;
+
+import io.grpc.ExperimentalApi;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -55,22 +57,26 @@ import java.util.concurrent.TimeUnit;
  * method to run all due tasks. {@link #forwardTime} and {@link #forwardMillis} call {@link
  * #runDueTasks} automatically.
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/2317")
 public final class FakeClock {
 
-  public final ScheduledExecutorService scheduledExecutorService = new ScheduledExecutorImpl();
-  final Ticker ticker = new Ticker() {
-      @Override public long read() {
-        return currentTimeNanos;
-      }
-    };
-
-  final Supplier<Stopwatch> stopwatchSupplier = new Supplier<Stopwatch>() {
-      @Override public Stopwatch get() {
-        return Stopwatch.createUnstarted(ticker);
-      }
-    };
-
+  private final ScheduledExecutorService scheduledExecutorService = new ScheduledExecutorImpl();
   private final PriorityQueue<ScheduledTask> tasks = new PriorityQueue<ScheduledTask>();
+
+  private final Ticker ticker =
+      new Ticker() {
+        @Override public long read() {
+          return currentTimeNanos;
+        }
+      };
+
+  private final Supplier<Stopwatch> stopwatchSupplier =
+      new Supplier<Stopwatch>() {
+        @Override public Stopwatch get() {
+          return Stopwatch.createUnstarted(ticker);
+        }
+      };
+
   private long currentTimeNanos;
 
   private class ScheduledTask extends AbstractFuture<Void> implements ScheduledFuture<Void> {
@@ -187,6 +193,21 @@ public final class FakeClock {
     @Override public void execute(Runnable command) {
       schedule(command, 0, TimeUnit.NANOSECONDS);
     }
+  }
+
+  /**
+   * Provides a partially implemented instance of {@link ScheduledExecutorService} that uses the
+   * fake clock ticker for testing.
+   */
+  public ScheduledExecutorService getScheduledExecutorService() {
+    return scheduledExecutorService;
+  }
+
+  /**
+   * Provides a stopwatch instance that uses the fake clock ticker.
+   */
+  public Supplier<Stopwatch> getStopwatchSupplier() {
+    return stopwatchSupplier;
   }
 
   /**

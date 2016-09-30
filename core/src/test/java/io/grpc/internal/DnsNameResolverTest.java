@@ -47,6 +47,7 @@ import io.grpc.NameResolver;
 import io.grpc.ResolvedServerInfoGroup;
 import io.grpc.Status;
 import io.grpc.internal.SharedResourceHolder.Resource;
+import io.grpc.testing.FakeClock;
 
 import org.junit.After;
 import org.junit.Before;
@@ -82,7 +83,7 @@ public class DnsNameResolverTest {
       new Resource<ScheduledExecutorService>() {
         @Override
         public ScheduledExecutorService create() {
-          return fakeClock.scheduledExecutorService;
+          return fakeClock.getScheduledExecutorService();
         }
 
         @Override
@@ -95,7 +96,7 @@ public class DnsNameResolverTest {
       new Resource<ExecutorService>() {
         @Override
         public ExecutorService create() {
-          return fakeExecutor.scheduledExecutorService;
+          return fakeExecutor.getScheduledExecutorService();
         }
 
         @Override
