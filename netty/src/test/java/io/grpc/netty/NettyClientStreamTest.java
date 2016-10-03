@@ -447,7 +447,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     return Utils.convertTrailers(trailers, true);
   }
 
-  class NettyClientStreamImpl extends NettyClientStream {
+  static class NettyClientStreamImpl extends NettyClientStream {
     NettyClientStreamImpl(MethodDescriptor<?, ?> method, Metadata headers, Channel channel,
         NettyClientHandler handler, int maxMessageSize, AsciiString authority, AsciiString scheme,
         AsciiString userAgent) {
