@@ -357,7 +357,7 @@ public final class ServerImpl extends io.grpc.Server {
       if (executor == directExecutor()) {
         wrappedExecutor = new SerializeReentrantCallsDirectExecutor();
       } else {
-        wrappedExecutor = new SerializingExecutor(executor);
+        wrappedExecutor = new SingleProducerSerializingExecutor(executor);
       }
 
       final JumpToApplicationThreadServerStreamListener jumpListener

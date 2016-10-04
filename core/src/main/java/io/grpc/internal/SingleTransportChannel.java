@@ -75,7 +75,7 @@ final class SingleTransportChannel extends Channel {
   public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
       MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
     return new ClientCallImpl<RequestT, ResponseT>(methodDescriptor,
-        new SerializingExecutor(executor), callOptions, transportProvider,
+        new SingleProducerSerializingExecutor(executor), callOptions, transportProvider,
         deadlineCancellationExecutor);
   }
 
