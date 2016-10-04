@@ -77,6 +77,7 @@ public final class StatsTraceContext {
     this.side = side;
     TagKey methodTagKey =
         side == Side.CLIENT ? RpcConstants.RPC_CLIENT_METHOD : RpcConstants.RPC_SERVER_METHOD;
+    // TODO(carl-mastrangelo): maybe cache TagValue in MethodDescriptor
     this.censusContext = parentContext.with(methodTagKey, new TagValue(fullMethodName));
     this.stopwatch = stopwatchSupplier.get().start();
     this.censusHeader = censusHeader;
