@@ -184,8 +184,9 @@ class NettyClientStream extends AbstractClientStream2 {
     private int id;
     private Http2Stream http2Stream;
 
-    public TransportState(NettyClientHandler handler, int maxMessageSize) {
-      super(maxMessageSize);
+    public TransportState(NettyClientHandler handler, int maxMessageSize,
+        StatsTraceContext statsTraceContext) {
+      super(maxMessageSize, statsTraceContext);
       this.handler = checkNotNull(handler, "handler");
     }
 

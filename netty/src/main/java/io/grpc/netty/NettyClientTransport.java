@@ -123,7 +123,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     Preconditions.checkNotNull(headers, "headers");
     Preconditions.checkNotNull(statsTraceContext, "statsTraceContext");
     return new NettyClientStream(
-        new NettyClientStream.TransportState(handler, maxMessageSize) {
+        new NettyClientStream.TransportState(handler, maxMessageSize, statsTraceContext) {
           @Override
           protected Status statusFromFailedFuture(ChannelFuture f) {
             return NettyClientTransport.this.statusFromFailedFuture(f);

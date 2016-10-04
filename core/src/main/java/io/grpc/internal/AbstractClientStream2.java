@@ -94,8 +94,9 @@ public abstract class AbstractClientStream2 extends AbstractStream2
    */
   private volatile boolean cancelled;
 
-  protected AbstractClientStream2(WritableBufferAllocator bufferAllocator) {
-    framer = new MessageFramer(this, bufferAllocator);
+  protected AbstractClientStream2(WritableBufferAllocator bufferAllocator,
+      StatsTraceContext statsTraceContext) {
+    framer = new MessageFramer(this, bufferAllocator, statsTraceContext);
   }
 
   /** {@inheritDoc} */
@@ -164,8 +165,8 @@ public abstract class AbstractClientStream2 extends AbstractStream2
      */
     private boolean statusReported;
 
-    protected TransportState(int maxMessageSize) {
-      super(maxMessageSize);
+    protected TransportState(int maxMessageSize, StatsTraceContext statsTraceContext) {
+      super(maxMessageSize, statsTraceContext);
     }
 
     @VisibleForTesting

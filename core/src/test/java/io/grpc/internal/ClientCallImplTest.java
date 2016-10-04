@@ -126,7 +126,7 @@ public class ClientCallImplTest {
       CensusTestUtils.EXTRA_TAG, new TagValue("extra-tag-value"));
   private final StatsTraceContext statsTraceContext = StatsTraceContext.newClientContextForTesting(
       method.getFullMethodName(), censusContextFactory, parentCensusContext,
-      fakeClock.stopwatchSupplier);
+      fakeClock.getStopwatchSupplier());
   private final CensusContext censusContext = censusContextFactory.contexts.poll();
 
   @Mock private ClientStreamListener streamListener;
