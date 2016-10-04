@@ -47,6 +47,7 @@ import io.grpc.Context;
 import java.nio.ByteBuffer;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nullable;
 
@@ -96,17 +97,35 @@ public class CensusTestUtils {
   private static final String NO_EXTRA_TAG_HEADER_VALUE_PREFIX = "noextratag";
 
   public static final class FakeCensusContextFactory extends CensusContextFactory {
-    public final BlockingQueue<MetricsRecord> records = new LinkedBlockingQueue<MetricsRecord>();
+    private BlockingQueue<MetricsRecord> records;
     public final BlockingQueue<FakeCensusContext> contexts =
         new LinkedBlockingQueue<FakeCensusContext>();
     private static final Context.Key<FakeCensusContext> CONTEXT_KEY =
         Context.key("fakeCensusContext");
-    private final FakeCensusContext defaultContext =
-        new FakeCensusContext(ImmutableMap.<TagKey, TagValue>of(), this);
+    private final FakeCensusContext defaultContext;
+
+    /**
+     * Constructor.
+     */
+    public FakeCensusContextFactory() {
+      rolloverRecords();
+      defaultContext = new FakeCensusContext(ImmutableMap.<TagKey, TagValue>of(), this);
+      // The records on the default context is not visible from pollRecord(), just like it's
+      // not visible from pollContextOrFail() either.
+      rolloverRecords();
+    }
 
     public CensusContext pollContextOrFail() {
       CensusContext cc = contexts.poll();
       return checkNotNull(cc);
+    }
+
+    public MetricsRecord pollRecord() {
+      return getCurrentRecordSink().poll();
+    }
+
+    public MetricsRecord pollRecord(long timeout, TimeUnit unit) throws InterruptedException {
+      return getCurrentRecordSink().poll(timeout, unit);
     }
 
     @Override
@@ -126,16 +145,31 @@ public class CensusTestUtils {
     public FakeCensusContext getDefault() {
       return defaultContext;
     }
+
+    /**
+     * Disconnect this factory with the contexts it has created so far.  The records from those
+     * contexts will not show up in {@link #pollRecord}.  Useful for isolating the records between
+     * test cases.
+     */
+    public synchronized void rolloverRecords() {
+      records = new LinkedBlockingQueue<MetricsRecord>();
+    }
+
+    private synchronized BlockingQueue<MetricsRecord> getCurrentRecordSink() {
+      return records;
+    }
   }
 
   public static class FakeCensusContext extends CensusContext {
     private final ImmutableMap<TagKey, TagValue> tags;
     private final FakeCensusContextFactory factory;
+    private final BlockingQueue<MetricsRecord> recordSink;
 
     private FakeCensusContext(ImmutableMap<TagKey, TagValue> tags,
         FakeCensusContextFactory factory) {
       this.tags = tags;
       this.factory = factory;
+      this.recordSink = factory.getCurrentRecordSink();
     }
 
     @Override
@@ -145,7 +179,7 @@ public class CensusTestUtils {
 
     @Override
     public CensusContext record(MetricMap metrics) {
-      factory.records.add(new MetricsRecord(tags, metrics));
+      recordSink.add(new MetricsRecord(tags, metrics));
       return this;
     }
 

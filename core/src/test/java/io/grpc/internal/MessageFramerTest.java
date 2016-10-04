@@ -389,7 +389,7 @@ public class MessageFramerTest {
 
   private void checkStats(long wireBytesSent, long uncompressedBytesSent) {
     statsTraceContext.callEnded(Status.OK);
-    MetricsRecord record = censusContextFactory.records.poll();
+    MetricsRecord record = censusContextFactory.pollRecord();
     assertEquals(0, record.getMetricAsLongOrFail(
             RpcConstants.RPC_SERVER_REQUEST_BYTES));
     assertEquals(0, record.getMetricAsLongOrFail(

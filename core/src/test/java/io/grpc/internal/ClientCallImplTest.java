@@ -825,7 +825,7 @@ public class ClientCallImplTest {
   }
 
   private void assertStatusInStats(Status.Code statusCode) {
-    CensusTestUtils.MetricsRecord record = censusContextFactory.records.poll();
+    CensusTestUtils.MetricsRecord record = censusContextFactory.pollRecord();
     assertNotNull(record);
     TagValue statusTag = record.tags.get(RpcConstants.RPC_STATUS);
     assertNotNull(statusTag);

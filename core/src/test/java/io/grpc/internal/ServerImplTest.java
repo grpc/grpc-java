@@ -357,7 +357,7 @@ public class ServerImplTest {
     assertEquals(Status.Code.UNIMPLEMENTED, status.getCode());
     assertEquals("Method not found: Waiter/nonexist", status.getDescription());
 
-    CensusTestUtils.MetricsRecord record = censusContextFactory.records.poll();
+    CensusTestUtils.MetricsRecord record = censusContextFactory.pollRecord();
     assertNotNull(record);
     TagValue methodTag = record.tags.get(RpcConstants.RPC_SERVER_METHOD);
     assertNotNull(methodTag);
@@ -456,7 +456,7 @@ public class ServerImplTest {
     verifyNoMoreInteractions(callListener);
 
     // Check stats
-    CensusTestUtils.MetricsRecord record = censusContextFactory.records.poll();
+    CensusTestUtils.MetricsRecord record = censusContextFactory.pollRecord();
     assertNotNull(record);
     TagValue methodTag = record.tags.get(RpcConstants.RPC_SERVER_METHOD);
     assertNotNull(methodTag);

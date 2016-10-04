@@ -180,8 +180,8 @@ public abstract class AbstractInteropTest {
     blockingStub = TestServiceGrpc.newBlockingStub(channel);
     asyncStub = TestServiceGrpc.newStub(channel);
     requestHeadersCapture.set(null);
-    clientCensusFactory.records.clear();
-    serverCensusFactory.records.clear();
+    clientCensusFactory.rolloverRecords();
+    serverCensusFactory.rolloverRecords();
   }
 
   /** Clean up. */
@@ -224,7 +224,6 @@ public abstract class AbstractInteropTest {
       assertMetrics("grpc.testing.TestService/UnaryCall", Status.Code.OK,
           Collections.singleton(request), Collections.singleton(goldenResponse));
     }
-    assertNoMoreMetrics();
   }
 
   @Test(timeout = 10000)
@@ -392,7 +391,6 @@ public abstract class AbstractInteropTest {
       getMetricsRecord(clientCensusFactory, "grpc.testing.TestService/StreamingInputCall",
           Status.Code.CANCELLED);
     }
-    assertNoMoreMetrics();
   }
 
   @Test(timeout = 10000)
@@ -426,7 +424,6 @@ public abstract class AbstractInteropTest {
     if (metricsExpected()) {
       assertMetrics("grpc.testing.TestService/FullDuplexCall", Status.Code.CANCELLED);
     }
-    assertNoMoreMetrics();
   }
 
   @Test(timeout = 10000)
@@ -468,7 +465,6 @@ public abstract class AbstractInteropTest {
       assertMetrics("grpc.testing.TestService/FullDuplexCall", Status.Code.OK, requests,
           recorder.getValues());
     }
-    assertNoMoreMetrics();
   }
 
   @Test(timeout = 10000)
@@ -766,7 +762,6 @@ public abstract class AbstractInteropTest {
       getMetricsRecord(clientCensusFactory, "grpc.testing.TestService/EmptyCall",
           Status.Code.DEADLINE_EXCEEDED);
     }
-    assertNoMoreMetrics();
 
     // warm up the channel
     blockingStub.emptyCall(Empty.getDefaultInstance());
@@ -783,7 +778,6 @@ public abstract class AbstractInteropTest {
       getMetricsRecord(clientCensusFactory, "grpc.testing.TestService/EmptyCall",
           Status.Code.DEADLINE_EXCEEDED);
     }
-    assertNoMoreMetrics();
   }
 
   protected int unaryPayloadLength() {
@@ -863,7 +857,6 @@ public abstract class AbstractInteropTest {
       assertMetrics("grpc.testing.UnimplementedService/UnimplementedCall",
           Status.Code.UNIMPLEMENTED);
     }
-    assertNoMoreMetrics();
   }
 
   /** Start a fullDuplexCall which the server will not respond, and verify the deadline expires. */
@@ -1137,13 +1130,8 @@ public abstract class AbstractInteropTest {
     getMetricsRecord(serverCensusFactory, methodName, status);
   }
 
-  private void assertNoMoreMetrics() {
-    assertEquals(0, clientCensusFactory.records.size());
-    assertEquals(0, serverCensusFactory.records.size());
-  }
-
   /**
-   * Poll the next client-side metrics record and check it against the provided method and status.
+   * Poll the next metrics record and check it against the provided method and status.
    */
   private MetricsRecord getMetricsRecord(FakeCensusContextFactory censusFactory,
       String methodName, Status.Code status) {
@@ -1151,7 +1139,7 @@ public abstract class AbstractInteropTest {
     // after the client receives the final status.  So we use a timeout.
     MetricsRecord record;
     try {
-      record = censusFactory.records.poll(1, TimeUnit.SECONDS);
+      record = censusFactory.pollRecord(1, TimeUnit.SECONDS);
     } catch (InterruptedException e) {
       throw new RuntimeException(e);
     }

@@ -393,7 +393,7 @@ public class MessageDeframerTest {
 
   private void checkStats(long wireBytesReceived, long uncompressedBytesReceived) {
     statsTraceContext.callEnded(Status.OK);
-    MetricsRecord record = censusContextFactory.records.poll();
+    MetricsRecord record = censusContextFactory.pollRecord();
     assertEquals(0, record.getMetricAsLongOrFail(
             RpcConstants.RPC_CLIENT_REQUEST_BYTES));
     assertEquals(0, record.getMetricAsLongOrFail(
