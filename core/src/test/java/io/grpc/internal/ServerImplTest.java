@@ -349,7 +349,7 @@ public class ServerImplTest {
     ServerStreamListener streamListener
         = transportListener.streamCreated(stream, "Waiter/nonexist", requestHeaders);
     assertNotNull(streamListener);
-    verify(stream).statsTraceContext();
+    verify(stream, atLeast(1)).statsTraceContext();
 
     executeBarrier(executor).await();
     verify(stream).close(statusCaptor.capture(), any(Metadata.class));
@@ -410,7 +410,7 @@ public class ServerImplTest {
     ServerStreamListener streamListener
         = transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
     assertNotNull(streamListener);
-    verify(stream).statsTraceContext();
+    verify(stream, atLeast(1)).statsTraceContext();
 
     executeBarrier(executor).await();
     ServerCall<String, Integer> call = callReference.get();
@@ -590,7 +590,7 @@ public class ServerImplTest {
     ServerStreamListener streamListener
         = transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
     assertNotNull(streamListener);
-    verify(stream).statsTraceContext();
+    verify(stream, atLeast(1)).statsTraceContext();
     verifyNoMoreInteractions(stream);
 
     barrier.await();
