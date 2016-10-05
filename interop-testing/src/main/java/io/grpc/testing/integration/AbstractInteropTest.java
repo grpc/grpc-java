@@ -388,8 +388,8 @@ public abstract class AbstractInteropTest {
         Status.fromThrowable(responseObserver.getError()).getCode());
 
     if (metricsExpected()) {
-      getMetricsRecord(clientCensusFactory, "grpc.testing.TestService/StreamingInputCall",
-          Status.Code.CANCELLED);
+      assertClientMetrics("grpc.testing.TestService/StreamingInputCall", Status.Code.CANCELLED);
+      // Do not check server-side metrics, because the status on the server side is undetermined.
     }
   }
 
@@ -712,7 +712,7 @@ public abstract class AbstractInteropTest {
     }
     if (metricsExpected()) {
       assertMetrics("grpc.testing.TestService/EmptyCall", Status.Code.OK);
-      getMetricsRecord(clientCensusFactory, "grpc.testing.TestService/StreamingOutputCall",
+      assertClientMetrics("grpc.testing.TestService/StreamingOutputCall",
           Status.Code.DEADLINE_EXCEEDED);
       // Do not check server-side metrics, because the status on the server side is undetermined.
     }
@@ -741,7 +741,7 @@ public abstract class AbstractInteropTest {
         Status.fromThrowable(recorder.getError()).getCode());
     if (metricsExpected()) {
       assertMetrics("grpc.testing.TestService/EmptyCall", Status.Code.OK);
-      getMetricsRecord(clientCensusFactory, "grpc.testing.TestService/StreamingOutputCall",
+      assertClientMetrics("grpc.testing.TestService/StreamingOutputCall",
           Status.Code.DEADLINE_EXCEEDED);
       // Do not check server-side metrics, because the status on the server side is undetermined.
     }
@@ -759,8 +759,7 @@ public abstract class AbstractInteropTest {
       assertEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus().getCode());
     }
     if (metricsExpected()) {
-      getMetricsRecord(clientCensusFactory, "grpc.testing.TestService/EmptyCall",
-          Status.Code.DEADLINE_EXCEEDED);
+      assertClientMetrics("grpc.testing.TestService/EmptyCall", Status.Code.DEADLINE_EXCEEDED);
     }
 
     // warm up the channel
@@ -775,8 +774,7 @@ public abstract class AbstractInteropTest {
     }
     if (metricsExpected()) {
       assertMetrics("grpc.testing.TestService/EmptyCall", Status.Code.OK);
-      getMetricsRecord(clientCensusFactory, "grpc.testing.TestService/EmptyCall",
-          Status.Code.DEADLINE_EXCEEDED);
+      assertClientMetrics("grpc.testing.TestService/EmptyCall", Status.Code.DEADLINE_EXCEEDED);
     }
   }
 
@@ -886,8 +884,7 @@ public abstract class AbstractInteropTest {
     verifyNoMoreInteractions(responseObserver);
 
     if (metricsExpected()) {
-      getMetricsRecord(clientCensusFactory, "grpc.testing.TestService/FullDuplexCall",
-          Status.Code.DEADLINE_EXCEEDED);
+      assertClientMetrics("grpc.testing.TestService/FullDuplexCall", Status.Code.DEADLINE_EXCEEDED);
       // Do not check server-side metrics, because the status on the server side is undetermined.
     }
   }
@@ -1112,49 +1109,83 @@ public abstract class AbstractInteropTest {
    * Poll the next metrics record and check it against the provided information, including the
    * message sizes.
    */
-  private void assertMetrics(String methodName, Status.Code status,
+  private void assertMetrics(String method, Status.Code status,
       Collection<? extends MessageLite> requests,
       Collection<? extends MessageLite> responses) {
-    checkMetrics(getMetricsRecord(clientCensusFactory, methodName, status), false, requests,
-        responses);
-    checkMetrics(getMetricsRecord(serverCensusFactory, methodName, status), true, requests,
-        responses);
+    assertClientMetrics(method, status, requests, responses);
+    assertServerMetrics(method, status, requests, responses);
   }
 
   /**
    * Poll the next metrics record and check it against the provided information, without checking
    * the message sizes.
    */
-  private void assertMetrics(String methodName, Status.Code status) {
-    getMetricsRecord(clientCensusFactory, methodName, status);
-    getMetricsRecord(serverCensusFactory, methodName, status);
+  private void assertMetrics(String method, Status.Code status) {
+    assertMetrics(method, status, null, null);
   }
 
-  /**
-   * Poll the next metrics record and check it against the provided method and status.
-   */
-  private MetricsRecord getMetricsRecord(FakeCensusContextFactory censusFactory,
-      String methodName, Status.Code status) {
-    // On the server, the stats is finalized in ServerStreamListener.closed(), which can be run
-    // after the client receives the final status.  So we use a timeout.
-    MetricsRecord record;
-    try {
-      record = censusFactory.pollRecord(1, TimeUnit.SECONDS);
-    } catch (InterruptedException e) {
-      throw new RuntimeException(e);
+  private void assertClientMetrics(String method, Status.Code status,
+      Collection<? extends MessageLite> requests, Collection<? extends MessageLite> responses) {
+    MetricsRecord clientRecord = clientCensusFactory.pollRecord();
+    assertNotNull("clientRecord is not null", clientRecord);
+    checkTags(clientRecord, false, method, status);
+    if (requests != null && responses != null) {
+      checkMetrics(clientRecord, false, requests, responses);
     }
-    assertNotNull("metrics recorded", record);
-    TagValue methodNameTag = record.tags.get(censusFactory == serverCensusFactory
-        ? RpcConstants.RPC_SERVER_METHOD : RpcConstants.RPC_CLIENT_METHOD);
+  }
+
+  private void assertClientMetrics(String method, Status.Code status) {
+    assertClientMetrics(method, status, null, null);
+  }
+
+  private void assertServerMetrics(String method, Status.Code status,
+      Collection<? extends MessageLite> requests, Collection<? extends MessageLite> responses) {
+    AssertionError checkFailure = null;
+    // Because the server doesn't restart between tests, it may still be processing the requests
+    // from the previous tests when a new test starts, thus the test may see metrics from previous
+    // tests.  The best we can do here is to exhaust all records and find one that matches the given
+    // conditions.
+    while (true) {
+      MetricsRecord serverRecord;
+      try {
+        // On the server, the stats is finalized in ServerStreamListener.closed(), which can be run
+        // after the client receives the final status.  So we use a timeout.
+        serverRecord = serverCensusFactory.pollRecord(1, TimeUnit.SECONDS);
+      } catch (InterruptedException e) {
+        throw new RuntimeException(e);
+      }
+      if (serverRecord == null) {
+        break;
+      }
+      try {
+        checkTags(serverRecord, true, method, status);
+        if (requests != null && responses != null) {
+          checkMetrics(serverRecord, true, requests, responses);
+        }
+        return;  // passed
+      } catch (AssertionError e) {
+        // May be the fallout from a previous test, continue trying
+        checkFailure = e;
+      }
+    }
+    if (checkFailure == null) {
+      throw new AssertionError("No record found");
+    }
+    throw checkFailure;
+  }
+
+  private static void checkTags(
+      MetricsRecord record, boolean server, String methodName, Status.Code status) {
+    TagValue methodNameTag = record.tags.get(
+        server ? RpcConstants.RPC_SERVER_METHOD : RpcConstants.RPC_CLIENT_METHOD);
     assertNotNull("method name tagged", methodNameTag);
-    assertEquals("method names match, server=" + server, methodName, methodNameTag.toString());
+    assertEquals("method names match", methodName, methodNameTag.toString());
     TagValue statusTag = record.tags.get(RpcConstants.RPC_STATUS);
     assertNotNull("status tagged", statusTag);
     assertEquals(status.toString(), statusTag.toString());
-    return record;
   }
 
-  private void checkMetrics(MetricsRecord record, boolean server,
+  private static void checkMetrics(MetricsRecord record, boolean server,
       Collection<? extends MessageLite> requests, Collection<? extends MessageLite> responses) {
     int uncompressedRequestsSize = 0;
     for (MessageLite request : requests) {
