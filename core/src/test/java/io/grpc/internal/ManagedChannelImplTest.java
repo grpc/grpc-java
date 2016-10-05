@@ -127,7 +127,7 @@ public class ManagedChannelImplTest {
   private final ResolvedServerInfo server = new ResolvedServerInfo(socketAddress, Attributes.EMPTY);
   private final FakeClock timer = new FakeClock();
   private final FakeClock executor = new FakeClock();
-  private final FakeCensusContextFactory censusContextFactory = new FakeCensusContextFactory();
+  private final FakeCensusContextFactory censusCtxFactory = new FakeCensusContextFactory();
   private SpyingLoadBalancerFactory loadBalancerFactory =
       new SpyingLoadBalancerFactory(PickFirstBalancerFactory.getInstance());
 
@@ -165,7 +165,7 @@ public class ManagedChannelImplTest {
         mockTransportFactory, DecompressorRegistry.getDefaultInstance(),
         CompressorRegistry.getDefaultInstance(), timerService, timer.getStopwatchSupplier(),
         ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE,
-        executor.getScheduledExecutorService(), userAgent, interceptors, censusContextFactory);
+        executor.getScheduledExecutorService(), userAgent, interceptors, censusCtxFactory);
     // Force-exit the initial idle-mode
     channel.exitIdleMode();
     // Will start NameResolver in the scheduled executor
@@ -257,7 +257,7 @@ public class ManagedChannelImplTest {
 
     verify(mockTransport).newStream(same(method), same(headers), same(CallOptions.DEFAULT),
         statsTraceCtxCaptor.capture());
-    assertEquals(censusContextFactory.pollContextOrFail(),
+    assertEquals(censusCtxFactory.pollContextOrFail(),
         statsTraceCtxCaptor.getValue().getCensusContext());
     verify(mockStream).start(streamListenerCaptor.capture());
     verify(mockStream).setCompressor(isA(Compressor.class));
@@ -273,7 +273,7 @@ public class ManagedChannelImplTest {
     call2.start(mockCallListener2, headers2);
     verify(mockTransport).newStream(same(method), same(headers2), same(CallOptions.DEFAULT),
         statsTraceCtxCaptor.capture());
-    assertEquals(censusContextFactory.pollContextOrFail(),
+    assertEquals(censusCtxFactory.pollContextOrFail(),
         statsTraceCtxCaptor.getValue().getCensusContext());
 
     verify(mockStream2).start(streamListenerCaptor.capture());

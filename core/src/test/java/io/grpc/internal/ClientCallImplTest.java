@@ -121,13 +121,13 @@ public class ClientCallImplTest {
       new TestMarshaller<Void>(),
       new TestMarshaller<Void>());
 
-  private final FakeCensusContextFactory censusContextFactory = new FakeCensusContextFactory();
-  private final CensusContext parentCensusContext = censusContextFactory.getDefault().with(
+  private final FakeCensusContextFactory censusCtxFactory = new FakeCensusContextFactory();
+  private final CensusContext parentCensusContext = censusCtxFactory.getDefault().with(
       CensusTestUtils.EXTRA_TAG, new TagValue("extra-tag-value"));
   private final StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContextForTesting(
-      method.getFullMethodName(), censusContextFactory, parentCensusContext,
+      method.getFullMethodName(), censusCtxFactory, parentCensusContext,
       fakeClock.getStopwatchSupplier());
-  private final CensusContext censusContext = censusContextFactory.contexts.poll();
+  private final CensusContext censusCtx = censusCtxFactory.contexts.poll();
 
   @Mock private ClientStreamListener streamListener;
   @Mock private ClientTransport clientTransport;
@@ -154,7 +154,7 @@ public class ClientCallImplTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    assertNotNull(censusContext);
+    assertNotNull(censusCtx);
     when(provider.get(any(CallOptions.class))).thenReturn(transport);
     when(transport.newStream(any(MethodDescriptor.class), any(Metadata.class),
             any(CallOptions.class), any(StatsTraceContext.class))).thenReturn(stream);
@@ -443,7 +443,7 @@ public class ClientCallImplTest {
   }
 
   @Test
-  public void prepareHeaders_censusContextAdded() {
+  public void prepareHeaders_censusCtxAdded() {
     Metadata m = new Metadata();
     ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, statsTraceCtx);
     assertEquals(parentCensusContext, m.get(statsTraceCtx.getCensusHeader()));
@@ -825,7 +825,7 @@ public class ClientCallImplTest {
   }
 
   private void assertStatusInStats(Status.Code statusCode) {
-    CensusTestUtils.MetricsRecord record = censusContextFactory.pollRecord();
+    CensusTestUtils.MetricsRecord record = censusCtxFactory.pollRecord();
     assertNotNull(record);
     TagValue statusTag = record.tags.get(RpcConstants.RPC_STATUS);
     assertNotNull(statusTag);

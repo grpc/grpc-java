@@ -92,10 +92,9 @@ public class ServerCallImplTest {
       MethodType.UNARY, "/service/method", new LongMarshaller(), new LongMarshaller());
 
   private final Metadata requestHeaders = new Metadata();
-  private final FakeCensusContextFactory censusContextFactory = new FakeCensusContextFactory();
+  private final FakeCensusContextFactory censusCtxFactory = new FakeCensusContextFactory();
   private final StatsTraceContext statsTraceCtx = StatsTraceContext.newServerContext(
-      method.getFullMethodName(), censusContextFactory, requestHeaders,
-      GrpcUtil.STOPWATCH_SUPPLIER);
+      method.getFullMethodName(), censusCtxFactory, requestHeaders, GrpcUtil.STOPWATCH_SUPPLIER);
 
   @Before
   public void setUp() {
@@ -316,7 +315,7 @@ public class ServerCallImplTest {
   }
 
   private void checkStats(Status.Code statusCode) {
-    CensusTestUtils.MetricsRecord record = censusContextFactory.pollRecord();
+    CensusTestUtils.MetricsRecord record = censusCtxFactory.pollRecord();
     assertNotNull(record);
     TagValue statusTag = record.tags.get(RpcConstants.RPC_STATUS);
     assertNotNull(statusTag);

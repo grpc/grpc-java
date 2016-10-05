@@ -81,11 +81,11 @@ public class MessageDeframerTest {
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private Listener listener = mock(Listener.class);
-  private final FakeCensusContextFactory censusContextFactory = new FakeCensusContextFactory();
+  private final FakeCensusContextFactory censusCtxFactory = new FakeCensusContextFactory();
   // MessageFramerTest tests with a server-side StatsTraceContext, so here we test with a
   // client-side StatsTraceContext.
   private StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(
-      "service/method", censusContextFactory, GrpcUtil.STOPWATCH_SUPPLIER);
+      "service/method", censusCtxFactory, GrpcUtil.STOPWATCH_SUPPLIER);
 
   private MessageDeframer deframer = new MessageDeframer(listener, Codec.Identity.NONE,
       DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx);
@@ -393,7 +393,7 @@ public class MessageDeframerTest {
 
   private void checkStats(long wireBytesReceived, long uncompressedBytesReceived) {
     statsTraceCtx.callEnded(Status.OK);
-    MetricsRecord record = censusContextFactory.pollRecord();
+    MetricsRecord record = censusCtxFactory.pollRecord();
     assertEquals(0, record.getMetricAsLongOrFail(
             RpcConstants.RPC_CLIENT_REQUEST_BYTES));
     assertEquals(0, record.getMetricAsLongOrFail(

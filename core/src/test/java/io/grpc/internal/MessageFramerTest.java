@@ -78,18 +78,18 @@ public class MessageFramerTest {
   private ArgumentCaptor<ByteWritableBuffer> frameCaptor;
   private BytesWritableBufferAllocator allocator =
       new BytesWritableBufferAllocator(1000, 1000);
-  private FakeCensusContextFactory censusContextFactory;
+  private FakeCensusContextFactory censusCtxFactory;
   private StatsTraceContext statsTraceCtx;
 
   /** Set up for test. */
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    censusContextFactory = new FakeCensusContextFactory();
+    censusCtxFactory = new FakeCensusContextFactory();
     // MessageDeframerTest tests with a client-side StatsTraceContext, so here we test with a
     // server-side StatsTraceContext.
     statsTraceCtx = StatsTraceContext.newServerContext(
-        "service/method", censusContextFactory, new Metadata(), GrpcUtil.STOPWATCH_SUPPLIER);
+        "service/method", censusCtxFactory, new Metadata(), GrpcUtil.STOPWATCH_SUPPLIER);
     framer = new MessageFramer(sink, allocator, statsTraceCtx);
   }
 
@@ -389,7 +389,7 @@ public class MessageFramerTest {
 
   private void checkStats(long wireBytesSent, long uncompressedBytesSent) {
     statsTraceCtx.callEnded(Status.OK);
-    MetricsRecord record = censusContextFactory.pollRecord();
+    MetricsRecord record = censusCtxFactory.pollRecord();
     assertEquals(0, record.getMetricAsLongOrFail(
             RpcConstants.RPC_SERVER_REQUEST_BYTES));
     assertEquals(0, record.getMetricAsLongOrFail(
