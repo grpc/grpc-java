@@ -67,7 +67,7 @@ public interface ClientTransport {
   ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
       StatsTraceContext statsTraceContext);
 
-  // TODO(zdapeng): Remove tow-argument version in favor of four-argument overload.
+  // TODO(zdapeng): Remove two-argument version in favor of four-argument overload.
   ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers);
 
   /**

@@ -556,8 +556,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
           statsTraceContext,
           transportProvider,
           scheduledExecutor)
-          .setDecompressorRegistry(decompressorRegistry)
-          .setCompressorRegistry(compressorRegistry);
+              .setDecompressorRegistry(decompressorRegistry)
+              .setCompressorRegistry(compressorRegistry);
     }
 
     @Override

@@ -145,7 +145,12 @@ public final class StatsTraceContext {
     return Metadata.Key.of("grpc-census-bin", new Metadata.BinaryMarshaller<CensusContext>() {
         @Override
         public byte[] toBytes(CensusContext context) {
-          return context.serialize().array();
+          ByteBuffer buffer = context.serialize();
+          // TODO(carl-mastrangelo): currently we only make sure the correctness. We may need to
+          // optimize out the allocation and copy in the future.
+          byte[] bytes = new byte[buffer.remaining()];
+          buffer.get(bytes);
+          return bytes;
         }
 
         @Override
@@ -159,6 +164,7 @@ public final class StatsTraceContext {
    * Record the outgoing number of payload bytes as on the wire.
    */
   void wireBytesSent(long bytes) {
+    // TODO(zhangkun83): maybe change of the checkState() to assert after this class is stabilized.
     checkState(!callEnded, "already eneded");
     wireBytesSent += bytes;
   }

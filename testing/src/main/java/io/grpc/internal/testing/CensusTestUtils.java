@@ -157,6 +157,7 @@ public class CensusTestUtils {
      * contexts will not show up in {@link #pollRecord}.  Useful for isolating the records between
      * test cases.
      */
+    // This needs to be synchronized with getCurrentRecordSink() which may run concurrently.
     public synchronized void rolloverRecords() {
       records = new LinkedBlockingQueue<MetricsRecord>();
     }

@@ -40,7 +40,7 @@ import com.google.census.TagValue;
 import java.nio.ByteBuffer;
 
 public final class NoopCensusContextFactory extends CensusContextFactory {
-  private static final ByteBuffer SERIALIZED_BYTES = ByteBuffer.allocate(0);
+  private static final ByteBuffer SERIALIZED_BYTES = ByteBuffer.allocate(0).asReadOnlyBuffer();
   private static final CensusContext DEFAULT_CONTEXT = new NoopCensusContext();
   private static final CensusContext.Builder BUILDER = new NoopContextBuilder();
 
