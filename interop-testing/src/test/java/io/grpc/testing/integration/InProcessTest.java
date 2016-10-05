@@ -31,8 +31,6 @@
 
 package io.grpc.testing.integration;
 
-import com.google.census.CensusContextFactory;
-
 import io.grpc.ManagedChannel;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
@@ -59,8 +57,9 @@ public class InProcessTest extends AbstractInteropTest {
   }
 
   @Override
-  protected ManagedChannel createChannel(CensusContextFactory censusFactory) {
-    return InProcessChannelBuilder.forName(serverName).censusContextFactory(censusFactory).build();
+  protected ManagedChannel createChannel() {
+    return InProcessChannelBuilder.forName(serverName)
+        .censusContextFactory(getClientCensusFactory()).build();
   }
 
   @Override

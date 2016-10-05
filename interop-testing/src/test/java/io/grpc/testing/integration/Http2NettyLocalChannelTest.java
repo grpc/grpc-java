@@ -31,8 +31,6 @@
 
 package io.grpc.testing.integration;
 
-import com.google.census.CensusContextFactory;
-
 import io.grpc.ManagedChannel;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
@@ -70,14 +68,14 @@ public class Http2NettyLocalChannelTest extends AbstractInteropTest {
   }
 
   @Override
-  protected ManagedChannel createChannel(CensusContextFactory censusFactory) {
+  protected ManagedChannel createChannel() {
     return NettyChannelBuilder
         .forAddress(new LocalAddress("in-process-1"))
         .negotiationType(NegotiationType.PLAINTEXT)
         .channelType(LocalChannel.class)
         .flowControlWindow(65 * 1024)
         .maxMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
-        .censusContextFactory(censusFactory)
+        .censusContextFactory(getClientCensusFactory())
         .build();
   }
 }

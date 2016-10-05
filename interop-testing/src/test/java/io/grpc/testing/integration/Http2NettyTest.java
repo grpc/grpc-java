@@ -31,8 +31,6 @@
 
 package io.grpc.testing.integration;
 
-import com.google.census.CensusContextFactory;
-
 import io.grpc.ManagedChannel;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyChannelBuilder;
@@ -81,7 +79,7 @@ public class Http2NettyTest extends AbstractInteropTest {
   }
 
   @Override
-  protected ManagedChannel createChannel(CensusContextFactory censusFactory) {
+  protected ManagedChannel createChannel() {
     try {
       return NettyChannelBuilder
           .forAddress(TestUtils.testServerAddress(getPort()))
@@ -94,7 +92,7 @@ public class Http2NettyTest extends AbstractInteropTest {
               .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
               .sslProvider(SslProvider.OPENSSL)
               .build())
-          .censusContextFactory(censusFactory)
+          .censusContextFactory(getClientCensusFactory())
           .build();
     } catch (Exception ex) {
       throw new RuntimeException(ex);

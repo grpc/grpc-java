@@ -176,7 +176,7 @@ public abstract class AbstractInteropTest {
    */
   @Before
   public void setUp() {
-    channel = createChannel(clientCensusFactory);
+    channel = createChannel();
     blockingStub = TestServiceGrpc.newBlockingStub(channel);
     asyncStub = TestServiceGrpc.newStub(channel);
     requestHeadersCapture.set(null);
@@ -192,7 +192,11 @@ public abstract class AbstractInteropTest {
     }
   }
 
-  protected abstract ManagedChannel createChannel(CensusContextFactory censusFactory);
+  protected abstract ManagedChannel createChannel();
+
+  protected final CensusContextFactory getClientCensusFactory() {
+    return clientCensusFactory;
+  }
 
   protected boolean metricsExpected() {
     return true;

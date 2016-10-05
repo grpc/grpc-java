@@ -37,7 +37,6 @@ import static java.util.Collections.singletonList;
 import static java.util.concurrent.Executors.newFixedThreadPool;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
-import com.google.census.CensusContextFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
@@ -475,7 +474,7 @@ public class StressTestClient {
 
     class Tester extends AbstractInteropTest {
       @Override
-      protected ManagedChannel createChannel(CensusContextFactory censusFactory) {
+      protected ManagedChannel createChannel() {
         return Worker.this.channel;
       }
 

@@ -31,8 +31,6 @@
 
 package io.grpc.testing.integration;
 
-import com.google.census.CensusContextFactory;
-
 import io.grpc.ManagedChannel;
 import io.grpc.netty.HandlerSettings;
 import io.grpc.netty.NegotiationType;
@@ -61,11 +59,11 @@ public class AutoWindowSizingOnTest extends AbstractInteropTest {
   }
 
   @Override
-  protected ManagedChannel createChannel(CensusContextFactory censusFactory) {
+  protected ManagedChannel createChannel() {
     return NettyChannelBuilder.forAddress("localhost", getPort())
         .negotiationType(NegotiationType.PLAINTEXT)
         .maxMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
-        .censusContextFactory(censusFactory)
+        .censusContextFactory(getClientCensusFactory())
         .build();
   }
 }
