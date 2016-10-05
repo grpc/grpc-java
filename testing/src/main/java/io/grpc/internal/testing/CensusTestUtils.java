@@ -96,6 +96,12 @@ public class CensusTestUtils {
   private static final String EXTRA_TAG_HEADER_VALUE_PREFIX = "extratag:";
   private static final String NO_EXTRA_TAG_HEADER_VALUE_PREFIX = "noextratag";
 
+  /**
+   * A factory that makes fake {@link CensusContext}s and saves the created contexts to be
+   * accessible from {@link #pollContextOrFail}.  The contexts it has created would save metrics
+   * records to be accessible from {@link #pollRecord()} and {@link #pollRecord(long, TimeUnit)},
+   * until {@link #rolloverRecords} is called.
+   */
   public static final class FakeCensusContextFactory extends CensusContextFactory {
     private BlockingQueue<MetricsRecord> records;
     public final BlockingQueue<FakeCensusContext> contexts =
