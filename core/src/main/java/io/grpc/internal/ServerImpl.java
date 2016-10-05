@@ -365,10 +365,10 @@ public final class ServerImpl extends io.grpc.Server {
     public ServerStreamListener streamCreated(final ServerStream stream, final String methodName,
         final Metadata headers) {
 
-      final StatsTraceContext statsTraceContext = Preconditions.checkNotNull(
-          stream.statsTraceContext(), "statsTraceContext not present from stream");
+      final StatsTraceContext statsTraceCtx = Preconditions.checkNotNull(
+          stream.statsTraceContext(), "statsTraceCtx not present from stream");
 
-      final Context.CancellableContext context = createContext(stream, headers, statsTraceContext);
+      final Context.CancellableContext context = createContext(stream, headers, statsTraceCtx);
       final Executor wrappedExecutor;
       // This is a performance optimization that avoids the synchronization and queuing overhead
       // that comes with SerializingExecutor.
@@ -399,7 +399,7 @@ public final class ServerImpl extends io.grpc.Server {
                 // TODO(zhangkun83): this would allow a misbehaving client to blow up the server
                 // in-memory stats storage by sending large number of distinct unimplemented method
                 // names. (https://github.com/grpc/grpc-java/issues/2285)
-                statsTraceContext.callEnded(status);
+                statsTraceCtx.callEnded(status);
                 context.cancel(null);
                 return;
               }
@@ -421,7 +421,7 @@ public final class ServerImpl extends io.grpc.Server {
     }
 
     private Context.CancellableContext createContext(
-        final ServerStream stream, Metadata headers, StatsTraceContext statsTraceContext) {
+        final ServerStream stream, Metadata headers, StatsTraceContext statsTraceCtx) {
       Long timeoutNanos = headers.get(TIMEOUT_KEY);
 
       // TODO(zhangkun83): attach the CensusContext from StatsTraceContext to baseContext

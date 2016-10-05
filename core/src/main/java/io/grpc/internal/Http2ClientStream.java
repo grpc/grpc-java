@@ -82,8 +82,8 @@ public abstract class Http2ClientStream extends AbstractClientStream {
   private boolean contentTypeChecked;
 
   protected Http2ClientStream(WritableBufferAllocator bufferAllocator, int maxMessageSize,
-      StatsTraceContext statsTraceContext) {
-    super(bufferAllocator, maxMessageSize, statsTraceContext);
+      StatsTraceContext statsTraceCtx) {
+    super(bufferAllocator, maxMessageSize, statsTraceCtx);
   }
 
   /**

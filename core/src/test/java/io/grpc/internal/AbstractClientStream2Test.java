@@ -63,7 +63,7 @@ public class AbstractClientStream2Test {
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
-  private final StatsTraceContext statsTraceContext = StatsTraceContext.NOOP;
+  private final StatsTraceContext statsTraceCtx = StatsTraceContext.NOOP;
   @Mock private ClientStreamListener mockListener;
   @Captor private ArgumentCaptor<Status> statusCaptor;
 
@@ -83,7 +83,7 @@ public class AbstractClientStream2Test {
   public void cancel_doNotAcceptOk() {
     for (Code code : Code.values()) {
       ClientStreamListener listener = new NoopClientStreamListener();
-      AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceContext);
+      AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
       stream.start(listener);
       if (code != Code.OK) {
         stream.cancel(Status.fromCodeValue(code.value()));
@@ -101,7 +101,7 @@ public class AbstractClientStream2Test {
   @Test
   public void cancel_failsOnNull() {
     ClientStreamListener listener = new NoopClientStreamListener();
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceContext);
+    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(listener);
     thrown.expect(NullPointerException.class);
 
@@ -110,14 +110,14 @@ public class AbstractClientStream2Test {
 
   @Test
   public void cancel_notifiesOnlyOnce() {
-    final BaseTransportState state = new BaseTransportState(statsTraceContext);
+    final BaseTransportState state = new BaseTransportState(statsTraceCtx);
     AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, state, new BaseSink() {
       @Override
       public void cancel(Status errorStatus) {
         // Cancel should eventually result in a transportReportStatus on the transport thread
         state.transportReportStatus(errorStatus, true/*stop delivery*/, new Metadata());
       }
-      }, statsTraceContext);
+      }, statsTraceCtx);
     stream.start(mockListener);
 
     stream.cancel(Status.DEADLINE_EXCEEDED);
@@ -128,7 +128,7 @@ public class AbstractClientStream2Test {
 
   @Test
   public void startFailsOnNullListener() {
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceContext);
+    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
 
     thrown.expect(NullPointerException.class);
 
@@ -137,7 +137,7 @@ public class AbstractClientStream2Test {
 
   @Test
   public void cantCallStartTwice() {
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceContext);
+    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(mockListener);
     thrown.expect(IllegalStateException.class);
 
@@ -147,7 +147,7 @@ public class AbstractClientStream2Test {
   @Test
   public void inboundDataReceived_failsOnNullFrame() {
     ClientStreamListener listener = new NoopClientStreamListener();
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceContext);
+    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(listener);
     thrown.expect(NullPointerException.class);
 
@@ -156,7 +156,7 @@ public class AbstractClientStream2Test {
 
   @Test
   public void inboundDataReceived_failsOnNoHeaders() {
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceContext);
+    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(mockListener);
 
     stream.transportState().inboundDataReceived(ReadableBuffers.empty());
@@ -167,7 +167,7 @@ public class AbstractClientStream2Test {
 
   @Test
   public void inboundHeadersReceived_notifiesListener() {
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceContext);
+    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(mockListener);
     Metadata headers = new Metadata();
 
@@ -177,7 +177,7 @@ public class AbstractClientStream2Test {
 
   @Test
   public void inboundHeadersReceived_failsIfStatusReported() {
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceContext);
+    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(mockListener);
     stream.transportState().transportReportStatus(Status.CANCELLED, false, new Metadata());
 
@@ -187,7 +187,7 @@ public class AbstractClientStream2Test {
 
   @Test
   public void inboundHeadersReceived_acceptsGzipEncoding() {
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceContext);
+    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(mockListener);
     Metadata headers = new Metadata();
     headers.put(GrpcUtil.MESSAGE_ENCODING_KEY, new Codec.Gzip().getMessageEncoding());
@@ -198,7 +198,7 @@ public class AbstractClientStream2Test {
 
   @Test
   public void inboundHeadersReceived_acceptsIdentityEncoding() {
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceContext);
+    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(mockListener);
     Metadata headers = new Metadata();
     headers.put(GrpcUtil.MESSAGE_ENCODING_KEY, Codec.Identity.NONE.getMessageEncoding());
@@ -209,7 +209,7 @@ public class AbstractClientStream2Test {
 
   @Test
   public void rstStreamClosesStream() {
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceContext);
+    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(mockListener);
     // The application will call request when waiting for a message, which will in turn call this
     // on the transport thread.
@@ -231,13 +231,13 @@ public class AbstractClientStream2Test {
     private final Sink sink;
 
     public BaseAbstractClientStream(WritableBufferAllocator allocator,
-        StatsTraceContext statsTraceContext) {
-      this(allocator, new BaseTransportState(statsTraceContext), new BaseSink(), statsTraceContext);
+        StatsTraceContext statsTraceCtx) {
+      this(allocator, new BaseTransportState(statsTraceCtx), new BaseSink(), statsTraceCtx);
     }
 
     public BaseAbstractClientStream(WritableBufferAllocator allocator, TransportState state,
-        Sink sink, StatsTraceContext statsTraceContext) {
-      super(allocator, statsTraceContext);
+        Sink sink, StatsTraceContext statsTraceCtx) {
+      super(allocator, statsTraceCtx);
       this.state = state;
       this.sink = sink;
     }
@@ -268,8 +268,8 @@ public class AbstractClientStream2Test {
   }
 
   private static class BaseTransportState extends AbstractClientStream2.TransportState {
-    public BaseTransportState(StatsTraceContext statsTraceContext) {
-      super(DEFAULT_MAX_MESSAGE_SIZE, statsTraceContext);
+    public BaseTransportState(StatsTraceContext statsTraceCtx) {
+      super(DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx);
     }
 
     @Override

@@ -81,9 +81,8 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
   private Charset errorCharset = Charsets.UTF_8;
   private boolean contentTypeChecked;
 
-  protected Http2ClientStreamTransportState(int maxMessageSize,
-      StatsTraceContext statsTraceContext) {
-    super(maxMessageSize, statsTraceContext);
+  protected Http2ClientStreamTransportState(int maxMessageSize, StatsTraceContext statsTraceCtx) {
+    super(maxMessageSize, statsTraceCtx);
   }
 
   /**

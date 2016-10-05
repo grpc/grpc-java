@@ -62,7 +62,7 @@ public final class StatsTraceContext {
     CLIENT, SERVER
   }
 
-  private final CensusContext censusContext;
+  private final CensusContext censusCtx;
   private final Stopwatch stopwatch;
   private final Side side;
   private final Metadata.Key<CensusContext> censusHeader;
@@ -72,13 +72,13 @@ public final class StatsTraceContext {
   private long uncompressedBytesReceived;
   private boolean callEnded;
 
-  private StatsTraceContext(Side side, String fullMethodName, CensusContext parentContext,
+  private StatsTraceContext(Side side, String fullMethodName, CensusContext parentCtx,
       Supplier<Stopwatch> stopwatchSupplier, Metadata.Key<CensusContext> censusHeader) {
     this.side = side;
     TagKey methodTagKey =
         side == Side.CLIENT ? RpcConstants.RPC_CLIENT_METHOD : RpcConstants.RPC_SERVER_METHOD;
     // TODO(carl-mastrangelo): maybe cache TagValue in MethodDescriptor
-    this.censusContext = parentContext.with(methodTagKey, new TagValue(fullMethodName));
+    this.censusCtx = parentCtx.with(methodTagKey, new TagValue(fullMethodName));
     this.stopwatch = stopwatchSupplier.get().start();
     this.censusHeader = censusHeader;
   }
@@ -114,11 +114,11 @@ public final class StatsTraceContext {
       CensusContextFactory censusFactory, Metadata headers,
       Supplier<Stopwatch> stopwatchSupplier) {
     Metadata.Key<CensusContext> censusHeader = createCensusHeader(censusFactory);
-    CensusContext parentContext = headers.get(censusHeader);
-    if (parentContext == null) {
-      parentContext = censusFactory.getDefault();
+    CensusContext parentCtx = headers.get(censusHeader);
+    if (parentCtx == null) {
+      parentCtx = censusFactory.getDefault();
     }
-    return new StatsTraceContext(Side.SERVER, methodName, parentContext, stopwatchSupplier,
+    return new StatsTraceContext(Side.SERVER, methodName, parentCtx, stopwatchSupplier,
         censusHeader);
   }
 
@@ -127,7 +127,7 @@ public final class StatsTraceContext {
    */
   void propagateToHeaders(Metadata headers) {
     headers.discardAll(censusHeader);
-    headers.put(censusHeader, censusContext);
+    headers.put(censusHeader, censusCtx);
   }
 
   Metadata.Key<CensusContext> getCensusHeader() {
@@ -136,12 +136,12 @@ public final class StatsTraceContext {
 
   @VisibleForTesting
   CensusContext getCensusContext() {
-    return censusContext;
+    return censusCtx;
   }
 
   @VisibleForTesting
   static Metadata.Key<CensusContext> createCensusHeader(
-      final CensusContextFactory censusContextFactory) {
+      final CensusContextFactory censusCtxFactory) {
     return Metadata.Key.of("grpc-census-bin", new Metadata.BinaryMarshaller<CensusContext>() {
         @Override
         public byte[] toBytes(CensusContext context) {
@@ -155,7 +155,7 @@ public final class StatsTraceContext {
 
         @Override
         public CensusContext parseBytes(byte[] serialized) {
-          return censusContextFactory.deserialize(ByteBuffer.wrap(serialized));
+          return censusCtxFactory.deserialize(ByteBuffer.wrap(serialized));
         }
       });
   }
@@ -222,7 +222,7 @@ public final class StatsTraceContext {
       uncompressedBytesSentMetric = RpcConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES;
       uncompressedBytesReceivedMetric = RpcConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES;
     }
-    censusContext
+    censusCtx
         .with(RpcConstants.RPC_STATUS, new TagValue(status.getCode().toString()))
         .record(MetricMap.builder()
             .put(latencyMetric, stopwatch.elapsed(TimeUnit.MILLISECONDS))

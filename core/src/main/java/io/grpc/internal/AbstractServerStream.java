@@ -90,14 +90,14 @@ public abstract class AbstractServerStream extends AbstractStream2
   }
 
   private final MessageFramer framer;
-  private final StatsTraceContext statsTraceContext;
+  private final StatsTraceContext statsTraceCtx;
   private boolean outboundClosed;
   private boolean headersSent;
 
   protected AbstractServerStream(WritableBufferAllocator bufferAllocator,
-      StatsTraceContext statsTraceContext) {
-    this.statsTraceContext = Preconditions.checkNotNull(statsTraceContext, "statsTraceContext");
-    framer = new MessageFramer(this, bufferAllocator, statsTraceContext);
+      StatsTraceContext statsTraceCtx) {
+    this.statsTraceCtx = Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
+    framer = new MessageFramer(this, bufferAllocator, statsTraceCtx);
   }
 
   @Override
@@ -171,7 +171,7 @@ public abstract class AbstractServerStream extends AbstractStream2
 
   @Override
   public StatsTraceContext statsTraceContext() {
-    return statsTraceContext;
+    return statsTraceCtx;
   }
 
   /** This should only called from the transport thread. */
@@ -180,8 +180,8 @@ public abstract class AbstractServerStream extends AbstractStream2
     private boolean listenerClosed;
     private ServerStreamListener listener;
 
-    protected TransportState(int maxMessageSize, StatsTraceContext statsTraceContext) {
-      super(maxMessageSize, statsTraceContext);
+    protected TransportState(int maxMessageSize, StatsTraceContext statsTraceCtx) {
+      super(maxMessageSize, statsTraceCtx);
     }
 
     /**

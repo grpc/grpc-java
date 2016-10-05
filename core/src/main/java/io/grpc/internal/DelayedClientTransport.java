@@ -114,7 +114,7 @@ class DelayedClientTransport implements ManagedClientTransport {
    */
   @Override
   public ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers,
-      CallOptions callOptions, StatsTraceContext statsTraceContext) {
+      CallOptions callOptions, StatsTraceContext statsTraceCtx) {
     Supplier<ClientTransport> supplier = transportSupplier;
     if (supplier == null) {
       synchronized (lock) {
@@ -125,7 +125,7 @@ class DelayedClientTransport implements ManagedClientTransport {
             return new FailingClientStream(backoffStatus);
           }
           PendingStream pendingStream = new PendingStream(method, headers, callOptions,
-              statsTraceContext);
+              statsTraceCtx);
           pendingStreams.add(pendingStream);
           if (pendingStreams.size() == 1) {
             listener.transportInUse(true);
@@ -135,7 +135,7 @@ class DelayedClientTransport implements ManagedClientTransport {
       }
     }
     if (supplier != null) {
-      return supplier.get().newStream(method, headers, callOptions, statsTraceContext);
+      return supplier.get().newStream(method, headers, callOptions, statsTraceCtx);
     }
     return new FailingClientStream(Status.UNAVAILABLE.withDescription("transport shutdown"));
   }
@@ -383,22 +383,22 @@ class DelayedClientTransport implements ManagedClientTransport {
     private final Metadata headers;
     private final CallOptions callOptions;
     private final Context context;
-    private final StatsTraceContext statsTraceContext;
+    private final StatsTraceContext statsTraceCtx;
 
     private PendingStream(MethodDescriptor<?, ?> method, Metadata headers,
-        CallOptions callOptions, StatsTraceContext statsTraceContext) {
+        CallOptions callOptions, StatsTraceContext statsTraceCtx) {
       this.method = method;
       this.headers = headers;
       this.callOptions = callOptions;
       this.context = Context.current();
-      this.statsTraceContext = statsTraceContext;
+      this.statsTraceCtx = statsTraceCtx;
     }
 
     private void createRealStream(ClientTransport transport) {
       ClientStream realStream;
       Context origContext = context.attach();
       try {
-        realStream = transport.newStream(method, headers, callOptions, statsTraceContext);
+        realStream = transport.newStream(method, headers, callOptions, statsTraceCtx);
       } finally {
         context.detach(origContext);
       }

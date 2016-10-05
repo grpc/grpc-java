@@ -343,9 +343,9 @@ public class ServerImplTest {
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
     Metadata requestHeaders = new Metadata();
-    StatsTraceContext statsTraceContext =
+    StatsTraceContext statsTraceCtx =
         transportListener.methodDetermined("Waiter/nonexist", requestHeaders);
-    when(stream.statsTraceContext()).thenReturn(statsTraceContext);
+    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
     ServerStreamListener streamListener
         = transportListener.streamCreated(stream, "Waiter/nonexist", requestHeaders);
     assertNotNull(streamListener);
@@ -402,10 +402,10 @@ public class ServerImplTest {
     CensusContext censusContextOnClient = censusContextFactory.getDefault().with(
         CensusTestUtils.EXTRA_TAG, new TagValue("extraTagValue"));
     requestHeaders.put(censusHeaderKey, censusContextOnClient);
-    StatsTraceContext statsTraceContext =
+    StatsTraceContext statsTraceCtx =
         transportListener.methodDetermined("Waiter/serve", requestHeaders);
-    assertNotNull(statsTraceContext);
-    when(stream.statsTraceContext()).thenReturn(statsTraceContext);
+    assertNotNull(statsTraceCtx);
+    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
 
     ServerStreamListener streamListener
         = transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
@@ -582,10 +582,10 @@ public class ServerImplTest {
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
 
     Metadata requestHeaders = new Metadata();
-    StatsTraceContext statsTraceContext =
+    StatsTraceContext statsTraceCtx =
         transportListener.methodDetermined("Waiter/serve", requestHeaders);
-    assertNotNull(statsTraceContext);
-    when(stream.statsTraceContext()).thenReturn(statsTraceContext);
+    assertNotNull(statsTraceCtx);
+    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
 
     ServerStreamListener streamListener
         = transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
@@ -746,10 +746,10 @@ public class ServerImplTest {
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
 
     Metadata requestHeaders = new Metadata();
-    StatsTraceContext statsTraceContext =
+    StatsTraceContext statsTraceCtx =
         transportListener.methodDetermined("Waiter/serve", requestHeaders);
-    assertNotNull(statsTraceContext);
-    when(stream.statsTraceContext()).thenReturn(statsTraceContext);
+    assertNotNull(statsTraceCtx);
+    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
 
     ServerStreamListener streamListener
         = transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
@@ -803,10 +803,10 @@ public class ServerImplTest {
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
     Metadata requestHeaders = new Metadata();
-    StatsTraceContext statsTraceContext =
+    StatsTraceContext statsTraceCtx =
         transportListener.methodDetermined("Waiter/serve", requestHeaders);
-    assertNotNull(statsTraceContext);
-    when(stream.statsTraceContext()).thenReturn(statsTraceContext);
+    assertNotNull(statsTraceCtx);
+    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
     ServerStreamListener streamListener
         = transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
     assertNotNull(streamListener);
@@ -876,10 +876,10 @@ public class ServerImplTest {
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
     Metadata requestHeaders = new Metadata();
-    StatsTraceContext statsTraceContext =
+    StatsTraceContext statsTraceCtx =
         transportListener.methodDetermined("Waiter/serve", requestHeaders);
-    assertNotNull(statsTraceContext);
-    when(stream.statsTraceContext()).thenReturn(statsTraceContext);
+    assertNotNull(statsTraceCtx);
+    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
 
     // This call will be handled by callHandler from the internal registry
     transportListener.streamCreated(stream, "Service1/Method1", requestHeaders);

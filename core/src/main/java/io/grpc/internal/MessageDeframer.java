@@ -98,7 +98,7 @@ public class MessageDeframer implements Closeable {
 
   private final Listener listener;
   private final int maxMessageSize;
-  private final StatsTraceContext statsTraceContext;
+  private final StatsTraceContext statsTraceCtx;
   private Decompressor decompressor;
   private State state = State.HEADER;
   private int requiredLength = HEADER_LENGTH;
@@ -119,11 +119,11 @@ public class MessageDeframer implements Closeable {
    * @param maxMessageSize the maximum allowed size for received messages.
    */
   public MessageDeframer(Listener listener, Decompressor decompressor, int maxMessageSize,
-      StatsTraceContext statsTraceContext) {
+      StatsTraceContext statsTraceCtx) {
     this.listener = Preconditions.checkNotNull(listener, "sink");
     this.decompressor = Preconditions.checkNotNull(decompressor, "decompressor");
     this.maxMessageSize = maxMessageSize;
-    this.statsTraceContext = checkNotNull(statsTraceContext, "statsTraceContext");
+    this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
   }
 
   /**
@@ -318,7 +318,7 @@ public class MessageDeframer implements Closeable {
       if (totalBytesRead > 0) {
         listener.bytesRead(totalBytesRead);
         if (state == State.BODY) {
-          statsTraceContext.wireBytesReceived(totalBytesRead);
+          statsTraceCtx.wireBytesReceived(totalBytesRead);
         }
       }
     }
@@ -363,7 +363,7 @@ public class MessageDeframer implements Closeable {
   }
 
   private InputStream getUncompressedBody() {
-    statsTraceContext.uncompressedBytesReceived(nextFrame.readableBytes());
+    statsTraceCtx.uncompressedBytesReceived(nextFrame.readableBytes());
     return ReadableBuffers.openStream(nextFrame, true);
   }
 
@@ -377,7 +377,7 @@ public class MessageDeframer implements Closeable {
       // Enforce the maxMessageSize limit on the returned stream.
       InputStream unlimitedStream =
           decompressor.decompress(ReadableBuffers.openStream(nextFrame, true));
-      return new SizeEnforcingInputStream(unlimitedStream, maxMessageSize, statsTraceContext);
+      return new SizeEnforcingInputStream(unlimitedStream, maxMessageSize, statsTraceCtx);
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
@@ -389,16 +389,16 @@ public class MessageDeframer implements Closeable {
   @VisibleForTesting
   static final class SizeEnforcingInputStream extends FilterInputStream {
     private final int maxMessageSize;
-    private final StatsTraceContext statsTraceContext;
+    private final StatsTraceContext statsTraceCtx;
     private long maxCount;
     private long count;
     private long mark = -1;
 
     SizeEnforcingInputStream(InputStream in, int maxMessageSize,
-        StatsTraceContext statsTraceContext) {
+        StatsTraceContext statsTraceCtx) {
       super(in);
       this.maxMessageSize = maxMessageSize;
-      this.statsTraceContext = statsTraceContext;
+      this.statsTraceCtx = statsTraceCtx;
     }
 
     @Override
@@ -454,7 +454,7 @@ public class MessageDeframer implements Closeable {
 
     private void reportCount() {
       if (count > maxCount) {
-        statsTraceContext.uncompressedBytesReceived(count - maxCount);
+        statsTraceCtx.uncompressedBytesReceived(count - maxCount);
         maxCount = count;
       }
     }

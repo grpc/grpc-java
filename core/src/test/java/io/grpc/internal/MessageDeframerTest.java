@@ -84,11 +84,11 @@ public class MessageDeframerTest {
   private final FakeCensusContextFactory censusContextFactory = new FakeCensusContextFactory();
   // MessageFramerTest tests with a server-side StatsTraceContext, so here we test with a
   // client-side StatsTraceContext.
-  private StatsTraceContext statsTraceContext = StatsTraceContext.newClientContext(
+  private StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(
       "service/method", censusContextFactory, GrpcUtil.STOPWATCH_SUPPLIER);
 
   private MessageDeframer deframer = new MessageDeframer(listener, Codec.Identity.NONE,
-      DEFAULT_MAX_MESSAGE_SIZE, statsTraceContext);
+      DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx);
 
   private ArgumentCaptor<InputStream> messages = ArgumentCaptor.forClass(InputStream.class);
 
@@ -208,7 +208,7 @@ public class MessageDeframerTest {
   @Test
   public void compressed() {
     deframer = new MessageDeframer(listener, new Codec.Gzip(), DEFAULT_MAX_MESSAGE_SIZE,
-        statsTraceContext);
+        statsTraceCtx);
     deframer.request(1);
 
     byte[] payload = compress(new byte[1000]);
@@ -246,7 +246,7 @@ public class MessageDeframerTest {
   public void sizeEnforcingInputStream_readByteBelowLimit() throws IOException {
     ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
     SizeEnforcingInputStream stream =
-        new MessageDeframer.SizeEnforcingInputStream(in, 4, statsTraceContext);
+        new MessageDeframer.SizeEnforcingInputStream(in, 4, statsTraceCtx);
 
     while (stream.read() != -1) {}
 
@@ -259,7 +259,7 @@ public class MessageDeframerTest {
   public void sizeEnforcingInputStream_readByteAtLimit() throws IOException {
     ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
     SizeEnforcingInputStream stream =
-        new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceContext);
+        new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceCtx);
 
     while (stream.read() != -1) {}
 
@@ -272,7 +272,7 @@ public class MessageDeframerTest {
   public void sizeEnforcingInputStream_readByteAboveLimit() throws IOException {
     ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
     SizeEnforcingInputStream stream =
-        new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceContext);
+        new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx);
 
     thrown.expect(StatusRuntimeException.class);
     thrown.expectMessage("INTERNAL: Compressed frame exceeds");
@@ -287,7 +287,7 @@ public class MessageDeframerTest {
   public void sizeEnforcingInputStream_readBelowLimit() throws IOException {
     ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
     SizeEnforcingInputStream stream =
-        new MessageDeframer.SizeEnforcingInputStream(in, 4, statsTraceContext);
+        new MessageDeframer.SizeEnforcingInputStream(in, 4, statsTraceCtx);
     byte[] buf = new byte[10];
 
     int read = stream.read(buf, 0, buf.length);
@@ -302,7 +302,7 @@ public class MessageDeframerTest {
   public void sizeEnforcingInputStream_readAtLimit() throws IOException {
     ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
     SizeEnforcingInputStream stream =
-        new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceContext);
+        new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceCtx);
     byte[] buf = new byte[10];
 
     int read = stream.read(buf, 0, buf.length);
@@ -317,7 +317,7 @@ public class MessageDeframerTest {
   public void sizeEnforcingInputStream_readAboveLimit() throws IOException {
     ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
     SizeEnforcingInputStream stream =
-        new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceContext);
+        new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx);
     byte[] buf = new byte[10];
 
     thrown.expect(StatusRuntimeException.class);
@@ -333,7 +333,7 @@ public class MessageDeframerTest {
   public void sizeEnforcingInputStream_skipBelowLimit() throws IOException {
     ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
     SizeEnforcingInputStream stream =
-        new MessageDeframer.SizeEnforcingInputStream(in, 4, statsTraceContext);
+        new MessageDeframer.SizeEnforcingInputStream(in, 4, statsTraceCtx);
 
     long skipped = stream.skip(4);
 
@@ -348,7 +348,7 @@ public class MessageDeframerTest {
   public void sizeEnforcingInputStream_skipAtLimit() throws IOException {
     ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
     SizeEnforcingInputStream stream =
-        new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceContext);
+        new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceCtx);
 
     long skipped = stream.skip(4);
 
@@ -362,7 +362,7 @@ public class MessageDeframerTest {
   public void sizeEnforcingInputStream_skipAboveLimit() throws IOException {
     ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
     SizeEnforcingInputStream stream =
-        new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceContext);
+        new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx);
 
     thrown.expect(StatusRuntimeException.class);
     thrown.expectMessage("INTERNAL: Compressed frame exceeds");
@@ -377,7 +377,7 @@ public class MessageDeframerTest {
   public void sizeEnforcingInputStream_markReset() throws IOException {
     ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
     SizeEnforcingInputStream stream =
-        new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceContext);
+        new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceCtx);
     // stream currently looks like: |foo
     stream.skip(1); // f|oo
     stream.mark(10); // any large number will work.
@@ -392,7 +392,7 @@ public class MessageDeframerTest {
   }
 
   private void checkStats(long wireBytesReceived, long uncompressedBytesReceived) {
-    statsTraceContext.callEnded(Status.OK);
+    statsTraceCtx.callEnded(Status.OK);
     MetricsRecord record = censusContextFactory.pollRecord();
     assertEquals(0, record.getMetricAsLongOrFail(
             RpcConstants.RPC_CLIENT_REQUEST_BYTES));

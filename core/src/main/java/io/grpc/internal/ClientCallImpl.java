@@ -84,7 +84,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
   private volatile ScheduledFuture<?> deadlineCancellationFuture;
   private final boolean unaryRequest;
   private final CallOptions callOptions;
-  private final StatsTraceContext statsTraceContext;
+  private final StatsTraceContext statsTraceCtx;
   private ClientStream stream;
   private volatile boolean cancelListenersShouldBeRemoved;
   private boolean cancelCalled;
@@ -95,7 +95,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
 
   ClientCallImpl(MethodDescriptor<ReqT, RespT> method, Executor executor,
-      CallOptions callOptions, StatsTraceContext statsTraceContext,
+      CallOptions callOptions, StatsTraceContext statsTraceCtx,
       ClientTransportProvider clientTransportProvider,
       ScheduledExecutorService deadlineCancellationExecutor) {
     this.method = method;
@@ -107,7 +107,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
         : new SerializingExecutor(executor);
     // Propagate the context from the thread which initiated the call to all callbacks.
     this.context = Context.current();
-    this.statsTraceContext = Preconditions.checkNotNull(statsTraceContext, "statsTraceContext");
+    this.statsTraceCtx = Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
     this.unaryRequest = method.getType() == MethodType.UNARY
         || method.getType() == MethodType.SERVER_STREAMING;
     this.callOptions = callOptions;
@@ -142,7 +142,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
 
   @VisibleForTesting
   static void prepareHeaders(Metadata headers, DecompressorRegistry decompressorRegistry,
-      Compressor compressor, StatsTraceContext statsTraceContext) {
+      Compressor compressor, StatsTraceContext statsTraceCtx) {
     headers.discardAll(MESSAGE_ENCODING_KEY);
     if (compressor != Codec.Identity.NONE) {
       headers.put(MESSAGE_ENCODING_KEY, compressor.getMessageEncoding());
@@ -153,7 +153,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
     if (!advertisedEncodings.isEmpty()) {
       headers.put(MESSAGE_ACCEPT_ENCODING_KEY, advertisedEncodings);
     }
-    statsTraceContext.propagateToHeaders(headers);
+    statsTraceCtx.propagateToHeaders(headers);
   }
 
   @Override
@@ -208,7 +208,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       compressor = Codec.Identity.NONE;
     }
 
-    prepareHeaders(headers, decompressorRegistry, compressor, statsTraceContext);
+    prepareHeaders(headers, decompressorRegistry, compressor, statsTraceCtx);
 
     Deadline effectiveDeadline = effectiveDeadline();
     boolean deadlineExceeded = effectiveDeadline != null && effectiveDeadline.isExpired();
@@ -218,7 +218,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       ClientTransport transport = clientTransportProvider.get(callOptions);
       Context origContext = context.attach();
       try {
-        stream = transport.newStream(method, headers, callOptions, statsTraceContext);
+        stream = transport.newStream(method, headers, callOptions, statsTraceCtx);
       } finally {
         context.detach(origContext);
       }
@@ -406,7 +406,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
   }
 
   private void closeObserver(Listener<RespT> observer, Status status, Metadata trailers) {
-    statsTraceContext.callEnded(status);
+    statsTraceCtx.callEnded(status);
     observer.onClose(status, trailers);
   }
 

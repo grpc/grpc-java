@@ -84,11 +84,11 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
     @Override
     public ClientStream newStream(
         MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
-        StatsTraceContext statsTraceContext) {
+        StatsTraceContext statsTraceCtx) {
       CallCredentials creds = callOptions.getCredentials();
       if (creds != null) {
         MetadataApplierImpl applier = new MetadataApplierImpl(
-            delegate, method, headers, callOptions, statsTraceContext);
+            delegate, method, headers, callOptions, statsTraceCtx);
         Attributes.Builder effectiveAttrsBuilder = Attributes.newBuilder()
             .set(CallCredentials.ATTR_AUTHORITY, authority)
             .set(CallCredentials.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
@@ -100,7 +100,7 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
             firstNonNull(callOptions.getExecutor(), appExecutor), applier);
         return applier.returnStream();
       } else {
-        return delegate.newStream(method, headers, callOptions, statsTraceContext);
+        return delegate.newStream(method, headers, callOptions, statsTraceCtx);
       }
     }
   }

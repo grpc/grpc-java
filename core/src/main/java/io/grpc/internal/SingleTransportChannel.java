@@ -82,10 +82,10 @@ final class SingleTransportChannel extends Channel {
   @Override
   public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
       MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
-    StatsTraceContext statsTraceContext = StatsTraceContext.newClientContext(
+    StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(
         methodDescriptor.getFullMethodName(), censusFactory, stopwatchSupplier);
     return new ClientCallImpl<RequestT, ResponseT>(methodDescriptor,
-        new SerializingExecutor(executor), callOptions, statsTraceContext, transportProvider,
+        new SerializingExecutor(executor), callOptions, statsTraceCtx, transportProvider,
         deadlineCancellationExecutor);
   }
 

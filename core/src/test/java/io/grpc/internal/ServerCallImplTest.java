@@ -93,7 +93,7 @@ public class ServerCallImplTest {
 
   private final Metadata requestHeaders = new Metadata();
   private final FakeCensusContextFactory censusContextFactory = new FakeCensusContextFactory();
-  private final StatsTraceContext statsTraceContext = StatsTraceContext.newServerContext(
+  private final StatsTraceContext statsTraceCtx = StatsTraceContext.newServerContext(
       method.getFullMethodName(), censusContextFactory, requestHeaders,
       GrpcUtil.STOPWATCH_SUPPLIER);
 
@@ -102,7 +102,7 @@ public class ServerCallImplTest {
     MockitoAnnotations.initMocks(this);
     context = Context.ROOT.withCancellation();
     call = new ServerCallImpl<Long, Long>(stream, method, requestHeaders, context,
-        statsTraceContext, DecompressorRegistry.getDefaultInstance(),
+        statsTraceCtx, DecompressorRegistry.getDefaultInstance(),
         CompressorRegistry.getDefaultInstance());
   }
 
@@ -202,7 +202,7 @@ public class ServerCallImplTest {
   public void streamListener_halfClosed() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<Long>(
-            call, callListener, context, statsTraceContext);
+            call, callListener, context, statsTraceCtx);
 
     streamListener.halfClosed();
 
@@ -213,7 +213,7 @@ public class ServerCallImplTest {
   public void streamListener_halfClosed_onlyOnce() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<Long>(
-            call, callListener, context, statsTraceContext);
+            call, callListener, context, statsTraceCtx);
     streamListener.halfClosed();
     // canceling the call should short circuit future halfClosed() calls.
     streamListener.closed(Status.CANCELLED);
@@ -227,7 +227,7 @@ public class ServerCallImplTest {
   public void streamListener_closedOk() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<Long>(
-            call, callListener, context, statsTraceContext);
+            call, callListener, context, statsTraceCtx);
 
     streamListener.closed(Status.OK);
 
@@ -241,7 +241,7 @@ public class ServerCallImplTest {
   public void streamListener_closedCancelled() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<Long>(
-            call, callListener, context, statsTraceContext);
+            call, callListener, context, statsTraceCtx);
 
     streamListener.closed(Status.CANCELLED);
 
@@ -255,7 +255,7 @@ public class ServerCallImplTest {
   public void streamListener_onReady() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<Long>(
-            call, callListener, context, statsTraceContext);
+            call, callListener, context, statsTraceCtx);
 
     streamListener.onReady();
 
@@ -266,7 +266,7 @@ public class ServerCallImplTest {
   public void streamListener_onReady_onlyOnce() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<Long>(
-            call, callListener, context, statsTraceContext);
+            call, callListener, context, statsTraceCtx);
     streamListener.onReady();
     // canceling the call should short circuit future halfClosed() calls.
     streamListener.closed(Status.CANCELLED);
@@ -280,7 +280,7 @@ public class ServerCallImplTest {
   public void streamListener_messageRead() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<Long>(
-            call, callListener, context, statsTraceContext);
+            call, callListener, context, statsTraceCtx);
     streamListener.messageRead(method.streamRequest(1234L));
 
     verify(callListener).onMessage(1234L);
@@ -290,7 +290,7 @@ public class ServerCallImplTest {
   public void streamListener_messageRead_unaryFailsOnMultiple() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<Long>(
-            call, callListener, context, statsTraceContext);
+            call, callListener, context, statsTraceCtx);
     streamListener.messageRead(method.streamRequest(1234L));
     streamListener.messageRead(method.streamRequest(1234L));
 
@@ -305,7 +305,7 @@ public class ServerCallImplTest {
   public void streamListener_messageRead_onlyOnce() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<Long>(
-            call, callListener, context, statsTraceContext);
+            call, callListener, context, statsTraceCtx);
     streamListener.messageRead(method.streamRequest(1234L));
     // canceling the call should short circuit future halfClosed() calls.
     streamListener.closed(Status.CANCELLED);

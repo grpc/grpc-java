@@ -79,7 +79,7 @@ public class MessageFramerTest {
   private BytesWritableBufferAllocator allocator =
       new BytesWritableBufferAllocator(1000, 1000);
   private FakeCensusContextFactory censusContextFactory;
-  private StatsTraceContext statsTraceContext;
+  private StatsTraceContext statsTraceCtx;
 
   /** Set up for test. */
   @Before
@@ -88,9 +88,9 @@ public class MessageFramerTest {
     censusContextFactory = new FakeCensusContextFactory();
     // MessageDeframerTest tests with a client-side StatsTraceContext, so here we test with a
     // server-side StatsTraceContext.
-    statsTraceContext = StatsTraceContext.newServerContext(
+    statsTraceCtx = StatsTraceContext.newServerContext(
         "service/method", censusContextFactory, new Metadata(), GrpcUtil.STOPWATCH_SUPPLIER);
-    framer = new MessageFramer(sink, allocator, statsTraceContext);
+    framer = new MessageFramer(sink, allocator, statsTraceCtx);
   }
 
   @Test
@@ -155,7 +155,7 @@ public class MessageFramerTest {
   @Test
   public void payloadSplitBetweenSinks() {
     allocator = new BytesWritableBufferAllocator(12, 12);
-    framer = new MessageFramer(sink, allocator, statsTraceContext);
+    framer = new MessageFramer(sink, allocator, statsTraceCtx);
     writeKnownLength(framer, new byte[]{3, 14, 1, 5, 9, 2, 6, 5});
     verify(sink).deliverFrame(
         toWriteBuffer(new byte[] {0, 0, 0, 0, 8, 3, 14, 1, 5, 9, 2, 6}), false, false);
@@ -171,7 +171,7 @@ public class MessageFramerTest {
   @Test
   public void frameHeaderSplitBetweenSinks() {
     allocator = new BytesWritableBufferAllocator(12, 12);
-    framer = new MessageFramer(sink, allocator, statsTraceContext);
+    framer = new MessageFramer(sink, allocator, statsTraceCtx);
     writeKnownLength(framer, new byte[]{3, 14, 1});
     writeKnownLength(framer, new byte[]{3});
     verify(sink).deliverFrame(
@@ -219,7 +219,7 @@ public class MessageFramerTest {
   @Test
   public void largerFrameSize() throws Exception {
     allocator = new BytesWritableBufferAllocator(0, 10000);
-    framer = new MessageFramer(sink, allocator, statsTraceContext);
+    framer = new MessageFramer(sink, allocator, statsTraceCtx);
     writeKnownLength(framer, new byte[1000]);
     framer.flush();
     verify(sink).deliverFrame(frameCaptor.capture(), eq(false), eq(true));
@@ -240,7 +240,7 @@ public class MessageFramerTest {
   public void largerFrameSizeUnknownLength() throws Exception {
     // Force payload to be split into two chunks
     allocator = new BytesWritableBufferAllocator(500, 500);
-    framer = new MessageFramer(sink, allocator, statsTraceContext);
+    framer = new MessageFramer(sink, allocator, statsTraceCtx);
     writeUnknownLength(framer, new byte[1000]);
     framer.flush();
     // Header and first chunk written with flush = false
@@ -267,7 +267,7 @@ public class MessageFramerTest {
   public void compressed() throws Exception {
     allocator = new BytesWritableBufferAllocator(100, Integer.MAX_VALUE);
     // setMessageCompression should default to true
-    framer = new MessageFramer(sink, allocator, statsTraceContext).setCompressor(new Codec.Gzip());
+    framer = new MessageFramer(sink, allocator, statsTraceCtx).setCompressor(new Codec.Gzip());
     writeKnownLength(framer, new byte[1000]);
     framer.flush();
     // The GRPC header is written first as a separate frame.
@@ -291,7 +291,7 @@ public class MessageFramerTest {
   @Test
   public void dontCompressIfNoEncoding() throws Exception {
     allocator = new BytesWritableBufferAllocator(100, Integer.MAX_VALUE);
-    framer = new MessageFramer(sink, allocator, statsTraceContext)
+    framer = new MessageFramer(sink, allocator, statsTraceCtx)
         .setMessageCompression(true);
     writeKnownLength(framer, new byte[1000]);
     framer.flush();
@@ -316,7 +316,7 @@ public class MessageFramerTest {
   @Test
   public void dontCompressIfNotRequested() throws Exception {
     allocator = new BytesWritableBufferAllocator(100, Integer.MAX_VALUE);
-    framer = new MessageFramer(sink, allocator, statsTraceContext)
+    framer = new MessageFramer(sink, allocator, statsTraceCtx)
         .setCompressor(new Codec.Gzip())
         .setMessageCompression(false);
     writeKnownLength(framer, new byte[1000]);
@@ -353,7 +353,7 @@ public class MessageFramerTest {
         }
       }
     };
-    framer = new MessageFramer(reentrant, allocator, statsTraceContext);
+    framer = new MessageFramer(reentrant, allocator, statsTraceCtx);
     writeKnownLength(framer, new byte[]{3, 14});
     framer.close();
   }
@@ -388,7 +388,7 @@ public class MessageFramerTest {
   }
 
   private void checkStats(long wireBytesSent, long uncompressedBytesSent) {
-    statsTraceContext.callEnded(Status.OK);
+    statsTraceCtx.callEnded(Status.OK);
     MetricsRecord record = censusContextFactory.pollRecord();
     assertEquals(0, record.getMetricAsLongOrFail(
             RpcConstants.RPC_SERVER_REQUEST_BYTES));

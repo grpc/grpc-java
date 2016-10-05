@@ -63,8 +63,8 @@ class NettyServerStream extends AbstractServerStream {
   private final Attributes attributes;
 
   public NettyServerStream(Channel channel, TransportState state, Attributes transportAttrs,
-      StatsTraceContext statsTraceContext) {
-    super(new NettyWritableBufferAllocator(channel.alloc()), statsTraceContext);
+      StatsTraceContext statsTraceCtx) {
+    super(new NettyWritableBufferAllocator(channel.alloc()), statsTraceCtx);
     this.state = checkNotNull(state, "transportState");
     this.channel = checkNotNull(channel, "channel");
     this.writeQueue = state.handler.getWriteQueue();
@@ -145,8 +145,8 @@ class NettyServerStream extends AbstractServerStream {
     private final NettyServerHandler handler;
 
     public TransportState(NettyServerHandler handler, Http2Stream http2Stream, int maxMessageSize,
-        StatsTraceContext statsTraceContext) {
-      super(maxMessageSize, statsTraceContext);
+        StatsTraceContext statsTraceCtx) {
+      super(maxMessageSize, statsTraceCtx);
       this.http2Stream = checkNotNull(http2Stream, "http2Stream");
       this.handler = checkNotNull(handler, "handler");
     }

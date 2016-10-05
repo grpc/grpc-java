@@ -137,7 +137,7 @@ public class ManagedChannelImplTest {
   @Captor
   private ArgumentCaptor<Status> statusCaptor;
   @Captor
-  private ArgumentCaptor<StatsTraceContext> statsTraceContextCaptor;
+  private ArgumentCaptor<StatsTraceContext> statsTraceCtxCaptor;
   @Mock
   private ConnectionClientTransport mockTransport;
   @Mock
@@ -256,9 +256,9 @@ public class ManagedChannelImplTest {
     executor.runDueTasks();
 
     verify(mockTransport).newStream(same(method), same(headers), same(CallOptions.DEFAULT),
-        statsTraceContextCaptor.capture());
+        statsTraceCtxCaptor.capture());
     assertEquals(censusContextFactory.pollContextOrFail(),
-        statsTraceContextCaptor.getValue().getCensusContext());
+        statsTraceCtxCaptor.getValue().getCensusContext());
     verify(mockStream).start(streamListenerCaptor.capture());
     verify(mockStream).setCompressor(isA(Compressor.class));
     ClientStreamListener streamListener = streamListenerCaptor.getValue();
@@ -272,9 +272,9 @@ public class ManagedChannelImplTest {
         .thenReturn(mockStream2);
     call2.start(mockCallListener2, headers2);
     verify(mockTransport).newStream(same(method), same(headers2), same(CallOptions.DEFAULT),
-        statsTraceContextCaptor.capture());
+        statsTraceCtxCaptor.capture());
     assertEquals(censusContextFactory.pollContextOrFail(),
-        statsTraceContextCaptor.getValue().getCensusContext());
+        statsTraceCtxCaptor.getValue().getCensusContext());
 
     verify(mockStream2).start(streamListenerCaptor.capture());
     ClientStreamListener streamListener2 = streamListenerCaptor.getValue();

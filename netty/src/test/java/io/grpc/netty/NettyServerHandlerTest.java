@@ -104,7 +104,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   @Mock
   private ServerStreamListener streamListener;
 
-  private final StatsTraceContext statsTraceContext = StatsTraceContext.NOOP;
+  private final StatsTraceContext statsTraceCtx = StatsTraceContext.NOOP;
 
   private NettyServerStream stream;
 
@@ -116,7 +116,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     MockitoAnnotations.initMocks(this);
 
     when(transportListener.methodDetermined(any(String.class), any(Metadata.class)))
-        .thenReturn(statsTraceContext);
+        .thenReturn(statsTraceCtx);
     when(transportListener.streamCreated(any(ServerStream.class),
         any(String.class),
         any(Metadata.class)))

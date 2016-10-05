@@ -195,12 +195,12 @@ class NettyServerHandler extends AbstractNettyHandler {
       Http2Stream http2Stream = requireHttp2Stream(streamId);
 
       Metadata metadata = Utils.convertHeaders(headers);
-      StatsTraceContext statsTraceContext =
-          checkNotNull(transportListener.methodDetermined(method, metadata), "statsTraceContext");
+      StatsTraceContext statsTraceCtx =
+          checkNotNull(transportListener.methodDetermined(method, metadata), "statsTraceCtx");
       NettyServerStream.TransportState state = new NettyServerStream.TransportState(
-          this, http2Stream, maxMessageSize, statsTraceContext);
+          this, http2Stream, maxMessageSize, statsTraceCtx);
       NettyServerStream stream = new NettyServerStream(ctx.channel(), state, attributes,
-          statsTraceContext);
+          statsTraceCtx);
       ServerStreamListener listener = transportListener.streamCreated(stream, method, metadata);
       // TODO(ejona): this could be racy since stream could have been used before getting here. All
       // cases appear to be fine, but some are almost only by happenstance and it is difficult to

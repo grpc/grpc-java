@@ -64,8 +64,8 @@ public abstract class AbstractClientStream extends AbstractStream
   private volatile boolean cancelled;
 
   protected AbstractClientStream(WritableBufferAllocator bufferAllocator, int maxMessageSize,
-      StatsTraceContext statsTraceContext) {
-    super(bufferAllocator, maxMessageSize, statsTraceContext);
+      StatsTraceContext statsTraceCtx) {
+    super(bufferAllocator, maxMessageSize, statsTraceCtx);
   }
 
   @Override

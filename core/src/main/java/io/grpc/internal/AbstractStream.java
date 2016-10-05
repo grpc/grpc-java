@@ -132,10 +132,10 @@ public abstract class AbstractStream implements Stream {
   }
 
   AbstractStream(WritableBufferAllocator bufferAllocator, int maxMessageSize,
-      StatsTraceContext statsTraceContext) {
-    framer = new MessageFramer(new FramerSink(), bufferAllocator, statsTraceContext);
+      StatsTraceContext statsTraceCtx) {
+    framer = new MessageFramer(new FramerSink(), bufferAllocator, statsTraceCtx);
     deframer = new MessageDeframer(new DeframerListener(), Codec.Identity.NONE, maxMessageSize,
-        statsTraceContext);
+        statsTraceCtx);
   }
 
   @VisibleForTesting

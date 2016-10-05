@@ -271,12 +271,12 @@ class OkHttpClientTransport implements ConnectionClientTransport {
 
   @Override
   public OkHttpClientStream newStream(final MethodDescriptor<?, ?> method,
-      final Metadata headers, CallOptions callOptions, StatsTraceContext statsTraceContext) {
+      final Metadata headers, CallOptions callOptions, StatsTraceContext statsTraceCtx) {
     Preconditions.checkNotNull(method, "method");
     Preconditions.checkNotNull(headers, "headers");
-    Preconditions.checkNotNull(statsTraceContext, "statsTraceContext");
+    Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
     return new OkHttpClientStream(method, headers, frameWriter, OkHttpClientTransport.this,
-        outboundFlow, lock, maxMessageSize, defaultAuthority, userAgent, statsTraceContext);
+        outboundFlow, lock, maxMessageSize, defaultAuthority, userAgent, statsTraceCtx);
   }
 
   @Override

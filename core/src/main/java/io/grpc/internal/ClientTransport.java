@@ -60,12 +60,12 @@ public interface ClientTransport {
    * @param method the descriptor of the remote method to be called for this stream.
    * @param headers to send at the beginning of the call
    * @param callOptions runtime options of the call
-   * @param statsTraceContext carries stats and tracing information
+   * @param statsTraceCtx carries stats and tracing information
    * @return the newly created stream.
    */
   // TODO(nmittler): Consider also throwing for stopping.
   ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
-      StatsTraceContext statsTraceContext);
+      StatsTraceContext statsTraceCtx);
 
   // TODO(zdapeng): Remove two-argument version in favor of four-argument overload.
   ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers);

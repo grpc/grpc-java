@@ -98,8 +98,8 @@ class OkHttpClientStream extends Http2ClientStream {
       int maxMessageSize,
       String authority,
       String userAgent,
-      StatsTraceContext statsTraceContext) {
-    super(new OkHttpWritableBufferAllocator(), maxMessageSize, statsTraceContext);
+      StatsTraceContext statsTraceCtx) {
+    super(new OkHttpWritableBufferAllocator(), maxMessageSize, statsTraceCtx);
     this.method = method;
     this.headers = headers;
     this.frameWriter = frameWriter;

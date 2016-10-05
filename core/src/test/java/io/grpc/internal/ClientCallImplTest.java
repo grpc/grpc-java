@@ -124,7 +124,7 @@ public class ClientCallImplTest {
   private final FakeCensusContextFactory censusContextFactory = new FakeCensusContextFactory();
   private final CensusContext parentCensusContext = censusContextFactory.getDefault().with(
       CensusTestUtils.EXTRA_TAG, new TagValue("extra-tag-value"));
-  private final StatsTraceContext statsTraceContext = StatsTraceContext.newClientContextForTesting(
+  private final StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContextForTesting(
       method.getFullMethodName(), censusContextFactory, parentCensusContext,
       fakeClock.getStopwatchSupplier());
   private final CensusContext censusContext = censusContextFactory.contexts.poll();
@@ -172,7 +172,7 @@ public class ClientCallImplTest {
         method,
         executor,
         CallOptions.DEFAULT,
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor);
     call.start(callListener, new Metadata());
@@ -195,7 +195,7 @@ public class ClientCallImplTest {
         method,
         executor,
         CallOptions.DEFAULT,
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor);
     call.start(callListener, new Metadata());
@@ -230,7 +230,7 @@ public class ClientCallImplTest {
         method,
         executor,
         CallOptions.DEFAULT,
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor);
     call.start(callListener, new Metadata());
@@ -264,7 +264,7 @@ public class ClientCallImplTest {
         method,
         executor,
         CallOptions.DEFAULT,
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor);
     call.start(callListener, new Metadata());
@@ -297,7 +297,7 @@ public class ClientCallImplTest {
         method,
         MoreExecutors.directExecutor(),
         CallOptions.DEFAULT,
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor)
             .setDecompressorRegistry(decompressorRegistry);
@@ -306,7 +306,7 @@ public class ClientCallImplTest {
 
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
     verify(transport).newStream(eq(method), metadataCaptor.capture(), same(CallOptions.DEFAULT),
-        same(statsTraceContext));
+        same(statsTraceCtx));
     Metadata actual = metadataCaptor.getValue();
 
     Set<String> acceptedEncodings =
@@ -320,7 +320,7 @@ public class ClientCallImplTest {
         method,
         MoreExecutors.directExecutor(),
         CallOptions.DEFAULT.withAuthority("overridden-authority"),
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor)
             .setDecompressorRegistry(decompressorRegistry);
@@ -336,7 +336,7 @@ public class ClientCallImplTest {
         method,
         MoreExecutors.directExecutor(),
         callOptions,
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor)
         .setDecompressorRegistry(decompressorRegistry);
@@ -345,7 +345,7 @@ public class ClientCallImplTest {
     call.start(callListener, metadata);
 
     verify(transport).newStream(same(method), same(metadata), same(callOptions),
-        same(statsTraceContext));
+        same(statsTraceCtx));
   }
 
   @Test
@@ -355,7 +355,7 @@ public class ClientCallImplTest {
         MoreExecutors.directExecutor(),
         // Don't provide an authority
         CallOptions.DEFAULT,
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor)
             .setDecompressorRegistry(decompressorRegistry);
@@ -368,7 +368,7 @@ public class ClientCallImplTest {
   public void prepareHeaders_userAgentIgnored() {
     Metadata m = new Metadata();
     m.put(GrpcUtil.USER_AGENT_KEY, "batmobile");
-    ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, statsTraceContext);
+    ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, statsTraceCtx);
 
     // User Agent is removed and set by the transport
     assertThat(m.get(GrpcUtil.USER_AGENT_KEY)).isNotNull();
@@ -377,7 +377,7 @@ public class ClientCallImplTest {
   @Test
   public void prepareHeaders_ignoreIdentityEncoding() {
     Metadata m = new Metadata();
-    ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, statsTraceContext);
+    ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, statsTraceCtx);
 
     assertNull(m.get(GrpcUtil.MESSAGE_ENCODING_KEY));
   }
@@ -420,7 +420,7 @@ public class ClientCallImplTest {
           }
         }, false); // not advertised
 
-    ClientCallImpl.prepareHeaders(m, customRegistry, Codec.Identity.NONE, statsTraceContext);
+    ClientCallImpl.prepareHeaders(m, customRegistry, Codec.Identity.NONE, statsTraceCtx);
 
     Iterable<String> acceptedEncodings =
         ACCEPT_ENCODING_SPLITER.split(m.get(GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY));
@@ -436,7 +436,7 @@ public class ClientCallImplTest {
     m.put(GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY, "gzip");
 
     ClientCallImpl.prepareHeaders(m, DecompressorRegistry.emptyInstance(), Codec.Identity.NONE,
-        statsTraceContext);
+        statsTraceCtx);
 
     assertNull(m.get(GrpcUtil.MESSAGE_ENCODING_KEY));
     assertNull(m.get(GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY));
@@ -445,8 +445,8 @@ public class ClientCallImplTest {
   @Test
   public void prepareHeaders_censusContextAdded() {
     Metadata m = new Metadata();
-    ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, statsTraceContext);
-    assertEquals(parentCensusContext, m.get(statsTraceContext.getCensusHeader()));
+    ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, statsTraceCtx);
+    assertEquals(parentCensusContext, m.get(statsTraceCtx.getCensusHeader()));
   }
 
   @Test
@@ -459,7 +459,7 @@ public class ClientCallImplTest {
         DESCRIPTOR,
         new SerializingExecutor(Executors.newSingleThreadExecutor()),
         CallOptions.DEFAULT,
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor)
             .setDecompressorRegistry(decompressorRegistry);
@@ -533,7 +533,7 @@ public class ClientCallImplTest {
         DESCRIPTOR,
         new SerializingExecutor(Executors.newSingleThreadExecutor()),
         CallOptions.DEFAULT,
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor)
             .setDecompressorRegistry(decompressorRegistry);
@@ -563,7 +563,7 @@ public class ClientCallImplTest {
         DESCRIPTOR,
         new SerializingExecutor(Executors.newSingleThreadExecutor()),
         CallOptions.DEFAULT,
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor)
         .setDecompressorRegistry(decompressorRegistry);
@@ -608,7 +608,7 @@ public class ClientCallImplTest {
         DESCRIPTOR,
         new SerializingExecutor(Executors.newSingleThreadExecutor()),
         callOptions,
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor)
             .setDecompressorRegistry(decompressorRegistry);
@@ -631,7 +631,7 @@ public class ClientCallImplTest {
         DESCRIPTOR,
         MoreExecutors.directExecutor(),
         CallOptions.DEFAULT,
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor);
 
@@ -659,7 +659,7 @@ public class ClientCallImplTest {
         DESCRIPTOR,
         MoreExecutors.directExecutor(),
         callOpts,
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor);
 
@@ -687,7 +687,7 @@ public class ClientCallImplTest {
         DESCRIPTOR,
         MoreExecutors.directExecutor(),
         callOpts,
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor);
 
@@ -711,7 +711,7 @@ public class ClientCallImplTest {
         DESCRIPTOR,
         MoreExecutors.directExecutor(),
         CallOptions.DEFAULT.withDeadline(Deadline.after(1000, TimeUnit.MILLISECONDS)),
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor);
 
@@ -735,7 +735,7 @@ public class ClientCallImplTest {
         DESCRIPTOR,
         MoreExecutors.directExecutor(),
         CallOptions.DEFAULT,
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor);
 
@@ -755,7 +755,7 @@ public class ClientCallImplTest {
         DESCRIPTOR,
         MoreExecutors.directExecutor(),
         CallOptions.DEFAULT.withDeadline(Deadline.after(1000, TimeUnit.MILLISECONDS)),
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor);
     call.start(callListener, new Metadata());
@@ -779,7 +779,7 @@ public class ClientCallImplTest {
         DESCRIPTOR,
         MoreExecutors.directExecutor(),
         CallOptions.DEFAULT,
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor);
 
@@ -796,7 +796,7 @@ public class ClientCallImplTest {
         DESCRIPTOR,
         MoreExecutors.directExecutor(),
         CallOptions.DEFAULT,
-        statsTraceContext,
+        statsTraceCtx,
         provider,
         deadlineCancellationExecutor);
     final Exception cause = new Exception();

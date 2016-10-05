@@ -58,8 +58,8 @@ abstract class ForwardingConnectionClientTransport implements ConnectionClientTr
   @Override
   public ClientStream newStream(
       MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
-      StatsTraceContext statsTraceContext) {
-    return delegate().newStream(method, headers, callOptions, statsTraceContext);
+      StatsTraceContext statsTraceCtx) {
+    return delegate().newStream(method, headers, callOptions, statsTraceCtx);
   }
 
   @Override

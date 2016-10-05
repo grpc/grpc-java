@@ -78,8 +78,8 @@ class NettyClientStream extends AbstractClientStream2 {
 
   NettyClientStream(TransportState state, MethodDescriptor<?, ?> method, Metadata headers,
       Channel channel, AsciiString authority, AsciiString scheme,
-      AsciiString userAgent, StatsTraceContext statsTraceContext) {
-    super(new NettyWritableBufferAllocator(channel.alloc()), statsTraceContext);
+      AsciiString userAgent, StatsTraceContext statsTraceCtx) {
+    super(new NettyWritableBufferAllocator(channel.alloc()), statsTraceCtx);
     this.state = checkNotNull(state, "transportState");
     this.writeQueue = state.handler.getWriteQueue();
     this.method = checkNotNull(method, "method");
@@ -185,8 +185,8 @@ class NettyClientStream extends AbstractClientStream2 {
     private Http2Stream http2Stream;
 
     public TransportState(NettyClientHandler handler, int maxMessageSize,
-        StatsTraceContext statsTraceContext) {
-      super(maxMessageSize, statsTraceContext);
+        StatsTraceContext statsTraceCtx) {
+      super(maxMessageSize, statsTraceCtx);
       this.handler = checkNotNull(handler, "handler");
     }
 

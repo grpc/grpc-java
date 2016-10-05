@@ -105,7 +105,7 @@ public class CallCredentialsApplyingTest {
   private static final String CREDS_VALUE = "some credentials";
 
   private final Metadata origHeaders = new Metadata();
-  private final StatsTraceContext statsTraceContext = StatsTraceContext.newClientContext(
+  private final StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(
       method.getFullMethodName(), NoopCensusContextFactory.INSTANCE, GrpcUtil.STOPWATCH_SUPPLIER);
   private ForwardingConnectionClientTransport transport;
   private CallOptions callOptions;
@@ -133,7 +133,7 @@ public class CallCredentialsApplyingTest {
     Attributes transportAttrs = Attributes.newBuilder().set(ATTR_KEY, ATTR_VALUE).build();
     when(mockTransport.getAttrs()).thenReturn(transportAttrs);
 
-    transport.newStream(method, origHeaders, callOptions, statsTraceContext);
+    transport.newStream(method, origHeaders, callOptions, statsTraceCtx);
 
     ArgumentCaptor<Attributes> attrsCaptor = ArgumentCaptor.forClass(null);
     verify(mockCreds).applyRequestMetadata(same(method), attrsCaptor.capture(), same(mockExecutor),
@@ -153,7 +153,7 @@ public class CallCredentialsApplyingTest {
         .build();
     when(mockTransport.getAttrs()).thenReturn(transportAttrs);
 
-    transport.newStream(method, origHeaders, callOptions, statsTraceContext);
+    transport.newStream(method, origHeaders, callOptions, statsTraceCtx);
 
     ArgumentCaptor<Attributes> attrsCaptor = ArgumentCaptor.forClass(null);
     verify(mockCreds).applyRequestMetadata(same(method), attrsCaptor.capture(), same(mockExecutor),
@@ -176,7 +176,7 @@ public class CallCredentialsApplyingTest {
 
     transport.newStream(method, origHeaders,
         callOptions.withAuthority("calloptions-authority").withExecutor(anotherExecutor),
-        statsTraceContext);
+        statsTraceCtx);
 
     ArgumentCaptor<Attributes> attrsCaptor = ArgumentCaptor.forClass(null);
     verify(mockCreds).applyRequestMetadata(same(method), attrsCaptor.capture(),
@@ -202,10 +202,9 @@ public class CallCredentialsApplyingTest {
       }).when(mockCreds).applyRequestMetadata(same(method), any(Attributes.class),
           same(mockExecutor), any(MetadataApplier.class));
 
-    ClientStream stream = transport.newStream(method, origHeaders, callOptions,
-        statsTraceContext);
+    ClientStream stream = transport.newStream(method, origHeaders, callOptions, statsTraceCtx);
 
-    verify(mockTransport).newStream(method, origHeaders, callOptions, statsTraceContext);
+    verify(mockTransport).newStream(method, origHeaders, callOptions, statsTraceCtx);
     assertSame(mockStream, stream);
     assertEquals(CREDS_VALUE, origHeaders.get(CREDS_KEY));
     assertEquals(ORIG_HEADER_VALUE, origHeaders.get(ORIG_HEADER_KEY));
@@ -226,10 +225,9 @@ public class CallCredentialsApplyingTest {
           same(mockExecutor), any(MetadataApplier.class));
 
     FailingClientStream stream =
-        (FailingClientStream) transport.newStream(method, origHeaders, callOptions,
-            statsTraceContext);
+        (FailingClientStream) transport.newStream(method, origHeaders, callOptions, statsTraceCtx);
 
-    verify(mockTransport, never()).newStream(method, origHeaders, callOptions, statsTraceContext);
+    verify(mockTransport, never()).newStream(method, origHeaders, callOptions, statsTraceCtx);
     assertSame(error, stream.getError());
   }
 
@@ -239,18 +237,18 @@ public class CallCredentialsApplyingTest {
 
     // Will call applyRequestMetadata(), which is no-op.
     DelayedStream stream = (DelayedStream) transport.newStream(method, origHeaders, callOptions,
-        statsTraceContext);
+        statsTraceCtx);
 
     ArgumentCaptor<MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
     verify(mockCreds).applyRequestMetadata(same(method), any(Attributes.class),
         same(mockExecutor), applierCaptor.capture());
-    verify(mockTransport, never()).newStream(method, origHeaders, callOptions, statsTraceContext);
+    verify(mockTransport, never()).newStream(method, origHeaders, callOptions, statsTraceCtx);
 
     Metadata headers = new Metadata();
     headers.put(CREDS_KEY, CREDS_VALUE);
     applierCaptor.getValue().apply(headers);
 
-    verify(mockTransport).newStream(method, origHeaders, callOptions, statsTraceContext);
+    verify(mockTransport).newStream(method, origHeaders, callOptions, statsTraceCtx);
     assertSame(mockStream, stream.getRealStream());
     assertEquals(CREDS_VALUE, origHeaders.get(CREDS_KEY));
     assertEquals(ORIG_HEADER_VALUE, origHeaders.get(ORIG_HEADER_KEY));
@@ -262,7 +260,7 @@ public class CallCredentialsApplyingTest {
 
     // Will call applyRequestMetadata(), which is no-op.
     DelayedStream stream = (DelayedStream) transport.newStream(method, origHeaders, callOptions,
-        statsTraceContext);
+        statsTraceCtx);
 
     ArgumentCaptor<MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
     verify(mockCreds).applyRequestMetadata(same(method), any(Attributes.class),
@@ -271,7 +269,7 @@ public class CallCredentialsApplyingTest {
     Status error = Status.FAILED_PRECONDITION.withDescription("channel not secure for creds");
     applierCaptor.getValue().fail(error);
 
-    verify(mockTransport, never()).newStream(method, origHeaders, callOptions, statsTraceContext);
+    verify(mockTransport, never()).newStream(method, origHeaders, callOptions, statsTraceCtx);
     FailingClientStream failingStream = (FailingClientStream) stream.getRealStream();
     assertSame(error, failingStream.getError());
   }
@@ -279,10 +277,9 @@ public class CallCredentialsApplyingTest {
   @Test
   public void noCreds() {
     callOptions = callOptions.withCallCredentials(null);
-    ClientStream stream = transport.newStream(method, origHeaders, callOptions,
-        statsTraceContext);
+    ClientStream stream = transport.newStream(method, origHeaders, callOptions, statsTraceCtx);
 
-    verify(mockTransport).newStream(method, origHeaders, callOptions, statsTraceContext);
+    verify(mockTransport).newStream(method, origHeaders, callOptions, statsTraceCtx);
     assertSame(mockStream, stream);
     assertNull(origHeaders.get(CREDS_KEY));
     assertEquals(ORIG_HEADER_VALUE, origHeaders.get(ORIG_HEADER_KEY));

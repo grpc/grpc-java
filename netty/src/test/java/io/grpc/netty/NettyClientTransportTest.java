@@ -99,7 +99,7 @@ public class NettyClientTransportTest {
 
   private final List<NettyClientTransport> transports = new ArrayList<NettyClientTransport>();
   private final NioEventLoopGroup group = new NioEventLoopGroup(1);
-  private final StatsTraceContext statsTraceContext = StatsTraceContext.NOOP;
+  private final StatsTraceContext statsTraceCtx = StatsTraceContext.NOOP;
 
   private InetSocketAddress address;
   private String authority;
