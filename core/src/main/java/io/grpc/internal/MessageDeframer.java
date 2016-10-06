@@ -394,8 +394,7 @@ public class MessageDeframer implements Closeable {
     private long count;
     private long mark = -1;
 
-    SizeEnforcingInputStream(InputStream in, int maxMessageSize,
-        StatsTraceContext statsTraceCtx) {
+    SizeEnforcingInputStream(InputStream in, int maxMessageSize, StatsTraceContext statsTraceCtx) {
       super(in);
       this.maxMessageSize = maxMessageSize;
       this.statsTraceCtx = statsTraceCtx;
