@@ -31,44 +31,57 @@
 
 package io.grpc.internal;
 
+import static io.grpc.internal.ExponentialBackoffPolicy.INITIAL_BACKOFF_MILLIS;
+import static io.grpc.internal.ExponentialBackoffPolicy.MAX_BACKOFF_MILLIS;
+import static io.grpc.internal.ExponentialBackoffPolicy.MIN_CONNECT_TIMEOUT_MILLIS;
+import static io.grpc.internal.ExponentialBackoffPolicy.MULTIPLIER;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-import java.util.Random;
-
 /**
  * Test for {@link ExponentialBackoffPolicy}.
  */
 @RunWith(JUnit4.class)
 public class ExponentialBackoffPolicyTest {
-  private ExponentialBackoffPolicy policy = new ExponentialBackoffPolicy();
-  private Random notRandom = new Random() {
-    @Override
-    public double nextDouble() {
-      return .5;
-    }
-  };
+
+  private final ExponentialBackoffPolicy policy = new ExponentialBackoffPolicy().setJitter(0D);
 
   @Test
   public void maxDelayReached() {
-    long maxBackoffMillis = 120 * 1000;
-    policy.setMaxBackoffMillis(maxBackoffMillis)
-        .setJitter(0)
-        .setRandom(notRandom);
     for (int i = 0; i < 50; i++) {
-      if (maxBackoffMillis == policy.nextBackoffMillis()) {
-        return; // Success
+      if (MAX_BACKOFF_MILLIS == policy.nextBackoffMillis()) {
+        assertEquals(
+            (int) (Math.log((double) MAX_BACKOFF_MILLIS / (double) INITIAL_BACKOFF_MILLIS)
+                / Math.log(MULTIPLIER)) + 1, i);
+        return; // Max delay reached
       }
     }
-    assertEquals("max delay not reached", maxBackoffMillis, policy.nextBackoffMillis());
+    assertEquals("max delay not reached", MAX_BACKOFF_MILLIS, policy.nextBackoffMillis());
   }
 
-  @Test public void canProvide() {
+  @Test
+  public void canProvide() {
     assertNotNull(new ExponentialBackoffPolicy.Provider().get());
+  }
+
+  @Test
+  public void minConnTimeoutExceeded() {
+    for (int i = 0; i < 50; i++) {
+      if (MIN_CONNECT_TIMEOUT_MILLIS != policy.currentTimeoutMills()) {
+        assertEquals(
+            (int) (Math.log((double) MIN_CONNECT_TIMEOUT_MILLIS / (double) INITIAL_BACKOFF_MILLIS)
+                / Math.log(MULTIPLIER)) + 1, i);
+        return; // Min connection timeout exceeded
+      }
+      policy.nextBackoffMillis();
+    }
+    assertNotEquals("min connection timeout not exceeded",
+        MIN_CONNECT_TIMEOUT_MILLIS, policy.currentTimeoutMills());
   }
 }
 

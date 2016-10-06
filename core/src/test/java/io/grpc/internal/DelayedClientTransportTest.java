@@ -113,7 +113,7 @@ public class DelayedClientTransportTest {
     when(mockRealTransport2.newStream(same(method2), same(headers2), same(callOptions2),
             same(statsTraceCtx2)))
         .thenReturn(mockRealStream2);
-    delayedTransport.start(transportListener);
+    delayedTransport.start(transportListener, null);
   }
 
   @After public void noMorePendingTasks() {

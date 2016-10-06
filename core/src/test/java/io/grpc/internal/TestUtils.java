@@ -37,6 +37,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import io.grpc.CallOptions;
+import io.grpc.Deadline;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 
@@ -96,7 +97,8 @@ final class TestUtils {
                 mockTransport, (ManagedClientTransport.Listener) invocation.getArguments()[0]));
             return null;
           }
-        }).when(mockTransport).start(any(ManagedClientTransport.Listener.class));
+        }).when(mockTransport)
+            .start(any(ManagedClientTransport.Listener.class), any(Deadline.class));
         return mockTransport;
       }
     }).when(mockTransportFactory)

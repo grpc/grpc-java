@@ -31,6 +31,7 @@
 
 package io.grpc.internal;
 
+import io.grpc.Deadline;
 import io.grpc.Status;
 
 import javax.annotation.CheckReturnValue;
@@ -59,12 +60,13 @@ public interface ManagedClientTransport extends ClientTransport, WithLogId {
    * run. This method and the returned {@code Runnable} should not throw any exceptions.
    *
    * @param listener non-{@code null} listener of transport events
+   * @param deadline deadline for connection attempt timeout
    * @return a {@link Runnable} that is executed after-the-fact by the original caller, typically
    *     after locks are released
    */
   @CheckReturnValue
   @Nullable
-  Runnable start(Listener listener);
+  Runnable start(Listener listener, @Nullable Deadline deadline);
 
   /**
    * Initiates an orderly shutdown of the transport.  Existing streams continue, but the transport

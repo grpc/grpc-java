@@ -39,12 +39,16 @@ import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
 
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
 
 import io.grpc.Attributes;
 import io.grpc.Context;
+import io.grpc.Deadline;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
@@ -139,7 +143,7 @@ public class NettyClientTransportTest {
   public void addDefaultUserAgent() throws Exception {
     startServer();
     NettyClientTransport transport = newTransport(newNegotiator());
-    transport.start(clientTransportListener);
+    transport.start(clientTransportListener, null);
 
     // Send a single RPC and wait for the response.
     new Rpc(transport).halfClose().waitForResponse();
@@ -156,7 +160,7 @@ public class NettyClientTransportTest {
     startServer();
     NettyClientTransport transport = newTransport(newNegotiator(),
         DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, "testUserAgent");
-    transport.start(clientTransportListener);
+    transport.start(clientTransportListener, null);
 
     new Rpc(transport, new Metadata()).halfClose().waitForResponse();
 
@@ -173,7 +177,7 @@ public class NettyClientTransportTest {
     // Allow the response payloads of up to 1 byte.
     NettyClientTransport transport = newTransport(newNegotiator(),
         1, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null);
-    transport.start(clientTransportListener);
+    transport.start(clientTransportListener, null);
 
     try {
       // Send a single RPC and wait for the response.
@@ -198,7 +202,7 @@ public class NettyClientTransportTest {
     ProtocolNegotiator negotiator = newNegotiator();
     for (int index = 0; index < 2; ++index) {
       NettyClientTransport transport = newTransport(negotiator);
-      transport.start(clientTransportListener);
+      transport.start(clientTransportListener, null);
     }
 
     // Send a single RPC on each transport.
@@ -219,7 +223,7 @@ public class NettyClientTransportTest {
     startServer(1, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE);
 
     NettyClientTransport transport = newTransport(newNegotiator());
-    transport.start(clientTransportListener);
+    transport.start(clientTransportListener, null);
 
     // Send a dummy RPC in order to ensure that the updated SETTINGS_MAX_CONCURRENT_STREAMS
     // has been received by the remote endpoint.
@@ -251,7 +255,7 @@ public class NettyClientTransportTest {
 
     NettyClientTransport transport =
         newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE, 1, null);
-    transport.start(clientTransportListener);
+    transport.start(clientTransportListener, null);
 
     try {
       // Send a single RPC and wait for the response.
@@ -270,7 +274,7 @@ public class NettyClientTransportTest {
     startServer(100, 1);
 
     NettyClientTransport transport = newTransport(newNegotiator());
-    transport.start(clientTransportListener);
+    transport.start(clientTransportListener, null);
 
     try {
       // Send a single RPC and wait for the response.
@@ -282,6 +286,17 @@ public class NettyClientTransportTest {
       assertTrue(rootCause.getMessage(),
           rootCause.getMessage().contains("Header size exceeded max allowed size (1)"));
     }
+  }
+
+  @Test
+  public void start_timeout() throws IOException {
+    address = new InetSocketAddress("240.0.0.0", 1234); // Reserved address as a black hole
+    authority = GrpcUtil.authorityFromHostAndPort(address.getHostString(), address.getPort());
+    NettyClientTransport transport = newTransport(newNegotiator());
+    transport.start(clientTransportListener, Deadline.after(1L, TimeUnit.MILLISECONDS));
+
+    verify(clientTransportListener, timeout(1000).times(1)).transportShutdown(any(Status.class));
+    verify(clientTransportListener, timeout(1000).times(1)).transportTerminated();
   }
 
   private Throwable getRootCause(Throwable t) {
@@ -306,8 +321,8 @@ public class NettyClientTransportTest {
   private NettyClientTransport newTransport(ProtocolNegotiator negotiator,
       int maxMsgSize, int maxHeaderListSize, String userAgent) {
     NettyClientTransport transport = new NettyClientTransport(address, NioSocketChannel.class,
-        group, negotiator, DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize, authority,
-        userAgent);
+        group, negotiator, GrpcUtil.TIMER_SERVICE , DEFAULT_WINDOW_SIZE, maxMsgSize,
+        maxHeaderListSize, authority, userAgent);
     transports.add(transport);
     return transport;
   }

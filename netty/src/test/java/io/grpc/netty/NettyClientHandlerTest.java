@@ -536,7 +536,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     };
 
     return NettyClientHandler.newHandler(connection, frameReader(), frameWriter(),
-        lifecycleManager, flowControlWindow, ticker);
+        lifecycleManager, GrpcUtil.TIMER_SERVICE, flowControlWindow, ticker);
   }
 
   @Override

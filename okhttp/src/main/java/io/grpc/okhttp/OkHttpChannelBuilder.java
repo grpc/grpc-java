@@ -61,8 +61,8 @@ import java.security.GeneralSecurityException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
@@ -228,6 +228,16 @@ public class OkHttpChannelBuilder extends
   }
 
   /**
+   * Sets the default timer service. If not called, defaults to {@link GrpcUtil#TIMER_SERVICE};
+   */
+  @ExperimentalApi
+  public final OkHttpChannelBuilder timerService(Resource<ScheduledExecutorService> timerService) {
+    checkArgument(timerService != null, "timerService");
+    super.timerService = timerService;
+    return this;
+  }
+
+  /**
    * Equivalent to using {@link #negotiationType(NegotiationType)} with {@code PLAINTEXT}.
    */
   @Override
@@ -242,7 +252,7 @@ public class OkHttpChannelBuilder extends
 
   @Override
   protected final ClientTransportFactory buildTransportFactory() {
-    return new OkHttpTransportFactory(transportExecutor,
+    return new OkHttpTransportFactory(transportExecutor, timerService,
         createSocketFactory(), connectionSpec, maxMessageSize, enableKeepAlive, keepAliveDelayNanos,
         keepAliveTimeoutNanos);
   }
@@ -291,6 +301,7 @@ public class OkHttpChannelBuilder extends
   @Internal
   static final class OkHttpTransportFactory implements ClientTransportFactory {
     private final Executor executor;
+    private final Resource<ScheduledExecutorService> timerService;
     private final boolean usingSharedExecutor;
     @Nullable
     private final SSLSocketFactory socketFactory;
@@ -302,12 +313,14 @@ public class OkHttpChannelBuilder extends
     private boolean closed;
 
     private OkHttpTransportFactory(Executor executor,
+        Resource<ScheduledExecutorService> timerService,
         @Nullable SSLSocketFactory socketFactory,
         ConnectionSpec connectionSpec,
         int maxMessageSize,
         boolean enableKeepAlive,
         long keepAliveDelayNanos,
         long keepAliveTimeoutNanos) {
+      this.timerService = timerService;
       this.socketFactory = socketFactory;
       this.connectionSpec = connectionSpec;
       this.maxMessageSize = maxMessageSize;
@@ -332,7 +345,8 @@ public class OkHttpChannelBuilder extends
       }
       InetSocketAddress inetSocketAddr = (InetSocketAddress) addr;
       OkHttpClientTransport transport = new OkHttpClientTransport(inetSocketAddr, authority,
-          userAgent, executor, socketFactory, Utils.convertSpec(connectionSpec), maxMessageSize);
+          userAgent, executor, timerService, socketFactory, Utils.convertSpec(connectionSpec),
+          maxMessageSize);
       if (enableKeepAlive) {
         transport.enableKeepAlive(true, keepAliveDelayNanos, keepAliveTimeoutNanos);
       }

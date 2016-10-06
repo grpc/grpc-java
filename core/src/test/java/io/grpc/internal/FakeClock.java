@@ -193,6 +193,13 @@ public final class FakeClock {
   }
 
   /**
+   * Returns the ticker that the fake clock uses.
+   */
+  public Ticker getTicker() {
+    return ticker;
+  }
+
+  /**
    * Provides a partially implemented instance of {@link ScheduledExecutorService} that uses the
    * fake clock ticker for testing.
    */

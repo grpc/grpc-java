@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Google Inc. All rights reserved.
+ * Copyright 2016, Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -29,27 +29,28 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.internal;
+package io.grpc;
 
-import javax.annotation.Nullable;
+import com.google.common.base.Ticker;
+
+import java.util.concurrent.TimeUnit;
 
 /**
- * Determines how long to wait before doing some action (typically a retry, or a reconnect).
+ * A testing tool that produces {@link Deadline} instances that is based on a custom time ticker.
  */
-interface BackoffPolicy {
-  interface Provider {
-    BackoffPolicy get();
+public class FakeDeadline {
+
+  /**
+   * Create a deadline that will expire at the specified offset from a custom/fake ticker clock.
+   */
+  public static Deadline after(long duration, TimeUnit units, final Ticker ticker) {
+    Deadline.Ticker tkr =
+        new Deadline.Ticker() {
+          @Override
+          public long read() {
+            return ticker.read();
+          }
+        };
+    return Deadline.after(duration, units, tkr);
   }
-
-  /**
-   * Returns the number of milliseconds to wait.
-   */
-  long nextBackoffMillis();
-
-  /**
-   * Returns the timeout milliseconds for connection attempt. Zero timeout means infinity.
-   */
-  @Nullable
-  long currentTimeoutMills();
 }
-

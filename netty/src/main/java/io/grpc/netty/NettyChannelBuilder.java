@@ -46,6 +46,8 @@ import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
+import io.grpc.internal.SharedResourceHolder.Resource;
+
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -53,6 +55,7 @@ import io.netty.handler.ssl.SslContext;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.concurrent.ScheduledExecutorService;
 
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
@@ -212,6 +215,15 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
   }
 
   /**
+   * Sets the default timer service. If not called, defaults to {@link GrpcUtil#TIMER_SERVICE};
+   */
+  final NettyChannelBuilder timerService(Resource<ScheduledExecutorService> timerService) {
+    checkArgument(timerService != null, "timerService");
+    super.timerService = timerService;
+    return this;
+  }
+
+  /**
    * Equivalent to using {@link #negotiationType(NegotiationType)} with {@code PLAINTEXT} or
    * {@code PLAINTEXT_UPGRADE}.
    */
@@ -228,7 +240,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
   @Override
   protected ClientTransportFactory buildTransportFactory() {
     return new NettyTransportFactory(channelType, negotiationType, protocolNegotiator, sslContext,
-        eventLoopGroup, flowControlWindow, maxMessageSize, maxHeaderListSize);
+        timerService, eventLoopGroup, flowControlWindow, maxMessageSize, maxHeaderListSize);
   }
 
   @Override
@@ -283,6 +295,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
     private final ProtocolNegotiator protocolNegotiator;
     private final SslContext sslContext;
     private final EventLoopGroup group;
+    private final Resource<ScheduledExecutorService> timerService;
     private final boolean usingSharedGroup;
     private final int flowControlWindow;
     private final int maxMessageSize;
@@ -294,6 +307,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
                                   NegotiationType negotiationType,
                                   ProtocolNegotiator protocolNegotiator,
                                   SslContext sslContext,
+                                  Resource<ScheduledExecutorService> timerService,
                                   EventLoopGroup group,
                                   int flowControlWindow,
                                   int maxMessageSize,
@@ -302,6 +316,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
       this.negotiationType = negotiationType;
       this.protocolNegotiator = protocolNegotiator;
       this.sslContext = sslContext;
+      this.timerService = timerService;
       this.flowControlWindow = flowControlWindow;
       this.maxMessageSize = maxMessageSize;
       this.maxHeaderListSize = maxHeaderListSize;
@@ -331,7 +346,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
       }
-      return new NettyClientTransport(serverAddress, channelType, group, negotiator,
+      return new NettyClientTransport(serverAddress, channelType, group, negotiator, timerService,
           flowControlWindow, maxMessageSize, maxHeaderListSize, authority, userAgent);
     }
 

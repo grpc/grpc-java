@@ -53,7 +53,9 @@ import static org.mockito.Matchers.isA;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
@@ -65,6 +67,7 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 
+import io.grpc.FakeDeadline;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -74,8 +77,10 @@ import io.grpc.StatusException;
 import io.grpc.internal.AbstractStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ManagedClientTransport;
+import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.okhttp.OkHttpClientTransport.ClientFrameHandler;
 import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.framed.ErrorCode;
@@ -105,13 +110,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nullable;
@@ -135,6 +143,20 @@ public class OkHttpClientTransportTest {
   MethodDescriptor<?, ?> method;
   @Mock
   private ManagedClientTransport.Listener transportListener;
+
+  private final FakeClock fakeClock = new FakeClock();
+  private Resource<ScheduledExecutorService> scheduledExecutorResource =
+      new Resource<ScheduledExecutorService>() {
+        @Override
+        public ScheduledExecutorService create() {
+          return fakeClock.getScheduledExecutorService();
+        }
+
+        @Override
+        public void close(ScheduledExecutorService instance) {
+        }
+      };
+
   private OkHttpClientTransport clientTransport;
   private MockFrameReader frameReader;
   private ExecutorService executor;
@@ -183,7 +205,7 @@ public class OkHttpClientTransportTest {
     clientTransport = new OkHttpClientTransport(userAgent, executor, frameReader,
         frameWriter, startId, new MockSocket(frameReader), ticker, connectingCallback,
         connectedFuture, maxMessageSize);
-    clientTransport.start(transportListener);
+    clientTransport.start(transportListener, null);
     if (waitingForConnected) {
       connectedFuture.get(TIME_OUT_MS, TimeUnit.MILLISECONDS);
     }
@@ -193,7 +215,7 @@ public class OkHttpClientTransportTest {
   public void testToString() throws Exception {
     InetSocketAddress address = InetSocketAddress.createUnresolved("hostname", 31415);
     clientTransport = new OkHttpClientTransport(
-        address, "hostname", null /* agent */, executor, null,
+        address, "hostname", null /* agent */, executor, GrpcUtil.TIMER_SERVICE, null,
         Utils.convertSpec(OkHttpChannelBuilder.DEFAULT_CONNECTION_SPEC), DEFAULT_MAX_MESSAGE_SIZE);
     String s = clientTransport.toString();
     assertTrue("Unexpected: " + s, s.contains("OkHttpClientTransport"));
@@ -1309,6 +1331,7 @@ public class OkHttpClientTransportTest {
         "invalid_authority",
         "userAgent",
         executor,
+        GrpcUtil.TIMER_SERVICE,
         null,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE);
@@ -1327,12 +1350,13 @@ public class OkHttpClientTransportTest {
         "authority",
         "userAgent",
         executor,
+        GrpcUtil.TIMER_SERVICE,
         null,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE);
 
     ManagedClientTransport.Listener listener = mock(ManagedClientTransport.Listener.class);
-    clientTransport.start(listener);
+    clientTransport.start(listener, null);
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     verify(listener, timeout(TIME_OUT_MS)).transportShutdown(captor.capture());
     Status status = captor.getValue();
@@ -1343,6 +1367,73 @@ public class OkHttpClientTransportTest {
     clientTransport.newStream(method, new Metadata()).start(streamListener);
     streamListener.waitUntilStreamClosed();
     assertEquals(Status.UNAVAILABLE.getCode(), streamListener.status.getCode());
+  }
+
+  @Test
+  public void start_socketTimeout() throws InterruptedException, IOException {
+    clientTransport = spy(new OkHttpClientTransport(
+        new InetSocketAddress("240.0.0.0", 111), // Reserved address as a black hole
+        "authority",
+        "userAgent",
+        executor,
+        scheduledExecutorResource,
+        null,
+        ConnectionSpec.CLEARTEXT,
+        DEFAULT_MAX_MESSAGE_SIZE));
+    ArgumentCaptor<Throwable> throwable = ArgumentCaptor.forClass(Throwable.class);
+
+    clientTransport.start(
+        transportListener, FakeDeadline.after(1L, TimeUnit.MILLISECONDS, fakeClock.getTicker()));
+    executor.awaitTermination(100, TimeUnit.MILLISECONDS);
+
+    verify(clientTransport, timeout(100).atLeastOnce()).onException(throwable.capture());
+    assertEquals(SocketTimeoutException.class, throwable.getAllValues().get(0).getClass());
+    verify(transportListener, times(1)).transportShutdown(any(Status.class));
+    verify(transportListener, timeout(100).times(1)).transportTerminated();
+  }
+
+  @Test
+  public void start_handShakeOrFrameSettingsTimeout() throws IOException, InterruptedException {
+    ServerSocket fakeServer = null;
+    try {
+      fakeServer = new ServerSocket(0);
+      clientTransport = spy(new OkHttpClientTransport(
+          new InetSocketAddress(fakeServer.getLocalPort()),
+          "authority",
+          "userAgent",
+          executor,
+          scheduledExecutorResource,
+          null,
+          ConnectionSpec.CLEARTEXT,
+          DEFAULT_MAX_MESSAGE_SIZE));
+      ArgumentCaptor<Throwable> throwable = ArgumentCaptor.forClass(Throwable.class);
+
+      clientTransport.start(
+          transportListener,
+          FakeDeadline.after(10000L, TimeUnit.MILLISECONDS, fakeClock.getTicker()));
+      fakeClock.forwardMillis(1001L);
+      executor.awaitTermination(100, TimeUnit.MILLISECONDS);
+
+      // no timeout yet
+      verify(clientTransport, never()).onException(any(Throwable.class));
+      verify(transportListener, never()).transportShutdown(any(Status.class));
+      verify(transportListener, never()).transportTerminated();
+
+      fakeClock.forwardMillis(10000L);
+      executor.awaitTermination(100, TimeUnit.MILLISECONDS);
+
+      // timeout
+      verify(clientTransport, timeout(100).atLeastOnce()).onException(throwable.capture());
+      assertEquals(IOException.class, throwable.getAllValues().get(0).getClass());
+      assertTrue(throwable.getAllValues().get(0)
+          .getMessage().contains("ssl handshake timeout or frame settings timeout"));
+      verify(transportListener, times(1)).transportShutdown(any(Status.class));
+      verify(transportListener, timeout(100).times(1)).transportTerminated();
+    } finally {
+      if (fakeServer != null) {
+        fakeServer.close();
+      }
+    }
   }
 
   private int activeStreamCount() {

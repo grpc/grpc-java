@@ -359,7 +359,12 @@ public class ManagedChannelImplIdlenessTest {
       return new BackoffPolicy() {
         @Override
         public long nextBackoffMillis() {
-          return 1;
+          return 1L;
+        }
+
+        @Override
+        public long currentTimeoutMills() {
+          return 0L;
         }
       };
     }
