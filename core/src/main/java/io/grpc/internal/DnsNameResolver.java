@@ -36,6 +36,7 @@ import com.google.common.base.Preconditions;
 
 import io.grpc.Attributes;
 import io.grpc.NameResolver;
+import io.grpc.RefreshingNameResolver;
 import io.grpc.ResolvedServerInfo;
 import io.grpc.ResolvedServerInfoGroup;
 import io.grpc.internal.SharedResourceHolder.Resource;

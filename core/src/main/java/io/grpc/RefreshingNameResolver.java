@@ -29,15 +29,14 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.internal;
+package io.grpc;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
-import io.grpc.Attributes;
-import io.grpc.NameResolver;
-import io.grpc.ResolvedServerInfoGroup;
-import io.grpc.Status;
+import io.grpc.internal.DnsNameResolverProvider;
+import io.grpc.internal.LogExceptionRunnable;
+import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
 
 import java.net.InetAddress;
@@ -54,7 +53,7 @@ import javax.annotation.concurrent.GuardedBy;
  * A DNS-based {@link NameResolver}.
  *
  * @see DnsNameResolverProvider */
-abstract class RefreshingNameResolver extends NameResolver {
+public abstract class RefreshingNameResolver extends NameResolver {
 
   private final Resource<ScheduledExecutorService> timerServiceResource;
   private final Resource<ExecutorService> executorResource;
@@ -71,7 +70,7 @@ abstract class RefreshingNameResolver extends NameResolver {
   @GuardedBy("this")
   private Listener listener;
 
-  RefreshingNameResolver(Resource<ScheduledExecutorService> timerServiceResource,
+  protected RefreshingNameResolver(Resource<ScheduledExecutorService> timerServiceResource,
                          Resource<ExecutorService> executorResource) {
     this.timerServiceResource = timerServiceResource;
     this.executorResource = executorResource;
