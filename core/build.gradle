@@ -1,5 +1,5 @@
 plugins {
-//    id "be.insaneprogramming.gradle.animalsniffer" version "1.4.0"
+    id "be.insaneprogramming.gradle.animalsniffer" version "1.4.0"
 }
 
 description = 'gRPC: Core'
@@ -9,14 +9,13 @@ dependencies {
             libraries.errorprone,
             libraries.jsr305,
             project(':grpc-context'),
-            libraries.census_api,
-            'com.netflix.eureka:eureka-client:1.6.0'
+            libraries.census_api
     testCompile project(':grpc-testing')
 }
 
 // Configure the animal sniffer plugin
-//animalsniffer {
-//    signature = "org.codehaus.mojo.signature:java16:+@signature"
-//}
+animalsniffer {
+    signature = "org.codehaus.mojo.signature:java16:+@signature"
+}
 
 javadoc.exclude 'io/grpc/internal/**'
