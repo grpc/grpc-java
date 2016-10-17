@@ -33,21 +33,22 @@ package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+
+import io.grpc.Attributes;
+import io.grpc.NameResolver;
+import io.grpc.ResolvedServerInfoGroup;
+import io.grpc.Status;
+import io.grpc.internal.SharedResourceHolder.Resource;
+
 import java.net.InetAddress;
-import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.Nullable;
+
 import javax.annotation.concurrent.GuardedBy;
-import io.grpc.Attributes;
-import io.grpc.NameResolver;
-import io.grpc.ResolvedServerInfoGroup;
-import io.grpc.Status;
-import io.grpc.internal.SharedResourceHolder.Resource;
 
 /**
  * A DNS-based {@link NameResolver}.
@@ -137,7 +138,7 @@ abstract class RefreshingNameResolver extends NameResolver {
       }
     };
 
-  abstract protected List<ResolvedServerInfoGroup> getResolvedServerInfoGroups() throws Exception;
+  protected abstract List<ResolvedServerInfoGroup> getResolvedServerInfoGroups() throws Exception;
 
   private final Runnable resolutionRunnableOnExecutor = new Runnable() {
       @Override

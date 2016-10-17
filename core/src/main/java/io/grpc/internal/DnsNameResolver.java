@@ -38,7 +38,6 @@ import io.grpc.Attributes;
 import io.grpc.NameResolver;
 import io.grpc.ResolvedServerInfo;
 import io.grpc.ResolvedServerInfoGroup;
-import io.grpc.Status;
 import io.grpc.internal.SharedResourceHolder.Resource;
 
 import java.net.InetAddress;
@@ -49,11 +48,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A DNS-based {@link NameResolver}.
@@ -61,62 +57,63 @@ import javax.annotation.concurrent.GuardedBy;
  * @see DnsNameResolverProvider
  */
 class DnsNameResolver extends RefreshingNameResolver {
-    private final String authority;
-    private final String host;
-    private final int port;
+  private final String authority;
+  private final String host;
+  private final int port;
 
-    DnsNameResolver(@Nullable String nsAuthority, String name, Attributes params,
-                    Resource<ScheduledExecutorService> timerServiceResource,
-                    Resource<ExecutorService> executorResource) {
+  DnsNameResolver(@Nullable String nsAuthority, String name, Attributes params,
+                  Resource<ScheduledExecutorService> timerServiceResource,
+                  Resource<ExecutorService> executorResource) {
 
-        super(timerServiceResource, executorResource);
-        // TODO: if a DNS server is provided as nsAuthority, use it.
-        // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
-
-        // Must prepend a "//" to the name when constructing a URI, otherwise it will be treated as an
-        // opaque URI, thus the authority and host of the resulted URI would be null.
-        URI nameUri = URI.create("//" + name);
-        authority = Preconditions.checkNotNull(nameUri.getAuthority(),
-                "nameUri (%s) doesn't have an authority", nameUri);
-        host = Preconditions.checkNotNull(nameUri.getHost(), "host");
-        if (nameUri.getPort() == -1) {
-            Integer defaultPort = params.get(NameResolver.Factory.PARAMS_DEFAULT_PORT);
-            if (defaultPort != null) {
-                port = defaultPort;
-            } else {
-                throw new IllegalArgumentException(
-                        "name '" + name + "' doesn't contain a port, and default port is not set in params");
-            }
-        } else {
-            port = nameUri.getPort();
-        }
+    super(timerServiceResource, executorResource);
+    // TODO: if a DNS server is provided as nsAuthority, use it.
+    // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
+    // Must prepend a "//" to the name when constructing a URI, otherwise it will be treated as an
+    // opaque URI, thus the authority and host of the resulted URI would be null.
+    URI nameUri = URI.create("//" + name);
+    authority = Preconditions.checkNotNull(nameUri.getAuthority(),
+            "nameUri (%s) doesn't have an authority", nameUri);
+    host = Preconditions.checkNotNull(nameUri.getHost(), "host");
+    if (nameUri.getPort() == -1) {
+      Integer defaultPort = params.get(NameResolver.Factory.PARAMS_DEFAULT_PORT);
+      if (defaultPort != null) {
+        port = defaultPort;
+      } else {
+        throw new IllegalArgumentException(
+          "name '" + name + "' doesn't contain a port, and default port is not set in params");
+      }
+    } else {
+      port = nameUri.getPort();
     }
+  }
 
-    @Override
-    public final String getServiceAuthority() {
-        return authority;
-    }
+  @Override
+  public final String getServiceAuthority() {
+    return authority;
+  }
 
-    @Override
-    protected List<ResolvedServerInfoGroup> getResolvedServerInfoGroups() throws UnknownHostException {
-        InetAddress[] inetAddrs;
-        inetAddrs = getAllByName(host);
-        ResolvedServerInfoGroup.Builder servers = ResolvedServerInfoGroup.builder();
-        for (int i = 0; i < inetAddrs.length; i++) {
-            InetAddress inetAddr = inetAddrs[i];
-            servers.add(
-                    new ResolvedServerInfo(new InetSocketAddress(inetAddr, port), Attributes.EMPTY));
-        }
-        return Collections.singletonList(servers.build());
-    }
+  @Override
+  protected List<ResolvedServerInfoGroup> getResolvedServerInfoGroups()
+    throws UnknownHostException {
 
-    // To be mocked out in tests
-    @VisibleForTesting
-    InetAddress[] getAllByName(String host) throws UnknownHostException {
-        return InetAddress.getAllByName(host);
+    InetAddress[] inetAddrs;
+    inetAddrs = getAllByName(host);
+    ResolvedServerInfoGroup.Builder servers = ResolvedServerInfoGroup.builder();
+    for (int i = 0; i < inetAddrs.length; i++) {
+      InetAddress inetAddr = inetAddrs[i];
+      servers.add(new ResolvedServerInfo(new InetSocketAddress(inetAddr, port), Attributes.EMPTY));
     }
+    return Collections.singletonList(servers.build());
+  }
 
-    final int getPort() {
-        return port;
-    }
+  // To be mocked out in tests
+  @VisibleForTesting
+  InetAddress[] getAllByName(String host) throws UnknownHostException {
+    return InetAddress.getAllByName(host);
+  }
+
+  final int getPort() {
+    return port;
+  }
+
 }
