@@ -179,7 +179,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         .frameLogger(frameLogger)
         .frameReader(frameReader)
         .frameWriter(frameWriter)
-        .bufferOutgoingStreams(true)
+        .bufferOutboundStreams(true)
         .initialSettings(settings);
 
     return new NettyClientHandler(frameCodecBuilder, flowControlWindow, lifecycleManager, ticker);
@@ -439,7 +439,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     ping = new Http2Ping(USER_PING_PAYLOAD, stopwatch);
     ping.addCallback(callback, executor);
     // and then write the ping
-    ctx.write(new DefaultHttp2PingFrame(userPayloadBuf.slice(), false), promise);
+    ctx.write(new DefaultHttp2PingFrame(userPayloadBuf.slice()), promise);
     ctx.flush();
     final Http2Ping finalPing = ping;
     promise.addListener(new ChannelFutureListener() {

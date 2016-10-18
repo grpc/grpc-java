@@ -181,7 +181,7 @@ abstract class AbstractNettyHandler extends Http2ChannelDuplexHandler {
     private void sendPing() {
       setDataSizeSincePing(0);
       lastPingTime = System.nanoTime();
-      ctx().write(new DefaultHttp2PingFrame(payloadBuf.slice(), false));
+      ctx().write(new DefaultHttp2PingFrame(payloadBuf.slice()));
       pingCount++;
     }
 
