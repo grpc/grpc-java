@@ -164,30 +164,27 @@ public final class GrpcUtil {
 
   /**
    * Maps HTTP error response status codes to transport codes.
+   *
+   * @see {@url https://github.com/grpc/grpc/blob/master/doc/http-grpc-status-mapping.md}
    */
   public static Status httpStatusToGrpcStatus(int httpStatusCode) {
-    // Specific HTTP code handling.
     switch (httpStatusCode) {
-      case HttpURLConnection.HTTP_UNAUTHORIZED:  // 401
+      case HttpURLConnection.HTTP_BAD_REQUEST:      // 400
+        return Status.INTERNAL;
+      case HttpURLConnection.HTTP_UNAUTHORIZED:     // 401
         return Status.UNAUTHENTICATED;
-      case HttpURLConnection.HTTP_FORBIDDEN:  // 403
+      case HttpURLConnection.HTTP_FORBIDDEN:        // 403
         return Status.PERMISSION_DENIED;
+      case HttpURLConnection.HTTP_NOT_FOUND:        // 404
+        return Status.UNIMPLEMENTED;
+      case 429:                                     // 429
+      case HttpURLConnection.HTTP_BAD_GATEWAY:      // 502
+      case HttpURLConnection.HTTP_UNAVAILABLE:      // 503
+      case HttpURLConnection.HTTP_GATEWAY_TIMEOUT:  // 504
+        return Status.UNAVAILABLE;
       default:
+        return Status.UNKNOWN;
     }
-    // Generic HTTP code handling.
-    if (httpStatusCode < 100) {
-      // 0xx. These don't exist.
-      return Status.UNKNOWN;
-    }
-    if (httpStatusCode < 200) {
-      // 1xx. These headers should have been ignored.
-      return Status.INTERNAL;
-    }
-    if (httpStatusCode < 300) {
-      // 2xx
-      return Status.OK;
-    }
-    return Status.UNKNOWN;
   }
 
   /**
