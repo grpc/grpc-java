@@ -118,11 +118,9 @@ public class RouteGuideClient {
     Iterator<Feature> features;
     try {
       features = blockingStub.listFeatures(request);
-
-      int i = 0;
-      while (features.hasNext()) {
+      for (int i = 1; features.hasNext(); i++) {
         Feature feature = features.next();
-        info("Result #" + ++i + ": {0}", feature);
+        info("Result #" + i + ": {0}", feature);
       }
     } catch (StatusRuntimeException e) {
       warning("RPC failed: {0}", e.getStatus());
@@ -271,21 +269,35 @@ public class RouteGuideClient {
     }
   }
 
+  /**
+   * Make it visible for unit test, so that test can verify state changes by spying on it.
+   */
   @VisibleForTesting
   void info(String msg, Object... params) {
     logger.log(Level.INFO, msg, params);
   }
 
+  /**
+   * Make it visible for unit test, so that test can verify state changes by spying on it.
+   */
   @VisibleForTesting
   void warning(String msg, Object... params) {
     logger.log(Level.WARNING, msg, params);
   }
 
+  /**
+   * Make it visible for unit test, so that we can override it by spying on it, as we do not want to
+   * introduce randomness in unit test.
+   */
   @VisibleForTesting
   int randomIndex(int bound, Random random) {
     return random.nextInt(bound);
   }
 
+  /**
+   * Make it visible for unit test, so that we can override it by spying on it, as we do not want to
+   * sleep in unit test.
+   */
   @VisibleForTesting
   void sleep(long millis) throws InterruptedException {
     Thread.sleep(millis);

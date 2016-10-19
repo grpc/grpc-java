@@ -80,7 +80,7 @@ public class HeaderServerInterceptorTest {
 
   @Before
   public void setUp() throws IOException {
-    String uniqueServerName = "fake server for " + this.getClass();
+    String uniqueServerName = "fake server for " + getClass();
     GreeterImplBase greeterImplBase =
         new GreeterImplBase() {
           @Override

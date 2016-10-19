@@ -89,7 +89,7 @@ public class HeaderClientInterceptorTest {
 
   @Before
   public void setUp() throws IOException {
-    String uniqueServerName = "fake server for " + this.getClass();
+    String uniqueServerName = "fake server for " + getClass();
     fakeServer = InProcessServerBuilder.forName(uniqueServerName)
         .addService(ServerInterceptors.intercept(new GreeterImplBase() {}, mockServerInterceptor))
         .build()

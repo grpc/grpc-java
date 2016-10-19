@@ -73,7 +73,7 @@ public class RouteGuideServerTest {
 
   @Before
   public void setUp() throws IOException {
-    String uniqueServerName = "fake server for " + this.getClass();
+    String uniqueServerName = "fake server for " + getClass();
     features = new ArrayList<Feature>();
     server = new RouteGuideServer(InProcessServerBuilder.forName(uniqueServerName), 0, features);
     server.start();
@@ -162,6 +162,7 @@ public class RouteGuideServerTest {
     assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testRecordRoute() {
     Point p1 = Point.newBuilder().setLongitude(1).setLatitude(1).build();
@@ -208,6 +209,7 @@ public class RouteGuideServerTest {
         .onError(any(Throwable.class));
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testRouteChat() {
     Point p1 = Point.newBuilder().setLongitude(1).setLatitude(1).build();

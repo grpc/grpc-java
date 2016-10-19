@@ -67,7 +67,7 @@ public class HelloWorldServerTest {
   @Before
   public void setUp() throws IOException {
     GreeterImpl greeterImpl = new GreeterImpl();
-    String uniqueServerName = "in-process server for " + this.getClass();
+    String uniqueServerName = "in-process server for " + getClass();
     inProcessServer =
         InProcessServerBuilder.forName(uniqueServerName).addService(greeterImpl).build().start();
     inProcessChannel = InProcessChannelBuilder.forName(uniqueServerName).build();
@@ -93,7 +93,7 @@ public class HelloWorldServerTest {
   @Test
   public void greeterImpl_replyMessage() throws IOException {
     GreeterGrpc.GreeterBlockingStub blockingStub = GreeterGrpc.newBlockingStub(inProcessChannel);
-    final String testName = "test name";
+    String testName = "test name";
 
     HelloReply reply = blockingStub.sayHello(HelloRequest.newBuilder().setName(testName).build());
 
