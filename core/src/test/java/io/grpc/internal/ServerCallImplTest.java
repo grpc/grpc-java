@@ -35,7 +35,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.isA;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -291,42 +290,6 @@ public class ServerCallImplTest {
     streamListener.messageRead(method.streamRequest(1234L));
 
     verify(callListener).onMessage(1234L);
-  }
-
-  @Test
-  public void streamListener_unexpectedRuntimeException() {
-    ServerStreamListenerImpl<Long> streamListener =
-        new ServerCallImpl.ServerStreamListenerImpl<Long>(
-            call, callListener, context, statsTraceCtx);
-    doThrow(new RuntimeException("unexpected exception"))
-        .when(callListener)
-        .onMessage(any(Long.class));
-
-    thrown.expect(RuntimeException.class);
-    thrown.expectMessage("unexpected exception");
-    streamListener.messageRead(method.streamRequest(1234L));
-  }
-
-  private void checkStats(Status.Code statusCode) {
-    CensusTestUtils.MetricsRecord record = censusCtxFactory.pollRecord();
-    assertNotNull(record);
-    TagValue statusTag = record.tags.get(RpcConstants.RPC_STATUS);
-    assertNotNull(statusTag);
-    assertEquals(statusCode.toString(), statusTag.toString());
-    assertNull(record.getMetric(RpcConstants.RPC_CLIENT_REQUEST_BYTES));
-    assertNull(record.getMetric(RpcConstants.RPC_CLIENT_RESPONSE_BYTES));
-    assertNull(record.getMetric(RpcConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES));
-    assertNull(record.getMetric(RpcConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
-    // The test doesn't invoke MessageFramer and MessageDeframer which keep the sizes.
-    // Thus the sizes reported to stats would be zero.
-    assertEquals(0,
-        record.getMetricAsLongOrFail(RpcConstants.RPC_SERVER_REQUEST_BYTES));
-    assertEquals(0,
-        record.getMetricAsLongOrFail(RpcConstants.RPC_SERVER_RESPONSE_BYTES));
-    assertEquals(0,
-        record.getMetricAsLongOrFail(RpcConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES));
-    assertEquals(0,
-        record.getMetricAsLongOrFail(RpcConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES));
   }
 
   private static class LongMarshaller implements Marshaller<Long> {
