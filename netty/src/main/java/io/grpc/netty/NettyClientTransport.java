@@ -90,11 +90,10 @@ class NettyClientTransport implements ConnectionClientTransport {
   /** Since not thread-safe, may only be used from event loop. */
   private ClientTransportLifecycleManager lifecycleManager;
 
-  NettyClientTransport(
-      SocketAddress address, Class<? extends Channel> channelType,
-      Map<ChannelOption<?>, ?> channelOptions, EventLoopGroup group,
-      ProtocolNegotiator negotiator, int flowControlWindow, int maxMessageSize,
-      int maxHeaderListSize, String authority, @Nullable String userAgent) {
+  NettyClientTransport(SocketAddress address, Class<? extends Channel> channelType,
+      Map<ChannelOption<?>, ?> channelOptions, EventLoopGroup group, ProtocolNegotiator negotiator,
+      int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
+      String authority, @Nullable String userAgent) {
     this.negotiator = Preconditions.checkNotNull(negotiator, "negotiator");
     this.address = Preconditions.checkNotNull(address, "address");
     this.group = Preconditions.checkNotNull(group, "group");

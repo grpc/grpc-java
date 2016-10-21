@@ -33,6 +33,7 @@ package io.grpc.internal;
 
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.census.Census;
 import com.google.census.CensusContextFactory;
@@ -53,6 +54,7 @@ import io.grpc.PickFirstBalancerFactory;
 import io.grpc.ResolvedServerInfo;
 import io.grpc.ResolvedServerInfoGroup;
 
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -137,6 +139,16 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Nullable
   private CensusContextFactory censusFactory;
+
+  @Nullable
+  protected InetSocketAddress proxyAddress;
+
+  @Nullable
+  protected String proxyUsername;
+
+  @Nullable
+  protected String proxyPassword;
+
 
   protected AbstractManagedChannelImplBuilder(String target) {
     this.target = Preconditions.checkNotNull(target, "target");
@@ -238,6 +250,20 @@ public abstract class AbstractManagedChannelImplBuilder
     } else {
       this.idleTimeoutMillis = Math.max(unit.toMillis(value), IDLE_MODE_MIN_TIMEOUT_MILLIS);
     }
+    return thisT();
+  }
+
+
+  /**
+   * Use of a http proxy server.
+   *
+   * <p>If username and password are null, authentication won't be enforced.
+   */
+  public T useHttpProxy(InetSocketAddress address, String username, String password) {
+    checkNotNull(address, "address must be present");
+    this.proxyAddress = address;
+    this.proxyUsername = username;
+    this.proxyPassword = password;
     return thisT();
   }
 
