@@ -235,11 +235,31 @@ public class UnimplementedServiceGrpc {
     }
   }
 
-  private static io.grpc.ServiceDescriptor serviceDescriptor;
+  public static class UnimplementedServiceServiceDescriptor extends io.grpc.protobuf.reflection.ProtoServiceDescriptor {
+    public UnimplementedServiceServiceDescriptor(String name, io.grpc.MethodDescriptor<?, ?>... methods) {
+      super(name, methods);
+    }
 
-  public static synchronized io.grpc.ServiceDescriptor getServiceDescriptor() {
+    public UnimplementedServiceServiceDescriptor(String name, java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
+      super(name, methods);
+    }
+
+    @java.lang.Override
+    public UnimplementedServiceServiceDescriptor withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
+      return new UnimplementedServiceServiceDescriptor(getName(), methods);
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.FileDescriptor getFile() {
+      return io.grpc.testing.integration.Test.getDescriptor();
+    }
+  }
+
+  private static UnimplementedServiceServiceDescriptor serviceDescriptor;
+
+  public static synchronized UnimplementedServiceServiceDescriptor getServiceDescriptor() {
     if (serviceDescriptor == null) {
-      serviceDescriptor = new io.grpc.ServiceDescriptor(SERVICE_NAME,
+      serviceDescriptor = new UnimplementedServiceServiceDescriptor(SERVICE_NAME,
           METHOD_UNIMPLEMENTED_CALL);
     }
 

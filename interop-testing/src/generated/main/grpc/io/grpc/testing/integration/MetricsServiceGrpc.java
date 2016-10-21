@@ -271,11 +271,31 @@ public class MetricsServiceGrpc {
     }
   }
 
-  private static io.grpc.ServiceDescriptor serviceDescriptor;
+  public static class MetricsServiceServiceDescriptor extends io.grpc.protobuf.reflection.ProtoServiceDescriptor {
+    public MetricsServiceServiceDescriptor(String name, io.grpc.MethodDescriptor<?, ?>... methods) {
+      super(name, methods);
+    }
 
-  public static synchronized io.grpc.ServiceDescriptor getServiceDescriptor() {
+    public MetricsServiceServiceDescriptor(String name, java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
+      super(name, methods);
+    }
+
+    @java.lang.Override
+    public MetricsServiceServiceDescriptor withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
+      return new MetricsServiceServiceDescriptor(getName(), methods);
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.FileDescriptor getFile() {
+      return io.grpc.testing.integration.Metrics.getDescriptor();
+    }
+  }
+
+  private static MetricsServiceServiceDescriptor serviceDescriptor;
+
+  public static synchronized MetricsServiceServiceDescriptor getServiceDescriptor() {
     if (serviceDescriptor == null) {
-      serviceDescriptor = new io.grpc.ServiceDescriptor(SERVICE_NAME,
+      serviceDescriptor = new MetricsServiceServiceDescriptor(SERVICE_NAME,
           METHOD_GET_ALL_GAUGES,
           METHOD_GET_GAUGE);
     }

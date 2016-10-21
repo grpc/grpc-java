@@ -884,21 +884,80 @@ static void PrintMethodHandlerClass(const ServiceDescriptor* service,
 static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
                                    map<string, string>* vars,
                                    Printer* p,
-                                   bool generate_nano) {
+                                   ProtoFlavor flavor) {
   (*vars)["service_name"] = service->name();
-  p->Print(
+
+
+  if (flavor == ProtoFlavor::NORMAL) {
+    (*vars)["proto_service_descriptor"] = service->name() + "ServiceDescriptor";
+    (*vars)["proto_class_name"] = google::protobuf::compiler::java::ClassName(service->file());
+    p->Print(
+        *vars,
+        "public static class $proto_service_descriptor$ extends $ProtobufServiceDescriptor$ {\n");
+    p->Indent();
+    p->Print(
+        *vars,
+        "public $proto_service_descriptor$(String name, io.grpc.MethodDescriptor<?, ?>... methods) {\n");
+    p->Indent();
+    p->Print(*vars, "super(name, methods);\n");
+    p->Outdent();
+    p->Print(*vars, "}\n\n");
+    p->Print(
+        *vars,
+        "public $proto_service_descriptor$(String name, java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {\n");
+    p->Indent();
+    p->Print(*vars, "super(name, methods);\n");
+    p->Outdent();
+    p->Print(*vars, "}\n\n");
+    p->Print(*vars, "@$Override$\n");
+    p->Print(
+        *vars,
+        "public $proto_service_descriptor$ withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {\n");
+    p->Indent();
+    p->Print(
+        *vars,
+        "return new $proto_service_descriptor$(getName(), methods);\n");
+    p->Outdent();
+    p->Print(*vars, "}\n\n");
+    p->Print(*vars, "@$Override$\n");
+    p->Print(
+        *vars,
+        "public com.google.protobuf.Descriptors.FileDescriptor getFile() {\n");
+    p->Indent();
+    p->Print(*vars, "return $proto_class_name$.getDescriptor();\n");
+    p->Outdent();
+    p->Print(*vars, "}\n");
+    p->Outdent();
+    p->Print(*vars, "}\n\n");
+
+    p->Print(
+            *vars,
+            "private static $proto_service_descriptor$ serviceDescriptor;\n\n");
+
+    p->Print(
+        *vars,
+        "public static synchronized $proto_service_descriptor$ getServiceDescriptor() {\n");
+    p->Indent();
+    p->Print("if (serviceDescriptor == null) {\n");
+    p->Indent();
+    p->Print(
+        *vars,
+        "serviceDescriptor = new $proto_service_descriptor$(SERVICE_NAME");
+  } else {
+    p->Print(
       *vars,
       "private static $ServiceDescriptor$ serviceDescriptor;\n\n");
+    p->Print(
+        *vars,
+        "public static synchronized $ServiceDescriptor$ getServiceDescriptor() {\n");
+    p->Indent();
+    p->Print("if (serviceDescriptor == null) {\n");
+    p->Indent();
+    p->Print(
+        *vars,
+        "serviceDescriptor = new $ServiceDescriptor$(SERVICE_NAME");
+  }
 
-  p->Print(
-      *vars,
-      "public static synchronized $ServiceDescriptor$ getServiceDescriptor() {\n");
-  p->Indent();
-  p->Print("if (serviceDescriptor == null) {\n");
-  p->Indent();
-  p->Print(
-      *vars,
-      "serviceDescriptor = new $ServiceDescriptor$(SERVICE_NAME");
   p->Indent();
   p->Indent();
   for (int i = 0; i < service->method_count(); ++i) {
@@ -1078,7 +1137,7 @@ static void PrintService(const ServiceDescriptor* service,
         "}\n\n");
   }
   PrintMethodHandlerClass(service, vars, p, generate_nano, enable_deprecated);
-  PrintGetServiceDescriptorMethod(service, vars, p, generate_nano);
+  PrintGetServiceDescriptorMethod(service, vars, p, flavor);
   p->Outdent();
   p->Print("}\n");
 }
@@ -1138,6 +1197,8 @@ void GenerateService(const ServiceDescriptor* service,
       "io.grpc.ServerServiceDefinition";
   vars["ServiceDescriptor"] =
       "io.grpc.ServiceDescriptor";
+  vars["ProtobufServiceDescriptor"] =
+      "io.grpc.protobuf.reflection.ProtoServiceDescriptor";
   vars["AbstractStub"] = "io.grpc.stub.AbstractStub";
   vars["MethodDescriptor"] = "io.grpc.MethodDescriptor";
   vars["NanoUtils"] = "io.grpc.protobuf.nano.NanoUtils";
