@@ -229,7 +229,7 @@ public class OkHttpChannelBuilder extends
   protected final ClientTransportFactory buildTransportFactory() {
     return new OkHttpTransportFactory(transportExecutor,
         createSocketFactory(), connectionSpec, maxInboundMessageSize(), enableKeepAlive,
-        keepAliveDelayNanos, keepAliveTimeoutNanos);
+        keepAliveDelayNanos, keepAliveTimeoutNanos, proxyAddress, proxyUsername, proxyPassword);
   }
 
   @Override
@@ -285,6 +285,9 @@ public class OkHttpChannelBuilder extends
     private long keepAliveDelayNanos;
     private long keepAliveTimeoutNanos;
     private boolean closed;
+    private InetSocketAddress proxyAddress;
+    private String proxyUsername;
+    private String proxyPassword;
 
     private OkHttpTransportFactory(Executor executor,
         @Nullable SSLSocketFactory socketFactory,
@@ -292,13 +295,19 @@ public class OkHttpChannelBuilder extends
         int maxMessageSize,
         boolean enableKeepAlive,
         long keepAliveDelayNanos,
-        long keepAliveTimeoutNanos) {
+        long keepAliveTimeoutNanos,
+        InetSocketAddress proxyAddress,
+        String proxyUsername,
+        String proxyPassword) {
       this.socketFactory = socketFactory;
       this.connectionSpec = connectionSpec;
       this.maxMessageSize = maxMessageSize;
       this.enableKeepAlive = enableKeepAlive;
       this.keepAliveDelayNanos = keepAliveDelayNanos;
       this.keepAliveTimeoutNanos = keepAliveTimeoutNanos;
+      this.proxyAddress = proxyAddress;
+      this.proxyUsername = proxyUsername;
+      this.proxyPassword = proxyPassword;
 
       usingSharedExecutor = executor == null;
       if (usingSharedExecutor) {
@@ -317,7 +326,8 @@ public class OkHttpChannelBuilder extends
       }
       InetSocketAddress inetSocketAddr = (InetSocketAddress) addr;
       OkHttpClientTransport transport = new OkHttpClientTransport(inetSocketAddr, authority,
-          userAgent, executor, socketFactory, Utils.convertSpec(connectionSpec), maxMessageSize);
+          userAgent, executor, socketFactory, Utils.convertSpec(connectionSpec), maxMessageSize,
+          proxyAddress, proxyUsername, proxyPassword);
       if (enableKeepAlive) {
         transport.enableKeepAlive(true, keepAliveDelayNanos, keepAliveTimeoutNanos);
       }

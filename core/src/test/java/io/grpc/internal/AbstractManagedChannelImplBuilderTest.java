@@ -71,6 +71,11 @@ public class AbstractManagedChannelImplBuilderTest {
       public Builder usePlaintext(boolean value) {
         return this;
       }
+
+      @Override
+      public Builder useHttpProxy(InetSocketAddress address, String username, String password) {
+        return this;
+      }
     }
 
     Builder builder = new Builder();

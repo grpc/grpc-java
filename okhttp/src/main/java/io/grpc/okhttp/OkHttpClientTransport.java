@@ -40,6 +40,11 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.SettableFuture;
 
+import com.squareup.okhttp.Credentials;
+import com.squareup.okhttp.HttpUrl;
+import com.squareup.okhttp.Request;
+import com.squareup.okhttp.internal.http.StatusLine;
+
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
@@ -76,6 +81,7 @@ import okio.Timeout;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketException;
 import java.net.URI;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -180,6 +186,12 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   private boolean enableKeepAlive;
   private long keepAliveDelayNanos;
   private long keepAliveTimeoutNanos;
+  @Nullable
+  private final InetSocketAddress proxyAddress;
+  @Nullable
+  private final String proxyUsername;
+  @Nullable
+  private final String proxyPassword;
 
   // The following fields should only be used for test.
   Runnable connectingCallback;
@@ -187,7 +199,8 @@ class OkHttpClientTransport implements ConnectionClientTransport {
 
   OkHttpClientTransport(InetSocketAddress address, String authority, @Nullable String userAgent,
       Executor executor, @Nullable SSLSocketFactory sslSocketFactory, ConnectionSpec connectionSpec,
-      int maxMessageSize) {
+      int maxMessageSize, @Nullable InetSocketAddress proxyAddress, @Nullable String proxyUsername,
+      @Nullable String proxyPassword) {
     this.address = Preconditions.checkNotNull(address, "address");
     this.defaultAuthority = authority;
     this.maxMessageSize = maxMessageSize;
@@ -200,6 +213,9 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     this.connectionSpec = Preconditions.checkNotNull(connectionSpec, "connectionSpec");
     this.ticker = Ticker.systemTicker();
     this.userAgent = GrpcUtil.getGrpcUserAgent("okhttp", userAgent);
+    this.proxyAddress = proxyAddress;
+    this.proxyUsername = proxyUsername;
+    this.proxyPassword = proxyPassword;
   }
 
   /**
@@ -224,6 +240,9 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     this.connectionSpec = null;
     this.connectingCallback = connectingCallback;
     this.connectedFuture = Preconditions.checkNotNull(connectedFuture, "connectedFuture");
+    this.proxyAddress = null;
+    this.proxyUsername = null;
+    this.proxyPassword = null;
   }
 
   /**
@@ -400,7 +419,12 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         BufferedSink sink;
         Socket sock;
         try {
-          sock = new Socket(address.getAddress(), address.getPort());
+          if (proxyAddress == null) {
+            sock = new Socket(address.getAddress(), address.getPort());
+          } else {
+            sock = createHttpProxySocket(address, proxyAddress, proxyUsername, proxyPassword);
+          }
+
           if (sslSocketFactory != null) {
             sock = OkHttpTlsUpgrader.upgrade(
                 sslSocketFactory, sock, getOverridenHost(), getOverridenPort(), connectionSpec);
@@ -439,6 +463,69 @@ class OkHttpClientTransport implements ConnectionClientTransport {
       }
     });
     return null;
+  }
+
+  private Socket createHttpProxySocket(InetSocketAddress address, InetSocketAddress proxyAddress,
+      String proxyUsername, String proxyPassword) {
+    Status internalStatus = Status.INTERNAL.withDescription("Failed trying to connect with proxy");
+    try {
+      Socket sock = new Socket(proxyAddress.getAddress(), proxyAddress.getPort());
+      sock.setTcpNoDelay(true);
+
+      BufferedSource source = Okio.buffer(Okio.source(sock));
+      BufferedSink sink = Okio.buffer(Okio.sink(sock));
+
+      // Prepare headers and request method line
+      Request proxyRequest = createHttpProxyRequest(address, proxyUsername, proxyPassword);
+      HttpUrl url = proxyRequest.httpUrl();
+      String requestLine = String.format("CONNECT %s:%d HTTP/1.1", url.host(), url.port());
+
+      // Write request to socket
+      sink.writeUtf8(requestLine).writeUtf8("\r\n");
+      for (int i = 0, size = proxyRequest.headers().size(); i < size; i++) {
+        sink.writeUtf8(proxyRequest.headers().name(i))
+            .writeUtf8(": ")
+            .writeUtf8(proxyRequest.headers().value(i))
+            .writeUtf8("\r\n");
+      }
+      sink.writeUtf8("\r\n");
+      // Flush buffer (flushes socket and sends request)
+      sink.flush();
+
+      // Read status line, check if 2xx was returned
+      StatusLine statusLine = StatusLine.parse(source.readUtf8LineStrict());
+      if (statusLine.code < 200 || statusLine.code > 300) {
+        throw new IOException(
+            String.format("Response returned from proxy was not successful (expected 2xx, got %d)",
+                statusLine.code));
+      }
+      return sock;
+
+    } catch (SocketException e) {
+      // NB(lukaszx0) We'd use mulit-catch, but it's not supported at this language level.
+      throw internalStatus.withCause(e).asRuntimeException();
+    } catch (IOException e) {
+      throw internalStatus.withCause(e).asRuntimeException();
+    }
+  }
+
+  private Request createHttpProxyRequest(InetSocketAddress address, String proxyUsername,
+      String proxyPassword) {
+    HttpUrl tunnelUrl = new HttpUrl.Builder()
+        .scheme("https")
+        .host(address.getHostName())
+        .port(address.getPort())
+        .build();
+    Request.Builder request = new Request.Builder()
+        .url(tunnelUrl)
+        .header("Host", defaultAuthority)
+        .header("User-Agent", userAgent);
+
+    // If we have proxy credentials, set them right away
+    if (proxyUsername != null && proxyPassword != null) {
+      request.header("Proxy-Authorization", Credentials.basic(proxyUsername, proxyPassword));
+    }
+    return request.build();
   }
 
   @Override
