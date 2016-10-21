@@ -272,7 +272,7 @@ public class BenchmarkServiceGrpc {
     }
 
     @java.lang.Override
-    public BenchmarkServiceServiceDescriptor withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
+    protected BenchmarkServiceServiceDescriptor withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
       return new BenchmarkServiceServiceDescriptor(getName(), methods);
     }
 

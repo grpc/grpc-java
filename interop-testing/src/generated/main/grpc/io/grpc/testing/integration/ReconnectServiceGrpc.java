@@ -279,7 +279,7 @@ public class ReconnectServiceGrpc {
     }
 
     @java.lang.Override
-    public ReconnectServiceServiceDescriptor withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
+    protected ReconnectServiceServiceDescriptor withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
       return new ReconnectServiceServiceDescriptor(getName(), methods);
     }
 

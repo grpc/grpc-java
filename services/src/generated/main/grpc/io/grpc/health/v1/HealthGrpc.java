@@ -213,7 +213,7 @@ public class HealthGrpc {
     }
 
     @java.lang.Override
-    public HealthServiceDescriptor withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
+    protected HealthServiceDescriptor withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
       return new HealthServiceDescriptor(getName(), methods);
     }
 

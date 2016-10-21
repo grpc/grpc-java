@@ -245,7 +245,7 @@ public class UnimplementedServiceGrpc {
     }
 
     @java.lang.Override
-    public UnimplementedServiceServiceDescriptor withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
+    protected UnimplementedServiceServiceDescriptor withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
       return new UnimplementedServiceServiceDescriptor(getName(), methods);
     }
 

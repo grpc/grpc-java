@@ -435,7 +435,7 @@ public class TestServiceGrpc {
     }
 
     @java.lang.Override
-    public TestServiceServiceDescriptor withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
+    protected TestServiceServiceDescriptor withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
       return new TestServiceServiceDescriptor(getName(), methods);
     }
 

@@ -912,7 +912,7 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
     p->Print(*vars, "@$Override$\n");
     p->Print(
         *vars,
-        "public $proto_service_descriptor$ withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {\n");
+        "protected $proto_service_descriptor$ withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {\n");
     p->Indent();
     p->Print(
         *vars,

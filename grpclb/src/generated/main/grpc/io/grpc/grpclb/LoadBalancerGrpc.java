@@ -203,7 +203,7 @@ public class LoadBalancerGrpc {
     }
 
     @java.lang.Override
-    public LoadBalancerServiceDescriptor withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
+    protected LoadBalancerServiceDescriptor withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
       return new LoadBalancerServiceDescriptor(getName(), methods);
     }
 

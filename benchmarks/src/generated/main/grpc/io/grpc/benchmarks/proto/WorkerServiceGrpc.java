@@ -390,7 +390,7 @@ public class WorkerServiceGrpc {
     }
 
     @java.lang.Override
-    public WorkerServiceServiceDescriptor withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
+    protected WorkerServiceServiceDescriptor withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
       return new WorkerServiceServiceDescriptor(getName(), methods);
     }
 

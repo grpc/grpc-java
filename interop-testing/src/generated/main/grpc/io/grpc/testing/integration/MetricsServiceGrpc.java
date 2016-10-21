@@ -281,7 +281,7 @@ public class MetricsServiceGrpc {
     }
 
     @java.lang.Override
-    public MetricsServiceServiceDescriptor withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
+    protected MetricsServiceServiceDescriptor withMethods(java.util.Collection<io.grpc.MethodDescriptor<?, ?>> methods) {
       return new MetricsServiceServiceDescriptor(getName(), methods);
     }
 
