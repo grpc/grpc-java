@@ -51,6 +51,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.notNull;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.base.Ticker;
@@ -64,6 +65,7 @@ import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.ClientTransport.PingCallback;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.netty.GrpcHttp2HeadersDecoder.GrpcHttp2ClientHeadersDecoder;
 import io.netty.buffer.ByteBuf;
@@ -105,6 +107,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   private int flowControlWindow = DEFAULT_WINDOW_SIZE;
   private int streamId = 3;
   private ClientTransportLifecycleManager lifecycleManager;
+  private KeepAliveManager keepAliveManager;
 
   @Mock
   private NettyClientTransport.Listener listener;
@@ -118,6 +121,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
     lifecycleManager = new ClientTransportLifecycleManager(listener);
+    keepAliveManager = mock(KeepAliveManager.class);
 
     initChannel(new GrpcHttp2ClientHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
     streamTransportState = new TransportStateImpl(handler(), DEFAULT_MAX_MESSAGE_SIZE);
@@ -536,7 +540,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     };
 
     return NettyClientHandler.newHandler(connection, frameReader(), frameWriter(),
-        lifecycleManager, flowControlWindow, ticker);
+        lifecycleManager, keepAliveManager, flowControlWindow, ticker);
   }
 
   @Override
