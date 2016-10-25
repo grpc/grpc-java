@@ -321,7 +321,11 @@ class DelayedClientTransport implements ManagedClientTransport {
    */
   void startBackoff(final Status status) {
     synchronized (lock) {
-      Preconditions.checkState(backoffStatus == null);
+      if (shutdown) {
+        return;
+      }
+      Preconditions.checkState(backoffStatus == null,
+          "Error when calling startBackoff: transport is already in backoff period");
       backoffStatus = Status.UNAVAILABLE.withDescription("Channel in TRANSIENT_FAILURE state")
           .withCause(status.asRuntimeException());
       final ArrayList<PendingStream> failFastPendingStreams = new ArrayList<PendingStream>();
@@ -334,14 +338,17 @@ class DelayedClientTransport implements ManagedClientTransport {
             it.remove();
           }
         }
-        streamCreationExecutor.execute(new Runnable() {
+
+        class FailTheFailFastPendingStreams implements Runnable {
           @Override
           public void run() {
             for (PendingStream stream : failFastPendingStreams) {
               stream.setStream(new FailingClientStream(status));
             }
           }
-        });
+        }
+
+        streamCreationExecutor.execute(new FailTheFailFastPendingStreams());
       }
     }
   }
@@ -352,6 +359,8 @@ class DelayedClientTransport implements ManagedClientTransport {
    */
   void endBackoff() {
     synchronized (lock) {
+      Preconditions.checkState(backoffStatus != null,
+          "Error when calling endBackoff: transport is not in backoff period");
       backoffStatus = null;
     }
   }
