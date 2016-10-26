@@ -338,7 +338,7 @@ public class NettyClientTransportTest {
     return transport;
   }
 
-  private NettyClientTransport newTransport(Map<ChannelOption<?>, Object> channelOptions)
+  private NettyClientTransport newTransport(Map<ChannelOption<?>, ?> channelOptions)
       throws IOException {
     NettyClientTransport transport = new NettyClientTransport(
         address, NioSocketChannel.class, channelOptions, group, newNegotiator(),

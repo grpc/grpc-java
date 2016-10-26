@@ -68,7 +68,7 @@ import javax.annotation.Nullable;
  * A Netty-based {@link ConnectionClientTransport} implementation.
  */
 class NettyClientTransport implements ConnectionClientTransport {
-  private final Map<ChannelOption<?>, Object> channelOptions;
+  private final Map<ChannelOption<?>, ?> channelOptions;
   private final SocketAddress address;
   private final Class<? extends Channel> channelType;
   private final EventLoopGroup group;
@@ -89,7 +89,7 @@ class NettyClientTransport implements ConnectionClientTransport {
 
   NettyClientTransport(
       SocketAddress address, Class<? extends Channel> channelType,
-      Map<ChannelOption<?>, Object> channelOptions, EventLoopGroup group,
+      Map<ChannelOption<?>, ?> channelOptions, EventLoopGroup group,
       ProtocolNegotiator negotiator, int flowControlWindow, int maxMessageSize,
       int maxHeaderListSize, String authority, @Nullable String userAgent) {
     this.negotiator = Preconditions.checkNotNull(negotiator, "negotiator");
@@ -162,7 +162,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     if (NioSocketChannel.class.isAssignableFrom(channelType)) {
       b.option(SO_KEEPALIVE, true);
     }
-    for (Map.Entry<ChannelOption<?>, Object> entry : channelOptions.entrySet()) {
+    for (Map.Entry<ChannelOption<?>, ?> entry : channelOptions.entrySet()) {
       b.option((ChannelOption<Object>) entry.getKey(), entry.getValue());
     }
 

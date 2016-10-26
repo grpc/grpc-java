@@ -293,7 +293,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
   @Internal
   protected static final class NettyTransportFactory implements ClientTransportFactory {
     private final Class<? extends Channel> channelType;
-    private final Map<ChannelOption<?>, Object> channelOptions;
+    private final Map<ChannelOption<?>, ?> channelOptions;
     private final NegotiationType negotiationType;
     private final ProtocolNegotiator protocolNegotiator;
     private final SslContext sslContext;
@@ -306,7 +306,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
     private boolean closed;
 
     private NettyTransportFactory(
-        Class<? extends Channel> channelType, Map<ChannelOption<?>, Object> channelOptions,
+        Class<? extends Channel> channelType, Map<ChannelOption<?>, ?> channelOptions,
         NegotiationType negotiationType, ProtocolNegotiator protocolNegotiator,
         SslContext sslContext, EventLoopGroup group, int flowControlWindow, int maxMessageSize,
         int maxHeaderListSize) {
