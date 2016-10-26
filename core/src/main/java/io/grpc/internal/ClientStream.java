@@ -31,6 +31,7 @@
 
 package io.grpc.internal;
 
+import io.grpc.Metadata;
 import io.grpc.Status;
 
 /**
@@ -72,6 +73,7 @@ public interface ClientStream extends Stream {
    * <p>This method should not throw any exceptions.
    *
    * @param listener non-{@code null} listener of stream events
+   * @param headers to send at the beginning of the call
    */
-  void start(ClientStreamListener listener);
+  void start(ClientStreamListener listener, Metadata headers);
 }

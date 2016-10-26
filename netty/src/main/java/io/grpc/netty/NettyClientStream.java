@@ -70,7 +70,6 @@ class NettyClientStream extends AbstractClientStream2 {
   private final WriteQueue writeQueue;
   private final MethodDescriptor<?, ?> method;
   /** {@code null} after start. */
-  private Metadata headers;
   private final Channel channel;
   private AsciiString authority;
   private final AsciiString scheme;
@@ -83,7 +82,6 @@ class NettyClientStream extends AbstractClientStream2 {
     this.state = checkNotNull(state, "transportState");
     this.writeQueue = state.handler.getWriteQueue();
     this.method = checkNotNull(method, "method");
-    this.headers = checkNotNull(headers, "headers");
     this.channel = checkNotNull(channel, "channel");
     this.authority = checkNotNull(authority, "authority");
     this.scheme = checkNotNull(scheme, "scheme");
@@ -102,13 +100,12 @@ class NettyClientStream extends AbstractClientStream2 {
 
   @Override
   public void setAuthority(String authority) {
-    checkState(headers != null, "must be call before start");
     this.authority = AsciiString.of(checkNotNull(authority, "authority"));
   }
 
   @Override
-  public void start(ClientStreamListener listener) {
-    super.start(listener);
+  public void start(ClientStreamListener listener, Metadata headers) {
+    super.start(listener, headers);
 
     // Convert the headers into Netty HTTP/2 headers.
     AsciiString defaultPath = (AsciiString) methodDescriptorAccessor.geRawMethodName(method);
@@ -119,7 +116,6 @@ class NettyClientStream extends AbstractClientStream2 {
     headers.discardAll(GrpcUtil.USER_AGENT_KEY);
     Http2Headers http2Headers
         = Utils.convertClientHeaders(headers, scheme, defaultPath, authority, userAgent);
-    headers = null;
 
     ChannelFutureListener failureListener = new ChannelFutureListener() {
       @Override

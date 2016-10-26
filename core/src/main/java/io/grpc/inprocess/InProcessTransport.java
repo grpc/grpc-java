@@ -132,7 +132,7 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
       final Status capturedStatus = shutdownStatus;
       return new NoopClientStream() {
         @Override
-        public void start(ClientStreamListener listener) {
+        public void start(ClientStreamListener listener, Metadata headers) {
           listener.closed(capturedStatus, new Metadata());
         }
       };
@@ -235,13 +235,11 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
     private final InProcessServerStream serverStream = new InProcessServerStream();
     private final InProcessClientStream clientStream = new InProcessClientStream();
     private final StatsTraceContext serverStatsTraceContext;
-    private final Metadata headers;
     private final MethodDescriptor<?, ?> method;
 
     private InProcessStream(MethodDescriptor<?, ?> method, Metadata headers,
         StatsTraceContext serverStatsTraceContext) {
       this.method = checkNotNull(method, "method");
-      this.headers = checkNotNull(headers, "headers");
       this.serverStatsTraceContext =
           checkNotNull(serverStatsTraceContext, "serverStatsTraceContext");
     }
@@ -551,7 +549,7 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
       }
 
       @Override
-      public void start(ClientStreamListener listener) {
+      public void start(ClientStreamListener listener, Metadata headers) {
         serverStream.setListener(listener);
 
         synchronized (InProcessTransport.this) {

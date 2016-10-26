@@ -157,7 +157,7 @@ class DelayedStream implements ClientStream {
   }
 
   @Override
-  public void start(ClientStreamListener listener) {
+  public void start(ClientStreamListener listener, Metadata headers) {
     checkState(this.listener == null, "already started");
 
     Status savedError;
@@ -177,13 +177,14 @@ class DelayedStream implements ClientStream {
     }
 
     if (savedPassThrough) {
-      realStream.start(listener);
+      realStream.start(listener, headers);
     } else {
       final ClientStreamListener finalListener = listener;
+      final Metadata finalHeaders = headers;
       delayOrExecute(new Runnable() {
         @Override
         public void run() {
-          realStream.start(finalListener);
+          realStream.start(finalListener, finalHeaders);
         }
       });
     }

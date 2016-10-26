@@ -44,6 +44,7 @@ import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.io.BaseEncoding;
 
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
@@ -93,6 +94,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
   private ScheduledExecutorService deadlineCancellationExecutor;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
+  private boolean streamStarted;
+  private Listener<RespT> observer;
+  private Metadata headers;
+  private int requestedMessages;
 
   ClientCallImpl(MethodDescriptor<ReqT, RespT> method, Executor executor,
       CallOptions callOptions, StatsTraceContext statsTraceCtx,
@@ -117,6 +122,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
 
   @Override
   public void cancelled(Context context) {
+    checkState(streamStarted, "Stream has not started");
     stream.cancel(statusFromCancelled(context));
   }
 
@@ -159,13 +165,14 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
   @Override
   public void start(final Listener<RespT> observer, Metadata headers) {
     checkState(stream == null, "Already started");
-    checkNotNull(observer, "observer");
-    checkNotNull(headers, "headers");
+    this.observer = checkNotNull(observer, "observer");
+    this.headers = checkNotNull(headers, "headers");
 
     if (context.isCancelled()) {
       // Context is already cancelled so no need to create a real stream, just notify the observer
       // of cancellation via callback on the executor
       stream = NoopClientStream.INSTANCE;
+      streamStarted = true;
       class ClosedByContext extends ContextRunnable {
         ClosedByContext() {
           super(context);
@@ -230,13 +237,28 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       stream.setAuthority(callOptions.getAuthority());
     }
     stream.setCompressor(compressor);
-    stream.start(new ClientStreamListenerImpl(observer));
+    if (!useGet()) {
+      startStream();
+    }
+    // If we're going to use GET verb, we will need to wait for the request message and then
+    // start the stream.
+  }
+
+  private void startStream() {
+    checkState(!streamStarted, "Already started");
+    streamStarted = true;
+    stream.start(new ClientStreamListenerImpl(observer), headers);
+    if (requestedMessages != 0) {
+      stream.request(requestedMessages);
+    }
 
     // Delay any sources of cancellation after start(), because most of the transports are broken if
     // they receive cancel before start. Issue #1343 has more details
 
     // Propagate later Context cancellation to the remote side.
     context.addListener(this, directExecutor());
+
+    Deadline effectiveDeadline = effectiveDeadline();
     if (effectiveDeadline != null
         // If the context has the effective deadline, we don't need to schedule an extra task.
         && context.getDeadline() != effectiveDeadline) {
@@ -331,9 +353,12 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
 
   @Override
   public void request(int numMessages) {
-    Preconditions.checkState(stream != null, "Not started");
     checkArgument(numMessages >= 0, "Number requested must be non-negative");
-    stream.request(numMessages);
+    if (streamStarted) {
+      stream.request(numMessages);
+    } else {
+      requestedMessages += numMessages;
+    }
   }
 
   @Override
@@ -349,7 +374,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
     try {
       // Cancel is called in exception handling cases, so it may be the case that the
       // stream was never successfully created or start has never been called.
-      if (stream != null) {
+      if (streamStarted) {
         Status status = Status.CANCELLED;
         if (message != null) {
           status = status.withDescription(message);
@@ -366,7 +391,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
 
   @Override
   public void halfClose() {
-    Preconditions.checkState(stream != null, "Not started");
+    Preconditions.checkState(streamStarted, "Not started");
     Preconditions.checkState(!cancelCalled, "call was cancelled");
     Preconditions.checkState(!halfCloseCalled, "call already half-closed");
     halfCloseCalled = true;
@@ -375,13 +400,22 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
 
   @Override
   public void sendMessage(ReqT message) {
-    Preconditions.checkState(stream != null, "Not started");
     Preconditions.checkState(!cancelCalled, "call was cancelled");
     Preconditions.checkState(!halfCloseCalled, "call was half-closed");
     try {
       // TODO(notcarl): Find out if messageIs needs to be closed.
       InputStream messageIs = method.streamRequest(message);
-      stream.writeMessage(messageIs);
+      if (!useGet()) {
+        stream.writeMessage(messageIs);
+      } else {
+        // Encode the request message and put it in the request headers.
+        byte[] payload = new byte[messageIs.available()];
+        messageIs.read(payload, 0, messageIs.available());
+        headers.put(
+            Metadata.Key.of("grpc-payload-bin", Metadata.BINARY_BYTE_MARSHALLER),
+            BaseEncoding.base64().encode(payload).getBytes());
+        startStream();
+      }
     } catch (Throwable e) {
       stream.cancel(Status.CANCELLED.withCause(e).withDescription("Failed to stream message"));
       return;
@@ -410,12 +444,20 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
     observer.onClose(status, trailers);
   }
 
+  /**
+   * If it returns true, we will try to send the request message in the headers.
+   */
+  private boolean useGet() {
+    return method.isSafe() && method.isIdempotent();
+  }
+
   private class ClientStreamListenerImpl implements ClientStreamListener {
     private final Listener<RespT> observer;
     private boolean closed;
 
     public ClientStreamListenerImpl(Listener<RespT> observer) {
       this.observer = Preconditions.checkNotNull(observer, "observer");
+      checkState(streamStarted, "Stream has not started");
     }
 
     @Override

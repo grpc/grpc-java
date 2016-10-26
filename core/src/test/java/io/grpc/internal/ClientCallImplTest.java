@@ -33,6 +33,7 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.GrpcUtil.ACCEPT_ENCODING_SPLITER;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -55,6 +56,7 @@ import com.google.census.CensusContext;
 import com.google.census.RpcConstants;
 import com.google.census.TagValue;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.io.BaseEncoding;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 
@@ -70,6 +72,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
+import io.grpc.StringMarshaller;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import io.grpc.internal.testing.CensusTestUtils.FakeCensusContextFactory;
 import io.grpc.internal.testing.CensusTestUtils;
@@ -176,7 +179,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor);
     call.start(callListener, new Metadata());
-    verify(stream).start(listenerArgumentCaptor.capture());
+    verify(stream).start(listenerArgumentCaptor.capture(), any(Metadata.class));
     final ClientStreamListener streamListener = listenerArgumentCaptor.getValue();
     streamListener.headersRead(new Metadata());
     Status status = Status.RESOURCE_EXHAUSTED.withDescription("simulated");
@@ -199,7 +202,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor);
     call.start(callListener, new Metadata());
-    verify(stream).start(listenerArgumentCaptor.capture());
+    verify(stream).start(listenerArgumentCaptor.capture(), any(Metadata.class));
     final ClientStreamListener streamListener = listenerArgumentCaptor.getValue();
     streamListener.headersRead(new Metadata());
 
@@ -234,7 +237,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor);
     call.start(callListener, new Metadata());
-    verify(stream).start(listenerArgumentCaptor.capture());
+    verify(stream).start(listenerArgumentCaptor.capture(), any(Metadata.class));
     final ClientStreamListener streamListener = listenerArgumentCaptor.getValue();
 
     RuntimeException failure = new RuntimeException("bad");
@@ -268,7 +271,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor);
     call.start(callListener, new Metadata());
-    verify(stream).start(listenerArgumentCaptor.capture());
+    verify(stream).start(listenerArgumentCaptor.capture(), any(Metadata.class));
     final ClientStreamListener streamListener = listenerArgumentCaptor.getValue();
 
     RuntimeException failure = new RuntimeException("bad");
@@ -507,7 +510,7 @@ public class ClientCallImplTest {
       }
     }, new Metadata());
 
-    verify(stream).start(listenerArgumentCaptor.capture());
+    verify(stream).start(listenerArgumentCaptor.capture(), any(Metadata.class));
     ClientStreamListener listener = listenerArgumentCaptor.getValue();
     listener.onReady();
     listener.headersRead(new Metadata());
@@ -812,7 +815,7 @@ public class ClientCallImplTest {
     call.halfClose();
     call.request(1);
 
-    verify(stream).start(listenerArgumentCaptor.capture());
+    verify(stream).start(listenerArgumentCaptor.capture(), any(Metadata.class));
     ClientStreamListener streamListener = listenerArgumentCaptor.getValue();
     streamListener.onReady();
     streamListener.headersRead(new Metadata());
@@ -822,6 +825,49 @@ public class ClientCallImplTest {
     assertEquals(Status.CANCELLED.getCode(), status.getCode());
     assertEquals("foo", status.getDescription());
     assertSame(cause, status.getCause());
+  }
+
+  @Test
+  public void unaryGetRequests() {
+    MethodDescriptor<String, Void> getMethod = MethodDescriptor.create(
+        MethodType.UNARY,
+        "service/getMethod",
+        StringMarshaller.INSTANCE,
+        new TestMarshaller<Void>()).withSafe(true).withIdempotent(true);
+
+    ClientCallImpl<String, Void> call = new ClientCallImpl<String, Void>(
+        getMethod,
+        MoreExecutors.directExecutor(),
+        CallOptions.DEFAULT,
+        statsTraceCtx,
+        provider,
+        deadlineCancellationExecutor);
+    call.start(callListener, new Metadata());
+    // call.start should not trigger stream.start
+    verify(stream, times(0)).start(any(ClientStreamListener.class), any(Metadata.class));
+
+    call.request(2);
+    verify(stream, times(0)).request(Matchers.anyInt());
+    call.sendMessage("request-payload");
+    verify(stream).request(eq(2));
+    ArgumentCaptor<Metadata> headersCaptor = ArgumentCaptor.forClass(Metadata.class);
+    // sendMessage has triggered stream.start
+    verify(stream).start(listenerArgumentCaptor.capture(), headersCaptor.capture());
+    Metadata headers = headersCaptor.getValue();
+    // The request payload is sent over the headers.
+    assertArrayEquals(BaseEncoding.base64().encode("request-payload".getBytes()).getBytes(),
+        headers.get(Metadata.Key.of("grpc-payload-bin", Metadata.BINARY_BYTE_MARSHALLER)));
+
+    ClientStreamListener streamListener = listenerArgumentCaptor.getValue();
+    streamListener.onReady();
+    streamListener.headersRead(new Metadata());
+    streamListener.messageRead(new ByteArrayInputStream(new byte[0]));
+    streamListener.closed(Status.OK, new Metadata());
+
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(callListener).onClose(statusCaptor.capture(), any(Metadata.class));
+    Status status = statusCaptor.getValue();
+    assertEquals(Status.OK.getCode(), status.getCode());
   }
 
   private void assertStatusInStats(Status.Code statusCode) {
