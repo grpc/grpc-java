@@ -158,19 +158,19 @@ public class NettyClientTransportTest {
   }
 
   @Test
-  public void setTosChannelOption() throws IOException {
+  public void setSoLingerChannelOption() throws IOException {
     startServer();
     Map<ChannelOption<?>, Object> channelOptions = new HashMap<ChannelOption<?>, Object>();
-    // set IP_TOS option
-    int tos = 123;
-    channelOptions.put(ChannelOption.IP_TOS, tos);
+    // set SO_LINGER option
+    int soLinger = 123;
+    channelOptions.put(ChannelOption.SO_LINGER, soLinger);
     NettyClientTransport transport = newTransport(channelOptions);
     transport.start(clientTransportListener);
 
-    // verify IP_TOS has been set
+    // verify SO_LINGER has been set
     ChannelConfig config = transport.channel().config();
     assertTrue(config instanceof SocketChannelConfig);
-    assertEquals(tos, ((SocketChannelConfig) config).getTrafficClass());
+    assertEquals(soLinger, ((SocketChannelConfig) config).getSoLinger());
   }
 
   @Test
