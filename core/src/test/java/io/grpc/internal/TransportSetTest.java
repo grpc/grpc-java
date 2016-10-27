@@ -143,14 +143,17 @@ public class TransportSetTest {
     assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
     verify(mockTransportFactory, times(++transportsCreated))
         .newClientTransport(addr, AUTHORITY, USER_AGENT);
+    // Back-off policy initialized
+    verify(mockBackoffPolicyProvider, times(1 + backoffReset)).get();
 
     // Fail this one
     transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
     assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(false));
     verify(mockTransportSetCallback, times(++onAllAddressesFailed)).onAllAddressesFailed();
-    // Backoff reset and using first back-off value interval
+    // Using first back-off value interval
     verify(mockBackoffPolicy1, times(++backoff1Consulted)).nextBackoffMillis();
-    verify(mockBackoffPolicyProvider, times(++backoffReset)).get();
+
+
 
     // Second attempt
     // Transport creation doesn't happen until time is due
@@ -168,7 +171,7 @@ public class TransportSetTest {
     verify(mockTransportSetCallback, times(++onAllAddressesFailed)).onAllAddressesFailed();
     // Second back-off interval
     verify(mockBackoffPolicy1, times(++backoff1Consulted)).nextBackoffMillis();
-    verify(mockBackoffPolicyProvider, times(backoffReset)).get();
+    verify(mockBackoffPolicyProvider, times(1 + backoffReset)).get();
 
     // Third attempt
     // Transport creation doesn't happen until time is due
@@ -183,6 +186,8 @@ public class TransportSetTest {
     // Let this one succeed
     transports.peek().listener.transportReady();
     assertEquals(ConnectivityState.READY, transportSet.getState(false));
+    // Back-off is reset
+    verify(mockBackoffPolicyProvider, times(1 + ++backoffReset)).get();
     fakeClock.runDueTasks();
     verify(mockTransportSetCallback, never()).onConnectionClosedByServer(any(Status.class));
     // And close it
@@ -194,7 +199,6 @@ public class TransportSetTest {
     // Back-off is reset, and the next attempt will happen immediately
     transportSet.obtainActiveTransport();
     assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
-    verify(mockBackoffPolicyProvider, times(backoffReset)).get();
     verify(mockTransportFactory, times(++transportsCreated))
         .newClientTransport(addr, AUTHORITY, USER_AGENT);
 
@@ -227,6 +231,7 @@ public class TransportSetTest {
     assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
     verify(mockTransportFactory, times(++transportsAddr1))
         .newClientTransport(addr1, AUTHORITY, USER_AGENT);
+    verify(mockBackoffPolicyProvider, times(1 + backoffReset)).get();
     delayedTransport1.newStream(method, new Metadata(), waitForReadyCallOptions, statsTraceCtx);
     // Let this one fail without success
     transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
@@ -234,12 +239,12 @@ public class TransportSetTest {
     assertNull(delayedTransport1.getTransportSupplier());
     verify(mockTransportSetCallback, times(onAllAddressesFailed)).onAllAddressesFailed();
 
-    // Second attempt will start immediately. Still no back-off policy.
+    // Second attempt will start immediately. Still no back-off scheduled.
     DelayedClientTransport delayedTransport2 =
         (DelayedClientTransport) transportSet.obtainActiveTransport();
     assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
     assertSame(delayedTransport1, delayedTransport2);
-    verify(mockBackoffPolicyProvider, times(backoffReset)).get();
+    verify(mockBackoffPolicyProvider, times(1 + backoffReset)).get();
     verify(mockTransportFactory, times(++transportsAddr2))
         .newClientTransport(addr2, AUTHORITY, USER_AGENT);
     // Fail this one too
@@ -249,9 +254,9 @@ public class TransportSetTest {
     assertNull(delayedTransport2.getTransportSupplier());
     assertTrue(delayedTransport2.isInBackoffPeriod());
     verify(mockTransportSetCallback, times(++onAllAddressesFailed)).onAllAddressesFailed();
-    // Backoff reset and first back-off interval begins
+    // First back-off interval begins
     verify(mockBackoffPolicy1, times(++backoff1Consulted)).nextBackoffMillis();
-    verify(mockBackoffPolicyProvider, times(++backoffReset)).get();
+    verify(mockBackoffPolicyProvider, times(1 + backoffReset)).get();
 
     // Third attempt is the first address, thus controlled by the first back-off interval.
     DelayedClientTransport delayedTransport3 =
@@ -277,7 +282,7 @@ public class TransportSetTest {
         (DelayedClientTransport) transportSet.obtainActiveTransport();
     assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
     assertSame(delayedTransport3, delayedTransport4);
-    verify(mockBackoffPolicyProvider, times(backoffReset)).get();
+    verify(mockBackoffPolicyProvider, times(1 + backoffReset)).get();
     verify(mockTransportFactory, times(++transportsAddr2))
         .newClientTransport(addr2, AUTHORITY, USER_AGENT);
     // Fail this one too
@@ -289,7 +294,7 @@ public class TransportSetTest {
     verify(mockTransportSetCallback, times(++onAllAddressesFailed)).onAllAddressesFailed();
     // Second back-off interval begins
     verify(mockBackoffPolicy1, times(++backoff1Consulted)).nextBackoffMillis();
-    verify(mockBackoffPolicyProvider, times(backoffReset)).get();
+    verify(mockBackoffPolicyProvider, times(1 + backoffReset)).get();
 
     // Fifth attempt for the first address, thus controlled by the second back-off interval.
     DelayedClientTransport delayedTransport5 =
@@ -307,6 +312,8 @@ public class TransportSetTest {
     // Let it through
     transports.peek().listener.transportReady();
     assertEquals(ConnectivityState.READY, transportSet.getState(false));
+    // Back-off policy is reset
+    verify(mockBackoffPolicyProvider, times(1 + ++backoffReset)).get();
     // Delayed transport will see the connected transport.
     assertSame(transports.peek().transport, delayedTransport5.getTransportSupplier().get());
     verify(mockTransportSetCallback, never()).onConnectionClosedByServer(any(Status.class));
@@ -316,14 +323,13 @@ public class TransportSetTest {
     verify(mockTransportSetCallback).onConnectionClosedByServer(same(Status.UNAVAILABLE));
     verify(mockTransportSetCallback, times(onAllAddressesFailed)).onAllAddressesFailed();
 
-    // First attempt after a successful connection. Old back-off policy should be ignored, but there
-    // is not yet a need for a new one. Start from the first address.
+    // First attempt after a successful connection. Start from the first address.
     DelayedClientTransport delayedTransport6 =
         (DelayedClientTransport) transportSet.obtainActiveTransport();
     assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
     assertNotSame(delayedTransport5, delayedTransport6);
     delayedTransport6.newStream(method, headers, waitForReadyCallOptions, statsTraceCtx);
-    verify(mockBackoffPolicyProvider, times(backoffReset)).get();
+    verify(mockBackoffPolicyProvider, times(1 + backoffReset)).get();
     verify(mockTransportFactory, times(++transportsAddr1))
         .newClientTransport(addr1, AUTHORITY, USER_AGENT);
     // Fail the transport
@@ -336,7 +342,7 @@ public class TransportSetTest {
     DelayedClientTransport delayedTransport7 =
         (DelayedClientTransport) transportSet.obtainActiveTransport();
     assertSame(delayedTransport6, delayedTransport7);
-    verify(mockBackoffPolicyProvider, times(backoffReset)).get();
+    verify(mockBackoffPolicyProvider, times(1 + backoffReset)).get();
     verify(mockTransportFactory, times(++transportsAddr2))
         .newClientTransport(addr2, AUTHORITY, USER_AGENT);
     // Fail this one too
@@ -349,7 +355,7 @@ public class TransportSetTest {
     verify(mockTransportSetCallback, times(++onAllAddressesFailed)).onAllAddressesFailed();
     // Back-off reset and first back-off interval begins
     verify(mockBackoffPolicy2, times(++backoff2Consulted)).nextBackoffMillis();
-    verify(mockBackoffPolicyProvider, times(++backoffReset)).get();
+    verify(mockBackoffPolicyProvider, times(1 + backoffReset)).get();
 
     // Third attempt is the first address, thus controlled by the first back-off interval.
     DelayedClientTransport delayedTransport8 =

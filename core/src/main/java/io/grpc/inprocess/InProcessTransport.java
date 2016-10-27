@@ -36,6 +36,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Compressor;
+import io.grpc.Deadline;
 import io.grpc.Decompressor;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
@@ -90,7 +91,7 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
 
   @CheckReturnValue
   @Override
-  public synchronized Runnable start(ManagedClientTransport.Listener listener) {
+  public synchronized Runnable start(ManagedClientTransport.Listener listener, Deadline deadline) {
     this.clientTransportListener = listener;
     InProcessServer server = InProcessServer.findServer(name);
     if (server != null) {

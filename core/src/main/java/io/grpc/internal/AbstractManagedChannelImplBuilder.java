@@ -52,6 +52,7 @@ import io.grpc.NameResolverProvider;
 import io.grpc.PickFirstBalancerFactory;
 import io.grpc.ResolvedServerInfo;
 import io.grpc.ResolvedServerInfoGroup;
+import io.grpc.internal.SharedResourceHolder.Resource;
 
 import java.net.SocketAddress;
 import java.net.URI;
@@ -62,6 +63,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
 
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
@@ -91,6 +93,8 @@ public abstract class AbstractManagedChannelImplBuilder
    */
   @VisibleForTesting
   static final long IDLE_MODE_MIN_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(1);
+
+  protected Resource<ScheduledExecutorService> timerService = GrpcUtil.TIMER_SERVICE;
 
   @Nullable
   private Executor executor;
@@ -281,7 +285,7 @@ public abstract class AbstractManagedChannelImplBuilder
         transportFactory,
         firstNonNull(decompressorRegistry, DecompressorRegistry.getDefaultInstance()),
         firstNonNull(compressorRegistry, CompressorRegistry.getDefaultInstance()),
-        GrpcUtil.TIMER_SERVICE, GrpcUtil.STOPWATCH_SUPPLIER, idleTimeoutMillis,
+        timerService, GrpcUtil.STOPWATCH_SUPPLIER, idleTimeoutMillis,
         executor, userAgent, interceptors,
         firstNonNull(censusFactory,
             firstNonNull(Census.getCensusContextFactory(), NoopCensusContextFactory.INSTANCE)));

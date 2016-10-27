@@ -32,7 +32,6 @@
 package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -42,6 +41,7 @@ import com.google.common.util.concurrent.SettableFuture;
 
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.Deadline;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -53,6 +53,7 @@ import io.grpc.internal.Http2Ping;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.internal.SharedResourceHolder;
+import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.framed.ErrorCode;
@@ -86,9 +87,10 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.net.ssl.SSLSocketFactory;
@@ -146,6 +148,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   private final Map<Integer, OkHttpClientStream> streams =
       new HashMap<Integer, OkHttpClientStream>();
   private final Executor executor;
+  private final Resource<ScheduledExecutorService> timerService;
   // Wrap on executor, to guarantee some operations be executed serially.
   private final SerializingExecutor serializingExecutor;
   private final int maxMessageSize;
@@ -184,12 +187,14 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   SettableFuture<Void> connectedFuture;
 
   OkHttpClientTransport(InetSocketAddress address, String authority, @Nullable String userAgent,
-      Executor executor, @Nullable SSLSocketFactory sslSocketFactory, ConnectionSpec connectionSpec,
+      Executor executor, Resource<ScheduledExecutorService> timerService,
+      @Nullable SSLSocketFactory sslSocketFactory, ConnectionSpec connectionSpec,
       int maxMessageSize) {
     this.address = Preconditions.checkNotNull(address, "address");
     this.defaultAuthority = authority;
     this.maxMessageSize = maxMessageSize;
     this.executor = Preconditions.checkNotNull(executor, "executor");
+    this.timerService = timerService;
     serializingExecutor = new SerializingExecutor(executor);
     // Client initiated streams are odd, server initiated ones are even. Server should not need to
     // use it. We start clients at 3 to avoid conflicting with HTTP negotiation.
@@ -213,6 +218,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     defaultAuthority = "notarealauthority:80";
     this.userAgent = GrpcUtil.getGrpcUserAgent("okhttp", userAgent);
     this.executor = Preconditions.checkNotNull(executor, "executor");
+    this.timerService = GrpcUtil.TIMER_SERVICE;
     serializingExecutor = new SerializingExecutor(executor);
     this.testFrameReader = Preconditions.checkNotNull(frameReader, "frameReader");
     this.testFrameWriter = Preconditions.checkNotNull(testFrameWriter, "testFrameWriter");
@@ -347,11 +353,11 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public Runnable start(Listener listener) {
+  public Runnable start(Listener listener, final Deadline deadline) {
     this.listener = Preconditions.checkNotNull(listener, "listener");
 
     if (enableKeepAlive) {
-      scheduler = SharedResourceHolder.get(TIMER_SERVICE);
+      scheduler = SharedResourceHolder.get(timerService);
       keepAliveManager = new KeepAliveManager(this, scheduler, keepAliveDelayNanos,
           keepAliveTimeoutNanos);
     }
@@ -398,10 +404,23 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         BufferedSink sink;
         Socket sock;
         try {
-          sock = new Socket(address.getAddress(), address.getPort());
+          sock = new Socket();
+          int timeout = 0; // infinity
+          if (deadline != null) {
+            long timeRemaining = deadline.timeRemaining(TimeUnit.MILLISECONDS);
+            if (timeRemaining <= 0) {
+              timeout = 1000;
+            } else if (timeRemaining <= (long) Integer.MAX_VALUE) {
+              timeout = (int) timeRemaining;
+            }
+          }
+          sock.connect(
+              new InetSocketAddress(address.getAddress(), address.getPort()), timeout);
+          log.info("Socket connected");
           if (sslSocketFactory != null) {
             sock = OkHttpTlsUpgrader.upgrade(
                 sslSocketFactory, sock, getOverridenHost(), getOverridenPort(), connectionSpec);
+            log.info("SSL handshake complete");
           }
           sock.setTcpNoDelay(true);
           source = Okio.buffer(Okio.source(sock));
@@ -412,6 +431,10 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         } finally {
           clientFrameHandler = new ClientFrameHandler(variant.newReader(source, true));
           executor.execute(clientFrameHandler);
+        }
+
+        if (deadline != null) {
+          clientFrameHandler.startDeadlineWatchdog(deadline);
         }
 
         FrameWriter rawFrameWriter;
@@ -436,6 +459,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         }
       }
     });
+    // schedule timeout watchdog
     return null;
   }
 
@@ -495,7 +519,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
       if (keepAliveManager != null) {
         keepAliveManager.onTransportShutdown();
         // KeepAliveManager should stop using the scheduler after onTransportShutdown gets called.
-        scheduler = SharedResourceHolder.release(TIMER_SERVICE, scheduler);
+        scheduler = SharedResourceHolder.release(timerService, scheduler);
       }
     }
   }
@@ -730,6 +754,10 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     FrameReader frameReader;
     boolean firstSettings = true;
 
+    @GuardedBy("lock")
+    private Boolean watchdogCanceled;
+    private ScheduledFuture<?> deadlineWatchdog;
+
     ClientFrameHandler(FrameReader frameReader) {
       this.frameReader = frameReader;
     }
@@ -854,6 +882,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         if (firstSettings) {
           listener.transportReady();
           firstSettings = false;
+          cancelDeadlineWatchdog();
         }
         startPendingStreams();
       }
@@ -954,6 +983,50 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     public void alternateService(int streamId, String origin, ByteString protocol, String host,
         int port, long maxAge) {
       // TODO(madongfly): Deal with alternateService propagation
+    }
+
+    /**
+     * This is called exactly once.
+     */
+    private void startDeadlineWatchdog(final Deadline deadline) {
+      Runnable onTimeout = new Runnable() {
+        @Override
+        public void run() {
+          if (firstSettings) {
+            onException(new IOException("ssl handshake timeout or frame settings timeout"));
+          }
+        }
+      };
+      synchronized (lock) {
+        if (watchdogCanceled != null) {
+          // watchdog canceled already before it even started
+          Preconditions.checkState(watchdogCanceled, "watchdogCanceled");
+          return;
+        }
+        watchdogCanceled = Boolean.FALSE;
+        ScheduledExecutorService scheduler = SharedResourceHolder.get(timerService);
+        deadlineWatchdog = scheduler.schedule(
+            onTimeout, deadline.timeRemaining(TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS);
+        SharedResourceHolder.release(timerService, scheduler);
+      }
+    }
+
+    /**
+     * This is called at most once, when the SETTINGS frame is received.
+     */
+    private void cancelDeadlineWatchdog() {
+      synchronized (lock) {
+        if (watchdogCanceled == null) {
+          // watchdog not even started (yet)
+          watchdogCanceled = Boolean.TRUE;
+          return;
+        }
+      }
+      Preconditions.checkNotNull(deadlineWatchdog, "deadlineWatchdog");
+      Preconditions.checkState(!watchdogCanceled, "watchdogCanceled");
+      // Do not forcefully interrupt. As the SETTINGS frame is received, the watchdog can not abort
+      // anything.
+      deadlineWatchdog.cancel(false);
     }
   }
 }

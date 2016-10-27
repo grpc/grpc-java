@@ -786,23 +786,26 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
     InterimTransportImpl() {
       delayedTransport = new DelayedClientTransport(executor);
-      delayedTransport.start(new ManagedClientTransport.Listener() {
-          @Override public void transportShutdown(Status status) {}
+      delayedTransport.start(
+          new ManagedClientTransport.Listener() {
+            @Override public void transportShutdown(Status status) {}
 
-          @Override public void transportTerminated() {
-            synchronized (lock) {
-              delayedTransports.remove(delayedTransport);
-              maybeTerminateChannel();
+            @Override public void transportTerminated() {
+              synchronized (lock) {
+                delayedTransports.remove(delayedTransport);
+                maybeTerminateChannel();
+              }
+              inUseStateAggregator.updateObjectInUse(delayedTransport, false);
             }
-            inUseStateAggregator.updateObjectInUse(delayedTransport, false);
-          }
 
-          @Override public void transportReady() {}
+            @Override public void transportReady() {}
 
-          @Override public void transportInUse(boolean inUse) {
-            inUseStateAggregator.updateObjectInUse(delayedTransport, inUse);
-          }
-        });
+            @Override public void transportInUse(boolean inUse) {
+              inUseStateAggregator.updateObjectInUse(delayedTransport, inUse);
+            }
+          },
+          null);
+
       boolean savedShutdown;
       synchronized (lock) {
         delayedTransports.add(delayedTransport);

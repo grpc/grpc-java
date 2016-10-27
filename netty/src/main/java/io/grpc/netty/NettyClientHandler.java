@@ -39,13 +39,17 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Ticker;
 
+import io.grpc.Deadline;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.internal.ClientTransport.PingCallback;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
+import io.grpc.internal.SharedResourceHolder;
+import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.GrpcHttp2HeadersDecoder.GrpcHttp2ClientHeadersDecoder;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
@@ -81,8 +85,12 @@ import io.netty.handler.logging.LogLevel;
 
 import java.nio.channels.ClosedChannelException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Client-side Netty handler for GRPC processing. All event handlers are executed entirely within
@@ -104,13 +112,21 @@ class NettyClientHandler extends AbstractNettyHandler {
           Status.UNAVAILABLE.withDescription("Stream IDs have been exhausted");
   private static final long USER_PING_PAYLOAD = 1111;
 
+  private final Object lock = new Object();
   private final Http2Connection.PropertyKey streamKey;
   private final ClientTransportLifecycleManager lifecycleManager;
+  private final Resource<ScheduledExecutorService> timerService;
   private final Ticker ticker;
+
+  @GuardedBy("lock")
+  private Boolean watchdogCanceled;
+
   private WriteQueue clientWriteQueue;
   private Http2Ping ping;
+  private ScheduledFuture<?> deadlineWatchdog;
 
   static NettyClientHandler newHandler(ClientTransportLifecycleManager lifecycleManager,
+                                       Resource<ScheduledExecutorService> timerService,
                                        int flowControlWindow, int maxHeaderListSize,
                                        Ticker ticker) {
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive");
@@ -119,8 +135,8 @@ class NettyClientHandler extends AbstractNettyHandler {
     Http2FrameWriter frameWriter = new DefaultHttp2FrameWriter();
     Http2Connection connection = new DefaultHttp2Connection(false);
 
-    return newHandler(
-        connection, frameReader, frameWriter, lifecycleManager, flowControlWindow, ticker);
+    return newHandler(connection, frameReader, frameWriter, lifecycleManager, timerService,
+        flowControlWindow, ticker);
   }
 
   @VisibleForTesting
@@ -128,6 +144,7 @@ class NettyClientHandler extends AbstractNettyHandler {
                                        Http2FrameReader frameReader,
                                        Http2FrameWriter frameWriter,
                                        ClientTransportLifecycleManager lifecycleManager,
+                                       Resource<ScheduledExecutorService> timerService,
                                        int flowControlWindow,
                                        Ticker ticker) {
     Preconditions.checkNotNull(connection, "connection");
@@ -155,15 +172,18 @@ class NettyClientHandler extends AbstractNettyHandler {
     settings.initialWindowSize(flowControlWindow);
     settings.maxConcurrentStreams(0);
 
-    return new NettyClientHandler(decoder, encoder, settings, lifecycleManager, ticker);
+    return new NettyClientHandler(
+        decoder, encoder, settings, lifecycleManager, timerService, ticker);
   }
 
   private NettyClientHandler(Http2ConnectionDecoder decoder,
                              StreamBufferingEncoder encoder, Http2Settings settings,
                              ClientTransportLifecycleManager lifecycleManager,
+                             Resource<ScheduledExecutorService> timerService,
                              Ticker ticker) {
     super(decoder, encoder, settings);
     this.lifecycleManager = lifecycleManager;
+    this.timerService = timerService;
     this.ticker = ticker;
 
     // Set the frame listener on the decoder.
@@ -584,12 +604,50 @@ class NettyClientHandler extends AbstractNettyHandler {
     return stream;
   }
 
+  /**
+   * This is called exactly once.
+   */
+  void startDeadlineWatchdog(Runnable onTimeout, Deadline deadline) {
+    Preconditions.checkArgument(deadline != null, "deadline");
+    synchronized (lock) {
+      if (watchdogCanceled != null) {
+        // watchdog canceled already before it even started
+        Preconditions.checkState(watchdogCanceled, "watchdogCanceled");
+        return;
+      }
+      watchdogCanceled = Boolean.FALSE;
+      ScheduledExecutorService scheduler = SharedResourceHolder.get(timerService);
+      deadlineWatchdog = scheduler.schedule(
+          onTimeout, deadline.timeRemaining(TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS);
+      SharedResourceHolder.release(timerService, scheduler);
+    }
+  }
+
+  /**
+   * This is called at most once, when the SETTINGS frame is received.
+   */
+  private void cancelDeadlineWatchdog() {
+    synchronized (lock) {
+      if (watchdogCanceled == null) {
+        // watchdog not even started (yet)
+        watchdogCanceled = Boolean.TRUE;
+        return;
+      }
+    }
+    Preconditions.checkNotNull(deadlineWatchdog, "deadlineWatchdog");
+    Preconditions.checkState(!watchdogCanceled, "watchdogCanceled");
+    // Do not forcefully interrupt. As the SETTINGS frame is received, the watchdog can not actually
+    // abort anything.
+    deadlineWatchdog.cancel(false);
+  }
+
   private class FrameListener extends Http2FrameAdapter {
     private boolean firstSettings = true;
 
     @Override
     public void onSettingsRead(ChannelHandlerContext ctx, Http2Settings settings) {
       if (firstSettings) {
+        cancelDeadlineWatchdog();
         firstSettings = false;
         lifecycleManager.notifyReady();
       }

@@ -38,6 +38,7 @@ import com.google.common.base.Supplier;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ConnectivityState;
+import io.grpc.Deadline;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
@@ -199,7 +200,7 @@ final class TransportSet extends ManagedChannel implements WithLogId {
       stateManager.gotoState(ConnectivityState.CONNECTING);
       DelayedClientTransport delayedTransport = new DelayedClientTransport(appExecutor);
       transports.add(delayedTransport);
-      delayedTransport.start(new BaseTransportListener(delayedTransport));
+      delayedTransport.start(new BaseTransportListener(delayedTransport), null);
       savedTransport = activeTransport = delayedTransport;
       runnable = startNewTransport(delayedTransport);
     }
@@ -231,7 +232,14 @@ final class TransportSet extends ManagedChannel implements WithLogId {
     }
     pendingTransport = transport;
     transports.add(transport);
-    return transport.start(new TransportListener(transport, delayedTransport, address));
+    if (reconnectPolicy == null) {
+      // initialize backoff policy
+      reconnectPolicy = backoffPolicyProvider.get();
+    }
+    long timeout = reconnectPolicy.currentTimeoutMills();
+    return transport.start(new TransportListener(
+        transport, delayedTransport, address),
+        timeout == 0 ? null : Deadline.after(timeout, TimeUnit.MILLISECONDS));
   }
 
   /**
@@ -274,11 +282,11 @@ final class TransportSet extends ManagedChannel implements WithLogId {
         return;
       }
       stateManager.gotoState(ConnectivityState.TRANSIENT_FAILURE);
-      if (reconnectPolicy == null) {
-        reconnectPolicy = backoffPolicyProvider.get();
-      }
       long delayMillis =
           reconnectPolicy.nextBackoffMillis() - connectingTimer.elapsed(TimeUnit.MILLISECONDS);
+      if (delayMillis < 0L) {
+        delayMillis = 0L;
+      }
       if (log.isLoggable(Level.FINE)) {
         log.log(Level.FINE, "[{0}] Scheduling backoff for {1} ms",
             new Object[]{getLogId(), delayMillis});
@@ -460,7 +468,7 @@ final class TransportSet extends ManagedChannel implements WithLogId {
     private final SocketAddress address;
     private final DelayedClientTransport delayedTransport;
 
-    public TransportListener(ManagedClientTransport transport,
+    public TransportListener(ConnectionClientTransport transport,
         DelayedClientTransport delayedTransport, SocketAddress address) {
       super(transport);
       this.address = address;
@@ -477,7 +485,8 @@ final class TransportSet extends ManagedChannel implements WithLogId {
       boolean savedShutdown;
       synchronized (lock) {
         savedShutdown = shutdown;
-        reconnectPolicy = null;
+        // reset backoff policy
+        reconnectPolicy = backoffPolicyProvider.get();
         nextAddressIndex = 0;
         if (shutdown) {
           // If TransportSet already shutdown, transport is only to take care of pending

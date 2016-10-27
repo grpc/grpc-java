@@ -40,6 +40,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
+import static org.mockito.Matchers.isNull;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atMost;
@@ -65,6 +66,7 @@ import io.grpc.ClientInterceptor;
 import io.grpc.Compressor;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
+import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
 import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer;
@@ -250,7 +252,7 @@ public class ManagedChannelImplTest {
 
     verify(mockTransportFactory)
         .newClientTransport(same(socketAddress), eq(authority), eq(userAgent));
-    verify(mockTransport).start(transportListenerCaptor.capture());
+    verify(mockTransport).start(transportListenerCaptor.capture(), isNull(Deadline.class));
     ManagedClientTransport.Listener transportListener = transportListenerCaptor.getValue();
     transportListener.transportReady();
     executor.runDueTasks();
@@ -345,7 +347,7 @@ public class ManagedChannelImplTest {
 
     verify(mockTransportFactory)
         .newClientTransport(same(socketAddress), eq(authority), any(String.class));
-    verify(mockTransport).start(transportListenerCaptor.capture());
+    verify(mockTransport).start(transportListenerCaptor.capture(), isNull(Deadline.class));
     ManagedClientTransport.Listener transportListener = transportListenerCaptor.getValue();
     transportListener.transportReady();
     executor.runDueTasks();
@@ -414,7 +416,7 @@ public class ManagedChannelImplTest {
     timer.runDueTasks();
     executor.runDueTasks();
 
-    verify(mockTransport).start(transportListenerCaptor.capture());
+    verify(mockTransport).start(transportListenerCaptor.capture(), isNull(Deadline.class));
     ManagedClientTransport.Listener transportListener = transportListenerCaptor.getValue();
     transportListener.transportReady();
     executor.runDueTasks();
@@ -476,7 +478,7 @@ public class ManagedChannelImplTest {
     call.cancel("Cancel for test", null);
     executor.runDueTasks();
 
-    verify(mockTransport).start(transportListenerCaptor.capture());
+    verify(mockTransport).start(transportListenerCaptor.capture(), isNull(Deadline.class));
     final ManagedClientTransport.Listener transportListener = transportListenerCaptor.getValue();
     final Object lock = new Object();
     final CyclicBarrier barrier = new CyclicBarrier(2);
@@ -532,7 +534,7 @@ public class ManagedChannelImplTest {
     timer.runDueTasks();
     executor.runDueTasks();
 
-    verify(mockTransport).start(transportListenerCaptor.capture());
+    verify(mockTransport).start(transportListenerCaptor.capture(), isNull(Deadline.class));
     assertEquals(0, executor.numPendingTasks());
     transportListenerCaptor.getValue().transportReady();
     // Real streams are started in the channel's executor
@@ -695,7 +697,7 @@ public class ManagedChannelImplTest {
 
     ArgumentCaptor<ManagedClientTransport.Listener> badTransportListenerCaptor =
         ArgumentCaptor.forClass(ManagedClientTransport.Listener.class);
-    verify(badTransport).start(badTransportListenerCaptor.capture());
+    verify(badTransport).start(badTransportListenerCaptor.capture(), isNull(Deadline.class));
     verify(mockTransportFactory)
         .newClientTransport(same(badAddress), any(String.class), any(String.class));
     verify(mockTransportFactory, times(0))
@@ -707,7 +709,7 @@ public class ManagedChannelImplTest {
         ArgumentCaptor.forClass(ManagedClientTransport.Listener.class);
     verify(mockTransportFactory)
           .newClientTransport(same(goodAddress), any(String.class), any(String.class));
-    verify(goodTransport).start(goodTransportListenerCaptor.capture());
+    verify(goodTransport).start(goodTransportListenerCaptor.capture(), isNull(Deadline.class));
     goodTransportListenerCaptor.getValue().transportReady();
     executor.runDueTasks();
 
@@ -752,7 +754,7 @@ public class ManagedChannelImplTest {
     timer.runDueTasks();
     executor.runDueTasks();
 
-    verify(transport1).start(transportListenerCaptor.capture());
+    verify(transport1).start(transportListenerCaptor.capture(), isNull(Deadline.class));
     verify(mockTransportFactory)
         .newClientTransport(same(addr1), any(String.class), any(String.class));
     verify(mockTransportFactory, times(0))
@@ -760,10 +762,10 @@ public class ManagedChannelImplTest {
     transportListenerCaptor.getValue().transportShutdown(Status.UNAVAILABLE);
 
     // The channel then try the second address, which will fail to connect too.
-    verify(transport2).start(transportListenerCaptor.capture());
+    verify(transport2).start(transportListenerCaptor.capture(), isNull(Deadline.class));
     verify(mockTransportFactory)
         .newClientTransport(same(addr2), any(String.class), any(String.class));
-    verify(transport2).start(transportListenerCaptor.capture());
+    verify(transport2).start(transportListenerCaptor.capture(), isNull(Deadline.class));
     transportListenerCaptor.getValue().transportShutdown(Status.UNAVAILABLE);
     executor.runDueTasks();
 
@@ -820,7 +822,7 @@ public class ManagedChannelImplTest {
 
     verify(mockTransportFactory)
         .newClientTransport(same(addr1), any(String.class), any(String.class));
-    verify(transport1).start(transportListenerCaptor.capture());
+    verify(transport1).start(transportListenerCaptor.capture(), isNull(Deadline.class));
     transportListenerCaptor.getValue().transportReady();
     executor.runDueTasks();
 
@@ -831,7 +833,7 @@ public class ManagedChannelImplTest {
     // Second call still use the first address, since it was successfully connected.
     ClientCall<String, Integer> call2 = channel.newCall(method, CallOptions.DEFAULT);
     call2.start(mockCallListener, headers);
-    verify(transport2).start(transportListenerCaptor.capture());
+    verify(transport2).start(transportListenerCaptor.capture(), isNull(Deadline.class));
     verify(mockTransportFactory, times(2))
         .newClientTransport(same(addr1), any(String.class), any(String.class));
     transportListenerCaptor.getValue().transportReady();
@@ -901,7 +903,7 @@ public class ManagedChannelImplTest {
         ArgumentCaptor.forClass(ManagedClientTransport.Listener.class);
     verify(mockTransportFactory).newClientTransport(
         same(socketAddress), eq(authority), eq(userAgent));
-    verify(transport).start(transportListenerCaptor.capture());
+    verify(transport).start(transportListenerCaptor.capture(), isNull(Deadline.class));
     verify(creds, never()).applyRequestMetadata(
         any(MethodDescriptor.class), any(Attributes.class), any(Executor.class),
         any(MetadataApplier.class));
@@ -962,7 +964,12 @@ public class ManagedChannelImplTest {
       return new BackoffPolicy() {
         @Override
         public long nextBackoffMillis() {
-          return 1;
+          return 1L;
+        }
+
+        @Override
+        public long currentTimeoutMills() {
+          return 0L;
         }
       };
     }

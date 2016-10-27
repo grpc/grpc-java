@@ -52,20 +52,31 @@ final class ExponentialBackoffPolicy implements BackoffPolicy {
     }
   }
 
-  private Random random = new Random();
-  private long initialBackoffMillis = TimeUnit.SECONDS.toMillis(1);
-  private long maxBackoffMillis = TimeUnit.MINUTES.toMillis(2);
-  private double multiplier = 1.6;
-  private double jitter = .2;
+  @VisibleForTesting
+  static final long MAX_BACKOFF_MILLIS = TimeUnit.SECONDS.toMillis(120L);
+  @VisibleForTesting
+  static final long INITIAL_BACKOFF_MILLIS = TimeUnit.SECONDS.toMillis(1L);
+  @VisibleForTesting
+  static final long MIN_CONNECT_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(20L);
+  @VisibleForTesting
+  static final double MULTIPLIER = 1.6D;
 
-  private long nextBackoffMillis = initialBackoffMillis;
+  private final Random random = new Random();
+  private double jitter = .2D;
+  private long nextBackoffMillis = INITIAL_BACKOFF_MILLIS;
+
 
   @Override
   public long nextBackoffMillis() {
     long currentBackoffMillis = nextBackoffMillis;
-    nextBackoffMillis = Math.min((long) (currentBackoffMillis * multiplier), maxBackoffMillis);
+    nextBackoffMillis = Math.min((long) (currentBackoffMillis * MULTIPLIER), MAX_BACKOFF_MILLIS);
     return currentBackoffMillis
         + uniformRandom(-jitter * currentBackoffMillis, jitter * currentBackoffMillis);
+  }
+
+  @Override
+  public long currentTimeoutMills() {
+    return Math.max(nextBackoffMillis, MIN_CONNECT_TIMEOUT_MILLIS);
   }
 
   private long uniformRandom(double low, double high) {
@@ -74,39 +85,11 @@ final class ExponentialBackoffPolicy implements BackoffPolicy {
     return (long) (random.nextDouble() * mag + low);
   }
 
-  /*
-   * No guice and no flags means we get to implement these setters for testing ourselves.  Do not
-   * call these from non-test code.
-   */
-
-  @VisibleForTesting
-  ExponentialBackoffPolicy setRandom(Random random) {
-    this.random = random;
-    return this;
-  }
-
-  @VisibleForTesting
-  ExponentialBackoffPolicy setInitialBackoffMillis(long initialBackoffMillis) {
-    this.initialBackoffMillis = initialBackoffMillis;
-    return this;
-  }
-
-  @VisibleForTesting
-  ExponentialBackoffPolicy setMaxBackoffMillis(long maxBackoffMillis) {
-    this.maxBackoffMillis = maxBackoffMillis;
-    return this;
-  }
-
-  @VisibleForTesting
-  ExponentialBackoffPolicy setMultiplier(double multiplier) {
-    this.multiplier = multiplier;
-    return this;
-  }
-
   @VisibleForTesting
   ExponentialBackoffPolicy setJitter(double jitter) {
     this.jitter = jitter;
     return this;
   }
+
 }
 

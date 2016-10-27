@@ -38,6 +38,7 @@ import com.google.common.base.Ticker;
 
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.Deadline;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -45,21 +46,26 @@ import io.grpc.internal.ClientStream;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
+import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.StatsTraceContext;
+
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ConnectTimeoutException;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http2.StreamBufferingEncoder.Http2ChannelClosedException;
 import io.netty.util.AsciiString;
+import io.netty.util.concurrent.Promise;
 
 import java.net.SocketAddress;
+import java.net.SocketTimeoutException;
 import java.nio.channels.ClosedChannelException;
 import java.util.concurrent.Executor;
-
+import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 
 /**
@@ -70,6 +76,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final Class<? extends Channel> channelType;
   private final EventLoopGroup group;
   private final ProtocolNegotiator negotiator;
+  private final Resource<ScheduledExecutorService> timerService;
   private final AsciiString authority;
   private final AsciiString userAgent;
   private final int flowControlWindow;
@@ -86,12 +93,14 @@ class NettyClientTransport implements ConnectionClientTransport {
 
   NettyClientTransport(SocketAddress address, Class<? extends Channel> channelType,
                        EventLoopGroup group, ProtocolNegotiator negotiator,
+                       Resource<ScheduledExecutorService> timerService,
                        int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
                        String authority, @Nullable String userAgent) {
     this.negotiator = Preconditions.checkNotNull(negotiator, "negotiator");
     this.address = Preconditions.checkNotNull(address, "address");
     this.group = Preconditions.checkNotNull(group, "group");
     this.channelType = Preconditions.checkNotNull(channelType, "channelType");
+    this.timerService = timerService;
     this.flowControlWindow = flowControlWindow;
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
@@ -140,7 +149,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public Runnable start(Listener transportListener) {
+  public Runnable start(Listener transportListener, Deadline deadline) {
     lifecycleManager = new ClientTransportLifecycleManager(
         Preconditions.checkNotNull(transportListener, "listener"));
 
@@ -162,7 +171,7 @@ class NettyClientTransport implements ConnectionClientTransport {
      */
     b.handler(negotiationHandler);
     // Start the connection operation to the server.
-    channel = b.connect(address).addListener(new ChannelFutureListener() {
+    final ChannelFuture connectFuture = b.connect(address).addListener(new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
         if (!future.isSuccess()) {
@@ -176,21 +185,23 @@ class NettyClientTransport implements ConnectionClientTransport {
           future.channel().pipeline().fireExceptionCaught(future.cause());
         }
       }
-    }).channel();
+    });
+    channel = connectFuture.channel();
     // Start the write queue as soon as the channel is constructed
     handler.startWriteQueue(channel);
     // This write will have no effect, yet it will only complete once the negotiationHandler
     // flushes any pending writes.
-    channel.write(NettyClientHandler.NOOP_MESSAGE).addListener(new ChannelFutureListener() {
-      @Override
-      public void operationComplete(ChannelFuture future) throws Exception {
-        if (!future.isSuccess()) {
-          // Need to notify of this failure, because NettyClientHandler may not have been added to
-          // the pipeline before the error occurred.
-          lifecycleManager.notifyTerminated(Utils.statusFromThrowable(future.cause()));
-        }
-      }
-    });
+    final ChannelFuture writeFuture =
+        channel.write(NettyClientHandler.NOOP_MESSAGE).addListener(new ChannelFutureListener() {
+          @Override
+          public void operationComplete(ChannelFuture future) throws Exception {
+            if (!future.isSuccess()) {
+              // Need to notify of this failure, because NettyClientHandler may not have been added
+              // to the pipeline before the error occurred.
+              lifecycleManager.notifyTerminated(Utils.statusFromThrowable(future.cause()));
+            }
+          }
+        });
     // Handle transport shutdown when the channel is closed.
     channel.closeFuture().addListener(new ChannelFutureListener() {
       @Override
@@ -200,6 +211,32 @@ class NettyClientTransport implements ConnectionClientTransport {
             Status.INTERNAL.withDescription("Connection closed with unknown cause"));
       }
     });
+
+    if (deadline != null) {
+      Runnable onTimeout = new Runnable() {
+        @Override
+        public void run() {
+          if (connectFuture instanceof Promise) {
+            try {
+              ((Promise<?>) connectFuture)
+                  .tryFailure(new SocketTimeoutException("connection timeout"));
+              return;
+            } catch (IllegalStateException e) {
+              // ignore and continue
+            }
+          }
+          if (writeFuture instanceof Promise) {
+            try {
+              ((Promise<?>) writeFuture)
+                  .tryFailure(new ConnectTimeoutException("write timeout"));
+            } catch (IllegalStateException e) {
+              // ignore
+            }
+          }
+        }
+      };
+      handler.startDeadlineWatchdog(onTimeout, deadline);
+    }
     return null;
   }
 
@@ -261,7 +298,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   }
 
   private NettyClientHandler newHandler() {
-    return NettyClientHandler.newHandler(lifecycleManager, flowControlWindow, maxHeaderListSize,
-        Ticker.systemTicker());
+    return NettyClientHandler.newHandler(lifecycleManager, timerService, flowControlWindow,
+        maxHeaderListSize, Ticker.systemTicker());
   }
 }

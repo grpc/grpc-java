@@ -33,6 +33,7 @@ package io.grpc.internal;
 
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.Deadline;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -41,8 +42,8 @@ import java.util.concurrent.Executor;
 
 abstract class ForwardingConnectionClientTransport implements ConnectionClientTransport {
   @Override
-  public Runnable start(Listener listener) {
-    return delegate().start(listener);
+  public Runnable start(Listener listener, Deadline deadline) {
+    return delegate().start(listener, deadline);
   }
 
   @Override

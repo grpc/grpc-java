@@ -38,6 +38,7 @@ import com.google.common.base.Suppliers;
 
 import io.grpc.CallOptions;
 import io.grpc.Context;
+import io.grpc.Deadline;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -96,7 +97,7 @@ class DelayedClientTransport implements ManagedClientTransport {
   }
 
   @Override
-  public Runnable start(Listener listener) {
+  public Runnable start(Listener listener, Deadline deadline) {
     this.listener = Preconditions.checkNotNull(listener, "listener");
     return null;
   }
@@ -218,7 +219,7 @@ class DelayedClientTransport implements ManagedClientTransport {
   /**
    * Transfers all the pending and future streams and pings to the given transport.
    *
-   * <p>May only be called after {@link #start(Listener)}.
+   * <p>May only be called after {@link #start}.
    *
    * <p>{@code transport} will be used for all future calls to {@link #newStream}, even if this
    * transport is {@link #shutdown}.
