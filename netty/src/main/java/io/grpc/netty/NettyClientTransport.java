@@ -60,6 +60,7 @@ import io.netty.util.AsciiString;
 
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
@@ -96,7 +97,8 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.address = Preconditions.checkNotNull(address, "address");
     this.group = Preconditions.checkNotNull(group, "group");
     this.channelType = Preconditions.checkNotNull(channelType, "channelType");
-    this.channelOptions = Preconditions.checkNotNull(channelOptions, "channelOptions");
+    this.channelOptions = new HashMap<ChannelOption<?>, Object>(
+        Preconditions.checkNotNull(channelOptions, "channelOptions"));
     this.flowControlWindow = flowControlWindow;
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
@@ -163,6 +165,9 @@ class NettyClientTransport implements ConnectionClientTransport {
       b.option(SO_KEEPALIVE, true);
     }
     for (Map.Entry<ChannelOption<?>, ?> entry : channelOptions.entrySet()) {
+      // Every entry in the map is obtained from
+      // NettyChannelBuilder#withOption(ChannelOption<T> option, T value)
+      // so it is safe to pass the key-value pair to b.option().
       b.option((ChannelOption<Object>) entry.getKey(), entry.getValue());
     }
 
