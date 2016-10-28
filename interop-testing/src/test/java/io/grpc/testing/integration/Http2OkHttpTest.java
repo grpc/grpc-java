@@ -32,6 +32,7 @@
 package io.grpc.testing.integration;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -63,6 +64,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.SSLPeerUnverifiedException;
 
@@ -137,10 +139,9 @@ public class Http2OkHttpTest extends AbstractInteropTest {
         asyncStub.fullDuplexCall(recorder);
     Messages.StreamingOutputCallRequest request = requestBuilder.build();
     requestStream.onNext(request);
-    recorder.firstValue().get();
     requestStream.onError(new Exception("failed"));
-
-    recorder.awaitCompletion();
+    recorder.awaitCompletion(10000, TimeUnit.MILLISECONDS);
+    assertNotNull(recorder.firstValue());
 
     assertEquals(EMPTY, blockingStub.emptyCall(EMPTY));
   }

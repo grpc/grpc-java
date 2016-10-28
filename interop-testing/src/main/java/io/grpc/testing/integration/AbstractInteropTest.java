@@ -302,8 +302,8 @@ public abstract class AbstractInteropTest {
       requestObserver.onNext(request);
     }
     requestObserver.onCompleted();
-    assertEquals(goldenResponse, responseObserver.firstValue().get());
-    responseObserver.awaitCompletion();
+    responseObserver.awaitCompletion(10000, TimeUnit.MILLISECONDS);
+    assertEquals(goldenResponse, responseObserver.firstValue());
   }
 
   @Test(timeout = 10000)
