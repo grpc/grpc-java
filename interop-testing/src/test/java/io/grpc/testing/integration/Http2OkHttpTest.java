@@ -32,7 +32,6 @@
 package io.grpc.testing.integration;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -139,9 +138,9 @@ public class Http2OkHttpTest extends AbstractInteropTest {
         asyncStub.fullDuplexCall(recorder);
     Messages.StreamingOutputCallRequest request = requestBuilder.build();
     requestStream.onNext(request);
+    recorder.getValues().take();
     requestStream.onError(new Exception("failed"));
     recorder.awaitCompletion(10000, TimeUnit.MILLISECONDS);
-    assertNotNull(recorder.firstValue());
 
     assertEquals(EMPTY, blockingStub.emptyCall(EMPTY));
   }

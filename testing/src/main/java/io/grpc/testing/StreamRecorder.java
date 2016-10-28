@@ -34,10 +34,9 @@ package io.grpc.testing;
 import io.grpc.ExperimentalApi;
 import io.grpc.stub.StreamObserver;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -60,7 +59,7 @@ public class StreamRecorder<T> implements StreamObserver<T> {
   }
 
   private final CountDownLatch latch = new CountDownLatch(1);
-  private final List<T> results = Collections.synchronizedList(new ArrayList<T>());
+  private final BlockingQueue<T> results = new LinkedBlockingQueue<T>();
   private final AtomicReference<Throwable> error = new AtomicReference<Throwable>();
   private final AtomicReference<T> firstValue = new AtomicReference<T>();
 
@@ -100,8 +99,8 @@ public class StreamRecorder<T> implements StreamObserver<T> {
   /**
    * Returns the current set of received values.
    */
-  public List<T> getValues() {
-    return Collections.unmodifiableList(results);
+  public BlockingQueue<T> getValues() {
+    return results;
   }
 
   /**
