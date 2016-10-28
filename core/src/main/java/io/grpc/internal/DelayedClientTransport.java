@@ -215,6 +215,11 @@ class DelayedClientTransport implements ManagedClientTransport {
     // If savedPendingStreams == null, transportTerminated() has already been called in shutdown().
   }
 
+  @Override
+  public boolean supportGetMethod() {
+    return false;
+  }
+
   /**
    * Transfers all the pending and future streams and pings to the given transport.
    *

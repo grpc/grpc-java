@@ -56,7 +56,6 @@ import com.google.census.CensusContext;
 import com.google.census.RpcConstants;
 import com.google.census.TagValue;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.io.BaseEncoding;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 
@@ -842,6 +841,7 @@ public class ClientCallImplTest {
         statsTraceCtx,
         provider,
         deadlineCancellationExecutor);
+    when(transport.supportGetMethod()).thenReturn(true);
     call.start(callListener, new Metadata());
     // call.start should not trigger stream.start
     verify(stream, times(0)).start(any(ClientStreamListener.class), any(Metadata.class));
@@ -855,8 +855,7 @@ public class ClientCallImplTest {
     verify(stream).start(listenerArgumentCaptor.capture(), headersCaptor.capture());
     Metadata headers = headersCaptor.getValue();
     // The request payload is sent over the headers.
-    assertArrayEquals(BaseEncoding.base64().encode("request-payload".getBytes()).getBytes(),
-        headers.get(Metadata.Key.of("grpc-payload-bin", Metadata.BINARY_BYTE_MARSHALLER)));
+    assertArrayEquals("request-payload".getBytes(), headers.get(GrpcUtil.GRPC_PAYLOAD_BIN_KEY));
 
     ClientStreamListener streamListener = listenerArgumentCaptor.getValue();
     streamListener.onReady();

@@ -99,6 +99,12 @@ public final class GrpcUtil {
           Metadata.Key.of("user-agent", Metadata.ASCII_STRING_MARSHALLER);
 
   /**
+   * {@link io.grpc.Metadata.Key} for the request payload request header.
+   */
+  public static final Metadata.Key<byte[]> GRPC_PAYLOAD_BIN_KEY =
+          Metadata.Key.of("grpc-payload-bin", Metadata.BINARY_BYTE_MARSHALLER);
+
+  /**
    * The default port for plain-text connections.
    */
   public static final int DEFAULT_PORT_PLAINTEXT = 80;

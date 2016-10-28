@@ -44,7 +44,7 @@ import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.io.BaseEncoding;
+import com.google.common.io.ByteStreams;
 
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
@@ -94,6 +94,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
   private ScheduledExecutorService deadlineCancellationExecutor;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
+  private boolean useGetMethod;
   private boolean streamStarted;
   private Listener<RespT> observer;
   private Metadata headers;
@@ -223,6 +224,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       updateTimeoutHeaders(effectiveDeadline, callOptions.getDeadline(),
           context.getDeadline(), headers);
       ClientTransport transport = clientTransportProvider.get(callOptions);
+      useGetMethod = unaryRequest && method.isSafe() && method.isIdempotent()
+          && transport.supportGetMethod();
       Context origContext = context.attach();
       try {
         stream = transport.newStream(method, headers, callOptions, statsTraceCtx);
@@ -237,7 +240,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       stream.setAuthority(callOptions.getAuthority());
     }
     stream.setCompressor(compressor);
-    if (!useGet()) {
+
+    if (!useGetMethod) {
       startStream();
     }
     // If we're going to use GET verb, we will need to wait for the request message and then
@@ -248,6 +252,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
     checkState(!streamStarted, "Already started");
     streamStarted = true;
     stream.start(new ClientStreamListenerImpl(observer), headers);
+    headers = null;
     if (requestedMessages != 0) {
       stream.request(requestedMessages);
     }
@@ -353,6 +358,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
 
   @Override
   public void request(int numMessages) {
+    Preconditions.checkState(stream != null, "Not started");
     checkArgument(numMessages >= 0, "Number requested must be non-negative");
     if (streamStarted) {
       stream.request(numMessages);
@@ -391,9 +397,13 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
 
   @Override
   public void halfClose() {
-    Preconditions.checkState(streamStarted, "Not started");
+    Preconditions.checkState(stream != null, "Not started");
     Preconditions.checkState(!cancelCalled, "call was cancelled");
     Preconditions.checkState(!halfCloseCalled, "call already half-closed");
+    if (!streamStarted) {
+      cancel("No request message has been sent", null);
+      return;
+    }
     halfCloseCalled = true;
     stream.halfClose();
   }
@@ -405,15 +415,12 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
     try {
       // TODO(notcarl): Find out if messageIs needs to be closed.
       InputStream messageIs = method.streamRequest(message);
-      if (!useGet()) {
+      if (!useGetMethod) {
         stream.writeMessage(messageIs);
       } else {
         // Encode the request message and put it in the request headers.
-        byte[] payload = new byte[messageIs.available()];
-        messageIs.read(payload, 0, messageIs.available());
-        headers.put(
-            Metadata.Key.of("grpc-payload-bin", Metadata.BINARY_BYTE_MARSHALLER),
-            BaseEncoding.base64().encode(payload).getBytes());
+        byte[] payload = ByteStreams.toByteArray(messageIs);
+        headers.put(GrpcUtil.GRPC_PAYLOAD_BIN_KEY, payload);
         startStream();
       }
     } catch (Throwable e) {
@@ -442,13 +449,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
   private void closeObserver(Listener<RespT> observer, Status status, Metadata trailers) {
     statsTraceCtx.callEnded(status);
     observer.onClose(status, trailers);
-  }
-
-  /**
-   * If it returns true, we will try to send the request message in the headers.
-   */
-  private boolean useGet() {
-    return method.isSafe() && method.isIdempotent();
   }
 
   private class ClientStreamListenerImpl implements ClientStreamListener {

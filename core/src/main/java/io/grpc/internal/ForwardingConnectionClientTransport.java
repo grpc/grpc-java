@@ -87,5 +87,10 @@ abstract class ForwardingConnectionClientTransport implements ConnectionClientTr
     return getClass().getSimpleName() + "[" + delegate().toString() + "]";
   }
 
+  @Override
+  public boolean supportGetMethod() {
+    return false;
+  }
+
   protected abstract ConnectionClientTransport delegate();
 }

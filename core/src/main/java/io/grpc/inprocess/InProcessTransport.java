@@ -139,7 +139,7 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
     }
     StatsTraceContext serverStatsTraceContext = serverTransportListener.methodDetermined(
         method.getFullMethodName(), headers);
-    return new InProcessStream(method, headers, serverStatsTraceContext).clientStream;
+    return new InProcessStream(method, serverStatsTraceContext).clientStream;
   }
 
   @Override
@@ -198,6 +198,11 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
   }
 
   @Override
+  public boolean supportGetMethod() {
+    return false;
+  }
+
+  @Override
   public String toString() {
     return getLogId() + "(" + name + ")";
   }
@@ -237,7 +242,7 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
     private final StatsTraceContext serverStatsTraceContext;
     private final MethodDescriptor<?, ?> method;
 
-    private InProcessStream(MethodDescriptor<?, ?> method, Metadata headers,
+    private InProcessStream(MethodDescriptor<?, ?> method,
         StatsTraceContext serverStatsTraceContext) {
       this.method = checkNotNull(method, "method");
       this.serverStatsTraceContext =

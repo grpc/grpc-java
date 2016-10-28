@@ -84,6 +84,11 @@ public interface ClientTransport {
   void ping(PingCallback callback, Executor executor);
 
   /**
+   * Returns true if the transport can send unary requests using GET.
+   */
+  boolean supportGetMethod();
+
+  /**
    * A callback that is invoked when the acknowledgement to a {@link #ping} is received. Exactly one
    * of the two methods should be called per {@link #ping}.
    */

@@ -440,6 +440,11 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   }
 
   @Override
+  public boolean supportGetMethod() {
+    return false;
+  }
+
+  @Override
   public String toString() {
     return getLogId() + "(" + address + ")";
   }

@@ -73,4 +73,9 @@ class FailingClientTransport implements ClientTransport {
         }
       });
   }
+
+  @Override
+  public boolean supportGetMethod() {
+    return false;
+  }
 }
