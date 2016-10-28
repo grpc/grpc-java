@@ -74,12 +74,11 @@ import java.io.IOException;
 @RunWith(JUnit4.class)
 public class HeaderClientInterceptorTest {
 
-  private final ServerInterceptor mockServerInterceptor =
-      spy(new ServerInterceptor() {
+  private final ServerInterceptor mockServerInterceptor = spy(
+      new ServerInterceptor() {
         @Override
-        public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
-            Metadata headers,
-            ServerCallHandler<ReqT, RespT> next) {
+        public <ReqT, RespT> Listener<ReqT> interceptCall(
+            ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
           return next.startCall(call, headers);
         }
       });
@@ -101,12 +100,8 @@ public class HeaderClientInterceptorTest {
 
   @After
   public void tearDown() {
-    if (inProcessChannel != null) {
-      inProcessChannel.shutdownNow();
-    }
-    if (fakeServer != null) {
-      fakeServer.shutdownNow();
-    }
+    inProcessChannel.shutdownNow();
+    fakeServer.shutdownNow();
   }
 
   @Test

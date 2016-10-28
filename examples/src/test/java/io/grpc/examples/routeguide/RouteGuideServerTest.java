@@ -53,9 +53,11 @@ import org.mockito.ArgumentCaptor;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Unit tests for {@link RouteGuideServer}.
@@ -73,21 +75,21 @@ public class RouteGuideServerTest {
 
   @Before
   public void setUp() throws IOException {
-    String uniqueServerName = "fake server for " + getClass();
+    String uniqueServerName = "in-process server for " + getClass();
     features = new ArrayList<Feature>();
-    server = new RouteGuideServer(InProcessServerBuilder.forName(uniqueServerName), 0, features);
+    // use directExecutor for both InProcessServerBuilder and InProcessChannelBuilder can reduce the
+    // usage timeouts and latches in test. But we still add timeout and latches where they would be
+    // needed if no directExecutor were used, just for demo purpose.
+    server = new RouteGuideServer(
+        InProcessServerBuilder.forName(uniqueServerName).directExecutor(), 0, features);
     server.start();
-    inProcessChannel = InProcessChannelBuilder.forName(uniqueServerName).build();
+    inProcessChannel = InProcessChannelBuilder.forName(uniqueServerName).directExecutor().build();
   }
 
   @After
   public void tearDown() throws InterruptedException {
-    if (inProcessChannel != null) {
-      inProcessChannel.shutdownNow();
-    }
-    if (server != null) {
-      server.stop();
-    }
+    inProcessChannel.shutdownNow();
+    server.stop();
   }
 
   @Test
@@ -115,17 +117,25 @@ public class RouteGuideServerTest {
   @Test
   public void testListFeatures() throws InterruptedException {
     // setup
-    Point lo = Point.newBuilder().setLongitude(0).setLatitude(0).build();
-    Point hi = Point.newBuilder().setLongitude(10).setLatitude(10).build();
-    Rectangle rect = Rectangle.newBuilder().setLo(lo).setHi(hi).build();
-    Point p1 = Point.newBuilder().setLongitude(-1).setLatitude(-1).build();
-    Point p2 = Point.newBuilder().setLongitude(2).setLatitude(2).build();
-    Point p3 = Point.newBuilder().setLongitude(3).setLatitude(3).build();
-    Point p4 = Point.newBuilder().setLongitude(4).setLatitude(4).build();
-    Feature f1 = Feature.newBuilder().setLocation(p1).setName("f1").build(); // not inside rect
-    Feature f2 = Feature.newBuilder().setLocation(p2).setName("f2").build();
-    Feature f3 = Feature.newBuilder().setLocation(p3).setName("f3").build();
-    Feature f4 = Feature.newBuilder().setLocation(p4).build(); // unamed
+    Rectangle rect = Rectangle.newBuilder()
+        .setLo(Point.newBuilder().setLongitude(0).setLatitude(0).build())
+        .setHi(Point.newBuilder().setLongitude(10).setLatitude(10).build())
+        .build();
+    Feature f1 = Feature.newBuilder()
+        .setLocation(Point.newBuilder().setLongitude(-1).setLatitude(-1).build())
+        .setName("f1")
+        .build(); // not inside rect
+    Feature f2 = Feature.newBuilder()
+        .setLocation(Point.newBuilder().setLongitude(2).setLatitude(2).build())
+        .setName("f2")
+        .build();
+    Feature f3 = Feature.newBuilder()
+        .setLocation(Point.newBuilder().setLongitude(3).setLatitude(3).build())
+        .setName("f3")
+        .build();
+    Feature f4 = Feature.newBuilder()
+        .setLocation(Point.newBuilder().setLongitude(4).setLatitude(4).build())
+        .build(); // unamed
     features.add(f1);
     features.add(f2);
     features.add(f3);
@@ -153,25 +163,18 @@ public class RouteGuideServerTest {
 
     // run
     stub.listFeatures(rect, responseObserver);
-    latch.await();
+    latch.await(1, TimeUnit.SECONDS);
 
     // verify
-    Collection<Feature> expected = new HashSet<Feature>();
-    expected.add(f2);
-    expected.add(f3);
-    assertEquals(expected, result);
+    assertEquals(new HashSet<Feature>(Arrays.asList(f2, f3)), result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testRecordRoute() {
-    Point p1 = Point.newBuilder().setLongitude(1).setLatitude(1).build();
-    Point p2 = Point.newBuilder().setLongitude(2).setLatitude(2).build();
-    Point p3 = Point.newBuilder().setLongitude(3).setLatitude(3).build();
-    Point p4 = Point.newBuilder().setLongitude(4).setLatitude(4).build();
-    int expectedDist = (int) (RouteGuideServer.calcDistance(p1, p2)
-        + RouteGuideServer.calcDistance(p2, p3)
-        + RouteGuideServer.calcDistance(p3, p4));
+    Point p1 = Point.newBuilder().setLongitude(1000).setLatitude(1000).build();
+    Point p2 = Point.newBuilder().setLongitude(2000).setLatitude(2000).build();
+    Point p3 = Point.newBuilder().setLongitude(3000).setLatitude(3000).build();
+    Point p4 = Point.newBuilder().setLongitude(4000).setLatitude(4000).build();
     Feature f1 = Feature.newBuilder().setLocation(p1).build(); // unamed
     Feature f2 = Feature.newBuilder().setLocation(p2).setName("f2").build();
     Feature f3 = Feature.newBuilder().setLocation(p3).setName("f3").build();
@@ -181,6 +184,7 @@ public class RouteGuideServerTest {
     features.add(f3);
     features.add(f4);
 
+    @SuppressWarnings("unchecked")
     StreamObserver<RouteSummary> responseObserver =
         (StreamObserver<RouteSummary>) mock(StreamObserver.class);
     RouteGuideGrpc.RouteGuideStub stub = RouteGuideGrpc.newStub(inProcessChannel);
@@ -198,18 +202,18 @@ public class RouteGuideServerTest {
 
     requestObserver.onCompleted();
 
-    verify(responseObserver, timeout(100).times(1))
+    // allow some ms to let client receive the response. Similar usage later on.
+    verify(responseObserver, timeout(100))
         .onNext(routeSummaryCaptor.capture());
     RouteSummary summary = routeSummaryCaptor.getValue();
-    assertEquals(expectedDist, summary.getDistance());
+    assertEquals(45, summary.getDistance()); // 45 is the hard coded distance from p1 to p4.
     assertEquals(2, summary.getFeatureCount());
-    verify(responseObserver, timeout(100).times(1))
+    verify(responseObserver, timeout(100))
         .onCompleted();
     verify(responseObserver, never())
         .onError(any(Throwable.class));
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testRouteChat() {
     Point p1 = Point.newBuilder().setLongitude(1).setLatitude(1).build();
@@ -222,6 +226,7 @@ public class RouteGuideServerTest {
     RouteNote n6 = RouteNote.newBuilder().setLocation(p1).setMessage("m6").build();
     int timesOnNext = 0;
 
+    @SuppressWarnings("unchecked")
     StreamObserver<RouteNote> responseObserver =
         (StreamObserver<RouteNote>) mock(StreamObserver.class);
     RouteGuideGrpc.RouteGuideStub stub = RouteGuideGrpc.newStub(inProcessChannel);
@@ -282,7 +287,7 @@ public class RouteGuideServerTest {
     assertEquals("m5", result.getMessage());
 
     requestObserver.onCompleted();
-    verify(responseObserver, timeout(100).times(1))
+    verify(responseObserver, timeout(100))
         .onCompleted();
     verify(responseObserver, never())
         .onError(any(Throwable.class));

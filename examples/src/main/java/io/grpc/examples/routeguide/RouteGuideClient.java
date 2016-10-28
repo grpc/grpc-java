@@ -60,6 +60,8 @@ public class RouteGuideClient {
   private final RouteGuideBlockingStub blockingStub;
   private final RouteGuideStub asyncStub;
 
+  private Random random = new Random();
+
   /** Construct client for accessing RouteGuide server at {@code host:port}. */
   public RouteGuideClient(String host, int port) {
     this(ManagedChannelBuilder.forAddress(host, port).usePlaintext(true));
@@ -160,15 +162,14 @@ public class RouteGuideClient {
     StreamObserver<Point> requestObserver = asyncStub.recordRoute(responseObserver);
     try {
       // Send numPoints points randomly selected from the features list.
-      Random rand = new Random();
       for (int i = 0; i < numPoints; ++i) {
-        int index = randomIndex(features.size(), rand);
+        int index = random.nextInt(features.size());
         Point point = features.get(index).getLocation();
         info("Visiting point {0}, {1}", RouteGuideUtil.getLatitude(point),
             RouteGuideUtil.getLongitude(point));
         requestObserver.onNext(point);
         // Sleep for a bit before sending the next one.
-        sleep(rand.nextInt(1000) + 500);
+        Thread.sleep(random.nextInt(1000) + 500);
         if (finishLatch.getCount() == 0) {
           // RPC completed or errored before we finished sending.
           // Sending further requests won't error, but they will just be thrown away.
@@ -286,21 +287,11 @@ public class RouteGuideClient {
   }
 
   /**
-   * Make it visible for unit test, so that we can override it by spying on it, as we do not want to
-   * introduce randomness in unit test.
+   * Only used for unit test, as we do not want to introduce randomness in unit test.
    */
   @VisibleForTesting
-  int randomIndex(int bound, Random random) {
-    return random.nextInt(bound);
-  }
-
-  /**
-   * Make it visible for unit test, so that we can override it by spying on it, as we do not want to
-   * sleep in unit test.
-   */
-  @VisibleForTesting
-  void sleep(long millis) throws InterruptedException {
-    Thread.sleep(millis);
+  void setRandom(Random random) {
+    this.random = random;
   }
 
   private RouteNote newNote(String message, int lat, int lon) {

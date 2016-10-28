@@ -32,9 +32,7 @@
 package io.grpc.examples.helloworld;
 
 import static org.junit.Assert.assertEquals;
-
 import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.ManagedChannelBuilder;
@@ -85,12 +83,8 @@ public class HelloWorldClientTest {
    */
   @After
   public void tearDown() throws InterruptedException {
-    if (client != null) {
-      client.shutdown();
-    }
-    if (fakeServer != null) {
-      fakeServer.shutdownNow();
-    }
+    client.shutdown();
+    fakeServer.shutdownNow();
   }
 
   /**
@@ -104,7 +98,7 @@ public class HelloWorldClientTest {
 
     client.greet(testName);
 
-    verify(serviceImpl, times(1))
+    verify(serviceImpl)
         .sayHello(requestCaptor.capture(), Matchers.<StreamObserver<HelloReply>>any());
     assertEquals(testName, requestCaptor.getValue().getName());
   }

@@ -57,8 +57,11 @@ import java.io.IOException;
  */
 @RunWith(JUnit4.class)
 public class HelloWorldServerTest {
-  private Server inProcessServer;
-  private ManagedChannel inProcessChannel;
+  private final String UNIQUE_SERVER_NAME = "in-process server for " + getClass();
+  private final Server inProcessServer =
+      InProcessServerBuilder.forName(UNIQUE_SERVER_NAME).addService(new GreeterImpl()).build();
+  private final ManagedChannel inProcessChannel =
+      InProcessChannelBuilder.forName(UNIQUE_SERVER_NAME).build();
 
   /**
    * Creates and starts the server with the {@link InProcessServerBuilder},
@@ -66,11 +69,7 @@ public class HelloWorldServerTest {
    */
   @Before
   public void setUp() throws IOException {
-    GreeterImpl greeterImpl = new GreeterImpl();
-    String uniqueServerName = "in-process server for " + getClass();
-    inProcessServer =
-        InProcessServerBuilder.forName(uniqueServerName).addService(greeterImpl).build().start();
-    inProcessChannel = InProcessChannelBuilder.forName(uniqueServerName).build();
+    inProcessServer.start();
   }
 
   /**
@@ -78,12 +77,8 @@ public class HelloWorldServerTest {
    */
   @After
   public void tearDown() {
-    if (inProcessChannel != null) {
-      inProcessChannel.shutdownNow();
-    }
-    if (inProcessServer != null) {
-      inProcessServer.shutdownNow();
-    }
+    inProcessChannel.shutdownNow();
+    inProcessServer.shutdownNow();
   }
 
   /**

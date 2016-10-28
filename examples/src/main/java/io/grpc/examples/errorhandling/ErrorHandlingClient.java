@@ -70,6 +70,7 @@ public class ErrorHandlingClient {
   private ManagedChannel channel;
 
   void run() throws Exception {
+    // Port 0 means that the operating system will pick an available port to use.
     Server server = ServerBuilder.forPort(0).addService(new GreeterGrpc.GreeterImplBase() {
       @Override
       public void sayHello(HelloRequest request, StreamObserver<HelloReply> responseObserver) {

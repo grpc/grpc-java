@@ -90,8 +90,7 @@ public class HeaderServerInterceptorTest {
           }
         };
     fakeServer = InProcessServerBuilder.forName(uniqueServerName)
-        .addService(
-            ServerInterceptors.intercept(greeterImplBase, new HeaderServerInterceptor()))
+        .addService(ServerInterceptors.intercept(greeterImplBase, new HeaderServerInterceptor()))
         .build()
         .start();
     inProcessChannel = InProcessChannelBuilder.forName(uniqueServerName).build();
@@ -99,12 +98,8 @@ public class HeaderServerInterceptorTest {
 
   @After
   public void tearDown() {
-    if (inProcessChannel != null) {
-      inProcessChannel.shutdownNow();
-    }
-    if (fakeServer != null) {
-      fakeServer.shutdownNow();
-    }
+    inProcessChannel.shutdownNow();
+    fakeServer.shutdownNow();
   }
 
   @Test
@@ -113,14 +108,14 @@ public class HeaderServerInterceptorTest {
         new ClientInterceptor() {
           @Override
           public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
-              MethodDescriptor<ReqT, RespT> method,
-              CallOptions callOptions, Channel next) {
+              MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
             return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+              @SuppressWarnings("unchecked")
               @Override
               public void start(Listener<RespT> responseListener, Metadata headers) {
-                Listener<RespT> listener = spy(responseListener);
-                spyListener = listener;
-                super.start(listener, headers);
+                spyListener = spy(responseListener);
+                // it is absolutely casting to the correct type
+                super.start((Listener<RespT>) spyListener, headers);
               }
             };
           }
