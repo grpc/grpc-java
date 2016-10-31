@@ -31,9 +31,11 @@
 
 package io.grpc.internal;
 
+import io.grpc.ExperimentalApi;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -41,10 +43,21 @@ import java.util.Map;
 import javax.annotation.Nullable;
 
 final class InternalHandlerRegistry {
+  private final Collection<ServerServiceDefinition> services;
   private final Map<String, ServerMethodDefinition<?, ?>> methods;
 
-  private InternalHandlerRegistry(Map<String, ServerMethodDefinition<?, ?>> methods) {
+  private InternalHandlerRegistry(Collection<ServerServiceDefinition> services,
+      Map<String, ServerMethodDefinition<?, ?>> methods) {
+    this.services = services;
     this.methods = methods;
+  }
+
+  /**
+   * Returns the service definitions in this registry.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
+  public Collection<ServerServiceDefinition> getServices() {
+    return services;
   }
 
   @Nullable
@@ -70,7 +83,7 @@ final class InternalHandlerRegistry {
           map.put(method.getMethodDescriptor().getFullMethodName(), method);
         }
       }
-      return new InternalHandlerRegistry(Collections.unmodifiableMap(map));
+      return new InternalHandlerRegistry(services.values(), Collections.unmodifiableMap(map));
     }
   }
 }

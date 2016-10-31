@@ -37,6 +37,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 
+import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -62,6 +63,12 @@ public final class MutableHandlerRegistry extends HandlerRegistry {
 
   public boolean removeService(ServerServiceDefinition service) {
     return services.remove(service.getServiceDescriptor().getName(), service);
+  }
+
+  @Override
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
+  public Collection<ServerServiceDefinition> getServices() {
+    return services.values();
   }
 
   /**

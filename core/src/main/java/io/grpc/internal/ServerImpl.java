@@ -48,10 +48,12 @@ import io.grpc.Attributes;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
+import io.grpc.ExperimentalApi;
 import io.grpc.HandlerRegistry;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.ServerMethodDefinition;
+import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
 
@@ -174,6 +176,15 @@ public final class ServerImpl extends io.grpc.Server {
       checkState(!terminated, "Already terminated");
       return transportServer.getPort();
     }
+  }
+
+  @Override
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
+  public Collection<ServerServiceDefinition> getServices() {
+    ArrayList<ServerServiceDefinition> services =
+        new ArrayList<ServerServiceDefinition>(registry.getServices());
+    services.addAll(fallbackRegistry.getServices());
+    return services;
   }
 
   /**

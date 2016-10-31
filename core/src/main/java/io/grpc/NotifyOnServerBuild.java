@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Google Inc. All rights reserved.
+ * Copyright 2016, Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -31,44 +31,13 @@
 
 package io.grpc;
 
-import java.util.Collection;
-import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
-
 /**
- * Registry of services and their methods used by servers to dispatching incoming calls.
+ * Provides a callback method for a service to receive a reference to its server. The contract with
+ * {@link ServerBuilder} is that this method will be called on all registered services implementing
+ * the interface after build() has been called and before the {@link Server} instance is returned.
  */
-@ThreadSafe
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/933")
-public abstract class HandlerRegistry {
-
-  /**
-   * Returns the {@link ServerServiceDefinition}s provided by the registry.
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
-  public abstract Collection<ServerServiceDefinition> getServices();
-
-  /**
-   * Lookup a {@link ServerMethodDefinition} by its fully-qualified name.
-   *
-   * @param methodName to lookup {@link ServerMethodDefinition} for.
-   * @param authority the authority for the desired method (to do virtual hosting). If {@code null}
-   *        the first matching method will be returned.
-   * @return the resolved method or {@code null} if no method for that name exists.
-   */
-  @Nullable
-  public abstract ServerMethodDefinition<?, ?> lookupMethod(
-      String methodName, @Nullable String authority);
-
-  /**
-   * Lookup a {@link ServerMethodDefinition} by its fully-qualified name.
-   *
-   * @param methodName to lookup {@link ServerMethodDefinition} for.
-   * @return the resolved method or {@code null} if no method for that name exists.
-   */
-  @Nullable
-  public final ServerMethodDefinition<?, ?> lookupMethod(String methodName) {
-    return lookupMethod(methodName, null);
-  }
-
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
+public interface NotifyOnServerBuild {
+  /** Notifies the service that the server has been built. */
+  void notifyOnBuild(Server server);
 }

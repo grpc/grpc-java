@@ -86,6 +86,17 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
   public abstract T addService(BindableService bindableService);
 
   /**
+   * Adds a NotifyOnServerBuild service implementation to the handler registry. When build() is
+   * called, these services will receive a reference to the generated server instance.
+   *
+   * @param bindableService object implementing the NotifyOnServerBuild and BindableService
+   *     interfaces
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
+  public abstract <S extends NotifyOnServerBuild & BindableService> T addService(
+      S bindableService);
+
+  /**
    * Adds a {@link ServerTransportFilter}. The order of filters being added is the order they will
    * be executed.
    */

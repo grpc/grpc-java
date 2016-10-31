@@ -32,6 +32,7 @@
 package io.grpc;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -62,6 +63,12 @@ public abstract class Server {
   public int getPort() {
     return -1;
   }
+
+  /**
+   * Returns the services registered with the server.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
+  public abstract Collection<ServerServiceDefinition> getServices();
 
   /**
    * Initiates an orderly shutdown in which preexisting calls continue but new calls are rejected.
