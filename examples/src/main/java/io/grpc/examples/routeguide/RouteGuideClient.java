@@ -270,18 +270,10 @@ public class RouteGuideClient {
     }
   }
 
-  /**
-   * Make it visible for unit test, so that test can verify state changes by spying on it.
-   */
-  @VisibleForTesting
   void info(String msg, Object... params) {
     logger.log(Level.INFO, msg, params);
   }
 
-  /**
-   * Make it visible for unit test, so that test can verify state changes by spying on it.
-   */
-  @VisibleForTesting
   void warning(String msg, Object... params) {
     logger.log(Level.WARNING, msg, params);
   }

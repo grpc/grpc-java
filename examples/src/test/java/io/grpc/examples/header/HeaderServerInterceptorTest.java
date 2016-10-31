@@ -76,7 +76,6 @@ import java.io.IOException;
 public class HeaderServerInterceptorTest {
   private Server fakeServer;
   private ManagedChannel inProcessChannel;
-  private ClientCall.Listener<?> spyListener;
 
   @Before
   public void setUp() throws IOException {
@@ -91,9 +90,10 @@ public class HeaderServerInterceptorTest {
         };
     fakeServer = InProcessServerBuilder.forName(uniqueServerName)
         .addService(ServerInterceptors.intercept(greeterImplBase, new HeaderServerInterceptor()))
+        .directExecutor()
         .build()
         .start();
-    inProcessChannel = InProcessChannelBuilder.forName(uniqueServerName).build();
+    inProcessChannel = InProcessChannelBuilder.forName(uniqueServerName).directExecutor().build();
   }
 
   @After
@@ -104,30 +104,33 @@ public class HeaderServerInterceptorTest {
 
   @Test
   public void serverHeaderDeliveredToClient() {
-    ClientInterceptor clientInterceptor =
-        new ClientInterceptor() {
+    class SpyingClientInterceptor implements ClientInterceptor {
+      ClientCall.Listener<?> spyListener;
+
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+          @SuppressWarnings("unchecked")
           @Override
-          public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
-              MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-            return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
-              @SuppressWarnings("unchecked")
-              @Override
-              public void start(Listener<RespT> responseListener, Metadata headers) {
-                spyListener = spy(responseListener);
-                // it is absolutely casting to the correct type
-                super.start((Listener<RespT>) spyListener, headers);
-              }
-            };
+          public void start(Listener<RespT> responseListener, Metadata headers) {
+            spyListener = spy(responseListener);
+            // it is absolutely casting to the correct type
+            super.start((Listener<RespT>) spyListener, headers);
           }
         };
+      }
+    }
+
+    SpyingClientInterceptor clientInterceptor = new SpyingClientInterceptor();
     GreeterBlockingStub blockingStub =
         GreeterGrpc.newBlockingStub(inProcessChannel).withInterceptors(clientInterceptor);
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
 
     blockingStub.sayHello(HelloRequest.getDefaultInstance());
 
-    assertNotNull(spyListener);
-    verify(spyListener).onHeaders(metadataCaptor.capture());
+    assertNotNull(clientInterceptor.spyListener);
+    verify(clientInterceptor.spyListener).onHeaders(metadataCaptor.capture());
     assertEquals(
         "customRespondValue",
         metadataCaptor.getValue().get(HeaderServerInterceptor.CUSTOM_HEADER_KEY));

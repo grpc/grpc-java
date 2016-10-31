@@ -91,10 +91,12 @@ public class HeaderClientInterceptorTest {
     String uniqueServerName = "fake server for " + getClass();
     fakeServer = InProcessServerBuilder.forName(uniqueServerName)
         .addService(ServerInterceptors.intercept(new GreeterImplBase() {}, mockServerInterceptor))
+        .directExecutor()
         .build()
         .start();
     inProcessChannel = InProcessChannelBuilder.forName(uniqueServerName)
         .intercept(new HeaderClientInterceptor())
+        .directExecutor()
         .build();
   }
 

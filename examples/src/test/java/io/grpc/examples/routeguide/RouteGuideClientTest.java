@@ -381,6 +381,8 @@ public class RouteGuideClientTest {
 
               @Override
               public void onNext(Point value) {
+                // verify that requestFeature1, requestFeature2, requestFeature3, and then
+                // requestFeature1 are received
                 assertEquals(features.get(idx++ % 3).getLocation(), value);
               }
 

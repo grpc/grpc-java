@@ -72,9 +72,10 @@ public class HelloWorldClientTest {
   @Before
   public void setUp() throws IOException {
     String uniqueServerName = "fake server for " + getClass();
-    fakeServer =
-        InProcessServerBuilder.forName(uniqueServerName).addService(serviceImpl).build().start();
-    ManagedChannelBuilder channelBuilder = InProcessChannelBuilder.forName(uniqueServerName);
+    fakeServer = InProcessServerBuilder
+        .forName(uniqueServerName).directExecutor().addService(serviceImpl).build().start();
+    ManagedChannelBuilder channelBuilder =
+        InProcessChannelBuilder.forName(uniqueServerName).directExecutor();
     client = new HelloWorldClient(channelBuilder);
   }
 

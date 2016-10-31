@@ -58,10 +58,10 @@ import java.io.IOException;
 @RunWith(JUnit4.class)
 public class HelloWorldServerTest {
   private final String UNIQUE_SERVER_NAME = "in-process server for " + getClass();
-  private final Server inProcessServer =
-      InProcessServerBuilder.forName(UNIQUE_SERVER_NAME).addService(new GreeterImpl()).build();
+  private final Server inProcessServer = InProcessServerBuilder
+      .forName(UNIQUE_SERVER_NAME).addService(new GreeterImpl()).directExecutor().build();
   private final ManagedChannel inProcessChannel =
-      InProcessChannelBuilder.forName(UNIQUE_SERVER_NAME).build();
+      InProcessChannelBuilder.forName(UNIQUE_SERVER_NAME).directExecutor().build();
 
   /**
    * Creates and starts the server with the {@link InProcessServerBuilder},
