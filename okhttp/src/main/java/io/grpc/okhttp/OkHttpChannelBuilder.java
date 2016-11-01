@@ -36,9 +36,11 @@ import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+
 import com.squareup.okhttp.CipherSuite;
 import com.squareup.okhttp.ConnectionSpec;
 import com.squareup.okhttp.TlsVersion;
+
 import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
@@ -50,6 +52,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.okhttp.internal.Platform;
+
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.GeneralSecurityException;
@@ -57,6 +60,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLSocketFactory;
 
