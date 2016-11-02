@@ -32,6 +32,7 @@
 package io.grpc.examples.routeguide;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.protobuf.Message;
 
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -61,6 +62,7 @@ public class RouteGuideClient {
   private final RouteGuideStub asyncStub;
 
   private Random random = new Random();
+  private TestHelper testHelper;
 
   /** Construct client for accessing RouteGuide server at {@code host:port}. */
   public RouteGuideClient(String host, int port) {
@@ -89,8 +91,14 @@ public class RouteGuideClient {
     Feature feature;
     try {
       feature = blockingStub.getFeature(request);
+      if (testHelper != null) {
+        testHelper.onMessage(feature);
+      }
     } catch (StatusRuntimeException e) {
       warning("RPC failed: {0}", e.getStatus());
+      if (testHelper != null) {
+        testHelper.onRpcError(e);
+      }
       return;
     }
     if (RouteGuideUtil.exists(feature)) {
@@ -123,9 +131,15 @@ public class RouteGuideClient {
       for (int i = 1; features.hasNext(); i++) {
         Feature feature = features.next();
         info("Result #" + i + ": {0}", feature);
+        if (testHelper != null) {
+          testHelper.onMessage(feature);
+        }
       }
     } catch (StatusRuntimeException e) {
       warning("RPC failed: {0}", e.getStatus());
+      if (testHelper != null) {
+        testHelper.onRpcError(e);
+      }
     }
   }
 
@@ -143,12 +157,17 @@ public class RouteGuideClient {
         info("Finished trip with {0} points. Passed {1} features. "
             + "Travelled {2} meters. It took {3} seconds.", summary.getPointCount(),
             summary.getFeatureCount(), summary.getDistance(), summary.getElapsedTime());
+        if (testHelper != null) {
+          testHelper.onMessage(summary);
+        }
       }
 
       @Override
       public void onError(Throwable t) {
-        Status status = Status.fromThrowable(t);
-        warning("RecordRoute Failed: {0}", status);
+        warning("RecordRoute Failed: {0}", Status.fromThrowable(t));
+        if (testHelper != null) {
+          testHelper.onRpcError(t);
+        }
         finishLatch.countDown();
       }
 
@@ -192,7 +211,7 @@ public class RouteGuideClient {
    * Bi-directional example, which can only be asynchronous. Send some chat messages, and print any
    * chat messages that are sent from the server.
    */
-  public void routeChat() throws InterruptedException {
+  public CountDownLatch routeChat() {
     info("*** RouteChat");
     final CountDownLatch finishLatch = new CountDownLatch(1);
     StreamObserver<RouteNote> requestObserver =
@@ -201,12 +220,17 @@ public class RouteGuideClient {
           public void onNext(RouteNote note) {
             info("Got message \"{0}\" at {1}, {2}", note.getMessage(), note.getLocation()
                 .getLatitude(), note.getLocation().getLongitude());
+            if (testHelper != null) {
+              testHelper.onMessage(note);
+            }
           }
 
           @Override
           public void onError(Throwable t) {
-            Status status = Status.fromThrowable(t);
-            warning("RouteChat Failed: {0}", status);
+            warning("RouteChat Failed: {0}", Status.fromThrowable(t));
+            if (testHelper != null) {
+              testHelper.onRpcError(t);
+            }
             finishLatch.countDown();
           }
 
@@ -235,8 +259,8 @@ public class RouteGuideClient {
     // Mark the end of requests
     requestObserver.onCompleted();
 
-    // Receiving happens asynchronously
-    finishLatch.await(1, TimeUnit.MINUTES);
+    // return the latch while receiving happens asynchronously
+    return finishLatch;
   }
 
   /** Issues several different requests and then exits. */
@@ -264,17 +288,17 @@ public class RouteGuideClient {
       client.recordRoute(features, 10);
 
       // Send and receive some notes.
-      client.routeChat();
+      client.routeChat().await(1, TimeUnit.MINUTES);
     } finally {
       client.shutdown();
     }
   }
 
-  void info(String msg, Object... params) {
+  private void info(String msg, Object... params) {
     logger.log(Level.INFO, msg, params);
   }
 
-  void warning(String msg, Object... params) {
+  private void warning(String msg, Object... params) {
     logger.log(Level.WARNING, msg, params);
   }
 
@@ -289,5 +313,26 @@ public class RouteGuideClient {
   private RouteNote newNote(String message, int lat, int lon) {
     return RouteNote.newBuilder().setMessage(message)
         .setLocation(Point.newBuilder().setLatitude(lat).setLongitude(lon).build()).build();
+  }
+
+  /**
+   * Only used for helping unit test.
+   */
+  @VisibleForTesting
+  interface TestHelper {
+    /**
+     * Used for verify/inspect message received from server.
+     */
+    void onMessage(Message message);
+
+    /**
+     * Used for verify/inspect error received from server.
+     */
+    void onRpcError(Throwable exception);
+  }
+
+  @VisibleForTesting
+  void setTestHelper(TestHelper testHelper) {
+    this.testHelper = testHelper;
   }
 }

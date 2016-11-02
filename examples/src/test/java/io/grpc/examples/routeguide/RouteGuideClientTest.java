@@ -31,25 +31,26 @@
 
 package io.grpc.examples.routeguide;
 
-import static junit.framework.TestCase.fail;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.timeout;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+
+import com.google.protobuf.Message;
 
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.Status;
-import io.grpc.Status.Code;
 import io.grpc.StatusRuntimeException;
+import io.grpc.examples.routeguide.RouteGuideClient.TestHelper;
+import io.grpc.examples.routeguide.RouteGuideGrpc.RouteGuideImplBase;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.stub.StreamObserver;
+import io.grpc.util.MutableHandlerRegistry;
 
 import org.junit.After;
 import org.junit.Before;
@@ -57,14 +58,15 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Matchers;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Unit tests for {@link RouteGuideClient}.
@@ -76,8 +78,8 @@ import java.util.Random;
  */
 @RunWith(JUnit4.class)
 public class RouteGuideClientTest {
-  private final RouteGuideGrpc.RouteGuideImplBase serviceImpl =
-      spy(new RouteGuideGrpc.RouteGuideImplBase() {});
+  private final MutableHandlerRegistry serviceRegistry = new MutableHandlerRegistry();
+  private final TestHelper testHelper = mock(TestHelper.class);
   private final Random noRandomness =
       new Random() {
         int index;
@@ -101,11 +103,15 @@ public class RouteGuideClientTest {
   @Before
   public void setUp() throws IOException {
     String uniqueServerName = "fake server for " + getClass();
-    fakeServer =
-        InProcessServerBuilder.forName(uniqueServerName).addService(serviceImpl).build().start();
-    ManagedChannelBuilder channelBuilder = InProcessChannelBuilder.forName(uniqueServerName);
+
+    // use a mutable service registry for later registering the service impl for each test case.
+    fakeServer = InProcessServerBuilder.forName(uniqueServerName)
+        .fallbackHandlerRegistry(serviceRegistry).build().start();
+    ManagedChannelBuilder channelBuilder =
+        InProcessChannelBuilder.forName(uniqueServerName).directExecutor();
     client = spy(
         new RouteGuideClient(channelBuilder));
+    client.setTestHelper(testHelper);
   }
 
   @After
@@ -118,77 +124,32 @@ public class RouteGuideClientTest {
    * Example for testing blocking unary call.
    */
   @Test
-  public void testGetFeature_exist() {
+  public void testGetFeature() {
     Point requestPoint =  Point.newBuilder().setLatitude(-1).setLongitude(-1).build();
     Point responsePoint = Point.newBuilder().setLatitude(-123).setLongitude(-123).build();
+    final AtomicReference<Point> pointDelivered = new AtomicReference<Point>();
     final Feature responseFeature =
         Feature.newBuilder().setName("dummyFeature").setLocation(responsePoint).build();
-    Answer<Void> answer =
-        new Answer<Void>() {
+
+    // implement the fake service
+    RouteGuideImplBase getFeatureImpl =
+        new RouteGuideImplBase() {
           @Override
-          public Void answer(InvocationOnMock invocation) {
-            @SuppressWarnings("unchecked")
-            StreamObserver<Feature> responseObserver =
-                (StreamObserver<Feature>) invocation.getArguments()[1];
+          public void getFeature(Point point, StreamObserver<Feature> responseObserver) {
+            pointDelivered.set(point);
             responseObserver.onNext(responseFeature);
             responseObserver.onCompleted();
-            return null;
           }
         };
-    doAnswer(answer)
-        .when(serviceImpl)
-        .getFeature(any(Point.class), Matchers.<StreamObserver<Feature>>any());
+    serviceRegistry.addService(getFeatureImpl.bindService());
 
     client.getFeature(-1, -1);
 
-    verify(serviceImpl)
-        .getFeature(eq(requestPoint), Matchers.<StreamObserver<Feature>>any());
-    verify(client)
-        .info(
-            "Found feature called \"{0}\" at {1}, {2}",
-            "dummyFeature",
-            RouteGuideUtil.getLatitude(responseFeature.getLocation()),
-            RouteGuideUtil.getLongitude(responseFeature.getLocation()));
-    verify(client, never())
-        .warning(any(String.class), any(Status.class));
-  }
-
-  /**
-   * Example for testing blocking unary call.
-   */
-  @Test
-  public void testGetFeature_notExist() {
-    Point requestPoint =  Point.newBuilder().setLatitude(-1).setLongitude(-1).build();
-    Point responsePoint = Point.newBuilder().setLatitude(-123).setLongitude(-123).build();
-    final Feature responseFeature =
-        Feature.newBuilder().setLocation(responsePoint).build();
-    Answer<Void> answer =
-        new Answer<Void>() {
-          @Override
-          public Void answer(InvocationOnMock invocation) {
-            @SuppressWarnings("unchecked")
-            StreamObserver<Feature> responseObserver =
-                (StreamObserver<Feature>) invocation.getArguments()[1];
-            responseObserver.onNext(responseFeature);
-            responseObserver.onCompleted();
-            return null;
-          }
-        };
-    doAnswer(answer)
-        .when(serviceImpl)
-        .getFeature(any(Point.class), Matchers.<StreamObserver<Feature>>any());
-
-    client.getFeature(-1, -1);
-
-    verify(serviceImpl)
-        .getFeature(eq(requestPoint), Matchers.<StreamObserver<Feature>>any());
-    verify(client)
-        .info(
-            "Found no feature at {0}, {1}",
-            RouteGuideUtil.getLatitude(responseFeature.getLocation()),
-            RouteGuideUtil.getLongitude(responseFeature.getLocation()));
-    verify(client, never())
-        .warning(any(String.class), any(Status.class));
+    assertEquals(requestPoint, pointDelivered.get());
+    verify(testHelper)
+        .onMessage(responseFeature);
+    verify(testHelper, never())
+        .onRpcError(any(Throwable.class));
   }
 
   /**
@@ -197,39 +158,27 @@ public class RouteGuideClientTest {
   @Test
   public void testGetFeature_error() {
     Point requestPoint =  Point.newBuilder().setLatitude(-1).setLongitude(-1).build();
-    Answer<Void> answer =
-        new Answer<Void>() {
+    final AtomicReference<Point> pointDelivered = new AtomicReference<Point>();
+    final StatusRuntimeException fakeError = new StatusRuntimeException(Status.DATA_LOSS);
+
+    // implement the fake service
+    RouteGuideImplBase getFeatureImpl =
+        new RouteGuideImplBase() {
           @Override
-          public Void answer(InvocationOnMock invocation) {
-            @SuppressWarnings("unchecked")
-            StreamObserver<Feature> responseObserver =
-                (StreamObserver<Feature>) invocation.getArguments()[1];
-            responseObserver.onError(new StatusRuntimeException(Status.DATA_LOSS));
-            return null;
+          public void getFeature(Point point, StreamObserver<Feature> responseObserver) {
+            pointDelivered.set(point);
+            responseObserver.onError(fakeError);
           }
         };
-    doAnswer(answer)
-        .when(serviceImpl)
-        .getFeature(any(Point.class), Matchers.<StreamObserver<Feature>>any());
+    serviceRegistry.addService(getFeatureImpl.bindService());
 
     client.getFeature(-1, -1);
 
-    verify(serviceImpl)
-        .getFeature(eq(requestPoint), Matchers.<StreamObserver<Feature>>any());
-    verify(client)
-        .warning(
-            "RPC failed: {0}",
-            Status.DATA_LOSS);
-    verify(client, never())
-        .info(
-            eq("Found no feature at {0}, {1}"),
-            any(Object.class),
-            any(Object.class));
-    verify(client, never())
-        .info(
-            eq("Found feature called \"{0}\" at {1}, {2}"),
-            any(Object.class),
-            any(Object.class));
+    assertEquals(requestPoint, pointDelivered.get());
+    ArgumentCaptor<Throwable> errorCaptor = ArgumentCaptor.forClass(Throwable.class);
+    verify(testHelper)
+        .onRpcError(errorCaptor.capture());
+    assertEquals(fakeError.getStatus(), Status.fromThrowable(errorCaptor.getValue()));
   }
 
   /**
@@ -241,55 +190,53 @@ public class RouteGuideClientTest {
         Feature.newBuilder().setName("feature 1").build();
     final Feature responseFeature2 =
         Feature.newBuilder().setName("feature 2").build();
-    Answer<Void> answer =
-        new Answer<Void>() {
+    final AtomicReference<Rectangle> rectangleDelivered = new AtomicReference<Rectangle>();
+
+    // implement the fake service
+    RouteGuideImplBase listFeaturesImpl =
+        new RouteGuideImplBase() {
           @Override
-          public Void answer(InvocationOnMock invocation) {
-            @SuppressWarnings("unchecked")
-            StreamObserver<Feature> responseObserver =
-                (StreamObserver<Feature>) invocation.getArguments()[1];
+          public void listFeatures(Rectangle rectangle, StreamObserver<Feature> responseObserver) {
+            rectangleDelivered.set(rectangle);
 
             // before sending any response,
             // verify the client#listFeatures method has been called (but has not returned yet)
             verify(client)
                 .listFeatures(1, 2, 3, 4);
-            verify(client)
-                .info("*** ListFeatures: lowLat={0} lowLon={1} hiLat={2} hiLon={3}", 1, 2, 3, 4);
-            verify(client, never())
-                .info(any(String.class), any(Object[].class));
+            verify(testHelper, never())
+                .onMessage(any(Message.class));
 
             // send one response message
             responseObserver.onNext(responseFeature1);
 
             // allow some milliseconds for the client to receive the response
-            verify(client, timeout(100))
-                .info("Result #1: {0}", responseFeature1);
-            verify(client, never())
-                .info("Result #2: {0}", responseFeature2);
+            verify(testHelper, timeout(100))
+                .onMessage(responseFeature1);
+            verify(testHelper, never())
+                .onMessage(responseFeature2);
 
             // send another response message
             responseObserver.onNext(responseFeature2);
 
             // allow some milliseconds for the client to receive the response
-            verify(client, timeout(100))
-                .info("Result #2: {0}", responseFeature2);
+            verify(testHelper, timeout(100))
+                .onMessage(responseFeature2);
 
             // complete the response
             responseObserver.onCompleted();
-
-            return null;
           }
         };
-    doAnswer(answer)
-        .when(serviceImpl)
-        .listFeatures(any(Rectangle.class), Matchers.<StreamObserver<Feature>>any());
+    serviceRegistry.addService(listFeaturesImpl.bindService());
 
     client.listFeatures(1, 2, 3, 4);
 
-    verify(serviceImpl)
-        .listFeatures(any(Rectangle.class), Matchers.<StreamObserver<Feature>>any());
-    verify(client, never())
-        .warning(any(String.class), any(Status.class));
+    assertEquals(Rectangle.newBuilder()
+                     .setLo(Point.newBuilder().setLatitude(1).setLongitude(2).build())
+                     .setHi(Point.newBuilder().setLatitude(3).setLongitude(4).build())
+                     .build(),
+                 rectangleDelivered.get());
+    verify(testHelper, never())
+        .onRpcError(any(Throwable.class));
   }
 
   /**
@@ -299,46 +246,50 @@ public class RouteGuideClientTest {
   public void testListFeatures_error() {
     final Feature responseFeature1 =
         Feature.newBuilder().setName("feature 1").build();
-    Answer<Void> answer =
-        new Answer<Void>() {
+    final AtomicReference<Rectangle> rectangleDelivered = new AtomicReference<Rectangle>();
+    final StatusRuntimeException fakeError = new StatusRuntimeException(Status.INVALID_ARGUMENT);
+
+    // implement the fake service
+    RouteGuideImplBase listFeaturesImpl =
+        new RouteGuideImplBase() {
           @Override
-          public Void answer(InvocationOnMock invocation) {
-            @SuppressWarnings("unchecked")
-            StreamObserver<Feature> responseObserver =
-                (StreamObserver<Feature>) invocation.getArguments()[1];
+          public void listFeatures(Rectangle rectangle, StreamObserver<Feature> responseObserver) {
+            rectangleDelivered.set(rectangle);
 
             // before sending response
             verify(client)
                 .listFeatures(1, 2, 3, 4);
-            verify(client)
-                .info("*** ListFeatures: lowLat={0} lowLon={1} hiLat={2} hiLon={3}", 1, 2, 3, 4);
-            verify(client, never())
-                .info(any(String.class), any(Object[].class));
-            verify(client, never())
-                .warning(any(String.class), any(Status.class));
+            verify(testHelper, never())
+                .onMessage(any(Message.class));
+            verify(testHelper, never())
+                .onRpcError(any(Throwable.class));
 
             // send one response message
             responseObserver.onNext(responseFeature1);
 
             // allow some milliseconds for the client to receive the response
-            verify(client, timeout(100))
-                .info("Result #1: {0}", responseFeature1);
-            verify(client, never())
-                .warning(any(String.class), any(Status.class));
+            verify(testHelper, timeout(100))
+                .onMessage(responseFeature1);
+            verify(testHelper, never())
+                .onRpcError(any(Throwable.class));
 
             // let the rpc fail
-            responseObserver.onError(new StatusRuntimeException(Status.CANCELLED));
-            return null;
+            responseObserver.onError(fakeError);
           }
         };
-    doAnswer(answer)
-        .when(serviceImpl)
-        .listFeatures(any(Rectangle.class), Matchers.<StreamObserver<Feature>>any());
+    serviceRegistry.addService(listFeaturesImpl.bindService());
 
     client.listFeatures(1, 2, 3, 4);
 
-    verify(client)
-        .warning("RPC failed: {0}", Status.CANCELLED);
+    assertEquals(Rectangle.newBuilder()
+                     .setLo(Point.newBuilder().setLatitude(1).setLongitude(2).build())
+                     .setHi(Point.newBuilder().setLatitude(3).setLongitude(4).build())
+                     .build(),
+                 rectangleDelivered.get());
+    ArgumentCaptor<Throwable> errorCaptor = ArgumentCaptor.forClass(Throwable.class);
+    verify(testHelper)
+        .onRpcError(errorCaptor.capture());
+    assertEquals(fakeError.getStatus(), Status.fromThrowable(errorCaptor.getValue()));
   }
 
   /**
@@ -358,6 +309,7 @@ public class RouteGuideClientTest {
         Feature.newBuilder().setLocation(point3).build();
     final List<Feature> features = Arrays.asList(
         requestFeature1, requestFeature2, requestFeature3);
+    final List<Point> pointsDelivered = new ArrayList<Point>();
     final RouteSummary fakeResponse = RouteSummary
         .newBuilder()
         .setPointCount(7)
@@ -365,30 +317,20 @@ public class RouteGuideClientTest {
         .setDistance(9)
         .setElapsedTime(10)
         .build();
-    Answer<StreamObserver<Point>> answer =
-        new Answer<StreamObserver<Point>>() {
+
+    // implement the fake service
+    RouteGuideImplBase recordRouteImpl =
+        new RouteGuideImplBase() {
           @Override
-          public StreamObserver<Point> answer(InvocationOnMock invocation) throws Throwable {
-            // before sending response
-            verify(client).recordRoute(eq(features), eq(4));
-
-            @SuppressWarnings("unchecked")
-            final StreamObserver<RouteSummary> responseObserver =
-                (StreamObserver<RouteSummary>) invocation.getArguments()[0];
-
+          public StreamObserver<Point> recordRoute(StreamObserver<RouteSummary> responseObserver) {
             StreamObserver<Point> requestObserver = new StreamObserver<Point>() {
-              int idx = 0;
-
               @Override
               public void onNext(Point value) {
-                // verify that requestFeature1, requestFeature2, requestFeature3, and then
-                // requestFeature1 are received
-                assertEquals(features.get(idx++ % 3).getLocation(), value);
+                pointsDelivered.add(value);
               }
 
               @Override
               public void onError(Throwable t) {
-                fail();
               }
 
               @Override
@@ -401,39 +343,22 @@ public class RouteGuideClientTest {
             return requestObserver;
           }
         };
-    doAnswer(answer)
-        .when(serviceImpl)
-        .recordRoute(Matchers.<StreamObserver<RouteSummary>>any());
+    serviceRegistry.addService(recordRouteImpl.bindService());
 
     // send requestFeature1, requestFeature2, requestFeature3, and then requestFeature1 again.
     client.recordRoute(features, 4);
 
-    verify(client)
-        .info("*** RecordRoute");
-    verify(client, timeout(100).times(2))
-        .info(
-            eq("Visiting point {0}, {1}"),
-            eq(RouteGuideUtil.getLatitude(requestFeature1.getLocation())),
-            eq(RouteGuideUtil.getLongitude(requestFeature1.getLocation())));
-    verify(client, timeout(100))
-        .info(
-            eq("Visiting point {0}, {1}"),
-            eq(RouteGuideUtil.getLatitude(requestFeature2.getLocation())),
-            eq(RouteGuideUtil.getLongitude(requestFeature2.getLocation())));
-    verify(client, timeout(100))
-        .info(
-            eq("Visiting point {0}, {1}"),
-            eq(RouteGuideUtil.getLatitude(requestFeature3.getLocation())),
-            eq(RouteGuideUtil.getLongitude(requestFeature3.getLocation())));
-    verify(client, timeout(100))
-        .info(
-            "Finished trip with {0} points. Passed {1} features. "
-                + "Travelled {2} meters. It took {3} seconds.",
-            7, 8, 9, 10);
-    verify(client, timeout(100))
-        .info("Finished RecordRoute");
-    verify(client, never())
-        .warning(any(String.class), any(Status.class));
+    assertEquals(
+        Arrays.asList(
+            requestFeature1.getLocation(),
+            requestFeature2.getLocation(),
+            requestFeature3.getLocation(),
+            requestFeature1.getLocation()),
+        pointsDelivered);
+    verify(testHelper)
+        .onMessage(fakeResponse);
+    verify(testHelper, never())
+        .onRpcError(any(Throwable.class));
   }
 
   /**
@@ -447,23 +372,18 @@ public class RouteGuideClientTest {
         Feature.newBuilder().setLocation(point1).build();
     final List<Feature> features = Arrays.asList(requestFeature1);
 
-    Answer<StreamObserver<Point>> answer =
-        new Answer<StreamObserver<Point>>() {
+    // implement the fake service
+    RouteGuideImplBase recordRouteImpl =
+        new RouteGuideImplBase() {
           @Override
-          public StreamObserver<Point> answer(InvocationOnMock invocation) throws Throwable {
-            // before sending response
-            verify(client).recordRoute(eq(features), eq(4));
-
-            @SuppressWarnings("unchecked")
-            StreamObserver<RouteSummary> responseObserver =
-                (StreamObserver<RouteSummary>) invocation.getArguments()[0];
+          public StreamObserver<Point> recordRoute(StreamObserver<RouteSummary> responseObserver) {
             RouteSummary response = RouteSummary.getDefaultInstance();
             // sending more than one responses is not right for client-streaming call.
             responseObserver.onNext(response);
             responseObserver.onNext(response);
             responseObserver.onCompleted();
 
-            StreamObserver<Point> requestObserver = new StreamObserver<Point>() {
+            return new StreamObserver<Point>() {
               @Override
               public void onNext(Point value) {
               }
@@ -476,21 +396,16 @@ public class RouteGuideClientTest {
               public void onCompleted() {
               }
             };
-            return requestObserver;
           }
         };
-    doAnswer(answer)
-        .when(serviceImpl)
-        .recordRoute(Matchers.<StreamObserver<RouteSummary>>any());
+    serviceRegistry.addService(recordRouteImpl.bindService());
 
     client.recordRoute(features, 4);
 
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(client)
-        .warning(eq("RecordRoute Failed: {0}"), statusCaptor.capture());
-    assertEquals(Code.CANCELLED, statusCaptor.getValue().getCode());
-    verify(client, never())
-        .info("Finished RecordRoute");
+    ArgumentCaptor<Throwable> errorCaptor = ArgumentCaptor.forClass(Throwable.class);
+    verify(testHelper)
+        .onRpcError(errorCaptor.capture());
+    assertEquals(Status.Code.CANCELLED, Status.fromThrowable(errorCaptor.getValue()).getCode());
   }
 
   /**
@@ -503,18 +418,15 @@ public class RouteGuideClientTest {
     final Feature requestFeature1 =
         Feature.newBuilder().setLocation(point1).build();
     final List<Feature> features = Arrays.asList(requestFeature1);
+    final StatusRuntimeException fakeError = new StatusRuntimeException(Status.INVALID_ARGUMENT);
 
-    Answer<StreamObserver<Point>> answer =
-        new Answer<StreamObserver<Point>>() {
+    // implement the fake service
+    RouteGuideImplBase recordRouteImpl =
+        new RouteGuideImplBase() {
           @Override
-          public StreamObserver<Point> answer(InvocationOnMock invocation) throws Throwable {
-            // before sending response
-            verify(client).recordRoute(eq(features), eq(4));
-
-            @SuppressWarnings("unchecked")
-            StreamObserver<RouteSummary> responseObserver =
-                (StreamObserver<RouteSummary>) invocation.getArguments()[0];
-            responseObserver.onError(new StatusRuntimeException(Status.INTERNAL));
+          public StreamObserver<Point> recordRoute(StreamObserver<RouteSummary> responseObserver) {
+            // send an error immediately
+            responseObserver.onError(fakeError);
 
             StreamObserver<Point> requestObserver = new StreamObserver<Point>() {
               @Override
@@ -532,18 +444,14 @@ public class RouteGuideClientTest {
             return requestObserver;
           }
         };
-    doAnswer(answer)
-        .when(serviceImpl)
-        .recordRoute(Matchers.<StreamObserver<RouteSummary>>any());
+    serviceRegistry.addService(recordRouteImpl.bindService());
 
     client.recordRoute(features, 4);
 
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(client)
-        .warning(eq("RecordRoute Failed: {0}"), statusCaptor.capture());
-    assertEquals(Code.INTERNAL, statusCaptor.getValue().getCode());
-    verify(client, never())
-        .info("Finished RecordRoute");
+    ArgumentCaptor<Throwable> errorCaptor = ArgumentCaptor.forClass(Throwable.class);
+    verify(testHelper)
+        .onRpcError(errorCaptor.capture());
+    assertEquals(fakeError.getStatus(), Status.fromThrowable(errorCaptor.getValue()));
   }
 
   /**
@@ -557,13 +465,11 @@ public class RouteGuideClientTest {
         Feature.newBuilder().setLocation(point1).build();
     final List<Feature> features = Arrays.asList(requestFeature1);
 
-    Answer<StreamObserver<Point>> answer =
-        new Answer<StreamObserver<Point>>() {
+    // implement the fake service
+    RouteGuideImplBase recordRouteImpl =
+        new RouteGuideImplBase() {
           @Override
-          public StreamObserver<Point> answer(InvocationOnMock invocation) throws Throwable {
-            // before sending response
-            verify(client).recordRoute(eq(features), eq(4));
-
+          public StreamObserver<Point> recordRoute(StreamObserver<RouteSummary> responseObserver) {
             StreamObserver<Point> requestObserver = new StreamObserver<Point>() {
               @Override
               public void onNext(Point value) {
@@ -582,18 +488,14 @@ public class RouteGuideClientTest {
             return requestObserver;
           }
         };
-    doAnswer(answer)
-        .when(serviceImpl)
-        .recordRoute(Matchers.<StreamObserver<RouteSummary>>any());
+    serviceRegistry.addService(recordRouteImpl.bindService());
 
     client.recordRoute(features, 4);
 
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(client)
-        .warning(eq("RecordRoute Failed: {0}"), statusCaptor.capture());
-    assertEquals(Code.UNKNOWN, statusCaptor.getValue().getCode());
-    verify(client, never())
-        .info("Finished RecordRoute");
+    ArgumentCaptor<Throwable> errorCaptor = ArgumentCaptor.forClass(Throwable.class);
+    verify(testHelper)
+        .onRpcError(errorCaptor.capture());
+    assertEquals(Status.UNKNOWN, Status.fromThrowable(errorCaptor.getValue()));
   }
 
   /**
@@ -602,71 +504,69 @@ public class RouteGuideClientTest {
   @Test
   public void testRouteChat_simpleResponse() throws InterruptedException {
     final RouteNote fakeResponse = RouteNote.newBuilder().setMessage("dummy msg").build();
-    Answer<StreamObserver<RouteNote>> answer =
-        new Answer<StreamObserver<RouteNote>>() {
+    final List<String> messagesDelivered = new ArrayList<String>();
+    final List<Point> locationsDelivered = new ArrayList<Point>();
+    final AtomicReference<StreamObserver<RouteNote>> responseObserverRef =
+        new AtomicReference<StreamObserver<RouteNote>>();
+
+    // implement the fake service
+    RouteGuideImplBase routeChatImpl =
+        new RouteGuideImplBase() {
           @Override
-          public StreamObserver<RouteNote> answer(InvocationOnMock invocation) throws Throwable {
-            // before sending response
-            verify(client).routeChat();
-
-            @SuppressWarnings("unchecked")
-            final StreamObserver<RouteNote> responseObserver =
-                (StreamObserver<RouteNote>) invocation.getArguments()[0];
-
-            // send out two simple response message
-            responseObserver.onNext(fakeResponse);
-            responseObserver.onNext(fakeResponse);
+          public StreamObserver<RouteNote> routeChat(StreamObserver<RouteNote> responseObserver) {
+            responseObserverRef.set(responseObserver);
 
             StreamObserver<RouteNote> requestObserver = new StreamObserver<RouteNote>() {
-              int idx = 0;
-              final String[] messages =
-                  {"First message", "Second message", "Third message", "Fourth message"};
-
               @Override
               public void onNext(RouteNote value) {
-                assertEquals(messages[idx++], value.getMessage());
+                messagesDelivered.add(value.getMessage());
+                locationsDelivered.add(value.getLocation());
               }
 
               @Override
               public void onError(Throwable t) {
-                fail();
               }
 
               @Override
               public void onCompleted() {
-                responseObserver.onCompleted();
               }
             };
 
             return requestObserver;
           }
         };
-    doAnswer(answer)
-        .when(serviceImpl)
-        .routeChat(Matchers.<StreamObserver<RouteNote>>any());
+    serviceRegistry.addService(routeChatImpl.bindService());
 
-    client.routeChat();
+    // start routeChat
+    CountDownLatch latch = client.routeChat();
 
-    verify(client)
-        .info("*** RouteChat");
-    // request message sent for four times
-    verify(client, times(4))
-        .info(
-            eq("Sending message \"{0}\" at {1}, {2}"),
-            any(Object.class),
-            any(Object.class),
-            any(Object.class));
-    // response message received for two times
-    verify(client, times(2))
-        .info(
-            eq("Got message \"{0}\" at {1}, {2}"),
-            eq("dummy msg"),
-            any(Object.class),
-            any(Object.class));
-    verify(client)
-        .info("Finished RouteChat");
-    verify(client, never())
-        .warning(any(String.class), any(Status.class));
+    // request message sent and delivered for four times
+    assertEquals(
+        Arrays.asList("First message", "Second message", "Third message", "Fourth message"),
+        messagesDelivered);
+    assertEquals(
+        Arrays.asList(
+            Point.newBuilder().setLatitude(0).setLongitude(0).build(),
+            Point.newBuilder().setLatitude(0).setLongitude(1).build(),
+            Point.newBuilder().setLatitude(1).setLongitude(0).build(),
+            Point.newBuilder().setLatitude(1).setLongitude(1).build()
+        ),
+        locationsDelivered);
+
+    // let the server send out simple response message for twice
+    responseObserverRef.get().onNext(fakeResponse);
+    responseObserverRef.get().onNext(fakeResponse);
+
+    // response message received for twice
+    verify(testHelper, timeout(100).times(2))
+        .onMessage(fakeResponse);
+
+    // let server complete.
+    responseObserverRef.get().onCompleted();
+
+    latch.await(1, TimeUnit.MINUTES);
+    verify(testHelper, never())
+        .onRpcError(any(Throwable.class));
   }
 
   /**
@@ -674,20 +574,17 @@ public class RouteGuideClientTest {
    */
   @Test
   public void testRouteChat_echoResponse() throws InterruptedException {
-    Answer<StreamObserver<RouteNote>> answer =
-        new Answer<StreamObserver<RouteNote>>() {
+    final List<RouteNote> notesDelivered = new ArrayList<RouteNote>();
+
+    // implement the fake service
+    RouteGuideImplBase routeChatImpl =
+        new RouteGuideImplBase() {
           @Override
-          public StreamObserver<RouteNote> answer(InvocationOnMock invocation) throws Throwable {
-            // before sending response
-            verify(client).routeChat();
-
-            @SuppressWarnings("unchecked")
-            final StreamObserver<RouteNote> responseObserver =
-                (StreamObserver<RouteNote>) invocation.getArguments()[0];
-
+          public StreamObserver<RouteNote> routeChat(StreamObserver<RouteNote> responseObserver) {
             StreamObserver<RouteNote> requestObserver = new StreamObserver<RouteNote>() {
               @Override
               public void onNext(RouteNote value) {
+                notesDelivered.add(value);
                 responseObserver.onNext(value);
               }
 
@@ -705,55 +602,42 @@ public class RouteGuideClientTest {
             return requestObserver;
           }
         };
-    doAnswer(answer)
-        .when(serviceImpl)
-        .routeChat(Matchers.<StreamObserver<RouteNote>>any());
+    serviceRegistry.addService(routeChatImpl.bindService());
 
-    client.routeChat();
+    CountDownLatch latch = client.routeChat();
 
-    verify(client).info("*** RouteChat");
     String[] messages =
         {"First message", "Second message", "Third message", "Fourth message"};
     for (int i = 0; i < 4; i++) {
-      verify(client)
-          .info(
-              eq("Sending message \"{0}\" at {1}, {2}"),
-              eq(messages[i]),
-              any(Object.class),
-              any(Object.class));
-      verify(client)
-          .info(
-              eq("Got message \"{0}\" at {1}, {2}"),
-              eq(messages[i]),
-              any(Object.class),
-              any(Object.class));
+      verify(testHelper, timeout(100))
+          .onMessage(notesDelivered.get(i));
+      assertEquals(messages[i], notesDelivered.get(i).getMessage());
     }
-    verify(client)
-        .info("Finished RouteChat");
-    verify(client, never())
-        .warning(any(String.class), any(Status.class));
+
+    latch.await(1, TimeUnit.MINUTES);
+    verify(testHelper, never())
+        .onRpcError(any(Throwable.class));
   }
 
   /**
    * Example for testing bi-directional call.
    */
   @Test
+
   public void testRouteChat_errorResponse() throws InterruptedException {
-    Answer<StreamObserver<RouteNote>> answer =
-        new Answer<StreamObserver<RouteNote>>() {
+    final List<RouteNote> notesDelivered = new ArrayList<RouteNote>();
+    final StatusRuntimeException fakeError = new StatusRuntimeException(Status.PERMISSION_DENIED);
+
+    // implement the fake service
+    RouteGuideImplBase routeChatImpl =
+        new RouteGuideImplBase() {
           @Override
-          public StreamObserver<RouteNote> answer(InvocationOnMock invocation) throws Throwable {
-            // before sending response
-            verify(client).routeChat();
-
-            @SuppressWarnings("unchecked")
-            final StreamObserver<RouteNote> responseObserver =
-                (StreamObserver<RouteNote>) invocation.getArguments()[0];
-
+          public StreamObserver<RouteNote> routeChat(StreamObserver<RouteNote> responseObserver) {
             StreamObserver<RouteNote> requestObserver = new StreamObserver<RouteNote>() {
               @Override
               public void onNext(RouteNote value) {
-                responseObserver.onError(new StatusRuntimeException(Status.PERMISSION_DENIED));
+                notesDelivered.add(value);
+                responseObserver.onError(fakeError);
               }
 
               @Override
@@ -769,32 +653,16 @@ public class RouteGuideClientTest {
             return requestObserver;
           }
         };
-    doAnswer(answer)
-        .when(serviceImpl)
-        .routeChat(Matchers.<StreamObserver<RouteNote>>any());
+    serviceRegistry.addService(routeChatImpl.bindService());
 
     client.routeChat();
 
-    verify(client).info("*** RouteChat");
-    String[] messages =
-        {"First message", "Second message", "Third message", "Fourth message"};
-    for (int i = 0; i < 4; i++) {
-      verify(client)
-          .info(
-              eq("Sending message \"{0}\" at {1}, {2}"),
-              eq(messages[i]),
-              any(Object.class),
-              any(Object.class));
-    }
-    verify(client)
-        .warning(eq("RouteChat Failed: {0}"), eq(Status.PERMISSION_DENIED));
-    verify(client, never())
-        .info(
-            eq("Got message \"{0}\" at {1}, {2}"),
-            any(Object.class),
-            any(Object.class),
-            any(Object.class));
-    verify(client, never())
-        .info("Finished RouteChat");
+    assertEquals("First message", notesDelivered.get(0).getMessage());
+    verify(testHelper, never())
+        .onMessage(any(Message.class));
+    ArgumentCaptor<Throwable> errorCaptor = ArgumentCaptor.forClass(Throwable.class);
+    verify(testHelper, timeout(100))
+        .onRpcError(errorCaptor.capture());
+    assertEquals(fakeError.getStatus(), Status.fromThrowable(errorCaptor.getValue()));
   }
 }
