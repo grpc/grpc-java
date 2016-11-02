@@ -312,7 +312,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
         int maxHeaderListSize) {
       this.channelType = channelType;
       this.negotiationType = negotiationType;
-      this.channelOptions = channelOptions;
+      this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
       this.protocolNegotiator = protocolNegotiator;
       this.sslContext = sslContext;
       this.flowControlWindow = flowControlWindow;

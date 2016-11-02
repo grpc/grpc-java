@@ -164,7 +164,11 @@ public class NettyClientTransportTest {
     // set SO_LINGER option
     int soLinger = 123;
     channelOptions.put(ChannelOption.SO_LINGER, soLinger);
-    NettyClientTransport transport = newTransport(channelOptions);
+    NettyClientTransport transport = new NettyClientTransport(
+        address, NioSocketChannel.class, channelOptions, group, newNegotiator(),
+        DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
+        authority, null /* user agent */);
+    transports.add(transport);
     transport.start(clientTransportListener);
 
     // verify SO_LINGER has been set
@@ -334,16 +338,6 @@ public class NettyClientTransportTest {
     NettyClientTransport transport = new NettyClientTransport(
         address, NioSocketChannel.class, new HashMap<ChannelOption<?>, Object>(), group, negotiator,
         DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize, authority, userAgent);
-    transports.add(transport);
-    return transport;
-  }
-
-  private NettyClientTransport newTransport(Map<ChannelOption<?>, ?> channelOptions)
-      throws IOException {
-    NettyClientTransport transport = new NettyClientTransport(
-        address, NioSocketChannel.class, channelOptions, group, newNegotiator(),
-        DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
-        authority, null /* user agent */);
     transports.add(transport);
     return transport;
   }

@@ -60,7 +60,6 @@ import io.netty.util.AsciiString;
 
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
@@ -97,8 +96,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.address = Preconditions.checkNotNull(address, "address");
     this.group = Preconditions.checkNotNull(group, "group");
     this.channelType = Preconditions.checkNotNull(channelType, "channelType");
-    this.channelOptions = new HashMap<ChannelOption<?>, Object>(
-        Preconditions.checkNotNull(channelOptions, "channelOptions"));
+    this.channelOptions = Preconditions.checkNotNull(channelOptions, "channelOptions");
     this.flowControlWindow = flowControlWindow;
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
