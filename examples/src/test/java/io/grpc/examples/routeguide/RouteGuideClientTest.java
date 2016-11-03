@@ -35,13 +35,10 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
 import com.google.protobuf.Message;
 
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
@@ -106,11 +103,9 @@ public class RouteGuideClientTest {
 
     // use a mutable service registry for later registering the service impl for each test case.
     fakeServer = InProcessServerBuilder.forName(uniqueServerName)
-        .fallbackHandlerRegistry(serviceRegistry).build().start();
-    ManagedChannelBuilder channelBuilder =
-        InProcessChannelBuilder.forName(uniqueServerName).directExecutor();
-    client = spy(
-        new RouteGuideClient(channelBuilder));
+        .fallbackHandlerRegistry(serviceRegistry).directExecutor().build().start();
+    client =
+        new RouteGuideClient(InProcessChannelBuilder.forName(uniqueServerName).directExecutor());
     client.setTestHelper(testHelper);
   }
 
@@ -186,10 +181,8 @@ public class RouteGuideClientTest {
    */
   @Test
   public void testListFeatures() {
-    final Feature responseFeature1 =
-        Feature.newBuilder().setName("feature 1").build();
-    final Feature responseFeature2 =
-        Feature.newBuilder().setName("feature 2").build();
+    final Feature responseFeature1 = Feature.newBuilder().setName("feature 1").build();
+    final Feature responseFeature2 = Feature.newBuilder().setName("feature 2").build();
     final AtomicReference<Rectangle> rectangleDelivered = new AtomicReference<Rectangle>();
 
     // implement the fake service
@@ -199,28 +192,9 @@ public class RouteGuideClientTest {
           public void listFeatures(Rectangle rectangle, StreamObserver<Feature> responseObserver) {
             rectangleDelivered.set(rectangle);
 
-            // before sending any response,
-            // verify the client#listFeatures method has been called (but has not returned yet)
-            verify(client)
-                .listFeatures(1, 2, 3, 4);
-            verify(testHelper, never())
-                .onMessage(any(Message.class));
-
-            // send one response message
+            // send two response messages
             responseObserver.onNext(responseFeature1);
-
-            // allow some milliseconds for the client to receive the response
-            verify(testHelper, timeout(100))
-                .onMessage(responseFeature1);
-            verify(testHelper, never())
-                .onMessage(responseFeature2);
-
-            // send another response message
             responseObserver.onNext(responseFeature2);
-
-            // allow some milliseconds for the client to receive the response
-            verify(testHelper, timeout(100))
-                .onMessage(responseFeature2);
 
             // complete the response
             responseObserver.onCompleted();
@@ -235,6 +209,10 @@ public class RouteGuideClientTest {
                      .setHi(Point.newBuilder().setLatitude(3).setLongitude(4).build())
                      .build(),
                  rectangleDelivered.get());
+    verify(testHelper)
+        .onMessage(responseFeature1);
+    verify(testHelper)
+        .onMessage(responseFeature2);
     verify(testHelper, never())
         .onRpcError(any(Throwable.class));
   }
@@ -256,22 +234,8 @@ public class RouteGuideClientTest {
           public void listFeatures(Rectangle rectangle, StreamObserver<Feature> responseObserver) {
             rectangleDelivered.set(rectangle);
 
-            // before sending response
-            verify(client)
-                .listFeatures(1, 2, 3, 4);
-            verify(testHelper, never())
-                .onMessage(any(Message.class));
-            verify(testHelper, never())
-                .onRpcError(any(Throwable.class));
-
             // send one response message
             responseObserver.onNext(responseFeature1);
-
-            // allow some milliseconds for the client to receive the response
-            verify(testHelper, timeout(100))
-                .onMessage(responseFeature1);
-            verify(testHelper, never())
-                .onRpcError(any(Throwable.class));
 
             // let the rpc fail
             responseObserver.onError(fakeError);
@@ -287,6 +251,8 @@ public class RouteGuideClientTest {
                      .build(),
                  rectangleDelivered.get());
     ArgumentCaptor<Throwable> errorCaptor = ArgumentCaptor.forClass(Throwable.class);
+    verify(testHelper)
+        .onMessage(responseFeature1);
     verify(testHelper)
         .onRpcError(errorCaptor.capture());
     assertEquals(fakeError.getStatus(), Status.fromThrowable(errorCaptor.getValue()));
@@ -322,7 +288,8 @@ public class RouteGuideClientTest {
     RouteGuideImplBase recordRouteImpl =
         new RouteGuideImplBase() {
           @Override
-          public StreamObserver<Point> recordRoute(StreamObserver<RouteSummary> responseObserver) {
+          public StreamObserver<Point> recordRoute(
+              final StreamObserver<RouteSummary> responseObserver) {
             StreamObserver<Point> requestObserver = new StreamObserver<Point>() {
               @Override
               public void onNext(Point value) {
@@ -345,7 +312,7 @@ public class RouteGuideClientTest {
         };
     serviceRegistry.addService(recordRouteImpl.bindService());
 
-    // send requestFeature1, requestFeature2, requestFeature3, and then requestFeature1 again.
+    // send requestFeature1, requestFeature2, requestFeature3, and then requestFeature1 again
     client.recordRoute(features, 4);
 
     assertEquals(
@@ -365,7 +332,12 @@ public class RouteGuideClientTest {
    * Example for testing async client-streaming.
    */
   @Test
-  public void testRecordRoute_wrongResponse() throws InterruptedException {
+  public void testRecordRoute_wrongResponse() throws InterruptedException, IOException {
+    // TODO(zdapeng): use direct executor once issue #1936 is fixed
+    fakeServer.shutdownNow();
+    fakeServer = InProcessServerBuilder.forName("fake server for " + getClass())
+        .fallbackHandlerRegistry(serviceRegistry).build().start();
+
     client.setRandom(noRandomness);
     Point point1 = Point.newBuilder().setLatitude(1).setLongitude(1).build();
     final Feature requestFeature1 =
@@ -412,7 +384,12 @@ public class RouteGuideClientTest {
    * Example for testing async client-streaming.
    */
   @Test
-  public void testRecordRoute_serverError() throws InterruptedException {
+  public void testRecordRoute_serverError() throws InterruptedException, IOException {
+    // TODO(zdapeng): use direct executor once issue #1936 is fixed
+    fakeServer.shutdownNow();
+    fakeServer = InProcessServerBuilder.forName("fake server for " + getClass())
+        .fallbackHandlerRegistry(serviceRegistry).build().start();
+
     client.setRandom(noRandomness);
     Point point1 = Point.newBuilder().setLatitude(1).setLongitude(1).build();
     final Feature requestFeature1 =
@@ -455,60 +432,17 @@ public class RouteGuideClientTest {
   }
 
   /**
-   * Example for testing async client-streaming.
-   */
-  @Test
-  public void testRecordRoute_erroneousServiceImpl() throws InterruptedException {
-    client.setRandom(noRandomness);
-    Point point1 = Point.newBuilder().setLatitude(1).setLongitude(1).build();
-    final Feature requestFeature1 =
-        Feature.newBuilder().setLocation(point1).build();
-    final List<Feature> features = Arrays.asList(requestFeature1);
-
-    // implement the fake service
-    RouteGuideImplBase recordRouteImpl =
-        new RouteGuideImplBase() {
-          @Override
-          public StreamObserver<Point> recordRoute(StreamObserver<RouteSummary> responseObserver) {
-            StreamObserver<Point> requestObserver = new StreamObserver<Point>() {
-              @Override
-              public void onNext(Point value) {
-                throw new RuntimeException(
-                    "unexpected error due to careless implementation of serviceImpl");
-              }
-
-              @Override
-              public void onError(Throwable t) {
-              }
-
-              @Override
-              public void onCompleted() {
-              }
-            };
-            return requestObserver;
-          }
-        };
-    serviceRegistry.addService(recordRouteImpl.bindService());
-
-    client.recordRoute(features, 4);
-
-    ArgumentCaptor<Throwable> errorCaptor = ArgumentCaptor.forClass(Throwable.class);
-    verify(testHelper)
-        .onRpcError(errorCaptor.capture());
-    assertEquals(Status.UNKNOWN, Status.fromThrowable(errorCaptor.getValue()));
-  }
-
-  /**
    * Example for testing bi-directional call.
    */
   @Test
   public void testRouteChat_simpleResponse() throws InterruptedException {
-    final RouteNote fakeResponse = RouteNote.newBuilder().setMessage("dummy msg").build();
+    RouteNote fakeResponse1 = RouteNote.newBuilder().setMessage("dummy msg1").build();
+    RouteNote fakeResponse2 = RouteNote.newBuilder().setMessage("dummy msg2").build();
     final List<String> messagesDelivered = new ArrayList<String>();
     final List<Point> locationsDelivered = new ArrayList<Point>();
     final AtomicReference<StreamObserver<RouteNote>> responseObserverRef =
         new AtomicReference<StreamObserver<RouteNote>>();
-
+    final CountDownLatch allRequestsDelivered = new CountDownLatch(1);
     // implement the fake service
     RouteGuideImplBase routeChatImpl =
         new RouteGuideImplBase() {
@@ -529,6 +463,7 @@ public class RouteGuideClientTest {
 
               @Override
               public void onCompleted() {
+                allRequestsDelivered.countDown();
               }
             };
 
@@ -541,6 +476,7 @@ public class RouteGuideClientTest {
     CountDownLatch latch = client.routeChat();
 
     // request message sent and delivered for four times
+    allRequestsDelivered.await(1, TimeUnit.SECONDS);
     assertEquals(
         Arrays.asList("First message", "Second message", "Third message", "Fourth message"),
         messagesDelivered);
@@ -553,18 +489,20 @@ public class RouteGuideClientTest {
         ),
         locationsDelivered);
 
-    // let the server send out simple response message for twice
-    responseObserverRef.get().onNext(fakeResponse);
-    responseObserverRef.get().onNext(fakeResponse);
-
-    // response message received for twice
-    verify(testHelper, timeout(100).times(2))
-        .onMessage(fakeResponse);
+    // Let the server send out two simple response messages
+    // and verify that the client receives them.
+    // Allow some timeout for verify() if not using directExecutor
+    responseObserverRef.get().onNext(fakeResponse1);
+    verify(testHelper)
+        .onMessage(fakeResponse1);
+    responseObserverRef.get().onNext(fakeResponse2);
+    verify(testHelper)
+        .onMessage(fakeResponse2);
 
     // let server complete.
     responseObserverRef.get().onCompleted();
 
-    latch.await(1, TimeUnit.MINUTES);
+    latch.await(1, TimeUnit.SECONDS);
     verify(testHelper, never())
         .onRpcError(any(Throwable.class));
   }
@@ -580,7 +518,8 @@ public class RouteGuideClientTest {
     RouteGuideImplBase routeChatImpl =
         new RouteGuideImplBase() {
           @Override
-          public StreamObserver<RouteNote> routeChat(StreamObserver<RouteNote> responseObserver) {
+          public StreamObserver<RouteNote> routeChat(
+              final StreamObserver<RouteNote> responseObserver) {
             StreamObserver<RouteNote> requestObserver = new StreamObserver<RouteNote>() {
               @Override
               public void onNext(RouteNote value) {
@@ -604,17 +543,16 @@ public class RouteGuideClientTest {
         };
     serviceRegistry.addService(routeChatImpl.bindService());
 
-    CountDownLatch latch = client.routeChat();
+    client.routeChat().await(1, TimeUnit.SECONDS);
 
     String[] messages =
         {"First message", "Second message", "Third message", "Fourth message"};
     for (int i = 0; i < 4; i++) {
-      verify(testHelper, timeout(100))
+      verify(testHelper)
           .onMessage(notesDelivered.get(i));
       assertEquals(messages[i], notesDelivered.get(i).getMessage());
     }
 
-    latch.await(1, TimeUnit.MINUTES);
     verify(testHelper, never())
         .onRpcError(any(Throwable.class));
   }
@@ -623,7 +561,6 @@ public class RouteGuideClientTest {
    * Example for testing bi-directional call.
    */
   @Test
-
   public void testRouteChat_errorResponse() throws InterruptedException {
     final List<RouteNote> notesDelivered = new ArrayList<RouteNote>();
     final StatusRuntimeException fakeError = new StatusRuntimeException(Status.PERMISSION_DENIED);
@@ -632,7 +569,8 @@ public class RouteGuideClientTest {
     RouteGuideImplBase routeChatImpl =
         new RouteGuideImplBase() {
           @Override
-          public StreamObserver<RouteNote> routeChat(StreamObserver<RouteNote> responseObserver) {
+          public StreamObserver<RouteNote> routeChat(
+              final StreamObserver<RouteNote> responseObserver) {
             StreamObserver<RouteNote> requestObserver = new StreamObserver<RouteNote>() {
               @Override
               public void onNext(RouteNote value) {
@@ -655,13 +593,13 @@ public class RouteGuideClientTest {
         };
     serviceRegistry.addService(routeChatImpl.bindService());
 
-    client.routeChat();
+    client.routeChat().await(1, TimeUnit.SECONDS);
 
     assertEquals("First message", notesDelivered.get(0).getMessage());
     verify(testHelper, never())
         .onMessage(any(Message.class));
     ArgumentCaptor<Throwable> errorCaptor = ArgumentCaptor.forClass(Throwable.class);
-    verify(testHelper, timeout(100))
+    verify(testHelper)
         .onRpcError(errorCaptor.capture());
     assertEquals(fakeError.getStatus(), Status.fromThrowable(errorCaptor.getValue()));
   }
