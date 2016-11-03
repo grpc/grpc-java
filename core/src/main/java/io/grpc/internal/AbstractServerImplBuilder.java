@@ -46,15 +46,15 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.ExperimentalApi;
 import io.grpc.HandlerRegistry;
 import io.grpc.Internal;
-import io.grpc.NotifyOnServerBuild;
+import io.grpc.InternalNotifyOnServerBuild;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerTransportFilter;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.Executor;
 
 import javax.annotation.Nullable;
@@ -68,7 +68,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
         extends ServerBuilder<T> {
 
   private static final HandlerRegistry EMPTY_FALLBACK_REGISTRY = new HandlerRegistry() {
-      public Collection<ServerServiceDefinition> getServices() {
+      public List<ServerServiceDefinition> getServices() {
         return Collections.emptyList();
       }
 
@@ -85,8 +85,8 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   private final ArrayList<ServerTransportFilter> transportFilters =
       new ArrayList<ServerTransportFilter>();
 
-  private final ArrayList<NotifyOnServerBuild> notifyOnBuildList =
-      new ArrayList<NotifyOnServerBuild>();
+  private final List<InternalNotifyOnServerBuild> notifyOnBuildList =
+      new ArrayList<InternalNotifyOnServerBuild>();
 
   @Nullable
   private HandlerRegistry fallbackRegistry;
@@ -127,7 +127,8 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
 
   @Override
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
-  public final <S extends NotifyOnServerBuild & BindableService> T addService(S bindableService) {
+  public final <S extends InternalNotifyOnServerBuild & BindableService> T
+      addService(S bindableService) {
     notifyOnBuildList.add(bindableService);
     return addService(bindableService.bindService());
   }
@@ -177,7 +178,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
         firstNonNull(censusFactory,
             firstNonNull(Census.getCensusContextFactory(), NoopCensusContextFactory.INSTANCE)),
         GrpcUtil.STOPWATCH_SUPPLIER);
-    for (NotifyOnServerBuild notifyTarget : notifyOnBuildList) {
+    for (InternalNotifyOnServerBuild notifyTarget : notifyOnBuildList) {
       notifyTarget.notifyOnBuild(server);
     }
     return server;

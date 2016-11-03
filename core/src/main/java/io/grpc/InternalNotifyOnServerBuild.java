@@ -37,7 +37,7 @@ package io.grpc;
  * the interface after build() has been called and before the {@link Server} instance is returned.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
-public interface NotifyOnServerBuild {
+public interface InternalNotifyOnServerBuild {
   /** Notifies the service that the server has been built. */
   void notifyOnBuild(Server server);
 }

@@ -93,7 +93,7 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    *     interfaces
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
-  public abstract <S extends NotifyOnServerBuild & BindableService> T addService(
+  public abstract <S extends InternalNotifyOnServerBuild & BindableService> T addService(
       S bindableService);
 
   /**

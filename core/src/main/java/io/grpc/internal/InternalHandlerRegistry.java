@@ -35,18 +35,20 @@ import io.grpc.ExperimentalApi;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 
-import java.util.Collection;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import javax.annotation.Nullable;
 
 final class InternalHandlerRegistry {
-  private final Collection<ServerServiceDefinition> services;
+
+  private final List<ServerServiceDefinition> services;
   private final Map<String, ServerMethodDefinition<?, ?>> methods;
 
-  private InternalHandlerRegistry(Collection<ServerServiceDefinition> services,
+  private InternalHandlerRegistry(List<ServerServiceDefinition> services,
       Map<String, ServerMethodDefinition<?, ?>> methods) {
     this.services = services;
     this.methods = methods;
@@ -56,7 +58,7 @@ final class InternalHandlerRegistry {
    * Returns the service definitions in this registry.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
-  public Collection<ServerServiceDefinition> getServices() {
+  public List<ServerServiceDefinition> getServices() {
     return services;
   }
 
@@ -66,6 +68,7 @@ final class InternalHandlerRegistry {
   }
 
   static class Builder {
+
     // Store per-service first, to make sure services are added/replaced atomically.
     private final HashMap<String, ServerServiceDefinition> services =
         new HashMap<String, ServerServiceDefinition>();
@@ -83,7 +86,9 @@ final class InternalHandlerRegistry {
           map.put(method.getMethodDescriptor().getFullMethodName(), method);
         }
       }
-      return new InternalHandlerRegistry(services.values(), Collections.unmodifiableMap(map));
+      return new InternalHandlerRegistry(
+          Collections.unmodifiableList(new ArrayList<ServerServiceDefinition>(services.values())),
+          Collections.unmodifiableMap(map));
     }
   }
 }

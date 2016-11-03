@@ -32,7 +32,7 @@
 package io.grpc;
 
 import java.io.IOException;
-import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -66,9 +66,13 @@ public abstract class Server {
 
   /**
    * Returns the services registered with the server.
+   *
+   * @throws UnsupportedOperationException if not supported by implementation
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
-  public abstract Collection<ServerServiceDefinition> getServices();
+  public List<ServerServiceDefinition> getServices() {
+    throw new UnsupportedOperationException("Not implemented");
+  }
 
   /**
    * Initiates an orderly shutdown in which preexisting calls continue but new calls are rejected.

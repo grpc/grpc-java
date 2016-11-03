@@ -31,7 +31,8 @@
 
 package io.grpc;
 
-import java.util.Collection;
+import java.util.List;
+
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -44,9 +45,13 @@ public abstract class HandlerRegistry {
 
   /**
    * Returns the {@link ServerServiceDefinition}s provided by the registry.
+   *
+   * @throws UnsupportedOperationException if not supported by implementation
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
-  public abstract Collection<ServerServiceDefinition> getServices();
+  public List<ServerServiceDefinition> getServices() {
+    throw new UnsupportedOperationException("Not implemented");
+  }
 
   /**
    * Lookup a {@link ServerMethodDefinition} by its fully-qualified name.

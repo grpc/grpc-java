@@ -180,11 +180,11 @@ public final class ServerImpl extends io.grpc.Server {
 
   @Override
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
-  public Collection<ServerServiceDefinition> getServices() {
-    ArrayList<ServerServiceDefinition> services =
+  public List<ServerServiceDefinition> getServices() {
+    List<ServerServiceDefinition> services =
         new ArrayList<ServerServiceDefinition>(registry.getServices());
     services.addAll(fallbackRegistry.getServices());
-    return services;
+    return Collections.unmodifiableList(services);
   }
 
   /**

@@ -31,13 +31,15 @@
 
 package io.grpc.protobuf.service;
 
+import com.google.common.base.Preconditions;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Descriptors.FileDescriptor;
 import com.google.protobuf.Descriptors.MethodDescriptor;
 import com.google.protobuf.Descriptors.ServiceDescriptor;
 
-import io.grpc.NotifyOnServerBuild;
+import io.grpc.ExperimentalApi;
+import io.grpc.InternalNotifyOnServerBuild;
 import io.grpc.Server;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
@@ -53,19 +55,24 @@ import io.grpc.reflection.v1alpha.ServerReflectionResponse;
 import io.grpc.reflection.v1alpha.ServiceResponse;
 import io.grpc.stub.StreamObserver;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 
 /**
  * Provides a reflection service for Protobuf services (including the reflection service itself).
+ *
+ * <p>Throws an exception if the set of services contain multiple protobuf files with declarations
+ * of the same service, method, type, or extension.
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
 public final class ProtoReflectionService extends ServerReflectionGrpc.ServerReflectionImplBase
-    implements NotifyOnServerBuild {
+    implements InternalNotifyOnServerBuild {
+
   private Server server;
   private Set<String> serviceNames;
   private Map<String, FileDescriptor> fileDescriptorsByName;
@@ -75,33 +82,46 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
 
   /**
    * Retrieves the services registered to the server at build time, and stores those services with a
-   * {@link ProtoFileDescriptorSupplier}.
+   * {@link ProtoFileDescriptorSupplier}. Subsequent calls to the method will have no effect.
    */
+  @Override
   public void notifyOnBuild(Server server) {
-    this.server = server;
+    if (this.server == null) {
+      this.server = Preconditions.checkNotNull(server, "server");
+    }
   }
 
   private void processExtension(FieldDescriptor extension, FileDescriptor fd) {
     String extensionName = extension.getContainingType().getFullName();
     int extensionNumber = extension.getNumber();
-    if (fileDescriptorsByExtensionAndNumber.containsKey(extensionName)) {
-      fileDescriptorsByExtensionAndNumber.get(extensionName).put(extensionNumber, fd);
-    } else {
-      Map<Integer, FileDescriptor> extensionMap = new HashMap<Integer, FileDescriptor>();
-      extensionMap.put(extensionNumber, fd);
-      fileDescriptorsByExtensionAndNumber.put(extensionName, extensionMap);
+    if (!fileDescriptorsByExtensionAndNumber.containsKey(extensionName)) {
+      fileDescriptorsByExtensionAndNumber.put(extensionName,
+          new HashMap<Integer, FileDescriptor>());
     }
+    Preconditions.checkState(
+        !fileDescriptorsByExtensionAndNumber.get(extensionName).containsKey(extensionNumber),
+        "Extension name and number already defined: %s, %s", extensionName, extensionNumber);
+    fileDescriptorsByExtensionAndNumber.get(extensionName).put(extensionNumber, fd);
   }
 
   private void processService(ServiceDescriptor service, FileDescriptor fd) {
-    fileDescriptorsBySymbol.put(service.getFullName(), fd);
+    String serviceName = service.getFullName();
+    Preconditions.checkState(!fileDescriptorsBySymbol.containsKey(serviceName),
+        "Service already defined: %s", serviceName);
+    fileDescriptorsBySymbol.put(serviceName, fd);
     for (MethodDescriptor method : service.getMethods()) {
-      fileDescriptorsBySymbol.put(method.getFullName(), fd);
+      String methodName = method.getFullName();
+      Preconditions.checkState(!fileDescriptorsBySymbol.containsKey(methodName),
+          "Method already defined: %s", methodName);
+      fileDescriptorsBySymbol.put(methodName, fd);
     }
   }
 
   private void processType(Descriptor type, FileDescriptor fd) {
-    fileDescriptorsBySymbol.put(type.getFullName(), fd);
+    String typeName = type.getFullName();
+    Preconditions.checkState(!fileDescriptorsBySymbol.containsKey(typeName),
+        "Type already defined: %s", typeName);
+    fileDescriptorsBySymbol.put(typeName, fd);
     for (FieldDescriptor extension : type.getExtensions()) {
       processExtension(extension, fd);
     }
@@ -111,7 +131,10 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
   }
 
   private void processFileDescriptor(FileDescriptor fd) {
-    fileDescriptorsByName.put(fd.getName(), fd);
+    String fdName = fd.getName();
+    Preconditions.checkState(!fileDescriptorsByName.containsKey(fdName),
+        "File name already used: %s", fdName);
+    fileDescriptorsByName.put(fdName, fd);
     for (ServiceDescriptor service : fd.getServices()) {
       processService(service, fd);
     }
@@ -130,7 +153,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
   private synchronized void initFileDescriptorMaps() {
     if (mapsInitialized) {
       // Check if the server's set of services has changed
-      Collection<ServerServiceDefinition> currentServices = server.getServices();
+      List<ServerServiceDefinition> currentServices = server.getServices();
       HashSet<String> currentServiceNames = new HashSet<String>();
       for (ServerServiceDefinition service : currentServices) {
         currentServiceNames.add(service.getServiceDescriptor().getName());
@@ -145,21 +168,25 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
     fileDescriptorsBySymbol = new HashMap<String, FileDescriptor>();
     fileDescriptorsByExtensionAndNumber = new HashMap<String, Map<Integer, FileDescriptor>>();
 
-    Collection<ServerServiceDefinition> services = server.getServices();
+    List<ServerServiceDefinition> services = server.getServices();
 
     Queue<FileDescriptor> fileDescriptorsToProcess = new LinkedList<FileDescriptor>();
     Set<String> seenFiles = new HashSet<String>();
     for (ServerServiceDefinition service : services) {
       io.grpc.ServiceDescriptor serviceDescriptor = service.getServiceDescriptor();
       if (serviceDescriptor.getMarshallerDescriptor() != null
-          && serviceDescriptor.getMarshallerDescriptor()
-          instanceof ProtoFileDescriptorSupplier) {
+          && serviceDescriptor.getMarshallerDescriptor() instanceof ProtoFileDescriptorSupplier) {
         FileDescriptor fileDescriptor =
             ((ProtoFileDescriptorSupplier) serviceDescriptor.getMarshallerDescriptor())
                 .getFileDescriptor();
-        serviceNames.add(serviceDescriptor.getName());
-        seenFiles.add(fileDescriptor.getName());
-        fileDescriptorsToProcess.offer(fileDescriptor);
+        String serviceName = serviceDescriptor.getName();
+        Preconditions.checkState(!serviceNames.contains(serviceName), "Service already defined: %s",
+            serviceName);
+        serviceNames.add(serviceName);
+        if (!seenFiles.contains(fileDescriptor.getName())) {
+          seenFiles.add(fileDescriptor.getName());
+          fileDescriptorsToProcess.offer(fileDescriptor);
+        }
       }
     }
 
@@ -186,19 +213,19 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
         switch (request.getMessageRequestCase()) {
           case FILE_BY_FILENAME:
             getFileByName(request);
-            break;
+            return;
           case FILE_CONTAINING_SYMBOL:
             getFileContainingSymbol(request);
-            break;
+            return;
           case FILE_CONTAINING_EXTENSION:
             getFileByExtension(request);
-            break;
+            return;
           case ALL_EXTENSION_NUMBERS_OF_TYPE:
             getAllExtensions(request);
-            break;
+            return;
           case LIST_SERVICES:
             listServices(request);
-            break;
+            return;
           default:
             sendErrorResponse(request, Status.UNIMPLEMENTED, "");
         }
