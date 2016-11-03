@@ -29,21 +29,16 @@ import java.lang.reflect.Proxy;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
-import java.security.KeyStore;
 import java.security.NoSuchAlgorithmException;
 import java.security.Provider;
-import java.security.SecureRandom;
 import java.security.Security;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
-import javax.net.ssl.TrustManagerFactory;
-
 import okio.Buffer;
 
 /**
@@ -133,29 +128,6 @@ public class Platform {
   public void connectSocket(Socket socket, InetSocketAddress address,
       int connectTimeout) throws IOException {
     socket.connect(address, connectTimeout);
-  }
-
-  public static SSLContext getSslContext() throws NoSuchAlgorithmException {
-    if (GrpcUtil.IS_RESTRICTED_APPENGINE) {
-      try {
-        SSLContext tlsContext = SSLContext.getInstance("TLS", Platform.get().getProvider());
-        KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-        keyStore.load(null, null);
-        KeyManagerFactory keyManagerFactory =
-            KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-        keyManagerFactory.init(keyStore, null);
-        TrustManagerFactory trustManagerFactory =
-            TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-        trustManagerFactory.init((KeyStore) null);
-        tlsContext.init(
-            null,
-            trustManagerFactory.getTrustManagers(),
-            SecureRandom.getInstance("SHA1PRNG", Platform.get().getProvider()));
-        return tlsContext;
-      } catch (Exception ex) {
-      }
-    }
-    return SSLContext.getInstance("Default", Platform.get().getProvider());
   }
 
   /** Attempt to match the host runtime to a capable Platform implementation. */
