@@ -49,8 +49,6 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Matchers;
 
-import java.io.IOException;
-
 /**
  * Unit tests for {@link HelloWorldClient}.
  * For demonstrating how to write gRPC unit test only.
@@ -70,7 +68,7 @@ public class HelloWorldClientTest {
    * Creates and starts a fake in-process server, and creates a client with an in-process channel.
    */
   @Before
-  public void setUp() throws IOException {
+  public void setUp() throws Exception {
     String uniqueServerName = "fake server for " + getClass();
     fakeServer = InProcessServerBuilder
         .forName(uniqueServerName).directExecutor().addService(serviceImpl).build().start();
@@ -83,7 +81,7 @@ public class HelloWorldClientTest {
    * Shuts down the client and server.
    */
   @After
-  public void tearDown() throws InterruptedException {
+  public void tearDown() throws Exception {
     client.shutdown();
     fakeServer.shutdownNow();
   }

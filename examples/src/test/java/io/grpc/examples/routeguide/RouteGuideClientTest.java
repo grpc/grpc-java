@@ -56,7 +56,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -98,7 +97,7 @@ public class RouteGuideClientTest {
   private RouteGuideClient client;
 
   @Before
-  public void setUp() throws IOException {
+  public void setUp() throws Exception {
     String uniqueServerName = "fake server for " + getClass();
 
     // use a mutable service registry for later registering the service impl for each test case.
@@ -110,7 +109,7 @@ public class RouteGuideClientTest {
   }
 
   @After
-  public void tearDown() throws InterruptedException {
+  public void tearDown() throws Exception {
     client.shutdown();
     fakeServer.shutdownNow();
   }
@@ -136,7 +135,7 @@ public class RouteGuideClientTest {
             responseObserver.onCompleted();
           }
         };
-    serviceRegistry.addService(getFeatureImpl.bindService());
+    serviceRegistry.addService(getFeatureImpl);
 
     client.getFeature(-1, -1);
 
@@ -165,7 +164,7 @@ public class RouteGuideClientTest {
             responseObserver.onError(fakeError);
           }
         };
-    serviceRegistry.addService(getFeatureImpl.bindService());
+    serviceRegistry.addService(getFeatureImpl);
 
     client.getFeature(-1, -1);
 
@@ -200,7 +199,7 @@ public class RouteGuideClientTest {
             responseObserver.onCompleted();
           }
         };
-    serviceRegistry.addService(listFeaturesImpl.bindService());
+    serviceRegistry.addService(listFeaturesImpl);
 
     client.listFeatures(1, 2, 3, 4);
 
@@ -241,7 +240,7 @@ public class RouteGuideClientTest {
             responseObserver.onError(fakeError);
           }
         };
-    serviceRegistry.addService(listFeaturesImpl.bindService());
+    serviceRegistry.addService(listFeaturesImpl);
 
     client.listFeatures(1, 2, 3, 4);
 
@@ -262,7 +261,7 @@ public class RouteGuideClientTest {
    * Example for testing async client-streaming.
    */
   @Test
-  public void testRecordRoute() throws InterruptedException {
+  public void testRecordRoute() throws Exception {
     client.setRandom(noRandomness);
     Point point1 = Point.newBuilder().setLatitude(1).setLongitude(1).build();
     Point point2 = Point.newBuilder().setLatitude(2).setLongitude(2).build();
@@ -310,7 +309,7 @@ public class RouteGuideClientTest {
             return requestObserver;
           }
         };
-    serviceRegistry.addService(recordRouteImpl.bindService());
+    serviceRegistry.addService(recordRouteImpl);
 
     // send requestFeature1, requestFeature2, requestFeature3, and then requestFeature1 again
     client.recordRoute(features, 4);
@@ -332,7 +331,7 @@ public class RouteGuideClientTest {
    * Example for testing async client-streaming.
    */
   @Test
-  public void testRecordRoute_wrongResponse() throws InterruptedException, IOException {
+  public void testRecordRoute_wrongResponse() throws Exception {
     // TODO(zdapeng): use direct executor once issue #1936 is fixed
     fakeServer.shutdownNow();
     fakeServer = InProcessServerBuilder.forName("fake server for " + getClass())
@@ -370,7 +369,7 @@ public class RouteGuideClientTest {
             };
           }
         };
-    serviceRegistry.addService(recordRouteImpl.bindService());
+    serviceRegistry.addService(recordRouteImpl);
 
     client.recordRoute(features, 4);
 
@@ -384,7 +383,7 @@ public class RouteGuideClientTest {
    * Example for testing async client-streaming.
    */
   @Test
-  public void testRecordRoute_serverError() throws InterruptedException, IOException {
+  public void testRecordRoute_serverError() throws Exception {
     // TODO(zdapeng): use direct executor once issue #1936 is fixed
     fakeServer.shutdownNow();
     fakeServer = InProcessServerBuilder.forName("fake server for " + getClass())
@@ -421,7 +420,7 @@ public class RouteGuideClientTest {
             return requestObserver;
           }
         };
-    serviceRegistry.addService(recordRouteImpl.bindService());
+    serviceRegistry.addService(recordRouteImpl);
 
     client.recordRoute(features, 4);
 
@@ -435,7 +434,7 @@ public class RouteGuideClientTest {
    * Example for testing bi-directional call.
    */
   @Test
-  public void testRouteChat_simpleResponse() throws InterruptedException {
+  public void testRouteChat_simpleResponse() throws Exception {
     RouteNote fakeResponse1 = RouteNote.newBuilder().setMessage("dummy msg1").build();
     RouteNote fakeResponse2 = RouteNote.newBuilder().setMessage("dummy msg2").build();
     final List<String> messagesDelivered = new ArrayList<String>();
@@ -470,7 +469,7 @@ public class RouteGuideClientTest {
             return requestObserver;
           }
         };
-    serviceRegistry.addService(routeChatImpl.bindService());
+    serviceRegistry.addService(routeChatImpl);
 
     // start routeChat
     CountDownLatch latch = client.routeChat();
@@ -511,7 +510,7 @@ public class RouteGuideClientTest {
    * Example for testing bi-directional call.
    */
   @Test
-  public void testRouteChat_echoResponse() throws InterruptedException {
+  public void testRouteChat_echoResponse() throws Exception {
     final List<RouteNote> notesDelivered = new ArrayList<RouteNote>();
 
     // implement the fake service
@@ -541,7 +540,7 @@ public class RouteGuideClientTest {
             return requestObserver;
           }
         };
-    serviceRegistry.addService(routeChatImpl.bindService());
+    serviceRegistry.addService(routeChatImpl);
 
     client.routeChat().await(1, TimeUnit.SECONDS);
 
@@ -561,7 +560,7 @@ public class RouteGuideClientTest {
    * Example for testing bi-directional call.
    */
   @Test
-  public void testRouteChat_errorResponse() throws InterruptedException {
+  public void testRouteChat_errorResponse() throws Exception {
     final List<RouteNote> notesDelivered = new ArrayList<RouteNote>();
     final StatusRuntimeException fakeError = new StatusRuntimeException(Status.PERMISSION_DENIED);
 
@@ -591,7 +590,7 @@ public class RouteGuideClientTest {
             return requestObserver;
           }
         };
-    serviceRegistry.addService(routeChatImpl.bindService());
+    serviceRegistry.addService(routeChatImpl);
 
     client.routeChat().await(1, TimeUnit.SECONDS);
 

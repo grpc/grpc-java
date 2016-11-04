@@ -61,8 +61,6 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Matchers;
 
-import java.io.IOException;
-
 /**
  * Unit tests for {@link HeaderClientInterceptor}.
  * For demonstrating how to write gRPC unit test only.
@@ -87,7 +85,7 @@ public class HeaderClientInterceptorTest {
   private ManagedChannel inProcessChannel;
 
   @Before
-  public void setUp() throws IOException {
+  public void setUp() throws Exception {
     String uniqueServerName = "fake server for " + getClass();
     fakeServer = InProcessServerBuilder.forName(uniqueServerName)
         .addService(ServerInterceptors.intercept(new GreeterImplBase() {}, mockServerInterceptor))

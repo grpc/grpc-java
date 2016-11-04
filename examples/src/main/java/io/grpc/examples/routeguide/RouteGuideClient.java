@@ -205,6 +205,10 @@ public class RouteGuideClient {
 
     // Receiving happens asynchronously
     finishLatch.await(1, TimeUnit.MINUTES);
+
+    if (!finishLatch.await(1, TimeUnit.MINUTES)) {
+      warning("recordRoute can not finish within 1 minutes");
+    }
   }
 
   /**
@@ -288,7 +292,11 @@ public class RouteGuideClient {
       client.recordRoute(features, 10);
 
       // Send and receive some notes.
-      client.routeChat().await(1, TimeUnit.MINUTES);
+      CountDownLatch finishLatch = client.routeChat();
+
+      if (!finishLatch.await(1, TimeUnit.MINUTES)) {
+        client.warning("routeChat can not finish within 1 minutes");
+      }
     } finally {
       client.shutdown();
     }
@@ -302,17 +310,17 @@ public class RouteGuideClient {
     logger.log(Level.WARNING, msg, params);
   }
 
+  private RouteNote newNote(String message, int lat, int lon) {
+    return RouteNote.newBuilder().setMessage(message)
+        .setLocation(Point.newBuilder().setLatitude(lat).setLongitude(lon).build()).build();
+  }
+
   /**
    * Only used for unit test, as we do not want to introduce randomness in unit test.
    */
   @VisibleForTesting
   void setRandom(Random random) {
     this.random = random;
-  }
-
-  private RouteNote newNote(String message, int lat, int lon) {
-    return RouteNote.newBuilder().setMessage(message)
-        .setLocation(Point.newBuilder().setLatitude(lat).setLongitude(lon).build()).build();
   }
 
   /**

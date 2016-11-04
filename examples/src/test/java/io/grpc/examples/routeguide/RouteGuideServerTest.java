@@ -51,7 +51,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -74,7 +73,7 @@ public class RouteGuideServerTest {
   private Collection<Feature> features;
 
   @Before
-  public void setUp() throws IOException {
+  public void setUp() throws Exception {
     String uniqueServerName = "in-process server for " + getClass();
     features = new ArrayList<Feature>();
     // use directExecutor for both InProcessServerBuilder and InProcessChannelBuilder can reduce the
@@ -87,7 +86,7 @@ public class RouteGuideServerTest {
   }
 
   @After
-  public void tearDown() throws InterruptedException {
+  public void tearDown() throws Exception {
     inProcessChannel.shutdownNow();
     server.stop();
   }
@@ -115,7 +114,7 @@ public class RouteGuideServerTest {
   }
 
   @Test
-  public void testListFeatures() throws InterruptedException {
+  public void testListFeatures() throws Exception {
     // setup
     Rectangle rect = Rectangle.newBuilder()
         .setLo(Point.newBuilder().setLongitude(0).setLatitude(0).build())

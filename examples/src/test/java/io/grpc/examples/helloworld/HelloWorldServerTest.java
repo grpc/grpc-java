@@ -45,8 +45,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-import java.io.IOException;
-
 /**
  * Unit tests for {@link HelloWorldServer}.
  * For demonstrating how to write gRPC unit test only.
@@ -57,7 +55,8 @@ import java.io.IOException;
  */
 @RunWith(JUnit4.class)
 public class HelloWorldServerTest {
-  private final String UNIQUE_SERVER_NAME = "in-process server for " + getClass();
+  private static final String UNIQUE_SERVER_NAME =
+      "in-process server for " + HelloWorldServerTest.class;
   private final Server inProcessServer = InProcessServerBuilder
       .forName(UNIQUE_SERVER_NAME).addService(new GreeterImpl()).directExecutor().build();
   private final ManagedChannel inProcessChannel =
@@ -68,7 +67,7 @@ public class HelloWorldServerTest {
    * and creates an in-process channel with the {@link InProcessChannelBuilder}.
    */
   @Before
-  public void setUp() throws IOException {
+  public void setUp() throws Exception {
     inProcessServer.start();
   }
 
@@ -86,7 +85,7 @@ public class HelloWorldServerTest {
    * behaviors or state changes from the client side.
    */
   @Test
-  public void greeterImpl_replyMessage() throws IOException {
+  public void greeterImpl_replyMessage() throws Exception {
     GreeterGrpc.GreeterBlockingStub blockingStub = GreeterGrpc.newBlockingStub(inProcessChannel);
     String testName = "test name";
 

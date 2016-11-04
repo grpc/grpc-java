@@ -62,8 +62,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 
-import java.io.IOException;
-
 /**
  * Unit tests for {@link HeaderClientInterceptor}.
  * For demonstrating how to write gRPC unit test only.
@@ -78,7 +76,7 @@ public class HeaderServerInterceptorTest {
   private ManagedChannel inProcessChannel;
 
   @Before
-  public void setUp() throws IOException {
+  public void setUp() throws Exception {
     String uniqueServerName = "fake server for " + getClass();
     GreeterImplBase greeterImplBase =
         new GreeterImplBase() {
@@ -111,12 +109,12 @@ public class HeaderServerInterceptorTest {
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
           MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
         return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
-          @SuppressWarnings("unchecked")
           @Override
           public void start(Listener<RespT> responseListener, Metadata headers) {
             spyListener = spy(responseListener);
-            // it is absolutely casting to the correct type
-            super.start((Listener<RespT>) spyListener, headers);
+            @SuppressWarnings("unchecked") // absolutely casting to the correct type
+            Listener<RespT> castedSpyListener = (Listener<RespT>) spyListener;
+            super.start(castedSpyListener, headers);
           }
         };
       }
