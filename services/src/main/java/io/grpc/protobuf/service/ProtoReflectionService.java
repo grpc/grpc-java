@@ -174,8 +174,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
     Set<String> seenFiles = new HashSet<String>();
     for (ServerServiceDefinition service : services) {
       io.grpc.ServiceDescriptor serviceDescriptor = service.getServiceDescriptor();
-      if (serviceDescriptor.getMarshallerDescriptor() != null
-          && serviceDescriptor.getMarshallerDescriptor() instanceof ProtoFileDescriptorSupplier) {
+      if (serviceDescriptor.getMarshallerDescriptor() instanceof ProtoFileDescriptorSupplier) {
         FileDescriptor fileDescriptor =
             ((ProtoFileDescriptorSupplier) serviceDescriptor.getMarshallerDescriptor())
                 .getFileDescriptor();
@@ -185,18 +184,18 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
         serviceNames.add(serviceName);
         if (!seenFiles.contains(fileDescriptor.getName())) {
           seenFiles.add(fileDescriptor.getName());
-          fileDescriptorsToProcess.offer(fileDescriptor);
+          fileDescriptorsToProcess.add(fileDescriptor);
         }
       }
     }
 
     while (!fileDescriptorsToProcess.isEmpty()) {
-      FileDescriptor currentFd = fileDescriptorsToProcess.poll();
+      FileDescriptor currentFd = fileDescriptorsToProcess.remove();
       processFileDescriptor(currentFd);
       for (FileDescriptor dependencyFd : currentFd.getDependencies()) {
         if (!seenFiles.contains(dependencyFd.getName())) {
           seenFiles.add(dependencyFd.getName());
-          fileDescriptorsToProcess.offer(dependencyFd);
+          fileDescriptorsToProcess.add(dependencyFd);
         }
       }
     }
@@ -331,14 +330,14 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
         Set<String> seenFiles = new HashSet<String>();
         Queue<FileDescriptor> frontier = new LinkedList<FileDescriptor>();
         seenFiles.add(fd.getName());
-        frontier.offer(fd);
+        frontier.add(fd);
         while (!frontier.isEmpty()) {
-          FileDescriptor nextFd = frontier.poll();
+          FileDescriptor nextFd = frontier.remove();
           fdRBuilder.addFileDescriptorProto(nextFd.toProto().toByteString());
           for (FileDescriptor dependencyFd : nextFd.getDependencies()) {
             if (!seenFiles.contains(dependencyFd.getName())) {
               seenFiles.add(dependencyFd.getName());
-              frontier.offer(dependencyFd);
+              frontier.add(dependencyFd);
             }
           }
         }

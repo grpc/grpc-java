@@ -127,8 +127,8 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
 
   @Override
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
-  public final <S extends InternalNotifyOnServerBuild & BindableService> T
-      addService(S bindableService) {
+  public final <S extends InternalNotifyOnServerBuild & BindableService> T addService(
+      S bindableService) {
     notifyOnBuildList.add(bindableService);
     return addService(bindableService.bindService());
   }

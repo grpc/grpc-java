@@ -40,6 +40,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 import javax.annotation.Nullable;
 
@@ -48,8 +50,8 @@ final class InternalHandlerRegistry {
   private final List<ServerServiceDefinition> services;
   private final Map<String, ServerMethodDefinition<?, ?>> methods;
 
-  private InternalHandlerRegistry(List<ServerServiceDefinition> services,
-      Map<String, ServerMethodDefinition<?, ?>> methods) {
+  private InternalHandlerRegistry(
+      List<ServerServiceDefinition> services, Map<String, ServerMethodDefinition<?, ?>> methods) {
     this.services = services;
     this.methods = methods;
   }
@@ -70,8 +72,8 @@ final class InternalHandlerRegistry {
   static class Builder {
 
     // Store per-service first, to make sure services are added/replaced atomically.
-    private final HashMap<String, ServerServiceDefinition> services =
-        new HashMap<String, ServerServiceDefinition>();
+    private final SortedMap<String, ServerServiceDefinition> services =
+        new TreeMap<String, ServerServiceDefinition>();
 
     Builder addService(ServerServiceDefinition service) {
       services.put(service.getServiceDescriptor().getName(), service);
