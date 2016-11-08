@@ -44,7 +44,6 @@ import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.io.ByteStreams;
 
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
@@ -173,7 +172,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       // Context is already cancelled so no need to create a real stream, just notify the observer
       // of cancellation via callback on the executor
       stream = NoopClientStream.INSTANCE;
-      streamStarted = true;
       class ClosedByContext extends ContextRunnable {
         ClosedByContext() {
           super(context);
@@ -380,7 +378,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
     try {
       // Cancel is called in exception handling cases, so it may be the case that the
       // stream was never successfully created or start has never been called.
-      if (streamStarted) {
+      if (stream != null) {
         Status status = Status.CANCELLED;
         if (message != null) {
           status = status.withDescription(message);
@@ -388,7 +386,26 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
         if (cause != null) {
           status = status.withCause(cause);
         }
-        stream.cancel(status);
+
+        if (streamStarted) {
+          stream.cancel(status);
+        } else {
+          class CallCanceled extends ContextRunnable {
+            private final Status status;
+
+            CallCanceled(Status status) {
+              super(context);
+              this.status = Preconditions.checkNotNull(status, "status");
+            }
+
+            @Override
+            public void runInContext() {
+              closeObserver(observer, status, new Metadata());
+            }
+          }
+
+          callExecutor.execute(new CallCanceled(status));
+        }
       }
     } finally {
       removeContextListenerAndCancelDeadlineFuture();
@@ -400,9 +417,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
     Preconditions.checkState(stream != null, "Not started");
     Preconditions.checkState(!cancelCalled, "call was cancelled");
     Preconditions.checkState(!halfCloseCalled, "call already half-closed");
-    if (!streamStarted) {
-      cancel("No request message has been sent", null);
-      return;
+    if (useGetMethod) {
+      startStream();
     }
     halfCloseCalled = true;
     stream.halfClose();
@@ -410,6 +426,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
 
   @Override
   public void sendMessage(ReqT message) {
+    Preconditions.checkState(stream != null, "Not started");
     Preconditions.checkState(!cancelCalled, "call was cancelled");
     Preconditions.checkState(!halfCloseCalled, "call was half-closed");
     try {
@@ -419,9 +436,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
         stream.writeMessage(messageIs);
       } else {
         // Encode the request message and put it in the request headers.
-        byte[] payload = ByteStreams.toByteArray(messageIs);
+        byte[] payload = IoUtils.toByteArray(messageIs);
         headers.put(GrpcUtil.GRPC_PAYLOAD_BIN_KEY, payload);
-        startStream();
       }
     } catch (Throwable e) {
       stream.cancel(Status.CANCELLED.withCause(e).withDescription("Failed to stream message"));

@@ -849,9 +849,10 @@ public class ClientCallImplTest {
     call.request(2);
     verify(stream, times(0)).request(Matchers.anyInt());
     call.sendMessage("request-payload");
+    call.halfClose();
     verify(stream).request(eq(2));
     ArgumentCaptor<Metadata> headersCaptor = ArgumentCaptor.forClass(Metadata.class);
-    // sendMessage has triggered stream.start
+    // halfClose has triggered stream.start
     verify(stream).start(listenerArgumentCaptor.capture(), headersCaptor.capture());
     Metadata headers = headersCaptor.getValue();
     // The request payload is sent over the headers.
@@ -867,6 +868,36 @@ public class ClientCallImplTest {
     verify(callListener).onClose(statusCaptor.capture(), any(Metadata.class));
     Status status = statusCaptor.getValue();
     assertEquals(Status.OK.getCode(), status.getCode());
+  }
+
+  @Test
+  public void cancelUnaryGetRequestsBeforeCallingHalfClose() {
+    MethodDescriptor<String, Void> getMethod = MethodDescriptor.create(
+        MethodType.UNARY,
+        "service/getMethod",
+        StringMarshaller.INSTANCE,
+        new TestMarshaller<Void>()).withSafe(true).withIdempotent(true);
+
+    ClientCallImpl<String, Void> call = new ClientCallImpl<String, Void>(
+        getMethod,
+        MoreExecutors.directExecutor(),
+        CallOptions.DEFAULT,
+        statsTraceCtx,
+        provider,
+        deadlineCancellationExecutor);
+    when(transport.supportGetMethod()).thenReturn(true);
+    call.start(callListener, new Metadata());
+    // call.start should not trigger stream.start
+    verify(stream, times(0)).start(any(ClientStreamListener.class), any(Metadata.class));
+
+    call.sendMessage("request-payload");
+    call.cancel("no reason", null);
+
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(callListener).onClose(statusCaptor.capture(), any(Metadata.class));
+    Status status = statusCaptor.getValue();
+    assertEquals(Status.CANCELLED.getCode(), status.getCode());
+    assertEquals("no reason", status.getDescription());
   }
 
   private void assertStatusInStats(Status.Code statusCode) {
