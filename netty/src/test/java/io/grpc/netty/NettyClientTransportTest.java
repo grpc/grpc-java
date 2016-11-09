@@ -434,11 +434,10 @@ public class NettyClientTransportTest {
       return new ServerTransportListener() {
 
         @Override
-        public ServerStreamListener streamCreated(final ServerStream stream, String method,
-                                                  Metadata headers) {
+        public void streamCreated(ServerStream stream, String method, Metadata headers) {
           EchoServerStreamListener listener = new EchoServerStreamListener(stream, method, headers);
+          stream.setListener(listener);
           streamListeners.add(listener);
-          return listener;
         }
 
         @Override

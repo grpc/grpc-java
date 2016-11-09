@@ -38,6 +38,7 @@ import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.internal.AbstractServerStream;
+import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.WritableBuffer;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
@@ -82,7 +83,8 @@ class NettyServerStream extends AbstractServerStream {
     return sink;
   }
 
-  @Override public Attributes attributes() {
+  @Override
+  public Attributes attributes() {
     return attributes;
   }
 
@@ -97,6 +99,11 @@ class NettyServerStream extends AbstractServerStream {
         .set(ServerCall.REMOTE_ADDR_KEY, channel.remoteAddress())
         .set(ServerCall.SSL_SESSION_KEY, sslSession)
         .build();
+  }
+
+  @Override
+  public void setListener(ServerStreamListener serverStreamListener) {
+    state.setListener(serverStreamListener);
   }
 
   private class Sink implements AbstractServerStream.Sink {
@@ -182,6 +189,7 @@ class NettyServerStream extends AbstractServerStream {
       super.inboundDataReceived(new NettyReadableBuffer(frame.retain()), endOfStream);
     }
 
+    @Override
     public Integer id() {
       return http2Stream.id();
     }

@@ -77,6 +77,7 @@ import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Matchers;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -121,12 +122,15 @@ public class ServerImplTest {
   private ServerImpl server = new ServerImpl(executor, registry, fallbackRegistry, transportServer,
       SERVER_CONTEXT, decompressorRegistry, compressorRegistry);
 
+  @Captor
+  private ArgumentCaptor<Status> statusCaptor;
+  @Captor
+  private ArgumentCaptor<ServerStreamListener> streamListenerCaptor;
+
   @Mock
   private ServerStream stream;
-
   @Mock
   private ServerCall.Listener<String> callListener;
-
   @Mock
   private ServerCallHandler<String, Integer> callHandler;
 
@@ -338,8 +342,9 @@ public class ServerImplTest {
 
     Metadata requestHeaders = new Metadata();
     requestHeaders.put(metadataKey, "value");
-    ServerStreamListener streamListener
-        = transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
+    transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
+    verify(stream).setListener(streamListenerCaptor.capture());
+    ServerStreamListener streamListener = streamListenerCaptor.getValue();
     assertNotNull(streamListener);
 
     executeBarrier(executor).await();
@@ -406,8 +411,10 @@ public class ServerImplTest {
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
 
-    ServerStreamListener streamListener
-        = transportListener.streamCreated(stream, "Waiter/serve", new Metadata());
+    Metadata requestHeaders = new Metadata();
+    transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
+    verify(stream).setListener(streamListenerCaptor.capture());
+    ServerStreamListener streamListener = streamListenerCaptor.getValue();
     assertNotNull(streamListener);
     verifyNoMoreInteractions(stream);
 
@@ -558,8 +565,10 @@ public class ServerImplTest {
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
 
-    ServerStreamListener streamListener
-        = transportListener.streamCreated(stream, "Waiter/serve", new Metadata());
+    Metadata requestHeaders = new Metadata();
+    transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
+    verify(stream).setListener(streamListenerCaptor.capture());
+    ServerStreamListener streamListener = streamListenerCaptor.getValue();
     assertNotNull(streamListener);
 
     streamListener.onReady();
@@ -604,9 +613,10 @@ public class ServerImplTest {
             }).build());
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
-
-    ServerStreamListener streamListener
-        = transportListener.streamCreated(stream, "Waiter/serve", new Metadata());
+    Metadata requestHeaders = new Metadata();
+    transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
+    verify(stream).setListener(streamListenerCaptor.capture());
+    ServerStreamListener streamListener = streamListenerCaptor.getValue();
     assertNotNull(streamListener);
 
     streamListener.onReady();

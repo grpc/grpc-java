@@ -325,8 +325,8 @@ public final class ServerImpl extends io.grpc.Server {
     }
 
     @Override
-    public ServerStreamListener streamCreated(final ServerStream stream, final String methodName,
-        final Metadata headers) {
+    public void streamCreated(
+        final ServerStream stream, final String methodName, final Metadata headers) {
       final Context.CancellableContext context = createContext(stream, headers);
       final Executor wrappedExecutor;
       // This is a performance optimization that avoids the synchronization and queuing overhead
@@ -339,6 +339,7 @@ public final class ServerImpl extends io.grpc.Server {
 
       final JumpToApplicationThreadServerStreamListener jumpListener
           = new JumpToApplicationThreadServerStreamListener(wrappedExecutor, stream, context);
+      stream.setListener(jumpListener);
       // Run in wrappedExecutor so jumpListener.setListener() is called before any callbacks
       // are delivered, including any errors. Callbacks can still be triggered, but they will be
       // queued.
@@ -372,7 +373,6 @@ public final class ServerImpl extends io.grpc.Server {
             }
           }
         });
-      return jumpListener;
     }
 
     private Context.CancellableContext createContext(final ServerStream stream, Metadata headers) {

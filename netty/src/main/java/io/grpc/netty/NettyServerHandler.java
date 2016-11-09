@@ -46,7 +46,6 @@ import com.google.common.base.Preconditions;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransportListener;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelFuture;
@@ -81,7 +80,6 @@ import io.netty.util.ReferenceCountUtil;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 import javax.annotation.Nullable;
 
 /**
@@ -195,15 +193,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       NettyServerStream stream = new NettyServerStream(ctx.channel(), state);
 
       Metadata metadata = Utils.convertHeaders(headers);
-
-      ServerStreamListener listener =
-          transportListener.streamCreated(stream, method, metadata);
-      // TODO(ejona): this could be racy since stream could have been used before getting here. All
-      // cases appear to be fine, but some are almost only by happenstance and it is difficult to
-      // audit. It would be good to improve the API to be less prone to races.
-      state.setListener(listener);
+      transportListener.streamCreated(stream, method, metadata);
       http2Stream.setProperty(streamKey, state);
-
     } catch (Http2Exception e) {
       throw e;
     } catch (Throwable e) {

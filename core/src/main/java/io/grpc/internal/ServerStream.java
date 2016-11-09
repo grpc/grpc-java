@@ -74,4 +74,9 @@ public interface ServerStream extends Stream {
    * @return Attributes container
    */
   Attributes attributes();
+
+  /**
+   * Sets the server stream listener.
+   */
+  void setListener(ServerStreamListener serverStreamListener);
 }

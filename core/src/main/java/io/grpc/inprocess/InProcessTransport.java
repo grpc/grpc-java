@@ -271,6 +271,11 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
       }
 
       @Override
+      public void setListener(ServerStreamListener serverStreamListener) {
+        clientStream.setListener(serverStreamListener);
+      }
+
+      @Override
       public void request(int numMessages) {
         boolean onReady = clientStream.serverRequested(numMessages);
         if (onReady) {
@@ -542,13 +547,11 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
         serverStream.setListener(listener);
 
         synchronized (InProcessTransport.this) {
-          ServerStreamListener serverStreamListener = serverTransportListener.streamCreated(
-              serverStream, method.getFullMethodName(), headers);
-          clientStream.setListener(serverStreamListener);
           streams.add(InProcessTransport.InProcessStream.this);
           if (streams.size() == 1) {
             clientTransportListener.transportInUse(true);
           }
+          serverTransportListener.streamCreated(serverStream, method.getFullMethodName(), headers);
         }
       }
 
