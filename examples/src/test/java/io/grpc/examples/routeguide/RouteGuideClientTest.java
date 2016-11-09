@@ -32,6 +32,7 @@
 package io.grpc.examples.routeguide;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -140,10 +141,8 @@ public class RouteGuideClientTest {
     client.getFeature(-1, -1);
 
     assertEquals(requestPoint, pointDelivered.get());
-    verify(testHelper)
-        .onMessage(responseFeature);
-    verify(testHelper, never())
-        .onRpcError(any(Throwable.class));
+    verify(testHelper).onMessage(responseFeature);
+    verify(testHelper, never()).onRpcError(any(Throwable.class));
   }
 
   /**
@@ -170,8 +169,7 @@ public class RouteGuideClientTest {
 
     assertEquals(requestPoint, pointDelivered.get());
     ArgumentCaptor<Throwable> errorCaptor = ArgumentCaptor.forClass(Throwable.class);
-    verify(testHelper)
-        .onRpcError(errorCaptor.capture());
+    verify(testHelper).onRpcError(errorCaptor.capture());
     assertEquals(fakeError.getStatus(), Status.fromThrowable(errorCaptor.getValue()));
   }
 
@@ -208,12 +206,9 @@ public class RouteGuideClientTest {
                      .setHi(Point.newBuilder().setLatitude(3).setLongitude(4).build())
                      .build(),
                  rectangleDelivered.get());
-    verify(testHelper)
-        .onMessage(responseFeature1);
-    verify(testHelper)
-        .onMessage(responseFeature2);
-    verify(testHelper, never())
-        .onRpcError(any(Throwable.class));
+    verify(testHelper).onMessage(responseFeature1);
+    verify(testHelper).onMessage(responseFeature2);
+    verify(testHelper, never()).onRpcError(any(Throwable.class));
   }
 
   /**
@@ -250,10 +245,8 @@ public class RouteGuideClientTest {
                      .build(),
                  rectangleDelivered.get());
     ArgumentCaptor<Throwable> errorCaptor = ArgumentCaptor.forClass(Throwable.class);
-    verify(testHelper)
-        .onMessage(responseFeature1);
-    verify(testHelper)
-        .onRpcError(errorCaptor.capture());
+    verify(testHelper).onMessage(responseFeature1);
+    verify(testHelper).onRpcError(errorCaptor.capture());
     assertEquals(fakeError.getStatus(), Status.fromThrowable(errorCaptor.getValue()));
   }
 
@@ -321,10 +314,8 @@ public class RouteGuideClientTest {
             requestFeature3.getLocation(),
             requestFeature1.getLocation()),
         pointsDelivered);
-    verify(testHelper)
-        .onMessage(fakeResponse);
-    verify(testHelper, never())
-        .onRpcError(any(Throwable.class));
+    verify(testHelper).onMessage(fakeResponse);
+    verify(testHelper, never()).onRpcError(any(Throwable.class));
   }
 
   /**
@@ -332,11 +323,6 @@ public class RouteGuideClientTest {
    */
   @Test
   public void testRecordRoute_wrongResponse() throws Exception {
-    // TODO(zdapeng): use direct executor once issue #1936 is fixed
-    fakeServer.shutdownNow();
-    fakeServer = InProcessServerBuilder.forName("fake server for " + getClass())
-        .fallbackHandlerRegistry(serviceRegistry).build().start();
-
     client.setRandom(noRandomness);
     Point point1 = Point.newBuilder().setLatitude(1).setLongitude(1).build();
     final Feature requestFeature1 =
@@ -374,8 +360,7 @@ public class RouteGuideClientTest {
     client.recordRoute(features, 4);
 
     ArgumentCaptor<Throwable> errorCaptor = ArgumentCaptor.forClass(Throwable.class);
-    verify(testHelper)
-        .onRpcError(errorCaptor.capture());
+    verify(testHelper).onRpcError(errorCaptor.capture());
     assertEquals(Status.Code.CANCELLED, Status.fromThrowable(errorCaptor.getValue()).getCode());
   }
 
@@ -384,11 +369,6 @@ public class RouteGuideClientTest {
    */
   @Test
   public void testRecordRoute_serverError() throws Exception {
-    // TODO(zdapeng): use direct executor once issue #1936 is fixed
-    fakeServer.shutdownNow();
-    fakeServer = InProcessServerBuilder.forName("fake server for " + getClass())
-        .fallbackHandlerRegistry(serviceRegistry).build().start();
-
     client.setRandom(noRandomness);
     Point point1 = Point.newBuilder().setLatitude(1).setLongitude(1).build();
     final Feature requestFeature1 =
@@ -425,8 +405,7 @@ public class RouteGuideClientTest {
     client.recordRoute(features, 4);
 
     ArgumentCaptor<Throwable> errorCaptor = ArgumentCaptor.forClass(Throwable.class);
-    verify(testHelper)
-        .onRpcError(errorCaptor.capture());
+    verify(testHelper).onRpcError(errorCaptor.capture());
     assertEquals(fakeError.getStatus(), Status.fromThrowable(errorCaptor.getValue()));
   }
 
@@ -492,18 +471,15 @@ public class RouteGuideClientTest {
     // and verify that the client receives them.
     // Allow some timeout for verify() if not using directExecutor
     responseObserverRef.get().onNext(fakeResponse1);
-    verify(testHelper)
-        .onMessage(fakeResponse1);
+    verify(testHelper).onMessage(fakeResponse1);
     responseObserverRef.get().onNext(fakeResponse2);
-    verify(testHelper)
-        .onMessage(fakeResponse2);
+    verify(testHelper).onMessage(fakeResponse2);
 
     // let server complete.
     responseObserverRef.get().onCompleted();
 
-    latch.await(1, TimeUnit.SECONDS);
-    verify(testHelper, never())
-        .onRpcError(any(Throwable.class));
+    assertTrue(latch.await(1, TimeUnit.SECONDS));
+    verify(testHelper, never()).onRpcError(any(Throwable.class));
   }
 
   /**
@@ -547,13 +523,11 @@ public class RouteGuideClientTest {
     String[] messages =
         {"First message", "Second message", "Third message", "Fourth message"};
     for (int i = 0; i < 4; i++) {
-      verify(testHelper)
-          .onMessage(notesDelivered.get(i));
+      verify(testHelper).onMessage(notesDelivered.get(i));
       assertEquals(messages[i], notesDelivered.get(i).getMessage());
     }
 
-    verify(testHelper, never())
-        .onRpcError(any(Throwable.class));
+    verify(testHelper, never()).onRpcError(any(Throwable.class));
   }
 
   /**
@@ -595,11 +569,9 @@ public class RouteGuideClientTest {
     client.routeChat().await(1, TimeUnit.SECONDS);
 
     assertEquals("First message", notesDelivered.get(0).getMessage());
-    verify(testHelper, never())
-        .onMessage(any(Message.class));
+    verify(testHelper, never()).onMessage(any(Message.class));
     ArgumentCaptor<Throwable> errorCaptor = ArgumentCaptor.forClass(Throwable.class);
-    verify(testHelper)
-        .onRpcError(errorCaptor.capture());
+    verify(testHelper).onRpcError(errorCaptor.capture());
     assertEquals(fakeError.getStatus(), Status.fromThrowable(errorCaptor.getValue()));
   }
 }

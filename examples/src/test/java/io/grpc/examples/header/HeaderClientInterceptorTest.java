@@ -116,11 +116,10 @@ public class HeaderClientInterceptorTest {
       // expected because the method is not implemented at server side
     }
 
-    verify(mockServerInterceptor)
-        .interceptCall(
-            Matchers.<ServerCall<HelloRequest, HelloReply>>any(),
-            metadataCaptor.capture(),
-            Matchers.<ServerCallHandler<HelloRequest, HelloReply>>any());
+    verify(mockServerInterceptor).interceptCall(
+        Matchers.<ServerCall<HelloRequest, HelloReply>>any(),
+        metadataCaptor.capture(),
+        Matchers.<ServerCallHandler<HelloRequest, HelloReply>>any());
     assertEquals(
         "customRequestValue",
         metadataCaptor.getValue().get(HeaderClientInterceptor.CUSTOM_HEADER_KEY));

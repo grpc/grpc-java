@@ -33,6 +33,7 @@ package io.grpc.examples.routeguide;
 
 import static junit.framework.TestCase.fail;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -162,7 +163,7 @@ public class RouteGuideServerTest {
 
     // run
     stub.listFeatures(rect, responseObserver);
-    latch.await(1, TimeUnit.SECONDS);
+    assertTrue(latch.await(1, TimeUnit.SECONDS));
 
     // verify
     assertEquals(new HashSet<Feature>(Arrays.asList(f2, f3)), result);
@@ -196,21 +197,17 @@ public class RouteGuideServerTest {
     requestObserver.onNext(p3);
     requestObserver.onNext(p4);
 
-    verify(responseObserver, never())
-        .onNext(any(RouteSummary.class));
+    verify(responseObserver, never()).onNext(any(RouteSummary.class));
 
     requestObserver.onCompleted();
 
     // allow some ms to let client receive the response. Similar usage later on.
-    verify(responseObserver, timeout(100))
-        .onNext(routeSummaryCaptor.capture());
+    verify(responseObserver, timeout(100)).onNext(routeSummaryCaptor.capture());
     RouteSummary summary = routeSummaryCaptor.getValue();
     assertEquals(45, summary.getDistance()); // 45 is the hard coded distance from p1 to p4.
     assertEquals(2, summary.getFeatureCount());
-    verify(responseObserver, timeout(100))
-        .onCompleted();
-    verify(responseObserver, never())
-        .onError(any(Throwable.class));
+    verify(responseObserver, timeout(100)).onCompleted();
+    verify(responseObserver, never()).onError(any(Throwable.class));
   }
 
   @Test
@@ -231,29 +228,24 @@ public class RouteGuideServerTest {
     RouteGuideGrpc.RouteGuideStub stub = RouteGuideGrpc.newStub(inProcessChannel);
 
     StreamObserver<RouteNote> requestObserver = stub.routeChat(responseObserver);
-    verify(responseObserver, never())
-        .onNext(any(RouteNote.class));
+    verify(responseObserver, never()).onNext(any(RouteNote.class));
 
     requestObserver.onNext(n1);
-    verify(responseObserver, never())
-        .onNext(any(RouteNote.class));
+    verify(responseObserver, never()).onNext(any(RouteNote.class));
 
     requestObserver.onNext(n2);
-    verify(responseObserver, never())
-        .onNext(any(RouteNote.class));
+    verify(responseObserver, never()).onNext(any(RouteNote.class));
 
     requestObserver.onNext(n3);
     ArgumentCaptor<RouteNote> routeNoteCaptor = ArgumentCaptor.forClass(RouteNote.class);
-    verify(responseObserver, timeout(100).times(++timesOnNext))
-        .onNext(routeNoteCaptor.capture());
+    verify(responseObserver, timeout(100).times(++timesOnNext)).onNext(routeNoteCaptor.capture());
     RouteNote result = routeNoteCaptor.getValue();
     assertEquals(p1, result.getLocation());
     assertEquals("m1", result.getMessage());
 
     requestObserver.onNext(n4);
     routeNoteCaptor = ArgumentCaptor.forClass(RouteNote.class);
-    verify(responseObserver, timeout(100).times(++timesOnNext))
-        .onNext(routeNoteCaptor.capture());
+    verify(responseObserver, timeout(100).times(++timesOnNext)).onNext(routeNoteCaptor.capture());
     result = routeNoteCaptor.getAllValues().get(timesOnNext - 1);
     assertEquals(p2, result.getLocation());
     assertEquals("m2", result.getMessage());
@@ -261,8 +253,7 @@ public class RouteGuideServerTest {
     requestObserver.onNext(n5);
     routeNoteCaptor = ArgumentCaptor.forClass(RouteNote.class);
     timesOnNext += 2;
-    verify(responseObserver, timeout(100).times(timesOnNext))
-        .onNext(routeNoteCaptor.capture());
+    verify(responseObserver, timeout(100).times(timesOnNext)).onNext(routeNoteCaptor.capture());
     result = routeNoteCaptor.getAllValues().get(timesOnNext - 2);
     assertEquals(p1, result.getLocation());
     assertEquals("m1", result.getMessage());
@@ -273,8 +264,7 @@ public class RouteGuideServerTest {
     requestObserver.onNext(n6);
     routeNoteCaptor = ArgumentCaptor.forClass(RouteNote.class);
     timesOnNext += 3;
-    verify(responseObserver, timeout(100).times(timesOnNext))
-        .onNext(routeNoteCaptor.capture());
+    verify(responseObserver, timeout(100).times(timesOnNext)).onNext(routeNoteCaptor.capture());
     result = routeNoteCaptor.getAllValues().get(timesOnNext - 3);
     assertEquals(p1, result.getLocation());
     assertEquals("m1", result.getMessage());
@@ -286,9 +276,7 @@ public class RouteGuideServerTest {
     assertEquals("m5", result.getMessage());
 
     requestObserver.onCompleted();
-    verify(responseObserver, timeout(100))
-        .onCompleted();
-    verify(responseObserver, never())
-        .onError(any(Throwable.class));
+    verify(responseObserver, timeout(100)).onCompleted();
+    verify(responseObserver, never()).onError(any(Throwable.class));
   }
 }
