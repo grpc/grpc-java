@@ -119,7 +119,7 @@ public class RouteGuideClientTest {
    * Example for testing blocking unary call.
    */
   @Test
-  public void testGetFeature() {
+  public void getFeature() {
     Point requestPoint =  Point.newBuilder().setLatitude(-1).setLongitude(-1).build();
     Point responsePoint = Point.newBuilder().setLatitude(-123).setLongitude(-123).build();
     final AtomicReference<Point> pointDelivered = new AtomicReference<Point>();
@@ -149,7 +149,7 @@ public class RouteGuideClientTest {
    * Example for testing blocking unary call.
    */
   @Test
-  public void testGetFeature_error() {
+  public void getFeature_error() {
     Point requestPoint =  Point.newBuilder().setLatitude(-1).setLongitude(-1).build();
     final AtomicReference<Point> pointDelivered = new AtomicReference<Point>();
     final StatusRuntimeException fakeError = new StatusRuntimeException(Status.DATA_LOSS);
@@ -177,7 +177,7 @@ public class RouteGuideClientTest {
    * Example for testing blocking server-streaming.
    */
   @Test
-  public void testListFeatures() {
+  public void listFeatures() {
     final Feature responseFeature1 = Feature.newBuilder().setName("feature 1").build();
     final Feature responseFeature2 = Feature.newBuilder().setName("feature 2").build();
     final AtomicReference<Rectangle> rectangleDelivered = new AtomicReference<Rectangle>();
@@ -215,7 +215,7 @@ public class RouteGuideClientTest {
    * Example for testing blocking server-streaming.
    */
   @Test
-  public void testListFeatures_error() {
+  public void listFeatures_error() {
     final Feature responseFeature1 =
         Feature.newBuilder().setName("feature 1").build();
     final AtomicReference<Rectangle> rectangleDelivered = new AtomicReference<Rectangle>();
@@ -254,7 +254,7 @@ public class RouteGuideClientTest {
    * Example for testing async client-streaming.
    */
   @Test
-  public void testRecordRoute() throws Exception {
+  public void recordRoute() throws Exception {
     client.setRandom(noRandomness);
     Point point1 = Point.newBuilder().setLatitude(1).setLongitude(1).build();
     Point point2 = Point.newBuilder().setLatitude(2).setLongitude(2).build();
@@ -322,7 +322,7 @@ public class RouteGuideClientTest {
    * Example for testing async client-streaming.
    */
   @Test
-  public void testRecordRoute_wrongResponse() throws Exception {
+  public void recordRoute_wrongResponse() throws Exception {
     client.setRandom(noRandomness);
     Point point1 = Point.newBuilder().setLatitude(1).setLongitude(1).build();
     final Feature requestFeature1 =
@@ -368,7 +368,7 @@ public class RouteGuideClientTest {
    * Example for testing async client-streaming.
    */
   @Test
-  public void testRecordRoute_serverError() throws Exception {
+  public void recordRoute_serverError() throws Exception {
     client.setRandom(noRandomness);
     Point point1 = Point.newBuilder().setLatitude(1).setLongitude(1).build();
     final Feature requestFeature1 =
@@ -413,7 +413,7 @@ public class RouteGuideClientTest {
    * Example for testing bi-directional call.
    */
   @Test
-  public void testRouteChat_simpleResponse() throws Exception {
+  public void routeChat_simpleResponse() throws Exception {
     RouteNote fakeResponse1 = RouteNote.newBuilder().setMessage("dummy msg1").build();
     RouteNote fakeResponse2 = RouteNote.newBuilder().setMessage("dummy msg2").build();
     final List<String> messagesDelivered = new ArrayList<String>();
@@ -486,7 +486,7 @@ public class RouteGuideClientTest {
    * Example for testing bi-directional call.
    */
   @Test
-  public void testRouteChat_echoResponse() throws Exception {
+  public void routeChat_echoResponse() throws Exception {
     final List<RouteNote> notesDelivered = new ArrayList<RouteNote>();
 
     // implement the fake service
@@ -534,7 +534,7 @@ public class RouteGuideClientTest {
    * Example for testing bi-directional call.
    */
   @Test
-  public void testRouteChat_errorResponse() throws Exception {
+  public void routeChat_errorResponse() throws Exception {
     final List<RouteNote> notesDelivered = new ArrayList<RouteNote>();
     final StatusRuntimeException fakeError = new StatusRuntimeException(Status.PERMISSION_DENIED);
 

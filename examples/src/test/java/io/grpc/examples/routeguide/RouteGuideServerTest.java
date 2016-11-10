@@ -93,7 +93,7 @@ public class RouteGuideServerTest {
   }
 
   @Test
-  public void testGetFeature() {
+  public void getFeature() {
     Point point = Point.newBuilder().setLongitude(1).setLatitude(1).build();
     Feature unnamedFeature = Feature.newBuilder()
         .setName("").setLocation(point).build();
@@ -115,7 +115,7 @@ public class RouteGuideServerTest {
   }
 
   @Test
-  public void testListFeatures() throws Exception {
+  public void listFeatures() throws Exception {
     // setup
     Rectangle rect = Rectangle.newBuilder()
         .setLo(Point.newBuilder().setLongitude(0).setLatitude(0).build())
@@ -170,7 +170,7 @@ public class RouteGuideServerTest {
   }
 
   @Test
-  public void testRecordRoute() {
+  public void recordRoute() {
     Point p1 = Point.newBuilder().setLongitude(1000).setLatitude(1000).build();
     Point p2 = Point.newBuilder().setLongitude(2000).setLatitude(2000).build();
     Point p3 = Point.newBuilder().setLongitude(3000).setLatitude(3000).build();
@@ -211,7 +211,7 @@ public class RouteGuideServerTest {
   }
 
   @Test
-  public void testRouteChat() {
+  public void routeChat() {
     Point p1 = Point.newBuilder().setLongitude(1).setLatitude(1).build();
     Point p2 = Point.newBuilder().setLongitude(2).setLatitude(2).build();
     RouteNote n1 = RouteNote.newBuilder().setLocation(p1).setMessage("m1").build();
