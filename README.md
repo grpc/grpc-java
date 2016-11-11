@@ -99,6 +99,8 @@ For protobuf-based codegen integrated with the Maven build system, you can use
 </build>
 ```
 
+For Eclipse IDE check https://github.com/trustin/os-maven-plugin#issues-with-eclipse-m2e-or-other-ides
+
 [protobuf-maven-plugin]: https://www.xolstice.org/protobuf-maven-plugin/
 
 For protobuf-based codegen integrated with the Gradle build system, you can use
