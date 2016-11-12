@@ -193,12 +193,9 @@ public abstract class AbstractServerStream extends AbstractStream2
       this.listener = Preconditions.checkNotNull(listener, "listener");
     }
 
-    /**
-     * Once the stream has actually been initialized, call the listener's onReady callback if
-     * appropriate.
-     */
-    public final void listenerReady() {
-      onStreamAllocated();
+    @Override
+    public final void onStreamAllocated() {
+      super.onStreamAllocated();
     }
 
     @Override

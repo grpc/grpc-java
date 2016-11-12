@@ -116,10 +116,10 @@ public class AbstractServerStreamTest {
   @Test
   public void listenerReady_onlyOnce() {
     stream.transportState().setListener(new ServerStreamListenerBase());
-    stream.transportState().listenerReady();
+    stream.transportState().onStreamAllocated();
     thrown.expect(IllegalStateException.class);
 
-    stream.transportState().listenerReady();
+    stream.transportState().onStreamAllocated();
   }
 
 
@@ -127,7 +127,7 @@ public class AbstractServerStreamTest {
   public void listenerReady_readyCalled() {
     ServerStreamListener streamListener = mock(ServerStreamListener.class);
     stream.transportState().setListener(streamListener);
-    stream.transportState().listenerReady();
+    stream.transportState().onStreamAllocated();
 
     verify(streamListener).onReady();
   }
