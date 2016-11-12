@@ -294,6 +294,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
         new NettyServerStream.TransportState(handler, http2Stream, DEFAULT_MAX_MESSAGE_SIZE);
     NettyServerStream stream = new NettyServerStream(channel, state);
     stream.transportState().setListener(serverListener);
+    state.onStreamAllocated();
     verify(serverListener, atLeastOnce()).onReady();
     verifyNoMoreInteractions(serverListener);
     return stream;

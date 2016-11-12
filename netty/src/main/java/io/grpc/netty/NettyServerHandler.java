@@ -194,6 +194,7 @@ class NettyServerHandler extends AbstractNettyHandler {
 
       Metadata metadata = Utils.convertHeaders(headers);
       transportListener.streamCreated(stream, method, metadata);
+      state.onStreamAllocated();
       http2Stream.setProperty(streamKey, state);
     } catch (Http2Exception e) {
       throw e;

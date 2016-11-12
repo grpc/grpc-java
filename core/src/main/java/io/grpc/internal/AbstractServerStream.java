@@ -85,7 +85,7 @@ public abstract class AbstractServerStream extends AbstractStream2
      * Tears down the stream, typically in the event of a timeout. This method may be called
      * multiple times and from any thread.
      *
-     * <p>This is a clone of {@link ServerStream#cancel()}.
+     * <p>This is a clone of {@link ServerStream#cancel(Status)}.
      */
     void cancel(Status status);
   }
@@ -177,11 +177,13 @@ public abstract class AbstractServerStream extends AbstractStream2
      * thread.
      */
     public final void setListener(ServerStreamListener listener) {
-      this.listener = Preconditions.checkNotNull(listener);
+      Preconditions.checkState(this.listener == null, "setListener should be called only once");
+      this.listener = Preconditions.checkNotNull(listener, "listener");
+    }
 
-      // Now that the stream has actually been initialized, call the listener's onReady callback if
-      // appropriate.
-      onStreamAllocated();
+    @Override
+    public final void onStreamAllocated() {
+      super.onStreamAllocated();
     }
 
     @Override
