@@ -302,7 +302,7 @@ public class RouteGuideServer {
       double deltaLambda = toRadians(lon2 - lon1);
 
       double a = sin(deltaPhi / 2) * sin(deltaPhi / 2)
-	       + cos(phi1) * cos(phi2) * sin(deltaLambda / 2) * sin(deltaLambda / 2);
+      + cos(phi1) * cos(phi2) * sin(deltaLambda / 2) * sin(deltaLambda / 2);
       double c = 2 * atan2(sqrt(a), sqrt(1 - a));
 
       return r * c;
