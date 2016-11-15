@@ -454,7 +454,7 @@ public class RouteGuideClientTest {
     CountDownLatch latch = client.routeChat();
 
     // request message sent and delivered for four times
-    allRequestsDelivered.await(1, TimeUnit.SECONDS);
+    assertTrue(allRequestsDelivered.await(1, TimeUnit.SECONDS));
     assertEquals(
         Arrays.asList("First message", "Second message", "Third message", "Fourth message"),
         messagesDelivered);

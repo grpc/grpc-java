@@ -204,8 +204,6 @@ public class RouteGuideClient {
     requestObserver.onCompleted();
 
     // Receiving happens asynchronously
-    finishLatch.await(1, TimeUnit.MINUTES);
-
     if (!finishLatch.await(1, TimeUnit.MINUTES)) {
       warning("recordRoute can not finish within 1 minutes");
     }

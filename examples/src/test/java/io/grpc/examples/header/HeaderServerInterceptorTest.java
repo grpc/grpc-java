@@ -111,10 +111,8 @@ public class HeaderServerInterceptorTest {
         return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
           @Override
           public void start(Listener<RespT> responseListener, Metadata headers) {
-            spyListener = spy(responseListener);
-            @SuppressWarnings("unchecked") // absolutely casting to the correct type
-            Listener<RespT> castedSpyListener = (Listener<RespT>) spyListener;
-            super.start(castedSpyListener, headers);
+            spyListener = responseListener = spy(responseListener);
+            super.start(responseListener, headers);
           }
         };
       }
