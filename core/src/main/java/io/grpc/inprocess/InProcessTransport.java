@@ -45,6 +45,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.CheckReturnValue;
@@ -58,6 +59,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   private final LogId logId = LogId.allocate(getClass().getName());
   private final String name;
   private final String authority;
+  private final ScheduledExecutorService scheduler;
   private ServerTransportListener serverTransportListener;
   private Attributes serverStreamAttributes;
   private ManagedClientTransport.Listener clientTransportListener;
@@ -70,13 +72,10 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   @GuardedBy("this")
   private Set<InProcessStream> streams = new HashSet<InProcessStream>();
 
-  public InProcessTransport(String name) {
-    this(name, null);
-  }
-
-  public InProcessTransport(String name, String authority) {
+  public InProcessTransport(String name, String authority, ScheduledExecutorService scheduler) {
     this.name = name;
     this.authority = authority;
+    this.scheduler = scheduler;
   }
 
   @CheckReturnValue
@@ -198,6 +197,11 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   @Override
   public Attributes getAttributes() {
     return Attributes.EMPTY;
+  }
+
+  @Override
+  public ScheduledExecutorService getScheduledExecutorService() {
+    return scheduler;
   }
 
   private synchronized void notifyShutdown(Status s) {
