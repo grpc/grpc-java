@@ -110,8 +110,8 @@ final class TransportSet implements WithLogId {
         }
 
         @Override
-        void handleInUse() {
-          callback.onInUse(TransportSet.this);
+        Runnable handleInUse() {
+          return callback.onInUse(TransportSet.this);
         }
 
         @Override
@@ -370,7 +370,10 @@ final class TransportSet implements WithLogId {
 
     @Override
     public void transportInUse(boolean inUse) {
-      inUseStateAggregator.updateObjectInUse(transport, inUse);
+      Runnable r = inUseStateAggregator.updateObjectInUse(transport, inUse);
+      if (r != null) {
+        r.run();
+      }
     }
 
     @Override
@@ -379,7 +382,8 @@ final class TransportSet implements WithLogId {
     @Override
     public void transportTerminated() {
       boolean runCallback = false;
-      inUseStateAggregator.updateObjectInUse(transport, false);
+      Runnable r = inUseStateAggregator.updateObjectInUse(transport, false);
+      assert r == null;
       synchronized (lock) {
         transports.remove(transport);
         if (shutdown && transports.isEmpty()) {
@@ -519,9 +523,13 @@ final class TransportSet implements WithLogId {
 
     /**
      * Called when the TransportSet's in-use state has changed to true, which means at least one
-     * transport is in use. This method is called under a lock thus externally synchronized.
+     * transport is in use. This method is called under a lock thus externally synchronized. If the
+     * return value is non-{@code null}, the runnable will be executed after releasing the lock.
      */
-    public void onInUse(TransportSet ts) { }
+    @CheckReturnValue
+    public Runnable onInUse(TransportSet ts) {
+      return null;
+    }
 
     /**
      * Called when the TransportSet's in-use state has changed to false, which means no transport is
