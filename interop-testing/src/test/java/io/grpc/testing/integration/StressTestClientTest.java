@@ -115,25 +115,6 @@ public class StressTestClientTest {
     assertEquals(9090, client.metricsPort());
   }
 
-  @Test
-  public void interopStyleFlagsTakePrecedence() {
-    StressTestClient client = new StressTestClient();
-    client.parseArgs(new String[] {
-        "--server_addresses=[0:0:0:0:0:0:0:1]:8080",
-        "--test_cases=empty_unary:20,large_unary:50,server_streaming:30",
-        "--test_case=empty_stream",
-        "--server_host=localhost",
-        "--server_port=8081"
-    });
-
-    List<InetSocketAddress> addresses = Arrays.asList(new InetSocketAddress("localhost", 8081));
-    assertEquals(addresses, client.addresses());
-
-    List<TestCaseWeightPair> testCases = Arrays.asList(
-            new TestCaseWeightPair(TestCases.EMPTY_STREAM, 100));
-    assertEquals(testCases, client.testCaseWeightPairs());
-  }
-
   @Test(timeout = 5000)
   public void gaugesShouldBeExported() throws Exception {
 

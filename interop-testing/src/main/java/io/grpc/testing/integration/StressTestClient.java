@@ -117,14 +117,9 @@ public class StressTestClient {
       singletonList(new InetSocketAddress("localhost", 8080));
   private List<TestCaseWeightPair> testCaseWeightPairs = new ArrayList<TestCaseWeightPair>();
 
-  private String serverAddresses;
-  private String serverHost = "localhost";
-  private int serverPort = 0;
   private String serverHostOverride;
   private boolean useTls = false;
   private boolean useTestCa = false;
-  private String testCase;
-  private String testCases;
   private int durationSecs = -1;
   private int channelsPerServer = 1;
   private int stubsPerChannel = 1;
@@ -166,21 +161,16 @@ public class StressTestClient {
       }
       String value = parts[1];
       if ("server_addresses".equals(key)) {
-        serverAddresses = value;
-      } else if ("server_host".equals(key)) {
-        serverHost = value;
-      } else if ("server_port".equals(key)) {
-        serverPort = Integer.parseInt(value);
+        addresses = parseServerAddresses(value);
+        usage = addresses.isEmpty();
       } else if ("server_host_override".equals(key)) {
         serverHostOverride = value;
       } else if ("use_tls".equals(key)) {
         useTls = Boolean.parseBoolean(value);
       } else if ("use_test_ca".equals(key)) {
         useTestCa = Boolean.parseBoolean(value);
-      } else if ("test_case".equals(key)) {
-        testCase = value;
       } else if ("test_cases".equals(key)) {
-        testCases = value;
+        testCaseWeightPairs = parseTestCases(value);
       } else if ("test_duration_secs".equals(key)) {
         durationSecs = Integer.valueOf(value);
       } else if ("num_channels_per_server".equals(key)) {
@@ -196,43 +186,18 @@ public class StressTestClient {
       }
     }
 
-    if (!usage) {
-      if (testCase != null) {
-        testCaseWeightPairs = parseTestCases(testCase + ":100");
-      } else if (testCases != null) {
-        testCaseWeightPairs = parseTestCases(testCases);
-      }
-    }
-
-    if (!usage) {
-      if (serverPort != 0) {
-        addresses = parseServerAddresses(serverHost + ":" + serverPort);
-        usage = addresses.isEmpty();
-      } else if (serverAddresses != null) {
-        addresses = parseServerAddresses(serverAddresses);
-        usage = addresses.isEmpty();
-      }
-    }
-
     if (usage) {
       StressTestClient c = new StressTestClient();
       System.err.println(
           "Usage: [ARGS...]"
               + "\n"
-              + "\n  --server_host=HOST             Server to connect to. Default " + c.serverHost
-              + "\n  --server_port=PORT             Port to connect to. Default " + c.serverPort
               + "\n  --server_host_override=HOST    Claimed identification expected of server."
               + "\n                                 Defaults to server host"
               + "\n  --server_addresses=<name_1>:<port_1>,<name_2>:<port_2>...<name_N>:<port_N>"
-              + "\n    This option is ignored if server_port is specified."
               + "\n    Default: " + serverAddressesToString(c.addresses)
-              + "\n  --test_case=TESTCASE"
-              + "\n    Valid Testcases:"
-              + validTestCasesHelpText()
               + "\n  --test_cases=<testcase_1:w_1>,<testcase_2:w_2>...<testcase_n:w_n>"
               + "\n    List of <testcase,weight> tuples. Weight is the relative frequency at which"
               + " testcase is run."
-              + "\n    This option is ignored if test_case is specified."
               + "\n    Valid Testcases:"
               + validTestCasesHelpText()
               + "\n  --use_tls=true|false           Whether to use TLS. Default " + c.useTls
