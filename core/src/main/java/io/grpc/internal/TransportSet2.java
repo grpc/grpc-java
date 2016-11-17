@@ -317,7 +317,6 @@ final class TransportSet2 implements WithLogId {
     if (savedPendingTransport != null) {
       savedPendingTransport.shutdown();
     }
-    return;
   }
 
   // May be called under lock.
@@ -374,9 +373,9 @@ final class TransportSet2 implements WithLogId {
   /** Listener for real transports. */
   private class TransportListener implements ManagedClientTransport.Listener {
     final ManagedClientTransport transport;
-    private final SocketAddress address;
+    final SocketAddress address;
 
-    public TransportListener(ManagedClientTransport transport, SocketAddress address) {
+    TransportListener(ManagedClientTransport transport, SocketAddress address) {
       this.transport = transport;
       this.address = address;
     }
@@ -408,7 +407,7 @@ final class TransportSet2 implements WithLogId {
     }
 
     @Override
-    public void transportInUse(final boolean inUse) {
+    public void transportInUse(boolean inUse) {
       handleTransportInUseState(transport, inUse);
     }
 

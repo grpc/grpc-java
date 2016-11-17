@@ -42,19 +42,6 @@ import javax.annotation.concurrent.NotThreadSafe;
 abstract class InUseStateAggregator2<T> {
 
   private final HashSet<T> inUseObjects = new HashSet<T>();
-  private final Runnable runHandleInUse = new Runnable() {
-      @Override
-      public void run() {
-        handleInUse();
-      }
-    };
-
-  private final Runnable runHandleNotInUse = new Runnable() {
-      @Override
-      public void run() {
-        handleNotInUse();
-      }
-    };
 
   /**
    * Update the in-use state of an object. Initially no object is in use.
