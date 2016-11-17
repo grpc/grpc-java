@@ -81,6 +81,12 @@ final class TransportSet2 implements WithLogId {
   private final ScheduledExecutorService scheduledExecutor;
 
   // A serializing executor shared across the Channel
+  //
+  // TODO(zhangkun83): decide the type of Channel Executor.  I considered a SerializingExecutor
+  // based on the app executor, but it seems abusive because the app executor is intended for app
+  // logic, not for channel bookkeeping. We don't want channel bookkeeping logic to contend for
+  // threads with app logic, which may increase latency or even cause starvation.  Instead, we may
+  // consider a thread-less Executor.
   private final Executor channelExecutor;
 
   @GuardedBy("lock")
@@ -111,7 +117,7 @@ final class TransportSet2 implements WithLogId {
   private final Collection<ManagedClientTransport> transports =
       new ArrayList<ManagedClientTransport>();
 
-  // Must be used from channelExecutor
+  // Must only be used from channelExecutor
   private final InUseStateAggregator2<ManagedClientTransport> inUseStateAggregator =
       new InUseStateAggregator2<ManagedClientTransport>() {
         @Override
@@ -269,9 +275,8 @@ final class TransportSet2 implements WithLogId {
   @GuardedBy("lock")
   private void gotoState(final ConnectivityStateInfo newState) {
     if (state.getState() != newState.getState()) {
-      if (state.getState() == SHUTDOWN) {
-        throw new IllegalStateException("Cannot transition out of SHUTDOWN to " + newState);
-      }
+      Preconditions.checkState(state.getState() != SHUTDOWN,
+          "Cannot transition out of SHUTDOWN to " + newState);
       state = newState;
       channelExecutor.execute(new Runnable() {
           @Override
@@ -483,13 +488,13 @@ final class TransportSet2 implements WithLogId {
 
     /**
      * Called when the TransportSet's in-use state has changed to true, which means at least one
-     * transport is in use. This method is called under a lock thus externally synchronized.
+     * transport is in use.
      */
     public void onInUse(TransportSet2 ts) { }
 
     /**
      * Called when the TransportSet's in-use state has changed to false, which means no transport is
-     * in use. This method is called under a lock thus externally synchronized.
+     * in use.
      */
     public void onNotInUse(TransportSet2 ts) { }
   }
