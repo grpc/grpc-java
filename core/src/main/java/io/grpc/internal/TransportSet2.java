@@ -226,6 +226,7 @@ final class TransportSet2 implements WithLogId {
    * @param status the causal status when the channel begins transition to
    *     TRANSIENT_FAILURE.
    */
+  @GuardedBy("lock")
   private void scheduleBackoff(final Status status) {
     class EndOfCurrentBackoff implements Runnable {
       @Override
@@ -251,26 +252,24 @@ final class TransportSet2 implements WithLogId {
       }
     }
 
-    synchronized (lock) {
-      if (state.getState() == SHUTDOWN) {
-        return;
-      }
-      gotoState(ConnectivityStateInfo.forTransientFailure(status));
-      if (reconnectPolicy == null) {
-        reconnectPolicy = backoffPolicyProvider.get();
-      }
-      long delayMillis =
-          reconnectPolicy.nextBackoffMillis() - connectingTimer.elapsed(TimeUnit.MILLISECONDS);
-      if (log.isLoggable(Level.FINE)) {
-        log.log(Level.FINE, "[{0}] Scheduling backoff for {1} ms",
-            new Object[]{getLogId(), delayMillis});
-      }
-      Preconditions.checkState(reconnectTask == null, "previous reconnectTask is not done");
-      reconnectTask = scheduledExecutor.schedule(
-          new LogExceptionRunnable(new EndOfCurrentBackoff()),
-          delayMillis,
-          TimeUnit.MILLISECONDS);
+    if (state.getState() == SHUTDOWN) {
+      return;
     }
+    gotoState(ConnectivityStateInfo.forTransientFailure(status));
+    if (reconnectPolicy == null) {
+      reconnectPolicy = backoffPolicyProvider.get();
+    }
+    long delayMillis =
+        reconnectPolicy.nextBackoffMillis() - connectingTimer.elapsed(TimeUnit.MILLISECONDS);
+    if (log.isLoggable(Level.FINE)) {
+      log.log(Level.FINE, "[{0}] Scheduling backoff for {1} ms",
+          new Object[]{getLogId(), delayMillis});
+    }
+    Preconditions.checkState(reconnectTask == null, "previous reconnectTask is not done");
+    reconnectTask = scheduledExecutor.schedule(
+        new LogExceptionRunnable(new EndOfCurrentBackoff()),
+        delayMillis,
+        TimeUnit.MILLISECONDS);
   }
 
   @GuardedBy("lock")
@@ -415,7 +414,6 @@ final class TransportSet2 implements WithLogId {
 
     @Override
     public void transportShutdown(Status s) {
-      boolean allAddressesFailed = false;
       if (log.isLoggable(Level.FINE)) {
         log.log(Level.FINE, "[{0}] {1} for {2} is being shutdown with status {3}",
             new Object[] {getLogId(), transport.getLogId(), address, s});
@@ -431,18 +429,15 @@ final class TransportSet2 implements WithLogId {
         } else if (pendingTransport == transport) {
           // Continue reconnect if there are still addresses to try.
           if (nextAddressIndex == 0) {
-            allAddressesFailed = true;
+            // Initiate backoff
+            // Transition to TRANSIENT_FAILURE
+            scheduleBackoff(s);
           } else {
             Preconditions.checkState(state.getState() == CONNECTING,
                 "Expected state is CONNECTING, actual state is %s", state.getState());
             runnable = startNewTransport();
           }
         }
-      }
-      if (allAddressesFailed) {
-        // Initiate backoff
-        // Transition to TRANSIENT_FAILURE
-        scheduleBackoff(s);
       }
       if (runnable != null) {
         runnable.run();
