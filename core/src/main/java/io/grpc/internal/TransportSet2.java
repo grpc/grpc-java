@@ -235,9 +235,12 @@ final class TransportSet2 implements WithLogId {
           Runnable runnable = null;
           synchronized (lock) {
             reconnectTask = null;
-            if (state.getState() != SHUTDOWN) {
-              gotoNonErrorState(CONNECTING);
+            if (state.getState() == SHUTDOWN) {
+              // Even though shutdown() will cancel this task, the task may have already started
+              // when it's being cancelled.
+              return;
             }
+            gotoNonErrorState(CONNECTING);
             runnable = startNewTransport();
           }
           if (runnable != null) {

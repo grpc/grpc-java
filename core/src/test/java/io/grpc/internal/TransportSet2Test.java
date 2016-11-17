@@ -32,8 +32,11 @@
 package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -441,10 +444,26 @@ public class TransportSet2Test {
     // Entering TRANSIENT_FAILURE, waiting for back-off
     assertExactCallbackInvokes("onStateChange:" + UNAVAILABLE_STATE);
 
+    // Save the reconnectTask before shutting down
+    FakeClock.ScheduledTask reconnectTask = null;
+    for (FakeClock.ScheduledTask task : fakeClock.getPendingTasks()) {
+      if (task.command.toString().contains("EndOfCurrentBackoff")) {
+        assertNull("There shouldn't be more than one reconnectTask", reconnectTask);
+        assertFalse(task.isDone());
+        reconnectTask = task;
+      }
+    }
+    assertNotNull("There should be at least one reconnectTask", reconnectTask);
+
     // Shut down TransportSet before the transport is created.
     transportSet.shutdown();
+    assertTrue(reconnectTask.isCancelled());
     // TransportSet terminated promptly.
     assertExactCallbackInvokes("onStateChange:SHUTDOWN", "onTerminated");
+
+    // Simulate a race between reconnectTask cancellation and execution -- the task runs anyway.
+    // This should not lead to the creation of a new transport.
+    reconnectTask.command.run();
 
     // Futher call to obtainActiveTransport() is no-op.
     assertNull(transportSet.obtainActiveTransport());
