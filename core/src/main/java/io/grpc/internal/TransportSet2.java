@@ -85,8 +85,12 @@ final class TransportSet2 implements WithLogId {
   // TODO(zhangkun83): decide the type of Channel Executor.  I considered a SerializingExecutor
   // based on the app executor, but it seems abusive because the app executor is intended for app
   // logic, not for channel bookkeeping. We don't want channel bookkeeping logic to contend for
-  // threads with app logic, which may increase latency or even cause starvation.  Instead, we may
-  // consider a thread-less Executor.
+  // threads with app logic, which may increase latency or even cause starvation.  Instead, we
+  // should consider a thread-less Executor after the refactor of ManagedChannelImpl is done.
+  //
+  // NOTE: there are cases where channelExecutor.execute() is run under "lock".  This will add risk
+  // of deadlock if channelExecutor is based on a direct executor.  Thread-less executor wouldn't
+  // have such problem.
   private final Executor channelExecutor;
 
   @GuardedBy("lock")
@@ -290,7 +294,6 @@ final class TransportSet2 implements WithLogId {
   public void shutdown() {
     ManagedClientTransport savedActiveTransport;
     ConnectionClientTransport savedPendingTransport;
-    boolean terminated = false;
     synchronized (lock) {
       if (state.getState() == SHUTDOWN) {
         return;
@@ -301,7 +304,7 @@ final class TransportSet2 implements WithLogId {
       activeTransport = null;
       pendingTransport = null;
       if (transports.isEmpty()) {
-        terminated = true;
+        handleTermination();
         if (log.isLoggable(Level.FINE)) {
           log.log(Level.FINE, "[{0}] Terminated in shutdown()", getLogId());
         }
@@ -314,12 +317,10 @@ final class TransportSet2 implements WithLogId {
     if (savedPendingTransport != null) {
       savedPendingTransport.shutdown();
     }
-    if (terminated) {
-      handleTermination();
-    }
     return;
   }
 
+  // May be called under lock.
   private void handleTermination() {
     channelExecutor.execute(new Runnable() {
         @Override
@@ -461,11 +462,8 @@ final class TransportSet2 implements WithLogId {
           if (log.isLoggable(Level.FINE)) {
             log.log(Level.FINE, "[{0}] Terminated in transportTerminated()", getLogId());
           }
-          terminated = true;
+          handleTermination();
         }
-      }
-      if (terminated) {
-        handleTermination();
       }
       Preconditions.checkState(activeTransport != transport,
           "activeTransport still points to this transport. "
