@@ -182,9 +182,8 @@ final class TransportSet2 implements WithLogId {
     Runnable runnable = null;
     synchronized (lock) {
       // Check again, since it could have changed before acquiring the lock
-      savedTransport = activeTransport;
-      if (savedTransport != null) {
-        return savedTransport;
+      if (activeTransport != null) {
+        return activeTransport;
       }
       if (state.getState() == IDLE) {
         gotoNonErrorState(CONNECTING);
@@ -194,7 +193,7 @@ final class TransportSet2 implements WithLogId {
     if (runnable != null) {
       runnable.run();
     }
-    return savedTransport;
+    return null;
   }
 
   @CheckReturnValue
