@@ -32,31 +32,18 @@
 package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.same;
-import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import io.grpc.CallOptions;
 import io.grpc.ConnectivityState;
+import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.IntegerMarshaller;
-import io.grpc.LoadBalancer;
-import io.grpc.Metadata;
-import io.grpc.MethodDescriptor;
 import io.grpc.Status;
-import io.grpc.StringMarshaller;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 
 import org.junit.After;
@@ -69,48 +56,71 @@ import org.mockito.MockitoAnnotations;
 
 import java.net.SocketAddress;
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Unit tests for {@link TransportSet}.
+ * Unit tests for {@link TransportSet2}.
  *
  * <p>It only tests the logic that is not covered by {@link ManagedChannelImplTransportManagerTest}.
  */
 @RunWith(JUnit4.class)
-public class TransportSetTest {
+public class TransportSet2Test {
 
   private static final String AUTHORITY = "fakeauthority";
   private static final String USER_AGENT = "mosaic";
+  private static final ConnectivityStateInfo UNAVAILABLE_STATE =
+      ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE);
+  private static final ConnectivityStateInfo RESOURCE_EXHAUSTED_STATE =
+      ConnectivityStateInfo.forTransientFailure(Status.RESOURCE_EXHAUSTED);
 
-  private FakeClock fakeClock;
-  private FakeClock fakeExecutor;
+  // For scheduled executor
+  private final FakeClock fakeClock = new FakeClock();
+  // For channelExecutor
+  private final FakeClock fakeExecutor = new FakeClock();
+  private final SerializingExecutor channelExecutor =
+      new SerializingExecutor(fakeExecutor.getScheduledExecutorService());
 
-  @Mock private LoadBalancer<ClientTransport> mockLoadBalancer;
   @Mock private BackoffPolicy mockBackoffPolicy1;
   @Mock private BackoffPolicy mockBackoffPolicy2;
   @Mock private BackoffPolicy mockBackoffPolicy3;
   @Mock private BackoffPolicy.Provider mockBackoffPolicyProvider;
   @Mock private ClientTransportFactory mockTransportFactory;
-  @Mock private TransportSet.Callback mockTransportSetCallback;
-  @Mock private ClientStreamListener mockStreamListener;
 
-  private final MethodDescriptor<String, Integer> method = MethodDescriptor.create(
-      MethodDescriptor.MethodType.UNKNOWN, "/service/method",
-      new StringMarshaller(), new IntegerMarshaller());
-  private final Metadata headers = new Metadata();
-  private final CallOptions waitForReadyCallOptions = CallOptions.DEFAULT.withWaitForReady();
-  private final CallOptions failFastCallOptions = CallOptions.DEFAULT;
-  private final StatsTraceContext statsTraceCtx = StatsTraceContext.NOOP;
+  private final LinkedList<String> callbackInvokes = new LinkedList<String>();
+  private final TransportSet2.Callback mockTransportSetCallback = new TransportSet2.Callback() {
+      @Override
+      public void onTerminated(TransportSet2 ts) {
+        assertSame(transportSet, ts);
+        callbackInvokes.add("onTerminated");
+      }
 
-  private TransportSet transportSet;
+      @Override
+      public void onStateChange(TransportSet2 ts, ConnectivityStateInfo newState) {
+        assertSame(transportSet, ts);
+        callbackInvokes.add("onStateChange:" + newState);
+      }
+
+      @Override
+      public void onInUse(TransportSet2 ts) {
+        assertSame(transportSet, ts);
+        callbackInvokes.add("onInUse");
+      }
+
+      @Override
+      public void onNotInUse(TransportSet2 ts) {
+        assertSame(transportSet, ts);
+        callbackInvokes.add("onNotInUse");
+      }
+    };
+
+  private TransportSet2 transportSet;
   private EquivalentAddressGroup addressGroup;
   private BlockingQueue<MockClientTransportInfo> transports;
 
   @Before public void setUp() {
     MockitoAnnotations.initMocks(this);
-    fakeClock = new FakeClock();
-    fakeExecutor = new FakeClock();
 
     when(mockBackoffPolicyProvider.get())
         .thenReturn(mockBackoffPolicy1, mockBackoffPolicy2, mockBackoffPolicy3);
@@ -128,26 +138,28 @@ public class TransportSetTest {
   @Test public void singleAddressReconnect() {
     SocketAddress addr = mock(SocketAddress.class);
     createTransportSet(addr);
-    assertEquals(ConnectivityState.IDLE, transportSet.getState(false));
+    assertEquals(ConnectivityState.IDLE, transportSet.getState());
 
     // Invocation counters
     int transportsCreated = 0;
     int backoff1Consulted = 0;
     int backoff2Consulted = 0;
     int backoffReset = 0;
-    int onAllAddressesFailed = 0;
 
     // First attempt
-    transportSet.obtainActiveTransport().newStream(method, new Metadata(), waitForReadyCallOptions,
-        statsTraceCtx);
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
+    assertEquals(ConnectivityState.IDLE, transportSet.getState());
+    assertNoCallbackInvoke();
+    assertNull(transportSet.obtainActiveTransport());
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
+    assertEquals(ConnectivityState.CONNECTING, transportSet.getState());
     verify(mockTransportFactory, times(++transportsCreated))
         .newClientTransport(addr, AUTHORITY, USER_AGENT);
 
-    // Fail this one
+    // Fail this one. Because there is only one address to try, enter TRANSIENT_FAILURE.
+    assertNoCallbackInvoke();
     transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(false));
-    verify(mockTransportSetCallback, times(++onAllAddressesFailed)).onAllAddressesFailed();
+    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState());
+    assertExactCallbackInvokes("onStateChange:" + UNAVAILABLE_STATE);
     // Backoff reset and using first back-off value interval
     verify(mockBackoffPolicy1, times(++backoff1Consulted)).nextBackoffMillis();
     verify(mockBackoffPolicyProvider, times(++backoffReset)).get();
@@ -155,17 +167,24 @@ public class TransportSetTest {
     // Second attempt
     // Transport creation doesn't happen until time is due
     fakeClock.forwardMillis(9);
+    assertNull(transportSet.obtainActiveTransport());
     verify(mockTransportFactory, times(transportsCreated))
         .newClientTransport(addr, AUTHORITY, USER_AGENT);
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(false));
+    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState());
+
+    assertNoCallbackInvoke();
     fakeClock.forwardMillis(1);
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
+    assertEquals(ConnectivityState.CONNECTING, transportSet.getState());
     verify(mockTransportFactory, times(++transportsCreated))
         .newClientTransport(addr, AUTHORITY, USER_AGENT);
     // Fail this one too
-    transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(false));
-    verify(mockTransportSetCallback, times(++onAllAddressesFailed)).onAllAddressesFailed();
+    assertNoCallbackInvoke();
+    // Here we use a different status from the first failure, and verify that it's passed to
+    // the callback.
+    transports.poll().listener.transportShutdown(Status.RESOURCE_EXHAUSTED);
+    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState());
+    assertExactCallbackInvokes("onStateChange:" + RESOURCE_EXHAUSTED_STATE);
     // Second back-off interval
     verify(mockBackoffPolicy1, times(++backoff1Consulted)).nextBackoffMillis();
     verify(mockBackoffPolicyProvider, times(backoffReset)).get();
@@ -173,27 +192,34 @@ public class TransportSetTest {
     // Third attempt
     // Transport creation doesn't happen until time is due
     fakeClock.forwardMillis(99);
+    assertNull(transportSet.obtainActiveTransport());
     verify(mockTransportFactory, times(transportsCreated))
         .newClientTransport(addr, AUTHORITY, USER_AGENT);
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(false));
+    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState());
+    assertNoCallbackInvoke();
     fakeClock.forwardMillis(1);
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
+    assertEquals(ConnectivityState.CONNECTING, transportSet.getState());
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
+    assertNull(transportSet.obtainActiveTransport());
     verify(mockTransportFactory, times(++transportsCreated))
         .newClientTransport(addr, AUTHORITY, USER_AGENT);
-    // Let this one succeed
+    // Let this one succeed, will enter READY state.
+    assertNoCallbackInvoke();
     transports.peek().listener.transportReady();
-    assertEquals(ConnectivityState.READY, transportSet.getState(false));
-    fakeClock.runDueTasks();
-    verify(mockTransportSetCallback, never()).onConnectionClosedByServer(any(Status.class));
-    // And close it
+    assertExactCallbackInvokes("onStateChange:READY");
+    assertEquals(ConnectivityState.READY, transportSet.getState());
+    assertSame(transports.peek().transport, transportSet.obtainActiveTransport());
+
+    // Close the READY transport, will enter IDLE state.
+    assertNoCallbackInvoke();
     transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
-    assertEquals(ConnectivityState.IDLE, transportSet.getState(false));
-    verify(mockTransportSetCallback).onConnectionClosedByServer(same(Status.UNAVAILABLE));
-    verify(mockTransportSetCallback, times(onAllAddressesFailed)).onAllAddressesFailed();
+    assertEquals(ConnectivityState.IDLE, transportSet.getState());
+    assertExactCallbackInvokes("onStateChange:IDLE");
 
     // Back-off is reset, and the next attempt will happen immediately
-    transportSet.obtainActiveTransport();
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
+    assertNull(transportSet.obtainActiveTransport());
+    assertEquals(ConnectivityState.CONNECTING, transportSet.getState());
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
     verify(mockBackoffPolicyProvider, times(backoffReset)).get();
     verify(mockTransportFactory, times(++transportsCreated))
         .newClientTransport(addr, AUTHORITY, USER_AGENT);
@@ -201,17 +227,13 @@ public class TransportSetTest {
     // Final checks for consultations on back-off policies
     verify(mockBackoffPolicy1, times(backoff1Consulted)).nextBackoffMillis();
     verify(mockBackoffPolicy2, times(backoff2Consulted)).nextBackoffMillis();
-    verify(mockTransportSetCallback, atLeast(0)).onInUse(transportSet);
-    verify(mockTransportSetCallback, atLeast(0)).onNotInUse(transportSet);
-    verifyNoMoreInteractions(mockTransportSetCallback);
-    fakeExecutor.runDueTasks(); // Drain new 'real' stream creation; not important to this test.
   }
 
   @Test public void twoAddressesReconnect() {
     SocketAddress addr1 = mock(SocketAddress.class);
     SocketAddress addr2 = mock(SocketAddress.class);
     createTransportSet(addr1, addr2);
-    assertEquals(ConnectivityState.IDLE, transportSet.getState(false));
+    assertEquals(ConnectivityState.IDLE, transportSet.getState());
     // Invocation counters
     int transportsAddr1 = 0;
     int transportsAddr2 = 0;
@@ -219,148 +241,133 @@ public class TransportSetTest {
     int backoff2Consulted = 0;
     int backoff3Consulted = 0;
     int backoffReset = 0;
-    int onAllAddressesFailed = 0;
 
     // First attempt
-    DelayedClientTransport delayedTransport1 =
-        (DelayedClientTransport) transportSet.obtainActiveTransport();
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
+    assertNoCallbackInvoke();
+    assertNull(transportSet.obtainActiveTransport());
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
+    assertEquals(ConnectivityState.CONNECTING, transportSet.getState());
     verify(mockTransportFactory, times(++transportsAddr1))
         .newClientTransport(addr1, AUTHORITY, USER_AGENT);
-    delayedTransport1.newStream(method, new Metadata(), waitForReadyCallOptions, statsTraceCtx);
+
     // Let this one fail without success
     transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
-    assertNull(delayedTransport1.getTransportSupplier());
-    verify(mockTransportSetCallback, times(onAllAddressesFailed)).onAllAddressesFailed();
+    // Still in CONNECTING
+    assertNull(transportSet.obtainActiveTransport());
+    assertNoCallbackInvoke();
+    assertEquals(ConnectivityState.CONNECTING, transportSet.getState());
 
     // Second attempt will start immediately. Still no back-off policy.
-    DelayedClientTransport delayedTransport2 =
-        (DelayedClientTransport) transportSet.obtainActiveTransport();
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
-    assertSame(delayedTransport1, delayedTransport2);
     verify(mockBackoffPolicyProvider, times(backoffReset)).get();
     verify(mockTransportFactory, times(++transportsAddr2))
         .newClientTransport(addr2, AUTHORITY, USER_AGENT);
+    assertNull(transportSet.obtainActiveTransport());
     // Fail this one too
+    assertNoCallbackInvoke();
     transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
     // All addresses have failed. Delayed transport will be in back-off interval.
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(false));
-    assertNull(delayedTransport2.getTransportSupplier());
-    assertTrue(delayedTransport2.isInBackoffPeriod());
-    verify(mockTransportSetCallback, times(++onAllAddressesFailed)).onAllAddressesFailed();
+    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState());
+    assertExactCallbackInvokes("onStateChange:" + UNAVAILABLE_STATE);
     // Backoff reset and first back-off interval begins
     verify(mockBackoffPolicy1, times(++backoff1Consulted)).nextBackoffMillis();
     verify(mockBackoffPolicyProvider, times(++backoffReset)).get();
 
+    // No reconnect during TRANSIENT_FAILURE even when requested.
+    assertNull(transportSet.obtainActiveTransport());
+    assertNoCallbackInvoke();
+    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState());
+
     // Third attempt is the first address, thus controlled by the first back-off interval.
-    DelayedClientTransport delayedTransport3 =
-        (DelayedClientTransport) transportSet.obtainActiveTransport();
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(false));
-    assertSame(delayedTransport2, delayedTransport3);
     fakeClock.forwardMillis(9);
     verify(mockTransportFactory, times(transportsAddr1))
         .newClientTransport(addr1, AUTHORITY, USER_AGENT);
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(false));
+    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState());
+    assertNoCallbackInvoke();
     fakeClock.forwardMillis(1);
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
+    assertEquals(ConnectivityState.CONNECTING, transportSet.getState());
     verify(mockTransportFactory, times(++transportsAddr1))
         .newClientTransport(addr1, AUTHORITY, USER_AGENT);
     // Fail this one too
     transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
-    assertNull(delayedTransport3.getTransportSupplier());
-    verify(mockTransportSetCallback, times(onAllAddressesFailed)).onAllAddressesFailed();
+    assertEquals(ConnectivityState.CONNECTING, transportSet.getState());
 
     // Forth attempt will start immediately. Keep back-off policy.
-    DelayedClientTransport delayedTransport4 =
-        (DelayedClientTransport) transportSet.obtainActiveTransport();
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
-    assertSame(delayedTransport3, delayedTransport4);
+    assertNull(transportSet.obtainActiveTransport());
+    assertEquals(ConnectivityState.CONNECTING, transportSet.getState());
     verify(mockBackoffPolicyProvider, times(backoffReset)).get();
     verify(mockTransportFactory, times(++transportsAddr2))
         .newClientTransport(addr2, AUTHORITY, USER_AGENT);
     // Fail this one too
-    transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
+    assertNoCallbackInvoke();
+    transports.poll().listener.transportShutdown(Status.RESOURCE_EXHAUSTED);
     // All addresses have failed again. Delayed transport will be in back-off interval.
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(false));
-    assertNull(delayedTransport4.getTransportSupplier());
-    assertTrue(delayedTransport4.isInBackoffPeriod());
-    verify(mockTransportSetCallback, times(++onAllAddressesFailed)).onAllAddressesFailed();
+    assertExactCallbackInvokes("onStateChange:" + RESOURCE_EXHAUSTED_STATE);
+    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState());
     // Second back-off interval begins
     verify(mockBackoffPolicy1, times(++backoff1Consulted)).nextBackoffMillis();
     verify(mockBackoffPolicyProvider, times(backoffReset)).get();
 
     // Fifth attempt for the first address, thus controlled by the second back-off interval.
-    DelayedClientTransport delayedTransport5 =
-        (DelayedClientTransport) transportSet.obtainActiveTransport();
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(false));
-    assertSame(delayedTransport4, delayedTransport5);
+    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState());
     fakeClock.forwardMillis(99);
     verify(mockTransportFactory, times(transportsAddr1))
         .newClientTransport(addr1, AUTHORITY, USER_AGENT);
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(false));
+    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState());
+    assertNoCallbackInvoke();
     fakeClock.forwardMillis(1);
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
+    assertEquals(ConnectivityState.CONNECTING, transportSet.getState());
     verify(mockTransportFactory, times(++transportsAddr1))
         .newClientTransport(addr1, AUTHORITY, USER_AGENT);
     // Let it through
+    assertNoCallbackInvoke();
     transports.peek().listener.transportReady();
-    assertEquals(ConnectivityState.READY, transportSet.getState(false));
-    // Delayed transport will see the connected transport.
-    assertSame(transports.peek().transport, delayedTransport5.getTransportSupplier().get());
-    verify(mockTransportSetCallback, never()).onConnectionClosedByServer(any(Status.class));
+    assertExactCallbackInvokes("onStateChange:READY");
+    assertEquals(ConnectivityState.READY, transportSet.getState());
+
+    assertSame(transports.peek().transport, transportSet.obtainActiveTransport());
     // Then close it.
+    assertNoCallbackInvoke();
     transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
-    assertEquals(ConnectivityState.IDLE, transportSet.getState(false));
-    verify(mockTransportSetCallback).onConnectionClosedByServer(same(Status.UNAVAILABLE));
-    verify(mockTransportSetCallback, times(onAllAddressesFailed)).onAllAddressesFailed();
+    assertExactCallbackInvokes("onStateChange:IDLE");
+    assertEquals(ConnectivityState.IDLE, transportSet.getState());
 
     // First attempt after a successful connection. Old back-off policy should be ignored, but there
     // is not yet a need for a new one. Start from the first address.
-    DelayedClientTransport delayedTransport6 =
-        (DelayedClientTransport) transportSet.obtainActiveTransport();
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
-    assertNotSame(delayedTransport5, delayedTransport6);
-    delayedTransport6.newStream(method, headers, waitForReadyCallOptions, statsTraceCtx);
+    assertNull(transportSet.obtainActiveTransport());
+    assertEquals(ConnectivityState.CONNECTING, transportSet.getState());
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
     verify(mockBackoffPolicyProvider, times(backoffReset)).get();
     verify(mockTransportFactory, times(++transportsAddr1))
         .newClientTransport(addr1, AUTHORITY, USER_AGENT);
     // Fail the transport
     transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
-    assertNull(delayedTransport6.getTransportSupplier());
-    verify(mockTransportSetCallback, times(onAllAddressesFailed)).onAllAddressesFailed();
+    assertEquals(ConnectivityState.CONNECTING, transportSet.getState());
 
     // Second attempt will start immediately. Still no new back-off policy.
-    DelayedClientTransport delayedTransport7 =
-        (DelayedClientTransport) transportSet.obtainActiveTransport();
-    assertSame(delayedTransport6, delayedTransport7);
     verify(mockBackoffPolicyProvider, times(backoffReset)).get();
     verify(mockTransportFactory, times(++transportsAddr2))
         .newClientTransport(addr2, AUTHORITY, USER_AGENT);
     // Fail this one too
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
+    assertEquals(ConnectivityState.CONNECTING, transportSet.getState());
     transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
-    // All addresses have failed. Delayed transport will be in back-off interval.
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(false));
-    assertNull(delayedTransport7.getTransportSupplier());
-    assertTrue(delayedTransport7.isInBackoffPeriod());
-    verify(mockTransportSetCallback, times(++onAllAddressesFailed)).onAllAddressesFailed();
+    // All addresses have failed. Enter TRANSIENT_FAILURE. Back-off in effect.
+    assertExactCallbackInvokes("onStateChange:" + UNAVAILABLE_STATE);
+    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState());
     // Back-off reset and first back-off interval begins
     verify(mockBackoffPolicy2, times(++backoff2Consulted)).nextBackoffMillis();
     verify(mockBackoffPolicyProvider, times(++backoffReset)).get();
 
     // Third attempt is the first address, thus controlled by the first back-off interval.
-    DelayedClientTransport delayedTransport8 =
-        (DelayedClientTransport) transportSet.obtainActiveTransport();
-    assertSame(delayedTransport7, delayedTransport8);
     fakeClock.forwardMillis(9);
     verify(mockTransportFactory, times(transportsAddr1))
         .newClientTransport(addr1, AUTHORITY, USER_AGENT);
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(false));
+    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState());
+    assertNoCallbackInvoke();
     fakeClock.forwardMillis(1);
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
+    assertEquals(ConnectivityState.CONNECTING, transportSet.getState());
     verify(mockTransportFactory, times(++transportsAddr1))
         .newClientTransport(addr1, AUTHORITY, USER_AGENT);
 
@@ -368,90 +375,6 @@ public class TransportSetTest {
     verify(mockBackoffPolicy1, times(backoff1Consulted)).nextBackoffMillis();
     verify(mockBackoffPolicy2, times(backoff2Consulted)).nextBackoffMillis();
     verify(mockBackoffPolicy3, times(backoff3Consulted)).nextBackoffMillis();
-    verify(mockTransportSetCallback, atLeast(0)).onInUse(transportSet);
-    verify(mockTransportSetCallback, atLeast(0)).onNotInUse(transportSet);
-    verifyNoMoreInteractions(mockTransportSetCallback);
-    fakeExecutor.runDueTasks(); // Drain new 'real' stream creation; not important to this test.
-  }
-
-  @Test
-  public void verifyFailFastAndNonFailFastBehaviors() {
-    int pendingStreamsCount = 0;
-    int failFastPendingStreamsCount = 0;
-
-    final SocketAddress addr1 = mock(SocketAddress.class);
-    final SocketAddress addr2 = mock(SocketAddress.class);
-    createTransportSet(addr1, addr2);
-
-    final DelayedClientTransport delayedTransport =
-        (DelayedClientTransport) transportSet.obtainActiveTransport();
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
-    assertFalse(delayedTransport.isInBackoffPeriod());
-
-    // Create a new fail fast stream.
-    ClientStream ffStream = delayedTransport.newStream(method, headers, failFastCallOptions,
-        statsTraceCtx);
-    ffStream.start(mockStreamListener);
-    // Verify it is queued.
-    assertEquals(++pendingStreamsCount, delayedTransport.getPendingStreamsCount());
-    failFastPendingStreamsCount++;
-    // Create a new non fail fast stream.
-    delayedTransport.newStream(method, headers, waitForReadyCallOptions, statsTraceCtx);
-    // Verify it is queued.
-    assertEquals(++pendingStreamsCount, delayedTransport.getPendingStreamsCount());
-
-    // Let this 1st address fail without success.
-    transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
-    assertFalse(delayedTransport.isInBackoffPeriod());
-    // Verify pending streams still in queue.
-    assertEquals(pendingStreamsCount, delayedTransport.getPendingStreamsCount());
-
-    // Create a new fail fast stream.
-    delayedTransport.newStream(method, headers, failFastCallOptions, statsTraceCtx);
-    // Verify it is queued.
-    assertEquals(++pendingStreamsCount, delayedTransport.getPendingStreamsCount());
-    failFastPendingStreamsCount++;
-    // Create a new non fail fast stream
-    delayedTransport.newStream(method, headers, waitForReadyCallOptions, statsTraceCtx);
-    // Verify it is queued.
-    assertEquals(++pendingStreamsCount, delayedTransport.getPendingStreamsCount());
-
-    // Let this 2nd address fail without success.
-    Status failureStatus = Status.UNAVAILABLE.withDescription("some unique failure");
-    transports.poll().listener.transportShutdown(failureStatus);
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(false));
-    assertTrue(delayedTransport.isInBackoffPeriod());
-    // Fail fast pending streams should be cleared
-    assertEquals(pendingStreamsCount - failFastPendingStreamsCount,
-        delayedTransport.getPendingStreamsCount());
-    pendingStreamsCount -= failFastPendingStreamsCount;
-    failFastPendingStreamsCount = 0;
-    fakeExecutor.runDueTasks();
-    verify(mockStreamListener).closed(same(failureStatus), any(Metadata.class));
-
-    // Create a new fail fast stream.
-    delayedTransport.newStream(method, headers, failFastCallOptions, statsTraceCtx);
-    // Verify it is not queued.
-    assertEquals(pendingStreamsCount, delayedTransport.getPendingStreamsCount());
-    // Create a new non fail fast stream
-    delayedTransport.newStream(method, headers, waitForReadyCallOptions, statsTraceCtx);
-    // Verify it is queued.
-    assertEquals(++pendingStreamsCount, delayedTransport.getPendingStreamsCount());
-
-    fakeClock.forwardMillis(10);
-    // Now back-off is over
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
-    assertFalse(delayedTransport.isInBackoffPeriod());
-
-    // Create a new fail fast stream.
-    delayedTransport.newStream(method, headers, failFastCallOptions, statsTraceCtx);
-    // Verify it is queued.
-    assertEquals(++pendingStreamsCount, delayedTransport.getPendingStreamsCount());
-    failFastPendingStreamsCount++;
-    assertEquals(1, failFastPendingStreamsCount);
-
-    fakeExecutor.runDueTasks(); // Drain new 'real' stream creation; not important to this test.
   }
 
   @Test
@@ -467,139 +390,73 @@ public class TransportSetTest {
         .newClientTransport(addr, AUTHORITY, USER_AGENT);
 
     // First attempt
-    transportSet.obtainActiveTransport().newStream(method, new Metadata());
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
+    transportSet.obtainActiveTransport();
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
     verify(mockTransportFactory, times(++transportsCreated))
         .newClientTransport(addr, AUTHORITY, USER_AGENT);
 
     // Fail this one
     transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(false));
+    assertExactCallbackInvokes("onStateChange:" + UNAVAILABLE_STATE);
 
     // Will always reconnect after back-off
     fakeClock.forwardMillis(10);
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
     verify(mockTransportFactory, times(++transportsCreated))
         .newClientTransport(addr, AUTHORITY, USER_AGENT);
 
     // Make this one proceed
     transports.peek().listener.transportReady();
-    assertEquals(ConnectivityState.READY, transportSet.getState(false));
+    assertExactCallbackInvokes("onStateChange:READY");
     // Then go-away
     transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
-    assertEquals(ConnectivityState.IDLE, transportSet.getState(false));
+    assertExactCallbackInvokes("onStateChange:IDLE");
 
-    // Request immediately
-    transportSet.obtainActiveTransport().newStream(method, new Metadata(), waitForReadyCallOptions,
-        statsTraceCtx);
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
+    // No scheduled tasks that would ever try to reconnect ...
+    assertEquals(0, fakeClock.numPendingTasks());
+    assertEquals(0, fakeExecutor.numPendingTasks());
+    
+    // ... until it's requested.
+    transportSet.obtainActiveTransport();
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
     verify(mockTransportFactory, times(++transportsCreated))
         .newClientTransport(addr, AUTHORITY, USER_AGENT);
-    fakeExecutor.runDueTasks(); // Drain new 'real' stream creation; not important to this test.
   }
 
   @Test
-  public void shutdownBeforeTransportCreatedWithPendingStream() throws Exception {
+  public void shutdownBeforeTransportCreated() throws Exception {
     SocketAddress addr = mock(SocketAddress.class);
     createTransportSet(addr);
 
     // First transport is created immediately
-    ClientTransport pick = transportSet.obtainActiveTransport();
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
-    verify(mockTransportFactory).newClientTransport(addr, AUTHORITY, USER_AGENT);
-    assertNotNull(pick);
-    // Fail this one
-    MockClientTransportInfo transportInfo = transports.poll();
-    transportInfo.listener.transportShutdown(Status.UNAVAILABLE);
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(false));
-    transportInfo.listener.transportTerminated();
-
-    // Second transport will wait for back-off
-    pick = transportSet.obtainActiveTransport();
-    assertTrue(pick instanceof DelayedClientTransport);
-    // Start a stream, which will be pending in the delayed transport
-    ClientStream pendingStream = pick.newStream(method, headers, waitForReadyCallOptions,
-        statsTraceCtx);
-    pendingStream.start(mockStreamListener);
-
-    // Shut down TransportSet before the transport is created. Further call to
-    // obtainActiveTransport() gets failing transports
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(false));
-    transportSet.shutdown();
-    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState(false));
-    pick = transportSet.obtainActiveTransport();
-    assertNotNull(pick);
-    assertTrue(pick instanceof FailingClientTransport);
+    transportSet.obtainActiveTransport();
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
     verify(mockTransportFactory).newClientTransport(addr, AUTHORITY, USER_AGENT);
 
-    // Reconnect will eventually happen, even though TransportSet has been shut down
-    fakeClock.forwardMillis(10);
-    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState(false));
-    verify(mockTransportFactory, times(2)).newClientTransport(addr, AUTHORITY, USER_AGENT);
-    // The pending stream will be started on this newly started transport after it's ready.
-    // The transport is shut down by TransportSet right after the stream is created.
-    transportInfo = transports.poll();
-    verify(transportInfo.transport, times(0)).shutdown();
-    assertEquals(0, fakeExecutor.numPendingTasks());
-    transportInfo.listener.transportReady();
-    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState(false));
-    verify(transportInfo.transport, times(0)).newStream(
-        any(MethodDescriptor.class), any(Metadata.class));
-    assertEquals(1, fakeExecutor.runDueTasks());
-    verify(transportInfo.transport).newStream(same(method), same(headers),
-        same(waitForReadyCallOptions), any(StatsTraceContext.class));
-    verify(transportInfo.transport).shutdown();
-    transportInfo.listener.transportShutdown(Status.UNAVAILABLE);
-    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState(false));
-    verify(mockTransportSetCallback, never()).onTerminated(any(TransportSet.class));
-    // Terminating the transport will let TransportSet to be terminated.
-    transportInfo.listener.transportTerminated();
-    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState(false));
-    verify(mockTransportSetCallback).onTerminated(transportSet);
-
-    // No more transports will be created.
-    fakeClock.forwardMillis(10000);
-    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState(false));
-    verifyNoMoreInteractions(mockTransportFactory);
-    assertEquals(0, transports.size());
-  }
-
-  @Test
-  public void shutdownBeforeTransportCreatedWithoutPendingStream() throws Exception {
-    SocketAddress addr = mock(SocketAddress.class);
-    createTransportSet(addr);
-
-    // First transport is created immediately
-    ClientTransport pick = transportSet.obtainActiveTransport();
-    verify(mockTransportFactory).newClientTransport(addr, AUTHORITY, USER_AGENT);
-    assertNotNull(pick);
     // Fail this one
     MockClientTransportInfo transportInfo = transports.poll();
     transportInfo.listener.transportShutdown(Status.UNAVAILABLE);
     transportInfo.listener.transportTerminated();
 
-    // Second transport will wait for back-off
-    pick = transportSet.obtainActiveTransport();
-    assertTrue(pick instanceof DelayedClientTransport);
+    // Entering TRANSIENT_FAILURE, waiting for back-off
+    assertExactCallbackInvokes("onStateChange:" + UNAVAILABLE_STATE);
 
-    // Shut down TransportSet before the transport is created. Futher call to
-    // obtainActiveTransport() gets failing transports
+    // Shut down TransportSet before the transport is created.
     transportSet.shutdown();
-    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState(false));
-    pick = transportSet.obtainActiveTransport();
-    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState(false));
-    assertNotNull(pick);
-    assertTrue(pick instanceof FailingClientTransport);
-
     // TransportSet terminated promptly.
-    verify(mockTransportSetCallback).onTerminated(transportSet);
-    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState(false));
+    assertExactCallbackInvokes("onStateChange:SHUTDOWN", "onTerminated");
+
+    // Futher call to obtainActiveTransport() is no-op.
+    assertNull(transportSet.obtainActiveTransport());
+    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState());
+    assertNoCallbackInvoke();
 
     // No more transports will be created.
     fakeClock.forwardMillis(10000);
-    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState(false));
+    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState());
     verifyNoMoreInteractions(mockTransportFactory);
     assertEquals(0, transports.size());
+    assertNoCallbackInvoke();
   }
 
   @Test
@@ -607,20 +464,22 @@ public class TransportSetTest {
     SocketAddress addr = mock(SocketAddress.class);
     createTransportSet(addr);
 
-    ClientTransport pick = transportSet.obtainActiveTransport();
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
+    transportSet.obtainActiveTransport();
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
     MockClientTransportInfo transportInfo = transports.poll();
-    assertNotSame(transportInfo.transport, pick);
 
     // Shutdown the TransportSet before the pending transport is ready
+    assertNull(transportSet.obtainActiveTransport());
     transportSet.shutdown();
-    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState(false));
+    assertExactCallbackInvokes("onStateChange:SHUTDOWN");
 
     // The transport should've been shut down even though it's not the active transport yet.
     verify(transportInfo.transport).shutdown();
     transportInfo.listener.transportShutdown(Status.UNAVAILABLE);
+    assertNoCallbackInvoke();
     transportInfo.listener.transportTerminated();
-    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState(false));
+    assertExactCallbackInvokes("onTerminated");
+    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState());
   }
 
   @Test
@@ -629,68 +488,18 @@ public class TransportSetTest {
     createTransportSet(addr);
 
     transportSet.shutdown();
-    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState(false));
-    ClientTransport pick = transportSet.obtainActiveTransport();
-    assertNotNull(pick);
+    assertExactCallbackInvokes("onStateChange:SHUTDOWN", "onTerminated");
+    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState());
+    assertNull(transportSet.obtainActiveTransport());
     verify(mockTransportFactory, times(0)).newClientTransport(addr, AUTHORITY, USER_AGENT);
-    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState(false));
-  }
-
-  @Test
-  public void requireConnectionThroughGetState() throws Exception {
-    SocketAddress addr = mock(SocketAddress.class);
-    createTransportSet(addr);
-
-    assertEquals(ConnectivityState.IDLE, transportSet.getState(false));
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(true));
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(true));
-
-    transportSet.obtainActiveTransport().newStream(method, new Metadata(), waitForReadyCallOptions,
-        statsTraceCtx);
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(true));
-
-    // Fail it
-    transports.peek().listener.transportShutdown(Status.UNAVAILABLE);
-    // requireConnection == true doesn't skip the back-off
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(true));
-    transports.poll().listener.transportTerminated();
-    fakeClock.forwardMillis(9);
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(true));
-    fakeClock.forwardMillis(1);
-    // Only when back-off is over, do we try to connect again
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(false));
-
-    // Let it through and fail, thus a go-away
-    transports.peek().listener.transportReady();
-    transports.peek().listener.transportShutdown(Status.UNAVAILABLE);
-    assertEquals(ConnectivityState.IDLE, transportSet.getState(false));
-    transports.poll().listener.transportTerminated();
-
-    // Request for connecting again
-    assertEquals(ConnectivityState.CONNECTING, transportSet.getState(true));
-    // And fail it again
-    transports.peek().listener.transportShutdown(Status.UNAVAILABLE);
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, transportSet.getState(true));
-
-    // Shut it down
-    transportSet.shutdown();
-    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState(true));
-    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState(false));
-    assertFalse(transportSet.isTerminated());
-
-    // Terminate it
-    transports.poll().listener.transportTerminated();
-    assertTrue(transportSet.isTerminated());
-    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState(true));
-    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState(false));
-
-    fakeExecutor.runDueTasks(); // What tasks are scheduled is not important to this test.
+    assertNoCallbackInvoke();
+    assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState());
   }
 
   @Test
   public void logId() {
     createTransportSet(mock(SocketAddress.class));
-    assertEquals("TransportSet@" + Integer.toHexString(transportSet.hashCode()),
+    assertEquals("TransportSet2@" + Integer.toHexString(transportSet.hashCode()),
         transportSet.getLogId());
   }
 
@@ -699,102 +508,115 @@ public class TransportSetTest {
     SocketAddress addr = mock(SocketAddress.class);
     createTransportSet(addr);
 
-    // Invocation counters
-    int inUse = 0;
-    int notInUse = 0;
-
-    verify(mockTransportSetCallback, never()).onInUse(any(TransportSet.class));
-    transportSet.obtainActiveTransport().newStream(method, new Metadata(), waitForReadyCallOptions,
-        statsTraceCtx);
-    verify(mockTransportSetCallback, times(++inUse)).onInUse(transportSet);
-
+    transportSet.obtainActiveTransport();
     MockClientTransportInfo t0 = transports.poll();
-
-    verify(mockTransportSetCallback, never()).onNotInUse(any(TransportSet.class));
     t0.listener.transportReady();
-    // The race between delayed transport being terminated (thus not in-use) and
-    // the real transport become in-use, caused a brief period of TransportSet not in-use.
-    verify(mockTransportSetCallback, times(++notInUse)).onNotInUse(transportSet);
-    // Delayed transport calls newStream() on the real transport in the executor
-    fakeExecutor.runDueTasks();
-    verify(t0.transport).newStream(
-        same(method), any(Metadata.class), same(waitForReadyCallOptions),
-        any(StatsTraceContext.class));
-    verify(mockTransportSetCallback, times(inUse)).onInUse(transportSet);
+    assertExactCallbackInvokes("onStateChange:CONNECTING", "onStateChange:READY");
     t0.listener.transportInUse(true);
-    verify(mockTransportSetCallback, times(++inUse)).onInUse(transportSet);
+    assertExactCallbackInvokes("onInUse");
 
     t0.listener.transportInUse(false);
-    verify(mockTransportSetCallback, times(++notInUse)).onNotInUse(transportSet);
+    assertExactCallbackInvokes("onNotInUse");
 
     t0.listener.transportInUse(true);
-    verify(mockTransportSetCallback, times(++inUse)).onInUse(transportSet);
-
-    // Simulate that the server sends a go-away
+    assertExactCallbackInvokes("onInUse");
     t0.listener.transportShutdown(Status.UNAVAILABLE);
+    assertExactCallbackInvokes("onStateChange:IDLE");
 
-    // Creates a new transport
-    transportSet.obtainActiveTransport().newStream(method, new Metadata(), waitForReadyCallOptions,
-        statsTraceCtx);
+    assertNull(transportSet.obtainActiveTransport());
     MockClientTransportInfo t1 = transports.poll();
     t1.listener.transportReady();
-    // Delayed transport calls newStream() on the real transport in the executor
-    fakeExecutor.runDueTasks();
-    verify(t1.transport).newStream(
-        same(method), any(Metadata.class), same(waitForReadyCallOptions),
-        any(StatsTraceContext.class));
+    assertExactCallbackInvokes("onStateChange:CONNECTING", "onStateChange:READY");
     t1.listener.transportInUse(true);
-    // No turbulance from the race mentioned eariler, because t0 has been in-use
-    verify(mockTransportSetCallback, times(inUse)).onInUse(transportSet);
-    verify(mockTransportSetCallback, times(notInUse)).onNotInUse(transportSet);
+    // TransportSet is already in-use, thus doesn't call the callback
+    assertNoCallbackInvoke();
 
-    // TransportSet is not in-use when both transports are not in-use.
     t1.listener.transportInUse(false);
-    verify(mockTransportSetCallback, times(notInUse)).onNotInUse(transportSet);
+    // t0 is still in-use
+    assertNoCallbackInvoke();
+
     t0.listener.transportInUse(false);
-    verify(mockTransportSetCallback, times(++notInUse)).onNotInUse(transportSet);
-    verify(mockTransportSetCallback, times(inUse)).onInUse(transportSet);
+    assertExactCallbackInvokes("onNotInUse");
   }
 
   @Test
-  public void scheduleBackoff_DoNotScheduleEndOfBackoffIfAlreadyShutdown() {
-    // Setup
-    final boolean[] startBackoffAndShutdownAreCalled = {false};
-    Executor executor = new Executor() {
-      @Override
-      public void execute(Runnable command) {
-        if (command.getClass().getName().contains("FailTheFailFastPendingStreams")) {
-          // shutdown during startBackoff
-          transportSet.shutdown();
-          startBackoffAndShutdownAreCalled[0] = true;
-        }
-        fakeExecutor.getScheduledExecutorService().execute(command);
-      }
-    };
+  public void transportTerminateWithoutExitingInUse() {
+    // An imperfect transport that terminates without going out of in-use. TransportSet will
+    // clear the in-use bit for it.
     SocketAddress addr = mock(SocketAddress.class);
-    addressGroup = new EquivalentAddressGroup(Arrays.asList(addr));
-    transportSet = new TransportSet(addressGroup, AUTHORITY, USER_AGENT, mockLoadBalancer,
-        mockBackoffPolicyProvider, mockTransportFactory, fakeClock.getScheduledExecutorService(),
-        fakeClock.getStopwatchSupplier(), executor, mockTransportSetCallback);
+    createTransportSet(addr);
 
-    // Attempt and fail, scheduleBackoff should be triggered,
-    // and transportSet.shutdown should be triggered by setup
-    transportSet.obtainActiveTransport().newStream(method, new Metadata(), waitForReadyCallOptions,
-        statsTraceCtx);
-    transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
-    verify(mockTransportSetCallback, times(1)).onAllAddressesFailed();
-    assertTrue(startBackoffAndShutdownAreCalled[0]);
+    transportSet.obtainActiveTransport();
+    MockClientTransportInfo t0 = transports.poll();
+    t0.listener.transportReady();
+    assertExactCallbackInvokes("onStateChange:CONNECTING", "onStateChange:READY");
+    t0.listener.transportInUse(true);
+    assertExactCallbackInvokes("onInUse");
 
+    t0.listener.transportShutdown(Status.UNAVAILABLE);
+    assertExactCallbackInvokes("onStateChange:IDLE");
+    t0.listener.transportTerminated();
+    assertExactCallbackInvokes("onNotInUse");
+  }
+
+  @Test
+  public void transportStartReturnsRunnable() {
+    SocketAddress addr1 = mock(SocketAddress.class);
+    SocketAddress addr2 = mock(SocketAddress.class);
+    createTransportSet(addr1, addr2);
+    final AtomicInteger runnableInvokes = new AtomicInteger(0);
+    Runnable startRunnable = new Runnable() {
+        @Override
+        public void run() {
+          runnableInvokes.incrementAndGet();
+        }
+      };
+    transports = TestUtils.captureTransports(mockTransportFactory, startRunnable);
+
+    assertEquals(0, runnableInvokes.get());
+    transportSet.obtainActiveTransport();
+    assertEquals(1, runnableInvokes.get());
+    transportSet.obtainActiveTransport();
+    assertEquals(1, runnableInvokes.get());
+
+    MockClientTransportInfo t0 = transports.poll();
+    t0.listener.transportShutdown(Status.UNAVAILABLE);
+    assertEquals(2, runnableInvokes.get());
+
+    // 2nd address: reconnect immediatly
+    MockClientTransportInfo t1 = transports.poll();
+    t1.listener.transportShutdown(Status.UNAVAILABLE);
+
+    // Addresses exhausted, waiting for back-off.
+    assertEquals(2, runnableInvokes.get());
+    // Run out the back-off period
+    fakeClock.forwardMillis(10);
+    assertEquals(3, runnableInvokes.get());
+
+    // This test doesn't care about scheduled TransportSet callbacks.  Clear it up so that
+    // noMorePendingTasks() won't fail.
     fakeExecutor.runDueTasks();
-    // verify endOfBackoff not scheduled
-    verify(mockBackoffPolicy1, never()).nextBackoffMillis();
+    assertEquals(3, runnableInvokes.get());
   }
 
   private void createTransportSet(SocketAddress ... addrs) {
     addressGroup = new EquivalentAddressGroup(Arrays.asList(addrs));
-    transportSet = new TransportSet(addressGroup, AUTHORITY, USER_AGENT, mockLoadBalancer,
+    transportSet = new TransportSet2(addressGroup, AUTHORITY, USER_AGENT,
         mockBackoffPolicyProvider, mockTransportFactory, fakeClock.getScheduledExecutorService(),
-        fakeClock.getStopwatchSupplier(), fakeExecutor.getScheduledExecutorService(),
-        mockTransportSetCallback);
+        fakeClock.getStopwatchSupplier(), channelExecutor, mockTransportSetCallback);
+  }
+
+  private void assertNoCallbackInvoke() {
+    while (fakeExecutor.runDueTasks() > 0) {}
+    assertEquals(0, callbackInvokes.size());
+  }
+
+  private void assertExactCallbackInvokes(String ... expectedInvokes) {
+    // Make sure all callbacks are to run from channelExecutor only.
+    assertEquals(0, callbackInvokes.size());
+
+    while (fakeExecutor.runDueTasks() > 0) {}
+    assertEquals(Arrays.asList(expectedInvokes), callbackInvokes);
+    callbackInvokes.clear();
   }
 }

@@ -33,51 +33,57 @@ package io.grpc.internal;
 
 import java.util.HashSet;
 
-import javax.annotation.concurrent.GuardedBy;
+import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * Aggregates the in-use state of a set of objects.
  */
-abstract class InUseStateAggregator<T> {
+@NotThreadSafe
+abstract class InUseStateAggregator2<T> {
 
-  @GuardedBy("getLock()")
   private final HashSet<T> inUseObjects = new HashSet<T>();
+  private final Runnable runHandleInUse = new Runnable() {
+      @Override
+      public void run() {
+        handleInUse();
+      }
+    };
+
+  private final Runnable runHandleNotInUse = new Runnable() {
+      @Override
+      public void run() {
+        handleNotInUse();
+      }
+    };
 
   /**
    * Update the in-use state of an object. Initially no object is in use.
+   *
+   * <p>This may call into {@link #handleInUse} or {@link #handleNotInUse} when appropriate.
    */
   final void updateObjectInUse(T object, boolean inUse) {
-    synchronized (getLock()) {
-      int origSize = inUseObjects.size();
-      if (inUse) {
-        inUseObjects.add(object);
-        if (origSize == 0) {
-          handleInUse();
-        }
-      } else {
-        boolean removed = inUseObjects.remove(object);
-        if (removed && origSize == 1) {
-          handleNotInUse();
-        }
+    int origSize = inUseObjects.size();
+    if (inUse) {
+      inUseObjects.add(object);
+      if (origSize == 0) {
+        handleInUse();
+      }
+    } else {
+      boolean removed = inUseObjects.remove(object);
+      if (removed && origSize == 1) {
+        handleNotInUse();
       }
     }
   }
 
   final boolean isInUse() {
-    synchronized (getLock()) {
-      return !inUseObjects.isEmpty();
-    }
+    return !inUseObjects.isEmpty();
   }
-
-  abstract Object getLock();
 
   /**
    * Called when the aggregated in-use state has changed to true, which means at least one object is
    * in use.
-   *
-   * <p>This method is called under the lock returned by {@link #getLock}.
    */
-  @GuardedBy("getLock()")
   abstract void handleInUse();
 
   /**
@@ -85,6 +91,5 @@ abstract class InUseStateAggregator<T> {
    *
    * <p>This method is called under the lock returned by {@link #getLock}.
    */
-  @GuardedBy("getLock()")
   abstract void handleNotInUse();
 }
