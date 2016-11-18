@@ -155,8 +155,7 @@ final class TransportSet2 implements WithLogId {
   TransportSet2(EquivalentAddressGroup addressGroup, String authority, String userAgent,
       BackoffPolicy.Provider backoffPolicyProvider,
       ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
-      Supplier<Stopwatch> stopwatchSupplier, Executor channelExecutor,
-      final Callback callback) {
+      Supplier<Stopwatch> stopwatchSupplier, Executor channelExecutor, Callback callback) {
     this.addressGroup = Preconditions.checkNotNull(addressGroup, "addressGroup");
     this.authority = authority;
     this.userAgent = userAgent;
@@ -252,9 +251,6 @@ final class TransportSet2 implements WithLogId {
       }
     }
 
-    if (state.getState() == SHUTDOWN) {
-      return;
-    }
     gotoState(ConnectivityStateInfo.forTransientFailure(status));
     if (reconnectPolicy == null) {
       reconnectPolicy = backoffPolicyProvider.get();
@@ -427,14 +423,14 @@ final class TransportSet2 implements WithLogId {
           gotoNonErrorState(IDLE);
           activeTransport = null;
         } else if (pendingTransport == transport) {
+          Preconditions.checkState(state.getState() == CONNECTING,
+              "Expected state is CONNECTING, actual state is %s", state.getState());
           // Continue reconnect if there are still addresses to try.
           if (nextAddressIndex == 0) {
             // Initiate backoff
             // Transition to TRANSIENT_FAILURE
             scheduleBackoff(s);
           } else {
-            Preconditions.checkState(state.getState() == CONNECTING,
-                "Expected state is CONNECTING, actual state is %s", state.getState());
             runnable = startNewTransport();
           }
         }
