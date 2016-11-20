@@ -201,8 +201,9 @@ public class StressTestClient {
               + "\n    Valid Testcases:"
               + validTestCasesHelpText()
               + "\n  --use_tls=true|false           Whether to use TLS. Default: " + c.useTls
-              + "\n  --use_test_ca=true|false       Whether to trust our fake CA."
-              + " Default: " + c.useTestCa
+              + "\n  --use_test_ca=true|false       Whether to trust our fake CA. Requires"
+              + " --use_tls=true"
+              + "\n                                 to have effect. Default: " + c.useTestCa
               + "\n  --test_duration_secs=SECONDS   '-1' for no limit. Default: " + c.durationSecs
               + "\n  --num_channels_per_server=INT  Number of connections to each server address."
               + " Default: " + c.channelsPerServer
