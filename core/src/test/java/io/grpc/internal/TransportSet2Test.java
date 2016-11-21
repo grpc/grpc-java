@@ -37,7 +37,10 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -427,6 +430,25 @@ public class TransportSet2Test {
   }
 
   @Test
+  public void shutdownWhenReady() throws Exception {
+    SocketAddress addr = mock(SocketAddress.class);
+    createTransportSet(addr);
+    
+    transportSet.obtainActiveTransport();
+    MockClientTransportInfo transportInfo = transports.poll();
+    transportInfo.listener.transportReady();
+    assertExactCallbackInvokes("onStateChange:CONNECTING", "onStateChange:READY");
+
+    transportSet.shutdown();
+    verify(transportInfo.transport).shutdown();
+    assertExactCallbackInvokes("onStateChange:SHUTDOWN");
+
+    transportInfo.listener.transportTerminated();
+    assertExactCallbackInvokes("onTerminated");
+    verify(transportInfo.transport, never()).shutdownNow(any(Status.class));
+  }
+
+  @Test
   public void shutdownBeforeTransportCreated() throws Exception {
     SocketAddress addr = mock(SocketAddress.class);
     createTransportSet(addr);
@@ -499,6 +521,30 @@ public class TransportSet2Test {
     transportInfo.listener.transportTerminated();
     assertExactCallbackInvokes("onTerminated");
     assertEquals(ConnectivityState.SHUTDOWN, transportSet.getState());
+  }
+
+  @Test
+  public void shutdownNow() throws Exception {
+    SocketAddress addr = mock(SocketAddress.class);
+    createTransportSet(addr);
+    
+    transportSet.obtainActiveTransport();
+    MockClientTransportInfo t1 = transports.poll();
+    t1.listener.transportReady();
+    assertExactCallbackInvokes("onStateChange:CONNECTING", "onStateChange:READY");
+    t1.listener.transportShutdown(Status.UNAVAILABLE);
+    assertExactCallbackInvokes("onStateChange:IDLE");
+
+    transportSet.obtainActiveTransport();
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
+    MockClientTransportInfo t2 = transports.poll();
+
+    Status status = Status.UNAVAILABLE.withDescription("Requested");
+    transportSet.shutdownNow(status);
+
+    verify(t1.transport).shutdownNow(same(status));
+    verify(t2.transport).shutdownNow(same(status));
+    assertExactCallbackInvokes("onStateChange:SHUTDOWN");
   }
 
   @Test
