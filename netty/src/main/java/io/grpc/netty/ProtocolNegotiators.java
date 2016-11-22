@@ -484,8 +484,12 @@ public final class ProtocolNegotiators {
   private static class BufferUntilTlsNegotiatedHandler extends AbstractBufferingHandler
       implements ProtocolNegotiator.Handler {
 
-    BufferUntilTlsNegotiatedHandler(ChannelHandler... handlers) {
-      super(handlers);
+    private final GrpcHttp2ConnectionHandler grpcHandler;
+
+    BufferUntilTlsNegotiatedHandler(
+        ChannelHandler bootstrapHandler, GrpcHttp2ConnectionHandler grpcHandler) {
+      super(bootstrapHandler, grpcHandler);
+      this.grpcHandler = grpcHandler;
     }
 
     @Override
@@ -502,6 +506,14 @@ public final class ProtocolNegotiators {
           if (HTTP2_VERSION.equals(handler.applicationProtocol())) {
             // Successfully negotiated the protocol.
             logSslEngineDetails(Level.FINER, ctx, "TLS negotiation succeeded.", null);
+
+            // Successfully negotiated the protocol.
+            // Notify about completion and pass down SSLSession in attributes.
+            grpcHandler.handleProtocolNegotiationCompleted(
+                Attributes.newBuilder()
+                    .set(Grpc.TRANSPORT_ATTR_SSL_SESSION,
+                        sslHandler(ctx.pipeline()).engine().getSession())
+                    .build());
             writeBufferedAndRemove(ctx);
           } else {
             Exception ex = new Exception(
@@ -515,6 +527,11 @@ public final class ProtocolNegotiators {
       }
       super.userEventTriggered(ctx, evt);
     }
+
+    private SslHandler sslHandler(ChannelPipeline pipeline) {
+      return pipeline.get(SslHandler.class);
+    }
+
   }
 
   /**
