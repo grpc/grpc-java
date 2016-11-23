@@ -392,18 +392,22 @@ public class DelayedClientTransportTest {
     // Fail-fast streams
     DelayedStream stream1 = (DelayedStream) delayedTransport.newStream(
         method, headers, failFastCallOptions, statsTraceCtx);
+    verify(transportListener).transportInUse(true);
     DelayedStream stream2 = (DelayedStream) delayedTransport.newStream(
         method2, headers2, failFastCallOptions, statsTraceCtx);
     DelayedStream stream3 = (DelayedStream) delayedTransport.newStream(
         method, headers, failFastCallOptions, statsTraceCtx);
 
     // Wait-for-ready streams
+    FakeClock stream6Executor = new FakeClock();
     DelayedStream stream4 = (DelayedStream) delayedTransport.newStream(
         method, headers, waitForReadyCallOptions, statsTraceCtx);
     DelayedStream stream5 = (DelayedStream) delayedTransport.newStream(
         method2, headers2, waitForReadyCallOptions, statsTraceCtx);
     DelayedStream stream6 = (DelayedStream) delayedTransport.newStream(
-        method, headers, waitForReadyCallOptions, statsTraceCtx);
+        method, headers,
+        waitForReadyCallOptions.withExecutor(stream6Executor.getScheduledExecutorService()),
+        statsTraceCtx);
     assertEquals(6, delayedTransport.getPendingStreamsCount());
 
     // First reprocess(). Some will proceed, some will fail and the rest will stay buffered.
@@ -454,9 +458,12 @@ public class DelayedClientTransportTest {
         PickResult.withSubchannel(subchannel2),  // stream5
         PickResult.withSubchannel(subchannel1));  // stream6
     inOrder = inOrder(picker);
+    assertEquals(0, stream6Executor.numPendingTasks());
+    verify(transportListener, never()).transportInUse(false);
 
     delayedTransport.reprocess(picker);
     assertEquals(0, delayedTransport.getPendingStreamsCount());
+    verify(transportListener).transportInUse(false);
     inOrder.verify(picker).pickSubchannel(affinity1, headers);  // stream3
     inOrder.verify(picker).pickSubchannel(affinity2, headers2);  // stream5
     inOrder.verify(picker).pickSubchannel(affinity2, headers);  // stream6
@@ -465,6 +472,18 @@ public class DelayedClientTransportTest {
     assertEquals(0, fakeExecutor.numPendingTasks());
     assertSame(mockRealStream, stream3.getRealStream());
     assertSame(mockRealStream2, stream5.getRealStream());
+
+    // If there is an executor in the CallOptions, it will be used to create the real tream.
+    assertNull(stream6.getRealStream());
+    stream6Executor.runDueTasks();
     assertSame(mockRealStream, stream6.getRealStream());
+  }
+
+  @Test
+  public void reprocess_NoPendingStream() {
+    SubchannelPicker picker = mock(SubchannelPicker.class);
+    delayedTransport.reprocess(picker);
+    verifyNoMoreInteractions(picker);
+    verifyNoMoreInteractions(transportListener);
   }
 }
