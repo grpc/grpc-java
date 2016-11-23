@@ -429,18 +429,15 @@ class DelayedClientTransport implements ManagedClientTransport {
       if (pendingStreams == null || pendingStreams.isEmpty()) {
         return;
       }
-      boolean wasEmpty = pendingStreams.isEmpty();
       pendingStreams.removeAll(toRemove);
       if (pendingStreams.isEmpty()) {
         pendingStreams = null;
-        if (!wasEmpty) {
-          // There may be a brief gap between delayed transport clearing in-use state, and first
-          // real transport starting streams and setting in-use state.  During the gap the whole
-          // channel's in-use state may be false. However, it shouldn't cause spurious switching to
-          // idleness (which would shutdown the transports and LoadBalancer) because the gap should
-          // be shorter than IDLE_MODE_DEFAULT_TIMEOUT_MILLIS (1 second).
-          listener.transportInUse(false);
-        }
+        // There may be a brief gap between delayed transport clearing in-use state, and first real
+        // transport starting streams and setting in-use state.  During the gap the whole channel's
+        // in-use state may be false. However, it shouldn't cause spurious switching to idleness
+        // (which would shutdown the transports and LoadBalancer) because the gap should be shorter
+        // than IDLE_MODE_DEFAULT_TIMEOUT_MILLIS (1 second).
+        listener.transportInUse(false);
       }
     }
   }
