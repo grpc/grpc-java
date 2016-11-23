@@ -35,6 +35,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.same;
 import static org.mockito.Mockito.times;
@@ -44,8 +46,12 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.base.Supplier;
 
+import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.IntegerMarshaller;
+import io.grpc.LoadBalancer2.PickResult;
+import io.grpc.LoadBalancer2.Subchannel;
+import io.grpc.LoadBalancer2.SubchannelPicker;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -58,10 +64,12 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.concurrent.Executor;
 
@@ -80,6 +88,8 @@ public class DelayedClientTransportTest {
   @Mock private Executor mockExecutor;
   @Captor private ArgumentCaptor<Status> statusCaptor;
   @Captor private ArgumentCaptor<ClientStreamListener> listenerCaptor;
+
+  private static final Attributes.Key<Integer> SHARD_ID = Attributes.Key.of("shard-id");
 
   private final MethodDescriptor<String, Integer> method = MethodDescriptor.create(
       MethodDescriptor.MethodType.UNKNOWN, "/service/method",
@@ -102,8 +112,17 @@ public class DelayedClientTransportTest {
       GrpcUtil.STOPWATCH_SUPPLIER);
 
   private final FakeClock fakeExecutor = new FakeClock();
+
+  final HashMap<Subchannel, ClientTransport> transportMap =
+      new HashMap<Subchannel, ClientTransport>();
+
   private final DelayedClientTransport delayedTransport = new DelayedClientTransport(
-      fakeExecutor.getScheduledExecutorService());
+      fakeExecutor.getScheduledExecutorService()) {
+      @Override
+      ClientTransport obtainActiveTransport(Subchannel subchannel) {
+        return transportMap.get(subchannel);
+      }
+    };
 
   @Before public void setUp() {
     MockitoAnnotations.initMocks(this);
@@ -348,5 +367,41 @@ public class DelayedClientTransportTest {
     delayedTransport.startBackoff(cause);
 
     assertFalse(delayedTransport.isInBackoffPeriod());
+  }
+
+  @Test public void reprocess() {
+    final Attributes affinity1 = Attributes.newBuilder().set(SHARD_ID, 1).build();
+    final Attributes affinity2 = Attributes.newBuilder().set(SHARD_ID, 2).build();
+    final CallOptions failFastCallOptions = CallOptions.DEFAULT.withAffinity(affinity1);
+    final CallOptions waitForReadyCallOptions =
+        CallOptions.DEFAULT.withWaitForReady().withAffinity(affinity2);
+
+    final Subchannel subchannel1 = mock(Subchannel.class);
+    when(mockRealTransport.newStream(same(method), same(headers), same(failFastCallOptions),
+            same(statsTraceCtx))).thenReturn(mockRealStream);
+    when(mockRealTransport.newStream(same(method2), same(headers2), same(waitForReadyCallOptions),
+            same(statsTraceCtx))).thenReturn(mockRealStream);
+    transportMap.put(subchannel1, mockRealTransport);
+    ClientStream stream1 = delayedTransport.newStream(
+        method, headers, failFastCallOptions, statsTraceCtx);
+    ClientStream stream2 = delayedTransport.newStream(
+        method2, headers2, waitForReadyCallOptions, statsTraceCtx);
+
+    SubchannelPicker picker1 = mock(SubchannelPicker.class);
+    InOrder inOrder = inOrder(picker1, mockRealTransport);
+    when(picker1.pickSubchannel(any(Attributes.class), any(Metadata.class)))
+        .thenReturn(PickResult.withSubchannel(subchannel1));
+
+    delayedTransport.reprocess(picker1);
+    inOrder.verify(picker1).pickSubchannel(same(affinity1), same(headers));
+    inOrder.verify(picker1).pickSubchannel(same(affinity2), same(headers2));
+    // Make sure that real transport creates streams in the executor
+    inOrder.verify(mockRealTransport, never()).newStream(any(MethodDescriptor.class),
+        any(Metadata.class), any(CallOptions.class), any(StatsTraceContext.class));
+    fakeExecutor.runDueTasks();
+    inOrder.verify(mockRealTransport).newStream(same(method), same(headers),
+        same(failFastCallOptions), same(statsTraceCtx));
+    inOrder.verify(mockRealTransport).newStream(same(method2), same(headers2),
+        same(waitForReadyCallOptions), same(statsTraceCtx));
   }
 }
