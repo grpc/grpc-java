@@ -33,6 +33,8 @@ package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.inOrder;
@@ -370,38 +372,99 @@ public class DelayedClientTransportTest {
   }
 
   @Test public void reprocess() {
-    final Attributes affinity1 = Attributes.newBuilder().set(SHARD_ID, 1).build();
-    final Attributes affinity2 = Attributes.newBuilder().set(SHARD_ID, 2).build();
-    final CallOptions failFastCallOptions = CallOptions.DEFAULT.withAffinity(affinity1);
-    final CallOptions waitForReadyCallOptions =
+    Attributes affinity1 = Attributes.newBuilder().set(SHARD_ID, 1).build();
+    Attributes affinity2 = Attributes.newBuilder().set(SHARD_ID, 2).build();
+    CallOptions failFastCallOptions = CallOptions.DEFAULT.withAffinity(affinity1);
+    CallOptions waitForReadyCallOptions =
         CallOptions.DEFAULT.withWaitForReady().withAffinity(affinity2);
 
-    final Subchannel subchannel1 = mock(Subchannel.class);
-    when(mockRealTransport.newStream(same(method), same(headers), same(failFastCallOptions),
-            same(statsTraceCtx))).thenReturn(mockRealStream);
-    when(mockRealTransport.newStream(same(method2), same(headers2), same(waitForReadyCallOptions),
-            same(statsTraceCtx))).thenReturn(mockRealStream);
+    Subchannel subchannel1 = mock(Subchannel.class);
+    Subchannel subchannel2 = mock(Subchannel.class);
+    Subchannel subchannel3 = mock(Subchannel.class);
+    when(mockRealTransport.newStream(any(MethodDescriptor.class), any(Metadata.class),
+            any(CallOptions.class), same(statsTraceCtx))).thenReturn(mockRealStream);
+    when(mockRealTransport2.newStream(any(MethodDescriptor.class), any(Metadata.class),
+            any(CallOptions.class), same(statsTraceCtx))).thenReturn(mockRealStream2);
     transportMap.put(subchannel1, mockRealTransport);
-    ClientStream stream1 = delayedTransport.newStream(
+    transportMap.put(subchannel2, mockRealTransport2);
+    // subchannel3 maps to null
+
+    // Fail-fast streams
+    DelayedStream stream1 = (DelayedStream) delayedTransport.newStream(
         method, headers, failFastCallOptions, statsTraceCtx);
-    ClientStream stream2 = delayedTransport.newStream(
+    DelayedStream stream2 = (DelayedStream) delayedTransport.newStream(
+        method2, headers2, failFastCallOptions, statsTraceCtx);
+    DelayedStream stream3 = (DelayedStream) delayedTransport.newStream(
+        method, headers, failFastCallOptions, statsTraceCtx);
+
+    // Wait-for-ready streams
+    DelayedStream stream4 = (DelayedStream) delayedTransport.newStream(
+        method, headers, waitForReadyCallOptions, statsTraceCtx);
+    DelayedStream stream5 = (DelayedStream) delayedTransport.newStream(
         method2, headers2, waitForReadyCallOptions, statsTraceCtx);
+    DelayedStream stream6 = (DelayedStream) delayedTransport.newStream(
+        method, headers, waitForReadyCallOptions, statsTraceCtx);
+    assertEquals(6, delayedTransport.getPendingStreamsCount());
 
-    SubchannelPicker picker1 = mock(SubchannelPicker.class);
-    InOrder inOrder = inOrder(picker1, mockRealTransport);
-    when(picker1.pickSubchannel(any(Attributes.class), any(Metadata.class)))
-        .thenReturn(PickResult.withSubchannel(subchannel1));
+    // First reprocess(). Some will proceed, some will fail and the rest will stay buffered.
+    SubchannelPicker picker = mock(SubchannelPicker.class);
+    when(picker.pickSubchannel(any(Attributes.class), any(Metadata.class))).thenReturn(
+        // For the fail-fast streams
+        PickResult.withSubchannel(subchannel1),    // stream1: proceed
+        PickResult.withError(Status.UNAVAILABLE),  // stream2: fail
+        PickResult.withSubchannel(subchannel3),    // stream3: stay
+        // For the wait-for-ready streams
+        PickResult.withSubchannel(subchannel2),           // stream4: proceed
+        PickResult.withError(Status.RESOURCE_EXHAUSTED),  // stream5: stay
+        PickResult.withSubchannel(subchannel3));          // stream6: stay
+    InOrder inOrder = inOrder(picker);
+    delayedTransport.reprocess(picker);
 
-    delayedTransport.reprocess(picker1);
-    inOrder.verify(picker1).pickSubchannel(same(affinity1), same(headers));
-    inOrder.verify(picker1).pickSubchannel(same(affinity2), same(headers2));
+    assertEquals(3, delayedTransport.getPendingStreamsCount());
+    inOrder.verify(picker).pickSubchannel(affinity1, headers);  // stream1
+    inOrder.verify(picker).pickSubchannel(affinity1, headers2);  // stream2
+    inOrder.verify(picker).pickSubchannel(affinity1, headers);  // stream3
+    inOrder.verify(picker).pickSubchannel(affinity2, headers);  // stream4
+    inOrder.verify(picker).pickSubchannel(affinity2, headers2);  // stream5
+    inOrder.verify(picker).pickSubchannel(affinity2, headers);  // stream6
+    inOrder.verifyNoMoreInteractions();
     // Make sure that real transport creates streams in the executor
-    inOrder.verify(mockRealTransport, never()).newStream(any(MethodDescriptor.class),
+    verify(mockRealTransport, never()).newStream(any(MethodDescriptor.class),
+        any(Metadata.class), any(CallOptions.class), any(StatsTraceContext.class));
+    verify(mockRealTransport2, never()).newStream(any(MethodDescriptor.class),
         any(Metadata.class), any(CallOptions.class), any(StatsTraceContext.class));
     fakeExecutor.runDueTasks();
-    inOrder.verify(mockRealTransport).newStream(same(method), same(headers),
-        same(failFastCallOptions), same(statsTraceCtx));
-    inOrder.verify(mockRealTransport).newStream(same(method2), same(headers2),
-        same(waitForReadyCallOptions), same(statsTraceCtx));
+    assertEquals(0, fakeExecutor.numPendingTasks());
+    // stream1 and stream4 went through
+    verify(mockRealTransport).newStream(method, headers, failFastCallOptions, statsTraceCtx);
+    verify(mockRealTransport2).newStream(method, headers, waitForReadyCallOptions, statsTraceCtx);
+    assertSame(mockRealStream, stream1.getRealStream());
+    assertSame(mockRealStream2, stream4.getRealStream());
+    // The fail-fast stream2 has failed due to picker returning an error
+    assertSame(Status.UNAVAILABLE, ((FailingClientStream) stream2.getRealStream()).getError());
+    // Other streams are still buffered
+    assertNull(stream3.getRealStream());
+    assertNull(stream5.getRealStream());
+    assertNull(stream6.getRealStream());
+
+    // Second reprocess(). All will proceed.
+    picker = mock(SubchannelPicker.class);
+    when(picker.pickSubchannel(any(Attributes.class), any(Metadata.class))).thenReturn(
+        PickResult.withSubchannel(subchannel1),  // stream3
+        PickResult.withSubchannel(subchannel2),  // stream5
+        PickResult.withSubchannel(subchannel1));  // stream6
+    inOrder = inOrder(picker);
+
+    delayedTransport.reprocess(picker);
+    assertEquals(0, delayedTransport.getPendingStreamsCount());
+    inOrder.verify(picker).pickSubchannel(affinity1, headers);  // stream3
+    inOrder.verify(picker).pickSubchannel(affinity2, headers2);  // stream5
+    inOrder.verify(picker).pickSubchannel(affinity2, headers);  // stream6
+    inOrder.verifyNoMoreInteractions();
+    fakeExecutor.runDueTasks();
+    assertEquals(0, fakeExecutor.numPendingTasks());
+    assertSame(mockRealStream, stream3.getRealStream());
+    assertSame(mockRealStream2, stream5.getRealStream());
+    assertSame(mockRealStream, stream6.getRealStream());
   }
 }
