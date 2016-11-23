@@ -124,7 +124,7 @@ public final class ProtocolNegotiators {
 
   @VisibleForTesting
   static final class ServerTlsHandler extends ChannelInboundHandlerAdapter
-          implements ProtocolNegotiator.Handler {
+      implements ProtocolNegotiator.Handler {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final SslContext sslContext;
 
@@ -512,7 +512,7 @@ public final class ProtocolNegotiators {
             grpcHandler.handleProtocolNegotiationCompleted(
                 Attributes.newBuilder()
                     .set(Grpc.TRANSPORT_ATTR_SSL_SESSION,
-                        sslHandler(ctx.pipeline()).engine().getSession())
+                        ctx.pipeline().get(SslHandler.class).engine().getSession())
                     .build());
             writeBufferedAndRemove(ctx);
           } else {
@@ -527,11 +527,6 @@ public final class ProtocolNegotiators {
       }
       super.userEventTriggered(ctx, evt);
     }
-
-    private SslHandler sslHandler(ChannelPipeline pipeline) {
-      return pipeline.get(SslHandler.class);
-    }
-
   }
 
   /**
