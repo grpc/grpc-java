@@ -187,7 +187,7 @@ public class StressTestClient {
       }
     }
 
-    if (!serverAddresses.isEmpty()) {
+    if (!usage && !serverAddresses.isEmpty()) {
       addresses = parseServerAddresses(serverAddresses);
       usage = addresses.isEmpty();
     }
