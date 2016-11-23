@@ -48,7 +48,6 @@ import io.grpc.Attributes;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
-import io.grpc.ExperimentalApi;
 import io.grpc.HandlerRegistry;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -179,12 +178,17 @@ public final class ServerImpl extends io.grpc.Server {
   }
 
   @Override
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
   public List<ServerServiceDefinition> getServices() {
-    List<ServerServiceDefinition> services =
-        new ArrayList<ServerServiceDefinition>(registry.getServices());
-    services.addAll(fallbackRegistry.getServices());
-    return Collections.unmodifiableList(services);
+    if (fallbackRegistry.getServices().isEmpty()) {
+      return registry.getServices();
+    } else {
+      int servicesCount = registry.getServices().size() + fallbackRegistry.getServices().size();
+      List<ServerServiceDefinition> services =
+          new ArrayList<ServerServiceDefinition>(servicesCount);
+      services.addAll(registry.getServices());
+      services.addAll(fallbackRegistry.getServices());
+      return Collections.unmodifiableList(services);
+    }
   }
 
   /**

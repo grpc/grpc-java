@@ -90,7 +90,7 @@ public class ProtoReflectionServiceTest {
 
   @Test
   public void listServices() throws Exception {
-    HashSet<ServiceResponse> originalServices = new HashSet<ServiceResponse>(
+    Set<ServiceResponse> originalServices = new HashSet<ServiceResponse>(
         Arrays.asList(
             ServiceResponse.newBuilder()
                 .setName("grpc.reflection.v1alpha.ServerReflection")
@@ -123,13 +123,13 @@ public class ProtoReflectionServiceTest {
 
   @Test
   public void fileByFilename() throws Exception {
-    final ServerReflectionRequest request =
+    ServerReflectionRequest request =
         ServerReflectionRequest.newBuilder()
             .setHost(TEST_HOST)
             .setFileByFilename("io/grpc/reflection/testing/reflection_test_depth_three.proto")
             .build();
 
-    final ServerReflectionResponse goldenResponse =
+    ServerReflectionResponse goldenResponse =
         ServerReflectionResponse.newBuilder()
             .setValidHost(TEST_HOST)
             .setOriginalRequest(request)
@@ -150,13 +150,13 @@ public class ProtoReflectionServiceTest {
 
   @Test
   public void fileContainingSymbol() throws Exception {
-    final ServerReflectionRequest request =
+    ServerReflectionRequest request =
         ServerReflectionRequest.newBuilder()
             .setHost(TEST_HOST)
             .setFileContainingSymbol("grpc.reflection.testing.ReflectableService.Method")
             .build();
 
-    final List<ByteString> goldenResponse =
+    List<ByteString> goldenResponse =
         Arrays.asList(
             ReflectionTestProto.getDescriptor().toProto().toByteString(),
             ReflectionTestDepthTwoProto.getDescriptor().toProto().toByteString(),
@@ -170,7 +170,7 @@ public class ProtoReflectionServiceTest {
     requestObserver.onNext(request);
     requestObserver.onCompleted();
 
-    final List<ByteString> response =
+    List<ByteString> response =
         responseObserver.firstValue().get()
             .getFileDescriptorResponse().getFileDescriptorProtoList();
     assertEquals(goldenResponse.size(), response.size());
@@ -179,13 +179,13 @@ public class ProtoReflectionServiceTest {
 
   @Test
   public void fileContainingNestedSymbol() throws Exception {
-    final ServerReflectionRequest request =
+    ServerReflectionRequest request =
         ServerReflectionRequest.newBuilder()
             .setHost(TEST_HOST)
             .setFileContainingSymbol("grpc.reflection.testing.NestedTypeOuter.Middle.Inner")
             .build();
 
-    final ServerReflectionResponse goldenResponse =
+    ServerReflectionResponse goldenResponse =
         ServerReflectionResponse.newBuilder()
             .setValidHost(TEST_HOST)
             .setOriginalRequest(request)
@@ -206,7 +206,7 @@ public class ProtoReflectionServiceTest {
 
   @Test
   public void fileContainingExtension() throws Exception {
-    final ServerReflectionRequest request =
+    ServerReflectionRequest request =
         ServerReflectionRequest.newBuilder()
             .setHost(TEST_HOST)
             .setFileContainingExtension(
@@ -216,7 +216,7 @@ public class ProtoReflectionServiceTest {
                     .build())
             .build();
 
-    final List<ByteString> goldenResponse =
+    List<ByteString> goldenResponse =
         Arrays.asList(
             ReflectionTestProto.getDescriptor().toProto().toByteString(),
             ReflectionTestDepthTwoProto.getDescriptor().toProto().toByteString(),
@@ -230,7 +230,7 @@ public class ProtoReflectionServiceTest {
     requestObserver.onNext(request);
     requestObserver.onCompleted();
 
-    final List<ByteString> response =
+    List<ByteString> response =
         responseObserver.firstValue().get()
             .getFileDescriptorResponse().getFileDescriptorProtoList();
     assertEquals(goldenResponse.size(), response.size());
@@ -239,7 +239,7 @@ public class ProtoReflectionServiceTest {
 
   @Test
   public void fileContainingNestedExtension() throws Exception {
-    final ServerReflectionRequest request =
+    ServerReflectionRequest request =
         ServerReflectionRequest.newBuilder()
             .setHost(TEST_HOST)
             .setFileContainingExtension(
@@ -249,7 +249,7 @@ public class ProtoReflectionServiceTest {
                     .build())
             .build();
 
-    final ServerReflectionResponse goldenResponse =
+    ServerReflectionResponse goldenResponse =
         ServerReflectionResponse.newBuilder()
             .setValidHost(TEST_HOST)
             .setOriginalRequest(request)
@@ -272,13 +272,13 @@ public class ProtoReflectionServiceTest {
 
   @Test
   public void allExtensionNumbersOfType() throws Exception {
-    final ServerReflectionRequest request =
+    ServerReflectionRequest request =
         ServerReflectionRequest.newBuilder()
             .setHost(TEST_HOST)
             .setAllExtensionNumbersOfType("grpc.reflection.testing.ThirdLevelType")
             .build();
 
-    final Set<Integer> goldenResponse = new HashSet<Integer>(Arrays.asList(100, 101));
+    Set<Integer> goldenResponse = new HashSet<Integer>(Arrays.asList(100, 101));
 
     StreamRecorder<ServerReflectionResponse> responseObserver = StreamRecorder.create();
     StreamObserver<ServerReflectionRequest> requestObserver =
@@ -297,14 +297,14 @@ public class ProtoReflectionServiceTest {
 
 
   private void assertServiceResponseEquals(Set<ServiceResponse> goldenResponse) throws Exception {
-    final ServerReflectionRequest request =
+    ServerReflectionRequest request =
         ServerReflectionRequest.newBuilder().setHost(TEST_HOST).setListServices("services").build();
     StreamRecorder<ServerReflectionResponse> responseObserver = StreamRecorder.create();
     StreamObserver<ServerReflectionRequest> requestObserver =
         reflectionService.serverReflectionInfo(responseObserver);
     requestObserver.onNext(request);
     requestObserver.onCompleted();
-    final List<ServiceResponse> response =
+    List<ServiceResponse> response =
         responseObserver.firstValue().get().getListServicesResponse().getServiceList();
     assertEquals(goldenResponse.size(), response.size());
     assertEquals(goldenResponse, new HashSet<ServiceResponse>(response));

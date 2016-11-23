@@ -31,17 +31,15 @@
 
 package io.grpc.internal;
 
-import io.grpc.ExperimentalApi;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.SortedMap;
-import java.util.TreeMap;
 
 import javax.annotation.Nullable;
 
@@ -59,7 +57,6 @@ final class InternalHandlerRegistry {
   /**
    * Returns the service definitions in this registry.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
   public List<ServerServiceDefinition> getServices() {
     return services;
   }
@@ -72,8 +69,8 @@ final class InternalHandlerRegistry {
   static class Builder {
 
     // Store per-service first, to make sure services are added/replaced atomically.
-    private final SortedMap<String, ServerServiceDefinition> services =
-        new TreeMap<String, ServerServiceDefinition>();
+    private final HashMap<String, ServerServiceDefinition> services =
+        new LinkedHashMap<String, ServerServiceDefinition>();
 
     Builder addService(ServerServiceDefinition service) {
       services.put(service.getServiceDescriptor().getName(), service);

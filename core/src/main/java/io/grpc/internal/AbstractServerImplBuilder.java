@@ -43,7 +43,6 @@ import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
-import io.grpc.ExperimentalApi;
 import io.grpc.HandlerRegistry;
 import io.grpc.Internal;
 import io.grpc.InternalNotifyOnServerBuild;
@@ -122,14 +121,9 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
 
   @Override
   public final T addService(BindableService bindableService) {
-    return addService(bindableService.bindService());
-  }
-
-  @Override
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
-  public final <S extends InternalNotifyOnServerBuild & BindableService> T addService(
-      S bindableService) {
-    notifyOnBuildList.add(bindableService);
+    if (bindableService instanceof InternalNotifyOnServerBuild) {
+      notifyOnBuildList.add((InternalNotifyOnServerBuild) bindableService);
+    }
     return addService(bindableService.bindService());
   }
 
