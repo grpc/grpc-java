@@ -68,8 +68,8 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>This is the next version of {@link TransportSet} in development.
  */
 @ThreadSafe
-final class TransportSet2 implements WithLogId {
-  private static final Logger log = Logger.getLogger(TransportSet2.class.getName());
+final class InternalSubchannel implements WithLogId {
+  private static final Logger log = Logger.getLogger(InternalSubchannel.class.getName());
 
   private final Object lock = new Object();
   private final EquivalentAddressGroup addressGroup;
@@ -126,12 +126,12 @@ final class TransportSet2 implements WithLogId {
       new InUseStateAggregator2<ManagedClientTransport>() {
         @Override
         void handleInUse() {
-          callback.onInUse(TransportSet2.this);
+          callback.onInUse(InternalSubchannel.this);
         }
 
         @Override
         void handleNotInUse() {
-          callback.onNotInUse(TransportSet2.this);
+          callback.onNotInUse(InternalSubchannel.this);
         }
       };
 
@@ -152,7 +152,7 @@ final class TransportSet2 implements WithLogId {
   @GuardedBy("lock")
   private ConnectivityStateInfo state = ConnectivityStateInfo.forNonError(IDLE);
 
-  TransportSet2(EquivalentAddressGroup addressGroup, String authority, String userAgent,
+  InternalSubchannel(EquivalentAddressGroup addressGroup, String authority, String userAgent,
       BackoffPolicy.Provider backoffPolicyProvider,
       ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
       Supplier<Stopwatch> stopwatchSupplier, Executor channelExecutor, Callback callback) {
@@ -283,7 +283,7 @@ final class TransportSet2 implements WithLogId {
       channelExecutor.execute(new Runnable() {
           @Override
           public void run() {
-            callback.onStateChange(TransportSet2.this, newState);
+            callback.onStateChange(InternalSubchannel.this, newState);
           }
         });
     }
@@ -322,7 +322,7 @@ final class TransportSet2 implements WithLogId {
     channelExecutor.execute(new Runnable() {
         @Override
         public void run() {
-          callback.onTerminated(TransportSet2.this);
+          callback.onTerminated(InternalSubchannel.this);
         }
       });
   }
@@ -467,26 +467,26 @@ final class TransportSet2 implements WithLogId {
   // All methods are called in channelExecutor, which is a serializing executor.
   abstract static class Callback {
     /**
-     * Called when the TransportSet is terminated, which means it's shut down and all transports
+     * Called when the subchannel is terminated, which means it's shut down and all transports
      * have been terminated.
      */
-    public void onTerminated(TransportSet2 ts) { }
+    public void onTerminated(InternalSubchannel is) { }
 
     /**
-     * Called when the TransportSet's connectivity state has changed.
+     * Called when the subchannel's connectivity state has changed.
      */
-    public void onStateChange(TransportSet2 ts, ConnectivityStateInfo newState) { }
+    public void onStateChange(InternalSubchannel is, ConnectivityStateInfo newState) { }
 
     /**
-     * Called when the TransportSet's in-use state has changed to true, which means at least one
+     * Called when the subchannel's in-use state has changed to true, which means at least one
      * transport is in use.
      */
-    public void onInUse(TransportSet2 ts) { }
+    public void onInUse(InternalSubchannel is) { }
 
     /**
-     * Called when the TransportSet's in-use state has changed to false, which means no transport is
+     * Called when the subchannel's in-use state has changed to false, which means no transport is
      * in use.
      */
-    public void onNotInUse(TransportSet2 ts) { }
+    public void onNotInUse(InternalSubchannel is) { }
   }
 }
