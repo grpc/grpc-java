@@ -511,8 +511,7 @@ public final class ProtocolNegotiators {
             // Notify about completion and pass down SSLSession in attributes.
             grpcHandler.handleProtocolNegotiationCompleted(
                 Attributes.newBuilder()
-                    .set(Grpc.TRANSPORT_ATTR_SSL_SESSION,
-                        ctx.pipeline().get(SslHandler.class).engine().getSession())
+                    .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, handler.engine().getSession())
                     .build());
             writeBufferedAndRemove(ctx);
           } else {
