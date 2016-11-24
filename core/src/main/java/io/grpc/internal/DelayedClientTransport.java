@@ -378,8 +378,8 @@ class DelayedClientTransport implements ManagedClientTransport {
   }
 
   /**
-   * Use the picker to try picking a transport for every pending stream and pending ping, proceed the
-   * stream or ping if the pick is successful, otherwise keep it pending.
+   * Use the picker to try picking a transport for every pending stream and pending ping, proceed
+   * the stream or ping if the pick is successful, otherwise keep it pending.
    *
    * <p>If new pending streams are created while reprocess() is in progress, there is no guarantee
    * that the pending streams will or will not be processed by this picker.
