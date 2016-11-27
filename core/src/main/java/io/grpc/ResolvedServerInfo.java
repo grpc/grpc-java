@@ -124,4 +124,8 @@ public final class ResolvedServerInfo {
   public int hashCode() {
     return Objects.hashCode(address, attributes);
   }
+
+  public EquivalentAddressGroup toEquivalentAddressGroup() {
+    return new EquivalentAddressGroup(address);
+  }
 }
