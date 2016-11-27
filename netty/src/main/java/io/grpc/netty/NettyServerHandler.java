@@ -168,9 +168,8 @@ class NettyServerHandler extends AbstractNettyHandler {
   @Override
   public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
     serverWriteQueue = new WriteQueue(ctx.channel());
-    attributes = transportListener.transportReady(Attributes.newBuilder(protocolNegotationAttrs)
-        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
-        .build());
+    attributes = transportListener.transportReady(protocolNegotationAttrs
+        .withKey(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress()));
     super.handlerAdded(ctx);
   }
 

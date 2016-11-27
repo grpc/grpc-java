@@ -32,6 +32,7 @@
 package io.grpc;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertSame;
 
 import org.junit.Test;
@@ -42,6 +43,7 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class AttributesTest {
   private static Attributes.Key<String> YOLO_KEY = Attributes.Key.of("yolo");
+  private static Attributes.Key<String> MAJOR_KEY = Attributes.Key.of("major-key");
 
   @Test
   public void buildAttributes() {
@@ -64,5 +66,17 @@ public class AttributesTest {
   @Test
   public void empty() {
     assertEquals(0, Attributes.EMPTY.keys().size());
+  }
+
+  @Test
+  public void withKey() {
+    Attributes attrs = Attributes.newBuilder()
+        .set(YOLO_KEY, "sup")
+        .build();
+    Attributes attrs2 = attrs.withKey(MAJOR_KEY, "I got the keys");
+
+    assertNotEquals(attrs, attrs2);
+    assertEquals(1, attrs.keys().size());
+    assertEquals(2, attrs2.keys().size());
   }
 }

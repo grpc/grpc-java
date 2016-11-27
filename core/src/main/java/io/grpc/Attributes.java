@@ -74,6 +74,15 @@ public final class Attributes {
   }
 
   /**
+   * Returns attributes with new key added.
+   *
+   * @return new Attributes object with the new Key.
+   */
+  public <T> Attributes withKey(Key<T> key, T value) {
+    return newBuilder(this).set(key, value).build();
+  }
+
+  /**
    * Create a new builder that is pre-populated with the content from a given container.
    */
   public static Builder newBuilder(Attributes base) {
