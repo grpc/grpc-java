@@ -43,7 +43,7 @@ import javax.annotation.Nullable;
 /**
  * Descriptor for a service.
  */
-public final class ServiceDescriptor {
+public class ServiceDescriptor {
 
   private final String name;
   private final Collection<MethodDescriptor<?, ?>> methods;
@@ -73,6 +73,15 @@ public final class ServiceDescriptor {
   /** Simple name of the service. It is not an absolute path. */
   public String getName() {
     return name;
+  }
+
+  /**
+   * Returns a ProtoServiceDescriptor only if this service is defined in a proto file. Otherwise
+   * returns null.
+   */
+  @Nullable
+  public ProtoServiceDescriptor getProtoServiceDescriptor() {
+    return null;
   }
 
   /**
