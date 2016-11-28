@@ -32,6 +32,7 @@
 package io.grpc;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -65,13 +66,12 @@ public abstract class Server {
   }
 
   /**
-   * Returns the services registered with the server.
-   *
-   * @throws UnsupportedOperationException if not supported by implementation
+   * Returns the services registered with the server, or an empty list if not supported by the
+   * implementation.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
   public List<ServerServiceDefinition> getServices() {
-    throw new UnsupportedOperationException("Not implemented");
+    return Collections.emptyList();
   }
 
   /**

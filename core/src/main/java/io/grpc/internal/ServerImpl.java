@@ -179,14 +179,16 @@ public final class ServerImpl extends io.grpc.Server {
 
   @Override
   public List<ServerServiceDefinition> getServices() {
-    if (fallbackRegistry.getServices().isEmpty()) {
+    List<ServerServiceDefinition> fallbackServices = fallbackRegistry.getServices();
+    if (fallbackServices.isEmpty()) {
       return registry.getServices();
     } else {
-      int servicesCount = registry.getServices().size() + fallbackRegistry.getServices().size();
+      List<ServerServiceDefinition> registryServices = registry.getServices();
+      int servicesCount = registryServices.size() + fallbackServices.size();
       List<ServerServiceDefinition> services =
           new ArrayList<ServerServiceDefinition>(servicesCount);
-      services.addAll(registry.getServices());
-      services.addAll(fallbackRegistry.getServices());
+      services.addAll(registryServices);
+      services.addAll(fallbackServices);
       return Collections.unmodifiableList(services);
     }
   }
