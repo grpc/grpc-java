@@ -106,7 +106,7 @@ public class ManagedChannelImplIdlenessTest {
   private final List<List<ResolvedServerInfo>> servers = new ArrayList<List<ResolvedServerInfo>>();
   private final List<EquivalentAddressGroup> addressGroupList =
       new ArrayList<EquivalentAddressGroup>();
-  
+
   @Mock private SharedResourceHolder.Resource<ScheduledExecutorService> timerService;
   @Mock private ClientTransportFactory mockTransportFactory;
   @Mock private LoadBalancer<ClientTransport> mockLoadBalancer;
@@ -177,8 +177,8 @@ public class ManagedChannelImplIdlenessTest {
     call.start(mockCallListener, new Metadata());
 
     verify(mockLoadBalancerFactory).newLoadBalancer(anyString(), same(channel.tm));
-    // NameResolver is started in the scheduled executor
-    timer.runDueTasks();
+    // NameResolver is started in the executor
+    executor.runDueTasks();
     verify(mockNameResolver).start(nameResolverListenerCaptor.capture());
 
     // LoadBalancer is used right after created.
@@ -224,8 +224,8 @@ public class ManagedChannelImplIdlenessTest {
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());
     assertTrue(channel.inUseStateAggregator.isInUse());
-    // NameResolver is started in the scheduled executor
-    timer.runDueTasks();
+    // NameResolver is started in the executor
+    executor.runDueTasks();
 
     // As long as the interim transport is in-use (by the pending RPC), the channel won't go idle.
     timer.forwardTime(IDLE_TIMEOUT_SECONDS * 2, TimeUnit.SECONDS);
@@ -255,8 +255,8 @@ public class ManagedChannelImplIdlenessTest {
 
     // A TransportSet is in-use, while the stream is pending in a delayed transport
     assertTrue(channel.inUseStateAggregator.isInUse());
-    // NameResolver is started in the scheduled executor
-    timer.runDueTasks();
+    // NameResolver is started in the executor
+    executor.runDueTasks();
 
     // Making the real transport ready, will release the delayed transport.
     // The TransportSet is *not* in-use before the real transport become in-use.
@@ -339,8 +339,8 @@ public class ManagedChannelImplIdlenessTest {
 
   private void forceExitIdleMode() {
     channel.exitIdleMode();
-    // NameResolver is started in the scheduled executor
-    timer.runDueTasks();
+    // NameResolver is started in the executor
+    executor.runDueTasks();
   }
 
   private ClientTransport channelTmGetTransportUnwrapped(EquivalentAddressGroup addressGroup) {
@@ -361,11 +361,11 @@ public class ManagedChannelImplIdlenessTest {
 
   private static class FakeSocketAddress extends SocketAddress {
     final String name;
- 
+
     FakeSocketAddress(String name) {
       this.name = name;
     }
- 
+
     @Override
     public String toString() {
       return "FakeSocketAddress-" + name;
