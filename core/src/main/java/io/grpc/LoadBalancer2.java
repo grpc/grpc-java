@@ -85,7 +85,7 @@ import javax.annotation.concurrent.ThreadSafe;
  *
  * </ol>
  *
- * <p>{@link Helper#runSeralized} allows you to schedule a task to be run in the Channel Executor.
+ * <p>{@link Helper#runSerialized} allows you to schedule a task to be run in the Channel Executor.
  *
  * <h3>The canonical implementation pattern</h3>
  *
@@ -166,6 +166,8 @@ public abstract class LoadBalancer2 {
    */
   @Immutable
   public static final class PickResult {
+    private static final PickResult NO_RESULT = new PickResult(null, Status.OK);
+
     // A READY channel, or null
     @Nullable private final Subchannel subchannel;
     // An error to be propagated to the application if subchannel == null
@@ -202,8 +204,8 @@ public abstract class LoadBalancer2 {
     /**
      * No decision could be made.  The RPC will stay buffered.
      */
-    public static PickResult withNothingYet() {
-      return new PickResult(null, Status.OK);
+    public static PickResult withNoResult() {
+      return NO_RESULT;
     }
 
     /**
@@ -241,7 +243,7 @@ public abstract class LoadBalancer2 {
      * <p>The LoadBalancer is responsible for closing unused Subchannels, and closing all
      * Subchannels within {@link #shutdown}.
      */
-    public abstract Subchannel createSubChannel(EquivalentAddressGroup addrs, Attributes attrs);
+    public abstract Subchannel createSubchannel(EquivalentAddressGroup addrs, Attributes attrs);
 
     /**
      * Out-of-band channel for LoadBalancer’s own RPC needs, e.g., talking to an external
@@ -269,7 +271,7 @@ public abstract class LoadBalancer2 {
      * Schedule a task to be run in the Channel Executor, which serializes the task with the
      * callback methods on the {@link LoadBalancer2} interface.
      */
-    public abstract void runSeralized(Runnable task);
+    public abstract void runSerialized(Runnable task);
 
     /**
      * Returns the NameResolver of the channel.
@@ -311,8 +313,8 @@ public abstract class LoadBalancer2 {
     public abstract EquivalentAddressGroup getAddresses();
 
     /**
-     * The same attributes passed to {@link #createSubChannel}. LoadBalancer can use it to attach
-     * additional information here, e.g., the shard this Subchannel belongs to.
+     * The same attributes passed to {@link io.grpc.LoadBalancer2#createSubchannel}. LoadBalancer
+     * can use it to attach additional information here, e.g., the shard this Subchannel belongs to.
      */
     public abstract Attributes getAttributes();
   }
