@@ -47,6 +47,7 @@ import io.grpc.examples.routeguide.RouteGuideClient.TestHelper;
 import io.grpc.examples.routeguide.RouteGuideGrpc.RouteGuideImplBase;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.stub.NoopStreamObserver;
 import io.grpc.stub.StreamObserver;
 import io.grpc.util.MutableHandlerRegistry;
 
@@ -340,19 +341,7 @@ public class RouteGuideClientTest {
             responseObserver.onNext(response);
             responseObserver.onCompleted();
 
-            return new StreamObserver<Point>() {
-              @Override
-              public void onNext(Point value) {
-              }
-
-              @Override
-              public void onError(Throwable t) {
-              }
-
-              @Override
-              public void onCompleted() {
-              }
-            };
+            return new NoopStreamObserver<Point>();
           }
         };
     serviceRegistry.addService(recordRouteImpl);
@@ -383,21 +372,7 @@ public class RouteGuideClientTest {
           public StreamObserver<Point> recordRoute(StreamObserver<RouteSummary> responseObserver) {
             // send an error immediately
             responseObserver.onError(fakeError);
-
-            StreamObserver<Point> requestObserver = new StreamObserver<Point>() {
-              @Override
-              public void onNext(Point value) {
-              }
-
-              @Override
-              public void onError(Throwable t) {
-              }
-
-              @Override
-              public void onCompleted() {
-              }
-            };
-            return requestObserver;
+            return new NoopStreamObserver<Point>();
           }
         };
     serviceRegistry.addService(recordRouteImpl);

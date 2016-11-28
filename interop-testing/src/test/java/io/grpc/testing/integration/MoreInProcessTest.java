@@ -41,6 +41,7 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.stub.NoopStreamObserver;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
@@ -101,19 +102,7 @@ public class MoreInProcessTest {
         // send response directly
         responseObserver.onNext(fakeResponse);
         responseObserver.onCompleted();
-        return new StreamObserver<StreamingInputCallRequest>() {
-          @Override
-          public void onNext(StreamingInputCallRequest value) {
-          }
-
-          @Override
-          public void onError(Throwable t) {
-          }
-
-          @Override
-          public void onCompleted() {
-          }
-        };
+        return new NoopStreamObserver<StreamingInputCallRequest>();
       }
     };
     serviceRegistry.addService(clientStreamingImpl);
@@ -160,19 +149,7 @@ public class MoreInProcessTest {
         // send error directly
         responseObserver.onError(new StatusRuntimeException(fakeError));
         responseObserver.onCompleted();
-        return new StreamObserver<StreamingInputCallRequest>() {
-          @Override
-          public void onNext(StreamingInputCallRequest value) {
-          }
-
-          @Override
-          public void onError(Throwable t) {
-          }
-
-          @Override
-          public void onCompleted() {
-          }
-        };
+        return new NoopStreamObserver<StreamingInputCallRequest>();
       }
     };
     serviceRegistry.addService(clientStreamingImpl);

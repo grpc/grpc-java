@@ -393,22 +393,4 @@ public final class ServerCalls {
     asyncUnimplementedUnaryCall(methodDescriptor, responseObserver);
     return new NoopStreamObserver<T>();
   }
-
-  /**
-   * No-op implementation of StreamObserver. Used in abstract stubs for default implementations of
-   * methods which throws UNIMPLEMENTED error and tests.
-   */
-  static class NoopStreamObserver<V> implements StreamObserver<V> {
-    @Override
-    public void onNext(V value) {
-    }
-
-    @Override
-    public void onError(Throwable t) {
-    }
-
-    @Override
-    public void onCompleted() {
-    }
-  }
 }

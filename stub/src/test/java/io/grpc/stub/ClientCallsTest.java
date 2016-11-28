@@ -53,7 +53,6 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
-import io.grpc.stub.ServerCalls.NoopStreamObserver;
 import io.grpc.stub.ServerCallsTest.IntegerMarshaller;
 import io.grpc.testing.NoopClientCall;
 
@@ -407,7 +406,7 @@ public class ClientCallsTest {
                     semaphore.release();
                   }
                 });
-                return new ServerCalls.NoopStreamObserver<Integer>() {
+                return new NoopStreamObserver<Integer>() {
                   @Override
                   public void onCompleted() {
                     serverCallObserver.onCompleted();

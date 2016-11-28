@@ -117,7 +117,7 @@ public class ServerCallsTest {
                   }
                 });
                 invokeCalled.set(true);
-                return new ServerCalls.NoopStreamObserver<Integer>();
+                return new NoopStreamObserver<Integer>();
               }
             });
     ServerCall.Listener<Integer> callListener =
@@ -151,7 +151,7 @@ public class ServerCallsTest {
               @Override
               public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
                 callObserver.set((ServerCallStreamObserver<Integer>) responseObserver);
-                return new ServerCalls.NoopStreamObserver<Integer>();
+                return new NoopStreamObserver<Integer>();
               }
             });
     ServerCall.Listener<Integer> callListener =
@@ -179,7 +179,7 @@ public class ServerCallsTest {
               @Override
               public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
                 callObserver.set((ServerCallStreamObserver<Integer>) responseObserver);
-                return new ServerCalls.NoopStreamObserver<Integer>();
+                return new NoopStreamObserver<Integer>();
               }
             });
     ServerCall.Listener<Integer> callListener =
@@ -207,7 +207,7 @@ public class ServerCallsTest {
               @Override
               public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
                 callObserver.set((ServerCallStreamObserver<Integer>) responseObserver);
-                return new ServerCalls.NoopStreamObserver<Integer>();
+                return new NoopStreamObserver<Integer>();
               }
             });
     ServerCall.Listener<Integer> callListener =
@@ -231,7 +231,7 @@ public class ServerCallsTest {
                 ServerCallStreamObserver<Integer> serverCallObserver =
                     (ServerCallStreamObserver<Integer>) responseObserver;
                 serverCallObserver.disableAutoInboundFlowControl();
-                return new ServerCalls.NoopStreamObserver<Integer>();
+                return new NoopStreamObserver<Integer>();
               }
             });
     ServerCall.Listener<Integer> callListener =
@@ -321,7 +321,7 @@ public class ServerCallsTest {
                     semaphore.release();
                   }
                 });
-                return new ServerCalls.NoopStreamObserver<Integer>() {
+                return new NoopStreamObserver<Integer>() {
                   @Override
                   public void onCompleted() {
                     serverCallObserver.onCompleted();
