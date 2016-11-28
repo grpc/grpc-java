@@ -181,4 +181,11 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   public final S withCallCredentials(CallCredentials credentials) {
     return build(channel, callOptions.withCallCredentials(credentials));
   }
+
+  /**
+   * Returns a new stub that uses the 'wait for ready' call option.
+   */
+  public final S withWaitForReady() {
+    return build(channel, callOptions.withWaitForReady());
+  }
 }
