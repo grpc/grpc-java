@@ -1,31 +1,8 @@
 description = "gRPC: Testing"
 
-// Add dependency on the protobuf plugin
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath libraries.protobuf_plugin
-    }
-}
-
 dependencies {
-    compile project(':grpc-core'),
-            project(':grpc-stub'),
+    compile project(':grpc-testing-proto'),
             libraries.junit,
             libraries.mockito,
             libraries.truth
-
-    testCompile project(':grpc-protobuf')
-}
-
-configureProtoCompilation()
-
-// Let intellij projects refer to generated code
-idea {
-    module {
-        testSourceDirs += file("${projectDir}/src/generated/test/java")
-        testSourceDirs += file("${projectDir}/src/generated/test/grpc")
-    }
 }

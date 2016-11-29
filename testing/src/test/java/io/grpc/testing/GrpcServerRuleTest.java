@@ -33,12 +33,13 @@ package io.grpc.testing;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.protobuf.ByteString;
+
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.stub.StreamObserver;
-import io.grpc.testing.helloworld.GreeterGrpc;
-import io.grpc.testing.helloworld.HelloReply;
-import io.grpc.testing.helloworld.HelloRequest;
+import io.grpc.testing.integration.Messages;
+import io.grpc.testing.integration.TestServiceGrpc;
 
 import org.junit.Rule;
 import org.junit.Test;
@@ -69,29 +70,28 @@ public class GrpcServerRuleTest {
 
     @Test
     public void serverAllowsServicesToBeAddedViaServiceRegistry() {
-      MockGreeterImpl greeter = new MockGreeterImpl();
+      TestServiceImpl testService = new TestServiceImpl();
 
-      grpcServerRule.getServiceRegistry().addService(greeter);
+      grpcServerRule.getServiceRegistry().addService(testService);
 
-      GreeterGrpc.GreeterBlockingStub stub =
-          GreeterGrpc.newBlockingStub(grpcServerRule.getChannel());
+      TestServiceGrpc.TestServiceBlockingStub stub =
+          TestServiceGrpc.newBlockingStub(grpcServerRule.getChannel());
 
-      HelloRequest request1 = HelloRequest.newBuilder()
-          .setName(UUID.randomUUID().toString())
+      Messages.SimpleRequest request1 = Messages.SimpleRequest.newBuilder()
+          .setPayload(Messages.Payload.newBuilder()
+                          .setBody(ByteString.copyFromUtf8(UUID.randomUUID().toString())))
           .build();
 
-      HelloRequest request2 = HelloRequest.newBuilder()
-          .setName(UUID.randomUUID().toString())
+      Messages.SimpleRequest request2 = Messages.SimpleRequest.newBuilder()
+          .setPayload(Messages.Payload.newBuilder()
+                          .setBody(ByteString.copyFromUtf8(UUID.randomUUID().toString())))
           .build();
 
-      HelloReply reply1 = stub.sayHello(request1);
-      HelloReply reply2 = stub.sayHello(request2);
+      stub.unaryCall(request1);
+      stub.unaryCall(request2);
 
-      assertThat(greeter.sayHelloRequests)
+      assertThat(testService.unaryCallRequests)
           .containsExactly(request1, request2);
-
-      assertThat(reply1.getMessage()).isEqualTo(MockGreeterImpl.REPLY_PREFIX + request1.getName());
-      assertThat(reply2.getMessage()).isEqualTo(MockGreeterImpl.REPLY_PREFIX + request2.getName());
     }
   }
 
@@ -114,29 +114,28 @@ public class GrpcServerRuleTest {
 
     @Test
     public void serverAllowsServicesToBeAddedViaServiceRegistry() {
-      MockGreeterImpl greeter = new MockGreeterImpl();
+      TestServiceImpl testService = new TestServiceImpl();
 
-      grpcServerRule.getServiceRegistry().addService(greeter);
+      grpcServerRule.getServiceRegistry().addService(testService);
 
-      GreeterGrpc.GreeterBlockingStub stub =
-          GreeterGrpc.newBlockingStub(grpcServerRule.getChannel());
+      TestServiceGrpc.TestServiceBlockingStub stub =
+          TestServiceGrpc.newBlockingStub(grpcServerRule.getChannel());
 
-      HelloRequest request1 = HelloRequest.newBuilder()
-          .setName(UUID.randomUUID().toString())
+      Messages.SimpleRequest request1 = Messages.SimpleRequest.newBuilder()
+          .setPayload(Messages.Payload.newBuilder()
+                          .setBody(ByteString.copyFromUtf8(UUID.randomUUID().toString())))
           .build();
 
-      HelloRequest request2 = HelloRequest.newBuilder()
-          .setName(UUID.randomUUID().toString())
+      Messages.SimpleRequest request2 = Messages.SimpleRequest.newBuilder()
+          .setPayload(Messages.Payload.newBuilder()
+                          .setBody(ByteString.copyFromUtf8(UUID.randomUUID().toString())))
           .build();
 
-      HelloReply reply1 = stub.sayHello(request1);
-      HelloReply reply2 = stub.sayHello(request2);
+      stub.unaryCall(request1);
+      stub.unaryCall(request2);
 
-      assertThat(greeter.sayHelloRequests)
+      assertThat(testService.unaryCallRequests)
           .containsExactly(request1, request2);
-
-      assertThat(reply1.getMessage()).isEqualTo(MockGreeterImpl.REPLY_PREFIX + request1.getName());
-      assertThat(reply2.getMessage()).isEqualTo(MockGreeterImpl.REPLY_PREFIX + request2.getName());
     }
   }
 
@@ -188,23 +187,18 @@ public class GrpcServerRuleTest {
     }
   }
 
-  private static class MockGreeterImpl extends GreeterGrpc.GreeterImplBase {
+  private static class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
-    private static final String REPLY_PREFIX = "Hello ";
-
-    private final Collection<HelloRequest> sayHelloRequests =
-        new ConcurrentLinkedQueue<HelloRequest>();
+    private final Collection<Messages.SimpleRequest> unaryCallRequests =
+        new ConcurrentLinkedQueue<Messages.SimpleRequest>();
 
     @Override
-    public void sayHello(HelloRequest request, StreamObserver<HelloReply> responseObserver) {
-      // Keep track of the requests made so that we can assert them in the test.
-      sayHelloRequests.add(request);
+    public void unaryCall(Messages.SimpleRequest request,
+                          StreamObserver<Messages.SimpleResponse> responseObserver) {
 
-      // Send out a mock response.
-      responseObserver.onNext(
-          HelloReply.newBuilder()
-              .setMessage(REPLY_PREFIX + request.getName())
-              .buildPartial());
+      unaryCallRequests.add(request);
+
+      responseObserver.onNext(Messages.SimpleResponse.newBuilder().build());
 
       responseObserver.onCompleted();
     }
