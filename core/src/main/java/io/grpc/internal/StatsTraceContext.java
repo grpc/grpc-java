@@ -75,7 +75,7 @@ public final class StatsTraceContext {
   private volatile long wireBytesReceived;
   private volatile long uncompressedBytesSent;
   private volatile long uncompressedBytesReceived;
-  private AtomicBoolean callEnded = new AtomicBoolean(false);
+  private final AtomicBoolean callEnded = new AtomicBoolean(false);
 
   private StatsTraceContext(Side side, String fullMethodName, CensusContext parentCtx,
       Supplier<Stopwatch> stopwatchSupplier, Metadata.Key<CensusContext> censusHeader) {
