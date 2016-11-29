@@ -58,6 +58,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * #wireBytesReceived} and {@link #wireBytesSent} can be called concurrently.  {@link #callEnded}
  * can be called concurrently with itself and the other methods.
  */
+@SuppressWarnings("NonAtomicVolatileUpdate")
 public final class StatsTraceContext {
   public static final StatsTraceContext NOOP = StatsTraceContext.newClientContext(
       "noopservice/noopmethod", NoopCensusContextFactory.INSTANCE,
