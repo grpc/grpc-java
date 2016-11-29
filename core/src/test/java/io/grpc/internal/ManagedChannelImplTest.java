@@ -152,8 +152,8 @@ public class ManagedChannelImplTest {
         executor.scheduledExecutorService, userAgent, interceptors);
     // Force-exit the initial idle-mode
     channel.exitIdleMode();
-    // Will start NameResolver in the scheduled executor
-    assertEquals(1, timer.runDueTasks());
+    // Will start NameResolver in the executor
+    assertEquals(1, executor.runDueTasks());
   }
 
   @Before

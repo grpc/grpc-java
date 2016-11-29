@@ -255,7 +255,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       }
     }
 
-    scheduledExecutor.execute(new NameResolverStartTask());
+    executor.execute(new NameResolverStartTask());
     return balancer;
   }
 
