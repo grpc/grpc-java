@@ -185,6 +185,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   /**
    * Returns a new stub that uses the 'wait for ready' call option.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1915")
   public final S withWaitForReady() {
     return build(channel, callOptions.withWaitForReady());
   }
