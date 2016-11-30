@@ -437,7 +437,9 @@ class DelayedClientTransport implements ManagedClientTransport {
       }
       pendingStreams.removeAll(toRemove);
       if (pendingStreams.isEmpty()) {
-        pendingStreams = null;
+        // Because delayed transport is long-lived, we take this opportunity to down-size the
+        // hashmap.
+        pendingStreams = new LinkedHashSet<PendingStream>();
         // There may be a brief gap between delayed transport clearing in-use state, and first real
         // transport starting streams and setting in-use state.  During the gap the whole channel's
         // in-use state may be false. However, it shouldn't cause spurious switching to idleness

@@ -483,6 +483,12 @@ public class DelayedClientTransportTest {
     assertNull(wfr3.getRealStream());
     wfr3Executor.runDueTasks();
     assertSame(mockRealStream, wfr3.getRealStream());
+
+    // Make sure the delayed transport still accepts new streams
+    DelayedStream wfr5 = (DelayedStream) delayedTransport.newStream(
+        method, headers, waitForReadyCallOptions, statsTraceCtx);
+    assertNull(wfr5.getRealStream());
+    assertEquals(1, delayedTransport.getPendingStreamsCount());
   }
 
   @Test
