@@ -184,6 +184,9 @@ public abstract class LoadBalancer2 {
      * A decision to proceed the RPC on a Subchannel.  The state of the Subchannel is supposed to be
      * {@link ConnectivityState#READY}.  However, since such decisions are racy, a non-READY
      * Subchannel will not fail the RPC, but will only leave it buffered.
+     *
+     * <p>Only Subchannels returned by {@link Helper#createSubchannel} will work.  DO NOT try to
+     * use your own implementations of Subchannels, as they won't work.
      */
     public static PickResult withSubchannel(Subchannel subchannel) {
       return new PickResult(Preconditions.checkNotNull(subchannel, "subchannel"), Status.OK);
@@ -313,8 +316,9 @@ public abstract class LoadBalancer2 {
     public abstract EquivalentAddressGroup getAddresses();
 
     /**
-     * The same attributes passed to {@link io.grpc.LoadBalancer2#createSubchannel}. LoadBalancer
-     * can use it to attach additional information here, e.g., the shard this Subchannel belongs to.
+     * The same attributes passed to {@link io.grpc.LoadBalancer2.Helper#createSubchannel}.
+     * LoadBalancer can use it to attach additional information here, e.g., the shard this
+     * Subchannel belongs to.
      */
     public abstract Attributes getAttributes();
   }

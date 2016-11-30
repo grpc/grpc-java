@@ -52,7 +52,6 @@ import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer2.PickResult;
-import io.grpc.LoadBalancer2.Subchannel;
 import io.grpc.LoadBalancer2.SubchannelPicker;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -71,7 +70,6 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.concurrent.Executor;
 
@@ -115,16 +113,8 @@ public class DelayedClientTransportTest {
 
   private final FakeClock fakeExecutor = new FakeClock();
 
-  final HashMap<Subchannel, ClientTransport> transportMap =
-      new HashMap<Subchannel, ClientTransport>();
-
-  private final DelayedClientTransport delayedTransport = new DelayedClientTransport(
-      fakeExecutor.getScheduledExecutorService()) {
-      @Override
-      ClientTransport obtainActiveTransport(Subchannel subchannel) {
-        return transportMap.get(subchannel);
-      }
-    };
+  private final DelayedClientTransport delayedTransport =
+      new DelayedClientTransport(fakeExecutor.getScheduledExecutorService());
 
   @Before public void setUp() {
     MockitoAnnotations.initMocks(this);
@@ -378,16 +368,16 @@ public class DelayedClientTransportTest {
     CallOptions waitForReadyCallOptions =
         CallOptions.DEFAULT.withWaitForReady().withAffinity(affinity2);
 
-    Subchannel subchannel1 = mock(Subchannel.class);
-    Subchannel subchannel2 = mock(Subchannel.class);
-    Subchannel subchannel3 = mock(Subchannel.class);
+    SubchannelImpl subchannel1 = mock(SubchannelImpl.class);
+    SubchannelImpl subchannel2 = mock(SubchannelImpl.class);
+    SubchannelImpl subchannel3 = mock(SubchannelImpl.class);
     when(mockRealTransport.newStream(any(MethodDescriptor.class), any(Metadata.class),
             any(CallOptions.class), same(statsTraceCtx))).thenReturn(mockRealStream);
     when(mockRealTransport2.newStream(any(MethodDescriptor.class), any(Metadata.class),
             any(CallOptions.class), same(statsTraceCtx))).thenReturn(mockRealStream2);
-    transportMap.put(subchannel1, mockRealTransport);
-    transportMap.put(subchannel2, mockRealTransport2);
-    // subchannel3 maps to null
+    when(subchannel1.obtainActiveTransport()).thenReturn(mockRealTransport);
+    when(subchannel2.obtainActiveTransport()).thenReturn(mockRealTransport2);
+    when(subchannel3.obtainActiveTransport()).thenReturn(null);
 
     // Fail-fast streams
     DelayedStream ff1 = (DelayedStream) delayedTransport.newStream(

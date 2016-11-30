@@ -400,7 +400,7 @@ class DelayedClientTransport implements ManagedClientTransport {
       final ClientTransport realTransport;
       Subchannel subchannel = pickResult.getSubchannel();
       if (subchannel != null) {
-        realTransport = obtainActiveTransport(subchannel);
+        realTransport = ((SubchannelImpl) subchannel).obtainActiveTransport();
       } else {
         realTransport = null;
       }
@@ -440,12 +440,6 @@ class DelayedClientTransport implements ManagedClientTransport {
         listener.transportInUse(false);
       }
     }
-  }
-
-  // To be implemented by ManagedChannelImpl2 and unit test
-  @Nullable
-  ClientTransport obtainActiveTransport(Subchannel subchannel) {
-    throw new UnsupportedOperationException("Not implemented");
   }
 
   @Override
