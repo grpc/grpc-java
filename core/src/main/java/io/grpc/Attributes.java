@@ -179,4 +179,8 @@ public final class Attributes {
       return result;
     }
   }
+
+  public interface Provider {
+    Attributes getAttributes();
+  }
 }

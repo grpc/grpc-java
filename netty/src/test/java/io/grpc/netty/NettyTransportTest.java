@@ -82,10 +82,18 @@ public class NettyTransportTest extends AbstractTransportTest {
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     int port = server.getPort();
-    return clientFactory.newClientTransport(
+    NettyClientTransport transport = (NettyClientTransport) clientFactory.newClientTransport(
         new InetSocketAddress("localhost", port),
         "localhost:" + port,
         null /* agent */);
+    transport.setAttrsForTest(clientTransportAttributes);
+    return transport;
+  }
+
+  @Override
+  @Test
+  public void clientStreamGetAttributes() throws Exception {
+    super.clientStreamGetAttributes();
   }
 
   @Test

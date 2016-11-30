@@ -252,4 +252,13 @@ public abstract class ClientCall<ReqT, RespT> {
   public void setMessageCompression(boolean enabled) {
     // noop
   }
+
+  /**
+   * Its overriding method returns a set of attributes, which may vary depending on the particular
+   * implementation and the state of the call, channel, or transport at the moment it is being
+   * called.
+   */
+  public Attributes getAttributes() {
+    return Attributes.EMPTY;
+  }
 }

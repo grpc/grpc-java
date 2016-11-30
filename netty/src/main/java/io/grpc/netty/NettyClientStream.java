@@ -36,6 +36,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
 
+import io.grpc.Attributes;
 import io.grpc.InternalKnownTransport;
 import io.grpc.InternalMethodDescriptor;
 import io.grpc.Metadata;
@@ -75,10 +76,12 @@ class NettyClientStream extends AbstractClientStream2 {
   private AsciiString authority;
   private final AsciiString scheme;
   private final AsciiString userAgent;
+  private final Attributes.Provider attrsProvider;
 
-  NettyClientStream(TransportState state, MethodDescriptor<?, ?> method, Metadata headers,
-      Channel channel, AsciiString authority, AsciiString scheme,
-      AsciiString userAgent, StatsTraceContext statsTraceCtx) {
+  NettyClientStream(
+      TransportState state, MethodDescriptor<?, ?> method, Metadata headers,
+      Channel channel, AsciiString authority, AsciiString scheme, AsciiString userAgent,
+      StatsTraceContext statsTraceCtx, @Nullable Attributes.Provider attrsProvider) {
     super(new NettyWritableBufferAllocator(channel.alloc()), statsTraceCtx);
     this.state = checkNotNull(state, "transportState");
     this.writeQueue = state.handler.getWriteQueue();
@@ -88,6 +91,7 @@ class NettyClientStream extends AbstractClientStream2 {
     this.authority = checkNotNull(authority, "authority");
     this.scheme = checkNotNull(scheme, "scheme");
     this.userAgent = userAgent;
+    this.attrsProvider = attrsProvider;
   }
 
   @Override
@@ -135,6 +139,14 @@ class NettyClientStream extends AbstractClientStream2 {
     // Write the command requesting the creation of the stream.
     writeQueue.enqueue(new CreateStreamCommand(http2Headers, transportState()),
         !method.getType().clientSendsOneMessage()).addListener(failureListener);
+  }
+
+  @Override
+  public Attributes getAttributes() {
+    if (attrsProvider != null) {
+      return attrsProvider.getAttributes();
+    }
+    return Attributes.EMPTY;
   }
 
   private class Sink implements AbstractClientStream2.Sink {

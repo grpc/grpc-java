@@ -31,7 +31,9 @@
 
 package io.grpc.netty;
 
+import io.grpc.Attributes;
 import io.grpc.Internal;
+
 import io.netty.channel.ChannelHandler;
 import io.netty.util.AsciiString;
 
@@ -56,4 +58,9 @@ public interface ProtocolNegotiator {
    * has completed successfully, the provided handler is installed.
    */
   Handler newHandler(GrpcHttp2ConnectionHandler handler);
+
+  /**
+   * Returns a set of attributes, which varies depending on the negotiator implementation.
+   */
+  Attributes getAttributes();
 }

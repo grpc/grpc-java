@@ -102,6 +102,9 @@ import java.util.concurrent.TimeoutException;
 public abstract class AbstractTransportTest {
   private static final int TIMEOUT_MS = 1000;
 
+  protected final Attributes clientTransportAttributes =
+      Attributes.newBuilder().set(Attributes.Key.<String>of("fakeKey"), "fakeValue").build();
+
   private static final Attributes.Key<String> ADDITIONAL_TRANSPORT_ATTR_KEY =
       Attributes.Key.of("additional-attr");
 
@@ -1052,6 +1055,19 @@ public abstract class AbstractTransportTest {
         .closed(statusCaptor.capture(), any(Metadata.class));
     assertEquals(status.getCode(), statusCaptor.getValue().getCode());
     assertEquals(status.getDescription(), statusCaptor.getValue().getDescription());
+  }
+
+  /**
+   * Overriding methods will set non-trivial transport attributes first and then call this method.
+   */
+  protected void clientStreamGetAttributes() throws Exception {
+    server.start(serverListener);
+    client = newClientTransport(server);
+    runIfNotNull(client.start(mockClientTransportListener));
+
+    ClientStream clientStream = client.newStream(methodDescriptor, new Metadata());
+
+    assertEquals(clientTransportAttributes, clientStream.getAttributes());
   }
 
   /**
