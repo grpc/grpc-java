@@ -32,6 +32,9 @@
 package io.grpc.internal;
 
 import io.grpc.Attributes;
+import io.grpc.Attributes.Key;
+
+import java.util.Collection;
 
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -45,4 +48,10 @@ public interface ConnectionClientTransport extends ManagedClientTransport {
    * should define in what states they will be present.
    */
   Attributes getAttrs();
+
+  /**
+   * The key for an attribute that includes a collection of keys for the attributes that are
+   * accessible for application.
+   */
+  Key<Collection<Key<?>>> APPLICATION_FILTER = Key.<Collection<Key<?>>>of("APPLICATION_FILTER");
 }

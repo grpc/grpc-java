@@ -38,15 +38,18 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Ticker;
 
 import io.grpc.Attributes;
+import io.grpc.Attributes.Key;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientStream;
+import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
 import io.grpc.internal.StatsTraceContext;
+
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -60,6 +63,7 @@ import io.netty.util.AsciiString;
 
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
+import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
@@ -86,6 +90,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private Channel channel;
   /** Since not thread-safe, may only be used from event loop. */
   private ClientTransportLifecycleManager lifecycleManager;
+  private Attributes attributesForTest;
 
   NettyClientTransport(
       SocketAddress address, Class<? extends Channel> channelType,
@@ -134,6 +139,22 @@ class NettyClientTransport implements ConnectionClientTransport {
           @Override
           protected Status statusFromFailedFuture(ChannelFuture f) {
             return NettyClientTransport.this.statusFromFailedFuture(f);
+          }
+
+          @Override
+          public void setListener(ClientStreamListener listener) {
+            super.setListener(listener);
+            final Collection<Key<?>> filter = NettyClientTransport.this.getAttrs()
+                .get(ConnectionClientTransport.APPLICATION_FILTER);
+            if (filter != null) {
+              listener.onConnection(new Attributes.Provider() {
+                @Override
+                public Attributes getAttrs() {
+                  // filter out security related attributes as the value is passed to application
+                  return NettyClientTransport.this.getAttrs().filterIn(filter);
+                }
+              });
+            }
           }
         },
         method, headers, channel, authority, negotiationHandler.scheme(), userAgent,
@@ -247,8 +268,18 @@ class NettyClientTransport implements ConnectionClientTransport {
 
   @Override
   public Attributes getAttrs() {
+    if (attributesForTest != null) {
+      return attributesForTest;
+    }
     // TODO(zhangkun83): fill channel security attributes
-    return Attributes.EMPTY;
+    return Attributes.newBuilder().setAll(negotiator.attributes()).build();
+  }
+
+  /**
+   * For test only.
+   */
+  void setAttrsForTest(Attributes attributes) {
+    attributesForTest = attributes;
   }
 
   @VisibleForTesting

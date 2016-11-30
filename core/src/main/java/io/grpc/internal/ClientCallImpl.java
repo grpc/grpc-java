@@ -45,6 +45,7 @@ import static java.lang.Math.max;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
+import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.Codec;
@@ -91,6 +92,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
   private boolean halfCloseCalled;
   private final ClientTransportProvider clientTransportProvider;
   private ScheduledExecutorService deadlineCancellationExecutor;
+  private Attributes.Provider attrsProvider;
+
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
 
@@ -405,6 +408,15 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
     return stream.isReady();
   }
 
+  @Override
+  public Attributes getAttrs() {
+    if (attrsProvider != null) {
+      return attrsProvider.getAttrs();
+    } else {
+      return super.getAttrs();
+    }
+  }
+
   private void closeObserver(Listener<RespT> observer, Status status, Metadata trailers) {
     statsTraceCtx.callEnded(status);
     observer.onClose(status, trailers);
@@ -530,6 +542,13 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       }
 
       callExecutor.execute(new StreamClosed());
+
+      attrsProvider = null;
+    }
+
+    @Override
+    public void onConnection(Attributes.Provider transportAttrsProvider) {
+      attrsProvider = transportAttrsProvider;
     }
 
     @Override

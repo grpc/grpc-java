@@ -31,7 +31,6 @@
 
 package io.grpc.internal;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
 import io.grpc.Metadata;
@@ -169,8 +168,7 @@ public abstract class AbstractClientStream2 extends AbstractStream2
       super(maxMessageSize, statsTraceCtx);
     }
 
-    @VisibleForTesting
-    public final void setListener(ClientStreamListener listener) {
+    public void setListener(ClientStreamListener listener) {
       Preconditions.checkState(this.listener == null, "Already called setListener");
       this.listener = Preconditions.checkNotNull(listener, "listener");
     }

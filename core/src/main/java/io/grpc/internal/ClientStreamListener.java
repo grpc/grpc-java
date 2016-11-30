@@ -31,6 +31,7 @@
 
 package io.grpc.internal;
 
+import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.Status;
 
@@ -61,4 +62,13 @@ public interface ClientStreamListener extends StreamListener {
    * @param trailers trailing metadata
    */
   void closed(Status status, Metadata trailers);
+
+  /**
+   * Called only when a {@link ConnectionClientTransport} starts a new stream with this listener
+   * and there are/will be attributes that the transport would like to share with API's of higher
+   * level than transport layer.  The callback may not be called at all.
+   *
+   * <p>Must return immediately.  Must not throw RuntimeException.
+   */
+  void onConnection(Attributes.Provider transportAttrsProvider);
 }

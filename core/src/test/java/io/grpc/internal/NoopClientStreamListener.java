@@ -31,6 +31,7 @@
 
 package io.grpc.internal;
 
+import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.Status;
 
@@ -51,4 +52,7 @@ class NoopClientStreamListener implements ClientStreamListener {
 
   @Override
   public void closed(Status status, Metadata trailers) {}
+
+  @Override
+  public void onConnection(Attributes.Provider transportAttrsProvider) {}
 }

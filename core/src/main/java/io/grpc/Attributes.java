@@ -34,6 +34,7 @@ package io.grpc;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Set;
@@ -71,6 +72,21 @@ public final class Attributes {
    */
   public Set<Key<?>> keys() {
     return Collections.unmodifiableSet(data.keySet());
+  }
+
+  /**
+   * Returns a new Attributes instance that contains only the given keys in the filter.
+   */
+  public Attributes filterIn(Collection<Key<?>> filter) {
+    Builder builder = new Builder();
+    for (Key<?> key : filter) {
+      if (data.containsKey(key)) {
+        @SuppressWarnings("unchecked") // type can be ignored here.
+        Key<Object> objKey = (Key<Object>) key;
+        builder.set(objKey, data.get(key));
+      }
+    }
+    return builder.build();
   }
 
   /**
@@ -164,7 +180,7 @@ public final class Attributes {
       return this;
     }
 
-    public <T> Builder setAll(Attributes other) {
+    public Builder setAll(Attributes other) {
       product.data.putAll(other.data);
       return this;
     }
@@ -178,5 +194,9 @@ public final class Attributes {
       product = null;
       return result;
     }
+  }
+
+  public interface Provider {
+    Attributes getAttrs();
   }
 }
