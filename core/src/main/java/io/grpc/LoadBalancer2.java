@@ -65,9 +65,9 @@ import javax.annotation.concurrent.ThreadSafe;
  *
  * <h3>Channel Executor</h3>
  *
- * <p>Channel Executor is an internal executor of the channel, which is used to run serialize all
- * the callback methods on the {@link LoadBalancer2} interface, thus the balancer implementation
- * doesn't need to worry about synchronization among them.  However, the actual thread that Channel
+ * <p>Channel Executor is an internal executor of the channel, which is used to serialize all the
+ * callback methods on the {@link LoadBalancer2} interface, thus the balancer implementation doesn't
+ * need to worry about synchronization among them.  However, the actual thread of the Channel
  * Executor is typically the network thread, thus following rules must be followed to prevent
  * blocking or even dead-locking in a network
  *
@@ -78,7 +78,7 @@ import javax.annotation.concurrent.ThreadSafe;
  *   synchronization primitives, blocking I/O, blocking RPCs, etc.</li>
  *
  *   <li><strong>Avoid calling into other components with lock held</strong>.  Channel Executor may
- *   run callbacks under a lock, e.g., the transport lock of OkHttp2.  If your LoadBalancer has a
+ *   run callbacks under a lock, e.g., the transport lock of OkHttp.  If your LoadBalancer has a
  *   lock, holds the lock in a callback method (e.g., {@link #handleSubchannelState}) while calling
  *   into another class that may involve locks, be cautious of deadlock.  Generally you wouldn't
  *   need any locking in the LoadBalancer.</li>
@@ -148,7 +148,7 @@ public abstract class LoadBalancer2 {
 
   /**
    * The main balancing logic.  It <strong>must be thread-safe</strong>. Typically it should only
-   * synchronize on its own state, and void synchronzing with the LoadBalancer's state.
+   * synchronize on its own state, and avoid synchronizing with the LoadBalancer's state.
    */
   @ThreadSafe
   public abstract static class SubchannelPicker {
@@ -182,8 +182,8 @@ public abstract class LoadBalancer2 {
 
     /**
      * A decision to proceed the RPC on a Subchannel.  The state of the Subchannel is supposed to be
-     * {@link ConnectivityState#READY}.  However, a non-READY Subchannel will not fail the RPC,
-     * but will only leave it buffered.
+     * {@link ConnectivityState#READY}.  However, since such decisions are racy, a non-READY
+     * Subchannel will not fail the RPC, but will only leave it buffered.
      */
     public static PickResult withSubchannel(Subchannel subchannel) {
       return new PickResult(Preconditions.checkNotNull(subchannel, "subchannel"), Status.OK);
@@ -236,7 +236,7 @@ public abstract class LoadBalancer2 {
   @ThreadSafe
   public abstract static class Helper {
     /**
-     * Creates a Subchannel, which is a logic connection to the given group of addresses which are
+     * Creates a Subchannel, which is a logical connection to the given group of addresses which are
      * considered equivalent.  The {@code attrs} are custom attributes associated with this
      * Subchannel, and can be accessed later through {@link Subchannel#getAttributes}.
      *
@@ -261,7 +261,7 @@ public abstract class LoadBalancer2 {
      * <p>When a new picker is provided via {@link Helper#updatePicker}, the channel will apply the
      * picker on all buffered RPCs, by calling {@link SubchannelPicker#pickSubchannel}.
      *
-     * <p>The channel will hold the a picker and use it for all RPCs, until {@link #updatePicker} is
+     * <p>The channel will hold the picker and use it for all RPCs, until {@link #updatePicker} is
      * called again and a new picker replaces the old one.  If {@link #updatePicker} has never been
      * called, the channel will buffer all RPCs until a picker is provided.
      */
@@ -291,7 +291,7 @@ public abstract class LoadBalancer2 {
    * <p>It maintains at most one physical connection (aka transport) for sending new RPCs, while
    * also keeps track of previous transports that has been shut down but not terminated yet.
    *
-   * <p>If there isn't an active transport yet, and the Subchannel is assigned to an RPC, it will
+   * <p>If there isn't an active transport yet, and an RPC is assigned to the Subchannel, it will
    * create a new transport.  It won't actively create transports otherwise.  {@link
    * #requestConnection} can be used to ask Subchannel to create a transport if there isn't any.
    */
