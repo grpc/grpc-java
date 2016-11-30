@@ -383,6 +383,9 @@ class DelayedClientTransport implements ManagedClientTransport {
    *
    * <p>If new pending streams are created while reprocess() is in progress, there is no guarantee
    * that the pending streams will or will not be processed by this picker.
+   *
+   * <p>This method <strong>must not</strong> be called concurrently, either with itself or with
+   * {@link #setTransportSupplier}/{@link #setTransport}.
    */
   final void reprocess(LoadBalancer2.SubchannelPicker picker) {
     ArrayList<PendingStream> toProcess;
@@ -426,6 +429,9 @@ class DelayedClientTransport implements ManagedClientTransport {
     }
 
     synchronized (lock) {
+      // Between this synchronized and the previous one:
+      //   - Streams may have been cancelled, which may turn pendingStreams into emptiness.
+      //   - shutdown() may be called, which may turn pendingStreams into null.
       if (pendingStreams == null || pendingStreams.isEmpty()) {
         return;
       }
