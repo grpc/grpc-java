@@ -822,6 +822,9 @@ public class Context {
    * <p>The default implementation will put the current context in a {@link ThreadLocal}.  If an
    * alternative implementation named {@code io.grpc.ContextStorageOverride} exists in the
    * classpath, it will be used instead of the default implementation.
+   *
+   * <p>This API is <a href="https://github.com/grpc/grpc-java/issues/2462">experimental</a> and
+   * subject to change.
    */
   public abstract static class Storage {
     /**
