@@ -34,6 +34,7 @@ package io.grpc.testing;
 import static com.google.common.truth.Truth.assertThat;
 
 import com.google.protobuf.ByteString;
+import com.google.protobuf.EmptyProtos;
 
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
@@ -93,6 +94,22 @@ public class GrpcServerRuleTest {
       assertThat(testService.unaryCallRequests)
           .containsExactly(request1, request2);
     }
+
+    @Test
+    public void serviceIsNotRunOnSameThreadAsTest() {
+      TestServiceImpl testService = new TestServiceImpl();
+
+      grpcServerRule.getServiceRegistry().addService(testService);
+
+      TestServiceGrpc.TestServiceBlockingStub stub =
+          TestServiceGrpc.newBlockingStub(grpcServerRule.getChannel());
+
+      // Make a garbage request first due to https://github.com/grpc/grpc-java/issues/2444.
+      stub.emptyCall(EmptyProtos.Empty.newBuilder().build());
+      stub.emptyCall(EmptyProtos.Empty.newBuilder().build());
+
+      assertThat(testService.lastEmptyCallRequestThread).isNotEqualTo(Thread.currentThread());
+    }
   }
 
   public static class WithDirectExecutor {
@@ -136,6 +153,22 @@ public class GrpcServerRuleTest {
 
       assertThat(testService.unaryCallRequests)
           .containsExactly(request1, request2);
+    }
+
+    @Test
+    public void serviceIsRunOnSameThreadAsTest() {
+      TestServiceImpl testService = new TestServiceImpl();
+
+      grpcServerRule.getServiceRegistry().addService(testService);
+
+      TestServiceGrpc.TestServiceBlockingStub stub =
+          TestServiceGrpc.newBlockingStub(grpcServerRule.getChannel());
+
+      // Make a garbage request first due to https://github.com/grpc/grpc-java/issues/2444.
+      stub.emptyCall(EmptyProtos.Empty.newBuilder().build());
+      stub.emptyCall(EmptyProtos.Empty.newBuilder().build());
+
+      assertThat(testService.lastEmptyCallRequestThread).isEqualTo(Thread.currentThread());
     }
   }
 
@@ -192,9 +225,24 @@ public class GrpcServerRuleTest {
     private final Collection<Messages.SimpleRequest> unaryCallRequests =
         new ConcurrentLinkedQueue<Messages.SimpleRequest>();
 
+    private volatile Thread lastEmptyCallRequestThread;
+
     @Override
-    public void unaryCall(Messages.SimpleRequest request,
-                          StreamObserver<Messages.SimpleResponse> responseObserver) {
+    public void emptyCall(
+        EmptyProtos.Empty request,
+        StreamObserver<EmptyProtos.Empty> responseObserver) {
+
+      lastEmptyCallRequestThread = Thread.currentThread();
+
+      responseObserver.onNext(EmptyProtos.Empty.newBuilder().build());
+
+      responseObserver.onCompleted();
+    }
+
+    @Override
+    public void unaryCall(
+        Messages.SimpleRequest request,
+        StreamObserver<Messages.SimpleResponse> responseObserver) {
 
       unaryCallRequests.add(request);
 
