@@ -489,6 +489,16 @@ public class DelayedClientTransportTest {
         method, headers, waitForReadyCallOptions, statsTraceCtx);
     assertNull(wfr5.getRealStream());
     assertEquals(1, delayedTransport.getPendingStreamsCount());
+
+    // wfr5 will stop delayed transport from terminating
+    delayedTransport.shutdown();
+    verify(transportListener).transportShutdown(any(Status.class));
+    verify(transportListener, never()).transportTerminated();
+    // ... until it's gone
+    delayedTransport.reprocess(picker);
+    fakeExecutor.runDueTasks();
+    assertEquals(0, delayedTransport.getPendingStreamsCount());
+    verify(transportListener).transportTerminated();
   }
 
   @Test
