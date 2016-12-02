@@ -50,10 +50,9 @@ import java.util.logging.Logger;
  * </ul>
  *
  * <p>A Context object can be {@link #attach attached} to the {@link Storage}, which effectively
- * forms a <b>scope</b> for the context.  The scope is typically bound to the current thread, though
- * alternative {@link Storage} implementations can alter this behavior.  Within a scope, its Context
- * is accessible even across API boundaries, through {@link #current}.  The scope can later be
- * exited by {@link #detach detaching} the Context.
+ * forms a <b>scope</b> for the context.  The scope is bound to the current thread.  Within a scope,
+ * its Context is accessible even across API boundaries, through {@link #current}.  The scope is
+ * later exited by {@link #detach detaching} the Context.
  *
  * <p>Context objects are immutable and inherit state from their parent. To add or overwrite the
  * current state a new context object must be created and then attached, replacing the previously
