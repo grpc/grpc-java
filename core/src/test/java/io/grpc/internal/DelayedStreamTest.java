@@ -86,34 +86,34 @@ public class DelayedStreamTest {
   public void setStream_setAuthority() {
     final String authority = "becauseIsaidSo";
     stream.setAuthority(authority);
-    stream.start(listener);
+    stream.start(listener, new Metadata());
     stream.setStream(realStream);
     InOrder inOrder = inOrder(realStream);
     inOrder.verify(realStream).setAuthority(authority);
-    inOrder.verify(realStream).start(any(ClientStreamListener.class));
+    inOrder.verify(realStream).start(any(ClientStreamListener.class), any(Metadata.class));
   }
 
   @Test(expected = IllegalStateException.class)
   public void setAuthority_afterStart() {
-    stream.start(listener);
+    stream.start(listener, new Metadata());
     stream.setAuthority("notgonnawork");
   }
 
   @Test(expected = IllegalStateException.class)
   public void start_afterStart() {
-    stream.start(listener);
-    stream.start(mock(ClientStreamListener.class));
+    stream.start(listener, new Metadata());
+    stream.start(mock(ClientStreamListener.class), new Metadata());
   }
 
   @Test(expected = IllegalStateException.class)
   public void setDecompressor_beforeSetStream() {
-    stream.start(listener);
+    stream.start(listener, new Metadata());
     stream.setDecompressor(Codec.Identity.NONE);
   }
 
   @Test
   public void setStream_sendsAllMessages() {
-    stream.start(listener);
+    stream.start(listener, new Metadata());
     stream.setCompressor(Codec.Identity.NONE);
 
     stream.setMessageCompression(true);
@@ -132,7 +132,7 @@ public class DelayedStreamTest {
     verify(realStream).setMessageCompression(false);
 
     verify(realStream, times(2)).writeMessage(message);
-    verify(realStream).start(listenerCaptor.capture());
+    verify(realStream).start(listenerCaptor.capture(),any(Metadata.class));
 
     stream.writeMessage(message);
     verify(realStream, times(3)).writeMessage(message);
@@ -144,7 +144,7 @@ public class DelayedStreamTest {
 
   @Test
   public void setStream_halfClose() {
-    stream.start(listener);
+    stream.start(listener, new Metadata());
     stream.halfClose();
     stream.setStream(realStream);
 
@@ -153,7 +153,7 @@ public class DelayedStreamTest {
 
   @Test
   public void setStream_flush() {
-    stream.start(listener);
+    stream.start(listener, new Metadata());
     stream.flush();
     stream.setStream(realStream);
     verify(realStream).flush();
@@ -164,7 +164,7 @@ public class DelayedStreamTest {
 
   @Test
   public void setStream_flowControl() {
-    stream.start(listener);
+    stream.start(listener, new Metadata());
     stream.request(1);
     stream.request(2);
     stream.setStream(realStream);
@@ -177,7 +177,7 @@ public class DelayedStreamTest {
 
   @Test
   public void setStream_setMessageCompression() {
-    stream.start(listener);
+    stream.start(listener, new Metadata());
     stream.setMessageCompression(false);
     stream.setStream(realStream);
     verify(realStream).setMessageCompression(false);
@@ -188,7 +188,7 @@ public class DelayedStreamTest {
 
   @Test
   public void setStream_isReady() {
-    stream.start(listener);
+    stream.start(listener, new Metadata());
     assertFalse(stream.isReady());
     stream.setStream(realStream);
     verify(realStream, never()).isReady();
@@ -203,26 +203,26 @@ public class DelayedStreamTest {
 
   @Test
   public void startThenCancelled() {
-    stream.start(listener);
+    stream.start(listener, new Metadata());
     stream.cancel(Status.CANCELLED);
     verify(listener).closed(eq(Status.CANCELLED), any(Metadata.class));
   }
 
   @Test
   public void startThenSetStreamThenCancelled() {
-    stream.start(listener);
+    stream.start(listener, new Metadata());
     stream.setStream(realStream);
     stream.cancel(Status.CANCELLED);
-    verify(realStream).start(any(ClientStreamListener.class));
+    verify(realStream).start(any(ClientStreamListener.class), any(Metadata.class));
     verify(realStream).cancel(same(Status.CANCELLED));
   }
 
   @Test
   public void setStreamThenStartThenCancelled() {
     stream.setStream(realStream);
-    stream.start(listener);
+    stream.start(listener, new Metadata());
     stream.cancel(Status.CANCELLED);
-    verify(realStream).start(same(listener));
+    verify(realStream).start(same(listener), any(Metadata.class));
     verify(realStream).cancel(same(Status.CANCELLED));
   }
 
@@ -235,9 +235,9 @@ public class DelayedStreamTest {
 
   @Test
   public void setStreamTwice() {
-    stream.start(listener);
+    stream.start(listener, new Metadata());
     stream.setStream(realStream);
-    verify(realStream).start(any(ClientStreamListener.class));
+    verify(realStream).start(any(ClientStreamListener.class), any(Metadata.class));
     stream.setStream(mock(ClientStream.class));
     stream.flush();
     verify(realStream).flush();
@@ -247,7 +247,7 @@ public class DelayedStreamTest {
   public void cancelThenSetStream() {
     stream.cancel(Status.CANCELLED);
     stream.setStream(realStream);
-    stream.start(listener);
+    stream.start(listener, new Metadata());
     stream.isReady();
     verifyNoMoreInteractions(realStream);
   }
@@ -256,14 +256,14 @@ public class DelayedStreamTest {
   public void cancel_beforeStart() {
     Status status = Status.CANCELLED.withDescription("that was quick");
     stream.cancel(status);
-    stream.start(listener);
+    stream.start(listener, new Metadata());
     verify(listener).closed(same(status), any(Metadata.class));
   }
 
   @Test
   public void cancelledThenStart() {
     stream.cancel(Status.CANCELLED);
-    stream.start(listener);
+    stream.start(listener, new Metadata());
     verify(listener).closed(eq(Status.CANCELLED), any(Metadata.class));
   }
 
@@ -281,10 +281,10 @@ public class DelayedStreamTest {
     }
 
     IsReadyListener isReadyListener = new IsReadyListener();
-    stream.start(isReadyListener);
+    stream.start(isReadyListener, new Metadata());
     stream.setStream(new NoopClientStream() {
       @Override
-      public void start(ClientStreamListener listener) {
+      public void start(ClientStreamListener listener, Metadata headers) {
         // This call to the listener should end up being delayed.
         listener.onReady();
       }
@@ -299,19 +299,19 @@ public class DelayedStreamTest {
 
   @Test
   public void listener_allQueued() {
-    final Metadata headers = new Metadata();
+    final Metadata responseHeaders = new Metadata();
     final InputStream message1 = mock(InputStream.class);
     final InputStream message2 = mock(InputStream.class);
     final Metadata trailers = new Metadata();
     final Status status = Status.UNKNOWN.withDescription("unique status");
 
     final InOrder inOrder = inOrder(listener);
-    stream.start(listener);
+    stream.start(listener, new Metadata());
     stream.setStream(new NoopClientStream() {
       @Override
-      public void start(ClientStreamListener passedListener) {
+      public void start(ClientStreamListener passedListener, Metadata headers) {
         passedListener.onReady();
-        passedListener.headersRead(headers);
+        passedListener.headersRead(responseHeaders);
         passedListener.messageRead(message1);
         passedListener.onReady();
         passedListener.messageRead(message2);
@@ -321,7 +321,7 @@ public class DelayedStreamTest {
       }
     });
     inOrder.verify(listener).onReady();
-    inOrder.verify(listener).headersRead(headers);
+    inOrder.verify(listener).headersRead(responseHeaders);
     inOrder.verify(listener).messageRead(message1);
     inOrder.verify(listener).onReady();
     inOrder.verify(listener).messageRead(message2);
@@ -335,9 +335,9 @@ public class DelayedStreamTest {
     final Metadata trailers = new Metadata();
     final Status status = Status.UNKNOWN.withDescription("unique status");
 
-    stream.start(listener);
+    stream.start(listener, new Metadata());
     stream.setStream(realStream);
-    verify(realStream).start(listenerCaptor.capture());
+    verify(realStream).start(listenerCaptor.capture(), any(Metadata.class));
     ClientStreamListener delayedListener = listenerCaptor.getValue();
     delayedListener.onReady();
     verify(listener).onReady();

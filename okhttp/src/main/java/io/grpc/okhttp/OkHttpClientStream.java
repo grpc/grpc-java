@@ -101,7 +101,6 @@ class OkHttpClientStream extends Http2ClientStream {
       StatsTraceContext statsTraceCtx) {
     super(new OkHttpWritableBufferAllocator(), maxMessageSize, statsTraceCtx);
     this.method = method;
-    this.headers = headers;
     this.frameWriter = frameWriter;
     this.transport = transport;
     this.outboundFlow = outboundFlow;
@@ -136,13 +135,12 @@ class OkHttpClientStream extends Http2ClientStream {
   }
 
   @Override
-  public void start(ClientStreamListener listener) {
-    super.start(listener);
+  public void start(ClientStreamListener listener, Metadata headers) {
+    super.start(listener, headers);
     String defaultPath = "/" + method.getFullMethodName();
     headers.discardAll(GrpcUtil.USER_AGENT_KEY);
     List<Header> requestHeaders =
         Headers.createRequestHeaders(headers, defaultPath, authority, userAgent);
-    headers = null;
     synchronized (lock) {
       this.requestHeaders = requestHeaders;
       transport.streamReadyToStart(this);

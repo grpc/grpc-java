@@ -259,7 +259,7 @@ public class ManagedChannelImplTest {
         statsTraceCtxCaptor.capture());
     assertEquals(censusCtxFactory.pollContextOrFail(),
         statsTraceCtxCaptor.getValue().getCensusContext());
-    verify(mockStream).start(streamListenerCaptor.capture());
+    verify(mockStream).start(streamListenerCaptor.capture(), same(headers));
     verify(mockStream).setCompressor(isA(Compressor.class));
     ClientStreamListener streamListener = streamListenerCaptor.getValue();
 
@@ -276,7 +276,7 @@ public class ManagedChannelImplTest {
     assertEquals(censusCtxFactory.pollContextOrFail(),
         statsTraceCtxCaptor.getValue().getCensusContext());
 
-    verify(mockStream2).start(streamListenerCaptor.capture());
+    verify(mockStream2).start(streamListenerCaptor.capture(), same(headers2));
     ClientStreamListener streamListener2 = streamListenerCaptor.getValue();
     Metadata trailers = new Metadata();
     streamListener2.closed(Status.CANCELLED, trailers);
@@ -353,7 +353,7 @@ public class ManagedChannelImplTest {
     verify(mockTransport).newStream(same(method), same(headers), same(CallOptions.DEFAULT),
         any(StatsTraceContext.class));
 
-    verify(mockStream).start(streamListenerCaptor.capture());
+    verify(mockStream).start(streamListenerCaptor.capture(), same(headers));
     verify(mockStream).setCompressor(isA(Compressor.class));
     ClientStreamListener streamListener = streamListenerCaptor.getValue();
 
@@ -419,7 +419,7 @@ public class ManagedChannelImplTest {
     transportListener.transportReady();
     executor.runDueTasks();
 
-    verify(mockStream).start(streamListenerCaptor.capture());
+    verify(mockStream).start(streamListenerCaptor.capture(), same(headers));
     ClientStreamListener streamListener = streamListenerCaptor.getValue();
 
     // ShutdownNow
@@ -540,7 +540,7 @@ public class ManagedChannelImplTest {
 
     verify(mockTransport).newStream(same(method), same(headers), same(options),
         any(StatsTraceContext.class));
-    verify(mockStream).start(streamListenerCaptor.capture());
+    verify(mockStream).start(streamListenerCaptor.capture(), same(headers));
     ClientStreamListener streamListener = streamListenerCaptor.getValue();
     Metadata trailers = new Metadata();
     assertEquals(0, callExecutor.numPendingTasks());

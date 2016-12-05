@@ -53,7 +53,7 @@ class FailingClientStream extends NoopClientStream {
   }
 
   @Override
-  public void start(ClientStreamListener listener) {
+  public void start(ClientStreamListener listener, Metadata headers) {
     Preconditions.checkState(!started, "already started");
     started = true;
     listener.closed(error, new Metadata());

@@ -391,7 +391,7 @@ public class TransportSetTest {
     // Create a new fail fast stream.
     ClientStream ffStream = delayedTransport.newStream(method, headers, failFastCallOptions,
         statsTraceCtx);
-    ffStream.start(mockStreamListener);
+    ffStream.start(mockStreamListener, headers);
     // Verify it is queued.
     assertEquals(++pendingStreamsCount, delayedTransport.getPendingStreamsCount());
     failFastPendingStreamsCount++;
@@ -520,7 +520,7 @@ public class TransportSetTest {
     // Start a stream, which will be pending in the delayed transport
     ClientStream pendingStream = pick.newStream(method, headers, waitForReadyCallOptions,
         statsTraceCtx);
-    pendingStream.start(mockStreamListener);
+    pendingStream.start(mockStreamListener, headers);
 
     // Shut down TransportSet before the transport is created. Further call to
     // obtainActiveTransport() gets failing transports

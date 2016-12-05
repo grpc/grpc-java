@@ -153,7 +153,7 @@ public class DelayedClientTransportTest {
   @Test public void streamStartThenSetTransport() {
     assertFalse(delayedTransport.hasPendingStreams());
     ClientStream stream = delayedTransport.newStream(method, headers, callOptions, statsTraceCtx);
-    stream.start(streamListener);
+    stream.start(streamListener, headers);
     assertEquals(1, delayedTransport.getPendingStreamsCount());
     assertTrue(delayedTransport.hasPendingStreams());
     assertTrue(stream instanceof DelayedStream);
@@ -164,7 +164,7 @@ public class DelayedClientTransportTest {
     assertEquals(1, fakeExecutor.runDueTasks());
     verify(mockRealTransport).newStream(same(method), same(headers), same(callOptions),
         same(statsTraceCtx));
-    verify(mockRealStream).start(listenerCaptor.capture());
+    verify(mockRealStream).start(listenerCaptor.capture(), same(headers));
     verifyNoMoreInteractions(streamListener);
     listenerCaptor.getValue().onReady();
     verify(streamListener).onReady();
@@ -183,8 +183,8 @@ public class DelayedClientTransportTest {
     assertEquals(1, fakeExecutor.runDueTasks());
     verify(mockRealTransport).newStream(same(method), same(headers), same(callOptions),
         same(statsTraceCtx));
-    stream.start(streamListener);
-    verify(mockRealStream).start(same(streamListener));
+    stream.start(streamListener, headers);
+    verify(mockRealStream).start(same(streamListener), same(headers));
   }
 
   @Test public void transportTerminatedThenSetTransport() {
@@ -202,11 +202,11 @@ public class DelayedClientTransportTest {
     verify(transportListener).transportTerminated();
     ClientStream stream = delayedTransport.newStream(method, headers, callOptions, statsTraceCtx);
     assertEquals(0, delayedTransport.getPendingStreamsCount());
-    stream.start(streamListener);
+    stream.start(streamListener, headers);
     assertFalse(stream instanceof DelayedStream);
     verify(mockRealTransport).newStream(same(method), same(headers), same(callOptions),
         same(statsTraceCtx));
-    verify(mockRealStream).start(same(streamListener));
+    verify(mockRealStream).start(same(streamListener), same(headers));
   }
 
   @Test public void setTransportThenShutdownNowThenNewStream() {
@@ -216,11 +216,11 @@ public class DelayedClientTransportTest {
     verify(transportListener).transportTerminated();
     ClientStream stream = delayedTransport.newStream(method, headers, callOptions, statsTraceCtx);
     assertEquals(0, delayedTransport.getPendingStreamsCount());
-    stream.start(streamListener);
+    stream.start(streamListener, headers);
     assertFalse(stream instanceof DelayedStream);
     verify(mockRealTransport).newStream(same(method), same(headers), same(callOptions),
         same(statsTraceCtx));
-    verify(mockRealStream).start(same(streamListener));
+    verify(mockRealStream).start(same(streamListener), same(headers));
   }
 
   @Test public void cancelStreamWithoutSetTransport() {
@@ -234,7 +234,7 @@ public class DelayedClientTransportTest {
 
   @Test public void startThenCancelStreamWithoutSetTransport() {
     ClientStream stream = delayedTransport.newStream(method, new Metadata());
-    stream.start(streamListener);
+    stream.start(streamListener, new Metadata());
     assertEquals(1, delayedTransport.getPendingStreamsCount());
     stream.cancel(Status.CANCELLED);
     assertEquals(0, delayedTransport.getPendingStreamsCount());
@@ -286,14 +286,14 @@ public class DelayedClientTransportTest {
     verify(transportListener).transportShutdown(any(Status.class));
     verify(transportListener).transportTerminated();
     ClientStream stream = delayedTransport.newStream(method, new Metadata());
-    stream.start(streamListener);
+    stream.start(streamListener, new Metadata());
     verify(streamListener).closed(statusCaptor.capture(), any(Metadata.class));
     assertEquals(Status.Code.UNAVAILABLE, statusCaptor.getValue().getCode());
   }
 
   @Test public void startStreamThenShutdownNow() {
     ClientStream stream = delayedTransport.newStream(method, new Metadata());
-    stream.start(streamListener);
+    stream.start(streamListener, new Metadata());
     delayedTransport.shutdownNow(Status.UNAVAILABLE);
     verify(transportListener).transportShutdown(any(Status.class));
     verify(transportListener).transportTerminated();
@@ -306,7 +306,7 @@ public class DelayedClientTransportTest {
     verify(transportListener).transportShutdown(any(Status.class));
     verify(transportListener).transportTerminated();
     ClientStream stream = delayedTransport.newStream(method, new Metadata());
-    stream.start(streamListener);
+    stream.start(streamListener, new Metadata());
     verify(streamListener).closed(statusCaptor.capture(), any(Metadata.class));
     assertEquals(Status.Code.UNAVAILABLE, statusCaptor.getValue().getCode());
   }
@@ -317,7 +317,7 @@ public class DelayedClientTransportTest {
     final CallOptions waitForReadyCallOptions = CallOptions.DEFAULT.withWaitForReady();
     final ClientStream ffStream = delayedTransport.newStream(method, headers, failFastCallOptions,
         statsTraceCtx);
-    ffStream.start(streamListener);
+    ffStream.start(streamListener, new Metadata());
     delayedTransport.newStream(method, headers, waitForReadyCallOptions, statsTraceCtx);
     delayedTransport.newStream(method, headers, failFastCallOptions, statsTraceCtx);
     assertEquals(3, delayedTransport.getPendingStreamsCount());
@@ -343,7 +343,7 @@ public class DelayedClientTransportTest {
 
     final ClientStream ffStream = delayedTransport.newStream(method, headers, failFastCallOptions,
         statsTraceCtx);
-    ffStream.start(streamListener);
+    ffStream.start(streamListener, new Metadata());
     assertEquals(0, delayedTransport.getPendingStreamsCount());
     verify(streamListener).closed(statusCaptor.capture(), any(Metadata.class));
     assertEquals(cause, Status.fromThrowable(statusCaptor.getValue().getCause()));

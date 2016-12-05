@@ -84,6 +84,15 @@ public interface ClientTransport {
   void ping(PingCallback callback, Executor executor);
 
   /**
+   * Returns true if the transport can send unary requests using GET.
+   *
+   * <p>GET will only be used for sending unary requests which are both safe and idempotent. The
+   * encoded request message will be put in the request header. By supporting this, transports are
+   * required to be able to use GET verb and encode the header in base64 encoding.
+   */
+  boolean supportGetMethod();
+
+  /**
    * A callback that is invoked when the acknowledgement to a {@link #ping} is received. Exactly one
    * of the two methods should be called per {@link #ping}.
    */

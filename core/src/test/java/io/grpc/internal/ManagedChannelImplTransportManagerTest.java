@@ -313,14 +313,14 @@ public class ManagedChannelImplTransportManagerTest {
     assertTrue(transport instanceof DelayedClientTransport);
     ClientStream s1 = transport.newStream(method, new Metadata());
     ClientStreamListener sl1 = mock(ClientStreamListener.class);
-    s1.start(sl1);
+    s1.start(sl1, new Metadata());
 
     // Shutting down the channel will shutdown the interim transport, thus refusing further streams,
     // but will continue existing streams.
     channel.shutdown();
     ClientStream s2 = transport.newStream(method, new Metadata());
     ClientStreamListener sl2 = mock(ClientStreamListener.class);
-    s2.start(sl2);
+    s2.start(sl2, new Metadata());
     verify(sl2).closed(any(Status.class), any(Metadata.class));
     verify(sl1, times(0)).closed(any(Status.class), any(Metadata.class));
     assertFalse(channel.isTerminated());
@@ -330,7 +330,7 @@ public class ManagedChannelImplTransportManagerTest {
     ClientTransport transportAfterShutdown = tm.createInterimTransport().transport();
     ClientStream s3 = transportAfterShutdown.newStream(method, new Metadata());
     ClientStreamListener sl3 = mock(ClientStreamListener.class);
-    s3.start(sl3);
+    s3.start(sl3, new Metadata());
     verify(sl3).closed(any(Status.class), any(Metadata.class));
 
     // Closing the interim transport with error will terminate the interim transport, which in turn
@@ -393,7 +393,7 @@ public class ManagedChannelImplTransportManagerTest {
     assertTrue(transport instanceof DelayedClientTransport);
     ClientStream s1 = transport.newStream(method, new Metadata());
     ClientStreamListener sl1 = mock(ClientStreamListener.class);
-    s1.start(sl1);
+    s1.start(sl1, new Metadata());
 
     // Shutting down the channel will shutdownNow the interim transport, thus kill existing streams.
     channel.shutdownNow();

@@ -104,7 +104,7 @@ public abstract class AbstractClientStream2 extends AbstractStream2
   protected abstract TransportState transportState();
 
   @Override
-  public void start(ClientStreamListener listener) {
+  public void start(ClientStreamListener listener, Metadata headers) {
     transportState().setListener(listener);
   }
 

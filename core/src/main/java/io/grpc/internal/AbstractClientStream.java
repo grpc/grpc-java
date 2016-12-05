@@ -78,7 +78,7 @@ public abstract class AbstractClientStream extends AbstractStream
    * this method after they have been created.
    */
   @Override
-  public void start(ClientStreamListener listener) {
+  public void start(ClientStreamListener listener, Metadata headers) {
     checkState(this.listener == null, "stream already started");
     this.listener = checkNotNull(listener, "listener");
   }

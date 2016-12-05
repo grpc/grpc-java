@@ -93,6 +93,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
   private ScheduledExecutorService deadlineCancellationExecutor;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
+  private boolean useGetMethod;
+  private boolean streamStarted;
+  private Listener<RespT> observer;
+  private Metadata headers;
+  private int requestedMessages;
 
   ClientCallImpl(MethodDescriptor<ReqT, RespT> method, Executor executor,
       CallOptions callOptions, StatsTraceContext statsTraceCtx,
@@ -117,6 +122,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
 
   @Override
   public void cancelled(Context context) {
+    checkState(streamStarted, "Stream has not started");
     stream.cancel(statusFromCancelled(context));
   }
 
@@ -159,8 +165,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
   @Override
   public void start(final Listener<RespT> observer, Metadata headers) {
     checkState(stream == null, "Already started");
-    checkNotNull(observer, "observer");
-    checkNotNull(headers, "headers");
+    this.observer = checkNotNull(observer, "observer");
+    this.headers = checkNotNull(headers, "headers");
 
     if (context.isCancelled()) {
       // Context is already cancelled so no need to create a real stream, just notify the observer
@@ -216,6 +222,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       updateTimeoutHeaders(effectiveDeadline, callOptions.getDeadline(),
           context.getDeadline(), headers);
       ClientTransport transport = clientTransportProvider.get(callOptions);
+      useGetMethod = unaryRequest && method.isSafe() && method.isIdempotent()
+          && transport.supportGetMethod();
       Context origContext = context.attach();
       try {
         stream = transport.newStream(method, headers, callOptions, statsTraceCtx);
@@ -230,13 +238,30 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       stream.setAuthority(callOptions.getAuthority());
     }
     stream.setCompressor(compressor);
-    stream.start(new ClientStreamListenerImpl(observer));
+
+    if (!useGetMethod) {
+      startStream();
+    }
+    // If we're going to use GET verb, we will need to wait for the request message and then
+    // start the stream.
+  }
+
+  private void startStream() {
+    checkState(!streamStarted, "Already started");
+    streamStarted = true;
+    stream.start(new ClientStreamListenerImpl(observer), headers);
+    headers = null;
+    if (requestedMessages != 0) {
+      stream.request(requestedMessages);
+    }
 
     // Delay any sources of cancellation after start(), because most of the transports are broken if
     // they receive cancel before start. Issue #1343 has more details
 
     // Propagate later Context cancellation to the remote side.
     context.addListener(this, directExecutor());
+
+    Deadline effectiveDeadline = effectiveDeadline();
     if (effectiveDeadline != null
         // If the context has the effective deadline, we don't need to schedule an extra task.
         && context.getDeadline() != effectiveDeadline) {
@@ -333,7 +358,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
   public void request(int numMessages) {
     Preconditions.checkState(stream != null, "Not started");
     checkArgument(numMessages >= 0, "Number requested must be non-negative");
-    stream.request(numMessages);
+    if (streamStarted) {
+      stream.request(numMessages);
+    } else {
+      requestedMessages += numMessages;
+    }
   }
 
   @Override
@@ -357,7 +386,26 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
         if (cause != null) {
           status = status.withCause(cause);
         }
-        stream.cancel(status);
+
+        if (streamStarted) {
+          stream.cancel(status);
+        } else {
+          class CallCanceled extends ContextRunnable {
+            private final Status status;
+
+            CallCanceled(Status status) {
+              super(context);
+              this.status = Preconditions.checkNotNull(status, "status");
+            }
+
+            @Override
+            public void runInContext() {
+              closeObserver(observer, status, new Metadata());
+            }
+          }
+
+          callExecutor.execute(new CallCanceled(status));
+        }
       }
     } finally {
       removeContextListenerAndCancelDeadlineFuture();
@@ -370,6 +418,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
     Preconditions.checkState(!cancelCalled, "call was cancelled");
     Preconditions.checkState(!halfCloseCalled, "call already half-closed");
     halfCloseCalled = true;
+    if (useGetMethod) {
+      startStream();
+    }
     stream.halfClose();
   }
 
@@ -381,7 +432,13 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
     try {
       // TODO(notcarl): Find out if messageIs needs to be closed.
       InputStream messageIs = method.streamRequest(message);
-      stream.writeMessage(messageIs);
+      if (!useGetMethod) {
+        stream.writeMessage(messageIs);
+      } else {
+        // Encode the request message and put it in the request headers.
+        byte[] payload = IoUtils.toByteArray(messageIs);
+        headers.put(GrpcUtil.GRPC_PAYLOAD_BIN_KEY, payload);
+      }
     } catch (Throwable e) {
       stream.cancel(Status.CANCELLED.withCause(e).withDescription("Failed to stream message"));
       return;
@@ -416,6 +473,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
 
     public ClientStreamListenerImpl(Listener<RespT> observer) {
       this.observer = Preconditions.checkNotNull(observer, "observer");
+      checkState(streamStarted, "Stream has not started");
     }
 
     @Override

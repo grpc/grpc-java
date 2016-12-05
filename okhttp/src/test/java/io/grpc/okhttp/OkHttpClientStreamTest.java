@@ -102,7 +102,7 @@ public class OkHttpClientStreamTest {
         statusRef.set(status);
         assertTrue(Thread.holdsLock(lock));
       }
-    });
+    }, new Metadata());
 
     stream.sendCancel(Status.CANCELLED);
 
@@ -111,7 +111,7 @@ public class OkHttpClientStreamTest {
 
   @Test
   public void sendCancel_started() {
-    stream.start(new BaseClientStreamListener());
+    stream.start(new BaseClientStreamListener(), new Metadata());
     stream.start(1234);
     Mockito.doAnswer(new Answer<Void>() {
       @Override
@@ -128,7 +128,7 @@ public class OkHttpClientStreamTest {
 
   @Test
   public void start_alreadyCancelled() {
-    stream.start(new BaseClientStreamListener());
+    stream.start(new BaseClientStreamListener(), new Metadata());
     stream.sendCancel(Status.CANCELLED);
 
     stream.start(1234);
@@ -143,7 +143,7 @@ public class OkHttpClientStreamTest {
     stream = new OkHttpClientStream(methodDescriptor, metaData, frameWriter, transport,
         flowController, lock, MAX_MESSAGE_SIZE, "localhost", "good-application",
         StatsTraceContext.NOOP);
-    stream.start(new BaseClientStreamListener());
+    stream.start(new BaseClientStreamListener(), new Metadata());
     stream.start(3);
 
     verify(frameWriter).synStream(eq(false), eq(false), eq(3), eq(0), headersCaptor.capture());
@@ -158,7 +158,7 @@ public class OkHttpClientStreamTest {
     stream = new OkHttpClientStream(methodDescriptor, metaData, frameWriter, transport,
         flowController, lock, MAX_MESSAGE_SIZE, "localhost", "good-application",
         StatsTraceContext.NOOP);
-    stream.start(new BaseClientStreamListener());
+    stream.start(new BaseClientStreamListener(), new Metadata());
     stream.start(3);
 
     verify(frameWriter).synStream(eq(false), eq(false), eq(3), eq(0), headersCaptor.capture());
