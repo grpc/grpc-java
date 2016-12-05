@@ -417,10 +417,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
     Preconditions.checkState(stream != null, "Not started");
     Preconditions.checkState(!cancelCalled, "call was cancelled");
     Preconditions.checkState(!halfCloseCalled, "call already half-closed");
+    halfCloseCalled = true;
     if (useGetMethod) {
       startStream();
     }
-    halfCloseCalled = true;
     stream.halfClose();
   }
 

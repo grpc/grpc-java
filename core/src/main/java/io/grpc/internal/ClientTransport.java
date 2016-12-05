@@ -85,6 +85,10 @@ public interface ClientTransport {
 
   /**
    * Returns true if the transport can send unary requests using GET.
+   *
+   * <p>GET will only be used for sending unary requests which are both safe and idempotent. The
+   * encoded request message will be put in the request header. By supporting this, transports are
+   * required to be able to use GET verb and encode the header in base64 encoding.
    */
   boolean supportGetMethod();
 
