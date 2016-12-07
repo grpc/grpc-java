@@ -183,11 +183,9 @@ public class DelayedClientTransport2Test {
     verify(transportListener).transportTerminated();
     ClientStream stream = delayedTransport.newStream(method, headers, callOptions, statsTraceCtx);
     assertEquals(0, delayedTransport.getPendingStreamsCount());
-    stream.start(streamListener);
-    assertFalse(stream instanceof DelayedStream);
-    verify(mockRealTransport).newStream(same(method), same(headers), same(callOptions),
-        same(statsTraceCtx));
-    verify(mockRealStream).start(same(streamListener));
+    assertTrue(stream instanceof FailingClientStream);
+    verify(mockRealTransport, never()).newStream(any(MethodDescriptor.class), any(Metadata.class),
+        any(CallOptions.class), any(StatsTraceContext.class));
   }
 
   @Test public void assignTransportThenShutdownNowThenNewStream() {
@@ -197,11 +195,9 @@ public class DelayedClientTransport2Test {
     verify(transportListener).transportTerminated();
     ClientStream stream = delayedTransport.newStream(method, headers, callOptions, statsTraceCtx);
     assertEquals(0, delayedTransport.getPendingStreamsCount());
-    stream.start(streamListener);
-    assertFalse(stream instanceof DelayedStream);
-    verify(mockRealTransport).newStream(same(method), same(headers), same(callOptions),
-        same(statsTraceCtx));
-    verify(mockRealStream).start(same(streamListener));
+    assertTrue(stream instanceof FailingClientStream);
+    verify(mockRealTransport, never()).newStream(any(MethodDescriptor.class), any(Metadata.class),
+        any(CallOptions.class), any(StatsTraceContext.class));
   }
 
   @Test public void cancelStreamWithoutSetTransport() {
@@ -220,6 +216,38 @@ public class DelayedClientTransport2Test {
     stream.cancel(Status.CANCELLED);
     assertEquals(0, delayedTransport.getPendingStreamsCount());
     verify(streamListener).closed(same(Status.CANCELLED), any(Metadata.class));
+    verifyNoMoreInteractions(mockRealTransport);
+    verifyNoMoreInteractions(mockRealStream);
+  }
+
+  @Test public void newStreamThenShutdownTransportThenAssignTransport() {
+    ClientStream stream = delayedTransport.newStream(method, headers, callOptions, statsTraceCtx);
+    stream.start(streamListener);
+    delayedTransport.shutdown();
+
+    // Stream is still buffered
+    verify(transportListener).transportShutdown(any(Status.class));
+    verify(transportListener, times(0)).transportTerminated();
+    assertEquals(1, delayedTransport.getPendingStreamsCount());
+
+    // ... and will proceed if a real transport is available
+    delayedTransport.reprocess(mockPicker);
+    fakeExecutor.runDueTasks();
+    verify(mockRealTransport).newStream(method, headers, callOptions, statsTraceCtx);
+    verify(mockRealStream).start(any(ClientStreamListener.class));
+
+    // Since no more streams are pending, delayed transport is now terminated
+    assertEquals(0, delayedTransport.getPendingStreamsCount());
+    verify(transportListener).transportTerminated();
+
+    // Further newStream() will return a failing stream
+    stream = delayedTransport.newStream(method, new Metadata());
+    verify(streamListener, never()).closed(any(Status.class), any(Metadata.class));
+    stream.start(streamListener);
+    verify(streamListener).closed(statusCaptor.capture(), any(Metadata.class));
+    assertEquals(Status.Code.UNAVAILABLE, statusCaptor.getValue().getCode());
+
+    assertEquals(0, delayedTransport.getPendingStreamsCount());
     verifyNoMoreInteractions(mockRealTransport);
     verifyNoMoreInteractions(mockRealStream);
   }

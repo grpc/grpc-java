@@ -81,9 +81,9 @@ final class DelayedClientTransport2 implements ManagedClientTransport {
   /**
    * The last picker that {@link #reprocess} has used.
    */
-  // "lock" must be held when assigning to lastPicker
+  @GuardedBy("lock")
   @Nullable
-  private volatile SubchannelPicker lastPicker;
+  private SubchannelPicker lastPicker;
 
   DelayedClientTransport2(Executor streamCreationExecutor) {
     this.streamCreationExecutor = streamCreationExecutor;
@@ -105,14 +105,13 @@ final class DelayedClientTransport2 implements ManagedClientTransport {
   @Override
   public final ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers,
       CallOptions callOptions, StatsTraceContext statsTraceCtx) {
-    SubchannelPicker picker = lastPicker;
-    if (picker == null) {
-      synchronized (lock) {
-        // Check again, since it may have changed while waiting for lock
-        picker = lastPicker;
-        if (picker == null && !shutdown) {
+    SubchannelPicker picker = null;
+    synchronized (lock) {
+      if (!shutdown) {
+        if (lastPicker == null) {
           return createPendingStream(method, headers, callOptions, statsTraceCtx);
         }
+        picker = lastPicker;
       }
     }
     if (picker != null) {
@@ -123,9 +122,13 @@ final class DelayedClientTransport2 implements ManagedClientTransport {
         if (transport != null) {
           return transport.newStream(method, headers, callOptions, statsTraceCtx);
         }
-        // This picker's conclusion is "buffer".  If there hasn't been a newer picker set (possible
-        // race with reprocess()), we will buffer it.  Otherwise, will try with the new picker.
+        // This picker's conclusion is "buffer".  If there hasn't been a newer picker set
+        // (possible race with reprocess()), we will buffer it.  Otherwise, will try with the new
+        // picker.
         synchronized (lock) {
+          if (shutdown) {
+            break;
+          }
           if (picker == lastPicker) {
             return createPendingStream(method, headers, callOptions, statsTraceCtx);
           }
@@ -133,7 +136,8 @@ final class DelayedClientTransport2 implements ManagedClientTransport {
         }
       }
     }
-    return new FailingClientStream(Status.UNAVAILABLE.withDescription("transport shutdown"));
+    return new FailingClientStream(Status.UNAVAILABLE.withDescription(
+            "Channel has shutdown (reported by delayed transport)"));
   }
 
   @Override
