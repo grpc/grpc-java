@@ -75,14 +75,14 @@ import javax.annotation.Nullable;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
 public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
-  private static final RoundRobinLoadBalancerFactory2 instance =
+  private static final RoundRobinLoadBalancerFactory2 INSTANCE =
       new RoundRobinLoadBalancerFactory2();
 
   private RoundRobinLoadBalancerFactory2() {
   }
 
   public static RoundRobinLoadBalancerFactory2 getInstance() {
-    return instance;
+    return INSTANCE;
   }
 
   @Override

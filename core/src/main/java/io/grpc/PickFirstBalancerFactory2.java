@@ -45,13 +45,13 @@ import java.util.List;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
 public final class PickFirstBalancerFactory2 extends LoadBalancer2.Factory {
 
-  private static final PickFirstBalancerFactory2 instance = new PickFirstBalancerFactory2();
+  private static final PickFirstBalancerFactory2 INSTANCE = new PickFirstBalancerFactory2();
 
   private PickFirstBalancerFactory2() {
   }
 
   public static PickFirstBalancerFactory2 getInstance() {
-    return instance;
+    return INSTANCE;
   }
 
   @Override
