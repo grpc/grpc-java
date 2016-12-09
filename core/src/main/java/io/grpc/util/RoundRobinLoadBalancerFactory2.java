@@ -34,6 +34,7 @@ package io.grpc.util;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.IDLE;
+import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -170,21 +171,22 @@ public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
      * Updates picker with the list of active subchannels (state != TRANSIENT_ERROR).
      */
     private void updatePicker(@Nullable Status error) {
-      List<Subchannel> activeList = filterFailingSubchannels(getSubchannels());
+      List<Subchannel> activeList = filterNonFailingSubchannels(getSubchannels());
       helper.updatePicker(new Picker(activeList, error));
     }
 
     /**
      * Filters out failing subchannels (state == TRANSIENT_ERROR).
      */
-    private static List<Subchannel> filterFailingSubchannels(Collection<Subchannel> subchannels) {
-      List<Subchannel> nonFailingSubchannels = Lists.newArrayList();
+    private static List<Subchannel> filterNonFailingSubchannels(
+        Collection<Subchannel> subchannels) {
+      List<Subchannel> readySubchannels = Lists.newArrayList();
       for (Subchannel subchannel : subchannels) {
-        if (getSubchannelStateInfoRef(subchannel).get().getState() != TRANSIENT_FAILURE) {
-          nonFailingSubchannels.add(subchannel);
+        if (getSubchannelStateInfoRef(subchannel).get().getState() == READY) {
+          readySubchannels.add(subchannel);
         }
       }
-      return nonFailingSubchannels;
+      return readySubchannels;
     }
 
     /**
