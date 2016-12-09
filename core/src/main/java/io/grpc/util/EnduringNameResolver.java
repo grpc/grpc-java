@@ -29,18 +29,19 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc;
+package io.grpc.util;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
-import io.grpc.internal.DnsNameResolverProvider;
+import io.grpc.Attributes;
+import io.grpc.ExperimentalApi;
+import io.grpc.NameResolver;
+import io.grpc.ResolvedServerInfoGroup;
+import io.grpc.Status;
 import io.grpc.internal.LogExceptionRunnable;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
@@ -50,13 +51,14 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.concurrent.GuardedBy;
 
 /**
- * A DNS-based {@link NameResolver}.
- *
- * @see DnsNameResolverProvider */
-public abstract class RefreshingNameResolver extends NameResolver {
+ * Abstract class for name resolvers that will retry operation if it fails.
+ */
+@ExperimentalApi
+public abstract class EnduringNameResolver extends NameResolver {
 
   private final Resource<ScheduledExecutorService> timerServiceResource;
   private final Resource<ExecutorService> executorResource;
+  private long retryDelay;
   @GuardedBy("this")
   private boolean shutdown;
   @GuardedBy("this")
@@ -70,11 +72,12 @@ public abstract class RefreshingNameResolver extends NameResolver {
   @GuardedBy("this")
   private Listener listener;
 
-  protected RefreshingNameResolver(Resource<ScheduledExecutorService> timerServiceResource,
-                         Resource<ExecutorService> executorResource) {
+  protected EnduringNameResolver(Resource<ScheduledExecutorService> timerServiceResource,
+                                 Resource<ExecutorService> executorResource,
+                                 long retryInterval) {
     this.timerServiceResource = timerServiceResource;
     this.executorResource = executorResource;
-
+    this.retryDelay = retryInterval;
   }
 
   @Override
@@ -93,68 +96,59 @@ public abstract class RefreshingNameResolver extends NameResolver {
   }
 
   private final Runnable resolutionRunnable = new Runnable() {
-      @Override
-      public void run() {
-        Listener savedListener;
-        synchronized (RefreshingNameResolver.this) {
-          // If this task is started by refresh(), there might already be a scheduled task.
-          if (resolutionTask != null) {
-            resolutionTask.cancel(false);
-            resolutionTask = null;
-          }
-          if (shutdown) {
-            return;
-          }
-          savedListener = listener;
-          resolving = true;
+    @Override
+    public void run() {
+      Listener savedListener;
+      synchronized (EnduringNameResolver.this) {
+        // If this task is started by refresh(), there might already be a scheduled task.
+        if (resolutionTask != null) {
+          resolutionTask.cancel(false);
+          resolutionTask = null;
         }
+        if (shutdown) {
+          return;
+        }
+        savedListener = listener;
+        resolving = true;
+      }
+      try {
         try {
-          try {
-
-            List<ResolvedServerInfoGroup> serversInfoList = getResolvedServerInfoGroups();
-            savedListener.onUpdate(serversInfoList, Attributes.EMPTY);
-
-          } catch (Exception e) {
-            synchronized (RefreshingNameResolver.this) {
-              if (shutdown) {
-                return;
-              }
-              // Because timerService is the single-threaded GrpcUtil.TIMER_SERVICE in production,
-              // we need to delegate the blocking work to the executor
-              resolutionTask =
-                  timerService.schedule(new LogExceptionRunnable(resolutionRunnableOnExecutor),
-                      1, TimeUnit.MINUTES);
+          List<ResolvedServerInfoGroup> serversInfoList = getResolvedServerInfoGroups();
+          savedListener.onUpdate(serversInfoList, Attributes.EMPTY);
+        } catch (Exception e) {
+          synchronized (EnduringNameResolver.this) {
+            if (shutdown) {
+              return;
             }
-            savedListener.onError(Status.UNAVAILABLE.withCause(e));
-            return;
+            // Because timerService is the single-threaded GrpcUtil.TIMER_SERVICE in production,
+            // we need to delegate the blocking work to the executor
+            resolutionTask =
+                timerService.schedule(new LogExceptionRunnable(resolutionRunnableOnExecutor),
+                    retryDelay, TimeUnit.MINUTES);
           }
-
-        } finally {
-          synchronized (RefreshingNameResolver.this) {
-            resolving = false;
-          }
+          savedListener.onError(Status.UNAVAILABLE.withCause(e));
+          return;
+        }
+      } finally {
+        synchronized (EnduringNameResolver.this) {
+          resolving = false;
         }
       }
-    };
+    }
+  };
 
   protected abstract List<ResolvedServerInfoGroup> getResolvedServerInfoGroups() throws Exception;
 
   private final Runnable resolutionRunnableOnExecutor = new Runnable() {
-      @Override
-      public void run() {
-        synchronized (RefreshingNameResolver.this) {
-          if (!shutdown) {
-            executor.execute(resolutionRunnable);
-          }
+    @Override
+    public void run() {
+      synchronized (EnduringNameResolver.this) {
+        if (!shutdown) {
+          executor.execute(resolutionRunnable);
         }
       }
-    };
-
-  // To be mocked out in tests
-  @VisibleForTesting
-  InetAddress[] getAllByName(String host) throws UnknownHostException {
-    return InetAddress.getAllByName(host);
-  }
+    }
+  };
 
   @GuardedBy("this")
   private void resolve() {

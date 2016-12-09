@@ -36,10 +36,10 @@ import com.google.common.base.Preconditions;
 
 import io.grpc.Attributes;
 import io.grpc.NameResolver;
-import io.grpc.RefreshingNameResolver;
 import io.grpc.ResolvedServerInfo;
 import io.grpc.ResolvedServerInfoGroup;
 import io.grpc.internal.SharedResourceHolder.Resource;
+import io.grpc.util.EnduringNameResolver;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -57,7 +57,7 @@ import javax.annotation.Nullable;
  *
  * @see DnsNameResolverProvider
  */
-class DnsNameResolver extends RefreshingNameResolver {
+class DnsNameResolver extends EnduringNameResolver {
   private final String authority;
   private final String host;
   private final int port;
@@ -66,7 +66,7 @@ class DnsNameResolver extends RefreshingNameResolver {
                   Resource<ScheduledExecutorService> timerServiceResource,
                   Resource<ExecutorService> executorResource) {
 
-    super(timerServiceResource, executorResource);
+    super(timerServiceResource, executorResource, 1);
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
     // Must prepend a "//" to the name when constructing a URI, otherwise it will be treated as an
