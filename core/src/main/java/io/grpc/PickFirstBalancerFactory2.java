@@ -98,21 +98,29 @@ public final class PickFirstBalancerFactory2 extends LoadBalancer2.Factory {
 
       PickResult pickResult;
       switch (stateInfo.getState()) {
-        case TRANSIENT_FAILURE:
-          pickResult = PickResult.withError(stateInfo.getStatus());
+        case CONNECTING:
+          pickResult = null; // Reuse pick result from IDLE state.
           break;
         case READY:
           pickResult = PickResult.withSubchannel(subchannel);
           break;
+        case TRANSIENT_FAILURE:
+          pickResult = PickResult.withError(stateInfo.getStatus());
+          break;
         case IDLE:
           subchannel.requestConnection();
-          pickResult = PickResult.withSubchannel(subchannel);
+          pickResult = PickResult.withNoResult();
+          break;
+        case SHUTDOWN:
+          pickResult = PickResult.withNoResult();
           break;
         default:
-          pickResult = PickResult.withNoResult();
+          throw new IllegalStateException();
       }
 
-      helper.updatePicker(new Picker(pickResult));
+      if (pickResult != null) {
+        helper.updatePicker(new Picker(pickResult));
+      }
     }
 
     @Override
