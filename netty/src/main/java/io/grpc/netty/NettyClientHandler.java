@@ -224,8 +224,6 @@ class NettyClientHandler extends AbstractNettyHandler {
       cancelStream(ctx, (CancelClientStreamCommand) msg, promise);
     } else if (msg instanceof SendPingCommand) {
       sendPingFrame(ctx, (SendPingCommand) msg, promise);
-    } else if (msg instanceof GracefulCloseCommand) {
-      gracefulClose(ctx, (GracefulCloseCommand) msg, promise);
     } else if (msg instanceof ForcefulCloseCommand) {
       forcefulClose(ctx, (ForcefulCloseCommand) msg, promise);
     } else if (msg == NOOP_MESSAGE) {
@@ -293,8 +291,10 @@ class NettyClientHandler extends AbstractNettyHandler {
   @Override
   public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
     logger.fine("Network channel being closed by the application.");
-    lifecycleManager.notifyShutdown(
-        Status.UNAVAILABLE.withDescription("Transport closed for unknown reason"));
+    if (ctx.channel().isActive()) { // This may be a notification that the socket was closed
+      lifecycleManager.notifyShutdown(
+          Status.UNAVAILABLE.withDescription("Transport closed for unknown reason"));
+    }
     super.close(ctx, promise);
   }
 
@@ -305,21 +305,25 @@ class NettyClientHandler extends AbstractNettyHandler {
   public void channelInactive(ChannelHandlerContext ctx) throws Exception {
     try {
       logger.fine("Network channel is closed");
-      lifecycleManager.notifyShutdown(
-          Status.UNAVAILABLE.withDescription("Network closed for unknown reason"));
-      cancelPing(lifecycleManager.getShutdownThrowable());
-      // Report status to the application layer for any open streams
-      connection().forEachActiveStream(new Http2StreamVisitor() {
-        @Override
-        public boolean visit(Http2Stream stream) throws Http2Exception {
-          NettyClientStream.TransportState clientStream = clientStream(stream);
-          if (clientStream != null) {
-            clientStream.transportReportStatus(
-                lifecycleManager.getShutdownStatus(), false, new Metadata());
+      Status status = Status.UNAVAILABLE.withDescription("Network closed for unknown reason");
+      lifecycleManager.notifyShutdown(status);
+      try {
+        cancelPing(lifecycleManager.getShutdownThrowable());
+        // Report status to the application layer for any open streams
+        connection().forEachActiveStream(new Http2StreamVisitor() {
+          @Override
+          public boolean visit(Http2Stream stream) throws Http2Exception {
+            NettyClientStream.TransportState clientStream = clientStream(stream);
+            if (clientStream != null) {
+              clientStream.transportReportStatus(
+                  lifecycleManager.getShutdownStatus(), false, new Metadata());
+            }
+            return true;
           }
-          return true;
-        }
-      });
+        });
+      } finally {
+        lifecycleManager.notifyTerminated(status);
+      }
     } finally {
       // Close any open streams
       super.channelInactive(ctx);
@@ -510,20 +514,8 @@ class NettyClientHandler extends AbstractNettyHandler {
     });
   }
 
-  private void gracefulClose(ChannelHandlerContext ctx, GracefulCloseCommand msg,
-      ChannelPromise promise) throws Exception {
-    lifecycleManager.notifyShutdown(msg.getStatus());
-    // Explicitly flush to create any buffered streams before sending GOAWAY.
-    // TODO(ejona): determine if the need to flush is a bug in Netty
-    flush(ctx);
-    close(ctx, promise);
-  }
-
   private void forcefulClose(final ChannelHandlerContext ctx, final ForcefulCloseCommand msg,
       ChannelPromise promise) throws Exception {
-    lifecycleManager.notifyShutdown(
-        Status.UNAVAILABLE.withDescription("Channel requested transport to shut down"));
-    close(ctx, promise);
     connection().forEachActiveStream(new Http2StreamVisitor() {
       @Override
       public boolean visit(Http2Stream stream) throws Http2Exception {

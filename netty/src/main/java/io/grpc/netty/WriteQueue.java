@@ -114,6 +114,20 @@ class WriteQueue {
   }
 
   /**
+   * Enqueue a runnable to the EventLoop, without reordering with other writes in this queue.
+   *
+   * @param runnable method to execute in EventLoop
+   * @param flush true if a flush of the write should be schedule, false if a later call will
+   *              schedule the flush.
+   */
+  void execute(Runnable runnable, boolean flush) {
+    queue.add(new RunnableCommand(runnable));
+    if (flush) {
+      scheduleFlush();
+    }
+  }
+
+  /**
    * Process the queue of commands and dispatch them to the stream. This method is only
    * called in the event loop
    */
@@ -123,7 +137,7 @@ class WriteQueue {
       int i = 0;
       boolean flushedOnce = false;
       while ((cmd = queue.poll()) != null) {
-        channel.write(cmd, cmd.promise());
+        cmd.run(channel);
         if (++i == DEQUE_CHUNK_SIZE) {
           i = 0;
           // Flush each chunk so we are releasing buffers periodically. In theory this loop
@@ -146,6 +160,29 @@ class WriteQueue {
     }
   }
 
+  private static class RunnableCommand implements QueuedCommand {
+    private final Runnable runnable;
+
+    public RunnableCommand(Runnable runnable) {
+      this.runnable = runnable;
+    }
+
+    @Override
+    public final void promise(ChannelPromise promise) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public final ChannelPromise promise() {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public final void run(Channel channel) {
+      runnable.run();
+    }
+  }
+
   abstract static class AbstractQueuedCommand implements QueuedCommand {
 
     private ChannelPromise promise;
@@ -158,6 +195,11 @@ class WriteQueue {
     @Override
     public final ChannelPromise promise() {
       return promise;
+    }
+
+    @Override
+    public final void run(Channel channel) {
+      channel.write(this, promise);
     }
   }
 
@@ -174,5 +216,7 @@ class WriteQueue {
      * Sets the promise.
      */
     void promise(ChannelPromise promise);
+
+    void run(Channel channel);
   }
 }

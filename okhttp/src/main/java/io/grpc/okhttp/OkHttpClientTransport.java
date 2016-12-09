@@ -51,6 +51,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
+import io.grpc.StatusException;
 import io.grpc.Status.Code;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
@@ -78,6 +79,7 @@ import okio.Okio;
 import okio.Source;
 import okio.Timeout;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -432,6 +434,9 @@ class OkHttpClientTransport implements ConnectionClientTransport {
           sock.setTcpNoDelay(true);
           source = Okio.buffer(Okio.source(sock));
           sink = Okio.buffer(Okio.sink(sock));
+        } catch (StatusException e) {
+          startGoAway(0, ErrorCode.INTERNAL_ERROR, e.getStatus());
+          return;
         } catch (Exception e) {
           onException(e);
           return;
@@ -466,13 +471,12 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   }
 
   private Socket createHttpProxySocket(InetSocketAddress address, InetSocketAddress proxyAddress,
-      String proxyUsername, String proxyPassword) {
-    Status internalStatus = Status.INTERNAL.withDescription("Failed trying to connect with proxy");
+      String proxyUsername, String proxyPassword) throws IOException, StatusException {
     try {
       Socket sock = new Socket(proxyAddress.getAddress(), proxyAddress.getPort());
       sock.setTcpNoDelay(true);
 
-      BufferedSource source = Okio.buffer(Okio.source(sock));
+      Source source = Okio.source(sock);
       BufferedSink sink = Okio.buffer(Okio.sink(sock));
 
       // Prepare headers and request method line
@@ -493,19 +497,31 @@ class OkHttpClientTransport implements ConnectionClientTransport {
       sink.flush();
 
       // Read status line, check if 2xx was returned
-      StatusLine statusLine = StatusLine.parse(source.readUtf8LineStrict());
+      StatusLine statusLine = StatusLine.parse(readUtf8LineStrictUnbuffered(source));
+      // Drain rest of headers
+      while (!readUtf8LineStrictUnbuffered(source).equals("")) {}
       if (statusLine.code < 200 || statusLine.code > 300) {
-        throw new IOException(
-            String.format("Response returned from proxy was not successful (expected 2xx, got %d)",
-                statusLine.code));
+        Buffer body = new Buffer();
+        try {
+          sock.shutdownOutput();
+          source.read(body, 1024);
+        } catch (IOException ex) {
+          body.writeUtf8("Unable to read body: " + ex.toString());
+        }
+        try {
+          sock.close();
+        } catch (IOException ignore) {
+        }
+        String message = String.format(
+            "Response returned from proxy was not successful (expected 2xx, got %d %s). "
+              + "Response body:\n%s",
+            statusLine.code, statusLine.message, body.readUtf8());
+        throw Status.UNAVAILABLE.withDescription(message).asException();
       }
       return sock;
-
-    } catch (SocketException e) {
-      // NB(lukaszx0) We'd use mulit-catch, but it's not supported at this language level.
-      throw internalStatus.withCause(e).asRuntimeException();
     } catch (IOException e) {
-      throw internalStatus.withCause(e).asRuntimeException();
+      throw Status.UNAVAILABLE.withDescription("Failed trying to connect with proxy").withCause(e)
+          .asException();
     }
   }
 
@@ -526,6 +542,18 @@ class OkHttpClientTransport implements ConnectionClientTransport {
       request.header("Proxy-Authorization", Credentials.basic(proxyUsername, proxyPassword));
     }
     return request.build();
+  }
+
+  private static String readUtf8LineStrictUnbuffered(Source source) throws IOException {
+    Buffer buffer = new Buffer();
+    while (true) {
+      if (source.read(buffer, 1) == -1) {
+        throw new EOFException("\\n not found: " + buffer.readByteString().hex());
+      }
+      if (buffer.getByte(buffer.size() - 1) == '\n') {
+        return buffer.readUtf8LineStrict();
+      }
+    }
   }
 
   @Override

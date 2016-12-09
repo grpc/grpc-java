@@ -226,15 +226,6 @@ class NettyClientTransport implements ConnectionClientTransport {
         }
       }
     });
-    // Handle transport shutdown when the channel is closed.
-    channel.closeFuture().addListener(new ChannelFutureListener() {
-      @Override
-      public void operationComplete(ChannelFuture future) throws Exception {
-        // Typically we should have noticed shutdown before this point.
-        lifecycleManager.notifyTerminated(
-            Status.INTERNAL.withDescription("Connection closed with unknown cause"));
-      }
-    });
     return null;
   }
 
@@ -242,17 +233,33 @@ class NettyClientTransport implements ConnectionClientTransport {
   public void shutdown() {
     // Notifying of termination is automatically done when the channel closes.
     if (channel.isOpen()) {
-      Status status
-          = Status.UNAVAILABLE.withDescription("Channel requested transport to shut down");
-      handler.getWriteQueue().enqueue(new GracefulCloseCommand(status), true);
+      handler.getWriteQueue().execute(new Runnable() {
+        @Override
+        public void run() {
+          lifecycleManager.notifyShutdown(
+              Status.UNAVAILABLE.withDescription("Channel requested transport to shut down"));
+          // Explicitly flush to create any buffered streams before sending GOAWAY.
+          // TODO(ejona): determine if the need to flush is a bug in Netty
+          channel.flush();
+          channel.close();
+        }
+      }, true);
     }
   }
 
   @Override
-  public void shutdownNow(Status reason) {
+  public void shutdownNow(final Status reason) {
     // Notifying of termination is automatically done when the channel closes.
     if (channel != null && channel.isOpen()) {
-      handler.getWriteQueue().enqueue(new ForcefulCloseCommand(reason), true);
+      handler.getWriteQueue().execute(new Runnable() {
+        @Override
+        public void run() {
+          lifecycleManager.notifyShutdown(
+              Status.UNAVAILABLE.withDescription("Channel requested transport to shut down"));
+          channel.close();
+          channel.write(new ForcefulCloseCommand(reason));
+        }
+      }, true);
     }
   }
 
