@@ -133,6 +133,10 @@ public abstract class LoadBalancer2 {
   /**
    * Handles a state change on a Subchannel.
    *
+   * <p>If a previously READY Subchannel has become not READY, in order to prevent unnecessary
+   * delays of RPCs, this method should create a new picker that will not use this Subchannel.
+   * Please refer to {@link PickResult#withSubchannel}'s javadoc for more information.
+   *
    * @param subchannel the involved Subchannel
    * @param stateInfo the new state
    */
@@ -181,9 +185,21 @@ public abstract class LoadBalancer2 {
     }
 
     /**
-     * A decision to proceed the RPC on a Subchannel.  The state of the Subchannel is supposed to be
-     * {@link ConnectivityState#READY}.  However, since such decisions are racy, a non-READY
-     * Subchannel will not fail the RPC, but will only leave it buffered.
+     * A decision to proceed the RPC on a Subchannel.
+     *
+     * <p>The state of the Subchannel should be {@link ConnectivityState#READY}.  If a non-READY
+     * Subchannel is returned, the RPC will stay buffered in the channel until the next picker is
+     * provided via {@link Helper#updatePicker}.  This also applies to a race condition where a
+     * previously READY Subchannel is returned but has become non-READY when Channel tries to use
+     * it.
+     *
+     * <p>In order to prevent unnecessary delay of RPCs:
+     * <ol>
+     *   <li>The picker should only return Subchannels that are known as READY. </li>
+     *   <li>The LoadBalancer should always create a new picker and call {@link Helper#updatePicker}
+     *   whenever a Subchannel that was known to be READY has become non-READY.  This will handle
+     *   the aforementioned race condition properly.</li>
+     * </ol>
      *
      * <p>Only Subchannels returned by {@link Helper#createSubchannel} will work.  DO NOT try to
      * use your own implementations of Subchannels, as they won't work.
