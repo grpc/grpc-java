@@ -194,7 +194,8 @@ public class OkHttpClientTransportTest {
     InetSocketAddress address = InetSocketAddress.createUnresolved("hostname", 31415);
     clientTransport = new OkHttpClientTransport(
         address, "hostname", null /* agent */, executor, null,
-        Utils.convertSpec(OkHttpChannelBuilder.DEFAULT_CONNECTION_SPEC), DEFAULT_MAX_MESSAGE_SIZE);
+        Utils.convertSpec(OkHttpChannelBuilder.DEFAULT_CONNECTION_SPEC), DEFAULT_MAX_MESSAGE_SIZE,
+        null, null, null);
     String s = clientTransport.toString();
     assertTrue("Unexpected: " + s, s.contains("OkHttpClientTransport"));
     assertTrue("Unexpected: " + s, s.contains(address.toString()));
@@ -1311,7 +1312,10 @@ public class OkHttpClientTransportTest {
         executor,
         null,
         ConnectionSpec.CLEARTEXT,
-        DEFAULT_MAX_MESSAGE_SIZE);
+        DEFAULT_MAX_MESSAGE_SIZE,
+        null,
+        null,
+        null);
 
     String host = clientTransport.getOverridenHost();
     int port = clientTransport.getOverridenPort();
@@ -1329,7 +1333,10 @@ public class OkHttpClientTransportTest {
         executor,
         null,
         ConnectionSpec.CLEARTEXT,
-        DEFAULT_MAX_MESSAGE_SIZE);
+        DEFAULT_MAX_MESSAGE_SIZE,
+        null,
+        null,
+        null);
 
     ManagedClientTransport.Listener listener = mock(ManagedClientTransport.Listener.class);
     clientTransport.start(listener);

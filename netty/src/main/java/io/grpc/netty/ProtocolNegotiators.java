@@ -55,6 +55,8 @@ import io.netty.handler.codec.http.HttpClientUpgradeHandler;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http2.Http2ClientUpgradeCodec;
+import io.netty.handler.proxy.HttpProxyHandler;
+import io.netty.handler.proxy.ProxyHandler;
 import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.OpenSslEngine;
 import io.netty.handler.ssl.SslContext;
@@ -63,6 +65,7 @@ import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import io.netty.util.AsciiString;
 import io.netty.util.ReferenceCountUtil;
 
+import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayDeque;
 import java.util.Arrays;
@@ -184,6 +187,65 @@ public final class ProtocolNegotiators {
     @Override
     public AsciiString scheme() {
       return Utils.HTTPS;
+    }
+  }
+
+  /**
+   * Returns a {@link ProtocolNegotiator} that does HTTP CONNECT proxy negotiation.
+   */
+  public static ProtocolNegotiator httpProxy(SocketAddress proxyAddress,
+      @Nullable String proxyUsername, @Nullable String proxyPassword,
+      ProtocolNegotiator negotiator) {
+    HttpProxyHandler proxyHandler = new HttpProxyHandler(proxyAddress, proxyUsername,
+        proxyPassword);
+    return new ProxyNegotiator(proxyHandler, negotiator);
+  }
+
+  /**
+   * Protocol Negotiator which enables using {@link ProxyHandler}s.
+   */
+  static final class ProxyNegotiator implements ProtocolNegotiator {
+    private final ProxyHandler proxyHandler;
+    private final ProtocolNegotiator negotiator;
+
+    public ProxyNegotiator(ProxyHandler proxyHandler, ProtocolNegotiator negotiator) {
+      this.negotiator = negotiator;
+      this.proxyHandler = proxyHandler;
+    }
+
+    @Override
+    public Handler newHandler(GrpcHttp2ConnectionHandler http2Handler) {
+      return new ProxyWrapperHandler(proxyHandler, negotiator.newHandler(http2Handler));
+    }
+  }
+
+  /**
+   * Protocol negotiation handler which adds proxy handler before given channel handler.
+   */
+  static final class ProxyWrapperHandler extends AbstractBufferingHandler
+      implements ProtocolNegotiator.Handler {
+    private final ProtocolNegotiator.Handler originalHandler;
+    private ProxyHandler proxyHandler;
+
+    public ProxyWrapperHandler(ProxyHandler proxyHandler, ChannelHandler handler) {
+      super(handler);
+      checkNotNull(proxyHandler, "proxyHandler");
+      this.proxyHandler = proxyHandler;
+      this.originalHandler = (ProtocolNegotiator.Handler) handler;
+    }
+
+    @Override
+    public AsciiString scheme() {
+      return originalHandler.scheme();
+    }
+
+    @Override
+    public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
+      if (proxyHandler != null) {
+        ctx.pipeline().addFirst(proxyHandler);
+        proxyHandler = null;
+      }
+      super.channelRegistered(ctx);
     }
   }
 

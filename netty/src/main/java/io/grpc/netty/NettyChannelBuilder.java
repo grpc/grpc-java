@@ -242,7 +242,8 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
   protected ClientTransportFactory buildTransportFactory() {
     return new NettyTransportFactory(
         channelType, channelOptions, negotiationType, protocolNegotiator, sslContext,
-        eventLoopGroup, flowControlWindow, maxInboundMessageSize(), maxHeaderListSize);
+        eventLoopGroup, flowControlWindow, maxInboundMessageSize(), maxHeaderListSize, proxyAddress,
+        proxyPassword, proxyUsername);
   }
 
   @Override
@@ -302,6 +303,9 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
     private final int flowControlWindow;
     private final int maxMessageSize;
     private final int maxHeaderListSize;
+    private final SocketAddress proxyAddress;
+    private final String proxyUsername;
+    private final String proxyPassword;
 
     private boolean closed;
 
@@ -309,7 +313,8 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
         Class<? extends Channel> channelType, Map<ChannelOption<?>, ?> channelOptions,
         NegotiationType negotiationType, ProtocolNegotiator protocolNegotiator,
         SslContext sslContext, EventLoopGroup group, int flowControlWindow, int maxMessageSize,
-        int maxHeaderListSize) {
+        int maxHeaderListSize, SocketAddress proxyAddress, String proxyPassword,
+        String proxyUsername) {
       this.channelType = channelType;
       this.negotiationType = negotiationType;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
@@ -318,6 +323,9 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
       this.flowControlWindow = flowControlWindow;
       this.maxMessageSize = maxMessageSize;
       this.maxHeaderListSize = maxHeaderListSize;
+      this.proxyAddress = proxyAddress;
+      this.proxyUsername = proxyUsername;
+      this.proxyPassword = proxyPassword;
       usingSharedGroup = group == null;
       if (usingSharedGroup) {
         // The group was unspecified, using the shared group.
@@ -335,6 +343,11 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
       }
       ProtocolNegotiator negotiator = protocolNegotiator != null ? protocolNegotiator :
           createProtocolNegotiator(authority, negotiationType, sslContext);
+      // If proxy information is passed, wrap negotiator in proxy negotiation.
+      if (proxyAddress != null) {
+        negotiator = ProtocolNegotiators.httpProxy(proxyAddress, proxyUsername,
+            proxyPassword, negotiator);
+      }
       return newClientTransport(serverAddress, authority, userAgent, negotiator);
     }
 
@@ -345,9 +358,8 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
       }
-      return new NettyClientTransport(
-          serverAddress, channelType, channelOptions, group, negotiator, flowControlWindow,
-          maxMessageSize, maxHeaderListSize, authority, userAgent);
+      return new NettyClientTransport(serverAddress, channelType, channelOptions, group, negotiator,
+          flowControlWindow, maxMessageSize, maxHeaderListSize, authority, userAgent);
     }
 
     @Override
