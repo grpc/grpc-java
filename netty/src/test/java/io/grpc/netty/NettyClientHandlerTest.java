@@ -52,7 +52,9 @@ import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.notNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.base.Ticker;
 import com.google.common.io.ByteStreams;
@@ -170,6 +172,9 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
     verifyWrite().writeRstStream(eq(ctx()), eq(3), eq(Http2Error.CANCEL.code()),
         any(ChannelPromise.class));
+    verify(keepAliveManager, times(1)).onTransportActive(); // onStreamActive
+    verify(keepAliveManager, times(1)).onTransportIdle(); // onStreamClosed
+    verifyNoMoreInteractions(keepAliveManager);
   }
 
   @Test
@@ -236,6 +241,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     assertTrue(future.isSuccess());
     verifyWrite().writeData(eq(ctx()), eq(3), eq(content()), eq(0), eq(true),
         any(ChannelPromise.class));
+    verify(keepAliveManager, times(1)).onTransportActive(); // onStreamActive
+    verifyNoMoreInteractions(keepAliveManager);
   }
 
   @Test
@@ -347,6 +354,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     handler().channelInactive(ctx());
     assertTrue(future.isDone());
     assertFalse(future.isSuccess());
+    verify(keepAliveManager, times(1)).onTransportShutdown(); // channelInactive
+    verifyNoMoreInteractions(keepAliveManager);
   }
 
   @Test
@@ -389,6 +398,9 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     streamTransportState.setListener(streamListener);
     enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
     assertEquals(7, streamTransportState.id());
+
+    verify(keepAliveManager, times(1)).onTransportActive(); // onStreamActive
+    verifyNoMoreInteractions(keepAliveManager);
   }
 
   @Test
@@ -488,6 +500,14 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
     assertEquals(1, handler().flowControlPing().getPingReturn());
     assertEquals(1, callback.invocationCount);
+  }
+
+  @Override
+  public void dataPingAckIsRecognized() throws Exception {
+    super.dataPingAckIsRecognized();
+    verify(keepAliveManager, times(1)).onTransportActive(); // onStreamActive
+    verify(keepAliveManager, times(2)).onDataReceived(); // onDataRead, onPingAckRead
+    verifyNoMoreInteractions(keepAliveManager);
   }
 
   @Test
