@@ -197,9 +197,9 @@ public class PickFirstLoadBalancer2Test {
     loadBalancer.handleSubchannelState(subchannel,
         ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
     loadBalancer.handleSubchannelState(subchannel,
-        ConnectivityStateInfo.forNonError(ConnectivityState.READY));
-    loadBalancer.handleSubchannelState(subchannel,
         ConnectivityStateInfo.forNonError(ConnectivityState.IDLE));
+    loadBalancer.handleSubchannelState(subchannel,
+        ConnectivityStateInfo.forNonError(ConnectivityState.READY));
 
     verify(mockHelper, times(3)).updatePicker(pickerCaptor.capture());
     verify(subchannel, times(1)).requestConnection();

@@ -33,9 +33,9 @@ package io.grpc.util;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.IDLE;
+import static io.grpc.ConnectivityState.READY;
 import static io.grpc.util.RoundRobinLoadBalancerFactory2.RoundRobinLoadBalancer.STATE_INFO;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.isA;
 import static org.mockito.Mockito.mock;
@@ -126,7 +126,14 @@ public class RoundRobinLoadBalancer2Test {
 
   @Test
   public void pickAfterResolved() throws Exception {
+    Subchannel readySubchannel = subchannels.get(servers.get(servers.keySet().iterator().next()));
+    when(readySubchannel.getAttributes()).thenReturn(Attributes.newBuilder()
+        .set(STATE_INFO, new AtomicReference<ConnectivityStateInfo>(
+            ConnectivityStateInfo.forNonError(READY)))
+        .build());
     loadBalancer.handleResolvedAddresses(Lists.newArrayList(servers.keySet()), affinity);
+
+
 
     verify(mockHelper, times(3)).createSubchannel(any(EquivalentAddressGroup.class),
         any(Attributes.class));
@@ -139,8 +146,7 @@ public class RoundRobinLoadBalancer2Test {
     verify(mockHelper, times(1)).updatePicker(pickerCaptor.capture());
 
     Iterator<Subchannel> subchannelIterator = pickerCaptor.getValue().subchannelIterator;
-    assertTrue(Lists.newArrayList(subchannelIterator.next(), subchannelIterator.next(),
-        subchannelIterator.next()).containsAll(subchannels.values()));
+    assertEquals(readySubchannel, subchannelIterator.next());
 
     verifyNoMoreInteractions(mockHelper);
   }

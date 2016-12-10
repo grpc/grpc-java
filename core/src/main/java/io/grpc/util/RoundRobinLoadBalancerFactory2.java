@@ -31,7 +31,6 @@
 
 package io.grpc.util;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
@@ -168,7 +167,7 @@ public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
     }
 
     /**
-     * Updates picker with the list of active subchannels (state != TRANSIENT_ERROR).
+     * Updates picker with the list of active subchannels (state == READY).
      */
     private void updatePicker(@Nullable Status error) {
       List<Subchannel> activeList = filterNonFailingSubchannels(getSubchannels());
@@ -176,7 +175,7 @@ public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
     }
 
     /**
-     * Filters out failing subchannels (state == TRANSIENT_ERROR).
+     * Filters out non-ready subchannels.
      */
     private static List<Subchannel> filterNonFailingSubchannels(
         Collection<Subchannel> subchannels) {
@@ -240,8 +239,6 @@ public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
 
     Picker(Iterable<Subchannel> iterable, @Nullable Status status) {
       this.subchannelIterator = Iterables.cycle(iterable).iterator();
-      checkArgument(subchannelIterator.hasNext() || status != null,
-          "status must be present if iterable is empty");
       this.status = status;
     }
 
@@ -251,7 +248,10 @@ public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
       if (subchannelIterator.hasNext()) {
         return PickResult.withSubchannel(subchannelIterator.next());
       } else {
-        return PickResult.withError(status);
+        if (status != null) {
+          return PickResult.withError(status);
+        }
+        return PickResult.withNoResult();
       }
     }
   }
