@@ -133,6 +133,9 @@ public abstract class LoadBalancer2 {
   /**
    * Handles a state change on a Subchannel.
    *
+   * <p>The initial state of a Subchannel is IDLE. You won't get a notification for the initial IDLE
+   * state.
+   *
    * <p>If a previously READY Subchannel has become not READY, in order to prevent unnecessary
    * delays of RPCs, this method should create a new picker that will not use this Subchannel.
    * Please refer to {@link PickResult#withSubchannel}'s javadoc for more information.
@@ -167,6 +170,18 @@ public abstract class LoadBalancer2 {
 
   /**
    * A balancing decision made by {@link SubchannelPicker} for an RPC.
+   *
+   * <p>The outcome of the decision will be one of the following:
+   * <ul>
+   *   <li>Proceed: if a Subchannel is provided via {@link #withSubchannel}, and is in READY state
+   *   when the RPC tries to start on it, the RPC will proceed on that Subchannel.</li>
+   *   <li>Error: if an error is provided via {@link #withError}, and the RPC is not wait-for-ready
+   *   (i.e., {@link CallOptions#withWaitForReady} was not called), the RPC will fail immediately
+   *   with the given error.</li>
+   *   <li>Buffer: in all other cases, the RPC will be buffered in the Channel, until next picker is
+   *   provided via {@link Helper#updatePicker}, when the RPC will go through the same picking
+   *   process again</li>
+   * </ul>
    */
   @Immutable
   public static final class PickResult {
@@ -187,22 +202,54 @@ public abstract class LoadBalancer2 {
     /**
      * A decision to proceed the RPC on a Subchannel.
      *
-     * <p>The state of the Subchannel should be {@link ConnectivityState#READY}.  If a non-READY
-     * Subchannel is returned, the RPC will stay buffered in the channel until the next picker is
-     * provided via {@link Helper#updatePicker}.  This also applies to a race condition where a
-     * previously READY Subchannel is returned but has become non-READY when Channel tries to use
-     * it.
-     *
-     * <p>In order to prevent unnecessary delay of RPCs:
-     * <ol>
-     *   <li>The picker should only return Subchannels that are known as READY. </li>
-     *   <li>The LoadBalancer should always create a new picker and call {@link Helper#updatePicker}
-     *   whenever a Subchannel that was known to be READY has become non-READY.  This will handle
-     *   the aforementioned race condition properly.</li>
-     * </ol>
-     *
      * <p>Only Subchannels returned by {@link Helper#createSubchannel} will work.  DO NOT try to
      * use your own implementations of Subchannels, as they won't work.
+     *
+     * <p>When the RPC tries to use the return Subchannel, which is briefly after this method
+     * returns, the state of the Subchannel will decide where the RPC would go:
+     *
+     * <ul>
+     *   <li>READY: the RPC will proceed on this Subchannel.</li>
+     *   <li>IDLE: the RPC will be buffered.  Subchannel will attempt to create connection.</li>
+     *   <li>All other states: the RPC will be buffered.</li>
+     * </ul>
+     *
+     * <p>Note that Subchannel's state may change at the same time the picker is making the
+     * decision, which means the decision may be made with (to-be) outdated information.  For
+     * example, a picker may return a Subchannel known to be READY, but it has become SHUTDOWN when
+     * used by RPC, which makes the RPC to be buffered.  The LoadBalancer will soon learn about
+     * the Subchannels' transition from READY to SHUTDOWN, create a new picker and allow the RPC to
+     * use another READY transport if there is any.
+     *
+     * <p>You will want to avoid running into a situation where there are READY Subchannels out
+     * there but some RPCs are still buffered for longer than a brief time.
+     * <ul>
+     *   <li>This can happen if you return Subchannels with states other than READY and IDLE.  For
+     *   example, suppose you round-robin on 2 Subchannels, in READY and CONNECTING states
+     *   respectively.  If the picker ignores the state and pick them equally, 50% of RPCs will be
+     *   stuck in buffered state until both Subchannels are READY.</li>
+     *   <li>This can also happen if you don't create a new picker at key state changes of
+     *   Subchannels.  Take the above round-robin example again.  Suppose you do pick only READY and
+     *   IDLE Subchannels, and initially both Subchannels are READY.  Now one becomes IDLE, then
+     *   CONNECTING and stays CONNECTING for a long time.  If you don't create a new picker in
+     *   response to the CONNECTING state to exclude that Subchannel, 50% of RPCs will hit it and
+     *   be buffered even though the other Subchannel is READY.</li>
+     * </ul>
+     * In order to prevent unnecessary delay of RPCs, the rules of thumb are:
+     * <ol>
+     *   <li>The picker should only pick Subchannels that are known as READY or IDLE.</li>
+     *   <li>Whenever a Subchannel that was known to be in a state that your picker would pick has
+     *   transitioned to a state that your picker wouldn't, the LoadBalancer should create a new
+     *   picker and call {@link Helper#updatePicker}.</li>
+     * </ol>
+     *
+     * <p>Whether to pick IDLE Subchannels depends on whether you want Subchannels to connect
+     * on-demand or actively.  If you want connect-on-demand, include IDLE Subchannels in your
+     * pick results, because when an RPC tries to use an IDLE Subchannel, the Subchannel will
+     * try to connect.  On the other hand, if you want Subchannels to be always connected even
+     * when there is no RPC, you would call {@link Subchannel#requestConnection} whenever the
+     * Subchannel has transitioned to IDLE, then you don't need to include IDLE Subchannels in your
+     * pick results.
      */
     public static PickResult withSubchannel(Subchannel subchannel) {
       return new PickResult(Preconditions.checkNotNull(subchannel, "subchannel"), Status.OK);
