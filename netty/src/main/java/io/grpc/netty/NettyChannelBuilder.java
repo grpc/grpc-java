@@ -38,7 +38,6 @@ import com.google.common.base.Preconditions;
 
 import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
-import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.ClientTransportFactory;
@@ -63,7 +62,8 @@ import javax.net.ssl.SSLException;
  * A builder to help simplify construction of channels using the Netty transport.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1784")
-public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<NettyChannelBuilder> {
+public final class NettyChannelBuilder
+    extends AbstractManagedChannelImplBuilder<NettyChannelBuilder> {
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1048576; // 1MiB
 
   private final Map<ChannelOption<?>, Object> channelOptions =
@@ -71,6 +71,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
 
   private NegotiationType negotiationType = NegotiationType.TLS;
   private ProtocolNegotiator protocolNegotiator;
+  private AuthorityChecker authorityChecker;
   private Class<? extends Channel> channelType = NioSocketChannel.class;
 
   @Nullable
@@ -128,7 +129,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
   /**
    * Specifies the channel type to use, by default we use {@link NioSocketChannel}.
    */
-  public final NettyChannelBuilder channelType(Class<? extends Channel> channelType) {
+  public NettyChannelBuilder channelType(Class<? extends Channel> channelType) {
     this.channelType = Preconditions.checkNotNull(channelType, "channelType");
     return this;
   }
@@ -137,7 +138,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
    * Specifies a channel option. As the underlying channel as well as network implementation may
    * ignore this value applications should consider it a hint.
    */
-  public final <T> NettyChannelBuilder withOption(ChannelOption<T> option, T value) {
+  public <T> NettyChannelBuilder withOption(ChannelOption<T> option, T value) {
     channelOptions.put(option, value);
     return this;
   }
@@ -147,21 +148,8 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
    *
    * <p>Default: <code>TLS</code>
    */
-  public final NettyChannelBuilder negotiationType(NegotiationType type) {
+  public NettyChannelBuilder negotiationType(NegotiationType type) {
     negotiationType = type;
-    return this;
-  }
-
-  /**
-   * Sets the {@link ProtocolNegotiator} to be used. If non-{@code null}, overrides the value
-   * specified in {@link #negotiationType(NegotiationType)} or {@link #usePlaintext(boolean)}.
-   *
-   * <p>Default: {@code null}.
-   */
-  @Internal
-  public final NettyChannelBuilder protocolNegotiator(
-          @Nullable ProtocolNegotiator protocolNegotiator) {
-    this.protocolNegotiator = protocolNegotiator;
     return this;
   }
 
@@ -174,7 +162,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
    * <p>The channel won't take ownership of the given EventLoopGroup. It's caller's responsibility
    * to shut it down when it's desired.
    */
-  public final NettyChannelBuilder eventLoopGroup(@Nullable EventLoopGroup eventLoopGroup) {
+  public NettyChannelBuilder eventLoopGroup(@Nullable EventLoopGroup eventLoopGroup) {
     this.eventLoopGroup = eventLoopGroup;
     return this;
   }
@@ -183,7 +171,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
    * SSL/TLS context to use instead of the system default. It must have been configured with {@link
    * GrpcSslContexts}, but options could have been overridden.
    */
-  public final NettyChannelBuilder sslContext(SslContext sslContext) {
+  public NettyChannelBuilder sslContext(SslContext sslContext) {
     if (sslContext != null) {
       checkArgument(sslContext.isClient(),
           "Server SSL context can not be used for client channel");
@@ -197,7 +185,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
    * Sets the flow control window in bytes. If not called, the default value
    * is {@link #DEFAULT_FLOW_CONTROL_WINDOW}).
    */
-  public final NettyChannelBuilder flowControlWindow(int flowControlWindow) {
+  public NettyChannelBuilder flowControlWindow(int flowControlWindow) {
     checkArgument(flowControlWindow > 0, "flowControlWindow must be positive");
     this.flowControlWindow = flowControlWindow;
     return this;
@@ -209,7 +197,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
    * @deprecated Use {@link #maxInboundMessageSize} instead
    */
   @Deprecated
-  public final NettyChannelBuilder maxMessageSize(int maxMessageSize) {
+  public NettyChannelBuilder maxMessageSize(int maxMessageSize) {
     maxInboundMessageSize(maxMessageSize);
     return this;
   }
@@ -218,7 +206,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
    * Sets the maximum size of header list allowed to be received on the channel. If not called,
    * defaults to {@link GrpcUtil#DEFAULT_MAX_HEADER_LIST_SIZE}.
    */
-  public final NettyChannelBuilder maxHeaderListSize(int maxHeaderListSize) {
+  public NettyChannelBuilder maxHeaderListSize(int maxHeaderListSize) {
     checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be > 0");
     this.maxHeaderListSize = maxHeaderListSize;
     return this;
@@ -229,7 +217,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
    * {@code PLAINTEXT_UPGRADE}.
    */
   @Override
-  public final NettyChannelBuilder usePlaintext(boolean skipNegotiation) {
+  public NettyChannelBuilder usePlaintext(boolean skipNegotiation) {
     if (skipNegotiation) {
       negotiationType(NegotiationType.PLAINTEXT);
     } else {
@@ -263,6 +251,10 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
         .set(NameResolver.Factory.PARAMS_DEFAULT_PORT, defaultPort).build();
   }
 
+  void setAuthorityChecker(@Nullable AuthorityChecker authorityChecker) {
+    this.authorityChecker = authorityChecker;
+  }
+
   @VisibleForTesting
   static ProtocolNegotiator createProtocolNegotiator(
       String authority,
@@ -287,11 +279,22 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
     }
   }
 
+  interface AuthorityChecker {
+    String checkAuthority(String authority);
+  }
+
+  @Override
+  protected String checkAuthority(String authority) {
+    if (authorityChecker != null) {
+      return authorityChecker.checkAuthority(authority);
+    }
+    return super.checkAuthority(authority);
+  }
+
   /**
    * Creates Netty transports. Exposed for internal use, as it should be private.
    */
-  @Internal
-  protected static final class NettyTransportFactory implements ClientTransportFactory {
+  static class NettyTransportFactory implements ClientTransportFactory {
     private final Class<? extends Channel> channelType;
     private final Map<ChannelOption<?>, ?> channelOptions;
     private final NegotiationType negotiationType;
@@ -338,8 +341,7 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
       return newClientTransport(serverAddress, authority, userAgent, negotiator);
     }
 
-    @Internal  // This is strictly for internal use.  Depend on this at your own peril.
-    public ConnectionClientTransport newClientTransport(
+    ConnectionClientTransport newClientTransport(
         SocketAddress serverAddress, String authority, String userAgent,
         ProtocolNegotiator negotiator) {
       if (closed) {
