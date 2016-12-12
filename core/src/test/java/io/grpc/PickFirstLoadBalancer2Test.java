@@ -202,7 +202,6 @@ public class PickFirstLoadBalancer2Test {
         ConnectivityStateInfo.forNonError(ConnectivityState.READY));
 
     verify(mockHelper, times(3)).updatePicker(pickerCaptor.capture());
-    verify(subchannel, times(1)).requestConnection();
 
     assertEquals(Status.UNAVAILABLE,
         pickerCaptor.getAllValues().get(1).pickSubchannel(Attributes.EMPTY,
