@@ -51,14 +51,12 @@ import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
@@ -83,18 +81,7 @@ final class InternalSubchannel implements WithLogId {
   private final ClientTransportFactory transportFactory;
   private final ScheduledExecutorService scheduledExecutor;
 
-  // A serializing executor shared across the Channel
-  //
-  // TODO(zhangkun83): decide the type of Channel Executor.  I considered a SerializingExecutor
-  // based on the app executor, but it seems abusive because the app executor is intended for app
-  // logic, not for channel bookkeeping. We don't want channel bookkeeping logic to contend for
-  // threads with app logic, which may increase latency or even cause starvation.  Instead, we
-  // should consider a thread-less Executor after the refactor of ManagedChannelImpl is done.
-  //
-  // NOTE: there are cases where channelExecutor.execute() is run under "lock".  This will add risk
-  // of deadlock if channelExecutor is based on a direct executor.  Thread-less executor wouldn't
-  // have such problem.
-  private final Executor channelExecutor;
+  private final ChannelExecutor channelExecutor;
 
   @GuardedBy("lock")
   private int nextAddressIndex;
@@ -158,7 +145,7 @@ final class InternalSubchannel implements WithLogId {
   InternalSubchannel(EquivalentAddressGroup addressGroup, String authority, String userAgent,
       BackoffPolicy.Provider backoffPolicyProvider,
       ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
-      Supplier<Stopwatch> stopwatchSupplier, Executor channelExecutor, Callback callback) {
+      Supplier<Stopwatch> stopwatchSupplier, ChannelExecutor channelExecutor, Callback callback) {
     this.addressGroup = Preconditions.checkNotNull(addressGroup, "addressGroup");
     this.authority = authority;
     this.userAgent = userAgent;
@@ -173,15 +160,14 @@ final class InternalSubchannel implements WithLogId {
   /**
    * Returns a READY transport that will be used to create new streams.
    *
-   * <p>Returns {@code null} if the state is not READY.
+   * <p>Returns {@code null} if the state is not READY.  Will try to connect if state is IDLE.
    */
   @Nullable
-  final ClientTransport obtainActiveTransport() {
+  ClientTransport obtainActiveTransport() {
     ClientTransport savedTransport = activeTransport;
     if (savedTransport != null) {
       return savedTransport;
     }
-    Runnable runnable = null;
     synchronized (lock) {
       savedTransport = activeTransport;
       // Check again, since it could have changed before acquiring the lock
@@ -190,18 +176,16 @@ final class InternalSubchannel implements WithLogId {
       }
       if (state.getState() == IDLE) {
         gotoNonErrorState(CONNECTING);
-        runnable = startNewTransport();
+        startNewTransport();
       }
     }
-    if (runnable != null) {
-      runnable.run();
-    }
+    channelExecutor.drain();
     return null;
   }
 
-  @CheckReturnValue
+  // Caller must call channelExecutor.drain() outside of lock after it returns
   @GuardedBy("lock")
-  private Runnable startNewTransport() {
+  private void startNewTransport() {
     Preconditions.checkState(reconnectTask == null, "Should have no reconnectTask scheduled");
 
     if (nextAddressIndex == 0) {
@@ -221,7 +205,10 @@ final class InternalSubchannel implements WithLogId {
     }
     pendingTransport = transport;
     transports.add(transport);
-    return transport.start(new TransportListener(transport, address));
+    Runnable runnable = transport.start(new TransportListener(transport, address));
+    if (runnable != null) {
+      channelExecutor.executeLater(runnable);
+    }
   }
 
   /**
@@ -229,13 +216,13 @@ final class InternalSubchannel implements WithLogId {
    * @param status the causal status when the channel begins transition to
    *     TRANSIENT_FAILURE.
    */
+  // Caller must call channelExecutor.drain() outside of lock after it returns
   @GuardedBy("lock")
   private void scheduleBackoff(final Status status) {
     class EndOfCurrentBackoff implements Runnable {
       @Override
       public void run() {
         try {
-          Runnable runnable = null;
           synchronized (lock) {
             reconnectTask = null;
             if (state.getState() == SHUTDOWN) {
@@ -244,11 +231,9 @@ final class InternalSubchannel implements WithLogId {
               return;
             }
             gotoNonErrorState(CONNECTING);
-            runnable = startNewTransport();
+            startNewTransport();
           }
-          if (runnable != null) {
-            runnable.run();
-          }
+          channelExecutor.drain();
         } catch (Throwable t) {
           log.log(Level.WARNING, "Exception handling end of backoff", t);
         }
@@ -272,18 +257,20 @@ final class InternalSubchannel implements WithLogId {
         TimeUnit.MILLISECONDS);
   }
 
+  // Caller must call channelExecutor.drain() outside of lock after it returns
   @GuardedBy("lock")
   private void gotoNonErrorState(ConnectivityState newState) {
     gotoState(ConnectivityStateInfo.forNonError(newState));
   }
 
+  // Caller must call channelExecutor.drain() outside of lock after it returns
   @GuardedBy("lock")
   private void gotoState(final ConnectivityStateInfo newState) {
     if (state.getState() != newState.getState()) {
       Preconditions.checkState(state.getState() != SHUTDOWN,
           "Cannot transition out of SHUTDOWN to " + newState);
       state = newState;
-      channelExecutor.execute(new Runnable() {
+      channelExecutor.executeLater(new Runnable() {
           @Override
           public void run() {
             callback.onStateChange(InternalSubchannel.this, newState);
@@ -312,6 +299,7 @@ final class InternalSubchannel implements WithLogId {
       }  // else: the callback will be run once all transports have been terminated
       cancelReconnectTask();
     }
+    channelExecutor.drain();
     if (savedActiveTransport != null) {
       savedActiveTransport.shutdown();
     }
@@ -320,9 +308,10 @@ final class InternalSubchannel implements WithLogId {
     }
   }
 
-  // May be called under lock.
+  // Caller must call channelExecutor.drain() outside of lock after it returns
+  @GuardedBy("lock")
   private void handleTermination() {
-    channelExecutor.execute(new Runnable() {
+    channelExecutor.executeLater(new Runnable() {
         @Override
         public void run() {
           callback.onTerminated(InternalSubchannel.this);
@@ -330,14 +319,15 @@ final class InternalSubchannel implements WithLogId {
       });
   }
 
+  // Must not be called under lock
   private void handleTransportInUseState(
       final ConnectionClientTransport transport, final boolean inUse) {
-    channelExecutor.execute(new Runnable() {
+    channelExecutor.executeLater(new Runnable() {
         @Override
         public void run() {
           inUseStateAggregator.updateObjectInUse(transport, inUse);
         }
-      });
+      }).drain();
   }
 
   void shutdownNow(Status reason) {
@@ -349,6 +339,10 @@ final class InternalSubchannel implements WithLogId {
     for (ManagedClientTransport transport : transportsCopy) {
       transport.shutdownNow(reason);
     }
+  }
+
+  EquivalentAddressGroup getAddressGroup() {
+    return addressGroup;
   }
 
   @GuardedBy("lock")
@@ -402,6 +396,7 @@ final class InternalSubchannel implements WithLogId {
           pendingTransport = null;
         }
       }
+      channelExecutor.drain();
       if (savedState == SHUTDOWN) {
         transport.shutdown();
       }
@@ -418,7 +413,6 @@ final class InternalSubchannel implements WithLogId {
         log.log(Level.FINE, "[{0}] {1} for {2} is being shutdown with status {3}",
             new Object[] {getLogId(), transport.getLogId(), address, s});
       }
-      Runnable runnable = null;
       synchronized (lock) {
         if (state.getState() == SHUTDOWN) {
           return;
@@ -435,13 +429,11 @@ final class InternalSubchannel implements WithLogId {
             // Transition to TRANSIENT_FAILURE
             scheduleBackoff(s);
           } else {
-            runnable = startNewTransport();
+            startNewTransport();
           }
         }
       }
-      if (runnable != null) {
-        runnable.run();
-      }
+      channelExecutor.drain();
     }
 
     @Override
@@ -460,6 +452,7 @@ final class InternalSubchannel implements WithLogId {
           handleTermination();
         }
       }
+      channelExecutor.drain();
       Preconditions.checkState(activeTransport != transport,
           "activeTransport still points to this transport. "
           + "Seems transportShutdown() was not called.");
