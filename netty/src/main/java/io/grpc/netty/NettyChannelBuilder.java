@@ -71,7 +71,7 @@ public final class NettyChannelBuilder
 
   private NegotiationType negotiationType = NegotiationType.TLS;
   private ProtocolNegotiator protocolNegotiator;
-  private AuthorityChecker authorityChecker;
+  private OverrideAuthorityChecker authorityChecker;
   private Class<? extends Channel> channelType = NioSocketChannel.class;
 
   @Nullable
@@ -251,7 +251,7 @@ public final class NettyChannelBuilder
         .set(NameResolver.Factory.PARAMS_DEFAULT_PORT, defaultPort).build();
   }
 
-  void setAuthorityChecker(@Nullable AuthorityChecker authorityChecker) {
+  void overrideAuthorityChecker(@Nullable OverrideAuthorityChecker authorityChecker) {
     this.authorityChecker = authorityChecker;
   }
 
@@ -279,7 +279,7 @@ public final class NettyChannelBuilder
     }
   }
 
-  interface AuthorityChecker {
+  interface OverrideAuthorityChecker {
     String checkAuthority(String authority);
   }
 

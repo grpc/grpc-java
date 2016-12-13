@@ -47,13 +47,13 @@ public final class InternalNettyChannelBuilder {
 
   /**
    * Checks authority upon channel construction.  The purpose of this interface is to raise the
-   * visibility of {@link NettyChannelBuilder.AuthorityChecker}.
+   * visibility of {@link NettyChannelBuilder.OverrideAuthorityChecker}.
    */
-  public interface AuthorityChecker extends NettyChannelBuilder.AuthorityChecker {}
+  public interface OverrideAuthorityChecker extends NettyChannelBuilder.OverrideAuthorityChecker {}
 
-  public static void setAuthorityChecker(
-      NettyChannelBuilder channelBuilder, AuthorityChecker authorityChecker) {
-    channelBuilder.setAuthorityChecker(authorityChecker);
+  public static void overrideAuthorityChecker(
+      NettyChannelBuilder channelBuilder, OverrideAuthorityChecker authorityChecker) {
+    channelBuilder.overrideAuthorityChecker(authorityChecker);
   }
 
   /**
