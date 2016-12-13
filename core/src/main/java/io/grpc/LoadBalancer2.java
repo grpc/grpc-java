@@ -136,9 +136,16 @@ public abstract class LoadBalancer2 {
    * <p>The initial state of a Subchannel is IDLE. You won't get a notification for the initial IDLE
    * state.
    *
-   * <p>If a previously READY Subchannel has become not READY, in order to prevent unnecessary
-   * delays of RPCs, this method should create a new picker that will not use this Subchannel.
-   * Please refer to {@link PickResult#withSubchannel}'s javadoc for more information.
+   * <p>If a Subchannel has transitioned from a state that would be picked for RPCs, to a state that
+   * would not be picked, this method should create a new picker and call {@link
+   * Helper#updatePicker}, in order to prevent unnecessary of RPCs. Please refer to {@link
+   * PickResult#withSubchannel}'s javadoc for more information.
+   *
+   * <p>SHUTDOWN can only happen in two cases.  One is that LoadBalancer called {@link
+   * Subchannel#shutdown} earlier, thus it should have already discarded this Subchannel.  The other
+   * is that Channel is doing a {@link ManagedChannel#shutdownNow forcibly shutdown} or has already
+   * terminated, thus there won't be further requests to LoadBalancer.  Therefore, SHUTDOWN can be
+   * safely ignored.
    *
    * @param subchannel the involved Subchannel
    * @param stateInfo the new state
