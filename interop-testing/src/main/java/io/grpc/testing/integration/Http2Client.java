@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Google Inc. All rights reserved.
+ * Copyright 2016, Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -32,8 +32,6 @@
 package io.grpc.testing.integration;
 
 import static java.util.concurrent.Executors.newFixedThreadPool;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
 
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -46,7 +44,7 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
-import io.grpc.testing.StreamRecorder;
+import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.PayloadType;
 import io.grpc.testing.integration.Messages.SimpleRequest;
@@ -58,6 +56,10 @@ import java.net.UnknownHostException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Client application for the {@link TestServiceGrpc.TestServiceImplBase} that runs through a series
@@ -65,7 +67,8 @@ import java.util.List;
  * server. Some of the test cases require server-side checks and do not have assertions within the
  * client code.
  */
-public class Http2Client {
+public final class Http2Client {
+  private static final Logger logger = Logger.getLogger(Http2Client.class.getName());
 
   /**
    * The main application allowing this client to be launched from the command line.
@@ -79,9 +82,9 @@ public class Http2Client {
       @Override
       public void run() {
         try {
-          client.tearDown();
+          client.shutdown();
         } catch (Exception e) {
-          e.printStackTrace();
+          logger.log(Level.SEVERE, e.getMessage(), e);
         }
       }
     });
@@ -89,16 +92,16 @@ public class Http2Client {
     try {
       client.run();
     } finally {
-      client.tearDown();
+      client.shutdown();
     }
-    System.exit(0);
   }
 
   private String serverHost = "localhost";
   private int serverPort = 8080;
-  private String testCase = "rst_stream_after_header";
+  private String testCase = Http2TestCases.RST_AFTER_DATA.name();
 
   private Tester tester = new Tester();
+  private ListeningExecutorService threadpool;
 
   protected ManagedChannel channel;
   protected TestServiceGrpc.TestServiceBlockingStub blockingStub;
@@ -157,20 +160,27 @@ public class Http2Client {
     asyncStub = TestServiceGrpc.newStub(channel);
   }
 
-  private synchronized void tearDown() {
+  private void shutdown() {
     try {
       if (channel != null) {
-        channel.shutdown();
+        channel.shutdownNow();
+        channel.awaitTermination(1, TimeUnit.SECONDS);
       }
-    } catch (RuntimeException ex) {
-      throw ex;
+    } catch (Exception ex) {
+      throw new RuntimeException(ex);
+    }
+
+    try {
+      if (threadpool != null) {
+        threadpool.shutdownNow();
+      }
     } catch (Exception ex) {
       throw new RuntimeException(ex);
     }
   }
 
   private void run() {
-    System.out.println("Running test " + testCase);
+    logger.info("Running test " + testCase);
     try {
       runTest(Http2TestCases.fromString(testCase));
     } catch (RuntimeException ex) {
@@ -178,19 +188,19 @@ public class Http2Client {
     } catch (Exception ex) {
       throw new RuntimeException(ex);
     }
-    System.out.println("Test completed.");
+    logger.info("Test completed.");
   }
 
   private void runTest(Http2TestCases testCase) throws Exception {
     switch (testCase) {
       case RST_AFTER_HEADER:
-        tester.rstStreamAfterHeader();
+        tester.rstAfterHeader();
         break;
       case RST_AFTER_DATA:
-        tester.rstStreamAfterData();
+        tester.rstAfterData();
         break;
       case RST_DURING_DATA:
-        tester.rstStreamDuringData();
+        tester.rstDuringData();
         break;
       case GOAWAY:
         tester.goAway();
@@ -207,96 +217,133 @@ public class Http2Client {
   }
 
   private class Tester {
+    private final int timeoutSeconds = 5;
+
     private final SimpleRequest simpleRequest = SimpleRequest.newBuilder()
         .setResponseSize(314159)
         .setResponseType(PayloadType.COMPRESSABLE)
-        .setPayload(Payload.newBuilder()
-            .setBody(ByteString.copyFrom(new byte[271828])))
+        .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[271828])))
         .build();
 
-    public void rstStreamAfterHeader() throws Exception {
+    private void rstAfterHeader() throws Exception {
       try {
         blockingStub.unaryCall(simpleRequest);
-        fail("Expected call to fail");
+        throw new Exception("Expected call to fail");
       } catch (StatusRuntimeException ex) {
-        assertEquals(Status.Code.UNAVAILABLE, ex.getStatus().getCode());
+        assertRstStreamReceived(ex.getStatus());
       }
     }
 
-    public void rstStreamAfterData() throws Exception {
+    private void rstAfterData() throws Exception {
       try {
         blockingStub.unaryCall(simpleRequest);
-        fail("Expected call to fail");
+        throw new Exception("Expected call to fail");
       } catch (StatusRuntimeException ex) {
-        assertEquals(Status.Code.UNAVAILABLE, ex.getStatus().getCode());
+        assertRstStreamReceived(ex.getStatus());
       }
 
-      // Use async stub to verify data was received.
-      StreamRecorder<SimpleResponse> responseObserver = StreamRecorder.create();
+      // Use async stub to verify data is received.
+      RstStreamObserver responseObserver = new RstStreamObserver();
       asyncStub.unaryCall(simpleRequest, responseObserver);
-      responseObserver.awaitCompletion();
-      assertEquals(1, responseObserver.getValues().size());
-      assertEquals(Status.Code.UNAVAILABLE,
-          Status.fromThrowable(responseObserver.getError()).getCode());
+      if (!responseObserver.awaitCompletion(timeoutSeconds, TimeUnit.SECONDS)) {
+        throw new AssertionError("Operation timed out");
+      }
+      if (responseObserver.getResponses().size() != 1) {
+        throw new AssertionError("Expected one response");
+      }
+      assertRstStreamReceived(Status.fromThrowable(responseObserver.getError()));
     }
 
-    public void rstStreamDuringData() throws Exception {
+    private void rstDuringData() throws Exception {
       try {
         blockingStub.unaryCall(simpleRequest);
-        fail("Expected call to fail");
+        throw new Exception("Expected call to fail");
       } catch (StatusRuntimeException ex) {
-        assertEquals(Status.Code.UNAVAILABLE, ex.getStatus().getCode());
+        assertRstStreamReceived(ex.getStatus());
       }
 
-      // Use async stub to verify data was not received.
-      StreamRecorder<SimpleResponse> responseObserver = StreamRecorder.create();
+      // Use async stub to verify no data is received.
+      RstStreamObserver responseObserver = new RstStreamObserver();
       asyncStub.unaryCall(simpleRequest, responseObserver);
-      responseObserver.awaitCompletion();
-      assertEquals(0, responseObserver.getValues().size());
-      assertEquals(Status.Code.UNAVAILABLE,
-          Status.fromThrowable(responseObserver.getError()).getCode());
+      if (!responseObserver.awaitCompletion(timeoutSeconds, TimeUnit.SECONDS)) {
+        throw new AssertionError("Operation timed out");
+      }
+      if (responseObserver.getResponses().size() != 0) {
+        throw new AssertionError("Expected zero responses");
+      }
+      assertRstStreamReceived(Status.fromThrowable(responseObserver.getError()));
     }
 
-    public void goAway() throws Exception {
+    private void goAway() throws Exception {
       blockingStub.unaryCall(simpleRequest);
       blockingStub.unaryCall(simpleRequest);
     }
 
-    public void ping() throws Exception {
+    private void ping() throws Exception {
       blockingStub.unaryCall(simpleRequest);
     }
 
-    public void maxStreams() throws Exception {
+    private void maxStreams() throws Exception {
       final int numThreads = 10;
 
       // Preliminary call to ensure MAX_STREAMS setting is received by the client.
       blockingStub.unaryCall(simpleRequest);
 
-      ListeningExecutorService threadpool =
-          MoreExecutors.listeningDecorator(newFixedThreadPool(numThreads));
+      threadpool = MoreExecutors.listeningDecorator(newFixedThreadPool(numThreads));
       List<ListenableFuture<?>> workerFutures = new ArrayList<ListenableFuture<?>>();
-      ManagedChannel channel = createChannel();
       for (int i = 0; i < numThreads; i++) {
-        workerFutures.add(threadpool.submit(new MaxStreamsWorker(channel, i, simpleRequest)));
+        workerFutures.add(threadpool.submit(new MaxStreamsWorker(i, simpleRequest)));
       }
       ListenableFuture<?> f = Futures.allAsList(workerFutures);
-      f.get();
+      f.get(timeoutSeconds, TimeUnit.SECONDS);
+    }
+
+    private class RstStreamObserver implements StreamObserver<SimpleResponse> {
+      private final CountDownLatch latch = new CountDownLatch(1);
+      private final List<SimpleResponse> responses = new ArrayList<SimpleResponse>();
+      private Throwable error;
+
+      @Override
+      public void onNext(SimpleResponse value) {
+        responses.add(value);
+      }
+
+      @Override
+      public void onError(Throwable t) {
+        error = t;
+        latch.countDown();
+      }
+
+      @Override
+      public void onCompleted() {
+        latch.countDown();
+      }
+
+      public List<SimpleResponse> getResponses() {
+        return responses;
+      }
+
+      public Throwable getError() {
+        return error;
+      }
+
+      public boolean awaitCompletion(long timeout, TimeUnit unit) throws Exception {
+        return latch.await(timeout, unit);
+      }
     }
 
     private class MaxStreamsWorker implements Runnable {
-      ManagedChannel channel;
-      int stubNum;
+      int threadNum;
       SimpleRequest request;
 
-      MaxStreamsWorker(ManagedChannel channel, int stubNum, SimpleRequest request) {
-        this.channel = channel;
-        this.stubNum = stubNum;
+      MaxStreamsWorker(int threadNum, SimpleRequest request) {
+        this.threadNum = threadNum;
         this.request = request;
       }
 
       @Override
       public void run() {
-        Thread.currentThread().setName("thread:" + stubNum);
+        Thread.currentThread().setName("thread:" + threadNum);
         try {
           TestServiceGrpc.TestServiceBlockingStub blockingStub =
               TestServiceGrpc.newBlockingStub(channel);
@@ -331,6 +378,19 @@ public class Http2Client {
           .append(testCase.description());
     }
     return builder.toString();
+  }
+
+  private static void assertRstStreamReceived(Status status) {
+    if (!status.getCode().equals(Status.Code.UNAVAILABLE)) {
+      throw new AssertionError("Wrong status code. Expected: " + Status.Code.UNAVAILABLE
+          + " Received: " + status.getCode());
+    }
+    String http2ErrorPrefix = "HTTP/2 error code: NO_ERROR";
+    if (status.getDescription() == null
+        || !status.getDescription().startsWith(http2ErrorPrefix)) {
+      throw new AssertionError("Wrong HTTP/2 error code. Expected: " + http2ErrorPrefix
+          + " Received: " + status.getDescription());
+    }
   }
 }
 
