@@ -74,6 +74,7 @@ import org.mockito.stubbing.Answer;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Unit tests for {@link DelayedClientTransport2}.
@@ -473,17 +474,21 @@ public class DelayedClientTransport2Test {
   @Test
   public void reprocess_newStreamRacesWithReprocess() throws Exception {
     final CyclicBarrier barrier = new CyclicBarrier(2);
-
+    // In both phases, we only expect the first pickSubchannel() call to block on the barrier.
+    final AtomicBoolean nextPickShouldWait = new AtomicBoolean(true);
     ///////// Phase 1: reprocess() twice with the same picker
     SubchannelPicker picker = mock(SubchannelPicker.class);
+
     doAnswer(new Answer<PickResult>() {
         @Override
         public PickResult answer(InvocationOnMock invocation) throws Throwable {
-          try {
-            barrier.await(5, TimeUnit.SECONDS);
-            return PickResult.withNoResult();
-          } catch (Exception e) {
-            e.printStackTrace();
+          if (nextPickShouldWait.compareAndSet(true, false)) {
+            try {
+              barrier.await();
+              return PickResult.withNoResult();
+            } catch (Exception e) {
+              e.printStackTrace();
+            }
           }
           return PickResult.withNoResult();
         }
@@ -493,7 +498,7 @@ public class DelayedClientTransport2Test {
     delayedTransport.reprocess(picker);
     verify(picker, never()).pickSubchannel(any(Attributes.class), any(Metadata.class));
 
-    Thread sideThread = new Thread() {
+    Thread sideThread = new Thread("sideThread") {
         @Override
         public void run() {
           // Will call pickSubchannel and wait on barrier
@@ -513,14 +518,17 @@ public class DelayedClientTransport2Test {
     // Now let the stuck newStream() through
     barrier.await(5, TimeUnit.SECONDS);
 
+    sideThread.join(5000);
+    assertFalse("sideThread should've exited", sideThread.isAlive());
     // newStream() detects that there has been a new picker while it's stuck, thus will pick again.
-    verify(picker, timeout(5000).times(2)).pickSubchannel(callOptions.getAffinity(), headers);
+    verify(picker, times(2)).pickSubchannel(callOptions.getAffinity(), headers);
 
     barrier.reset();
+    nextPickShouldWait.set(true);
 
     ////////// Phase 2: reprocess() with a different picker
     // Create the second stream
-    Thread sideThread2 = new Thread() {
+    Thread sideThread2 = new Thread("sideThread2") {
         @Override
         public void run() {
           // Will call pickSubchannel and wait on barrier
@@ -545,6 +553,9 @@ public class DelayedClientTransport2Test {
 
     // Now let the second stream finish creation
     barrier.await(5, TimeUnit.SECONDS);
+
+    sideThread2.join(5000);
+    assertFalse("sideThread2 should've exited", sideThread2.isAlive());
     // The second stream should see the new picker
     verify(picker2, timeout(5000)).pickSubchannel(callOptions.getAffinity(), headers2);
 
