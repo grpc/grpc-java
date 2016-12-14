@@ -194,7 +194,6 @@ public abstract class LoadBalancer2 {
   public static final class PickResult {
     private static final PickResult NO_RESULT = new PickResult(null, Status.OK);
 
-    // A READY channel, or null
     @Nullable private final Subchannel subchannel;
     // An error to be propagated to the application if subchannel == null
     // Or OK if there is no error.
@@ -244,7 +243,10 @@ public abstract class LoadBalancer2 {
      * </ul>
      * In order to prevent unnecessary delay of RPCs, the rules of thumb are:
      * <ol>
-     *   <li>The picker should only pick Subchannels that are known as READY or IDLE.</li>
+     *   <li>The picker should only pick Subchannels that are known as READY or IDLE.  An exception
+     *   is that if there is only one Subchannel at a time, you may also include CONNECTING, because
+     *   the failure mode described above applies only when there are more than one Subchannels.
+     *   </li>
      *   <li>Whenever a Subchannel that was known to be in a state that your picker would pick has
      *   transitioned to a state that your picker wouldn't, the LoadBalancer should create a new
      *   picker and call {@link Helper#updatePicker}.</li>
