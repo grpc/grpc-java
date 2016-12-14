@@ -262,7 +262,6 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
     public void onCompleted() {
       if (request != null) {
         closeAfterSend = true;
-        handleReflectionRequest();
       } else {
         serverCallStreamObserver.onCompleted();
       }
