@@ -66,6 +66,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A {@link LoadBalancer} that provides round-robin load balancing mechanism over the
@@ -233,6 +234,7 @@ public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
 
   @VisibleForTesting
   static class Picker extends SubchannelPicker {
+    @GuardedBy("this")
     final Iterator<Subchannel> subchannelIterator;
     @Nullable
     final Status status;
@@ -246,7 +248,9 @@ public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
     public PickResult pickSubchannel(Attributes affinity, Metadata headers) {
       // This will be true only if it's empty
       if (subchannelIterator.hasNext()) {
-        return PickResult.withSubchannel(subchannelIterator.next());
+        synchronized (this) {
+          return PickResult.withSubchannel(subchannelIterator.next());
+        }
       } else {
         if (status != null) {
           return PickResult.withError(status);
