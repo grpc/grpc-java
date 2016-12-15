@@ -31,9 +31,10 @@
 
 package io.grpc;
 
+import static io.grpc.ConnectivityState.IDLE;
+import static io.grpc.PickFirstBalancerFactory2.PickFirstBalancer.LAST_STATE;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -48,6 +49,7 @@ import com.google.common.collect.Lists;
 import io.grpc.LoadBalancer2.Helper;
 import io.grpc.LoadBalancer2.PickResult;
 import io.grpc.LoadBalancer2.Subchannel;
+import io.grpc.PickFirstBalancerFactory2.PickFirstBalancer;
 import io.grpc.PickFirstBalancerFactory2.Picker;
 
 import org.junit.Before;
@@ -63,21 +65,23 @@ import org.mockito.stubbing.Answer;
 
 import java.net.SocketAddress;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 
 /** Unit test for {@link PickFirstBalancerFactory2}. */
 @RunWith(JUnit4.class)
 public class PickFirstLoadBalancer2Test {
-  private LoadBalancer2 loadBalancer;
+  private PickFirstBalancer loadBalancer;
   private List<ResolvedServerInfoGroup> servers = Lists.newArrayList();
   private List<SocketAddress> socketAddresses = Lists.newArrayList();
-  private static Attributes.Key<String> MAJOR_KEY = Attributes.Key.of("major-key");
-  private Attributes affinity = Attributes.newBuilder().set(MAJOR_KEY, "I got the keys").build();
+  private Attributes affinity = Attributes.EMPTY;
 
   @Captor
   private ArgumentCaptor<EquivalentAddressGroup> eagCaptor;
   @Captor
   private ArgumentCaptor<Picker> pickerCaptor;
+  @Captor
+  private ArgumentCaptor<Attributes> attrsCaptor;
   @Mock
   private Helper mockHelper;
   @Mock
@@ -93,17 +97,21 @@ public class PickFirstLoadBalancer2Test {
     }
 
     when(mockSubchannel.getAddresses()).thenReturn(new EquivalentAddressGroup(socketAddresses));
+    when(mockSubchannel.getAttributes()).thenReturn(Attributes.newBuilder()
+        .set(LAST_STATE, new AtomicReference<ConnectivityState>(IDLE))
+        .build());
     when(mockHelper.createSubchannel(any(EquivalentAddressGroup.class), any(Attributes.class)))
         .thenReturn(mockSubchannel);
 
-    loadBalancer = PickFirstBalancerFactory2.getInstance().newLoadBalancer(mockHelper);
+    loadBalancer = (PickFirstBalancer) PickFirstBalancerFactory2.getInstance().newLoadBalancer(
+        mockHelper);
   }
 
   @Test
   public void pickAfterResolved() throws Exception {
     loadBalancer.handleResolvedAddresses(servers, affinity);
 
-    verify(mockHelper).createSubchannel(eagCaptor.capture(), eq(affinity));
+    verify(mockHelper).createSubchannel(eagCaptor.capture(), attrsCaptor.capture());
     verify(mockHelper).updatePicker(pickerCaptor.capture());
 
     assertEquals(new EquivalentAddressGroup(socketAddresses), eagCaptor.getValue());
@@ -112,7 +120,6 @@ public class PickFirstLoadBalancer2Test {
 
     verifyNoMoreInteractions(mockHelper);
   }
-
 
   @Test
   public void pickAfterResolvedAndUnchanged() throws Exception {
@@ -159,7 +166,7 @@ public class PickFirstLoadBalancer2Test {
     loadBalancer.handleResolvedAddresses(servers, affinity);
     loadBalancer.handleResolvedAddresses(newServers, affinity);
 
-    verify(mockHelper, times(2)).createSubchannel(eagCaptor.capture(), eq(affinity));
+    verify(mockHelper, times(2)).createSubchannel(eagCaptor.capture(), attrsCaptor.capture());
     verify(mockHelper, times(2)).updatePicker(pickerCaptor.capture());
 
     assertEquals(socketAddresses, eagCaptor.getAllValues().get(0).getAddresses());
@@ -182,7 +189,9 @@ public class PickFirstLoadBalancer2Test {
     loadBalancer.handleSubchannelState(mockSubchannel,
         ConnectivityStateInfo.forNonError(ConnectivityState.READY));
 
-    verifyNoMoreInteractions(mockSubchannel);
+    verify(mockHelper).updatePicker(pickerCaptor.capture());
+    assertEquals(PickResult.withNoResult(),
+        pickerCaptor.getValue().pickSubchannel(affinity, new Metadata()));
     verifyNoMoreInteractions(mockHelper);
   }
 
