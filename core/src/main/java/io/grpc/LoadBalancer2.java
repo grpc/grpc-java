@@ -138,12 +138,12 @@ public abstract class LoadBalancer2 {
    *
    * <p>If a Subchannel has transitioned from a state that would be picked for RPCs, to a state that
    * would not be picked, this method should create a new picker and call {@link
-   * Helper#updatePicker}, in order to prevent unnecessary of RPCs. Please refer to {@link
+   * Helper#updatePicker}, in order to prevent unnecessary delays of RPCs. Please refer to {@link
    * PickResult#withSubchannel}'s javadoc for more information.
    *
    * <p>SHUTDOWN can only happen in two cases.  One is that LoadBalancer called {@link
    * Subchannel#shutdown} earlier, thus it should have already discarded this Subchannel.  The other
-   * is that Channel is doing a {@link ManagedChannel#shutdownNow forcibly shutdown} or has already
+   * is that Channel is doing a {@link ManagedChannel#shutdownNow forced shutdown} or has already
    * terminated, thus there won't be further requests to LoadBalancer.  Therefore, SHUTDOWN can be
    * safely ignored.
    *
@@ -185,9 +185,9 @@ public abstract class LoadBalancer2 {
    *   <li>Error: if an error is provided via {@link #withError}, and the RPC is not wait-for-ready
    *   (i.e., {@link CallOptions#withWaitForReady} was not called), the RPC will fail immediately
    *   with the given error.</li>
-   *   <li>Buffer: in all other cases, the RPC will be buffered in the Channel, until next picker is
-   *   provided via {@link Helper#updatePicker}, when the RPC will go through the same picking
-   *   process again</li>
+   *   <li>Buffer: in all other cases, the RPC will be buffered in the Channel, until the next
+   *   picker is provided via {@link Helper#updatePicker}, when the RPC will go through the same
+   *   picking process again.</li>
    * </ul>
    */
   @Immutable
@@ -219,6 +219,9 @@ public abstract class LoadBalancer2 {
      *   <li>IDLE: the RPC will be buffered.  Subchannel will attempt to create connection.</li>
      *   <li>All other states: the RPC will be buffered.</li>
      * </ul>
+     *
+     * <p><strong>All buffered RPCs will stay buffered</strong> until the next call of {@link
+     * Helper#updatePicker}, which will trigger a new picking process.
      *
      * <p>Note that Subchannel's state may change at the same time the picker is making the
      * decision, which means the decision may be made with (to-be) outdated information.  For
