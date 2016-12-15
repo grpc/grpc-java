@@ -38,7 +38,6 @@ import static com.google.common.base.Throwables.getStackTraceAsString;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
-import com.google.common.base.Throwables;
 
 import io.grpc.Metadata.TrustedAsciiMarshaller;
 
