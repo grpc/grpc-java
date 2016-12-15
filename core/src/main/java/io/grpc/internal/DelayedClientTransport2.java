@@ -106,26 +106,26 @@ final class DelayedClientTransport2 implements ManagedClientTransport {
 
   @Override
   public final Runnable start(final Listener listener) {
-    this.reportTransportInUse = new Runnable() {
+    reportTransportInUse = new Runnable() {
         @Override
         public void run() {
           listener.transportInUse(true);
         }
       };
-    this.reportTransportNotInUse = new Runnable() {
+    reportTransportNotInUse = new Runnable() {
         @Override
         public void run() {
           listener.transportInUse(false);
         }
       };
-    this.reportTransportShutdown = new Runnable() {
+    reportTransportShutdown = new Runnable() {
         @Override
         public void run() {
           listener.transportShutdown(
               Status.UNAVAILABLE.withDescription("Channel requested transport to shut down"));
         }
       };
-    this.reportTransportTerminated = new Runnable() {
+    reportTransportTerminated = new Runnable() {
         @Override
         public void run() {
           listener.transportTerminated();
