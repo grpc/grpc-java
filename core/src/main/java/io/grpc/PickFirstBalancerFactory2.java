@@ -120,9 +120,12 @@ public final class PickFirstBalancerFactory2 extends LoadBalancer2.Factory {
       checkState(lastStateRef != null, "subchannel should have LAST_STATE attribute set");
 
       PickResult pickResult;
-      if (subchannel != this.subchannel || currentState == SHUTDOWN || currentState == CONNECTING) {
+      if (subchannel != this.subchannel || currentState == SHUTDOWN) {
+        return;
+      } else if (currentState == CONNECTING) {
         pickResult = PickResult.withNoResult();
-      } else if (lastStateRef.get() == TRANSIENT_FAILURE || currentState == READY || currentState == IDLE) {
+      } else if (lastStateRef.get() == TRANSIENT_FAILURE || currentState == READY
+          || currentState == IDLE) {
         pickResult = PickResult.withSubchannel(subchannel);
       } else if (currentState == TRANSIENT_FAILURE) {
         pickResult = PickResult.withError(stateInfo.getStatus());

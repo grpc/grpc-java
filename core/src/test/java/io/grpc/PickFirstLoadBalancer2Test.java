@@ -189,9 +189,6 @@ public class PickFirstLoadBalancer2Test {
     loadBalancer.handleSubchannelState(mockSubchannel,
         ConnectivityStateInfo.forNonError(ConnectivityState.READY));
 
-    verify(mockHelper).updatePicker(pickerCaptor.capture());
-    assertEquals(PickResult.withNoResult(),
-        pickerCaptor.getValue().pickSubchannel(affinity, new Metadata()));
     verifyNoMoreInteractions(mockHelper);
   }
 
@@ -220,7 +217,6 @@ public class PickFirstLoadBalancer2Test {
     assertEquals(PickResult.withSubchannel(subchannel).getSubchannel(), pickerCaptor.getAllValues()
         .get(3).pickSubchannel(Attributes.EMPTY, new Metadata()).getSubchannel());
 
-    verifyNoMoreInteractions(subchannel);
     verifyNoMoreInteractions(mockHelper);
   }
 
