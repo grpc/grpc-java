@@ -35,7 +35,9 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.PickFirstBalancerFactory2.PickFirstBalancer.LAST_STATE;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -58,10 +60,9 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 import java.net.SocketAddress;
 import java.util.List;
@@ -126,9 +127,9 @@ public class PickFirstLoadBalancer2Test {
     loadBalancer.handleResolvedAddresses(servers, affinity);
     loadBalancer.handleResolvedAddresses(servers, affinity);
 
-    verify(mockHelper, times(1)).createSubchannel(any(EquivalentAddressGroup.class),
+    verify(mockHelper).createSubchannel(any(EquivalentAddressGroup.class),
         any(Attributes.class));
-    verify(mockHelper, times(1)).updatePicker(isA(Picker.class));
+    verify(mockHelper).updatePicker(isA(Picker.class));
 
     verifyNoMoreInteractions(mockHelper);
   }
@@ -148,29 +149,20 @@ public class PickFirstLoadBalancer2Test {
     final EquivalentAddressGroup newEag = new EquivalentAddressGroup(newSocketAddresses);
     when(newSubchannel.getAddresses()).thenReturn(newEag);
 
-    when(mockHelper.createSubchannel(any(EquivalentAddressGroup.class), any(Attributes.class)))
-        .then(new Answer<Subchannel>() {
-          @Override
-          public Subchannel answer(InvocationOnMock invocation) throws Throwable {
-            Object[] args = invocation.getArguments();
-            EquivalentAddressGroup eag = (EquivalentAddressGroup) args[0];
-            if (eag.equals(oldEag)) {
-              return oldSubchannel;
-            } else if (eag.equals(newEag)) {
-              return newSubchannel;
-            }
-            throw new IllegalArgumentException();
-          }
-        });
+    when(mockHelper.createSubchannel(eq(oldEag), any(Attributes.class))).thenReturn(oldSubchannel);
+    when(mockHelper.createSubchannel(eq(newEag), any(Attributes.class))).thenReturn(newSubchannel);
+
+    InOrder inOrder = inOrder(mockHelper);
 
     loadBalancer.handleResolvedAddresses(servers, affinity);
+    inOrder.verify(mockHelper).createSubchannel(eagCaptor.capture(), any(Attributes.class));
+    inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
+    assertEquals(socketAddresses, eagCaptor.getValue().getAddresses());
+
     loadBalancer.handleResolvedAddresses(newServers, affinity);
-
-    verify(mockHelper, times(2)).createSubchannel(eagCaptor.capture(), attrsCaptor.capture());
-    verify(mockHelper, times(2)).updatePicker(pickerCaptor.capture());
-
-    assertEquals(socketAddresses, eagCaptor.getAllValues().get(0).getAddresses());
-    assertEquals(newSocketAddresses, eagCaptor.getAllValues().get(1).getAddresses());
+    inOrder.verify(mockHelper).createSubchannel(eagCaptor.capture(), any(Attributes.class));
+    inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
+    assertEquals(newSocketAddresses, eagCaptor.getValue().getAddresses());
 
     Subchannel subchannel = pickerCaptor.getAllValues().get(0).pickSubchannel(
         affinity, new Metadata()).getSubchannel();
