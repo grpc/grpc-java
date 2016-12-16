@@ -70,8 +70,6 @@ import javax.annotation.concurrent.ThreadSafe;
 final class InternalSubchannel implements WithLogId {
   private static final Logger log = Logger.getLogger(InternalSubchannel.class.getName());
 
-
-  private final Object lock = new Object();
   private final LogId logId = LogId.allocate(getClass().getName());
   private final EquivalentAddressGroup addressGroup;
   private final String authority;
@@ -81,6 +79,17 @@ final class InternalSubchannel implements WithLogId {
   private final ClientTransportFactory transportFactory;
   private final ScheduledExecutorService scheduledExecutor;
 
+  // File-specific convention: methods without GuardedBy("lock") MUST NOT be called under the lock.
+  private final Object lock = new Object();
+
+  // File-specific convention:
+  //
+  // 1. In a method without GuardedBy("lock"), executeLater() MUST be followed by a drain() later in
+  // the same method.
+  //
+  // 2. drain() MUST NOT be called under "lock".
+  //
+  // 3. Every synchronized("lock") must be inside a try-finally which calls drain() in "finally".
   private final ChannelExecutor channelExecutor;
 
   @GuardedBy("lock")
@@ -168,22 +177,24 @@ final class InternalSubchannel implements WithLogId {
     if (savedTransport != null) {
       return savedTransport;
     }
-    synchronized (lock) {
-      savedTransport = activeTransport;
-      // Check again, since it could have changed before acquiring the lock
-      if (savedTransport != null) {
-        return savedTransport;
+    try {
+      synchronized (lock) {
+        savedTransport = activeTransport;
+        // Check again, since it could have changed before acquiring the lock
+        if (savedTransport != null) {
+          return savedTransport;
+        }
+        if (state.getState() == IDLE) {
+          gotoNonErrorState(CONNECTING);
+          startNewTransport();
+        }
       }
-      if (state.getState() == IDLE) {
-        gotoNonErrorState(CONNECTING);
-        startNewTransport();
-      }
+    } finally {
+      channelExecutor.drain();
     }
-    channelExecutor.drain();
     return null;
   }
 
-  // Caller must call channelExecutor.drain() outside of lock after it returns
   @GuardedBy("lock")
   private void startNewTransport() {
     Preconditions.checkState(reconnectTask == null, "Should have no reconnectTask scheduled");
@@ -201,7 +212,7 @@ final class InternalSubchannel implements WithLogId {
         transportFactory.newClientTransport(address, authority, userAgent);
     if (log.isLoggable(Level.FINE)) {
       log.log(Level.FINE, "[{0}] Created {1} for {2}",
-          new Object[] {getLogId(), transport.getLogId(), address});
+          new Object[] {logId, transport.getLogId(), address});
     }
     pendingTransport = transport;
     transports.add(transport);
@@ -216,7 +227,6 @@ final class InternalSubchannel implements WithLogId {
    * @param status the causal status when the channel begins transition to
    *     TRANSIENT_FAILURE.
    */
-  // Caller must call channelExecutor.drain() outside of lock after it returns
   @GuardedBy("lock")
   private void scheduleBackoff(final Status status) {
     class EndOfCurrentBackoff implements Runnable {
@@ -233,9 +243,10 @@ final class InternalSubchannel implements WithLogId {
             gotoNonErrorState(CONNECTING);
             startNewTransport();
           }
-          channelExecutor.drain();
         } catch (Throwable t) {
           log.log(Level.WARNING, "Exception handling end of backoff", t);
+        } finally {
+          channelExecutor.drain();
         }
       }
     }
@@ -247,8 +258,7 @@ final class InternalSubchannel implements WithLogId {
     long delayMillis =
         reconnectPolicy.nextBackoffMillis() - connectingTimer.elapsed(TimeUnit.MILLISECONDS);
     if (log.isLoggable(Level.FINE)) {
-      log.log(Level.FINE, "[{0}] Scheduling backoff for {1} ms",
-          new Object[]{getLogId(), delayMillis});
+      log.log(Level.FINE, "[{0}] Scheduling backoff for {1} ms", new Object[]{logId, delayMillis});
     }
     Preconditions.checkState(reconnectTask == null, "previous reconnectTask is not done");
     reconnectTask = scheduledExecutor.schedule(
@@ -257,13 +267,11 @@ final class InternalSubchannel implements WithLogId {
         TimeUnit.MILLISECONDS);
   }
 
-  // Caller must call channelExecutor.drain() outside of lock after it returns
   @GuardedBy("lock")
   private void gotoNonErrorState(ConnectivityState newState) {
     gotoState(ConnectivityStateInfo.forNonError(newState));
   }
 
-  // Caller must call channelExecutor.drain() outside of lock after it returns
   @GuardedBy("lock")
   private void gotoState(final ConnectivityStateInfo newState) {
     if (state.getState() != newState.getState()) {
@@ -282,24 +290,27 @@ final class InternalSubchannel implements WithLogId {
   public void shutdown() {
     ManagedClientTransport savedActiveTransport;
     ConnectionClientTransport savedPendingTransport;
-    synchronized (lock) {
-      if (state.getState() == SHUTDOWN) {
-        return;
-      }
-      gotoNonErrorState(SHUTDOWN);
-      savedActiveTransport = activeTransport;
-      savedPendingTransport = pendingTransport;
-      activeTransport = null;
-      pendingTransport = null;
-      if (transports.isEmpty()) {
-        handleTermination();
-        if (log.isLoggable(Level.FINE)) {
-          log.log(Level.FINE, "[{0}] Terminated in shutdown()", getLogId());
+    try {
+      synchronized (lock) {
+        if (state.getState() == SHUTDOWN) {
+          return;
         }
-      }  // else: the callback will be run once all transports have been terminated
-      cancelReconnectTask();
+        gotoNonErrorState(SHUTDOWN);
+        savedActiveTransport = activeTransport;
+        savedPendingTransport = pendingTransport;
+        activeTransport = null;
+        pendingTransport = null;
+        if (transports.isEmpty()) {
+          handleTermination();
+          if (log.isLoggable(Level.FINE)) {
+            log.log(Level.FINE, "[{0}] Terminated in shutdown()", logId);
+          }
+        }  // else: the callback will be run once all transports have been terminated
+        cancelReconnectTask();
+      }
+    } finally {
+      channelExecutor.drain();
     }
-    channelExecutor.drain();
     if (savedActiveTransport != null) {
       savedActiveTransport.shutdown();
     }
@@ -308,7 +319,6 @@ final class InternalSubchannel implements WithLogId {
     }
   }
 
-  // Caller must call channelExecutor.drain() outside of lock after it returns
   @GuardedBy("lock")
   private void handleTermination() {
     channelExecutor.executeLater(new Runnable() {
@@ -319,7 +329,6 @@ final class InternalSubchannel implements WithLogId {
       });
   }
 
-  // Must not be called under lock
   private void handleTransportInUseState(
       final ConnectionClientTransport transport, final boolean inUse) {
     channelExecutor.executeLater(new Runnable() {
@@ -333,8 +342,12 @@ final class InternalSubchannel implements WithLogId {
   void shutdownNow(Status reason) {
     shutdown();
     Collection<ManagedClientTransport> transportsCopy;
-    synchronized (lock) {
-      transportsCopy = new ArrayList<ManagedClientTransport>(transports);
+    try {
+      synchronized (lock) {
+        transportsCopy = new ArrayList<ManagedClientTransport>(transports);
+      }
+    } finally {
+      channelExecutor.drain();
     }
     for (ManagedClientTransport transport : transportsCopy) {
       transport.shutdownNow(reason);
@@ -360,8 +373,12 @@ final class InternalSubchannel implements WithLogId {
 
   @VisibleForTesting
   ConnectivityState getState() {
-    synchronized (lock) {
-      return state.getState();
+    try {
+      synchronized (lock) {
+        return state.getState();
+      }
+    } finally {
+      channelExecutor.drain();
     }
   }
 
@@ -379,24 +396,27 @@ final class InternalSubchannel implements WithLogId {
     public void transportReady() {
       if (log.isLoggable(Level.FINE)) {
         log.log(Level.FINE, "[{0}] {1} for {2} is ready",
-            new Object[] {getLogId(), transport.getLogId(), address});
+            new Object[] {logId, transport.getLogId(), address});
       }
       ConnectivityState savedState;
-      synchronized (lock) {
-        savedState = state.getState();
-        reconnectPolicy = null;
-        nextAddressIndex = 0;
-        if (savedState == SHUTDOWN) {
-          // activeTransport should have already been set to null by shutdown(). We keep it null.
-          Preconditions.checkState(activeTransport == null,
-              "Unexpected non-null activeTransport");
-        } else if (pendingTransport == transport) {
-          gotoNonErrorState(READY);
-          activeTransport = transport;
-          pendingTransport = null;
+      try {
+        synchronized (lock) {
+          savedState = state.getState();
+          reconnectPolicy = null;
+          nextAddressIndex = 0;
+          if (savedState == SHUTDOWN) {
+            // activeTransport should have already been set to null by shutdown(). We keep it null.
+            Preconditions.checkState(activeTransport == null,
+                "Unexpected non-null activeTransport");
+          } else if (pendingTransport == transport) {
+            gotoNonErrorState(READY);
+            activeTransport = transport;
+            pendingTransport = null;
+          }
         }
+      } finally {
+        channelExecutor.drain();
       }
-      channelExecutor.drain();
       if (savedState == SHUTDOWN) {
         transport.shutdown();
       }
@@ -411,48 +431,54 @@ final class InternalSubchannel implements WithLogId {
     public void transportShutdown(Status s) {
       if (log.isLoggable(Level.FINE)) {
         log.log(Level.FINE, "[{0}] {1} for {2} is being shutdown with status {3}",
-            new Object[] {getLogId(), transport.getLogId(), address, s});
+            new Object[] {logId, transport.getLogId(), address, s});
       }
-      synchronized (lock) {
-        if (state.getState() == SHUTDOWN) {
-          return;
-        }
-        if (activeTransport == transport) {
-          gotoNonErrorState(IDLE);
-          activeTransport = null;
-        } else if (pendingTransport == transport) {
-          Preconditions.checkState(state.getState() == CONNECTING,
-              "Expected state is CONNECTING, actual state is %s", state.getState());
-          // Continue reconnect if there are still addresses to try.
-          if (nextAddressIndex == 0) {
-            // Initiate backoff
-            // Transition to TRANSIENT_FAILURE
-            scheduleBackoff(s);
-          } else {
-            startNewTransport();
+      try {
+        synchronized (lock) {
+          if (state.getState() == SHUTDOWN) {
+            return;
+          }
+          if (activeTransport == transport) {
+            gotoNonErrorState(IDLE);
+            activeTransport = null;
+          } else if (pendingTransport == transport) {
+            Preconditions.checkState(state.getState() == CONNECTING,
+                "Expected state is CONNECTING, actual state is %s", state.getState());
+            // Continue reconnect if there are still addresses to try.
+            if (nextAddressIndex == 0) {
+              // Initiate backoff
+              // Transition to TRANSIENT_FAILURE
+              scheduleBackoff(s);
+            } else {
+              startNewTransport();
+            }
           }
         }
+      } finally {
+        channelExecutor.drain();
       }
-      channelExecutor.drain();
     }
 
     @Override
     public void transportTerminated() {
       if (log.isLoggable(Level.FINE)) {
         log.log(Level.FINE, "[{0}] {1} for {2} is terminated",
-            new Object[] {getLogId(), transport.getLogId(), address});
+            new Object[] {logId, transport.getLogId(), address});
       }
       handleTransportInUseState(transport, false);
-      synchronized (lock) {
-        transports.remove(transport);
-        if (state.getState() == SHUTDOWN && transports.isEmpty()) {
-          if (log.isLoggable(Level.FINE)) {
-            log.log(Level.FINE, "[{0}] Terminated in transportTerminated()", getLogId());
+      try {
+        synchronized (lock) {
+          transports.remove(transport);
+          if (state.getState() == SHUTDOWN && transports.isEmpty()) {
+            if (log.isLoggable(Level.FINE)) {
+              log.log(Level.FINE, "[{0}] Terminated in transportTerminated()", logId);
+            }
+            handleTermination();
           }
-          handleTermination();
         }
+      } finally {
+        channelExecutor.drain();
       }
-      channelExecutor.drain();
       Preconditions.checkState(activeTransport != transport,
           "activeTransport still points to this transport. "
           + "Seems transportShutdown() was not called.");
