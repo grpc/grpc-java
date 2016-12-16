@@ -197,7 +197,7 @@ public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
       Set<EquivalentAddressGroup> addrs = Sets.newHashSet();
       for (ResolvedServerInfoGroup group : groupList) {
         for (ResolvedServerInfo server : group.getResolvedServerInfoList()) {
-          addrs.add(server.toEquivalentAddressGroup());
+          addrs.add(new EquivalentAddressGroup(server.getAddress()));
         }
       }
       return addrs;
