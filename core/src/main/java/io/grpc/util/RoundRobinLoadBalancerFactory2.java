@@ -239,15 +239,17 @@ public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
     @Nullable
     final Status status;
 
-    Picker(Iterable<Subchannel> iterable, @Nullable Status status) {
-      this.subchannelIterator = Iterables.cycle(iterable).iterator();
+    private final boolean empty;
+
+    Picker(List<Subchannel> list, @Nullable Status status) {
+      this.empty = list.isEmpty();
+      this.subchannelIterator = Iterables.cycle(list).iterator();
       this.status = status;
     }
 
     @Override
     public PickResult pickSubchannel(Attributes affinity, Metadata headers) {
-      // This will be true only if it's empty
-      if (subchannelIterator.hasNext()) {
+      if (!empty) {
         synchronized (this) {
           return PickResult.withSubchannel(subchannelIterator.next());
         }
