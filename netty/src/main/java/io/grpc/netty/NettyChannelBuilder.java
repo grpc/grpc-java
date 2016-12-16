@@ -86,14 +86,7 @@ public final class NettyChannelBuilder
   private boolean enableKeepAlive;
   private long keepAliveDelayNanos;
   private long keepAliveTimeoutNanos;
-  private TransportCreationParamsFilterFactory dynamicParamsFactory =
-      new TransportCreationParamsFilterFactory() {
-        @Override
-        public TransportCreationParamsFilter create(
-            SocketAddress targetServerAddress, String authority, String userAgent) {
-          return new DynamicNettyTransportParams(targetServerAddress, authority, userAgent);
-        }
-      };
+  private TransportCreationParamsFilterFactory dynamicParamsFactory;
 
   /**
    * Creates a new builder with the given server address. This factory method is primarily intended
@@ -351,40 +344,6 @@ public final class NettyChannelBuilder
     ProtocolNegotiator getProtocolNegotiator();
   }
 
-  private final class DynamicNettyTransportParams implements TransportCreationParamsFilter {
-
-    private final SocketAddress targetServerAddress;
-    private final String authority;
-    @Nullable private final String userAgent;
-
-    private DynamicNettyTransportParams(
-        SocketAddress targetServerAddress, String authority, String userAgent) {
-      this.targetServerAddress = targetServerAddress;
-      this.authority = authority;
-      this.userAgent = userAgent;
-    }
-
-    @Override
-    public SocketAddress getTargetServerAddress() {
-      return targetServerAddress;
-    }
-
-    @Override
-    public String getAuthority() {
-      return authority;
-    }
-
-    @Override
-    public String getUserAgent() {
-      return userAgent;
-    }
-
-    @Override
-    public ProtocolNegotiator getProtocolNegotiator() {
-      return createProtocolNegotiator(authority, negotiationType, sslContext);
-    }
-  }
-
   /**
    * Creates Netty transports. Exposed for internal use, as it should be private.
    */
@@ -410,11 +369,22 @@ public final class NettyChannelBuilder
         NegotiationType negotiationType, SslContext sslContext, EventLoopGroup group,
         int flowControlWindow, int maxMessageSize, int maxHeaderListSize, boolean enableKeepAlive,
         long keepAliveDelayNanos, long keepAliveTimeoutNanos) {
-      this.dynamicParams = dynamicParams;
       this.channelType = channelType;
       this.negotiationType = negotiationType;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
       this.sslContext = sslContext;
+
+      if (dynamicParams == null) {
+        dynamicParams = new TransportCreationParamsFilterFactory() {
+          @Override
+          public TransportCreationParamsFilter create(
+              SocketAddress targetServerAddress, String authority, String userAgent) {
+            return new DynamicNettyTransportParams(targetServerAddress, authority, userAgent);
+          }
+        };
+      }
+      this.dynamicParams = dynamicParams;
+
       this.flowControlWindow = flowControlWindow;
       this.maxMessageSize = maxMessageSize;
       this.maxHeaderListSize = maxHeaderListSize;
@@ -457,6 +427,40 @@ public final class NettyChannelBuilder
 
       if (usingSharedGroup) {
         SharedResourceHolder.release(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP, group);
+      }
+    }
+
+    private final class DynamicNettyTransportParams implements TransportCreationParamsFilter {
+
+      private final SocketAddress targetServerAddress;
+      private final String authority;
+      @Nullable private final String userAgent;
+
+      private DynamicNettyTransportParams(
+          SocketAddress targetServerAddress, String authority, String userAgent) {
+        this.targetServerAddress = targetServerAddress;
+        this.authority = authority;
+        this.userAgent = userAgent;
+      }
+
+      @Override
+      public SocketAddress getTargetServerAddress() {
+        return targetServerAddress;
+      }
+
+      @Override
+      public String getAuthority() {
+        return authority;
+      }
+
+      @Override
+      public String getUserAgent() {
+        return userAgent;
+      }
+
+      @Override
+      public ProtocolNegotiator getProtocolNegotiator() {
+        return createProtocolNegotiator(authority, negotiationType, sslContext);
       }
     }
   }
