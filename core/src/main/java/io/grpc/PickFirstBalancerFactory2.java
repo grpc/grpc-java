@@ -31,19 +31,13 @@
 
 package io.grpc;
 
-import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.ConnectivityState.CONNECTING;
-import static io.grpc.ConnectivityState.IDLE;
-import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
-import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 
 import java.net.SocketAddress;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * A {@link LoadBalancer} that provides no load balancing mechanism over the
@@ -72,10 +66,6 @@ public final class PickFirstBalancerFactory2 extends LoadBalancer2.Factory {
     private final Helper helper;
     private Subchannel subchannel;
 
-    @VisibleForTesting
-    static final Attributes.Key<AtomicReference<ConnectivityState>> LAST_STATE =
-        Attributes.Key.of("last-state");
-
     public PickFirstBalancer(Helper helper) {
       this.helper = helper;
     }
@@ -93,17 +83,7 @@ public final class PickFirstBalancerFactory2 extends LoadBalancer2.Factory {
           subchannel.shutdown();
         }
 
-        // NB(lukaszx0): we don't merge `attributes` with `subchannelAttr` because subchannel
-        // doesn't need them. They're describing the resolved server list but we're not taking any
-        // action based on this information.
-        Attributes subchannelAttrs = Attributes.newBuilder()
-            // NB(lukaszx0): because attributes are immutable we can't set new value for the key
-            // after creation but since we can mutate the values we leverge that and set
-            // AtomicReference which will allow mutating state info for given channel.
-            .set(LAST_STATE, new AtomicReference<ConnectivityState>(IDLE))
-            .build();
-
-        subchannel = helper.createSubchannel(newEag, subchannelAttrs);
+        subchannel = helper.createSubchannel(newEag, Attributes.EMPTY);
         helper.updatePicker(new Picker(PickResult.withSubchannel(subchannel)));
       }
     }
@@ -116,24 +96,25 @@ public final class PickFirstBalancerFactory2 extends LoadBalancer2.Factory {
     @Override
     public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
       ConnectivityState currentState = stateInfo.getState();
-      AtomicReference<ConnectivityState> lastStateRef = subchannel.getAttributes().get(LAST_STATE);
-      checkState(lastStateRef != null, "subchannel should have LAST_STATE attribute set");
-
-      PickResult pickResult;
       if (subchannel != this.subchannel || currentState == SHUTDOWN) {
         return;
-      } else if (currentState == CONNECTING) {
-        pickResult = PickResult.withNoResult();
-      } else if (lastStateRef.get() == TRANSIENT_FAILURE || currentState == READY
-          || currentState == IDLE) {
-        pickResult = PickResult.withSubchannel(subchannel);
-      } else if (currentState == TRANSIENT_FAILURE) {
-        pickResult = PickResult.withError(stateInfo.getStatus());
-      } else {
-        throw new IllegalStateException();
       }
 
-      lastStateRef.set(currentState);
+      PickResult pickResult;
+      switch (currentState) {
+        case CONNECTING:
+          pickResult = PickResult.withNoResult();
+          break;
+        case READY:
+        case IDLE:
+          pickResult = PickResult.withSubchannel(subchannel);
+          break;
+        case TRANSIENT_FAILURE:
+          pickResult = PickResult.withError(stateInfo.getStatus());
+          break;
+        default:
+          throw new IllegalStateException();
+      }
 
       helper.updatePicker(new Picker(pickResult));
     }

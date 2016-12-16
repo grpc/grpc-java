@@ -31,8 +31,6 @@
 
 package io.grpc;
 
-import static io.grpc.ConnectivityState.IDLE;
-import static io.grpc.PickFirstBalancerFactory2.PickFirstBalancer.LAST_STATE;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
@@ -66,7 +64,6 @@ import org.mockito.MockitoAnnotations;
 
 import java.net.SocketAddress;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 
 
 /** Unit test for {@link PickFirstBalancerFactory2}. */
@@ -98,9 +95,6 @@ public class PickFirstLoadBalancer2Test {
     }
 
     when(mockSubchannel.getAddresses()).thenReturn(new EquivalentAddressGroup(socketAddresses));
-    when(mockSubchannel.getAttributes()).thenReturn(Attributes.newBuilder()
-        .set(LAST_STATE, new AtomicReference<ConnectivityState>(IDLE))
-        .build());
     when(mockHelper.createSubchannel(any(EquivalentAddressGroup.class), any(Attributes.class)))
         .thenReturn(mockSubchannel);
 
