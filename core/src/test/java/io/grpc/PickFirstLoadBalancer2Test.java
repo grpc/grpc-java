@@ -212,6 +212,17 @@ public class PickFirstLoadBalancer2Test {
     verifyNoMoreInteractions(mockHelper);
   }
 
+  @Test
+  public void nameResolutionError() throws Exception {
+    loadBalancer.handleNameResolutionError(Status.UNKNOWN);
+    verify(mockHelper).updatePicker(pickerCaptor.capture());
+    PickResult pickResult = pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY,
+        new Metadata());
+    assertEquals(null, pickResult.getSubchannel());
+    assertEquals(Status.UNKNOWN, pickResult.getStatus());
+    verifyNoMoreInteractions(mockHelper);
+  }
+
   private static class FakeSocketAddress extends SocketAddress {
     final String name;
 
