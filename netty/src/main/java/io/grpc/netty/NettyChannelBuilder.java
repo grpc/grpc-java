@@ -87,7 +87,13 @@ public final class NettyChannelBuilder
   private long keepAliveDelayNanos;
   private long keepAliveTimeoutNanos;
   private TransportCreationParamsFilterFactory dynamicParamsFactory =
-      DynamicNettyTransportParams.FACTORY;
+      new TransportCreationParamsFilterFactory() {
+        @Override
+        public TransportCreationParamsFilter create(
+            SocketAddress targetServerAddress, String authority, String userAgent) {
+          return new DynamicNettyTransportParams(targetServerAddress, authority, userAgent);
+        }
+      };
 
   /**
    * Creates a new builder with the given server address. This factory method is primarily intended
@@ -332,7 +338,7 @@ public final class NettyChannelBuilder
 
   interface TransportCreationParamsFilterFactory {
     TransportCreationParamsFilter create(
-        SocketAddress targetServerAddress, String authority, String userAgent);
+        SocketAddress targetServerAddress, String authority, @Nullable String userAgent);
   }
 
   interface TransportCreationParamsFilter {
@@ -342,20 +348,10 @@ public final class NettyChannelBuilder
 
     @Nullable String getUserAgent();
 
-    ProtocolNegotiator getProtocolNegotiator(
-        NegotiationType negotiationType, SslContext sslContext);
+    ProtocolNegotiator getProtocolNegotiator();
   }
 
-  private static final class DynamicNettyTransportParams implements TransportCreationParamsFilter {
-    private static final TransportCreationParamsFilterFactory FACTORY =
-        new TransportCreationParamsFilterFactory() {
-
-      @Override
-      public TransportCreationParamsFilter create(
-          SocketAddress targetServerAddress, String authority, String userAgent) {
-        return new DynamicNettyTransportParams(targetServerAddress, authority, userAgent);
-      }
-    };
+  private final class DynamicNettyTransportParams implements TransportCreationParamsFilter {
 
     private final SocketAddress targetServerAddress;
     private final String authority;
@@ -384,8 +380,7 @@ public final class NettyChannelBuilder
     }
 
     @Override
-    public ProtocolNegotiator getProtocolNegotiator(
-        NegotiationType negotiationType, SslContext sslContext) {
+    public ProtocolNegotiator getProtocolNegotiator() {
       return createProtocolNegotiator(authority, negotiationType, sslContext);
     }
   }
@@ -445,7 +440,7 @@ public final class NettyChannelBuilder
 
       NettyClientTransport transport = new NettyClientTransport(
           dparams.getTargetServerAddress(), channelType, channelOptions, group,
-          dparams.getProtocolNegotiator(negotiationType, sslContext), flowControlWindow,
+          dparams.getProtocolNegotiator(), flowControlWindow,
           maxMessageSize, maxHeaderListSize, dparams.getAuthority(), dparams.getUserAgent());
       if (enableKeepAlive) {
         transport.enableKeepAlive(true, keepAliveDelayNanos, keepAliveTimeoutNanos);
