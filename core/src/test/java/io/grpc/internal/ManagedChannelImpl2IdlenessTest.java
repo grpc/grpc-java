@@ -33,13 +33,11 @@ package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotSame;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.same;
-import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -55,7 +53,12 @@ import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.IntegerMarshaller;
-import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer2.Helper;
+import io.grpc.LoadBalancer2.PickResult;
+import io.grpc.LoadBalancer2.Subchannel;
+import io.grpc.LoadBalancer2.SubchannelPicker;
+import io.grpc.LoadBalancer2;
+import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
@@ -63,8 +66,6 @@ import io.grpc.ResolvedServerInfo;
 import io.grpc.ResolvedServerInfoGroup;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
-import io.grpc.TransportManager.OobTransportProvider;
-import io.grpc.TransportManager;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 
 import org.junit.After;
@@ -74,17 +75,12 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
-import org.mockito.Matchers;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -95,13 +91,13 @@ import java.util.concurrent.TimeUnit;
  * Unit tests for {@link ManagedChannelImpl}'s idle mode.
  */
 @RunWith(JUnit4.class)
-public class ManagedChannelImplIdlenessTest {
+public class ManagedChannelImpl2IdlenessTest {
   private final FakeClock timer = new FakeClock();
   private final FakeClock executor = new FakeClock();
   private static final String AUTHORITY = "fakeauthority";
   private static final String USER_AGENT = "fakeagent";
   private static final long IDLE_TIMEOUT_SECONDS = 30;
-  private ManagedChannelImpl channel;
+  private ManagedChannelImpl2 channel;
 
   private final MethodDescriptor<String, Integer> method = MethodDescriptor.create(
       MethodDescriptor.MethodType.UNKNOWN, "/service/method",
@@ -113,11 +109,12 @@ public class ManagedChannelImplIdlenessTest {
   
   @Mock private SharedResourceHolder.Resource<ScheduledExecutorService> timerService;
   @Mock private ClientTransportFactory mockTransportFactory;
-  @Mock private LoadBalancer<ClientTransport> mockLoadBalancer;
-  @Mock private LoadBalancer.Factory mockLoadBalancerFactory;
+  @Mock private LoadBalancer2 mockLoadBalancer;
+  @Mock private LoadBalancer2.Factory mockLoadBalancerFactory;
   @Mock private NameResolver mockNameResolver;
   @Mock private NameResolver.Factory mockNameResolverFactory;
   @Mock private ClientCall.Listener<Integer> mockCallListener;
+  @Mock private ClientCall.Listener<Integer> mockCallListener2;
   @Captor private ArgumentCaptor<NameResolver.Listener> nameResolverListenerCaptor;
   private BlockingQueue<MockClientTransportInfo> newTransports;
 
@@ -125,15 +122,13 @@ public class ManagedChannelImplIdlenessTest {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     when(timerService.create()).thenReturn(timer.getScheduledExecutorService());
-    when(mockLoadBalancerFactory
-        .newLoadBalancer(anyString(), Matchers.<TransportManager<ClientTransport>>any()))
-        .thenReturn(mockLoadBalancer);
+    when(mockLoadBalancerFactory.newLoadBalancer(any(Helper.class))).thenReturn(mockLoadBalancer);
     when(mockNameResolver.getServiceAuthority()).thenReturn(AUTHORITY);
     when(mockNameResolverFactory
         .newNameResolver(any(URI.class), any(Attributes.class)))
         .thenReturn(mockNameResolver);
 
-    channel = new ManagedChannelImpl("fake://target", new FakeBackoffPolicyProvider(),
+    channel = new ManagedChannelImpl2("fake://target", new FakeBackoffPolicyProvider(),
         mockNameResolverFactory, Attributes.EMPTY, mockLoadBalancerFactory,
         mockTransportFactory, DecompressorRegistry.getDefaultInstance(),
         CompressorRegistry.getDefaultInstance(), timerService, timer.getStopwatchSupplier(),
@@ -154,8 +149,7 @@ public class ManagedChannelImplIdlenessTest {
     }
     verify(mockNameResolverFactory).newNameResolver(any(URI.class), any(Attributes.class));
     // Verify the initial idleness
-    verify(mockLoadBalancerFactory, never()).newLoadBalancer(
-        anyString(), Matchers.<TransportManager<ClientTransport>>any());
+    verify(mockLoadBalancerFactory, never()).newLoadBalancer(any(Helper.class));
     verify(mockTransportFactory, never()).newClientTransport(
         any(SocketAddress.class), anyString(), anyString());
     verify(mockNameResolver, never()).start(any(NameResolver.Listener.class));
@@ -170,126 +164,70 @@ public class ManagedChannelImplIdlenessTest {
   @Test
   public void newCallExitsIdleness() throws Exception {
     final EquivalentAddressGroup addressGroup = addressGroupList.get(1);
-    doAnswer(new Answer<ClientTransport>() {
-        @Override
-        public ClientTransport answer(InvocationOnMock invocation) throws Throwable {
-          return channel.tm.getTransport(addressGroup);
-        }
-      }).when(mockLoadBalancer).pickTransport(any(Attributes.class));
 
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());
 
-    verify(mockLoadBalancerFactory).newLoadBalancer(anyString(), same(channel.tm));
-    // NameResolver is started in the scheduled executor
-    timer.runDueTasks();
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    verify(mockLoadBalancerFactory).newLoadBalancer(helperCaptor.capture());
+    Helper helper = helperCaptor.getValue();
+
     verify(mockNameResolver).start(nameResolverListenerCaptor.capture());
-
-    // LoadBalancer is used right after created.
-    verify(mockLoadBalancer).pickTransport(any(Attributes.class));
-    verify(mockTransportFactory).newClientTransport(
-        addressGroup.getAddresses().get(0), AUTHORITY, USER_AGENT);
-
-    // Simulate new address resolved
+    // Simulate new address resolved to make sure the LoadBalancer is correctly linked to
+    // the NameResolver.
     nameResolverListenerCaptor.getValue().onUpdate(servers, Attributes.EMPTY);
     verify(mockLoadBalancer).handleResolvedAddresses(servers, Attributes.EMPTY);
   }
 
   @Test
-  public void newCallResetsGracePeriod() throws Exception {
+  public void newCallRefreshesIdlenessTimer() throws Exception {
     final EquivalentAddressGroup addressGroup = addressGroupList.get(1);
-    doAnswer(new Answer<ClientTransport>() {
-        @Override
-        public ClientTransport answer(InvocationOnMock invocation) throws Throwable {
-          return channel.tm.getTransport(addressGroup);
-        }
-      }).when(mockLoadBalancer).pickTransport(any(Attributes.class));
 
+    // First call to exit the initial idleness, then immediately cancel the call.
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());
-    call.cancel("cleanup", null);
-    executor.runDueTasks();
+    call.cancel("For testing", null);
 
-    timer.runDueTasks();
-    verify(mockLoadBalancerFactory).newLoadBalancer(anyString(), same(channel.tm));
-    verify(mockLoadBalancer).pickTransport(any(Attributes.class));
+    // Verify that we have exited the idle mode
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    verify(mockLoadBalancerFactory).newLoadBalancer(helperCaptor.capture());
+    Helper helper = helperCaptor.getValue();
+    assertFalse(channel.inUseStateAggregator.isInUse());
 
-    // Enter grace period
-    timer.forwardTime(TimeUnit.SECONDS.toMillis(IDLE_TIMEOUT_SECONDS)
-        - ManagedChannelImpl.IDLE_GRACE_PERIOD_MILLIS, TimeUnit.MILLISECONDS);
-    assertTrue(channel.isInIdleGracePeriod());
-
-    call = channel.newCall(method, CallOptions.DEFAULT);
-    call.start(mockCallListener, new Metadata());
-    assertFalse(channel.isInIdleGracePeriod());
-    call.cancel("cleanup", null);
-    executor.runDueTasks();
-
-    // Load balancer was reused.
-    timer.runDueTasks();
-    verify(mockLoadBalancerFactory).newLoadBalancer(anyString(), same(channel.tm));
-    verify(mockLoadBalancer, times(2)).pickTransport(any(Attributes.class));
-
-    // Now just let time pass to allow the original idle time to be well past expired.
+    // Move closer to idleness, but not yet.
     timer.forwardTime(IDLE_TIMEOUT_SECONDS - 1, TimeUnit.SECONDS);
+    verify(mockLoadBalancer, never()).shutdown();
+    assertFalse(channel.inUseStateAggregator.isInUse());
 
+    // A new call would refresh the timer
     call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());
+    call.cancel("For testing", null);
+    assertFalse(channel.inUseStateAggregator.isInUse());
 
-    // Load balancer was reused; the idle time period must have been reset.
-    timer.runDueTasks();
-    verify(mockLoadBalancerFactory).newLoadBalancer(anyString(), same(channel.tm));
-    verify(mockLoadBalancer, times(3)).pickTransport(any(Attributes.class));
-  }
-
-  @Test
-  public void shutdownDuringGracePeriodShutdownLb() throws Exception {
-    forceExitIdleMode();
-    verify(mockLoadBalancerFactory).newLoadBalancer(anyString(), same(channel.tm));
-    // Enter grace period
-    timer.forwardTime(TimeUnit.SECONDS.toMillis(IDLE_TIMEOUT_SECONDS)
-        - ManagedChannelImpl.IDLE_GRACE_PERIOD_MILLIS, TimeUnit.MILLISECONDS);
+    // ... so that passing the same length of time will not trigger idle mode
+    timer.forwardTime(IDLE_TIMEOUT_SECONDS - 1, TimeUnit.SECONDS);
     verify(mockLoadBalancer, never()).shutdown();
-    channel.shutdown();
+    assertFalse(channel.inUseStateAggregator.isInUse());
+
+    // ... until the time since last call has reached the timeout
+    timer.forwardTime(1, TimeUnit.SECONDS);
     verify(mockLoadBalancer).shutdown();
+    assertFalse(channel.inUseStateAggregator.isInUse());
+
+    // Drain the app executor, which runs the call listeners
+    verify(mockCallListener, never()).onClose(any(Status.class), any(Metadata.class));
+    assertEquals(2, executor.runDueTasks());
+    verify(mockCallListener, times(2)).onClose(any(Status.class), any(Metadata.class));
   }
-
+  
   @Test
-  public void enterIdleModeAfterForceExit() throws Exception {
-    forceExitIdleMode();
-
-    // Trigger the creation of TransportSets
-    for (EquivalentAddressGroup addressGroup : addressGroupList) {
-      channel.tm.getTransport(addressGroup);
-      verify(mockTransportFactory).newClientTransport(
-          addressGroup.getAddresses().get(0), AUTHORITY, USER_AGENT);
-    }
-    ArrayList<MockClientTransportInfo> transports = new ArrayList<MockClientTransportInfo>();
-    newTransports.drainTo(transports);
-    assertEquals(addressGroupList.size(), transports.size());
-
-    channel.tm.createInterimTransport();
-
-    // Without actually using these transports, will eventually enter idle mode
-    walkIntoIdleMode(transports);
-  }
-
-  @Test
-  public void interimTransportHoldsOffIdleness() throws Exception {
-    doAnswer(new Answer<ClientTransport>() {
-        @Override
-        public ClientTransport answer(InvocationOnMock invocation) throws Throwable {
-          return channel.tm.createInterimTransport().transport();
-        }
-      }).when(mockLoadBalancer).pickTransport(any(Attributes.class));
-
+  public void delayedTransportHoldsOffIdleness() throws Exception {
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());
     assertTrue(channel.inUseStateAggregator.isInUse());
-    // NameResolver is started in the scheduled executor
-    timer.runDueTasks();
 
-    // As long as the interim transport is in-use (by the pending RPC), the channel won't go idle.
+    // As long as the delayed transport is in-use (by the pending RPC), the channel won't go idle.
     timer.forwardTime(IDLE_TIMEOUT_SECONDS * 2, TimeUnit.SECONDS);
     assertTrue(channel.inUseStateAggregator.isInUse());
 
@@ -299,118 +237,100 @@ public class ManagedChannelImplIdlenessTest {
     assertEquals(1, executor.runDueTasks());
     assertFalse(channel.inUseStateAggregator.isInUse());
     // And allow the channel to go idle.
-    walkIntoIdleMode(Collections.<MockClientTransportInfo>emptyList());
+    timer.forwardTime(IDLE_TIMEOUT_SECONDS - 1, TimeUnit.SECONDS);
+    verify(mockLoadBalancer, never()).shutdown();
+    timer.forwardTime(1, TimeUnit.SECONDS);
+    verify(mockLoadBalancer).shutdown();
   }
 
   @Test
   public void realTransportsHoldsOffIdleness() throws Exception {
     final EquivalentAddressGroup addressGroup = addressGroupList.get(1);
-    doAnswer(new Answer<ClientTransport>() {
-        @Override
-        public ClientTransport answer(InvocationOnMock invocation) throws Throwable {
-          return channel.tm.getTransport(addressGroup);
-        }
-      }).when(mockLoadBalancer).pickTransport(any(Attributes.class));
 
+    // Start a call, which goes to delayed transport
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());
 
-    // A TransportSet is in-use, while the stream is pending in a delayed transport
+    // Verify that we have exited the idle mode
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    verify(mockLoadBalancerFactory).newLoadBalancer(helperCaptor.capture());
+    Helper helper = helperCaptor.getValue();
     assertTrue(channel.inUseStateAggregator.isInUse());
-    // NameResolver is started in the scheduled executor
-    timer.runDueTasks();
 
-    // Making the real transport ready, will release the delayed transport.
-    // The TransportSet is *not* in-use before the real transport become in-use.
+    // Assume LoadBalancer has received an address, then create a subchannel.
+    Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
+    subchannel.requestConnection();
     MockClientTransportInfo t0 = newTransports.poll();
-    assertEquals(0, executor.numPendingTasks());
     t0.listener.transportReady();
-    // Real streams are started in the executor
-    assertEquals(1, executor.runDueTasks());
+
+    SubchannelPicker mockPicker = mock(SubchannelPicker.class);
+    when(mockPicker.pickSubchannel(any(Attributes.class), any(Metadata.class)))
+        .thenReturn(PickResult.withSubchannel(subchannel));
+    helper.updatePicker(mockPicker);
+    // Delayed transport creates real streams in the app executor
+    executor.runDueTasks();
+
+    // Delayed transport exits in-use, while real transport has not entered in-use yet.
     assertFalse(channel.inUseStateAggregator.isInUse());
+
+    // Now it's in-use
     t0.listener.transportInUse(true);
     assertTrue(channel.inUseStateAggregator.isInUse());
 
     // As long as the transport is in-use, the channel won't go idle.
     timer.forwardTime(IDLE_TIMEOUT_SECONDS * 2, TimeUnit.SECONDS);
+    assertTrue(channel.inUseStateAggregator.isInUse());
 
     t0.listener.transportInUse(false);
     assertFalse(channel.inUseStateAggregator.isInUse());
     // And allow the channel to go idle.
-    walkIntoIdleMode(Arrays.asList(t0));
-  }
-
-  @Test
-  public void idlenessDecommissionsTransports() throws Exception {
-    EquivalentAddressGroup addressGroup = addressGroupList.get(0);
-    forceExitIdleMode();
-
-    channel.tm.getTransport(addressGroup);
-    MockClientTransportInfo t0 = newTransports.poll();
-    t0.listener.transportReady();
-    assertSame(t0.transport, channelTmGetTransportUnwrapped(addressGroup));
-
-    walkIntoIdleMode(Arrays.asList(t0));
-    verify(t0.transport).shutdown();
-
-    forceExitIdleMode();
-    channel.tm.getTransport(addressGroup);
-    MockClientTransportInfo t1 = newTransports.poll();
-    t1.listener.transportReady();
-
-    assertSame(t1.transport, channelTmGetTransportUnwrapped(addressGroup));
-    assertNotSame(t0.transport, channelTmGetTransportUnwrapped(addressGroup));
-
-    channel.shutdown();
-    verify(t1.transport).shutdown();
-    channel.shutdownNow();
-    verify(t0.transport).shutdownNow(any(Status.class));
-    verify(t1.transport).shutdownNow(any(Status.class));
-
-    t1.listener.transportTerminated();
-    assertFalse(channel.isTerminated());
-    t0.listener.transportTerminated();
-    assertTrue(channel.isTerminated());
-  }
-
-  @Test
-  public void loadBalancerShouldNotCreateConnectionsWhenIdle() throws Exception {
-    // Acts as a misbehaving LoadBalancer that tries to create connections when channel is in idle,
-    // which means the LoadBalancer is supposedly shutdown.
-    assertSame(ManagedChannelImpl.IDLE_MODE_TRANSPORT,
-        channel.tm.getTransport(addressGroupList.get(0)));
-    OobTransportProvider<ClientTransport> oobProvider =
-        channel.tm.createOobTransportProvider(addressGroupList.get(0), AUTHORITY);
-    assertSame(ManagedChannelImpl.IDLE_MODE_TRANSPORT, oobProvider.get());
-    oobProvider.close();
-    verify(mockTransportFactory, never()).newClientTransport(
-        any(SocketAddress.class), anyString(), anyString());
-    // We don't care for delayed (interim) transports, because they don't create connections.
-  }
-
-  private void walkIntoIdleMode(Collection<MockClientTransportInfo> currentTransports) {
     timer.forwardTime(IDLE_TIMEOUT_SECONDS - 1, TimeUnit.SECONDS);
     verify(mockLoadBalancer, never()).shutdown();
-    verify(mockNameResolver, never()).shutdown();
-    for (MockClientTransportInfo transport : currentTransports) {
-      verify(transport.transport, never()).shutdown();
-    }
     timer.forwardTime(1, TimeUnit.SECONDS);
     verify(mockLoadBalancer).shutdown();
-    verify(mockNameResolver).shutdown();
-    for (MockClientTransportInfo transport : currentTransports) {
-      verify(transport.transport).shutdown();
-    }
   }
 
-  private void forceExitIdleMode() {
-    channel.exitIdleMode();
-    // NameResolver is started in the scheduled executor
-    timer.runDueTasks();
-  }
+  @Test
+  public void oobTransportDoesNotAffectIdleness() {
+    FakeClock oobExecutor = new FakeClock();
+    // Start a call, which goes to delayed transport
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, new Metadata());
 
-  private ClientTransport channelTmGetTransportUnwrapped(EquivalentAddressGroup addressGroup) {
-    return ((ForwardingConnectionClientTransport) channel.tm.getTransport(addressGroup)).delegate();
+    // Verify that we have exited the idle mode
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    verify(mockLoadBalancerFactory).newLoadBalancer(helperCaptor.capture());
+    Helper helper = helperCaptor.getValue();
+
+    // Fail the RPC
+    SubchannelPicker failingPicker = mock(SubchannelPicker.class);
+    when(failingPicker.pickSubchannel(any(Attributes.class), any(Metadata.class)))
+        .thenReturn(PickResult.withError(Status.UNAVAILABLE));
+    helper.updatePicker(failingPicker);
+    executor.runDueTasks();
+    verify(mockCallListener).onClose(same(Status.UNAVAILABLE), any(Metadata.class));
+
+    // ... so that the channel resets its in-use state
+    assertFalse(channel.inUseStateAggregator.isInUse());
+
+    // Now make an RPC on an OOB channel
+    ManagedChannel oob = helper.createOobChannel(addressGroupList.get(0), "oobauthority",
+        oobExecutor.getScheduledExecutorService());
+    verify(mockTransportFactory, never())
+        .newClientTransport(any(SocketAddress.class), same("oobauthority"), same(USER_AGENT));
+    ClientCall<String, Integer> oobCall = oob.newCall(method, CallOptions.DEFAULT);
+    oobCall.start(mockCallListener2, new Metadata());
+    verify(mockTransportFactory)
+        .newClientTransport(any(SocketAddress.class), same("oobauthority"), same(USER_AGENT));
+    MockClientTransportInfo oobTransportInfo = newTransports.poll();
+    assertEquals(0, newTransports.size());
+    // The OOB transport reports in-use state
+    oobTransportInfo.listener.transportInUse(true);
+
+    // But it won't stop the channel from going idle
+    verify(mockLoadBalancer, never()).shutdown();
+    timer.forwardTime(IDLE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    verify(mockLoadBalancer).shutdown();
   }
 
   private static class FakeBackoffPolicyProvider implements BackoffPolicy.Provider {
