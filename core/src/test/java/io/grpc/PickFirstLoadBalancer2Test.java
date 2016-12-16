@@ -208,12 +208,13 @@ public class PickFirstLoadBalancer2Test {
 
   @Test
   public void nameResolutionError() throws Exception {
-    loadBalancer.handleNameResolutionError(Status.UNKNOWN);
+    loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
     verify(mockHelper).updatePicker(pickerCaptor.capture());
     PickResult pickResult = pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY,
         new Metadata());
     assertEquals(null, pickResult.getSubchannel());
-    assertEquals(Status.UNKNOWN, pickResult.getStatus());
+    assertEquals(Status.NOT_FOUND.getCode(), pickResult.getStatus().getCode());
+    assertEquals("nameResolutionError", pickResult.getStatus().getDescription());
     verifyNoMoreInteractions(mockHelper);
   }
 
