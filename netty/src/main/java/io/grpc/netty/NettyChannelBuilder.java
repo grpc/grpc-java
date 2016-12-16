@@ -86,7 +86,8 @@ public final class NettyChannelBuilder
   private boolean enableKeepAlive;
   private long keepAliveDelayNanos;
   private long keepAliveTimeoutNanos;
-  private DynamicParamsFactory dynamicParamsFactory = DynamicNettyTransportParams.FACTORY;
+  private TransportCreationParamsFilterFactory dynamicParamsFactory =
+      DynamicNettyTransportParams.FACTORY;
 
   /**
    * Creates a new builder with the given server address. This factory method is primarily intended
@@ -325,15 +326,16 @@ public final class NettyChannelBuilder
     return super.checkAuthority(authority);
   }
 
-  void setDynamicParamsFactory(DynamicParamsFactory factory) {
+  void setDynamicParamsFactory(TransportCreationParamsFilterFactory factory) {
     this.dynamicParamsFactory = checkNotNull(factory, "factory");
   }
 
-  interface DynamicParamsFactory {
-    DynamicParams create(SocketAddress targetServerAddress, String authority, String userAgent);
+  interface TransportCreationParamsFilterFactory {
+    TransportCreationParamsFilter create(
+        SocketAddress targetServerAddress, String authority, String userAgent);
   }
 
-  interface DynamicParams {
+  interface TransportCreationParamsFilter {
     SocketAddress getTargetServerAddress();
 
     String getAuthority();
@@ -344,11 +346,12 @@ public final class NettyChannelBuilder
         NegotiationType negotiationType, SslContext sslContext);
   }
 
-  private static final class DynamicNettyTransportParams implements DynamicParams {
-    private static final DynamicParamsFactory FACTORY = new DynamicParamsFactory() {
+  private static final class DynamicNettyTransportParams implements TransportCreationParamsFilter {
+    private static final TransportCreationParamsFilterFactory FACTORY =
+        new TransportCreationParamsFilterFactory() {
 
       @Override
-      public DynamicParams create(
+      public TransportCreationParamsFilter create(
           SocketAddress targetServerAddress, String authority, String userAgent) {
         return new DynamicNettyTransportParams(targetServerAddress, authority, userAgent);
       }
@@ -391,7 +394,7 @@ public final class NettyChannelBuilder
    * Creates Netty transports. Exposed for internal use, as it should be private.
    */
   private static final class NettyTransportFactory implements ClientTransportFactory {
-    private final DynamicParamsFactory dynamicParams;
+    private final TransportCreationParamsFilterFactory dynamicParams;
     private final Class<? extends Channel> channelType;
     private final Map<ChannelOption<?>, ?> channelOptions;
     private final NegotiationType negotiationType;
@@ -407,7 +410,7 @@ public final class NettyChannelBuilder
 
     private boolean closed;
 
-    NettyTransportFactory(DynamicParamsFactory dynamicParams,
+    NettyTransportFactory(TransportCreationParamsFilterFactory dynamicParams,
         Class<? extends Channel> channelType, Map<ChannelOption<?>, ?> channelOptions,
         NegotiationType negotiationType, SslContext sslContext, EventLoopGroup group,
         int flowControlWindow, int maxMessageSize, int maxHeaderListSize, boolean enableKeepAlive,
@@ -437,7 +440,8 @@ public final class NettyChannelBuilder
         SocketAddress serverAddress, String authority, @Nullable String userAgent) {
       checkState(!closed, "The transport factory is closed.");
 
-      DynamicParams dparams = dynamicParams.create(serverAddress, authority, userAgent);
+      TransportCreationParamsFilter dparams =
+          dynamicParams.create(serverAddress, authority, userAgent);
 
       NettyClientTransport transport = new NettyClientTransport(
           dparams.getTargetServerAddress(), channelType, channelOptions, group,

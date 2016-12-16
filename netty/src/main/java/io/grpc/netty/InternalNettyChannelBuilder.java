@@ -56,20 +56,23 @@ public final class InternalNettyChannelBuilder {
   /**
    * Interface to create netty dynamic parameters.
    */
-  public interface DynamicParamsFactory extends NettyChannelBuilder.DynamicParamsFactory {
+  public interface TransportCreationParamsFilterFactory
+      extends NettyChannelBuilder.TransportCreationParamsFilterFactory {
     @Override
-    DynamicParams create(SocketAddress targetServerAddress, String authority, String userAgent);
+    TransportCreationParamsFilter create(
+        SocketAddress targetServerAddress, String authority, String userAgent);
   }
 
   /**
-   * {@link DynamicParams} are those that may depend on late-known information about a client
-   * transport.  This interface can be used to dynamically alter params based on the params of
-   * {@code ClientTransportFactory}.
+   * {@link TransportCreationParamsFilter} are those that may depend on late-known information about
+   * a client transport.  This interface can be used to dynamically alter params based on the
+   * params of {@code ClientTransportFactory#newClientTransport}.
    */
-  public interface DynamicParams extends NettyChannelBuilder.DynamicParams {}
+  public interface TransportCreationParamsFilter
+      extends NettyChannelBuilder.TransportCreationParamsFilter {}
 
   public static void setDynamicTransportParamsFactory(
-      NettyChannelBuilder builder, DynamicParamsFactory factory) {
+      NettyChannelBuilder builder, TransportCreationParamsFilterFactory factory) {
     builder.setDynamicParamsFactory(factory);
   }
 
