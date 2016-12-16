@@ -52,6 +52,7 @@ import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.LoadBalancer2;
 import io.grpc.LoadBalancer2.Helper;
 import io.grpc.LoadBalancer2.Subchannel;
 import io.grpc.Metadata;
@@ -87,9 +88,6 @@ public class RoundRobinLoadBalancer2Test {
   private Map<EquivalentAddressGroup, Subchannel> subchannels = Maps.newLinkedHashMap();
   private static Attributes.Key<String> MAJOR_KEY = Attributes.Key.of("major-key");
   private Attributes affinity = Attributes.newBuilder().set(MAJOR_KEY, "I got the keys").build();
-  private Attributes subchannelInitialAttrs = Attributes.newBuilder().set(STATE_INFO,
-      new AtomicReference<ConnectivityStateInfo>(
-          ConnectivityStateInfo.forNonError(IDLE))).build();
 
   @Captor
   private ArgumentCaptor<Picker> pickerCaptor;
@@ -159,7 +157,9 @@ public class RoundRobinLoadBalancer2Test {
 
     for (Subchannel subchannel : Lists.newArrayList(removedSubchannel, oldSubchannel,
         newSubchannel)) {
-      when(subchannel.getAttributes()).thenReturn(subchannelInitialAttrs);
+      when(subchannel.getAttributes()).thenReturn(Attributes.newBuilder().set(STATE_INFO,
+          new AtomicReference<ConnectivityStateInfo>(
+              ConnectivityStateInfo.forNonError(IDLE))).build());
     }
 
     FakeSocketAddress removedAddr = new FakeSocketAddress("removed");
@@ -294,9 +294,45 @@ public class RoundRobinLoadBalancer2Test {
         picker.pickSubchannel(Attributes.EMPTY, new Metadata()).getStatus());
   }
 
+  @Test
+  public void nameResolutionErrorWithNoChannels() throws Exception {
+    loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
+    verify(mockHelper).updatePicker(pickerCaptor.capture());
+    LoadBalancer2.PickResult pickResult = pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY,
+        new Metadata());
+    assertEquals(null, pickResult.getSubchannel());
+    assertEquals(Status.NOT_FOUND.getCode(), pickResult.getStatus().getCode());
+    assertEquals("nameResolutionError", pickResult.getStatus().getDescription());
+    verifyNoMoreInteractions(mockHelper);
+  }
+
+  @Test
+  public void nameResolutionErrorWithActiveChannels() throws Exception {
+    Subchannel readySubchannel = subchannels.values().iterator().next();
+    readySubchannel.getAttributes().get(STATE_INFO).set(ConnectivityStateInfo.forNonError(READY));
+    loadBalancer.handleResolvedAddresses(Lists.newArrayList(servers.keySet()), affinity);
+    loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
+
+    verify(mockHelper, times(3)).createSubchannel(any(EquivalentAddressGroup.class),
+        any(Attributes.class));
+    verify(mockHelper, times(2)).updatePicker(pickerCaptor.capture());
+
+    LoadBalancer2.PickResult pickResult = pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY,
+        new Metadata());
+    assertEquals(readySubchannel, pickResult.getSubchannel());
+    assertEquals(Status.OK.getCode(), pickResult.getStatus().getCode());
+
+    LoadBalancer2.PickResult pickResult2 = pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY,
+        new Metadata());
+    assertEquals(readySubchannel, pickResult2.getSubchannel());
+    verifyNoMoreInteractions(mockHelper);
+  }
+
   private Subchannel createMockSubchannel() {
     Subchannel subchannel = mock(Subchannel.class);
-    when(subchannel.getAttributes()).thenReturn(subchannelInitialAttrs);
+    when(subchannel.getAttributes()).thenReturn(Attributes.newBuilder().set(STATE_INFO,
+        new AtomicReference<ConnectivityStateInfo>(
+            ConnectivityStateInfo.forNonError(IDLE))).build());
     return subchannel;
   }
 
