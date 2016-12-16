@@ -218,6 +218,35 @@ public class PickFirstLoadBalancer2Test {
     verifyNoMoreInteractions(mockHelper);
   }
 
+  @Test
+  public void nameResolutionErrorWithStateChanges() throws Exception {
+    InOrder inOrder = inOrder(mockHelper);
+
+    loadBalancer.handleSubchannelState(mockSubchannel,
+        ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+    loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
+    inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
+
+    PickResult pickResult = pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY,
+        new Metadata());
+    assertEquals(null, pickResult.getSubchannel());
+    assertEquals(Status.NOT_FOUND.getCode(), pickResult.getStatus().getCode());
+    assertEquals("nameResolutionError", pickResult.getStatus().getDescription());
+
+    loadBalancer.handleSubchannelState(mockSubchannel,
+        ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
+    inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
+
+    pickResult = pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY,
+        new Metadata());
+    assertEquals(null, pickResult.getSubchannel());
+    assertEquals(Status.NOT_FOUND.getCode(), pickResult.getStatus().getCode());
+    assertEquals("nameResolutionError", pickResult.getStatus().getDescription());
+
+    verifyNoMoreInteractions(mockHelper);
+  }
+
   private static class FakeSocketAddress extends SocketAddress {
     final String name;
 
