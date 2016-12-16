@@ -348,7 +348,7 @@ public final class NettyChannelBuilder
    * Creates Netty transports. Exposed for internal use, as it should be private.
    */
   private static final class NettyTransportFactory implements ClientTransportFactory {
-    private final TransportCreationParamsFilterFactory dynamicParams;
+    private final TransportCreationParamsFilterFactory transportCreationParamsFilterFactory;
     private final Class<? extends Channel> channelType;
     private final Map<ChannelOption<?>, ?> channelOptions;
     private final NegotiationType negotiationType;
@@ -364,7 +364,7 @@ public final class NettyChannelBuilder
 
     private boolean closed;
 
-    NettyTransportFactory(TransportCreationParamsFilterFactory dynamicParams,
+    NettyTransportFactory(TransportCreationParamsFilterFactory transportCreationParamsFilterFactory,
         Class<? extends Channel> channelType, Map<ChannelOption<?>, ?> channelOptions,
         NegotiationType negotiationType, SslContext sslContext, EventLoopGroup group,
         int flowControlWindow, int maxMessageSize, int maxHeaderListSize, boolean enableKeepAlive,
@@ -374,8 +374,8 @@ public final class NettyChannelBuilder
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
       this.sslContext = sslContext;
 
-      if (dynamicParams == null) {
-        dynamicParams = new TransportCreationParamsFilterFactory() {
+      if (transportCreationParamsFilterFactory == null) {
+        transportCreationParamsFilterFactory = new TransportCreationParamsFilterFactory() {
           @Override
           public TransportCreationParamsFilter create(
               SocketAddress targetServerAddress, String authority, String userAgent) {
@@ -383,7 +383,7 @@ public final class NettyChannelBuilder
           }
         };
       }
-      this.dynamicParams = dynamicParams;
+      this.transportCreationParamsFilterFactory = transportCreationParamsFilterFactory;
 
       this.flowControlWindow = flowControlWindow;
       this.maxMessageSize = maxMessageSize;
@@ -406,7 +406,7 @@ public final class NettyChannelBuilder
       checkState(!closed, "The transport factory is closed.");
 
       TransportCreationParamsFilter dparams =
-          dynamicParams.create(serverAddress, authority, userAgent);
+          transportCreationParamsFilterFactory.create(serverAddress, authority, userAgent);
 
       NettyClientTransport transport = new NettyClientTransport(
           dparams.getTargetServerAddress(), channelType, channelOptions, group,
