@@ -102,14 +102,14 @@ public final class ProtocolNegotiators {
           public AsciiString scheme() {
             return Utils.HTTP;
           }
+
+          @Override
+          public Attributes getAttributes() {
+            return Attributes.EMPTY;
+          }
         }
 
         return new PlaintextHandler();
-      }
-
-      @Override
-      public Attributes getAttributes() {
-        return Attributes.EMPTY;
       }
     };
   }
@@ -123,11 +123,6 @@ public final class ProtocolNegotiators {
       @Override
       public Handler newHandler(GrpcHttp2ConnectionHandler handler) {
         return new ServerTlsHandler(sslContext, handler);
-      }
-
-      @Override
-      public Attributes getAttributes() {
-        return Attributes.EMPTY;
       }
     };
   }
@@ -195,6 +190,11 @@ public final class ProtocolNegotiators {
     public AsciiString scheme() {
       return Utils.HTTPS;
     }
+
+    @Override
+    public Attributes getAttributes() {
+      return Attributes.EMPTY;
+    }
   }
 
   /**
@@ -261,11 +261,6 @@ public final class ProtocolNegotiators {
       };
       return new BufferUntilTlsNegotiatedHandler(sslBootstrap, handler);
     }
-
-    @Override
-    public Attributes getAttributes() {
-      return Attributes.EMPTY;
-    }
   }
 
   /**
@@ -285,11 +280,6 @@ public final class ProtocolNegotiators {
           new HttpClientUpgradeHandler(httpClientCodec, upgradeCodec, 1000);
       return new BufferingHttp2UpgradeHandler(upgrader);
     }
-
-    @Override
-    public Attributes getAttributes() {
-      return Attributes.EMPTY;
-    }
   }
 
   /**
@@ -305,11 +295,6 @@ public final class ProtocolNegotiators {
     @Override
     public Handler newHandler(GrpcHttp2ConnectionHandler handler) {
       return new BufferUntilChannelActiveHandler(handler);
-    }
-
-    @Override
-    public Attributes getAttributes() {
-      return Attributes.EMPTY;
     }
   }
 
@@ -523,6 +508,11 @@ public final class ProtocolNegotiators {
     }
 
     @Override
+    public Attributes getAttributes() {
+      return Attributes.EMPTY;
+    }
+
+    @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
       if (evt instanceof SslHandshakeCompletionEvent) {
         SslHandshakeCompletionEvent handshakeEvent = (SslHandshakeCompletionEvent) evt;
@@ -569,6 +559,11 @@ public final class ProtocolNegotiators {
     }
 
     @Override
+    public Attributes getAttributes() {
+      return Attributes.EMPTY;
+    }
+
+    @Override
     public void handlerAdded(ChannelHandlerContext ctx) {
       writeBufferedAndRemove(ctx);
     }
@@ -593,6 +588,11 @@ public final class ProtocolNegotiators {
     @Override
     public AsciiString scheme() {
       return Utils.HTTP;
+    }
+
+    @Override
+    public Attributes getAttributes() {
+      return Attributes.EMPTY;
     }
 
     @Override

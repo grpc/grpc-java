@@ -38,7 +38,6 @@ import static io.grpc.internal.GrpcUtil.USER_AGENT_KEY;
 import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -318,7 +317,7 @@ public class NettyClientTransportTest {
   }
 
   @Test
-  public void getAttributes() throws Exception {
+  public void getAttributes_negotiatorHandler() throws Exception {
     address = TestUtils.testServerAddress(12345);
     authority = GrpcUtil.authorityFromHostAndPort(address.getHostString(), address.getPort());
     final Attributes attributes =
@@ -330,15 +329,9 @@ public class NettyClientTransportTest {
           public Handler newHandler(GrpcHttp2ConnectionHandler handler) {
             return null;
           }
-
-          @Override
-          public Attributes getAttributes() {
-            return attributes;
-          }
         });
 
-    assertEquals(attributes, transport.getAttrs());
-    assertNotSame(attributes, transport.getAttrs());
+    assertEquals(Attributes.EMPTY, transport.getAttrs());
 
     transports.clear();
   }

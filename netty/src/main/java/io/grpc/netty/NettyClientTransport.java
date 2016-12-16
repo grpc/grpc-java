@@ -95,6 +95,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private Channel channel;
   /** Since not thread-safe, may only be used from event loop. */
   private ClientTransportLifecycleManager lifecycleManager;
+  private Attributes attributes = Attributes.EMPTY;
   private Attributes attributesForTest;
 
   NettyClientTransport(
@@ -156,7 +157,7 @@ class NettyClientTransport implements ConnectionClientTransport {
           }
         },
         method, headers, channel, authority, negotiationHandler.scheme(), userAgent, statsTraceCtx,
-        new Attributes.Provider() {
+        new TransportAttributesProvider() {
           @Override
           public Attributes getAttributes() {
             return NettyClientTransport.this.getAttrs();
@@ -184,6 +185,10 @@ class NettyClientTransport implements ConnectionClientTransport {
     HandlerSettings.setAutoWindow(handler);
 
     negotiationHandler = negotiator.newHandler(handler);
+    attributes = Attributes.newBuilder()
+        .setAll(attributes)
+        .setAll(negotiationHandler.getAttributes())
+        .build();
 
     Bootstrap b = new Bootstrap();
     b.group(group);
@@ -280,11 +285,11 @@ class NettyClientTransport implements ConnectionClientTransport {
       return attributesForTest;
     }
     // TODO(zhangkun83): fill channel security attributes
-    return Attributes.newBuilder().setAll(negotiator.getAttributes()).build();
+    return attributes;
   }
 
   /**
-   * For test only.
+   * For test only. Sets the transport attributes directly, ignoring other attributes modification.
    */
   void setAttrsForTest(Attributes attributes) {
     attributesForTest = attributes;
@@ -321,5 +326,9 @@ class NettyClientTransport implements ConnectionClientTransport {
   private NettyClientHandler newHandler() {
     return NettyClientHandler.newHandler(lifecycleManager, keepAliveManager, flowControlWindow,
         maxHeaderListSize, Ticker.systemTicker());
+  }
+
+  interface TransportAttributesProvider {
+    Attributes getAttributes();
   }
 }

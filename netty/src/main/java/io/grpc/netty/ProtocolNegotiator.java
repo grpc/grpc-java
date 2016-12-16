@@ -51,6 +51,11 @@ public interface ProtocolNegotiator {
      * The HTTP/2 scheme to be used when sending {@code HEADERS}.
      */
     AsciiString scheme();
+
+    /**
+     * Returns a set of attributes, which varies depending on the handler implementation.
+     */
+    Attributes getAttributes();
   }
 
   /**
@@ -58,9 +63,4 @@ public interface ProtocolNegotiator {
    * has completed successfully, the provided handler is installed.
    */
   Handler newHandler(GrpcHttp2ConnectionHandler handler);
-
-  /**
-   * Returns a set of attributes, which varies depending on the negotiator implementation.
-   */
-  Attributes getAttributes();
 }

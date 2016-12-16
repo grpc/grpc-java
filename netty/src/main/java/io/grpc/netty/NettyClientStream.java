@@ -48,6 +48,8 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2ClientStreamTransportState;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.WritableBuffer;
+import io.grpc.netty.NettyClientTransport.TransportAttributesProvider;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -76,12 +78,12 @@ class NettyClientStream extends AbstractClientStream2 {
   private AsciiString authority;
   private final AsciiString scheme;
   private final AsciiString userAgent;
-  private final Attributes.Provider attrsProvider;
+  private final TransportAttributesProvider attrsProvider;
 
   NettyClientStream(
       TransportState state, MethodDescriptor<?, ?> method, Metadata headers,
       Channel channel, AsciiString authority, AsciiString scheme, AsciiString userAgent,
-      StatsTraceContext statsTraceCtx, @Nullable Attributes.Provider attrsProvider) {
+      StatsTraceContext statsTraceCtx, @Nullable TransportAttributesProvider attrsProvider) {
     super(new NettyWritableBufferAllocator(channel.alloc()), statsTraceCtx);
     this.state = checkNotNull(state, "transportState");
     this.writeQueue = state.handler.getWriteQueue();

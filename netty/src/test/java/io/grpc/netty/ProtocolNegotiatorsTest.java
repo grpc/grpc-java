@@ -284,10 +284,20 @@ public class ProtocolNegotiatorsTest {
   public void getAttributes() throws Exception {
     SslContext ctx = GrpcSslContexts.forClient().build();
 
-    assertSame(Attributes.EMPTY, ProtocolNegotiators.plaintext().getAttributes());
-    assertSame(Attributes.EMPTY, ProtocolNegotiators.plaintextUpgrade().getAttributes());
-    assertSame(Attributes.EMPTY, ProtocolNegotiators.serverPlaintext().getAttributes());
-    assertSame(Attributes.EMPTY, ProtocolNegotiators.serverTls(ctx) .getAttributes());
-    assertSame(Attributes.EMPTY, ProtocolNegotiators.tls(ctx, "bad_host:1234") .getAttributes());
+    assertSame(
+        Attributes.EMPTY,
+        ProtocolNegotiators.plaintext().newHandler(grpcHandler).getAttributes());
+    assertSame(
+        Attributes.EMPTY,
+        ProtocolNegotiators.plaintextUpgrade().newHandler(grpcHandler).getAttributes());
+    assertSame(
+        Attributes.EMPTY,
+        ProtocolNegotiators.serverPlaintext().newHandler(grpcHandler).getAttributes());
+    assertSame(
+        Attributes.EMPTY,
+        ProtocolNegotiators.serverTls(ctx).newHandler(grpcHandler).getAttributes());
+    assertSame(
+        Attributes.EMPTY,
+        ProtocolNegotiators.tls(ctx, "bad_host:1234").newHandler(grpcHandler).getAttributes());
   }
 }

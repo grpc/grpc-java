@@ -254,9 +254,9 @@ public abstract class ClientCall<ReqT, RespT> {
   }
 
   /**
-   * Its overriding method returns a set of attributes, which may vary depending on the particular
+   * Returns a set of attributes, which may vary depending on the particular
    * implementation and the state of the call, channel, or transport at the moment it is being
-   * called.
+   * called. By default it returns EMPTY attributes.
    */
   public Attributes getAttributes() {
     return Attributes.EMPTY;
