@@ -27,24 +27,23 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Service definition designed to test the ProtoReflectionService. It contains
-// nested types, extensions, and multiple levels of imports.
+// Service definition designed to test the ProtoReflectionService when a service
+// is dynamically added and removed.
 
 syntax = "proto2";
 
-import "io/grpc/reflection/testing/reflection_test_depth_two.proto";
-import "io/grpc/reflection/testing/reflection_test_depth_two_alternate.proto";
+import "io/grpc/reflection/testing/dynamic_reflection_test_depth_two.proto";
 
 option java_multiple_files = true;
 option java_package = "io.grpc.reflection.testing";
-option java_outer_classname = "ReflectionTestProto";
+option java_outer_classname = "DynamicReflectionTestProto";
 
 package grpc.reflection.testing;
 
-extend ThirdLevelType {
-  optional int32 bar = 100;
+service DynamicService {
+  rpc Method (DynamicRequest) returns (DynamicReply) {}
 }
 
-service ReflectableService {
-  rpc Method (Request) returns (Reply) {}
+service AnotherDynamicService {
+  rpc Method (DynamicRequest) returns (DynamicReply) {}
 }
