@@ -219,10 +219,17 @@ public final class Http2Client {
   private class Tester {
     private final int timeoutSeconds = 5;
 
+    private final int responseSize = 314159;
+    private final int payloadSize = 271828;
     private final SimpleRequest simpleRequest = SimpleRequest.newBuilder()
-        .setResponseSize(314159)
+        .setResponseSize(responseSize)
         .setResponseType(PayloadType.COMPRESSABLE)
-        .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[271828])))
+        .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[payloadSize])))
+        .build();
+    final SimpleResponse goldenResponse = SimpleResponse.newBuilder()
+        .setPayload(Payload.newBuilder()
+            .setType(PayloadType.COMPRESSABLE)
+            .setBody(ByteString.copyFrom(new byte[responseSize])))
         .build();
 
     private void rstAfterHeader() throws Exception {
@@ -235,13 +242,6 @@ public final class Http2Client {
     }
 
     private void rstAfterData() throws Exception {
-      try {
-        blockingStub.unaryCall(simpleRequest);
-        throw new Exception("Expected call to fail");
-      } catch (StatusRuntimeException ex) {
-        assertRstStreamReceived(ex.getStatus());
-      }
-
       // Use async stub to verify data is received.
       RstStreamObserver responseObserver = new RstStreamObserver();
       asyncStub.unaryCall(simpleRequest, responseObserver);
@@ -251,17 +251,13 @@ public final class Http2Client {
       if (responseObserver.getResponses().size() != 1) {
         throw new AssertionError("Expected one response");
       }
+      if (responseObserver.getError() == null) {
+        throw new AssertionError("Expected call to fail");
+      }
       assertRstStreamReceived(Status.fromThrowable(responseObserver.getError()));
     }
 
     private void rstDuringData() throws Exception {
-      try {
-        blockingStub.unaryCall(simpleRequest);
-        throw new Exception("Expected call to fail");
-      } catch (StatusRuntimeException ex) {
-        assertRstStreamReceived(ex.getStatus());
-      }
-
       // Use async stub to verify no data is received.
       RstStreamObserver responseObserver = new RstStreamObserver();
       asyncStub.unaryCall(simpleRequest, responseObserver);
@@ -271,23 +267,26 @@ public final class Http2Client {
       if (responseObserver.getResponses().size() != 0) {
         throw new AssertionError("Expected zero responses");
       }
+      if (responseObserver.getError() == null) {
+        throw new AssertionError("Expected call to fail");
+      }
       assertRstStreamReceived(Status.fromThrowable(responseObserver.getError()));
     }
 
     private void goAway() throws Exception {
-      blockingStub.unaryCall(simpleRequest);
-      blockingStub.unaryCall(simpleRequest);
+      assertResponseEquals(blockingStub.unaryCall(simpleRequest), goldenResponse);
+      assertResponseEquals(blockingStub.unaryCall(simpleRequest), goldenResponse);
     }
 
     private void ping() throws Exception {
-      blockingStub.unaryCall(simpleRequest);
+      assertResponseEquals(blockingStub.unaryCall(simpleRequest), goldenResponse);
     }
 
     private void maxStreams() throws Exception {
       final int numThreads = 10;
 
       // Preliminary call to ensure MAX_STREAMS setting is received by the client.
-      blockingStub.unaryCall(simpleRequest);
+      assertResponseEquals(blockingStub.unaryCall(simpleRequest), goldenResponse);
 
       threadpool = MoreExecutors.listeningDecorator(newFixedThreadPool(numThreads));
       List<ListenableFuture<?>> workerFutures = new ArrayList<ListenableFuture<?>>();
@@ -347,10 +346,29 @@ public final class Http2Client {
         try {
           TestServiceGrpc.TestServiceBlockingStub blockingStub =
               TestServiceGrpc.newBlockingStub(channel);
-          blockingStub.unaryCall(request);
+          assertResponseEquals(blockingStub.unaryCall(simpleRequest), goldenResponse);
         } catch (Exception e) {
           throw new RuntimeException(e);
         }
+      }
+    }
+
+    private void assertRstStreamReceived(Status status) {
+      if (!status.getCode().equals(Status.Code.UNAVAILABLE)) {
+        throw new AssertionError("Wrong status code. Expected: " + Status.Code.UNAVAILABLE
+            + " Received: " + status.getCode());
+      }
+      String http2ErrorPrefix = "HTTP/2 error code: NO_ERROR";
+      if (status.getDescription() == null
+          || !status.getDescription().startsWith(http2ErrorPrefix)) {
+        throw new AssertionError("Wrong HTTP/2 error code. Expected: " + http2ErrorPrefix
+            + " Received: " + status.getDescription());
+      }
+    }
+
+    private void assertResponseEquals(SimpleResponse response, SimpleResponse goldenResponse) {
+      if (!response.equals(goldenResponse)) {
+        throw new AssertionError("Incorrect response received");
       }
     }
   }
@@ -378,19 +396,6 @@ public final class Http2Client {
           .append(testCase.description());
     }
     return builder.toString();
-  }
-
-  private static void assertRstStreamReceived(Status status) {
-    if (!status.getCode().equals(Status.Code.UNAVAILABLE)) {
-      throw new AssertionError("Wrong status code. Expected: " + Status.Code.UNAVAILABLE
-          + " Received: " + status.getCode());
-    }
-    String http2ErrorPrefix = "HTTP/2 error code: NO_ERROR";
-    if (status.getDescription() == null
-        || !status.getDescription().startsWith(http2ErrorPrefix)) {
-      throw new AssertionError("Wrong HTTP/2 error code. Expected: " + http2ErrorPrefix
-          + " Received: " + status.getDescription());
-    }
   }
 }
 
