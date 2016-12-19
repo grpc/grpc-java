@@ -74,7 +74,9 @@ public class PickFirstLoadBalancer2Test {
   private PickFirstBalancer loadBalancer;
   private List<ResolvedServerInfoGroup> servers = Lists.newArrayList();
   private List<SocketAddress> socketAddresses = Lists.newArrayList();
-  private Attributes affinity = Attributes.EMPTY;
+
+  private static Attributes.Key<String> FOO = Attributes.Key.of("foo");
+  private Attributes affinity = Attributes.newBuilder().set(FOO, "bar").build();
 
   @Captor
   private ArgumentCaptor<EquivalentAddressGroup> eagCaptor;
