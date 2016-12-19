@@ -46,6 +46,8 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Lists;
 
+import com.sun.tools.javac.comp.Attr;
+
 import io.grpc.LoadBalancer2.Helper;
 import io.grpc.LoadBalancer2.PickResult;
 import io.grpc.LoadBalancer2.Subchannel;
@@ -212,13 +214,31 @@ public class PickFirstLoadBalancer2Test {
 
   @Test
   public void nameResolutionError() throws Exception {
-    loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
+    Status error = Status.NOT_FOUND.withDescription("nameResolutionError");
+    loadBalancer.handleNameResolutionError(error);
     verify(mockHelper).updatePicker(pickerCaptor.capture());
     PickResult pickResult = pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY,
         new Metadata());
     assertEquals(null, pickResult.getSubchannel());
-    assertEquals(Status.NOT_FOUND.getCode(), pickResult.getStatus().getCode());
-    assertEquals("nameResolutionError", pickResult.getStatus().getDescription());
+    assertEquals(error, pickResult.getStatus());
+    verifyNoMoreInteractions(mockHelper);
+  }
+
+  @Test
+  public void nameResolutionSuccessAfterError() throws Exception {
+    InOrder inOrder = inOrder(mockHelper);
+
+    loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
+    inOrder.verify(mockHelper).updatePicker(any(Picker.class));
+
+    loadBalancer.handleResolvedAddresses(servers, affinity);
+    inOrder.verify(mockHelper).createSubchannel(eq(new EquivalentAddressGroup(socketAddresses)),
+        eq(Attributes.EMPTY));
+    inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
+
+    assertEquals(pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY, new Metadata()),
+        pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY, new Metadata()));
+
     verifyNoMoreInteractions(mockHelper);
   }
 
