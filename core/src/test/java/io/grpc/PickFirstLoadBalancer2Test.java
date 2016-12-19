@@ -186,22 +186,26 @@ public class PickFirstLoadBalancer2Test {
         new Metadata()).getSubchannel();
     reset(mockHelper);
 
+    InOrder inOrder = inOrder(mockHelper);
+
+    Status error = Status.UNAVAILABLE.withDescription("boom!");
     loadBalancer.handleSubchannelState(subchannel,
-        ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+        ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
+    assertEquals(error, pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY,
+            new Metadata()).getStatus());
+
     loadBalancer.handleSubchannelState(subchannel,
         ConnectivityStateInfo.forNonError(ConnectivityState.IDLE));
+    inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
+    assertEquals(Status.OK, pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY,
+        new Metadata()).getStatus());
+
     loadBalancer.handleSubchannelState(subchannel,
         ConnectivityStateInfo.forNonError(ConnectivityState.READY));
-
-    verify(mockHelper, times(3)).updatePicker(pickerCaptor.capture());
-
-    assertEquals(Status.UNAVAILABLE,
-        pickerCaptor.getAllValues().get(1).pickSubchannel(Attributes.EMPTY,
-            new Metadata()).getStatus());
-    assertEquals(Status.OK, pickerCaptor.getAllValues().get(2).pickSubchannel(Attributes.EMPTY,
-        new Metadata()).getStatus());
-    assertEquals(PickResult.withSubchannel(subchannel).getSubchannel(), pickerCaptor.getAllValues()
-        .get(3).pickSubchannel(Attributes.EMPTY, new Metadata()).getSubchannel());
+    inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
+    assertEquals(PickResult.withSubchannel(subchannel).getSubchannel(),
+        pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY, new Metadata()).getSubchannel());
 
     verifyNoMoreInteractions(mockHelper);
   }
