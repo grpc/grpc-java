@@ -36,8 +36,10 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.util.RoundRobinLoadBalancerFactory2.RoundRobinLoadBalancer.STATE_INFO;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.isA;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -47,6 +49,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
@@ -69,6 +72,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
@@ -79,6 +83,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 /** Unit test for {@link RoundRobinLoadBalancerFactory2}. */
@@ -161,7 +166,7 @@ public class RoundRobinLoadBalancer2Test {
         newSubchannel)) {
       when(subchannel.getAttributes()).thenReturn(Attributes.newBuilder().set(STATE_INFO,
           new AtomicReference<ConnectivityStateInfo>(
-              ConnectivityStateInfo.forNonError(IDLE))).build());
+              ConnectivityStateInfo.forNonError(READY))).build());
     }
 
     FakeSocketAddress removedAddr = new FakeSocketAddress("removed");
@@ -189,7 +194,19 @@ public class RoundRobinLoadBalancer2Test {
 
     loadBalancer.handleResolvedAddresses(currentServers, affinity);
 
-    verify(mockHelper, times(1)).updatePicker(pickerCaptor.capture());
+    InOrder inOrder = inOrder(mockHelper);
+
+    inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
+    Picker picker = pickerCaptor.getValue();
+    assertNull(picker.status);
+
+    Set<Object> pickerSubchannels = Sets.newHashSet();
+    for (int i = 0; i < 3; i++) {
+      pickerSubchannels.add(
+          picker.pickSubchannel(Attributes.EMPTY, new Metadata()).getSubchannel());
+    }
+    assertThat(pickerSubchannels).containsAllOf(removedSubchannel, oldSubchannel);
+
     verify(removedSubchannel, times(1)).requestConnection();
     verify(oldSubchannel, times(1)).requestConnection();
 
@@ -216,7 +233,17 @@ public class RoundRobinLoadBalancer2Test {
 
     verify(mockHelper, times(3)).createSubchannel(any(EquivalentAddressGroup.class),
         any(Attributes.class));
-    verify(mockHelper, times(2)).updatePicker(pickerCaptor.capture());
+    inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
+
+    picker = pickerCaptor.getValue();
+    assertNull(picker.status);
+
+    pickerSubchannels.clear();
+    for (int i = 0; i < 3; i++) {
+      pickerSubchannels.add(
+          picker.pickSubchannel(Attributes.EMPTY, new Metadata()).getSubchannel());
+    }
+    assertThat(pickerSubchannels).containsAllOf(oldSubchannel, newSubchannel);
 
     verifyNoMoreInteractions(mockHelper);
   }
