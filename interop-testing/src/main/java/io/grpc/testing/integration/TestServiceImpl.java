@@ -207,8 +207,10 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
       @Override
       public void onCompleted() {
-        // Tell the dispatcher that all input has been received.
-        dispatcher.completeInput();
+        if (!dispatcher.isCancelled()) {
+          // Tell the dispatcher that all input has been received.
+          dispatcher.completeInput();
+        }
       }
 
       @Override
@@ -321,6 +323,10 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       }
       chunks.clear();
       cancelled = true;
+    }
+
+    public synchronized boolean isCancelled() {
+      return cancelled;
     }
 
     /**

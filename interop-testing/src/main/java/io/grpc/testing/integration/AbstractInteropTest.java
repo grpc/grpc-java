@@ -877,6 +877,7 @@ public abstract class AbstractInteropTest {
     StreamObserver<StreamingOutputCallRequest> requestObserver
         = asyncStub.fullDuplexCall(responseObserver);
     requestObserver.onNext(streamingRequest);
+    requestObserver.onCompleted();
 
     ArgumentCaptor<Throwable> captor = ArgumentCaptor.forClass(Throwable.class);
     verify(responseObserver, timeout(operationTimeoutMillis())).onError(captor.capture());
@@ -886,6 +887,7 @@ public abstract class AbstractInteropTest {
     if (metricsExpected()) {
       assertClientMetrics("grpc.testing.TestService/FullDuplexCall", Status.Code.UNKNOWN);
     }
+
   }
 
   /** Sends an rpc to an unimplemented method within TestService. */
