@@ -90,9 +90,12 @@ public final class PickFirstBalancerFactory2 extends LoadBalancer2.Factory {
 
     @Override
     public void handleNameResolutionError(Status error) {
-      // NB(lukaszx0) Whether we should propagate the error unconditionally is arguable.
-      // It's fine for time being, but we should probably shutdown and discard subchannel if there
-      // is one. Otherwise we end up keeping a connection that you will never use.
+      if (subchannel != null) {
+        subchannel.shutdown();
+        subchannel = null;
+      }
+      // NB(lukaszx0) Whether we should propagate the error unconditionally is arguable. It's fine
+      // for time being.
       helper.updatePicker(new Picker(PickResult.withError(error)));
     }
 
