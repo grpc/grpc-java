@@ -210,6 +210,7 @@ final class OobChannel extends ManagedChannel implements WithLogId {
 
   @Override
   public ManagedChannel shutdownNow() {
+    shutdown = true;
     delayedTransport.shutdownNow(
         Status.UNAVAILABLE.withDescription("OobChannel.shutdownNow() called"));
     return this;

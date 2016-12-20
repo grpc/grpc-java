@@ -167,6 +167,8 @@ public class ManagedChannelImpl2Test {
   @Mock
   private ClientCall.Listener<Integer> mockCallListener4;
   @Mock
+  private ClientCall.Listener<Integer> mockCallListener5;
+  @Mock
   private SharedResourceHolder.Resource<ScheduledExecutorService> timerService;
   @Mock
   private CallCredentials creds;
@@ -746,15 +748,19 @@ public class ManagedChannelImpl2Test {
     createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
     FakeClock oobExecutor = new FakeClock();
 
-    ManagedChannel oob = helper.createOobChannel(addressGroup, "oobauthority",
+    ManagedChannel oob1 = helper.createOobChannel(addressGroup, "oob1authority",
         oobExecutor.getScheduledExecutorService());
-    assertEquals("oobauthority", oob.authority());
+    ManagedChannel oob2 = helper.createOobChannel(addressGroup, "oob2authority",
+        oobExecutor.getScheduledExecutorService());
+
+    assertEquals("oob1authority", oob1.authority());
+    assertEquals("oob2authority", oob2.authority());
 
     // OOB channels create connections lazily.  A new call will initiate the connection.
     Metadata headers = new Metadata();
-    ClientCall<String, Integer> call = oob.newCall(method, CallOptions.DEFAULT);
+    ClientCall<String, Integer> call = oob1.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, headers);
-    verify(mockTransportFactory).newClientTransport(socketAddress, "oobauthority", userAgent);
+    verify(mockTransportFactory).newClientTransport(socketAddress, "oob1authority", userAgent);
     MockClientTransportInfo transportInfo = transports.poll();
     assertNotNull(transportInfo);
 
@@ -769,12 +775,13 @@ public class ManagedChannelImpl2Test {
     transportInfo.listener.transportTerminated();
 
     // A new call will trigger a new transport
-    ClientCall<String, Integer> call2 = oob.newCall(method, CallOptions.DEFAULT);
+    ClientCall<String, Integer> call2 = oob1.newCall(method, CallOptions.DEFAULT);
     call2.start(mockCallListener2, headers);
-    ClientCall<String, Integer> call3 = oob.newCall(method, CallOptions.DEFAULT.withWaitForReady());
+    ClientCall<String, Integer> call3 =
+        oob1.newCall(method, CallOptions.DEFAULT.withWaitForReady());
     call3.start(mockCallListener3, headers);
     verify(mockTransportFactory, times(2)).newClientTransport(
-        socketAddress, "oobauthority", userAgent);
+        socketAddress, "oob1authority", userAgent);
     transportInfo = transports.poll();
     assertNotNull(transportInfo);
 
@@ -789,23 +796,33 @@ public class ManagedChannelImpl2Test {
     verify(mockCallListener3, never()).onClose(any(Status.class), any(Metadata.class));
 
     // Shutdown
-    assertFalse(oob.isShutdown());
-    oob.shutdown();
-    assertTrue(oob.isShutdown());
+    assertFalse(oob1.isShutdown());
+    assertFalse(oob2.isShutdown());
+    oob1.shutdown();
+    oob2.shutdownNow();
+    assertTrue(oob1.isShutdown());
+    assertTrue(oob2.isShutdown());
 
     // New RPCs will be rejected.
     assertEquals(0, oobExecutor.numPendingTasks());
-    ClientCall<String, Integer> call4 = oob.newCall(method, CallOptions.DEFAULT);
+    ClientCall<String, Integer> call4 = oob1.newCall(method, CallOptions.DEFAULT);
+    ClientCall<String, Integer> call5 = oob2.newCall(method, CallOptions.DEFAULT);
     call4.start(mockCallListener4, headers);
+    call5.start(mockCallListener5, headers);
     assertTrue(oobExecutor.runDueTasks() > 0);
     verify(mockCallListener4).onClose(statusCaptor.capture(), any(Metadata.class));
+    Status status4 = statusCaptor.getValue();
+    assertEquals(Status.Code.UNAVAILABLE, status4.getCode());
+    verify(mockCallListener5).onClose(statusCaptor.capture(), any(Metadata.class));
+    Status status5 = statusCaptor.getValue();
+    assertEquals(Status.Code.UNAVAILABLE, status5.getCode());
 
     // The pending RPC will still be pending
     verify(mockCallListener3, never()).onClose(any(Status.class), any(Metadata.class));
 
     // This will shutdownNow() the delayed transport, terminating the pending RPC
     assertEquals(0, oobExecutor.numPendingTasks());
-    oob.shutdownNow();
+    oob1.shutdownNow();
     assertTrue(oobExecutor.runDueTasks() > 0);
     verify(mockCallListener3).onClose(any(Status.class), any(Metadata.class));
 
@@ -814,9 +831,9 @@ public class ManagedChannelImpl2Test {
     assertFalse(channel.isTerminated());
     // Delayed transport has already terminated.  Terminating the transport terminates the
     // subchannel, which in turn terimates the OOB channel, which terminates the channel.
-    assertFalse(oob.isTerminated());
+    assertFalse(oob1.isTerminated());
     transportInfo.listener.transportTerminated();
-    assertTrue(oob.isTerminated());
+    assertTrue(oob1.isTerminated());
     assertTrue(channel.isTerminated());
   }
 
