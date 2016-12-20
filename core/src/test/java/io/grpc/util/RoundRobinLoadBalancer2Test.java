@@ -62,6 +62,7 @@ import io.grpc.Status;
 import io.grpc.util.RoundRobinLoadBalancerFactory2.Picker;
 import io.grpc.util.RoundRobinLoadBalancerFactory2.RoundRobinLoadBalancer;
 
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -91,6 +92,8 @@ public class RoundRobinLoadBalancer2Test {
 
   @Captor
   private ArgumentCaptor<Picker> pickerCaptor;
+  @Captor
+  private ArgumentCaptor<EquivalentAddressGroup> eagCaptor;
   @Captor
   private ArgumentCaptor<Attributes> attrsCaptor;
   @Mock
@@ -131,11 +134,10 @@ public class RoundRobinLoadBalancer2Test {
         .build());
     loadBalancer.handleResolvedAddresses(Lists.newArrayList(servers.keySet()), affinity);
 
-
-
-    verify(mockHelper, times(3)).createSubchannel(any(EquivalentAddressGroup.class),
+    verify(mockHelper, times(3)).createSubchannel(eagCaptor.capture(),
         any(Attributes.class));
 
+    assertThat(eagCaptor.getAllValues()).containsAllIn(subchannels.keySet());
     for (Subchannel subchannel : subchannels.values()) {
       verify(subchannel).requestConnection();
       verify(subchannel, never()).shutdown();
