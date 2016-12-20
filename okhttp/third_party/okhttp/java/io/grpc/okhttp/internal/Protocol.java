@@ -74,9 +74,10 @@ public enum Protocol {
 
   /**
    * The experimental "grpc-exp" string identifies gRPC (and by implication
-   * HTTP/2) when used over TLS. This is negotiated in preference to h2 when the
-   * client and server support it, but is not standardized. Support for this may
-   * be removed at any time.
+   * HTTP/2) when used over TLS. This indicates to the server that the client
+   * will only send gRPC traffic on the h2 connection and is negotiated in
+   * preference to h2 when the client and server support it, but is not
+   * standardized. Support for this may be removed at any time.
    */
   GRPC_EXP("grpc-exp");
 

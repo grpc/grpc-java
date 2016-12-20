@@ -31,6 +31,7 @@
 
 package io.grpc.okhttp;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
 import io.grpc.okhttp.internal.ConnectionSpec;
@@ -52,7 +53,12 @@ import javax.net.ssl.SSLSocketFactory;
  */
 final class OkHttpTlsUpgrader {
 
-  private static final List<Protocol> TLS_PROTOCOLS =
+  /*
+   * List of ALPN/NPN protocols in order of preference. GRPC_EXP_VERSION
+   * requires that HTTP2_VERSION be present and should be preferenced.
+   */
+  @VisibleForTesting
+  static final List<Protocol> TLS_PROTOCOLS =
       Collections.unmodifiableList(Arrays.<Protocol>asList(Protocol.GRPC_EXP, Protocol.HTTP_2));
 
   /**
