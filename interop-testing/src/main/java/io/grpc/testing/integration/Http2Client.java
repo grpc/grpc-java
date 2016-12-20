@@ -235,7 +235,7 @@ public final class Http2Client {
     private void rstAfterHeader() throws Exception {
       try {
         blockingStub.unaryCall(simpleRequest);
-        throw new Exception("Expected call to fail");
+        throw new AssertionError("Expected call to fail");
       } catch (StatusRuntimeException ex) {
         assertRstStreamReceived(ex.getStatus());
       }
@@ -381,7 +381,6 @@ public final class Http2Client {
       throw new RuntimeException(ex);
     }
     return NettyChannelBuilder.forAddress(new InetSocketAddress(address, serverPort))
-        .flowControlWindow(65 * 1024)
         .negotiationType(NegotiationType.PLAINTEXT)
         .build();
   }
