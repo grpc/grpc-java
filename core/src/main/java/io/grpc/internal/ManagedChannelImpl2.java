@@ -830,32 +830,32 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
         } else {
           shutdownRequested = true;
         }
+        ScheduledExecutorService scheduledExecutorCopy = scheduledExecutor;
+        // Add a delay to shutdown to deal with the race between 1) a transport being picked and
+        // newStream() being called on it, and 2) its Subchannel is shut down by LoadBalancer (e.g.,
+        // because of address change, or because LoadBalancer is shutdown by Channel entering idle
+        // mode). If (2) wins, the app will see a spurious error. We work around this by delaying
+        // shutdown of Subchannel for a few seconds here.
+        if (!terminating && scheduledExecutorCopy != null) {
+          delayedShutdownTask = scheduledExecutorCopy.schedule(
+              new LogExceptionRunnable(
+                  new Runnable() {
+                    @Override
+                    public void run() {
+                      subchannel.shutdown();
+                    }
+                  }), SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS);
+          return;
+        }
       }
-      ScheduledExecutorService scheduledExecutorCopy = scheduledExecutor;
-      // Add a delay to shutdown to deal with the race between 1) a transport being picked and
-      // newStream() being called on it, and 2) its Subchannel is shut down by LoadBalancer (e.g.,
-      // because of address change, or because LoadBalancer is shutdown by Channel entering idle
-      // mode). If (2) wins, the app will see a spurious error. We work around this by delaying
-      // shutdown of Subchannel for a few seconds here.
-      if (!terminating && scheduledExecutorCopy != null) {
-        delayedShutdownTask = scheduledExecutorCopy.schedule(
-            new LogExceptionRunnable(
-                new Runnable() {
-                  @Override
-                  public void run() {
-                    subchannel.shutdown();
-                  }
-                }), SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS);
-      } else {
-        // Two possible ways to get here:
-        //
-        // 1. terminating == true: no more real streams will be created, it's safe and also
-        // desirable to shutdown timely.
-        //
-        // 2. scheduledExecutor == null: possible only when Channel has already been terminated.
-        // Though may not be necessary, we'll do it anyway.
-        subchannel.shutdown();
-      }
+      // Two possible ways to get here:
+      //
+      // 1. terminating == true: no more real streams will be created, it's safe and also desirable
+      // to shutdown timely.
+      //
+      // 2. scheduledExecutor == null: possible only when Channel has already been terminated.
+      // Though may not be necessary, we'll do it anyway.
+      subchannel.shutdown();
     }
 
     @Override
