@@ -34,9 +34,9 @@ package io.grpc;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Lists;
 
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -134,7 +134,7 @@ public final class PickFirstBalancerFactory2 extends LoadBalancer2.Factory {
      */
     private static EquivalentAddressGroup flattenResolvedServerInfoGroupsIntoEquivalentAddressGroup(
         List<ResolvedServerInfoGroup> groupList) {
-      List<SocketAddress> addrs = Lists.newArrayList();
+      List<SocketAddress> addrs = new ArrayList<SocketAddress>();
       for (ResolvedServerInfoGroup group : groupList) {
         for (ResolvedServerInfo srv : group.getResolvedServerInfoList()) {
           addrs.add(srv.getAddress());
