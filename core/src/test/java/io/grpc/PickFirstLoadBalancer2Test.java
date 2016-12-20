@@ -205,7 +205,7 @@ public class PickFirstLoadBalancer2Test {
     loadBalancer.handleSubchannelState(subchannel,
         ConnectivityStateInfo.forNonError(ConnectivityState.READY));
     inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
-    assertEquals(PickResult.withSubchannel(subchannel).getSubchannel(),
+    assertEquals(subchannel,
         pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY, new Metadata()).getSubchannel());
 
     verifyNoMoreInteractions(mockHelper);
@@ -235,6 +235,9 @@ public class PickFirstLoadBalancer2Test {
         eq(Attributes.EMPTY));
     inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
 
+    assertEquals(mockSubchannel,
+        pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY, new Metadata()).getSubchannel());
+
     assertEquals(pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY, new Metadata()),
         pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY, new Metadata()));
 
@@ -244,10 +247,10 @@ public class PickFirstLoadBalancer2Test {
   @Test
   public void nameResolutionErrorWithStateChanges() throws Exception {
     InOrder inOrder = inOrder(mockHelper);
-    Status error = Status.NOT_FOUND.withDescription("nameResolutionError");
 
     loadBalancer.handleSubchannelState(mockSubchannel,
         ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+    Status error = Status.NOT_FOUND.withDescription("nameResolutionError");
     loadBalancer.handleNameResolutionError(error);
     inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
 
@@ -258,13 +261,14 @@ public class PickFirstLoadBalancer2Test {
 
     loadBalancer.handleSubchannelState(mockSubchannel,
         ConnectivityStateInfo.forNonError(ConnectivityState.READY));
-    loadBalancer.handleNameResolutionError(error);
+    Status error2 = Status.NOT_FOUND.withDescription("nameResolutionError2");
+    loadBalancer.handleNameResolutionError(error2);
     inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
 
     pickResult = pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY,
         new Metadata());
     assertEquals(null, pickResult.getSubchannel());
-    assertEquals(error, pickResult.getStatus());
+    assertEquals(error2, pickResult.getStatus());
 
     verifyNoMoreInteractions(mockHelper);
   }
