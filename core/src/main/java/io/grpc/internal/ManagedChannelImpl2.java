@@ -172,15 +172,15 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
   //   1c delayedTransport.shutdown()
   // 2. delayedTransport terminated: stop stream-creation functionality
   //   2a terminating <- true
-  //   2b loadBalancer <- null
-  //   2c nameResolver <- null
-  //   2d loadBalancer.shutdown()
+  //   2b loadBalancer.shutdown()
   //     * LoadBalancer will shutdown subchannels and OOB channels
-  //   2e nameResolver.shutdown()
+  //   2c loadBalancer <- null
+  //   2d nameResolver.shutdown()
+  //   2e nameResolver <- null
   // 3. All subchannels and OOB channels terminated: Channel considered terminated
 
   private final AtomicBoolean shutdown = new AtomicBoolean(false);
-  // Must be mutated from channelExecutor
+  // Must only be mutated and read from channelExecutor
   private boolean shutdownNowed;
   // Must be mutated from channelExecutor
   private volatile boolean terminating;
@@ -228,7 +228,6 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
 
   // Must be called from channelExecutor
   private void maybeShutdownNowSubchannels() {
-    Status nowStatus = Status.UNAVAILABLE.withDescription("Channel shutdownNow invoked");
     if (shutdownNowed) {
       for (InternalSubchannel subchannel : subchannels) {
         subchannel.shutdownNow(SHUTDOWN_NOW_STATUS);
@@ -272,6 +271,9 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
         return;
       }
       log.log(Level.FINE, "[{0}] Entering idle mode", getLogId());
+      // nameResolver and loadBalancer are guaranteed to be non-null.  If any of them were null,
+      // either the idleModeTimer ran twice without exiting the idle mode, or the task in shutdown()
+      // did not cancel idleModeTimer, both of which are bugs.
       nameResolver.shutdown();
       nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
       loadBalancer.shutdown();
@@ -650,7 +652,7 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
       subchannel.subchannel = internalSubchannel;
       log.log(Level.FINE, "[{0}] {1} created for {2}",
           new Object[] {getLogId(), internalSubchannel.getLogId(), addressGroup});
-      channelExecutor.executeLater(new Runnable() {
+      runSerialized(new Runnable() {
           @Override
           public void run() {
             if (terminating) {
@@ -662,7 +664,7 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
               subchannels.add(internalSubchannel);
             }
           }
-        }).drain();
+        });
       return subchannel;
     }
 
@@ -693,7 +695,7 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
             }
           });
       oobChannel.setSubchannel(internalSubchannel);
-      channelExecutor.executeLater(new Runnable() {
+      runSerialized(new Runnable() {
           @Override
           public void run() {
             if (terminating) {
@@ -705,7 +707,7 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
               oobChannels.add(internalSubchannel);
             }
           }
-        }).drain();
+        });
       return oobChannel;
     }
 
