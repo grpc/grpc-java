@@ -244,28 +244,27 @@ public class PickFirstLoadBalancer2Test {
   @Test
   public void nameResolutionErrorWithStateChanges() throws Exception {
     InOrder inOrder = inOrder(mockHelper);
+    Status error = Status.NOT_FOUND.withDescription("nameResolutionError");
 
     loadBalancer.handleSubchannelState(mockSubchannel,
         ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
-    loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
+    loadBalancer.handleNameResolutionError(error);
     inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
 
     PickResult pickResult = pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY,
         new Metadata());
     assertEquals(null, pickResult.getSubchannel());
-    assertEquals(Status.NOT_FOUND.getCode(), pickResult.getStatus().getCode());
-    assertEquals("nameResolutionError", pickResult.getStatus().getDescription());
+    assertEquals(error, pickResult.getStatus());
 
     loadBalancer.handleSubchannelState(mockSubchannel,
         ConnectivityStateInfo.forNonError(ConnectivityState.READY));
-    loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
+    loadBalancer.handleNameResolutionError(error);
     inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
 
     pickResult = pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY,
         new Metadata());
     assertEquals(null, pickResult.getSubchannel());
-    assertEquals(Status.NOT_FOUND.getCode(), pickResult.getStatus().getCode());
-    assertEquals("nameResolutionError", pickResult.getStatus().getDescription());
+    assertEquals(error, pickResult.getStatus());
 
     verifyNoMoreInteractions(mockHelper);
   }
