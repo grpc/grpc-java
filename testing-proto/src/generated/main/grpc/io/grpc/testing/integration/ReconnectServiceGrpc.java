@@ -278,14 +278,23 @@ public class ReconnectServiceGrpc {
 
   private static io.grpc.ServiceDescriptor serviceDescriptor;
 
-  public static synchronized io.grpc.ServiceDescriptor getServiceDescriptor() {
-    if (serviceDescriptor == null) {
-      serviceDescriptor = new io.grpc.ServiceDescriptor(SERVICE_NAME,
-          new ReconnectServiceDescriptorSupplier(),
-          METHOD_START,
-          METHOD_STOP);
+  public static io.grpc.ServiceDescriptor getServiceDescriptor() {
+    if (serviceDescriptor != null) {
+      return serviceDescriptor;
     }
+    return newServiceDescriptor();
+  }
 
+  private static synchronized io.grpc.ServiceDescriptor newServiceDescriptor() {
+    if (serviceDescriptor != null) {
+      return serviceDescriptor;
+    }
+    io.grpc.ServiceDescriptor serviceDescriptorCopy = new io.grpc.ServiceDescriptor(
+        SERVICE_NAME,
+        new ReconnectServiceDescriptorSupplier(),
+        METHOD_START,
+        METHOD_STOP);
+    serviceDescriptor = serviceDescriptorCopy;
     return serviceDescriptor;
   }
 }

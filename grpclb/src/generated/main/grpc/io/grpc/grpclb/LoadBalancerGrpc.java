@@ -202,13 +202,22 @@ public class LoadBalancerGrpc {
 
   private static io.grpc.ServiceDescriptor serviceDescriptor;
 
-  public static synchronized io.grpc.ServiceDescriptor getServiceDescriptor() {
-    if (serviceDescriptor == null) {
-      serviceDescriptor = new io.grpc.ServiceDescriptor(SERVICE_NAME,
-          new LoadBalancerDescriptorSupplier(),
-          METHOD_BALANCE_LOAD);
+  public static io.grpc.ServiceDescriptor getServiceDescriptor() {
+    if (serviceDescriptor != null) {
+      return serviceDescriptor;
     }
+    return newServiceDescriptor();
+  }
 
+  private static synchronized io.grpc.ServiceDescriptor newServiceDescriptor() {
+    if (serviceDescriptor != null) {
+      return serviceDescriptor;
+    }
+    io.grpc.ServiceDescriptor serviceDescriptorCopy = new io.grpc.ServiceDescriptor(
+        SERVICE_NAME,
+        new LoadBalancerDescriptorSupplier(),
+        METHOD_BALANCE_LOAD);
+    serviceDescriptor = serviceDescriptorCopy;
     return serviceDescriptor;
   }
 }

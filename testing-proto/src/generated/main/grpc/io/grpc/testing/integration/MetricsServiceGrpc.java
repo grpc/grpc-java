@@ -280,14 +280,23 @@ public class MetricsServiceGrpc {
 
   private static io.grpc.ServiceDescriptor serviceDescriptor;
 
-  public static synchronized io.grpc.ServiceDescriptor getServiceDescriptor() {
-    if (serviceDescriptor == null) {
-      serviceDescriptor = new io.grpc.ServiceDescriptor(SERVICE_NAME,
-          new MetricsServiceDescriptorSupplier(),
-          METHOD_GET_ALL_GAUGES,
-          METHOD_GET_GAUGE);
+  public static io.grpc.ServiceDescriptor getServiceDescriptor() {
+    if (serviceDescriptor != null) {
+      return serviceDescriptor;
     }
+    return newServiceDescriptor();
+  }
 
+  private static synchronized io.grpc.ServiceDescriptor newServiceDescriptor() {
+    if (serviceDescriptor != null) {
+      return serviceDescriptor;
+    }
+    io.grpc.ServiceDescriptor serviceDescriptorCopy = new io.grpc.ServiceDescriptor(
+        SERVICE_NAME,
+        new MetricsServiceDescriptorSupplier(),
+        METHOD_GET_ALL_GAUGES,
+        METHOD_GET_GAUGE);
+    serviceDescriptor = serviceDescriptorCopy;
     return serviceDescriptor;
   }
 }
