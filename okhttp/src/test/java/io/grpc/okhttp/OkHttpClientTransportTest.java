@@ -244,6 +244,7 @@ public class OkHttpClientTransportTest {
     frameReader.throwIoExceptionForNextFrame();
     listener1.waitUntilStreamClosed();
     listener2.waitUntilStreamClosed();
+
     assertEquals(0, activeStreamCount());
     assertEquals(Status.UNAVAILABLE.getCode(), listener1.status.getCode());
     assertEquals(NETWORK_ISSUE_MESSAGE, listener1.status.getCause().getMessage());
@@ -270,6 +271,7 @@ public class OkHttpClientTransportTest {
     assertContainStream(3);
     frameReader.throwErrorForNextFrame();
     listener.waitUntilStreamClosed();
+
     assertEquals(0, activeStreamCount());
     assertEquals(Status.UNAVAILABLE.getCode(), listener.status.getCode());
     assertEquals(ERROR_MESSAGE, listener.status.getCause().getMessage());
