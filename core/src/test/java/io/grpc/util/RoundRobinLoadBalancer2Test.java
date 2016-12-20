@@ -65,7 +65,6 @@ import io.grpc.Status;
 import io.grpc.util.RoundRobinLoadBalancerFactory2.Picker;
 import io.grpc.util.RoundRobinLoadBalancerFactory2.RoundRobinLoadBalancer;
 
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
