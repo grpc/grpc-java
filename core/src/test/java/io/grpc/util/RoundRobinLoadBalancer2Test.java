@@ -266,6 +266,7 @@ public class RoundRobinLoadBalancer2Test {
 
   @Test
   public void pickAfterStateChange() throws Exception {
+    InOrder inOrder = inOrder(mockHelper);
     when(mockHelper.createSubchannel(any(EquivalentAddressGroup.class), any(Attributes.class)))
         .then(new Answer<Subchannel>() {
           @Override
@@ -274,25 +275,39 @@ public class RoundRobinLoadBalancer2Test {
           }
         });
     loadBalancer.handleResolvedAddresses(Lists.newArrayList(servers.keySet()), Attributes.EMPTY);
-    verify(mockHelper, times(1)).updatePicker(isA(Picker.class));
-
     Subchannel subchannel = loadBalancer.getSubchannels().iterator().next();
     AtomicReference<ConnectivityStateInfo> subchannelStateInfo = subchannel.getAttributes().get(
         STATE_INFO);
 
+    inOrder.verify(mockHelper).updatePicker(isA(Picker.class));
     assertThat(subchannelStateInfo.get()).isEqualTo(ConnectivityStateInfo.forNonError(IDLE));
 
     loadBalancer.handleSubchannelState(subchannel,
         ConnectivityStateInfo.forNonError(ConnectivityState.READY));
-
+    inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
+    assertNull(pickerCaptor.getValue().status);
     assertThat(subchannelStateInfo.get()).isEqualTo(
         ConnectivityStateInfo.forNonError(ConnectivityState.READY));
 
+    Status error = Status.UNKNOWN.withDescription("¯\\_(ツ)_//¯");
     loadBalancer.handleSubchannelState(subchannel,
-        ConnectivityStateInfo.forTransientFailure(Status.UNKNOWN));
-
+        ConnectivityStateInfo.forTransientFailure(error));
     assertThat(subchannelStateInfo.get()).isEqualTo(
-        ConnectivityStateInfo.forTransientFailure(Status.UNKNOWN));
+        ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
+    assertNull(pickerCaptor.getValue().status);
+
+    loadBalancer.handleSubchannelState(subchannel,
+        ConnectivityStateInfo.forNonError(ConnectivityState.IDLE));
+    inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
+    assertNull(pickerCaptor.getValue().status);
+    assertThat(subchannelStateInfo.get()).isEqualTo(
+        ConnectivityStateInfo.forNonError(ConnectivityState.IDLE));
+
+    verify(subchannel, times(2)).requestConnection();
+    verify(mockHelper, times(3)).createSubchannel(any(EquivalentAddressGroup.class),
+        any(Attributes.class));
+    verifyNoMoreInteractions(mockHelper);
   }
 
   @Test
@@ -325,13 +340,13 @@ public class RoundRobinLoadBalancer2Test {
 
   @Test
   public void nameResolutionErrorWithNoChannels() throws Exception {
-    loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
+    Status error = Status.NOT_FOUND.withDescription("nameResolutionError");
+    loadBalancer.handleNameResolutionError(error);
     verify(mockHelper).updatePicker(pickerCaptor.capture());
     LoadBalancer2.PickResult pickResult = pickerCaptor.getValue().pickSubchannel(Attributes.EMPTY,
         new Metadata());
-    assertEquals(null, pickResult.getSubchannel());
-    assertEquals(Status.NOT_FOUND.getCode(), pickResult.getStatus().getCode());
-    assertEquals("nameResolutionError", pickResult.getStatus().getDescription());
+    assertNull(pickResult.getSubchannel());
+    assertEquals(error, pickResult.getStatus());
     verifyNoMoreInteractions(mockHelper);
   }
 
