@@ -108,9 +108,7 @@ public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
     @Override
     public void handleResolvedAddresses(List<ResolvedServerInfoGroup> servers,
         Attributes attributes) {
-      // Make immutable copy of current keys to avoid ConcurrentModificationException when removing
-      // adresses from the subchannels map.
-      Set<EquivalentAddressGroup> currentAddrs = Collections.unmodifiableSet(subchannels.keySet());
+      Set<EquivalentAddressGroup> currentAddrs = subchannels.keySet();
       Set<EquivalentAddressGroup> latestAddrs =
           resolvedServerInfoGroupToEquivalentAddressGroup(servers);
       Set<EquivalentAddressGroup> addedAddrs = setsDifference(latestAddrs, currentAddrs);
