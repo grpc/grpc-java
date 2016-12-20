@@ -78,6 +78,7 @@ import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.StreamRecorder;
 import io.grpc.testing.TestUtils;
+import io.grpc.testing.integration.Messages.EchoStatus;
 import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.PayloadType;
 import io.grpc.testing.integration.Messages.ResponseParameters;
@@ -841,6 +842,50 @@ public abstract class AbstractInteropTest {
     requestObserver.onCompleted();
     verify(responseObserver, timeout(operationTimeoutMillis())).onCompleted();
     verifyNoMoreInteractions(responseObserver);
+  }
+
+  @Test(timeout = 10000)
+  public void statusCodeAndMessage() throws Exception {
+    final int errorCode = 2;
+    final String errorMessage = "test status message";
+    final EchoStatus responseStatus = EchoStatus.newBuilder()
+        .setCode(errorCode)
+        .setMessage(errorMessage)
+        .build();
+    final SimpleRequest simpleRequest = SimpleRequest.newBuilder()
+        .setResponseStatus(responseStatus)
+        .build();
+    final StreamingOutputCallRequest streamingRequest = StreamingOutputCallRequest.newBuilder()
+        .setResponseStatus(responseStatus)
+        .build();
+
+    // Test UnaryCall
+    try {
+      blockingStub.unaryCall(simpleRequest);
+      fail();
+    } catch (StatusRuntimeException e) {
+      assertEquals(Status.UNKNOWN.getCode(), e.getStatus().getCode());
+      assertEquals(errorMessage, e.getStatus().getDescription());
+    }
+    if (metricsExpected()) {
+      assertClientMetrics("grpc.testing.TestService/UnaryCall", Status.Code.UNKNOWN);
+    }
+
+    // Test FullDuplexCall
+    @SuppressWarnings("unchecked")
+    StreamObserver<StreamingOutputCallResponse> responseObserver = mock(StreamObserver.class);
+    StreamObserver<StreamingOutputCallRequest> requestObserver
+        = asyncStub.fullDuplexCall(responseObserver);
+    requestObserver.onNext(streamingRequest);
+
+    ArgumentCaptor<Throwable> captor = ArgumentCaptor.forClass(Throwable.class);
+    verify(responseObserver, timeout(operationTimeoutMillis())).onError(captor.capture());
+    assertEquals(Status.UNKNOWN.getCode(), Status.fromThrowable(captor.getValue()).getCode());
+    assertEquals(errorMessage, Status.fromThrowable(captor.getValue()).getDescription());
+    verifyNoMoreInteractions(responseObserver);
+    if (metricsExpected()) {
+      assertClientMetrics("grpc.testing.TestService/FullDuplexCall", Status.Code.UNKNOWN);
+    }
   }
 
   /** Sends an rpc to an unimplemented method within TestService. */

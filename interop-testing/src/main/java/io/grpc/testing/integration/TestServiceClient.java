@@ -263,6 +263,11 @@ public class TestServiceClient {
         break;
       }
 
+      case STATUS_CODE_AND_MESSAGE: {
+        tester.statusCodeAndMessage();
+        break;
+      }
+
       case UNIMPLEMENTED_METHOD: {
         tester.unimplementedMethod();
         break;
