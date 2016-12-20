@@ -58,7 +58,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -66,7 +65,6 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A {@link LoadBalancer} that provides round-robin load balancing mechanism over the
@@ -239,25 +237,22 @@ public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
 
   @VisibleForTesting
   static class Picker extends SubchannelPicker {
-    @GuardedBy("this")
-    final Iterator<Subchannel> subchannelIterator;
     @Nullable
     final Status status;
-
+    private final List<Subchannel> list;
+    private int index;
     private final boolean empty;
 
     Picker(List<Subchannel> list, @Nullable Status status) {
       this.empty = list.isEmpty();
-      this.subchannelIterator = new CycleIterator<Subchannel>(list);
+      this.list = list;
       this.status = status;
     }
 
     @Override
     public PickResult pickSubchannel(Attributes affinity, Metadata headers) {
       if (!empty) {
-        synchronized (this) {
-          return PickResult.withSubchannel(subchannelIterator.next());
-        }
+        return PickResult.withSubchannel(nextSubchannel());
       } else {
         if (status != null) {
           return PickResult.withError(status);
@@ -266,36 +261,23 @@ public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
       }
     }
 
-    private static final class CycleIterator<T> implements Iterator<T> {
-      private final List<T> list;
-      private int index;
-
-      public CycleIterator(List<T> list) {
-        this.list = list;
+    private Subchannel nextSubchannel() {
+      if (empty) {
+        throw new NoSuchElementException();
       }
-
-      @Override
-      public boolean hasNext() {
-        return !list.isEmpty();
-      }
-
-      @Override
-      public T next() {
-        if (!hasNext()) {
-          throw new NoSuchElementException();
-        }
-        T val = list.get(index);
+      synchronized (this) {
+        Subchannel val = list.get(index);
         index++;
         if (index >= list.size()) {
           index -= list.size();
         }
         return val;
       }
+    }
 
-      @Override
-      public void remove() {
-        throw new UnsupportedOperationException();
-      }
+    @VisibleForTesting
+    List<Subchannel> getList() {
+      return Collections.unmodifiableList(list);
     }
   }
 }

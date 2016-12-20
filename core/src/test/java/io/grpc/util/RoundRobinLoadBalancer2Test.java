@@ -49,7 +49,6 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
@@ -79,10 +78,8 @@ import org.mockito.stubbing.Answer;
 
 import java.net.SocketAddress;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 /** Unit test for {@link RoundRobinLoadBalancerFactory2}. */
@@ -149,8 +146,7 @@ public class RoundRobinLoadBalancer2Test {
 
     verify(mockHelper, times(1)).updatePicker(pickerCaptor.capture());
 
-    Iterator<Subchannel> subchannelIterator = pickerCaptor.getValue().subchannelIterator;
-    assertEquals(readySubchannel, subchannelIterator.next());
+    assertThat(pickerCaptor.getValue().getList()).containsExactly(readySubchannel);
 
     verifyNoMoreInteractions(mockHelper);
   }
@@ -198,13 +194,7 @@ public class RoundRobinLoadBalancer2Test {
     inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
     Picker picker = pickerCaptor.getValue();
     assertNull(picker.status);
-
-    Set<Object> pickerSubchannels = Sets.newHashSet();
-    for (int i = 0; i < 3; i++) {
-      pickerSubchannels.add(
-          picker.pickSubchannel(Attributes.EMPTY, new Metadata()).getSubchannel());
-    }
-    assertThat(pickerSubchannels).containsAllOf(removedSubchannel, oldSubchannel);
+    assertThat(picker.getList()).containsAllOf(removedSubchannel, oldSubchannel);
 
     verify(removedSubchannel, times(1)).requestConnection();
     verify(oldSubchannel, times(1)).requestConnection();
@@ -236,13 +226,7 @@ public class RoundRobinLoadBalancer2Test {
 
     picker = pickerCaptor.getValue();
     assertNull(picker.status);
-
-    pickerSubchannels.clear();
-    for (int i = 0; i < 3; i++) {
-      pickerSubchannels.add(
-          picker.pickSubchannel(Attributes.EMPTY, new Metadata()).getSubchannel());
-    }
-    assertThat(pickerSubchannels).containsAllOf(oldSubchannel, newSubchannel);
+    assertThat(picker.getList()).containsAllOf(oldSubchannel, newSubchannel);
 
     verifyNoMoreInteractions(mockHelper);
   }
@@ -317,6 +301,8 @@ public class RoundRobinLoadBalancer2Test {
 
     Picker picker = new Picker(Collections.unmodifiableList(
         Lists.<Subchannel>newArrayList(subchannel, subchannel1, subchannel2)), null);
+
+    assertThat(picker.getList()).containsExactly(subchannel, subchannel1, subchannel2);
 
     assertEquals(subchannel,
         picker.pickSubchannel(Attributes.EMPTY, new Metadata()).getSubchannel());
