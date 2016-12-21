@@ -202,14 +202,24 @@ public class ServerReflectionGrpc {
     }
   }
 
-  private static final class LazyServiceDescriptorHolder {
-    static final io.grpc.ServiceDescriptor SERVICE_DESCRIPTOR = new io.grpc.ServiceDescriptor(
+  private static io.grpc.ServiceDescriptor serviceDescriptor;
+
+  public static io.grpc.ServiceDescriptor getServiceDescriptor() {
+    if (serviceDescriptor != null) {
+      return serviceDescriptor;
+    }
+    return newServiceDescriptor();
+  }
+
+  private static synchronized io.grpc.ServiceDescriptor newServiceDescriptor() {
+    if (serviceDescriptor != null) {
+      return serviceDescriptor;
+    }
+    io.grpc.ServiceDescriptor serviceDescriptorCopy = new io.grpc.ServiceDescriptor(
         SERVICE_NAME,
         new ServerReflectionDescriptorSupplier(),
         METHOD_SERVER_REFLECTION_INFO);
-  }
-
-  public static io.grpc.ServiceDescriptor getServiceDescriptor() {
-    return LazyServiceDescriptorHolder.SERVICE_DESCRIPTOR;
+    serviceDescriptor = serviceDescriptorCopy;
+    return serviceDescriptor;
   }
 }
