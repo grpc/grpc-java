@@ -31,6 +31,8 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 
@@ -76,6 +78,12 @@ public final class CallOptions {
    * Opposite to fail fast.
    */
   private boolean waitForReady;
+
+  @Nullable
+  private Integer maxInboundMessageSize;
+  @Nullable
+  private Integer maxOutboundMessageSize;
+
 
   /**
    * Override the HTTP/2 authority the channel claims to be connecting to. <em>This is not
@@ -363,6 +371,70 @@ public final class CallOptions {
   }
 
   /**
+   * Sets the maximum allowed message size acceptable from the remote peer.  If unset, this will
+   * default to the value set on the {@link ManagedChannel}.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/FIXME")
+  public CallOptions withMaxInboundMessageSize(int maxSize) {
+    checkArgument(maxSize >= 0, "invalid maxsize %s", maxSize);
+    CallOptions newOptions = new CallOptions(this);
+    newOptions.maxInboundMessageSize = maxSize;
+    return newOptions;
+  }
+
+  /**
+   * Sets the maximum allowed message size acceptable sent to the remote peer.  If unset, this will
+   * default to the value set on the {@link ManagedChannel}.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/FIXME")
+  public CallOptions withMaxOutboundMessageSize(int maxSize) {
+    checkArgument(maxSize >= 0, "invalid maxsize %s", maxSize);
+    CallOptions newOptions = new CallOptions(this);
+    newOptions.maxOutboundMessageSize = maxSize;
+    return newOptions;
+  }
+
+  /**
+   * Clears the maximum allowed message size acceptable from the remote peer.  The value set on the
+   * {@link ManagedChannel} may still be enforced.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/FIXME")
+  public CallOptions withoutMaxInboundMessageSize() {
+    CallOptions newOptions = new CallOptions(this);
+    newOptions.maxInboundMessageSize = null;
+    return newOptions;
+  }
+
+  /**
+   * Clears the maximum allowed message size acceptable to send the remote peer.  The value set on
+   * the {@link ManagedChannel} may still be enforced.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/FIXME")
+  public CallOptions withoutMaxOutboundMessageSize() {
+    CallOptions newOptions = new CallOptions(this);
+    newOptions.maxOutboundMessageSize = null;
+    return newOptions;
+  }
+
+  /**
+   * Gets the maximum allowed message size acceptable from the remote peer.
+   */
+  @Nullable
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/FIXME")
+  public Integer getMaxInboundMessageSize() {
+    return maxInboundMessageSize;
+  }
+
+  /**
+   * Gets the maximum allowed message size acceptable to send the remote peer.
+   */
+  @Nullable
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/FIXME")
+  public Integer getMaxOutboundMessageSize() {
+    return maxOutboundMessageSize;
+  }
+
+  /**
    * Copy constructor.
    */
   private CallOptions(CallOptions other) {
@@ -374,20 +446,23 @@ public final class CallOptions {
     compressorName = other.compressorName;
     customOptions = other.customOptions;
     waitForReady = other.waitForReady;
+    maxInboundMessageSize = other.maxInboundMessageSize;
+    maxOutboundMessageSize = other.maxOutboundMessageSize;
   }
 
   @Override
   public String toString() {
-    MoreObjects.ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
-    toStringHelper.add("deadline", deadline);
-    toStringHelper.add("authority", authority);
-    toStringHelper.add("callCredentials", credentials);
-    toStringHelper.add("affinity", affinity);
-    toStringHelper.add("executor", executor != null ? executor.getClass() : null);
-    toStringHelper.add("compressorName", compressorName);
-    toStringHelper.add("customOptions", Arrays.deepToString(customOptions));
-    toStringHelper.add("waitForReady", isWaitForReady());
-
-    return toStringHelper.toString();
+    return MoreObjects.toStringHelper(this)
+        .add("deadline", deadline)
+        .add("authority", authority)
+        .add("callCredentials", credentials)
+        .add("affinity", affinity)
+        .add("executor", executor != null ? executor.getClass() : null)
+        .add("compressorName", compressorName)
+        .add("customOptions", Arrays.deepToString(customOptions))
+        .add("waitForReady", isWaitForReady())
+        .add("maxInboundMessageSize", maxInboundMessageSize)
+        .add("maxOutboundMessageSize", maxOutboundMessageSize)
+        .toString();
   }
 }

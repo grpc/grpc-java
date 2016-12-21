@@ -97,7 +97,7 @@ public class MessageDeframer implements Closeable {
   }
 
   private final Listener listener;
-  private final int maxMessageSize;
+  private int maxInboundMessageSize;
   private final StatsTraceContext statsTraceCtx;
   private Decompressor decompressor;
   private State state = State.HEADER;
@@ -122,8 +122,12 @@ public class MessageDeframer implements Closeable {
       StatsTraceContext statsTraceCtx) {
     this.listener = Preconditions.checkNotNull(listener, "sink");
     this.decompressor = Preconditions.checkNotNull(decompressor, "decompressor");
-    this.maxMessageSize = maxMessageSize;
+    this.maxInboundMessageSize = maxMessageSize;
     this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
+  }
+
+  void setMaxInboundMessageSize(int messageSize) {
+    maxInboundMessageSize = messageSize;
   }
 
   /**
@@ -338,10 +342,10 @@ public class MessageDeframer implements Closeable {
 
     // Update the required length to include the length of the frame.
     requiredLength = nextFrame.readInt();
-    if (requiredLength < 0 || requiredLength > maxMessageSize) {
+    if (requiredLength < 0 || requiredLength > maxInboundMessageSize) {
       throw Status.INTERNAL.withDescription(String.format("Frame size %d exceeds maximum: %d. "
               + "If this is normal, increase the maxMessageSize in the channel/server builder",
-              requiredLength, maxMessageSize)).asRuntimeException();
+              requiredLength, maxInboundMessageSize)).asRuntimeException();
     }
 
     // Continue reading the frame body.
@@ -377,7 +381,7 @@ public class MessageDeframer implements Closeable {
       // Enforce the maxMessageSize limit on the returned stream.
       InputStream unlimitedStream =
           decompressor.decompress(ReadableBuffers.openStream(nextFrame, true));
-      return new SizeEnforcingInputStream(unlimitedStream, maxMessageSize, statsTraceCtx);
+      return new SizeEnforcingInputStream(unlimitedStream, maxInboundMessageSize, statsTraceCtx);
     } catch (IOException e) {
       throw new RuntimeException(e);
     }

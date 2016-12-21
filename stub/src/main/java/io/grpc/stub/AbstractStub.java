@@ -189,4 +189,20 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   public final S withWaitForReady() {
     return build(channel, callOptions.withWaitForReady());
   }
+
+  /**
+   * Returns a new stub that limits the maximum acceptable message size from a remote peer.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/FIXME")
+  public final S withMaxInboundMessageSize(int maxSize) {
+    return build(channel, callOptions.withMaxInboundMessageSize(maxSize));
+  }
+
+  /**
+   * Returns a new stub that limits the maximum acceptable message size to send a remote peer.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/FIXME")
+  public final S withMaxOutboundMessageSize(int maxSize) {
+    return build(channel, callOptions.withMaxOutboundMessageSize(maxSize));
+  }
 }
