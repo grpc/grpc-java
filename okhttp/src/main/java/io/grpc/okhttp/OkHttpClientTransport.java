@@ -51,8 +51,8 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
-import io.grpc.StatusException;
 import io.grpc.Status.Code;
+import io.grpc.StatusException;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
@@ -83,7 +83,6 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.net.SocketException;
 import java.net.URI;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -500,7 +499,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
       StatusLine statusLine = StatusLine.parse(readUtf8LineStrictUnbuffered(source));
       // Drain rest of headers
       while (!readUtf8LineStrictUnbuffered(source).equals("")) {}
-      if (statusLine.code < 200 || statusLine.code > 300) {
+      if (statusLine.code < 200 || statusLine.code >= 300) {
         Buffer body = new Buffer();
         try {
           sock.shutdownOutput();
@@ -510,7 +509,8 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         }
         try {
           sock.close();
-        } catch (IOException ignore) {
+        } catch (IOException ignored) {
+          // ignored
         }
         String message = String.format(
             "Response returned from proxy was not successful (expected 2xx, got %d %s). "
@@ -534,7 +534,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         .build();
     Request.Builder request = new Request.Builder()
         .url(tunnelUrl)
-        .header("Host", defaultAuthority)
+        .header("Host", tunnelUrl.host() + ":" + tunnelUrl.port())
         .header("User-Agent", userAgent);
 
     // If we have proxy credentials, set them right away

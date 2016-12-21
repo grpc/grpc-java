@@ -31,6 +31,7 @@
 
 package io.grpc.netty;
 
+import static com.google.common.base.Charsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -75,7 +76,6 @@ import org.mockito.Mockito;
 import java.io.File;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.nio.charset.Charset;
 import java.util.logging.Filter;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
@@ -337,7 +337,7 @@ public class ProtocolNegotiatorsTest {
     Mockito.verify(mockHandler)
         .channelRead(any(ChannelHandlerContext.class), objectCaptor.capture());
     ByteBuf b = (ByteBuf) objectCaptor.getValue();
-    String request = b.toString(Charset.forName("UTF-8"));
+    String request = b.toString(UTF_8);
     b.release();
     assertTrue("No trailing newline: " + request, request.endsWith("\r\n\r\n"));
     assertTrue("No CONNECT: " + request, request.startsWith("CONNECT specialHost:314 "));
@@ -353,7 +353,7 @@ public class ProtocolNegotiatorsTest {
         .channelRead(any(ChannelHandlerContext.class), objectCaptor.capture());
     b = (ByteBuf) objectCaptor.getAllValues().get(1);
     // If we were using the real grpcHandler, this would have been the HTTP/2 preface
-    String preface = b.toString(Charset.forName("UTF-8"));
+    String preface = b.toString(UTF_8);
     b.release();
     assertEquals(golden, preface);
 
