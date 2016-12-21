@@ -322,6 +322,16 @@ public class NettyChannelBuilder extends AbstractManagedChannelImplBuilder<Netty
       }
       ProtocolNegotiator negotiator = protocolNegotiator != null ? protocolNegotiator :
           createProtocolNegotiator(authority, negotiationType, sslContext);
+      String proxy = System.getenv("GRPC_PROXY_EXP");
+      if (proxy != null) {
+        String[] parts = proxy.split(":", 2);
+        int port = 80;
+        if (parts.length > 1) {
+          port = Integer.parseInt(parts[1]);
+        }
+        InetSocketAddress proxyAddress = new InetSocketAddress(parts[0], port);
+        negotiator = ProtocolNegotiators.httpProxy(proxyAddress, null, null, negotiator);
+      }
       return newClientTransport(serverAddress, authority, userAgent, negotiator);
     }
 
