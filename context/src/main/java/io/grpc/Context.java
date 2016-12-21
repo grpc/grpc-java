@@ -120,7 +120,7 @@ public class Context {
    */
   public static final Context ROOT = new Context(null);
 
-  private static Storage storage;
+  private static volatile Storage storage;
 
   private static synchronized Storage initializeStorage() {
     if (storage != null) {
@@ -141,10 +141,11 @@ public class Context {
 
   // For testing
   static Storage storage() {
-    if (storage == null) {
+    Storage s = storage;
+    if (s == null) {
       return initializeStorage();
     }
-    return storage;
+    return s;
   }
 
   /**
