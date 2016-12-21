@@ -909,35 +909,11 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
 
   p->Print(
       *vars,
-      "private static $ServiceDescriptor$ serviceDescriptor;\n\n");
-
+      "private static final class LazyServiceDescriptorHolder {\n");
+  p->Indent();
   p->Print(
       *vars,
-      "public static $ServiceDescriptor$ getServiceDescriptor() {\n");
-  p->Indent();
-  p->Print("if (serviceDescriptor != null) {\n");
-  p->Indent();
-  p->Print("return serviceDescriptor;\n");
-  p->Outdent();
-  p->Print("}\n");
-  p->Print("return newServiceDescriptor();\n");
-  p->Outdent();
-  p->Print("}\n\n");
-
-  p->Print(
-      *vars,
-      "private static synchronized $ServiceDescriptor$ newServiceDescriptor() {\n");
-  p->Indent();
-  p->Print("if (serviceDescriptor != null) {\n");
-  p->Indent();
-  p->Print("return serviceDescriptor;\n");
-  p->Outdent();
-  p->Print("}\n");
-  // use a copy to avoid serviceDescriptor being assigned to an address at the beginning of
-  // the execution of the constructor rather than the completion of it for some JVMs
-  p->Print(
-      *vars,
-      "$ServiceDescriptor$ serviceDescriptorCopy = new $ServiceDescriptor$(\n");
+      "static final $ServiceDescriptor$ SERVICE_DESCRIPTOR = new $ServiceDescriptor$(\n");
   p->Indent();
   p->Indent();
   p->Print("SERVICE_NAME");
@@ -954,8 +930,14 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
   p->Print(");\n");
   p->Outdent();
   p->Outdent();
-  p->Print("serviceDescriptor = serviceDescriptorCopy;\n");
-  p->Print("return serviceDescriptor;\n");
+  p->Outdent();
+  p->Print("}\n\n");
+
+  p->Print(
+      *vars,
+      "public static $ServiceDescriptor$ getServiceDescriptor() {\n");
+  p->Indent();
+  p->Print("return LazyServiceDescriptorHolder.SERVICE_DESCRIPTOR;\n");
   p->Outdent();
   p->Print("}\n");
 }
