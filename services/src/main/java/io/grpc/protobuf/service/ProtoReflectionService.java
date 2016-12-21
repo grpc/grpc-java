@@ -78,22 +78,22 @@ import javax.annotation.concurrent.GuardedBy;
 public final class ProtoReflectionService extends ServerReflectionGrpc.ServerReflectionImplBase
     implements InternalNotifyOnServerBuild {
 
-  private Server server;
-  private final ServerReflectionIndex serverReflectionIndex = new ServerReflectionIndex();
+  private ServerReflectionIndex serverReflectionIndex;
 
   /**
    * Receives a reference to the server at build time.
    */
   @Override
   public void notifyOnBuild(Server server) {
-    Preconditions.checkState(this.server == null);
-    this.server = Preconditions.checkNotNull(server, "server");
+    Preconditions.checkState(this.serverReflectionIndex == null);
+    serverReflectionIndex = new ServerReflectionIndex(Preconditions.checkNotNull(server, "server"));
   }
 
   @Override
   public StreamObserver<ServerReflectionRequest> serverReflectionInfo(
       final StreamObserver<ServerReflectionResponse> responseObserver) {
 
+    Preconditions.checkState(this.serverReflectionIndex != null);
     serverReflectionIndex.initializeImmutableServicesIndex();
 
     final ServerCallStreamObserver<ServerReflectionResponse> serverCallStreamObserver =
@@ -292,15 +292,22 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
    * queried, the immutable service index is checked for a matching value. Only if there is no match
    * in the immutable service index are the mutable services checked.
    */
-  private class ServerReflectionIndex {
+  private static final class ServerReflectionIndex {
     private final FileDescriptorIndex immutableServicesIndex = new FileDescriptorIndex();
     /** Tracks mutable services. Accesses must be synchronized. */
     @GuardedBy("mutableServicesIndex") private final FileDescriptorIndex mutableServicesIndex =
         new FileDescriptorIndex();
 
     private boolean immutableIndexInitialized = false;
-    @GuardedBy("mutableServicesIndex") private Set<FileDescriptor>
-        cachedMutableServiceFileDescriptors = new HashSet<FileDescriptor>();
+    @GuardedBy("mutableServicesIndex")
+        private Set<FileDescriptor> cachedMutableServiceFileDescriptors
+            = new HashSet<FileDescriptor>();
+
+    private final Server server;
+
+    public ServerReflectionIndex(Server server) {
+      this.server = server;
+    }
 
     /**
      * When first called, initializes the immutable services index. Subsequent calls have no effect.
@@ -326,19 +333,23 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
         Set<FileDescriptor> currentMutableServiceFileDescriptors =
             new HashSet<FileDescriptor>();
         Set<String> currentMutableServiceNames = new HashSet<String>();
-        for (ServerServiceDefinition mutableService : server.getMutableServices()) {
+        List<ServerServiceDefinition> currentMutableServices = server.getMutableServices();
+        for (ServerServiceDefinition mutableService : currentMutableServices) {
           io.grpc.ServiceDescriptor serviceDescriptor = mutableService.getServiceDescriptor();
           if (serviceDescriptor.getMarshallerDescriptor() instanceof ProtoFileDescriptorSupplier) {
+            String serviceName = serviceDescriptor.getName();
             FileDescriptor fileDescriptor =
                 ((ProtoFileDescriptorSupplier) serviceDescriptor.getMarshallerDescriptor())
                     .getFileDescriptor();
             currentMutableServiceFileDescriptors.add(fileDescriptor);
-            currentMutableServiceNames.add(serviceDescriptor.getName());
+            Preconditions.checkState(!currentMutableServiceNames.contains(serviceName),
+                "Service already defined: %s", serviceName);
+            currentMutableServiceNames.add(serviceName);
           }
         }
 
         if (!cachedMutableServiceFileDescriptors.equals(currentMutableServiceFileDescriptors)) {
-          mutableServicesIndex.initialize(server.getMutableServices());
+          mutableServicesIndex.initialize(currentMutableServices);
           cachedMutableServiceFileDescriptors = currentMutableServiceFileDescriptors;
         } else if (mutableServicesIndex.isInitialized()
             && !mutableServicesIndex.getServiceNames().equals(currentMutableServiceNames)) {
@@ -387,8 +398,8 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
 
     @Nullable
     private FileDescriptor getFileDescriptorByExtensionAndNumber(String type, int extension) {
-      FileDescriptor fd =
-          immutableServicesIndex.getFileDescriptorByExtensionAndNumber(type, extension);
+      FileDescriptor fd
+          = immutableServicesIndex.getFileDescriptorByExtensionAndNumber(type, extension);
       if (fd == null) {
         synchronized (mutableServicesIndex) {
           if (mutableServicesIndex.isInitialized()) {
@@ -412,157 +423,157 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
       }
       return extensionNumbers;
     }
+  }
+
+  /**
+   * Provides a set of methods for answering reflection queries for the file descriptors
+   * underlying a set of services. Used by {@link ServerReflectionIndex} to separately index
+   * immutable and mutable services.
+   *
+   * <p>This class is not thread-safe. {@link ServerReflectionIndex} handles synchronization for
+   * initialization, updates (for mutable services), and reads.
+   */
+  private static final class FileDescriptorIndex {
+    private Set<String> serviceNames;
+    private Map<String, FileDescriptor> fileDescriptorsByName;
+    private Map<String, FileDescriptor> fileDescriptorsBySymbol;
+    private Map<String, Map<Integer, FileDescriptor>> fileDescriptorsByExtensionAndNumber;
+    private boolean isInitialized = false;
+
+    private void initialize(List<ServerServiceDefinition> services) {
+      serviceNames = new HashSet<String>();
+      fileDescriptorsByName = new HashMap<String, FileDescriptor>();
+      fileDescriptorsBySymbol = new HashMap<String, FileDescriptor>();
+      fileDescriptorsByExtensionAndNumber = new HashMap<String, Map<Integer, FileDescriptor>>();
+
+      Queue<FileDescriptor> fileDescriptorsToProcess = new LinkedList<FileDescriptor>();
+      Set<String> seenFiles = new HashSet<String>();
+      for (ServerServiceDefinition service : services) {
+        io.grpc.ServiceDescriptor serviceDescriptor = service.getServiceDescriptor();
+        if (serviceDescriptor.getMarshallerDescriptor() instanceof ProtoFileDescriptorSupplier) {
+          FileDescriptor fileDescriptor =
+              ((ProtoFileDescriptorSupplier) serviceDescriptor.getMarshallerDescriptor())
+                  .getFileDescriptor();
+          String serviceName = serviceDescriptor.getName();
+          Preconditions.checkState(!serviceNames.contains(serviceName),
+              "Service already defined: %s", serviceName);
+          serviceNames.add(serviceName);
+          if (!seenFiles.contains(fileDescriptor.getName())) {
+            seenFiles.add(fileDescriptor.getName());
+            fileDescriptorsToProcess.add(fileDescriptor);
+          }
+        }
+      }
+
+      while (!fileDescriptorsToProcess.isEmpty()) {
+        FileDescriptor currentFd = fileDescriptorsToProcess.remove();
+        processFileDescriptor(currentFd);
+        for (FileDescriptor dependencyFd : currentFd.getDependencies()) {
+          if (!seenFiles.contains(dependencyFd.getName())) {
+            seenFiles.add(dependencyFd.getName());
+            fileDescriptorsToProcess.add(dependencyFd);
+          }
+        }
+      }
+
+      isInitialized = true;
+    }
+
+    private boolean isInitialized() {
+      return isInitialized;
+    }
+
+    private Set<String> getServiceNames() {
+      return serviceNames;
+    }
 
     /**
-     * Provides a set of methods for answering reflection queries for the file descriptors
-     * underlying a set of services. Used by {@link ServerReflectionIndex} to separately index
-     * immutable and mutable services.
-     *
-     * <p>This class is not thread-safe. {@link ServerReflectionIndex} handles synchronization for
-     * initialization, updates (for mutable services), and reads.
+     * Updates the service names. Should only be called when the service names have changed but
+     * the underlying proto file descriptors remain unchanged.
      */
-    private class FileDescriptorIndex {
-      private Set<String> serviceNames;
-      private Map<String, FileDescriptor> fileDescriptorsByName;
-      private Map<String, FileDescriptor> fileDescriptorsBySymbol;
-      private Map<String, Map<Integer, FileDescriptor>> fileDescriptorsByExtensionAndNumber;
-      private boolean isInitialized = false;
+    private void setServiceNames(Set<String> serviceNames) {
+      this.serviceNames = serviceNames;
+    }
 
-      private void initialize(List<ServerServiceDefinition> services) {
-        serviceNames = new HashSet<String>();
-        fileDescriptorsByName = new HashMap<String, FileDescriptor>();
-        fileDescriptorsBySymbol = new HashMap<String, FileDescriptor>();
-        fileDescriptorsByExtensionAndNumber = new HashMap<String, Map<Integer, FileDescriptor>>();
+    @Nullable
+    private FileDescriptor getFileDescriptorByName(String name) {
+      return fileDescriptorsByName.get(name);
+    }
 
-        Queue<FileDescriptor> fileDescriptorsToProcess = new LinkedList<FileDescriptor>();
-        Set<String> seenFiles = new HashSet<String>();
-        for (ServerServiceDefinition service : services) {
-          io.grpc.ServiceDescriptor serviceDescriptor = service.getServiceDescriptor();
-          if (serviceDescriptor.getMarshallerDescriptor() instanceof ProtoFileDescriptorSupplier) {
-            FileDescriptor fileDescriptor =
-                ((ProtoFileDescriptorSupplier) serviceDescriptor.getMarshallerDescriptor())
-                    .getFileDescriptor();
-            String serviceName = serviceDescriptor.getName();
-            Preconditions.checkState(!serviceNames.contains(serviceName),
-                "Service already defined: %s", serviceName);
-            serviceNames.add(serviceName);
-            if (!seenFiles.contains(fileDescriptor.getName())) {
-              seenFiles.add(fileDescriptor.getName());
-              fileDescriptorsToProcess.add(fileDescriptor);
-            }
-          }
-        }
+    @Nullable
+    private FileDescriptor getFileDescriptorBySymbol(String symbol) {
+      return fileDescriptorsBySymbol.get(symbol);
+    }
 
-        while (!fileDescriptorsToProcess.isEmpty()) {
-          FileDescriptor currentFd = fileDescriptorsToProcess.remove();
-          processFileDescriptor(currentFd);
-          for (FileDescriptor dependencyFd : currentFd.getDependencies()) {
-            if (!seenFiles.contains(dependencyFd.getName())) {
-              seenFiles.add(dependencyFd.getName());
-              fileDescriptorsToProcess.add(dependencyFd);
-            }
-          }
-        }
-
-        isInitialized = true;
+    @Nullable
+    private FileDescriptor getFileDescriptorByExtensionAndNumber(String type, int number) {
+      if (fileDescriptorsByExtensionAndNumber.containsKey(type)) {
+        return fileDescriptorsByExtensionAndNumber.get(type).get(number);
       }
+      return null;
+    }
 
-      private boolean isInitialized() {
-        return isInitialized;
+    @Nullable
+    private Set<Integer> getExtensionNumbersOfType(String type) {
+      if (fileDescriptorsByExtensionAndNumber.containsKey(type)) {
+        return fileDescriptorsByExtensionAndNumber.get(type).keySet();
       }
+      return null;
+    }
 
-      private Set<String> getServiceNames() {
-        return serviceNames;
+    private void processFileDescriptor(FileDescriptor fd) {
+      String fdName = fd.getName();
+      Preconditions.checkState(!fileDescriptorsByName.containsKey(fdName),
+          "File name already used: %s", fdName);
+      fileDescriptorsByName.put(fdName, fd);
+      for (ServiceDescriptor service : fd.getServices()) {
+        processService(service, fd);
       }
+      for (Descriptor type : fd.getMessageTypes()) {
+        processType(type, fd);
+      }
+      for (FieldDescriptor extension : fd.getExtensions()) {
+        processExtension(extension, fd);
+      }
+    }
 
-      /**
-       * Updates the service names. Should only be called when the service names have changed but
-       * the underlying proto file descriptors remain unchanged.
-       */
-      private void setServiceNames(Set<String> serviceNames) {
-        this.serviceNames = serviceNames;
+    private void processService(ServiceDescriptor service, FileDescriptor fd) {
+      String serviceName = service.getFullName();
+      Preconditions.checkState(!fileDescriptorsBySymbol.containsKey(serviceName),
+          "Service already defined: %s", serviceName);
+      fileDescriptorsBySymbol.put(serviceName, fd);
+      for (MethodDescriptor method : service.getMethods()) {
+        String methodName = method.getFullName();
+        Preconditions.checkState(!fileDescriptorsBySymbol.containsKey(methodName),
+            "Method already defined: %s", methodName);
+        fileDescriptorsBySymbol.put(methodName, fd);
       }
+    }
 
-      @Nullable
-      private FileDescriptor getFileDescriptorByName(String name) {
-        return fileDescriptorsByName.get(name);
+    private void processType(Descriptor type, FileDescriptor fd) {
+      String typeName = type.getFullName();
+      Preconditions.checkState(!fileDescriptorsBySymbol.containsKey(typeName),
+          "Type already defined: %s", typeName);
+      fileDescriptorsBySymbol.put(typeName, fd);
+      for (FieldDescriptor extension : type.getExtensions()) {
+        processExtension(extension, fd);
       }
+      for (Descriptor nestedType : type.getNestedTypes()) {
+        processType(nestedType, fd);
+      }
+    }
 
-      @Nullable
-      private FileDescriptor getFileDescriptorBySymbol(String symbol) {
-        return fileDescriptorsBySymbol.get(symbol);
+    private void processExtension(FieldDescriptor extension, FileDescriptor fd) {
+      String extensionName = extension.getContainingType().getFullName();
+      int extensionNumber = extension.getNumber();
+      if (!fileDescriptorsByExtensionAndNumber.containsKey(extensionName)) {
+        fileDescriptorsByExtensionAndNumber.put(
+            extensionName, new HashMap<Integer, FileDescriptor>());
       }
-
-      @Nullable
-      private FileDescriptor getFileDescriptorByExtensionAndNumber(String type, int number) {
-        if (fileDescriptorsByExtensionAndNumber.containsKey(type)) {
-          return fileDescriptorsByExtensionAndNumber.get(type).get(number);
-        }
-        return null;
-      }
-
-      @Nullable
-      private Set<Integer> getExtensionNumbersOfType(String type) {
-        if (fileDescriptorsByExtensionAndNumber.containsKey(type)) {
-          return fileDescriptorsByExtensionAndNumber.get(type).keySet();
-        }
-        return null;
-      }
-
-      private void processFileDescriptor(FileDescriptor fd) {
-        String fdName = fd.getName();
-        Preconditions.checkState(!fileDescriptorsByName.containsKey(fdName),
-            "File name already used: %s", fdName);
-        fileDescriptorsByName.put(fdName, fd);
-        for (ServiceDescriptor service : fd.getServices()) {
-          processService(service, fd);
-        }
-        for (Descriptor type : fd.getMessageTypes()) {
-          processType(type, fd);
-        }
-        for (FieldDescriptor extension : fd.getExtensions()) {
-          processExtension(extension, fd);
-        }
-      }
-
-      private void processService(ServiceDescriptor service, FileDescriptor fd) {
-        String serviceName = service.getFullName();
-        Preconditions.checkState(!fileDescriptorsBySymbol.containsKey(serviceName),
-            "Service already defined: %s", serviceName);
-        fileDescriptorsBySymbol.put(serviceName, fd);
-        for (MethodDescriptor method : service.getMethods()) {
-          String methodName = method.getFullName();
-          Preconditions.checkState(!fileDescriptorsBySymbol.containsKey(methodName),
-              "Method already defined: %s", methodName);
-          fileDescriptorsBySymbol.put(methodName, fd);
-        }
-      }
-
-      private void processType(Descriptor type, FileDescriptor fd) {
-        String typeName = type.getFullName();
-        Preconditions.checkState(!fileDescriptorsBySymbol.containsKey(typeName),
-            "Type already defined: %s", typeName);
-        fileDescriptorsBySymbol.put(typeName, fd);
-        for (FieldDescriptor extension : type.getExtensions()) {
-          processExtension(extension, fd);
-        }
-        for (Descriptor nestedType : type.getNestedTypes()) {
-          processType(nestedType, fd);
-        }
-      }
-
-      private void processExtension(FieldDescriptor extension, FileDescriptor fd) {
-        String extensionName = extension.getContainingType().getFullName();
-        int extensionNumber = extension.getNumber();
-        if (!fileDescriptorsByExtensionAndNumber.containsKey(extensionName)) {
-          fileDescriptorsByExtensionAndNumber.put(
-              extensionName, new HashMap<Integer, FileDescriptor>());
-        }
-        Preconditions.checkState(
-            !fileDescriptorsByExtensionAndNumber.get(extensionName).containsKey(extensionNumber),
-            "Extension name and number already defined: %s, %s", extensionName, extensionNumber);
-        fileDescriptorsByExtensionAndNumber.get(extensionName).put(extensionNumber, fd);
-      }
+      Preconditions.checkState(
+          !fileDescriptorsByExtensionAndNumber.get(extensionName).containsKey(extensionNumber),
+          "Extension name and number already defined: %s, %s", extensionName, extensionNumber);
+      fileDescriptorsByExtensionAndNumber.get(extensionName).put(extensionNumber, fd);
     }
   }
 }
