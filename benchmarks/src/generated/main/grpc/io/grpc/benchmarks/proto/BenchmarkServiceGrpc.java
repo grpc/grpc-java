@@ -18,7 +18,7 @@ import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
 /**
  */
 @javax.annotation.Generated(
-    value = "by gRPC proto compiler (version 1.0.3)",
+    value = "by gRPC proto compiler (version 1.0.4-SNAPSHOT)",
     comments = "Source: services.proto")
 public class BenchmarkServiceGrpc {
 
