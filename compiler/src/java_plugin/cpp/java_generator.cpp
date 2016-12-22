@@ -909,35 +909,28 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
 
   p->Print(
       *vars,
-      "private static $ServiceDescriptor$ serviceDescriptor;\n\n");
+      "private static volatile $ServiceDescriptor$ serviceDescriptor;\n\n");
 
   p->Print(
       *vars,
       "public static $ServiceDescriptor$ getServiceDescriptor() {\n");
   p->Indent();
-  p->Print("if (serviceDescriptor != null) {\n");
+  p->Print(
+      *vars,
+      "$ServiceDescriptor$ result = serviceDescriptor;\n");
+  p->Print("if (result == null) {\n");
   p->Indent();
-  p->Print("return serviceDescriptor;\n");
-  p->Outdent();
-  p->Print("}\n");
-  p->Print("return newServiceDescriptor();\n");
-  p->Outdent();
-  p->Print("}\n\n");
+  p->Print(
+      *vars,
+      "synchronized($service_class_name$.class) {\n");
+  p->Indent();
+  p->Print("result = serviceDescriptor;\n");
+  p->Print("if (result == null) {\n");
+  p->Indent();
 
   p->Print(
       *vars,
-      "private static synchronized $ServiceDescriptor$ newServiceDescriptor() {\n");
-  p->Indent();
-  p->Print("if (serviceDescriptor != null) {\n");
-  p->Indent();
-  p->Print("return serviceDescriptor;\n");
-  p->Outdent();
-  p->Print("}\n");
-  // use a copy to avoid serviceDescriptor being assigned to an address at the beginning of
-  // the execution of the constructor rather than the completion of it for some JVMs
-  p->Print(
-      *vars,
-      "$ServiceDescriptor$ serviceDescriptorCopy = new $ServiceDescriptor$(\n");
+      "serviceDescriptor = result = new $ServiceDescriptor$(\n");
   p->Indent();
   p->Indent();
   p->Print("SERVICE_NAME");
@@ -954,8 +947,14 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
   p->Print(");\n");
   p->Outdent();
   p->Outdent();
-  p->Print("serviceDescriptor = serviceDescriptorCopy;\n");
-  p->Print("return serviceDescriptor;\n");
+
+  p->Outdent();
+  p->Print("}\n");
+  p->Outdent();
+  p->Print("}\n");
+  p->Outdent();
+  p->Print("}\n");
+  p->Print("return result;\n");
   p->Outdent();
   p->Print("}\n");
 }

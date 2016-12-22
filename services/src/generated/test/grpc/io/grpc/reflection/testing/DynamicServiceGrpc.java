@@ -210,24 +210,21 @@ public class DynamicServiceGrpc {
     }
   }
 
-  private static io.grpc.ServiceDescriptor serviceDescriptor;
+  private static volatile io.grpc.ServiceDescriptor serviceDescriptor;
 
   public static io.grpc.ServiceDescriptor getServiceDescriptor() {
-    if (serviceDescriptor != null) {
-      return serviceDescriptor;
+    io.grpc.ServiceDescriptor result = serviceDescriptor;
+    if (result == null) {
+      synchronized(DynamicServiceGrpc.class) {
+        result = serviceDescriptor;
+        if (result == null) {
+          serviceDescriptor = result = new io.grpc.ServiceDescriptor(
+              SERVICE_NAME,
+              new DynamicServiceDescriptorSupplier(),
+              METHOD_METHOD);
+        }
+      }
     }
-    return newServiceDescriptor();
-  }
-
-  private static synchronized io.grpc.ServiceDescriptor newServiceDescriptor() {
-    if (serviceDescriptor != null) {
-      return serviceDescriptor;
-    }
-    io.grpc.ServiceDescriptor serviceDescriptorCopy = new io.grpc.ServiceDescriptor(
-        SERVICE_NAME,
-        new DynamicServiceDescriptorSupplier(),
-        METHOD_METHOD);
-    serviceDescriptor = serviceDescriptorCopy;
-    return serviceDescriptor;
+    return result;
   }
 }
