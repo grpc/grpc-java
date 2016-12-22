@@ -71,7 +71,8 @@ public class GrpcSslContexts {
 
   /*
    * List of ALPN/NPN protocols in order of preference. GRPC_EXP_VERSION
-   * requires that HTTP2_VERSION be present and should be preferenced.
+   * requires that HTTP2_VERSION be present and that GRPC_EXP_VERSION should be
+   * preferenced over HTTP2_VERSION.
    */
   static final List<String> NEXT_PROTOCOL_VERSIONS =
       Collections.unmodifiableList(Arrays.asList(GRPC_EXP_VERSION, HTTP2_VERSION));

@@ -54,8 +54,8 @@ import javax.net.ssl.SSLSocketFactory;
 final class OkHttpTlsUpgrader {
 
   /*
-   * List of ALPN/NPN protocols in order of preference. GRPC_EXP_VERSION
-   * requires that HTTP2_VERSION be present and should be preferenced.
+   * List of ALPN/NPN protocols in order of preference. GRPC_EXP requires that
+   * HTTP_2 be present and that GRPC_EXP should be preferenced over HTTP_2.
    */
   @VisibleForTesting
   static final List<Protocol> TLS_PROTOCOLS =
