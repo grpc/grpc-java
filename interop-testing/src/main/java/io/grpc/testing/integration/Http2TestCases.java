@@ -34,31 +34,19 @@ package io.grpc.testing.integration;
 import com.google.common.base.Preconditions;
 
 /**
- * Enum of interop test cases.
+ * Enum of HTTP/2 interop test cases.
  */
-public enum TestCases {
-  EMPTY_UNARY("empty (zero bytes) request and response"),
-  LARGE_UNARY("single request and (large) response"),
-  CLIENT_STREAMING("request streaming with single response"),
-  SERVER_STREAMING("single request with response streaming"),
-  PING_PONG("full-duplex ping-pong streaming"),
-  EMPTY_STREAM("A stream that has zero-messages in both directions"),
-  COMPUTE_ENGINE_CREDS("large_unary with service_account auth"),
-  SERVICE_ACCOUNT_CREDS("large_unary with compute engine auth"),
-  JWT_TOKEN_CREDS("JWT-based auth"),
-  OAUTH2_AUTH_TOKEN("raw oauth2 access token auth"),
-  PER_RPC_CREDS("per rpc raw oauth2 access token auth"),
-  CUSTOM_METADATA("unary and full duplex calls with metadata"),
-  STATUS_CODE_AND_MESSAGE("request error code and message"),
-  UNIMPLEMENTED_METHOD("call an unimplemented RPC method"),
-  UNIMPLEMENTED_SERVICE("call an unimplemented RPC service"),
-  CANCEL_AFTER_BEGIN("cancel stream after starting it"),
-  CANCEL_AFTER_FIRST_RESPONSE("cancel on first response"),
-  TIMEOUT_ON_SLEEPING_SERVER("timeout before receiving a response");
+public enum Http2TestCases {
+  RST_AFTER_HEADER("server resets stream after sending header"),
+  RST_AFTER_DATA("server resets stream after sending data"),
+  RST_DURING_DATA("server resets stream in the middle of sending data"),
+  GOAWAY("server sends goaway after first request and asserts second request uses new connection"),
+  PING("server sends pings during request and verifies client response"),
+  MAX_STREAMS("server verifies that the client respects MAX_STREAMS setting");
 
   private final String description;
 
-  TestCases(String description) {
+  Http2TestCases(String description) {
     this.description = description;
   }
 
@@ -70,11 +58,15 @@ public enum TestCases {
   }
 
   /**
-   * Returns the {@link TestCases} matching the string {@code s}. The
-   * matching is done case insensitive.
+   * Returns the {@link Http2TestCases} matching the string {@code s}. The
+   * matching is case insensitive.
    */
-  public static TestCases fromString(String s) {
+  public static Http2TestCases fromString(String s) {
     Preconditions.checkNotNull(s, "s");
-    return TestCases.valueOf(s.toUpperCase());
+    try {
+      return Http2TestCases.valueOf(s.toUpperCase());
+    } catch (IllegalArgumentException ex) {
+      throw new IllegalArgumentException("Invalid test case: " + s);
+    }
   }
 }

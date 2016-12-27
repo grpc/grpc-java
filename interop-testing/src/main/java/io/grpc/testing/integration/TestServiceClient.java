@@ -263,6 +263,11 @@ public class TestServiceClient {
         break;
       }
 
+      case CUSTOM_METADATA: {
+        tester.customMetadata();
+        break;
+      }
+
       case STATUS_CODE_AND_MESSAGE: {
         tester.statusCodeAndMessage();
         break;
