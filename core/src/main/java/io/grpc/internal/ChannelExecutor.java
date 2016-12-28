@@ -31,6 +31,8 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
 
 import java.util.LinkedList;
@@ -47,7 +49,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * order as they are submitted.
  */
 @ThreadSafe
-final class ChannelExecutor {
+public final class ChannelExecutor {
   private static final Logger log = Logger.getLogger(ChannelExecutor.class.getName());
 
   private final Object lock = new Object();
@@ -64,7 +66,7 @@ final class ChannelExecutor {
    * <p>Upon returning, it guarantees that all tasks submitted by {@code executeLater()} before it
    * have been or will eventually be run, while not requiring any more calls to {@code drain()}.
    */
-  void drain() {
+  public void drain() {
     boolean drainLeaseAcquired = false;
     while (true) {
       Runnable runnable;
@@ -95,9 +97,9 @@ final class ChannelExecutor {
    *
    * @return this ChannelExecutor
    */
-  ChannelExecutor executeLater(Runnable runnable) {
+  public ChannelExecutor executeLater(Runnable runnable) {
     synchronized (lock) {
-      queue.add(runnable);
+      queue.add(checkNotNull(runnable, "runnable is null"));
     }
     return this;
   }
