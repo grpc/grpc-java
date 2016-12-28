@@ -927,16 +927,16 @@ public abstract class AbstractInteropTest {
 
   @Test(timeout = 10000)
   public void statusCodeAndMessage() throws Exception {
-    final int errorCode = 2;
-    final String errorMessage = "test status message";
-    final EchoStatus responseStatus = EchoStatus.newBuilder()
+    int errorCode = 2;
+    String errorMessage = "test status message";
+    EchoStatus responseStatus = EchoStatus.newBuilder()
         .setCode(errorCode)
         .setMessage(errorMessage)
         .build();
-    final SimpleRequest simpleRequest = SimpleRequest.newBuilder()
+    SimpleRequest simpleRequest = SimpleRequest.newBuilder()
         .setResponseStatus(responseStatus)
         .build();
-    final StreamingOutputCallRequest streamingRequest = StreamingOutputCallRequest.newBuilder()
+    StreamingOutputCallRequest streamingRequest = StreamingOutputCallRequest.newBuilder()
         .setResponseStatus(responseStatus)
         .build();
 
@@ -954,7 +954,8 @@ public abstract class AbstractInteropTest {
 
     // Test FullDuplexCall
     @SuppressWarnings("unchecked")
-    StreamObserver<StreamingOutputCallResponse> responseObserver = mock(StreamObserver.class);
+    StreamObserver<StreamingOutputCallResponse> responseObserver =
+        (StreamObserver<StreamingOutputCallResponse>) mock(StreamObserver.class);
     StreamObserver<StreamingOutputCallRequest> requestObserver
         = asyncStub.fullDuplexCall(responseObserver);
     requestObserver.onNext(streamingRequest);
