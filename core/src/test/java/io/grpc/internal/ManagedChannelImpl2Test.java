@@ -138,6 +138,7 @@ public class ManagedChannelImpl2Test {
   private final ResolvedServerInfo server = new ResolvedServerInfo(socketAddress, Attributes.EMPTY);
   private final FakeClock timer = new FakeClock();
   private final FakeClock executor = new FakeClock();
+  private final FakeClock oobExecutor = new FakeClock();
   private final FakeCensusContextFactory censusCtxFactory = new FakeCensusContextFactory();
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
@@ -169,7 +170,11 @@ public class ManagedChannelImpl2Test {
   @Mock
   private ClientCall.Listener<Integer> mockCallListener5;
   @Mock
-  private SharedResourceHolder.Resource<ScheduledExecutorService> timerService;
+  private ObjectPool<ScheduledExecutorService> timerServicePool;
+  @Mock
+  private ObjectPool<Executor> executorPool;
+  @Mock
+  private ObjectPool<Executor> oobExecutorPool;
   @Mock
   private CallCredentials creds;
   private BlockingQueue<MockClientTransportInfo> transports;
@@ -182,9 +187,9 @@ public class ManagedChannelImpl2Test {
     channel = new ManagedChannelImpl2(target, new FakeBackoffPolicyProvider(),
         nameResolverFactory, NAME_RESOLVER_PARAMS, mockLoadBalancerFactory,
         mockTransportFactory, DecompressorRegistry.getDefaultInstance(),
-        CompressorRegistry.getDefaultInstance(), timerService, timer.getStopwatchSupplier(),
-        ManagedChannelImpl2.IDLE_TIMEOUT_MILLIS_DISABLE,
-        executor.getScheduledExecutorService(), userAgent, interceptors, censusCtxFactory);
+        CompressorRegistry.getDefaultInstance(), timerServicePool, executorPool, oobExecutorPool,
+        timer.getStopwatchSupplier(),  ManagedChannelImpl2.IDLE_TIMEOUT_MILLIS_DISABLE, userAgent,
+        interceptors, censusCtxFactory);
     // Force-exit the initial idle-mode
     channel.exitIdleMode();
     assertEquals(0, timer.numPendingTasks());
@@ -200,7 +205,9 @@ public class ManagedChannelImpl2Test {
     expectedUri = new URI(target);
     when(mockLoadBalancerFactory.newLoadBalancer(any(Helper.class))).thenReturn(mockLoadBalancer);
     transports = TestUtils.captureTransports(mockTransportFactory);
-    when(timerService.create()).thenReturn(timer.getScheduledExecutorService());
+    when(timerServicePool.getObject()).thenReturn(timer.getScheduledExecutorService());
+    when(executorPool.getObject()).thenReturn(executor.getScheduledExecutorService());
+    when(oobExecutorPool.getObject()).thenReturn(oobExecutor.getScheduledExecutorService());
   }
 
   @After
@@ -746,12 +753,9 @@ public class ManagedChannelImpl2Test {
   @Test
   public void oobchannels() {
     createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
-    FakeClock oobExecutor = new FakeClock();
 
-    ManagedChannel oob1 = helper.createOobChannel(addressGroup, "oob1authority",
-        oobExecutor.getScheduledExecutorService());
-    ManagedChannel oob2 = helper.createOobChannel(addressGroup, "oob2authority",
-        oobExecutor.getScheduledExecutorService());
+    ManagedChannel oob1 = helper.createOobChannel(addressGroup, "oob1authority");
+    ManagedChannel oob2 = helper.createOobChannel(addressGroup, "oob2authority");
 
     assertEquals("oob1authority", oob1.authority());
     assertEquals("oob2authority", oob2.authority());

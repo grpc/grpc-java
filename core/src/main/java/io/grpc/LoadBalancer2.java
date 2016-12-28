@@ -34,7 +34,6 @@ package io.grpc;
 import com.google.common.base.Preconditions;
 
 import java.util.List;
-import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -338,13 +337,9 @@ public abstract class LoadBalancer2 {
      *
      * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
      * channels within {@link #shutdown}.
-     *
-     * @param eag the address(es) of the channel
-     * @param authority the authority of the destination this channel connects to
-     * @param executor the default executor for running RPC callbacks
      */
     public abstract ManagedChannel createOobChannel(
-        EquivalentAddressGroup eag, String authority, Executor executor);
+        EquivalentAddressGroup eag, String authority);
 
     /**
      * Set a new picker to the channel.

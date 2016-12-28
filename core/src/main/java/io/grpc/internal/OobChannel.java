@@ -38,6 +38,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import com.google.census.CensusContextFactory;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.common.util.concurrent.MoreExecutors;
 
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -75,7 +76,8 @@ final class OobChannel extends ManagedChannel implements WithLogId {
   private final CensusContextFactory censusFactory;
   private final String authority;
   private final DelayedClientTransport2 delayedTransport;
-  private final Executor executor;
+  private final ObjectPool<? extends Executor> executorPool;
+  private volatile Executor executor;
   private final ScheduledExecutorService deadlineCancellationExecutor;
   private final Supplier<Stopwatch> stopwatchSupplier;
   private final CountDownLatch terminatedLatch = new CountDownLatch(1);
@@ -91,12 +93,14 @@ final class OobChannel extends ManagedChannel implements WithLogId {
     }
   };
 
-  OobChannel(CensusContextFactory censusFactory, String authority, Executor executor,
+  OobChannel(CensusContextFactory censusFactory, String authority,
+      ObjectPool<? extends Executor> executorPool,
       ScheduledExecutorService deadlineCancellationExecutor, Supplier<Stopwatch> stopwatchSupplier,
       ChannelExecutor channelExecutor) {
     this.censusFactory = checkNotNull(censusFactory, "censusFactory");
     this.authority = checkNotNull(authority, "authority");
-    this.executor = checkNotNull(executor, "executor");
+    this.executorPool = checkNotNull(executorPool, "executorPool");
+    this.executor = checkNotNull(executorPool.getObject(), "executor");
     this.deadlineCancellationExecutor = checkNotNull(
         deadlineCancellationExecutor, "deadlineCancellationExecutor");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
@@ -240,6 +244,9 @@ final class OobChannel extends ManagedChannel implements WithLogId {
   void handleSubchannelTerminated() {
     // When delayedTransport is terminated, it shuts down subchannel.  Therefore, at this point
     // both delayedTransport and subchannel have terminated.
+    executorPool.returnObject(executor);
+    // Needed for delivering rejections to new calls after OobChannel is terminated.
+    executor = MoreExecutors.directExecutor();
     terminatedLatch.countDown();
   }
 }

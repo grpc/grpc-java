@@ -84,6 +84,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -94,6 +95,7 @@ import java.util.concurrent.TimeUnit;
 public class ManagedChannelImpl2IdlenessTest {
   private final FakeClock timer = new FakeClock();
   private final FakeClock executor = new FakeClock();
+  private final FakeClock oobExecutor = new FakeClock();
   private static final String AUTHORITY = "fakeauthority";
   private static final String USER_AGENT = "fakeagent";
   private static final long IDLE_TIMEOUT_SECONDS = 30;
@@ -107,7 +109,9 @@ public class ManagedChannelImpl2IdlenessTest {
   private final List<EquivalentAddressGroup> addressGroupList =
       new ArrayList<EquivalentAddressGroup>();
   
-  @Mock private SharedResourceHolder.Resource<ScheduledExecutorService> timerService;
+  @Mock private ObjectPool<ScheduledExecutorService> timerServicePool;
+  @Mock private ObjectPool<Executor> executorPool;
+  @Mock private ObjectPool<Executor> oobExecutorPool;
   @Mock private ClientTransportFactory mockTransportFactory;
   @Mock private LoadBalancer2 mockLoadBalancer;
   @Mock private LoadBalancer2.Factory mockLoadBalancerFactory;
@@ -121,7 +125,9 @@ public class ManagedChannelImpl2IdlenessTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    when(timerService.create()).thenReturn(timer.getScheduledExecutorService());
+    when(timerServicePool.getObject()).thenReturn(timer.getScheduledExecutorService());
+    when(executorPool.getObject()).thenReturn(executor.getScheduledExecutorService());
+    when(oobExecutorPool.getObject()).thenReturn(oobExecutor.getScheduledExecutorService());
     when(mockLoadBalancerFactory.newLoadBalancer(any(Helper.class))).thenReturn(mockLoadBalancer);
     when(mockNameResolver.getServiceAuthority()).thenReturn(AUTHORITY);
     when(mockNameResolverFactory
@@ -131,9 +137,8 @@ public class ManagedChannelImpl2IdlenessTest {
     channel = new ManagedChannelImpl2("fake://target", new FakeBackoffPolicyProvider(),
         mockNameResolverFactory, Attributes.EMPTY, mockLoadBalancerFactory,
         mockTransportFactory, DecompressorRegistry.getDefaultInstance(),
-        CompressorRegistry.getDefaultInstance(), timerService, timer.getStopwatchSupplier(),
-        TimeUnit.SECONDS.toMillis(IDLE_TIMEOUT_SECONDS),
-        executor.getScheduledExecutorService(), USER_AGENT,
+        CompressorRegistry.getDefaultInstance(), timerServicePool, executorPool, oobExecutorPool,
+        timer.getStopwatchSupplier(), TimeUnit.SECONDS.toMillis(IDLE_TIMEOUT_SECONDS), USER_AGENT,
         Collections.<ClientInterceptor>emptyList(),
         NoopCensusContextFactory.INSTANCE);
     newTransports = TestUtils.captureTransports(mockTransportFactory);
@@ -314,8 +319,7 @@ public class ManagedChannelImpl2IdlenessTest {
     assertFalse(channel.inUseStateAggregator.isInUse());
 
     // Now make an RPC on an OOB channel
-    ManagedChannel oob = helper.createOobChannel(addressGroupList.get(0), "oobauthority",
-        oobExecutor.getScheduledExecutorService());
+    ManagedChannel oob = helper.createOobChannel(addressGroupList.get(0), "oobauthority");
     verify(mockTransportFactory, never())
         .newClientTransport(any(SocketAddress.class), same("oobauthority"), same(USER_AGENT));
     ClientCall<String, Integer> oobCall = oob.newCall(method, CallOptions.DEFAULT);

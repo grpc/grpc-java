@@ -41,6 +41,7 @@ import com.google.census.CensusContextFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.common.util.concurrent.MoreExecutors;
 
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -70,7 +71,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -111,8 +111,9 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
   private final Attributes nameResolverParams;
   private final LoadBalancer2.Factory loadBalancerFactory;
   private final ClientTransportFactory transportFactory;
-  private final Executor executor;
-  private final boolean usingSharedExecutor;
+  private volatile Executor executor;
+  private final ObjectPool<? extends Executor> executorPool;
+  private final ObjectPool<? extends Executor> oobExecutorPool;
   private final LogId logId = LogId.allocate(getClass().getName());
 
   private final ChannelExecutor channelExecutor = new ChannelExecutor();
@@ -120,7 +121,7 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
   private final DecompressorRegistry decompressorRegistry;
   private final CompressorRegistry compressorRegistry;
 
-  private final SharedResourceHolder.Resource<ScheduledExecutorService> timerService;
+  private final ObjectPool<ScheduledExecutorService> timerServicePool;
   private final Supplier<Stopwatch> stopwatchSupplier;
   /** The timout before entering idle mode. */
   private final long idleTimeoutMillis;
@@ -392,30 +393,27 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
       NameResolver.Factory nameResolverFactory, Attributes nameResolverParams,
       LoadBalancer2.Factory loadBalancerFactory, ClientTransportFactory transportFactory,
       DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
-      SharedResourceHolder.Resource<ScheduledExecutorService> timerService,
+      ObjectPool<ScheduledExecutorService> timerServicePool,
+      ObjectPool<? extends Executor> executorPool, ObjectPool<? extends Executor> oobExecutorPool,
       Supplier<Stopwatch> stopwatchSupplier, long idleTimeoutMillis,
-      @Nullable Executor executor, @Nullable String userAgent,
+      @Nullable String userAgent,
       List<ClientInterceptor> interceptors, CensusContextFactory censusFactory) {
     this.target = checkNotNull(target, "target");
     this.nameResolverFactory = checkNotNull(nameResolverFactory, "nameResolverFactory");
     this.nameResolverParams = checkNotNull(nameResolverParams, "nameResolverParams");
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
     this.loadBalancerFactory = checkNotNull(loadBalancerFactory, "loadBalancerFactory");
-    if (executor == null) {
-      usingSharedExecutor = true;
-      this.executor = SharedResourceHolder.get(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
-    } else {
-      usingSharedExecutor = false;
-      this.executor = executor;
-    }
+    this.executorPool = checkNotNull(executorPool, "executorPool");
+    this.oobExecutorPool = checkNotNull(oobExecutorPool, "oobExecutorPool");
+    this.executor = checkNotNull(executorPool.getObject(), "executor");
     this.delayedTransport = new DelayedClientTransport2(this.executor, this.channelExecutor);
     this.delayedTransport.start(delayedTransportListener);
     this.backoffPolicyProvider = backoffPolicyProvider;
     this.transportFactory =
         new CallCredentialsApplyingTransportFactory(transportFactory, this.executor);
     this.interceptorChannel = ClientInterceptors.intercept(new RealChannel(), interceptors);
-    this.timerService = timerService;
-    this.scheduledExecutor = SharedResourceHolder.get(timerService);
+    this.timerServicePool = timerServicePool;
+    this.scheduledExecutor = timerServicePool.getObject();
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     if (idleTimeoutMillis == IDLE_TIMEOUT_MILLIS_DISABLE) {
       this.idleTimeoutMillis = idleTimeoutMillis;
@@ -594,10 +592,10 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
       log.log(Level.FINE, "[{0}] Terminated", getLogId());
       terminated = true;
       terminatedLatch.countDown();
-      if (usingSharedExecutor) {
-        SharedResourceHolder.release(GrpcUtil.SHARED_CHANNEL_EXECUTOR, (ExecutorService) executor);
-      }
-      scheduledExecutor = SharedResourceHolder.release(timerService, scheduledExecutor);
+      executorPool.returnObject(executor);
+      // Needed for delivering rejections to new calls after OobChannel is terminated.
+      executor = MoreExecutors.directExecutor();
+      scheduledExecutor = timerServicePool.returnObject(scheduledExecutor);
       // Release the transport factory so that it can deallocate any resources.
       transportFactory.close();
     }
@@ -669,14 +667,13 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
     }
 
     @Override
-    public ManagedChannel createOobChannel(
-        EquivalentAddressGroup addressGroup, String authority, Executor executor) {
+    public ManagedChannel createOobChannel(EquivalentAddressGroup addressGroup, String authority) {
       ScheduledExecutorService scheduledExecutorCopy = scheduledExecutor;
       checkState(scheduledExecutorCopy != null,
           "scheduledExecutor is already cleared. Looks like you are calling this method after "
           + "you've already shut down");
-      final OobChannel oobChannel = new OobChannel(censusFactory, authority, executor,
-          scheduledExecutorCopy, stopwatchSupplier, channelExecutor);
+      final OobChannel oobChannel = new OobChannel(censusFactory, authority,
+          oobExecutorPool, scheduledExecutorCopy, stopwatchSupplier, channelExecutor);
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
           addressGroup, authority, userAgent, backoffPolicyProvider, transportFactory,
           scheduledExecutorCopy, stopwatchSupplier, channelExecutor,
