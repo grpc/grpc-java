@@ -55,6 +55,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.io.ByteStreams;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.ByteString;
 
 import io.grpc.Attributes;
@@ -79,7 +80,7 @@ import io.grpc.grpclb.GrpclbLoadBalancer2.ErrorPicker;
 import io.grpc.grpclb.GrpclbLoadBalancer2.RoundRobinPicker;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
-import io.grpc.internal.ChannelExecutor;
+import io.grpc.internal.SerializingExecutor;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.StreamObserver;
 import org.junit.After;
@@ -152,7 +153,8 @@ public class GrpclbLoadBalancer2Test {
   private io.grpc.Server fakeLbServer;
   @Captor
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
-  private final ChannelExecutor channelExecutor = new ChannelExecutor();
+  private final SerializingExecutor channelExecutor =
+      new SerializingExecutor(MoreExecutors.directExecutor());
   private final Metadata headers = new Metadata();
   @Mock
   private LoadBalancer2.Factory pickFirstBalancerFactory;
@@ -234,7 +236,7 @@ public class GrpclbLoadBalancer2Test {
         @Override
         public Void answer(InvocationOnMock invocation) throws Throwable {
           Runnable task = (Runnable) invocation.getArguments()[0];
-          channelExecutor.executeLater(task).drain();
+          channelExecutor.execute(task);
           return null;
         }
       }).when(helper).runSerialized(any(Runnable.class));
@@ -246,12 +248,12 @@ public class GrpclbLoadBalancer2Test {
   public void tearDown() {
     try {
       if (balancer != null) {
-        channelExecutor.executeLater(new Runnable() {
+        channelExecutor.execute(new Runnable() {
             @Override
             public void run() {
               balancer.shutdown();
             }
-          }).drain();
+          });
       }
       for (ManagedChannel channel : oobChannelTracker) {
         assertTrue(channel + " is shutdown", channel.isShutdown());
@@ -731,31 +733,31 @@ public class GrpclbLoadBalancer2Test {
 
   private void deliverSubchannelState(
       final Subchannel subchannel, final ConnectivityStateInfo newState) {
-    channelExecutor.executeLater(new Runnable() {
+    channelExecutor.execute(new Runnable() {
         @Override
         public void run() {
           balancer.handleSubchannelState(subchannel, newState);
         }
-      }).drain();
+      });
   }
 
   private void deliverNameResolutionError(final Status error) {
-    channelExecutor.executeLater(new Runnable() {
+    channelExecutor.execute(new Runnable() {
         @Override
         public void run() {
           balancer.handleNameResolutionError(error);
         }
-      }).drain();
+      });
   }
 
   private void deliverResolvedAddresses(
       final List<ResolvedServerInfoGroup> addrs, final Attributes attrs) {
-    channelExecutor.executeLater(new Runnable() {
+    channelExecutor.execute(new Runnable() {
         @Override
         public void run() {
           balancer.handleResolvedAddresses(addrs, attrs);
         }
-      }).drain();
+      });
   }
 
   private static List<ResolvedServerInfoGroup> createResolvedServerInfoGroupList(boolean ... isLb) {

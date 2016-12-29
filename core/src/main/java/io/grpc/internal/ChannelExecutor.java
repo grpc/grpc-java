@@ -49,7 +49,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * order as they are submitted.
  */
 @ThreadSafe
-public final class ChannelExecutor {
+final class ChannelExecutor {
   private static final Logger log = Logger.getLogger(ChannelExecutor.class.getName());
 
   private final Object lock = new Object();
@@ -66,7 +66,7 @@ public final class ChannelExecutor {
    * <p>Upon returning, it guarantees that all tasks submitted by {@code executeLater()} before it
    * have been or will eventually be run, while not requiring any more calls to {@code drain()}.
    */
-  public void drain() {
+  void drain() {
     boolean drainLeaseAcquired = false;
     while (true) {
       Runnable runnable;
@@ -97,7 +97,7 @@ public final class ChannelExecutor {
    *
    * @return this ChannelExecutor
    */
-  public ChannelExecutor executeLater(Runnable runnable) {
+  ChannelExecutor executeLater(Runnable runnable) {
     synchronized (lock) {
       queue.add(checkNotNull(runnable, "runnable is null"));
     }
