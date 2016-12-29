@@ -42,6 +42,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyObject;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.atLeast;
@@ -250,10 +251,16 @@ public class ManagedChannelImpl2Test {
   @Test
   public void shutdownWithNoTransportsEverCreated() {
     createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+    verify(executorPool).getObject();
+    verify(timerServicePool).getObject();
+    verify(executorPool, never()).returnObject(anyObject());
+    verify(timerServicePool, never()).returnObject(anyObject());
     verifyNoMoreInteractions(mockTransportFactory);
     channel.shutdown();
     assertTrue(channel.isShutdown());
     assertTrue(channel.isTerminated());
+    verify(executorPool).returnObject(executor.getScheduledExecutorService());
+    verify(timerServicePool).returnObject(timer.getScheduledExecutorService());
   }
 
   @Test
@@ -275,6 +282,8 @@ public class ManagedChannelImpl2Test {
   private void subtestCallsAndShutdown(boolean shutdownNow, boolean shutdownNowAfterShutdown) {
     FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory(true);
     createChannel(nameResolverFactory, NO_INTERCEPTOR);
+    verify(executorPool).getObject();
+    verify(timerServicePool).getObject();
     ClientStream mockStream = mock(ClientStream.class);
     ClientStream mockStream2 = mock(ClientStream.class);
     Metadata headers = new Metadata();
@@ -388,8 +397,13 @@ public class ManagedChannelImpl2Test {
     // Killing the remaining real transport will terminate the channel
     transportListener.transportShutdown(Status.UNAVAILABLE);
     assertFalse(channel.isTerminated());
+    verify(executorPool, never()).returnObject(anyObject());
+    verify(timerServicePool, never()).returnObject(anyObject());
     transportListener.transportTerminated();
     assertTrue(channel.isTerminated());
+    verify(executorPool).returnObject(executor.getScheduledExecutorService());
+    verify(timerServicePool).returnObject(timer.getScheduledExecutorService());
+    verifyNoMoreInteractions(oobExecutorPool);
 
     verify(mockTransportFactory).close();
     verifyNoMoreInteractions(mockTransportFactory);
@@ -756,6 +770,7 @@ public class ManagedChannelImpl2Test {
 
     ManagedChannel oob1 = helper.createOobChannel(addressGroup, "oob1authority");
     ManagedChannel oob2 = helper.createOobChannel(addressGroup, "oob2authority");
+    verify(oobExecutorPool, times(2)).getObject();
 
     assertEquals("oob1authority", oob1.authority());
     assertEquals("oob2authority", oob2.authority());
@@ -803,9 +818,12 @@ public class ManagedChannelImpl2Test {
     assertFalse(oob1.isShutdown());
     assertFalse(oob2.isShutdown());
     oob1.shutdown();
+    verify(oobExecutorPool, never()).returnObject(anyObject());
     oob2.shutdownNow();
     assertTrue(oob1.isShutdown());
     assertTrue(oob2.isShutdown());
+    assertTrue(oob2.isTerminated());
+    verify(oobExecutorPool).returnObject(oobExecutor.getScheduledExecutorService());
 
     // New RPCs will be rejected.
     assertEquals(0, oobExecutor.numPendingTasks());
@@ -836,9 +854,11 @@ public class ManagedChannelImpl2Test {
     // Delayed transport has already terminated.  Terminating the transport terminates the
     // subchannel, which in turn terimates the OOB channel, which terminates the channel.
     assertFalse(oob1.isTerminated());
+    verify(oobExecutorPool).returnObject(oobExecutor.getScheduledExecutorService());
     transportInfo.listener.transportTerminated();
     assertTrue(oob1.isTerminated());
     assertTrue(channel.isTerminated());
+    verify(oobExecutorPool, times(2)).returnObject(oobExecutor.getScheduledExecutorService());
   }
 
   @Test
