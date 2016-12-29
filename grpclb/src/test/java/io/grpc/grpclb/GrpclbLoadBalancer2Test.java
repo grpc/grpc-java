@@ -49,6 +49,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -139,7 +140,6 @@ public class GrpclbLoadBalancer2Test {
   private Helper helper;
   @Mock
   private Subchannel mockSubchannel;
-  @Mock
   private LoadBalancerGrpc.LoadBalancerImplBase mockLbService;
   @Captor
   private ArgumentCaptor<StreamObserver<LoadBalanceResponse>> lbResponseObserverCaptor;
@@ -174,11 +174,10 @@ public class GrpclbLoadBalancer2Test {
         .thenReturn(pickFirstBalancer);
     when(roundRobinBalancerFactory.newLoadBalancer(any(Helper.class)))
         .thenReturn(roundRobinBalancer);
-    doAnswer(new Answer<StreamObserver<LoadBalanceRequest>>() {
+    mockLbService = spy(new LoadBalancerGrpc.LoadBalancerImplBase() {
         @Override
-        public StreamObserver<LoadBalanceRequest> answer(InvocationOnMock invocation) {
-          final StreamObserver<?> responseObserver =
-              (StreamObserver<?>) invocation.getArguments()[0];
+        public StreamObserver<LoadBalanceRequest> balanceLoad(
+            final StreamObserver<LoadBalanceResponse> responseObserver) {
           StreamObserver<LoadBalanceRequest> requestObserver =
               (StreamObserver<LoadBalanceRequest>) mock(StreamObserver.class);
           Answer<Void> closeRpc = new Answer<Void>() {
@@ -192,9 +191,7 @@ public class GrpclbLoadBalancer2Test {
           lbRequestObservers.add(requestObserver);
           return requestObserver;
         }
-      }).when(mockLbService).balanceLoad(any(StreamObserver.class));
-    // TODO(zhangkun83): remove this once https://github.com/grpc/grpc-java/pull/2553 is in.
-    when(mockLbService.bindService()).thenCallRealMethod();
+      });
     fakeLbServer = InProcessServerBuilder.forName("fakeLb")
         .directExecutor().addService(mockLbService).build().start();
     doAnswer(new Answer<ManagedChannel>() {
