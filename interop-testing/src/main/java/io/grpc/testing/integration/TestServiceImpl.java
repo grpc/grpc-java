@@ -31,6 +31,7 @@
 
 package io.grpc.testing.integration;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Queues;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.EmptyProtos;
@@ -318,9 +319,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
      * Allows the service to cancel the remaining responses.
      */
     public synchronized void cancel() {
-      if (cancelled) {
-        throw new IllegalStateException("Dispatcher already cancelled");
-      }
+      Preconditions.checkState(!cancelled, "Dispatcher already cancelled");
       chunks.clear();
       cancelled = true;
     }
