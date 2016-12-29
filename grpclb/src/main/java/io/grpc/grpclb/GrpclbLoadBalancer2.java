@@ -66,6 +66,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.Nullable;
 
 /**
  * A {@link LoadBalancer2} that uses the GRPCLB protocol.
@@ -85,8 +86,8 @@ class GrpclbLoadBalancer2 extends LoadBalancer2 implements WithLogId {
 
   private final String serviceName;
   private final Helper helper;
-  private final LoadBalancer2.Factory pickFirstBalancerFactory;
-  private final LoadBalancer2.Factory roundRobinBalancerFactory;
+  private final Factory pickFirstBalancerFactory;
+  private final Factory roundRobinBalancerFactory;
 
   private static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
         Attributes.Key.of("io.grpc.grpclb.GrpclbLoadBalancer.stateInfo");
@@ -94,8 +95,11 @@ class GrpclbLoadBalancer2 extends LoadBalancer2 implements WithLogId {
   static final PickResult THROTTLED_RESULT =
       PickResult.withError(Status.UNAVAILABLE.withDescription("Throttled by LB"));
 
-  // All states in this class are mutated ONLY from Channel Executor
+  // All mutable states in this class are mutated ONLY from Channel Executor
 
+  ///////////////////////////////////////////////////////////////////////////////
+  // General states.
+  ///////////////////////////////////////////////////////////////////////////////
   private LoadBalancer2 delegate;
   private LbPolicy lbPolicy;
 
@@ -105,23 +109,29 @@ class GrpclbLoadBalancer2 extends LoadBalancer2 implements WithLogId {
 
   // null if there isn't any available LB addresses.
   // If non-null, never empty.
+  @Nullable
   private List<LbAddressGroup> lbAddressGroups;
+  @Nullable
   private ManagedChannel lbCommChannel;
   // Points to the position of the LB address that lbCommChannel is bound to, if
   // lbCommChannel != null.
   private int currentLbIndex;
+  @Nullable
   private LbResponseObserver lbResponseObserver;
+  @Nullable
   private StreamObserver<LoadBalanceRequest> lbRequestWriter;
   private Map<EquivalentAddressGroup, Subchannel> subchannels = Collections.emptyMap();
   // A null element indicate a simulated error for throttling purpose
-  private List<EquivalentAddressGroup> roundRobinList;
+  private List<EquivalentAddressGroup> roundRobinList = Collections.emptyList();
 
-  GrpclbLoadBalancer2(Helper helper, LoadBalancer2.Factory pickFirstBalancerFactory,
-      LoadBalancer2.Factory roundRobinBalancerFactory) {
-    this.serviceName = helper.getAuthority();
-    this.helper = helper;
-    this.pickFirstBalancerFactory = pickFirstBalancerFactory;
-    this.roundRobinBalancerFactory = roundRobinBalancerFactory;
+  GrpclbLoadBalancer2(Helper helper, Factory pickFirstBalancerFactory,
+      Factory roundRobinBalancerFactory) {
+    this.helper = checkNotNull(helper, "helper");
+    this.serviceName = checkNotNull(helper.getAuthority(), "helper returns null authority");
+    this.pickFirstBalancerFactory =
+        checkNotNull(pickFirstBalancerFactory, "pickFirstBalancerFactory");
+    this.roundRobinBalancerFactory =
+        checkNotNull(roundRobinBalancerFactory, "roundRobinBalancerFactory");
   }
 
   @Override
@@ -190,10 +200,12 @@ class GrpclbLoadBalancer2 extends LoadBalancer2 implements WithLogId {
       currentLbIndex = 0;
       switch (newLbPolicy) {
         case PICK_FIRST:
-          delegate = pickFirstBalancerFactory.newLoadBalancer(helper);
+          delegate = checkNotNull(pickFirstBalancerFactory.newLoadBalancer(helper),
+              "pickFirstBalancerFactory.newLoadBalancer()");
           break;
         case ROUND_ROBIN:
-          delegate = roundRobinBalancerFactory.newLoadBalancer(helper);
+          delegate = checkNotNull(roundRobinBalancerFactory.newLoadBalancer(helper),
+              "roundRobinBalancerFactory.newLoadBalancer()");
           break;
         default:
           // Do nohting
@@ -287,7 +299,7 @@ class GrpclbLoadBalancer2 extends LoadBalancer2 implements WithLogId {
   }
 
   private void handleGrpclbError(Status status) {
-    if (roundRobinList == null || roundRobinList.isEmpty()) {
+    if (roundRobinList.isEmpty()) {
       helper.updatePicker(new ErrorPicker(status));
     }
   }

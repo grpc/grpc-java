@@ -35,6 +35,9 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.EquivalentAddressGroup;
 
+/**
+ * Represents a balancer address entry.
+ */
 class LbAddressGroup {
   private final EquivalentAddressGroup addresses;
   private final String authority;
