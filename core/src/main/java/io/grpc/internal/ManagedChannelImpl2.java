@@ -491,7 +491,6 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
     channelExecutor.executeLater(new Runnable() {
         @Override
         public void run() {
-          maybeTerminateChannel();
           cancelIdleTimer();
         }
       }).drain();
