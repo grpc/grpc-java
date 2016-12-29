@@ -70,6 +70,9 @@ import javax.annotation.Nullable;
 
 /**
  * A {@link LoadBalancer2} that uses the GRPCLB protocol.
+ *
+ * <p>Optionally, when requested by the naming system, will delegate the work to a local pick-first
+ * or round-robin balancer.
  */
 class GrpclbLoadBalancer2 extends LoadBalancer2 implements WithLogId {
   private static final Logger logger = Logger.getLogger(GrpclbLoadBalancer2.class.getName());
@@ -100,6 +103,9 @@ class GrpclbLoadBalancer2 extends LoadBalancer2 implements WithLogId {
   ///////////////////////////////////////////////////////////////////////////////
   // General states.
   ///////////////////////////////////////////////////////////////////////////////
+
+  // If not null, all work is delegated to it.
+  @Nullable
   private LoadBalancer2 delegate;
   private LbPolicy lbPolicy;
 
@@ -152,7 +158,7 @@ class GrpclbLoadBalancer2 extends LoadBalancer2 implements WithLogId {
       subchannel.requestConnection();
     }
     subchannel.getAttributes().get(STATE_INFO).set(newState);
-    helper.updatePicker(getPickerForRoundRobin());
+    helper.updatePicker(makePicker());
   }
 
   @Override
@@ -163,8 +169,6 @@ class GrpclbLoadBalancer2 extends LoadBalancer2 implements WithLogId {
     List<LbAddressGroup> newLbAddressGroups = new ArrayList<LbAddressGroup>();
     List<ResolvedServerInfoGroup> newBackendServerInfoGroups =
         new ArrayList<ResolvedServerInfoGroup>();
-    List<EquivalentAddressGroup> newBackendAddressGroups =
-        new ArrayList<EquivalentAddressGroup>();
     for (ResolvedServerInfoGroup serverInfoGroup : updatedServers) {
       String lbAddrAuthority = serverInfoGroup.getAttributes().get(
           GrpclbConstants.ATTR_LB_ADDR_AUTHORITY);
@@ -172,12 +176,11 @@ class GrpclbLoadBalancer2 extends LoadBalancer2 implements WithLogId {
       if (lbAddrAuthority != null) {
         newLbAddressGroups.add(new LbAddressGroup(eag, lbAddrAuthority));
       } else {
-        newBackendAddressGroups.add(eag);
         newBackendServerInfoGroups.add(serverInfoGroup);
       }
     }
 
-    if (newBackendAddressGroups.isEmpty()) {
+    if (newBackendServerInfoGroups.isEmpty()) {
       // handleResolvedAddresses()'s javadoc has guaranteed updatedServers is never empty.
       checkState(!newLbAddressGroups.isEmpty(),
           "No backend address nor LB address.  updatedServers=%s", updatedServers);
@@ -299,6 +302,8 @@ class GrpclbLoadBalancer2 extends LoadBalancer2 implements WithLogId {
   }
 
   private void handleGrpclbError(Status status) {
+    logger.log(Level.FINE, "[{0}] Had an error: {1}; roundRobinList={2}",
+        new Object[] {logId, status, roundRobinList});
     if (roundRobinList.isEmpty()) {
       helper.updatePicker(new ErrorPicker(status));
     }
@@ -374,7 +379,7 @@ class GrpclbLoadBalancer2 extends LoadBalancer2 implements WithLogId {
 
       subchannels = newSubchannelMap;
       roundRobinList = newRoundRobinList;
-      helper.updatePicker(getPickerForRoundRobin());
+      helper.updatePicker(makePicker());
     }
 
     @Override public void onError(final Throwable error) {
@@ -409,7 +414,10 @@ class GrpclbLoadBalancer2 extends LoadBalancer2 implements WithLogId {
     }
   }
 
-  private SubchannelPicker getPickerForRoundRobin() {
+  /**
+   * Make a picker out of the current roundRobinList and the states of subchannels.
+   */
+  private SubchannelPicker makePicker() {
     List<PickResult> resultList = new ArrayList<PickResult>();
     Status error = null;
     for (EquivalentAddressGroup eag : roundRobinList) {
@@ -429,11 +437,15 @@ class GrpclbLoadBalancer2 extends LoadBalancer2 implements WithLogId {
     }
     if (resultList.isEmpty()) {
       if (error != null) {
+        logger.log(Level.FINE, "[{0}] No ready Subchannel. Using error: {1}",
+            new Object[] {logId, error});
         return new ErrorPicker(error);
       } else {
+        logger.log(Level.FINE, "[{0}] No ready Subchannel and no error", logId);
         return BUFFER_PICKER;
       }
     } else {
+      logger.log(Level.FINE, "[{0}] Using list {1}", new Object[] {logId, resultList});
       return new RoundRobinPicker(resultList);
     }
   }
