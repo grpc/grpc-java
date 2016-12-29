@@ -359,7 +359,8 @@ class GrpclbLoadBalancer2 extends LoadBalancer2 implements WithLogId {
           // TODO(zhangkun83): save the LB token and insert it to the application RPCs' headers.
           if (!newSubchannelMap.containsKey(eag)) {
             Attributes subchannelAttrs = Attributes.newBuilder()
-                .set(STATE_INFO, new AtomicReference<ConnectivityStateInfo>(
+                .set(STATE_INFO,
+                    new AtomicReference<ConnectivityStateInfo>(
                         ConnectivityStateInfo.forNonError(IDLE)))
                 .build();
             Subchannel subchannel = helper.createSubchannel(eag, subchannelAttrs);
