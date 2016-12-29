@@ -392,7 +392,7 @@ public class WorkerServiceGrpc {
   public static io.grpc.ServiceDescriptor getServiceDescriptor() {
     io.grpc.ServiceDescriptor result = serviceDescriptor;
     if (result == null) {
-      synchronized(WorkerServiceGrpc.class) {
+      synchronized (WorkerServiceGrpc.class) {
         result = serviceDescriptor;
         if (result == null) {
           serviceDescriptor = result = new io.grpc.ServiceDescriptor(

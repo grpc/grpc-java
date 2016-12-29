@@ -274,7 +274,7 @@ public class BenchmarkServiceGrpc {
   public static io.grpc.ServiceDescriptor getServiceDescriptor() {
     io.grpc.ServiceDescriptor result = serviceDescriptor;
     if (result == null) {
-      synchronized(BenchmarkServiceGrpc.class) {
+      synchronized (BenchmarkServiceGrpc.class) {
         result = serviceDescriptor;
         if (result == null) {
           serviceDescriptor = result = new io.grpc.ServiceDescriptor(

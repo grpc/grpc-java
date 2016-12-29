@@ -205,7 +205,7 @@ public class LoadBalancerGrpc {
   public static io.grpc.ServiceDescriptor getServiceDescriptor() {
     io.grpc.ServiceDescriptor result = serviceDescriptor;
     if (result == null) {
-      synchronized(LoadBalancerGrpc.class) {
+      synchronized (LoadBalancerGrpc.class) {
         result = serviceDescriptor;
         if (result == null) {
           serviceDescriptor = result = new io.grpc.ServiceDescriptor(

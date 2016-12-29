@@ -215,7 +215,7 @@ public class ReflectableServiceGrpc {
   public static io.grpc.ServiceDescriptor getServiceDescriptor() {
     io.grpc.ServiceDescriptor result = serviceDescriptor;
     if (result == null) {
-      synchronized(ReflectableServiceGrpc.class) {
+      synchronized (ReflectableServiceGrpc.class) {
         result = serviceDescriptor;
         if (result == null) {
           serviceDescriptor = result = new io.grpc.ServiceDescriptor(

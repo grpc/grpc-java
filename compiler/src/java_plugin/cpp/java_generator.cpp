@@ -922,7 +922,7 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
   p->Indent();
   p->Print(
       *vars,
-      "synchronized($service_class_name$.class) {\n");
+      "synchronized ($service_class_name$.class) {\n");
   p->Indent();
   p->Print("result = serviceDescriptor;\n");
   p->Print("if (result == null) {\n");
