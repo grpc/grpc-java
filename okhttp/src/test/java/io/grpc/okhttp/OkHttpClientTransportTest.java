@@ -1574,7 +1574,7 @@ public class OkHttpClientTransportTest {
         try {
           message.close();
         } catch (IOException e) {
-          throw new RuntimeException(e);
+          // Ignore
         }
       }
     }
