@@ -41,7 +41,6 @@ import com.google.census.CensusContextFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-import com.google.common.util.concurrent.MoreExecutors;
 
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -111,7 +110,7 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
   private final Attributes nameResolverParams;
   private final LoadBalancer2.Factory loadBalancerFactory;
   private final ClientTransportFactory transportFactory;
-  private volatile Executor executor;
+  private final Executor executor;
   private final ObjectPool<? extends Executor> executorPool;
   private final ObjectPool<? extends Executor> oobExecutorPool;
   private final LogId logId = LogId.allocate(getClass().getName());
@@ -593,8 +592,6 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
       terminated = true;
       terminatedLatch.countDown();
       executorPool.returnObject(executor);
-      // Needed for delivering rejections to new calls after OobChannel is terminated.
-      executor = MoreExecutors.directExecutor();
       scheduledExecutor = timerServicePool.returnObject(scheduledExecutor);
       // Release the transport factory so that it can deallocate any resources.
       transportFactory.close();

@@ -38,7 +38,6 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import com.google.census.CensusContextFactory;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-import com.google.common.util.concurrent.MoreExecutors;
 
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -77,7 +76,7 @@ final class OobChannel extends ManagedChannel implements WithLogId {
   private final String authority;
   private final DelayedClientTransport2 delayedTransport;
   private final ObjectPool<? extends Executor> executorPool;
-  private volatile Executor executor;
+  private final Executor executor;
   private final ScheduledExecutorService deadlineCancellationExecutor;
   private final Supplier<Stopwatch> stopwatchSupplier;
   private final CountDownLatch terminatedLatch = new CountDownLatch(1);
@@ -245,8 +244,6 @@ final class OobChannel extends ManagedChannel implements WithLogId {
     // When delayedTransport is terminated, it shuts down subchannel.  Therefore, at this point
     // both delayedTransport and subchannel have terminated.
     executorPool.returnObject(executor);
-    // Needed for delivering rejections to new calls after OobChannel is terminated.
-    executor = MoreExecutors.directExecutor();
     terminatedLatch.countDown();
   }
 }
