@@ -650,6 +650,11 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
           @Override
           public void run() {
             if (terminating) {
+              // Because runSerialized() doesn't guarantee the runnable has been executed upon when
+              // returning, the subchannel may still be returned to the balancer without being
+              // shutdown even if "terminating" is already true.  The subchannel will not be used in
+              // this case, because delayed transport has terminated when "terminating" becomes
+              // true, and no more requests will be sent to balancer beyond this point.
               internalSubchannel.shutdown();
             }
             if (!terminated) {
