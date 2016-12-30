@@ -315,7 +315,7 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
     helper.lb = loadBalancerFactory.newLoadBalancer(helper);
     this.loadBalancer = helper.lb;
 
-    NameResolverListenerImpl listener = new NameResolverListenerImpl(helper.lb);
+    NameResolverListenerImpl listener = new NameResolverListenerImpl(helper);
     try {
       nameResolver.start(listener);
     } catch (Throwable t) {
@@ -743,9 +743,11 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
 
   private class NameResolverListenerImpl implements NameResolver.Listener {
     final LoadBalancer2 balancer;
+    final LoadBalancer2.Helper helper;
 
-    NameResolverListenerImpl(LoadBalancer2 balancer) {
-      this.balancer = balancer;
+    NameResolverListenerImpl(LbHelperImpl helperImpl) {
+      this.balancer = helperImpl.lb;
+      this.helper = helperImpl;
     }
 
     @Override
@@ -756,7 +758,7 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
       }
       log.log(Level.FINE, "[{0}] resolved address: {1}, config={2}",
           new Object[] {getLogId(), servers, config});
-      channelExecutor.executeLater(new Runnable() {
+      helper.runSerialized(new Runnable() {
           @Override
           public void run() {
             if (terminated) {
@@ -772,7 +774,7 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
                   .withDescription("Thrown from handleResolvedAddresses(): " + e));
             }
           }
-        }).drain();
+        });
     }
 
     @Override
