@@ -297,12 +297,13 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
     if (shutdown.get()) {
       return;
     }
-    // Cancel the timer now, so that a racing due timer will not put Channel on idleness
-    // when the caller of exitIdleMode() is about to use the returned loadBalancer.
-    cancelIdleTimer();
-    // exitIdleMode() may be called outside of inUseStateAggregator.handleNotInUse() while
-    // isInUse() == false, in which case we still need to schedule the timer.
-    if (!inUseStateAggregator.isInUse()) {
+    if (inUseStateAggregator.isInUse()) {
+      // Cancel the timer now, so that a racing due timer will not put Channel on idleness
+      // when the caller of exitIdleMode() is about to use the returned loadBalancer.
+      cancelIdleTimer();
+    } else {
+      // exitIdleMode() may be called outside of inUseStateAggregator.handleNotInUse() while
+      // isInUse() == false, in which case we still need to schedule the timer.
       rescheduleIdleTimer();
     }
     if (loadBalancer != null) {
@@ -409,8 +410,8 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
     this.transportFactory =
         new CallCredentialsApplyingTransportFactory(transportFactory, this.executor);
     this.interceptorChannel = ClientInterceptors.intercept(new RealChannel(), interceptors);
-    this.timerServicePool = timerServicePool;
-    this.scheduledExecutor = timerServicePool.getObject();
+    this.timerServicePool = checkNotNull(timerServicePool, "timerServicePool");
+    this.scheduledExecutor = checkNotNull(timerServicePool.getObject(), "timerService");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     if (idleTimeoutMillis == IDLE_TIMEOUT_MILLIS_DISABLE) {
       this.idleTimeoutMillis = idleTimeoutMillis;
@@ -420,8 +421,8 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
           "invalid idleTimeoutMillis %s", idleTimeoutMillis);
       this.idleTimeoutMillis = idleTimeoutMillis;
     }
-    this.decompressorRegistry = decompressorRegistry;
-    this.compressorRegistry = compressorRegistry;
+    this.decompressorRegistry = checkNotNull(decompressorRegistry, "decompressorRegistry");
+    this.compressorRegistry = checkNotNull(compressorRegistry, "compressorRegistry");
     this.userAgent = userAgent;
     this.censusFactory = checkNotNull(censusFactory, "censusFactory");
 
@@ -463,11 +464,9 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
         // Should not be possible.
         throw new IllegalArgumentException(e);
       }
-      if (targetUri != null) {
-        NameResolver resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverParams);
-        if (resolver != null) {
-          return resolver;
-        }
+      NameResolver resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverParams);
+      if (resolver != null) {
+        return resolver;
       }
     }
     throw new IllegalArgumentException(String.format(
@@ -834,6 +833,9 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
         // because of address change, or because LoadBalancer is shutdown by Channel entering idle
         // mode). If (2) wins, the app will see a spurious error. We work around this by delaying
         // shutdown of Subchannel for a few seconds here.
+        //
+        // TODO(zhangkun83): consider a better approach
+        // (https://github.com/grpc/grpc-java/issues/2562).
         if (!terminating && scheduledExecutorCopy != null) {
           delayedShutdownTask = scheduledExecutorCopy.schedule(
               new LogExceptionRunnable(
