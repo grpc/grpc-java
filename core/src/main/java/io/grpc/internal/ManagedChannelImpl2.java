@@ -232,11 +232,9 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
       for (InternalSubchannel subchannel : subchannels) {
         subchannel.shutdownNow(SHUTDOWN_NOW_STATUS);
       }
-      subchannels.clear();
       for (InternalSubchannel oobChannel : oobChannels) {
         oobChannel.shutdownNow(SHUTDOWN_NOW_STATUS);
       }
-      oobChannels.clear();
     }
   }
 

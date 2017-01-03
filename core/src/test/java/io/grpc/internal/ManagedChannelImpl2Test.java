@@ -43,6 +43,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyObject;
+import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.atLeast;
@@ -412,6 +413,10 @@ public class ManagedChannelImpl2Test {
   }
 
   @Test
+  public void shutdownNowWithMultipleOobChannels() {
+  }
+
+  @Test
   public void interceptor() throws Exception {
     final AtomicLong atomic = new AtomicLong();
     ClientInterceptor interceptor = new ClientInterceptor() {
@@ -765,6 +770,65 @@ public class ManagedChannelImpl2Test {
   }
 
   @Test
+  public void subchannelsWhenChannelShutdownNow() {
+    createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+    Subchannel sub1 = helper.createSubchannel(addressGroup, Attributes.EMPTY);
+    Subchannel sub2 = helper.createSubchannel(addressGroup, Attributes.EMPTY);
+    sub1.requestConnection();
+    sub2.requestConnection();
+
+    assertEquals(2, transports.size());
+    MockClientTransportInfo ti1 = transports.poll();
+    MockClientTransportInfo ti2 = transports.poll();
+
+    ti1.listener.transportReady();
+    ti2.listener.transportReady();
+
+    channel.shutdownNow();
+    verify(ti1.transport).shutdownNow(any(Status.class));
+    verify(ti2.transport).shutdownNow(any(Status.class));
+
+    ti1.listener.transportShutdown(Status.UNAVAILABLE.withDescription("shutdown now"));
+    ti2.listener.transportShutdown(Status.UNAVAILABLE.withDescription("shutdown now"));
+    ti1.listener.transportTerminated();
+
+    assertFalse(channel.isTerminated());
+    ti2.listener.transportTerminated();
+    assertTrue(channel.isTerminated());
+  }
+
+  @Test
+  public void subchannelsNoConnectionShutdown() {
+    createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+    Subchannel sub1 = helper.createSubchannel(addressGroup, Attributes.EMPTY);
+    Subchannel sub2 = helper.createSubchannel(addressGroup, Attributes.EMPTY);
+
+    channel.shutdown();
+    verify(mockLoadBalancer).shutdown();
+    sub1.shutdown();
+    assertFalse(channel.isTerminated());
+    sub2.shutdown();
+    assertTrue(channel.isTerminated());
+    verify(mockTransportFactory, never()).newClientTransport(any(SocketAddress.class), anyString(),
+        anyString());
+  }
+
+  @Test
+  public void subchannelsNoConnectionShutdownNow() {
+    createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+    Subchannel sub1 = helper.createSubchannel(addressGroup, Attributes.EMPTY);
+    Subchannel sub2 = helper.createSubchannel(addressGroup, Attributes.EMPTY);
+    channel.shutdownNow();
+
+    verify(mockLoadBalancer).shutdown();
+    // Channel's shutdownNow() will call shutdownNow() on all subchannels and oobchannels.
+    // Therefore, channel is terminated without relying on LoadBalancer to shutdown subchannels.
+    assertTrue(channel.isTerminated());
+    verify(mockTransportFactory, never()).newClientTransport(any(SocketAddress.class), anyString(),
+        anyString());
+  }
+
+  @Test
   public void oobchannels() {
     createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
 
@@ -859,6 +923,68 @@ public class ManagedChannelImpl2Test {
     assertTrue(oob1.isTerminated());
     assertTrue(channel.isTerminated());
     verify(oobExecutorPool, times(2)).returnObject(oobExecutor.getScheduledExecutorService());
+  }
+
+  @Test
+  public void oobChannelsWhenChannelShutdownNow() {
+    createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+    ManagedChannel oob1 = helper.createOobChannel(addressGroup, "oob1Authority");
+    ManagedChannel oob2 = helper.createOobChannel(addressGroup, "oob2Authority");
+
+    oob1.newCall(method, CallOptions.DEFAULT).start(mockCallListener, new Metadata());
+    oob2.newCall(method, CallOptions.DEFAULT).start(mockCallListener2, new Metadata());
+
+    assertEquals(2, transports.size());
+    MockClientTransportInfo ti1 = transports.poll();
+    MockClientTransportInfo ti2 = transports.poll();
+
+    ti1.listener.transportReady();
+    ti2.listener.transportReady();
+
+    channel.shutdownNow();
+    verify(ti1.transport).shutdownNow(any(Status.class));
+    verify(ti2.transport).shutdownNow(any(Status.class));
+
+    ti1.listener.transportShutdown(Status.UNAVAILABLE.withDescription("shutdown now"));
+    ti2.listener.transportShutdown(Status.UNAVAILABLE.withDescription("shutdown now"));
+    ti1.listener.transportTerminated();
+
+    assertFalse(channel.isTerminated());
+    ti2.listener.transportTerminated();
+    assertTrue(channel.isTerminated());
+  }
+
+  @Test
+  public void oobChannelsNoConnectionShutdown() {
+    createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+    ManagedChannel oob1 = helper.createOobChannel(addressGroup, "oob1Authority");
+    ManagedChannel oob2 = helper.createOobChannel(addressGroup, "oob2Authority");
+    channel.shutdown();
+
+    verify(mockLoadBalancer).shutdown();
+    oob1.shutdown();
+    assertTrue(oob1.isTerminated());
+    assertFalse(channel.isTerminated());
+    oob2.shutdown();
+    assertTrue(oob2.isTerminated());
+    assertTrue(channel.isTerminated());
+    verify(mockTransportFactory, never()).newClientTransport(any(SocketAddress.class), anyString(),
+        anyString());
+  }
+
+  @Test
+  public void oobChannelsNoConnectionShutdownNow() {
+    createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+    ManagedChannel oob1 = helper.createOobChannel(addressGroup, "oob1Authority");
+    ManagedChannel oob2 = helper.createOobChannel(addressGroup, "oob2Authority");
+    channel.shutdownNow();
+
+    verify(mockLoadBalancer).shutdown();
+    assertTrue(channel.isTerminated());
+    // Channel's shutdownNow() will call shutdownNow() on all subchannels and oobchannels.
+    // Therefore, channel is terminated without relying on LoadBalancer to shutdown oobchannels.
+    verify(mockTransportFactory, never()).newClientTransport(any(SocketAddress.class), anyString(),
+        anyString());
   }
 
   @Test
