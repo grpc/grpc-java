@@ -52,12 +52,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.instrumentation.stats.StatsContext;
-import com.google.instrumentation.stats.RpcConstants;
-import com.google.instrumentation.stats.TagValue;
 import com.google.common.collect.ImmutableList;
 import com.google.common.truth.Truth;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.instrumentation.stats.RpcConstants;
+import com.google.instrumentation.stats.StatsContext;
+import com.google.instrumentation.stats.TagValue;
 
 import io.grpc.Attributes;
 import io.grpc.Compressor;

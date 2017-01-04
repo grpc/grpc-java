@@ -51,12 +51,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.instrumentation.stats.StatsContext;
-import com.google.instrumentation.stats.RpcConstants;
-import com.google.instrumentation.stats.TagValue;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.instrumentation.stats.RpcConstants;
+import com.google.instrumentation.stats.StatsContext;
+import com.google.instrumentation.stats.TagValue;
 
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;

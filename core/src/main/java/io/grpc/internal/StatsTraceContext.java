@@ -31,16 +31,16 @@
 
 package io.grpc.internal;
 
-import com.google.instrumentation.stats.StatsContext;
-import com.google.instrumentation.stats.StatsContextFactory;
-import com.google.instrumentation.stats.MeasurementMap;
-import com.google.instrumentation.stats.MeasurementDescriptor;
-import com.google.instrumentation.stats.RpcConstants;
-import com.google.instrumentation.stats.TagKey;
-import com.google.instrumentation.stats.TagValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.instrumentation.stats.MeasurementDescriptor;
+import com.google.instrumentation.stats.MeasurementMap;
+import com.google.instrumentation.stats.RpcConstants;
+import com.google.instrumentation.stats.StatsContext;
+import com.google.instrumentation.stats.StatsContextFactory;
+import com.google.instrumentation.stats.TagKey;
+import com.google.instrumentation.stats.TagValue;
 
 import io.grpc.Metadata;
 import io.grpc.Status;

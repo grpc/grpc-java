@@ -31,10 +31,10 @@
 
 package io.grpc.internal;
 
-import com.google.instrumentation.stats.StatsContextFactory;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.instrumentation.stats.StatsContextFactory;
 
 import io.grpc.CallOptions;
 import io.grpc.Channel;

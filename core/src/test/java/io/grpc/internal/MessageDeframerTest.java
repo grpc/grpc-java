@@ -43,10 +43,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
-import com.google.instrumentation.stats.RpcConstants;
 import com.google.common.base.Charsets;
 import com.google.common.io.ByteStreams;
 import com.google.common.primitives.Bytes;
+import com.google.instrumentation.stats.RpcConstants;
 
 import io.grpc.Codec;
 import io.grpc.Status;

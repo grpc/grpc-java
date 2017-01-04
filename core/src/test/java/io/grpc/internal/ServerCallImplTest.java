@@ -43,9 +43,9 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.common.io.CharStreams;
 import com.google.instrumentation.stats.RpcConstants;
 import com.google.instrumentation.stats.TagValue;
-import com.google.common.io.CharStreams;
 
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;

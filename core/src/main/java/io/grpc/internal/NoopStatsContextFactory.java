@@ -32,10 +32,10 @@
 package io.grpc.internal;
 
 import com.google.instrumentation.stats.MeasurementMap;
-import com.google.instrumentation.stats.TagKey;
-import com.google.instrumentation.stats.TagValue;
 import com.google.instrumentation.stats.StatsContext;
 import com.google.instrumentation.stats.StatsContextFactory;
+import com.google.instrumentation.stats.TagKey;
+import com.google.instrumentation.stats.TagValue;
 
 import java.io.InputStream;
 import java.io.OutputStream;

@@ -34,9 +34,9 @@ package io.grpc.internal;
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.instrumentation.stats.Stats;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.instrumentation.stats.Stats;
 import com.google.instrumentation.stats.StatsContextFactory;
 
 import io.grpc.BindableService;
