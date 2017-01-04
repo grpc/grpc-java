@@ -95,7 +95,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
   private final InternalHandlerRegistry registry;
   private final HandlerRegistry fallbackRegistry;
   private final List<ServerTransportFilter> transportFilters;
-  private final StatsContextFactory censusFactory;
+  private final StatsContextFactory statsFactory;
   @GuardedBy("lock") private boolean started;
   @GuardedBy("lock") private boolean shutdown;
   /** non-{@code null} if immediate shutdown has been requested. */
@@ -129,7 +129,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
   ServerImpl(Executor executor, InternalHandlerRegistry registry, HandlerRegistry fallbackRegistry,
       InternalServer transportServer, Context rootContext,
       DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
-      List<ServerTransportFilter> transportFilters, StatsContextFactory censusFactory,
+      List<ServerTransportFilter> transportFilters, StatsContextFactory statsFactory,
       Supplier<Stopwatch> stopwatchSupplier) {
     this.executor = executor;
     this.registry = Preconditions.checkNotNull(registry, "registry");
@@ -142,7 +142,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
     this.compressorRegistry = compressorRegistry;
     this.transportFilters = Collections.unmodifiableList(
         new ArrayList<ServerTransportFilter>(transportFilters));
-    this.censusFactory = Preconditions.checkNotNull(censusFactory, "censusFactory");
+    this.statsFactory = Preconditions.checkNotNull(statsFactory, "statsFactory");
     this.stopwatchSupplier = Preconditions.checkNotNull(stopwatchSupplier, "stopwatchSupplier");
   }
 
@@ -376,7 +376,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
     @Override
     public StatsTraceContext methodDetermined(String methodName, Metadata headers) {
       return StatsTraceContext.newServerContext(
-          methodName, censusFactory, headers, stopwatchSupplier);
+          methodName, statsFactory, headers, stopwatchSupplier);
     }
 
     @Override

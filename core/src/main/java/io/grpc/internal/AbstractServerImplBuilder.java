@@ -101,7 +101,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   private CompressorRegistry compressorRegistry;
 
   @Nullable
-  private StatsContextFactory censusFactory;
+  private StatsContextFactory statsFactory;
 
   @Override
   public final T directExecutor() {
@@ -153,12 +153,12 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   }
 
   /**
-   * Override the default Census implementation.  This is meant to be used in tests.
+   * Override the default stats implementation.  This is meant to be used in tests.
    */
   @VisibleForTesting
   @Internal
-  public T censusContextFactory(StatsContextFactory censusFactory) {
-    this.censusFactory = censusFactory;
+  public T statsContextFactory(StatsContextFactory statsFactory) {
+    this.statsFactory = statsFactory;
     return thisT();
   }
 
@@ -170,7 +170,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
         Context.ROOT, firstNonNull(decompressorRegistry, DecompressorRegistry.getDefaultInstance()),
         firstNonNull(compressorRegistry, CompressorRegistry.getDefaultInstance()),
         transportFilters,
-        firstNonNull(censusFactory,
+        firstNonNull(statsFactory,
             firstNonNull(Stats.getStatsContextFactory(), NoopStatsContextFactory.INSTANCE)),
         GrpcUtil.STOPWATCH_SUPPLIER);
     for (InternalNotifyOnServerBuild notifyTarget : notifyOnBuildList) {

@@ -136,7 +136,7 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   @Nullable
-  private StatsContextFactory censusFactory;
+  private StatsContextFactory statsFactory;
 
   protected AbstractManagedChannelImplBuilder(String target) {
     this.target = Preconditions.checkNotNull(target, "target");
@@ -242,12 +242,12 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   /**
-   * Override the default Census implementation.  This is meant to be used in tests.
+   * Override the default stats implementation.  This is meant to be used in tests.
    */
   @VisibleForTesting
   @Internal
-  public T censusContextFactory(StatsContextFactory censusFactory) {
-    this.censusFactory = censusFactory;
+  public T statsContextFactory(StatsContextFactory statsFactory) {
+    this.statsFactory = statsFactory;
     return thisT();
   }
 
@@ -291,7 +291,7 @@ public abstract class AbstractManagedChannelImplBuilder
         firstNonNull(compressorRegistry, CompressorRegistry.getDefaultInstance()),
         GrpcUtil.TIMER_SERVICE, GrpcUtil.STOPWATCH_SUPPLIER, idleTimeoutMillis,
         executor, userAgent, interceptors,
-        firstNonNull(censusFactory,
+        firstNonNull(statsFactory,
             firstNonNull(Stats.getStatsContextFactory(), NoopStatsContextFactory.INSTANCE)));
   }
 

@@ -68,9 +68,9 @@ public class InProcessChannelBuilder extends
     super(new InProcessSocketAddress(name), "localhost");
     this.name = Preconditions.checkNotNull(name, "name");
     // TODO(zhangkun83): InProcessTransport by-passes framer and deframer, thus message sizses are
-    // not counted.  Therefore, we disable Census for now.
+    // not counted.  Therefore, we disable stats for now.
     // (https://github.com/grpc/grpc-java/issues/2284)
-    super.censusContextFactory(NoopStatsContextFactory.INSTANCE);
+    super.statsContextFactory(NoopStatsContextFactory.INSTANCE);
   }
 
   @Override
@@ -94,9 +94,9 @@ public class InProcessChannelBuilder extends
 
   @Internal
   @Override
-  public InProcessChannelBuilder censusContextFactory(StatsContextFactory censusFactory) {
+  public InProcessChannelBuilder statsContextFactory(StatsContextFactory statsFactory) {
     // TODO(zhangkun83): InProcessTransport by-passes framer and deframer, thus message sizses are
-    // not counted.  Census is disabled by using a NOOP Census factory in the constructor, and here
+    // not counted.  Stats is disabled by using a NOOP stats factory in the constructor, and here
     // we prevent the user from overriding it.
     // (https://github.com/grpc/grpc-java/issues/2284)
     return this;

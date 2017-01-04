@@ -57,8 +57,8 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
-import io.grpc.internal.testing.CensusTestUtils.FakeStatsContextFactory;
-import io.grpc.internal.testing.CensusTestUtils;
+import io.grpc.internal.testing.StatsTestUtils.FakeStatsContextFactory;
+import io.grpc.internal.testing.StatsTestUtils;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -90,9 +90,9 @@ public class ServerCallImplTest {
       MethodType.UNARY, "/service/method", new LongMarshaller(), new LongMarshaller());
 
   private final Metadata requestHeaders = new Metadata();
-  private final FakeStatsContextFactory censusCtxFactory = new FakeStatsContextFactory();
+  private final FakeStatsContextFactory statsCtxFactory = new FakeStatsContextFactory();
   private final StatsTraceContext statsTraceCtx = StatsTraceContext.newServerContext(
-      method.getFullMethodName(), censusCtxFactory, requestHeaders, GrpcUtil.STOPWATCH_SUPPLIER);
+      method.getFullMethodName(), statsCtxFactory, requestHeaders, GrpcUtil.STOPWATCH_SUPPLIER);
 
   @Before
   public void setUp() {
@@ -327,7 +327,7 @@ public class ServerCallImplTest {
   }
 
   private void checkStats(Status.Code statusCode) {
-    CensusTestUtils.MetricsRecord record = censusCtxFactory.pollRecord();
+    StatsTestUtils.MetricsRecord record = statsCtxFactory.pollRecord();
     assertNotNull(record);
     TagValue statusTag = record.tags.get(RpcConstants.RPC_STATUS);
     assertNotNull(statusTag);

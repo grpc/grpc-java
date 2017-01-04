@@ -71,8 +71,8 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.testing.CensusTestUtils.FakeStatsContextFactory;
-import io.grpc.internal.testing.CensusTestUtils.MetricsRecord;
+import io.grpc.internal.testing.StatsTestUtils.FakeStatsContextFactory;
+import io.grpc.internal.testing.StatsTestUtils.MetricsRecord;
 import io.grpc.protobuf.ProtoUtils;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
@@ -130,9 +130,9 @@ public abstract class AbstractInteropTest {
       new AtomicReference<Metadata>();
   private static ScheduledExecutorService testServiceExecutor;
   private static Server server;
-  private static final FakeStatsContextFactory clientCensusFactory =
+  private static final FakeStatsContextFactory clientStatsFactory =
       new FakeStatsContextFactory();
-  private static final FakeStatsContextFactory serverCensusFactory =
+  private static final FakeStatsContextFactory serverStatsFactory =
       new FakeStatsContextFactory();
   protected static final Empty EMPTY = Empty.getDefaultInstance();
 
@@ -152,7 +152,7 @@ public abstract class AbstractInteropTest {
     builder.addService(ServerInterceptors.intercept(
         new TestServiceImpl(testServiceExecutor),
         allInterceptors));
-    builder.censusContextFactory(serverCensusFactory);
+    builder.statsContextFactory(serverStatsFactory);
     try {
       server = builder.build().start();
     } catch (IOException ex) {
@@ -183,8 +183,8 @@ public abstract class AbstractInteropTest {
     blockingStub = TestServiceGrpc.newBlockingStub(channel);
     asyncStub = TestServiceGrpc.newStub(channel);
     requestHeadersCapture.set(null);
-    clientCensusFactory.rolloverRecords();
-    serverCensusFactory.rolloverRecords();
+    clientStatsFactory.rolloverRecords();
+    serverStatsFactory.rolloverRecords();
   }
 
   /** Clean up. */
@@ -197,8 +197,8 @@ public abstract class AbstractInteropTest {
 
   protected abstract ManagedChannel createChannel();
 
-  protected final StatsContextFactory getClientCensusFactory() {
-    return clientCensusFactory;
+  protected final StatsContextFactory getClientStatsFactory() {
+    return clientStatsFactory;
   }
 
   protected boolean metricsExpected() {
@@ -1274,7 +1274,7 @@ public abstract class AbstractInteropTest {
 
   private void assertClientMetrics(String method, Status.Code status,
       Collection<? extends MessageLite> requests, Collection<? extends MessageLite> responses) {
-    MetricsRecord clientRecord = clientCensusFactory.pollRecord();
+    MetricsRecord clientRecord = clientStatsFactory.pollRecord();
     assertNotNull("clientRecord is not null", clientRecord);
     checkTags(clientRecord, false, method, status);
     if (requests != null && responses != null) {
@@ -1298,7 +1298,7 @@ public abstract class AbstractInteropTest {
       try {
         // On the server, the stats is finalized in ServerStreamListener.closed(), which can be run
         // after the client receives the final status.  So we use a timeout.
-        serverRecord = serverCensusFactory.pollRecord(1, TimeUnit.SECONDS);
+        serverRecord = serverStatsFactory.pollRecord(1, TimeUnit.SECONDS);
       } catch (InterruptedException e) {
         throw new RuntimeException(e);
       }

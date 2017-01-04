@@ -71,8 +71,8 @@ import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
-import io.grpc.internal.testing.CensusTestUtils.FakeStatsContextFactory;
-import io.grpc.internal.testing.CensusTestUtils;
+import io.grpc.internal.testing.StatsTestUtils.FakeStatsContextFactory;
+import io.grpc.internal.testing.StatsTestUtils;
 
 import org.junit.After;
 import org.junit.Before;
@@ -121,13 +121,13 @@ public class ClientCallImplTest {
       new TestMarshaller<Void>(),
       new TestMarshaller<Void>());
 
-  private final FakeStatsContextFactory censusCtxFactory = new FakeStatsContextFactory();
-  private final StatsContext parentStatsContext = censusCtxFactory.getDefault().with(
-      CensusTestUtils.EXTRA_TAG, TagValue.create("extra-tag-value"));
+  private final FakeStatsContextFactory statsCtxFactory = new FakeStatsContextFactory();
+  private final StatsContext parentStatsContext = statsCtxFactory.getDefault().with(
+      StatsTestUtils.EXTRA_TAG, TagValue.create("extra-tag-value"));
   private final StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContextForTesting(
-      method.getFullMethodName(), censusCtxFactory, parentStatsContext,
+      method.getFullMethodName(), statsCtxFactory, parentStatsContext,
       fakeClock.getStopwatchSupplier());
-  private final StatsContext censusCtx = censusCtxFactory.contexts.poll();
+  private final StatsContext statsCtx = statsCtxFactory.contexts.poll();
 
   @Mock private ClientStreamListener streamListener;
   @Mock private ClientTransport clientTransport;
@@ -154,7 +154,7 @@ public class ClientCallImplTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    assertNotNull(censusCtx);
+    assertNotNull(statsCtx);
     when(provider.get(any(CallOptions.class))).thenReturn(transport);
     when(transport.newStream(any(MethodDescriptor.class), any(Metadata.class),
             any(CallOptions.class), any(StatsTraceContext.class))).thenReturn(stream);
@@ -443,10 +443,10 @@ public class ClientCallImplTest {
   }
 
   @Test
-  public void prepareHeaders_censusCtxAdded() {
+  public void prepareHeaders_statsCtxAdded() {
     Metadata m = new Metadata();
     ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, statsTraceCtx);
-    assertEquals(parentStatsContext, m.get(statsTraceCtx.getCensusHeader()));
+    assertEquals(parentStatsContext, m.get(statsTraceCtx.getStatsHeader()));
   }
 
   @Test
@@ -825,7 +825,7 @@ public class ClientCallImplTest {
   }
 
   private void assertStatusInStats(Status.Code statusCode) {
-    CensusTestUtils.MetricsRecord record = censusCtxFactory.pollRecord();
+    StatsTestUtils.MetricsRecord record = statsCtxFactory.pollRecord();
     assertNotNull(record);
     TagValue statusTag = record.tags.get(RpcConstants.RPC_STATUS);
     assertNotNull(statusTag);

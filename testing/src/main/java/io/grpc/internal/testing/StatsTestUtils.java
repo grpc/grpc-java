@@ -53,8 +53,8 @@ import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nullable;
 
-public class CensusTestUtils {
-  private CensusTestUtils() {
+public class StatsTestUtils {
+  private StatsTestUtils() {
   }
 
   public static class MetricsRecord {
