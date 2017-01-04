@@ -169,7 +169,7 @@ public class MessageFramer {
     if (maxOutboundMessageSize >= 0 && written > maxOutboundMessageSize) {
       throw Status.INTERNAL
           .withDescription(
-              String.format("message too large %d > %d", written > maxOutboundMessageSize))
+              String.format("message too large %d > %d", written , maxOutboundMessageSize))
           .asRuntimeException();
     }
     writeBufferChain(bufferChain, false);
@@ -189,7 +189,7 @@ public class MessageFramer {
     if (maxOutboundMessageSize >= 0 && written > maxOutboundMessageSize) {
       throw Status.INTERNAL
           .withDescription(
-              String.format("message too large %d > %d", written > maxOutboundMessageSize))
+              String.format("message too large %d > %d", written , maxOutboundMessageSize))
           .asRuntimeException();
     }
 

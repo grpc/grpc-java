@@ -374,7 +374,7 @@ public final class CallOptions {
    * Sets the maximum allowed message size acceptable from the remote peer.  If unset, this will
    * default to the value set on the {@link ManagedChannel}.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/FIXME")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
   public CallOptions withMaxInboundMessageSize(int maxSize) {
     checkArgument(maxSize >= 0, "invalid maxsize %s", maxSize);
     CallOptions newOptions = new CallOptions(this);
@@ -386,7 +386,7 @@ public final class CallOptions {
    * Sets the maximum allowed message size acceptable sent to the remote peer.  If unset, this will
    * default to the value set on the {@link ManagedChannel}.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/FIXME")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
   public CallOptions withMaxOutboundMessageSize(int maxSize) {
     checkArgument(maxSize >= 0, "invalid maxsize %s", maxSize);
     CallOptions newOptions = new CallOptions(this);
@@ -398,7 +398,7 @@ public final class CallOptions {
    * Clears the maximum allowed message size acceptable from the remote peer.  The value set on the
    * {@link ManagedChannel} may still be enforced.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/FIXME")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
   public CallOptions withoutMaxInboundMessageSize() {
     CallOptions newOptions = new CallOptions(this);
     newOptions.maxInboundMessageSize = null;
@@ -409,7 +409,7 @@ public final class CallOptions {
    * Clears the maximum allowed message size acceptable to send the remote peer.  The value set on
    * the {@link ManagedChannel} may still be enforced.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/FIXME")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
   public CallOptions withoutMaxOutboundMessageSize() {
     CallOptions newOptions = new CallOptions(this);
     newOptions.maxOutboundMessageSize = null;
@@ -420,7 +420,7 @@ public final class CallOptions {
    * Gets the maximum allowed message size acceptable from the remote peer.
    */
   @Nullable
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/FIXME")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
   public Integer getMaxInboundMessageSize() {
     return maxInboundMessageSize;
   }
@@ -429,7 +429,7 @@ public final class CallOptions {
    * Gets the maximum allowed message size acceptable to send the remote peer.
    */
   @Nullable
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/FIXME")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
   public Integer getMaxOutboundMessageSize() {
     return maxOutboundMessageSize;
   }

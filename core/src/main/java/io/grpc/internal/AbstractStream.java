@@ -138,11 +138,11 @@ public abstract class AbstractStream implements Stream {
         statsTraceCtx);
   }
 
-  protected void setMaxInboundMessageSizeProtected(int maxSize) {
+  protected final void setMaxInboundMessageSizeProtected(int maxSize) {
     deframer.setMaxInboundMessageSize(maxSize);
   }
 
-  protected void setMaxOutboundMessageSizeProtected(int maxSize) {
+  protected final void setMaxOutboundMessageSizeProtected(int maxSize) {
     framer.setMaxOutboundMessageSize(maxSize);
   }
 
