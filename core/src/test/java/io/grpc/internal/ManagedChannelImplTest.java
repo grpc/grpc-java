@@ -78,7 +78,7 @@ import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.TransportManager;
-import io.grpc.internal.testing.CensusTestUtils.FakeCensusContextFactory;
+import io.grpc.internal.testing.CensusTestUtils.FakeStatsContextFactory;
 
 import org.junit.After;
 import org.junit.Before;
@@ -127,7 +127,7 @@ public class ManagedChannelImplTest {
   private final ResolvedServerInfo server = new ResolvedServerInfo(socketAddress, Attributes.EMPTY);
   private final FakeClock timer = new FakeClock();
   private final FakeClock executor = new FakeClock();
-  private final FakeCensusContextFactory censusCtxFactory = new FakeCensusContextFactory();
+  private final FakeStatsContextFactory censusCtxFactory = new FakeStatsContextFactory();
   private SpyingLoadBalancerFactory loadBalancerFactory =
       new SpyingLoadBalancerFactory(PickFirstBalancerFactory.getInstance());
 
@@ -258,7 +258,7 @@ public class ManagedChannelImplTest {
     verify(mockTransport).newStream(same(method), same(headers), same(CallOptions.DEFAULT),
         statsTraceCtxCaptor.capture());
     assertEquals(censusCtxFactory.pollContextOrFail(),
-        statsTraceCtxCaptor.getValue().getCensusContext());
+        statsTraceCtxCaptor.getValue().getStatsContext());
     verify(mockStream).start(streamListenerCaptor.capture());
     verify(mockStream).setCompressor(isA(Compressor.class));
     ClientStreamListener streamListener = streamListenerCaptor.getValue();
@@ -274,7 +274,7 @@ public class ManagedChannelImplTest {
     verify(mockTransport).newStream(same(method), same(headers2), same(CallOptions.DEFAULT),
         statsTraceCtxCaptor.capture());
     assertEquals(censusCtxFactory.pollContextOrFail(),
-        statsTraceCtxCaptor.getValue().getCensusContext());
+        statsTraceCtxCaptor.getValue().getStatsContext());
 
     verify(mockStream2).start(streamListenerCaptor.capture());
     ClientStreamListener streamListener2 = streamListenerCaptor.getValue();

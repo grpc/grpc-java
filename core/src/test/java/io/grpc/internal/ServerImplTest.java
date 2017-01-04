@@ -52,9 +52,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.census.CensusContext;
-import com.google.census.RpcConstants;
-import com.google.census.TagValue;
+import com.google.instrumentation.stats.StatsContext;
+import com.google.instrumentation.stats.RpcConstants;
+import com.google.instrumentation.stats.TagValue;
 import com.google.common.collect.ImmutableList;
 import com.google.common.truth.Truth;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -78,7 +78,7 @@ import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.testing.CensusTestUtils;
-import io.grpc.internal.testing.CensusTestUtils.FakeCensusContextFactory;
+import io.grpc.internal.testing.CensusTestUtils.FakeStatsContextFactory;
 import io.grpc.util.MutableHandlerRegistry;
 
 import org.junit.After;
@@ -119,7 +119,7 @@ public class ServerImplTest {
       Context.ROOT.withValue(SERVER_ONLY, "yes").withCancellation();
   private static final ImmutableList<ServerTransportFilter> NO_FILTERS = ImmutableList.of();
 
-  private final FakeCensusContextFactory censusCtxFactory = new FakeCensusContextFactory();
+  private final FakeStatsContextFactory censusCtxFactory = new FakeStatsContextFactory();
   private final CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
   private final DecompressorRegistry decompressorRegistry =
       DecompressorRegistry.getDefaultInstance();
@@ -370,7 +370,7 @@ public class ServerImplTest {
   public void basicExchangeSuccessful() throws Exception {
     final Metadata.Key<String> metadataKey
         = Metadata.Key.of("inception", Metadata.ASCII_STRING_MARSHALLER);
-    final Metadata.Key<CensusContext> censusHeaderKey
+    final Metadata.Key<StatsContext> censusHeaderKey
         = StatsTraceContext.createCensusHeader(censusCtxFactory);
     final AtomicReference<ServerCall<String, Integer>> callReference
         = new AtomicReference<ServerCall<String, Integer>>();
@@ -398,8 +398,8 @@ public class ServerImplTest {
 
     Metadata requestHeaders = new Metadata();
     requestHeaders.put(metadataKey, "value");
-    CensusContext censusContextOnClient = censusCtxFactory.getDefault().with(
-        CensusTestUtils.EXTRA_TAG, new TagValue("extraTagValue"));
+    StatsContext censusContextOnClient = censusCtxFactory.getDefault().with(
+        CensusTestUtils.EXTRA_TAG, TagValue.create("extraTagValue"));
     requestHeaders.put(censusHeaderKey, censusContextOnClient);
     StatsTraceContext statsTraceCtx =
         transportListener.methodDetermined("Waiter/serve", requestHeaders);

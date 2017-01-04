@@ -34,10 +34,10 @@ package io.grpc.internal;
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.census.Census;
-import com.google.census.CensusContextFactory;
+import com.google.instrumentation.stats.Stats;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.instrumentation.stats.StatsContextFactory;
 
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
@@ -101,7 +101,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   private CompressorRegistry compressorRegistry;
 
   @Nullable
-  private CensusContextFactory censusFactory;
+  private StatsContextFactory censusFactory;
 
   @Override
   public final T directExecutor() {
@@ -157,7 +157,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
    */
   @VisibleForTesting
   @Internal
-  public T censusContextFactory(CensusContextFactory censusFactory) {
+  public T censusContextFactory(StatsContextFactory censusFactory) {
     this.censusFactory = censusFactory;
     return thisT();
   }
@@ -171,7 +171,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
         firstNonNull(compressorRegistry, CompressorRegistry.getDefaultInstance()),
         transportFilters,
         firstNonNull(censusFactory,
-            firstNonNull(Census.getCensusContextFactory(), NoopCensusContextFactory.INSTANCE)),
+            firstNonNull(Stats.getStatsContextFactory(), NoopStatsContextFactory.INSTANCE)),
         GrpcUtil.STOPWATCH_SUPPLIER);
     for (InternalNotifyOnServerBuild notifyTarget : notifyOnBuildList) {
       notifyTarget.notifyOnBuild(server);

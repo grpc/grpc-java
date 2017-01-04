@@ -43,7 +43,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
-import com.google.census.RpcConstants;
+import com.google.instrumentation.stats.RpcConstants;
 import com.google.common.base.Charsets;
 import com.google.common.io.ByteStreams;
 import com.google.common.primitives.Bytes;
@@ -53,7 +53,7 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.internal.MessageDeframer.Listener;
 import io.grpc.internal.MessageDeframer.SizeEnforcingInputStream;
-import io.grpc.internal.testing.CensusTestUtils.FakeCensusContextFactory;
+import io.grpc.internal.testing.CensusTestUtils.FakeStatsContextFactory;
 import io.grpc.internal.testing.CensusTestUtils.MetricsRecord;
 
 import org.junit.Rule;
@@ -81,7 +81,7 @@ public class MessageDeframerTest {
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private Listener listener = mock(Listener.class);
-  private final FakeCensusContextFactory censusCtxFactory = new FakeCensusContextFactory();
+  private final FakeStatsContextFactory censusCtxFactory = new FakeStatsContextFactory();
   // MessageFramerTest tests with a server-side StatsTraceContext, so here we test with a
   // client-side StatsTraceContext.
   private StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(

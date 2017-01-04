@@ -46,9 +46,9 @@ import com.google.auth.oauth2.ComputeEngineCredentials;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.auth.oauth2.OAuth2Credentials;
 import com.google.auth.oauth2.ServiceAccountCredentials;
-import com.google.census.CensusContextFactory;
-import com.google.census.RpcConstants;
-import com.google.census.TagValue;
+import com.google.instrumentation.stats.StatsContextFactory;
+import com.google.instrumentation.stats.RpcConstants;
+import com.google.instrumentation.stats.TagValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -71,7 +71,7 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.testing.CensusTestUtils.FakeCensusContextFactory;
+import io.grpc.internal.testing.CensusTestUtils.FakeStatsContextFactory;
 import io.grpc.internal.testing.CensusTestUtils.MetricsRecord;
 import io.grpc.protobuf.ProtoUtils;
 import io.grpc.stub.MetadataUtils;
@@ -130,10 +130,10 @@ public abstract class AbstractInteropTest {
       new AtomicReference<Metadata>();
   private static ScheduledExecutorService testServiceExecutor;
   private static Server server;
-  private static final FakeCensusContextFactory clientCensusFactory =
-      new FakeCensusContextFactory();
-  private static final FakeCensusContextFactory serverCensusFactory =
-      new FakeCensusContextFactory();
+  private static final FakeStatsContextFactory clientCensusFactory =
+      new FakeStatsContextFactory();
+  private static final FakeStatsContextFactory serverCensusFactory =
+      new FakeStatsContextFactory();
   protected static final Empty EMPTY = Empty.getDefaultInstance();
 
   protected static void startStaticServer(
@@ -197,7 +197,7 @@ public abstract class AbstractInteropTest {
 
   protected abstract ManagedChannel createChannel();
 
-  protected final CensusContextFactory getClientCensusFactory() {
+  protected final StatsContextFactory getClientCensusFactory() {
     return clientCensusFactory;
   }
 

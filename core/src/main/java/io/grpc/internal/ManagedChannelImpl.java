@@ -35,10 +35,10 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import com.google.census.CensusContextFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.instrumentation.stats.StatsContextFactory;
 
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -139,7 +139,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   private final Supplier<Stopwatch> stopwatchSupplier;
   /** The timout before entering idle mode, less {@link #IDLE_GRACE_PERIOD_MILLIS}. */
   private final long idleTimeoutMillis;
-  private final CensusContextFactory censusFactory;
+  private final StatsContextFactory censusFactory;
 
   /**
    * Executor that runs deadline timers for requests.
@@ -379,7 +379,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       SharedResourceHolder.Resource<ScheduledExecutorService> timerService,
       Supplier<Stopwatch> stopwatchSupplier, long idleTimeoutMillis,
       @Nullable Executor executor, @Nullable String userAgent,
-      List<ClientInterceptor> interceptors, CensusContextFactory censusFactory) {
+      List<ClientInterceptor> interceptors, StatsContextFactory censusFactory) {
     this.target = checkNotNull(target, "target");
     this.nameResolverFactory = checkNotNull(nameResolverFactory, "nameResolverFactory");
     this.nameResolverParams = checkNotNull(nameResolverParams, "nameResolverParams");

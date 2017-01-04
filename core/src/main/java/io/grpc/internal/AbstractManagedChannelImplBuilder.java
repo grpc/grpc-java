@@ -34,11 +34,11 @@ package io.grpc.internal;
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkArgument;
 
-import com.google.census.Census;
-import com.google.census.CensusContextFactory;
+import com.google.instrumentation.stats.Stats;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.instrumentation.stats.StatsContextFactory;
 
 import io.grpc.Attributes;
 import io.grpc.ClientInterceptor;
@@ -136,7 +136,7 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   @Nullable
-  private CensusContextFactory censusFactory;
+  private StatsContextFactory censusFactory;
 
   protected AbstractManagedChannelImplBuilder(String target) {
     this.target = Preconditions.checkNotNull(target, "target");
@@ -246,7 +246,7 @@ public abstract class AbstractManagedChannelImplBuilder
    */
   @VisibleForTesting
   @Internal
-  public T censusContextFactory(CensusContextFactory censusFactory) {
+  public T censusContextFactory(StatsContextFactory censusFactory) {
     this.censusFactory = censusFactory;
     return thisT();
   }
@@ -292,7 +292,7 @@ public abstract class AbstractManagedChannelImplBuilder
         GrpcUtil.TIMER_SERVICE, GrpcUtil.STOPWATCH_SUPPLIER, idleTimeoutMillis,
         executor, userAgent, interceptors,
         firstNonNull(censusFactory,
-            firstNonNull(Census.getCensusContextFactory(), NoopCensusContextFactory.INSTANCE)));
+            firstNonNull(Stats.getStatsContextFactory(), NoopStatsContextFactory.INSTANCE)));
   }
 
   /**

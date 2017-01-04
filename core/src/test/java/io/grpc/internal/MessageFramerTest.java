@@ -41,13 +41,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
 
-import com.google.census.RpcConstants;
+import com.google.instrumentation.stats.RpcConstants;
 
 import io.grpc.Codec;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.StatsTraceContext;
-import io.grpc.internal.testing.CensusTestUtils.FakeCensusContextFactory;
+import io.grpc.internal.testing.CensusTestUtils.FakeStatsContextFactory;
 import io.grpc.internal.testing.CensusTestUtils.MetricsRecord;
 
 import org.junit.Before;
@@ -78,14 +78,14 @@ public class MessageFramerTest {
   private ArgumentCaptor<ByteWritableBuffer> frameCaptor;
   private BytesWritableBufferAllocator allocator =
       new BytesWritableBufferAllocator(1000, 1000);
-  private FakeCensusContextFactory censusCtxFactory;
+  private FakeStatsContextFactory censusCtxFactory;
   private StatsTraceContext statsTraceCtx;
 
   /** Set up for test. */
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    censusCtxFactory = new FakeCensusContextFactory();
+    censusCtxFactory = new FakeStatsContextFactory();
     // MessageDeframerTest tests with a client-side StatsTraceContext, so here we test with a
     // server-side StatsTraceContext.
     statsTraceCtx = StatsTraceContext.newServerContext(

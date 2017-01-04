@@ -43,8 +43,8 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.google.census.RpcConstants;
-import com.google.census.TagValue;
+import com.google.instrumentation.stats.RpcConstants;
+import com.google.instrumentation.stats.TagValue;
 import com.google.common.io.CharStreams;
 
 import io.grpc.CompressorRegistry;
@@ -57,7 +57,7 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
-import io.grpc.internal.testing.CensusTestUtils.FakeCensusContextFactory;
+import io.grpc.internal.testing.CensusTestUtils.FakeStatsContextFactory;
 import io.grpc.internal.testing.CensusTestUtils;
 
 import org.junit.Before;
@@ -90,7 +90,7 @@ public class ServerCallImplTest {
       MethodType.UNARY, "/service/method", new LongMarshaller(), new LongMarshaller());
 
   private final Metadata requestHeaders = new Metadata();
-  private final FakeCensusContextFactory censusCtxFactory = new FakeCensusContextFactory();
+  private final FakeStatsContextFactory censusCtxFactory = new FakeStatsContextFactory();
   private final StatsTraceContext statsTraceCtx = StatsTraceContext.newServerContext(
       method.getFullMethodName(), censusCtxFactory, requestHeaders, GrpcUtil.STOPWATCH_SUPPLIER);
 

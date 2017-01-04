@@ -39,10 +39,10 @@ import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
-import com.google.census.CensusContextFactory;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.instrumentation.stats.StatsContextFactory;
 
 import io.grpc.Attributes;
 import io.grpc.CompressorRegistry;
@@ -95,7 +95,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
   private final InternalHandlerRegistry registry;
   private final HandlerRegistry fallbackRegistry;
   private final List<ServerTransportFilter> transportFilters;
-  private final CensusContextFactory censusFactory;
+  private final StatsContextFactory censusFactory;
   @GuardedBy("lock") private boolean started;
   @GuardedBy("lock") private boolean shutdown;
   /** non-{@code null} if immediate shutdown has been requested. */
@@ -129,7 +129,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
   ServerImpl(Executor executor, InternalHandlerRegistry registry, HandlerRegistry fallbackRegistry,
       InternalServer transportServer, Context rootContext,
       DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
-      List<ServerTransportFilter> transportFilters, CensusContextFactory censusFactory,
+      List<ServerTransportFilter> transportFilters, StatsContextFactory censusFactory,
       Supplier<Stopwatch> stopwatchSupplier) {
     this.executor = executor;
     this.registry = Preconditions.checkNotNull(registry, "registry");
@@ -442,7 +442,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
         final ServerStream stream, Metadata headers) {
       Long timeoutNanos = headers.get(TIMEOUT_KEY);
 
-      // TODO(zhangkun83): attach the CensusContext from StatsTraceContext to baseContext
+      // TODO(zhangkun83): attach the StatsContext from StatsTraceContext to baseContext
       Context baseContext = rootContext;
 
       if (timeoutNanos == null) {

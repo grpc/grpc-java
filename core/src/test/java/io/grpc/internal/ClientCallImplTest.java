@@ -51,9 +51,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.census.CensusContext;
-import com.google.census.RpcConstants;
-import com.google.census.TagValue;
+import com.google.instrumentation.stats.StatsContext;
+import com.google.instrumentation.stats.RpcConstants;
+import com.google.instrumentation.stats.TagValue;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
@@ -71,7 +71,7 @@ import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
-import io.grpc.internal.testing.CensusTestUtils.FakeCensusContextFactory;
+import io.grpc.internal.testing.CensusTestUtils.FakeStatsContextFactory;
 import io.grpc.internal.testing.CensusTestUtils;
 
 import org.junit.After;
@@ -121,13 +121,13 @@ public class ClientCallImplTest {
       new TestMarshaller<Void>(),
       new TestMarshaller<Void>());
 
-  private final FakeCensusContextFactory censusCtxFactory = new FakeCensusContextFactory();
-  private final CensusContext parentCensusContext = censusCtxFactory.getDefault().with(
-      CensusTestUtils.EXTRA_TAG, new TagValue("extra-tag-value"));
+  private final FakeStatsContextFactory censusCtxFactory = new FakeStatsContextFactory();
+  private final StatsContext parentStatsContext = censusCtxFactory.getDefault().with(
+      CensusTestUtils.EXTRA_TAG, TagValue.create("extra-tag-value"));
   private final StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContextForTesting(
-      method.getFullMethodName(), censusCtxFactory, parentCensusContext,
+      method.getFullMethodName(), censusCtxFactory, parentStatsContext,
       fakeClock.getStopwatchSupplier());
-  private final CensusContext censusCtx = censusCtxFactory.contexts.poll();
+  private final StatsContext censusCtx = censusCtxFactory.contexts.poll();
 
   @Mock private ClientStreamListener streamListener;
   @Mock private ClientTransport clientTransport;
@@ -446,7 +446,7 @@ public class ClientCallImplTest {
   public void prepareHeaders_censusCtxAdded() {
     Metadata m = new Metadata();
     ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, statsTraceCtx);
-    assertEquals(parentCensusContext, m.get(statsTraceCtx.getCensusHeader()));
+    assertEquals(parentStatsContext, m.get(statsTraceCtx.getCensusHeader()));
   }
 
   @Test

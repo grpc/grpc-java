@@ -31,7 +31,7 @@
 
 package io.grpc.internal;
 
-import com.google.census.CensusContextFactory;
+import com.google.instrumentation.stats.StatsContextFactory;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
@@ -50,7 +50,7 @@ import java.util.concurrent.ScheduledExecutorService;
  */
 final class SingleTransportChannel extends Channel {
 
-  private final CensusContextFactory censusFactory;
+  private final StatsContextFactory censusFactory;
   private final ClientTransport transport;
   private final Executor executor;
   private final String authority;
@@ -67,7 +67,7 @@ final class SingleTransportChannel extends Channel {
   /**
    * Creates a new channel with a connected transport.
    */
-  public SingleTransportChannel(CensusContextFactory censusFactory, ClientTransport transport,
+  public SingleTransportChannel(StatsContextFactory censusFactory, ClientTransport transport,
       Executor executor, ScheduledExecutorService deadlineCancellationExecutor, String authority,
       Supplier<Stopwatch> stopwatchSupplier) {
     this.censusFactory = Preconditions.checkNotNull(censusFactory, "censusFactory");
