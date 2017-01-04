@@ -187,7 +187,7 @@ public class MessageFramer {
       compressingStream.close();
     }
     if (maxOutboundMessageSize >= 0 && written > maxOutboundMessageSize) {
-      throw Status.INTERNAL
+      throw Status.CANCELLED
           .withDescription(
               String.format("message too large %d > %d", written , maxOutboundMessageSize))
           .asRuntimeException();
@@ -209,6 +209,12 @@ public class MessageFramer {
    */
   private int writeKnownLengthUncompressed(InputStream message, int messageLength)
       throws IOException {
+    if (maxOutboundMessageSize >= 0 && messageLength > maxOutboundMessageSize) {
+      throw Status.CANCELLED
+          .withDescription(
+              String.format("message too large %d > %d", messageLength , maxOutboundMessageSize))
+          .asRuntimeException();
+    }
     ByteBuffer header = ByteBuffer.wrap(headerScratch);
     header.put(UNCOMPRESSED);
     header.putInt(messageLength);

@@ -155,7 +155,7 @@ public abstract class AbstractStream2 implements Stream {
       this.deframer = deframer;
     }
 
-    void setMaxInboundMessageSize(int maxSize) {
+    final void setMaxInboundMessageSize(int maxSize) {
       deframer.setMaxInboundMessageSize(maxSize);
     }
 
