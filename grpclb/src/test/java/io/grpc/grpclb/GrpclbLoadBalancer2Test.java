@@ -394,6 +394,7 @@ public class GrpclbLoadBalancer2Test {
     verify(helper).createOobChannel(eq(grpclbResolutionList.get(0).toEquivalentAddressGroup()),
         eq(lbAuthority(0)));
     assertEquals(1, fakeOobChannels.size());
+    ManagedChannel oobChannel = fakeOobChannels.poll();
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
     StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
 
@@ -404,6 +405,7 @@ public class GrpclbLoadBalancer2Test {
     inOrder.verify(helper).updatePicker(pickerCaptor.capture());
     ErrorPicker errorPicker = (ErrorPicker) pickerCaptor.getValue();
     assertSame(error, errorPicker.result.getStatus());
+    assertFalse(oobChannel.isShutdown());
 
     // Simulate receiving LB response
     List<InetSocketAddress> backends = Arrays.asList(
@@ -444,7 +446,6 @@ public class GrpclbLoadBalancer2Test {
     Attributes pickFirstResolutionAttrs = Attributes.newBuilder()
         .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.PICK_FIRST).build();
     verify(pickFirstBalancerFactory, never()).newLoadBalancer(any(Helper.class));
-    verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
     assertEquals(1, lbRequestObservers.size());
     StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
 
