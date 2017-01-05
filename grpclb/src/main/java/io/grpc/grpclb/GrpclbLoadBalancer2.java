@@ -87,7 +87,6 @@ class GrpclbLoadBalancer2 extends LoadBalancer2 implements WithLogId {
 
   private final LogId logId = LogId.allocate(getClass().getName());
 
-  private final String serviceName;
   private final Helper helper;
   private final Factory pickFirstBalancerFactory;
   private final Factory roundRobinBalancerFactory;
@@ -133,7 +132,7 @@ class GrpclbLoadBalancer2 extends LoadBalancer2 implements WithLogId {
   GrpclbLoadBalancer2(Helper helper, Factory pickFirstBalancerFactory,
       Factory roundRobinBalancerFactory) {
     this.helper = checkNotNull(helper, "helper");
-    this.serviceName = checkNotNull(helper.getAuthority(), "helper returns null authority");
+    checkNotNull(helper.getAuthority(), "helper returns null authority");
     this.pickFirstBalancerFactory =
         checkNotNull(pickFirstBalancerFactory, "pickFirstBalancerFactory");
     this.roundRobinBalancerFactory =

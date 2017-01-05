@@ -301,7 +301,6 @@ public class GrpclbLoadBalancer2Test {
 
     // Recover with a subsequent success
     List<ResolvedServerInfoGroup> resolvedServers = createResolvedServerInfoGroupList(false);
-    EquivalentAddressGroup eag = resolvedServers.get(0).toEquivalentAddressGroup();
 
     Attributes resolutionAttrs = Attributes.newBuilder().set(RESOLUTION_ATTR, "yeah").build();
     deliverResolvedAddresses(resolvedServers, resolutionAttrs);
@@ -395,7 +394,6 @@ public class GrpclbLoadBalancer2Test {
     verify(helper).createOobChannel(eq(grpclbResolutionList.get(0).toEquivalentAddressGroup()),
         eq(lbAuthority(0)));
     assertEquals(1, fakeOobChannels.size());
-    ManagedChannel oobChannel = fakeOobChannels.poll();
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
     StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
 
@@ -447,7 +445,6 @@ public class GrpclbLoadBalancer2Test {
         .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.PICK_FIRST).build();
     verify(pickFirstBalancerFactory, never()).newLoadBalancer(any(Helper.class));
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
-    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
     assertEquals(1, lbRequestObservers.size());
     StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
 
