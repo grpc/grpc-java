@@ -148,8 +148,7 @@ public final class StatsTraceContext {
   }
 
   @VisibleForTesting
-  static Metadata.Key<StatsContext> createStatsHeader(
-      final StatsContextFactory statsCtxFactory) {
+  static Metadata.Key<StatsContext> createStatsHeader(final StatsContextFactory statsCtxFactory) {
     return Metadata.Key.of("grpc-census-bin", new Metadata.BinaryMarshaller<StatsContext>() {
         @Override
         public byte[] toBytes(StatsContext context) {
