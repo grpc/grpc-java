@@ -789,28 +789,27 @@ public abstract class AbstractInteropTest {
 
   @Test(timeout = 10000)
   public void maxInboundSize_exact() {
-    // warm up the channel and JVM
-    blockingStub.emptyCall(Empty.getDefaultInstance());
-    // 5 is the size of the encoded response proto
-    TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(channel)
-        .withMaxInboundMessageSize(5);
     StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
         .addResponseParameters(ResponseParameters.newBuilder().setSize(1))
         .build();
+    int size = blockingStub.streamingOutputCall(request).next().getSerializedSize();
+
+    TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(channel)
+        .withMaxInboundMessageSize(size);
 
     stub.streamingOutputCall(request).next();
   }
 
   @Test(timeout = 10000)
   public void maxInboundSize_tooBig() {
-    // warm up the channel and JVM
-    blockingStub.emptyCall(Empty.getDefaultInstance());
-    // 6 is the size of the encoded response proto
-    TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(channel)
-        .withMaxInboundMessageSize(6 - 1);
     StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
-        .addResponseParameters(ResponseParameters.newBuilder().setSize(2))
+        .addResponseParameters(ResponseParameters.newBuilder().setSize(1))
         .build();
+    int size = blockingStub.streamingOutputCall(request).next().getSerializedSize();
+
+    TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(channel)
+        .withMaxInboundMessageSize(size - 1);
+
     try {
       stub.streamingOutputCall(request).next();
       fail();
