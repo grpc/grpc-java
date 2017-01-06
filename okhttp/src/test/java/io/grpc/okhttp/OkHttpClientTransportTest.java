@@ -65,6 +65,7 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 
+import io.grpc.Attributes.Provider;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -1545,6 +1546,10 @@ public class OkHttpClientTransportTest {
       this.status = status;
       this.trailers = trailers;
       closed.countDown();
+    }
+
+    @Override
+    public void onConnection(Provider transportAttrsProvider) {
     }
 
     @Override

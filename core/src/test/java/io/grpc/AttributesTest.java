@@ -32,16 +32,21 @@
 package io.grpc;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+
+import io.grpc.Attributes.Key;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
+import java.util.Arrays;
+
 /** Unit tests for {@link Attributes}. */
 @RunWith(JUnit4.class)
 public class AttributesTest {
-  private static Attributes.Key<String> YOLO_KEY = Attributes.Key.of("yolo");
+  private static Key<String> YOLO_KEY = Key.<String>of("yolo");
 
   @Test
   public void buildAttributes() {
@@ -64,5 +69,24 @@ public class AttributesTest {
   @Test
   public void empty() {
     assertEquals(0, Attributes.EMPTY.keys().size());
+  }
+
+  @Test
+  public void filterIn() {
+    Key<String> key1 = Key.<String>of("key1");
+    Key<String> key2 = Key.<String>of("key2");
+    Key<Object> key3 = Key.<Object>of("key3");
+    Key<Object> key4 = Key.<Object>of("key4");
+    Attributes attrs = Attributes.newBuilder()
+        .set(key1, "val1").set(key2, "val2").set(key3, "val3").set(key4, "val4")
+        .build();
+
+    @SuppressWarnings("unchecked") // type params are inhomogeneous but doesn't matter
+    Attributes newAttrs = attrs.filterIn(Arrays.asList(key2, key3));
+
+    assertNull(newAttrs.get(key1));
+    assertEquals("val2", newAttrs.get(key2));
+    assertEquals("val3", newAttrs.get(key3));
+    assertNull(newAttrs.get(key4));
   }
 }

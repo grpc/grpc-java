@@ -58,6 +58,8 @@ import com.google.instrumentation.stats.RpcConstants;
 import com.google.instrumentation.stats.StatsContext;
 import com.google.instrumentation.stats.TagValue;
 
+import io.grpc.Attributes;
+import io.grpc.Attributes.Key;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.Codec;
@@ -822,6 +824,34 @@ public class ClientCallImplTest {
     assertEquals(Status.CANCELLED.getCode(), status.getCode());
     assertEquals("foo", status.getDescription());
     assertSame(cause, status.getCause());
+  }
+
+  @Test
+  public void onConnectionTriggered() {
+    DelayedExecutor executor = new DelayedExecutor();
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+        method,
+        executor,
+        CallOptions.DEFAULT,
+        statsTraceCtx,
+        provider,
+        deadlineCancellationExecutor);
+    call.start(callListener, new Metadata());
+    verify(stream).start(listenerArgumentCaptor.capture());
+    final ClientStreamListener streamListener = listenerArgumentCaptor.getValue();
+    final Attributes attributes =
+        Attributes.newBuilder().set(Key.<String>of("fakeKey"), "fakeValue").build();
+
+    streamListener.onConnection(
+        new Attributes.Provider() {
+          @Override
+          public Attributes getAttrs() {
+            return attributes;
+          }
+        }
+    );
+
+    assertEquals(attributes, call.getAttrs());
   }
 
   private void assertStatusInStats(Status.Code statusCode) {

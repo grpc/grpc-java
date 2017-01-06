@@ -31,7 +31,10 @@
 
 package io.grpc.netty;
 
+import io.grpc.Attributes;
+import io.grpc.Attributes.Key;
 import io.grpc.internal.ClientTransportFactory;
+import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.testing.AbstractTransportTest;
@@ -43,6 +46,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 import java.net.InetSocketAddress;
+import java.util.Collection;
+import java.util.Collections;
 
 /** Unit tests for Netty transport. */
 @RunWith(JUnit4.class)
@@ -56,6 +61,8 @@ public class NettyTransportTest extends AbstractTransportTest {
       .flowControlWindow(65 * 1024)
       .negotiationType(NegotiationType.PLAINTEXT)
       .buildTransportFactory();
+
+  private Attributes transportAttrs;
 
   @After
   public void releaseClientFactory() {
@@ -82,14 +89,31 @@ public class NettyTransportTest extends AbstractTransportTest {
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     int port = server.getPort();
-    return clientFactory.newClientTransport(
+    NettyClientTransport transport = (NettyClientTransport) clientFactory.newClientTransport(
         new InetSocketAddress("localhost", port),
         "localhost:" + port,
         null /* agent */);
+    if (transportAttrs != null) {
+      transport.setAttrsForTest(transportAttrs);
+    }
+    return transport;
   }
 
   @Test
   @Ignore("flaky")
   @Override
   public void flowControlPushBack() {}
+
+  @Test
+  @Override
+  public void clientStreamOnConnectionCalled() throws Exception {
+    @SuppressWarnings("unchecked") // replace the wildcard type in APPLICATION_FILTER by Object type
+    Key<Collection<Object>> filterKey =
+        (Key<Collection<Object>>)((Key<?>) ConnectionClientTransport.APPLICATION_FILTER);
+    transportAttrs = Attributes.newBuilder()
+        .set(filterKey, Collections.singleton((Object) filterKey))
+        .build();
+
+    super.clientStreamOnConnectionCalled();
+  }
 }

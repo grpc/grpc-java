@@ -37,7 +37,9 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
+import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -86,6 +88,7 @@ public class OkHttpClientStreamTest {
         MethodType.UNARY, "/testService/test", marshaller, marshaller);
     stream = new OkHttpClientStream(methodDescriptor, new Metadata(), frameWriter, transport,
         flowController, lock, MAX_MESSAGE_SIZE, "localhost", "userAgent", StatsTraceContext.NOOP);
+    when(transport.getAttrs()).thenReturn(Attributes.EMPTY);
   }
 
   @Test
@@ -187,6 +190,10 @@ public class OkHttpClientStreamTest {
 
     @Override
     public void closed(Status status, Metadata trailers) {}
+
+    @Override
+    public void onConnection(Attributes.Provider transportAttrsProvider) {
+    }
   }
 }
 

@@ -828,6 +828,10 @@ public abstract class AbstractTransportTest {
       }
 
       @Override
+      public void onConnection(Attributes.Provider transportAttrsProvider) {
+      }
+
+      @Override
       public void messageRead(InputStream message) {
         assertEquals("foo", methodDescriptor.parseResponse(message));
         clientStream.cancel(Status.CANCELLED.withDescription("nevermind"));
@@ -1052,6 +1056,35 @@ public abstract class AbstractTransportTest {
         .closed(statusCaptor.capture(), any(Metadata.class));
     assertEquals(status.getCode(), statusCaptor.getValue().getCode());
     assertEquals(status.getDescription(), statusCaptor.getValue().getDescription());
+  }
+
+  @Test
+  public void clientStreamOnConnectionNotCalled() throws Exception {
+    server.start(serverListener);
+    client = newClientTransport(server);
+    runIfNotNull(client.start(mockClientTransportListener));
+    ClientStream clientStream = client.newStream(methodDescriptor, new Metadata());
+
+    clientStream.start(mockClientStreamListener);
+
+    // because transport has no attributes set
+    verify(mockClientStreamListener, never()).onConnection(any(Attributes.Provider.class));
+  }
+
+  /**
+   * Overriding methods will set non-trivial transport attributes first and then call this method,
+   * then {@link ClientStreamListener#onConnection} will be called.
+   */
+  protected void clientStreamOnConnectionCalled() throws Exception {
+    server.start(serverListener);
+    client = newClientTransport(server);
+    runIfNotNull(client.start(mockClientTransportListener));
+    ClientStream clientStream = client.newStream(methodDescriptor, new Metadata());
+    verify(mockClientStreamListener, never()).onConnection(any(Attributes.Provider.class));
+
+    clientStream.start(mockClientStreamListener);
+
+    verify(mockClientStreamListener).onConnection(any(Attributes.Provider.class));
   }
 
   /**

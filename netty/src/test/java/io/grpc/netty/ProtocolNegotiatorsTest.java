@@ -35,12 +35,15 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
+import io.grpc.Attributes;
 import io.grpc.netty.ProtocolNegotiators.ServerTlsHandler;
 import io.grpc.netty.ProtocolNegotiators.TlsNegotiator;
 import io.grpc.testing.TestUtils;
+
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
@@ -67,6 +70,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
 
+/** Tests for {@link ProtocolNegotiators}.*/
 @RunWith(JUnit4.class)
 public class ProtocolNegotiatorsTest {
   @Rule public final ExpectedException thrown = ExpectedException.none();
@@ -251,5 +255,16 @@ public class ProtocolNegotiatorsTest {
     // invalid.
     assertEquals("bad_host:1234", negotiator.getHost());
     assertEquals(-1, negotiator.getPort());
+  }
+
+  @Test
+  public void attributes() throws Exception {
+    SslContext ctx = GrpcSslContexts.forClient().build();
+
+    assertSame(Attributes.EMPTY, ProtocolNegotiators.plaintext().attributes());
+    assertSame(Attributes.EMPTY, ProtocolNegotiators.plaintextUpgrade().attributes());
+    assertSame(Attributes.EMPTY, ProtocolNegotiators.serverPlaintext().attributes());
+    assertSame(Attributes.EMPTY, ProtocolNegotiators.serverTls(ctx) .attributes());
+    assertSame(Attributes.EMPTY, ProtocolNegotiators.tls(ctx, "bad_host:1234") .attributes());
   }
 }

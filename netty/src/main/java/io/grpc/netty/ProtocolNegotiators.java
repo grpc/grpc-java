@@ -42,6 +42,7 @@ import io.grpc.Grpc;
 import io.grpc.Internal;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
+
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
@@ -106,6 +107,11 @@ public final class ProtocolNegotiators {
 
         return new PlaintextHandler();
       }
+
+      @Override
+      public Attributes attributes() {
+        return Attributes.EMPTY;
+      }
     };
   }
 
@@ -118,6 +124,11 @@ public final class ProtocolNegotiators {
       @Override
       public Handler newHandler(GrpcHttp2ConnectionHandler handler) {
         return new ServerTlsHandler(sslContext, handler);
+      }
+
+      @Override
+      public Attributes attributes() {
+        return Attributes.EMPTY;
       }
     };
   }
@@ -251,6 +262,11 @@ public final class ProtocolNegotiators {
       };
       return new BufferUntilTlsNegotiatedHandler(sslBootstrap, handler);
     }
+
+    @Override
+    public Attributes attributes() {
+      return Attributes.EMPTY;
+    }
   }
 
   /**
@@ -270,6 +286,11 @@ public final class ProtocolNegotiators {
           new HttpClientUpgradeHandler(httpClientCodec, upgradeCodec, 1000);
       return new BufferingHttp2UpgradeHandler(upgrader);
     }
+
+    @Override
+    public Attributes attributes() {
+      return Attributes.EMPTY;
+    }
   }
 
   /**
@@ -285,6 +306,11 @@ public final class ProtocolNegotiators {
     @Override
     public Handler newHandler(GrpcHttp2ConnectionHandler handler) {
       return new BufferUntilChannelActiveHandler(handler);
+    }
+
+    @Override
+    public Attributes attributes() {
+      return Attributes.EMPTY;
     }
   }
 
