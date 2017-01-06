@@ -58,8 +58,8 @@ import java.util.concurrent.TimeUnit;
 public class CallOptionsTest {
   private String sampleAuthority = "authority";
   private String sampleCompressor = "compressor";
-  private Deadline.Ticker ticker = new FakeTicker();
-  private Deadline sampleDeadline = Deadline.after(1, NANOSECONDS, ticker);
+  private Deadline.DeadlineTicker ticker = new FakeTicker();
+  private Deadline sampleDeadline = Deadline.forTest(1, NANOSECONDS, ticker);
   private Key<String> sampleKey = Attributes.Key.of("sample");
   private Attributes sampleAffinity = Attributes.newBuilder().set(sampleKey, "blah").build();
   private CallCredentials sampleCreds = mock(CallCredentials.class);
@@ -240,7 +240,7 @@ public class CallOptionsTest {
         && Objects.equal(o1.getCredentials(), o2.getCredentials());
   }
 
-  private static class FakeTicker extends Deadline.Ticker {
+  private static class FakeTicker implements Deadline.DeadlineTicker {
     private long time;
 
     @Override

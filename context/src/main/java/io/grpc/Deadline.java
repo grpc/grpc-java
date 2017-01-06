@@ -39,7 +39,6 @@ import java.util.concurrent.TimeUnit;
  * An absolute deadline in system time.
  */
 public final class Deadline implements Comparable<Deadline> {
-  private static final SystemTicker SYSTEM_TICKER = new SystemTicker();
   // nanoTime has a range of just under 300 years. Only allow up to 100 years in the past or future
   // to prevent wraparound as long as process runs for less than ~100 years.
   private static final long MAX_OFFSET = TimeUnit.DAYS.toNanos(100 * 365);
@@ -52,24 +51,25 @@ public final class Deadline implements Comparable<Deadline> {
    * @return A new deadline.
    */
   public static Deadline after(long duration, TimeUnit units) {
-    return after(duration, units, SYSTEM_TICKER);
+    checkNotNull(units, "units");
+    return new Deadline(SystemTicker.INTANCE, units.toNanos(duration), true);
   }
 
-  // For testing
-  static Deadline after(long duration, TimeUnit units, Ticker ticker) {
+  //For testing
+  public static Deadline forTest(long duration, TimeUnit units, DeadlineTicker ticker) {
     checkNotNull(units, "units");
     return new Deadline(ticker, units.toNanos(duration), true);
   }
 
-  private final Ticker ticker;
+  private final DeadlineTicker ticker;
   private final long deadlineNanos;
   private volatile boolean expired;
 
-  private Deadline(Ticker ticker, long offset, boolean baseInstantAlreadyExpired) {
+  private Deadline(DeadlineTicker ticker, long offset, boolean baseInstantAlreadyExpired) {
     this(ticker, ticker.read(), offset, baseInstantAlreadyExpired);
   }
 
-  private Deadline(Ticker ticker, long baseInstant, long offset,
+  private Deadline(DeadlineTicker ticker, long baseInstant, long offset,
       boolean baseInstantAlreadyExpired) {
     this.ticker = ticker;
     // Clamp to range [MIN_OFFSET, MAX_OFFSET]
@@ -164,13 +164,19 @@ public final class Deadline implements Comparable<Deadline> {
     return 0;
   }
 
-  /** Time source representing nanoseconds since fixed but arbitrary point in time. */
-  abstract static class Ticker {
+  /**
+   * Time source representing nanoseconds since fixed but arbitrary point in time.
+   *
+   * <p>This is public for testing purposes.
+   */
+  public interface DeadlineTicker {
     /** Returns the number of nanoseconds since this source's epoch. */
-    public abstract long read();
+    long read();
   }
 
-  private static class SystemTicker extends Ticker {
+  private enum SystemTicker implements DeadlineTicker {
+    INTANCE;
+
     @Override
     public long read() {
       return System.nanoTime();
