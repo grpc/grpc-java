@@ -90,7 +90,6 @@ class OkHttpClientStream extends Http2ClientStream {
 
   OkHttpClientStream(
       MethodDescriptor<?, ?> method,
-      Metadata headers,
       AsyncFrameWriter frameWriter,
       OkHttpClientTransport transport,
       OutboundFlowController outboundFlow,

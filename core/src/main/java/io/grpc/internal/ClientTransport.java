@@ -32,7 +32,6 @@
 package io.grpc.internal;
 
 import io.grpc.CallOptions;
-import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 
 import java.util.concurrent.Executor;
@@ -58,17 +57,16 @@ public interface ClientTransport {
    * <p>This method is called under the {@link io.grpc.Context} of the {@link io.grpc.ClientCall}.
    *
    * @param method the descriptor of the remote method to be called for this stream.
-   * @param headers to send at the beginning of the call
    * @param callOptions runtime options of the call
    * @param statsTraceCtx carries stats and tracing information
    * @return the newly created stream.
    */
   // TODO(nmittler): Consider also throwing for stopping.
-  ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+  ClientStream newStream(MethodDescriptor<?, ?> method, CallOptions callOptions,
       StatsTraceContext statsTraceCtx);
 
   // TODO(zdapeng): Remove two-argument version in favor of four-argument overload.
-  ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers);
+  ClientStream newStream(MethodDescriptor<?, ?> method);
 
   /**
    * Pings a remote endpoint. When an acknowledgement is received, the given callback will be

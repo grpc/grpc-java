@@ -75,7 +75,7 @@ class NettyClientStream extends AbstractClientStream2 {
   private final AsciiString scheme;
   private final AsciiString userAgent;
 
-  NettyClientStream(TransportState state, MethodDescriptor<?, ?> method, Metadata headers,
+  NettyClientStream(TransportState state, MethodDescriptor<?, ?> method,
       Channel channel, AsciiString authority, AsciiString scheme,
       AsciiString userAgent, StatsTraceContext statsTraceCtx) {
     super(new NettyWritableBufferAllocator(channel.alloc()), statsTraceCtx);

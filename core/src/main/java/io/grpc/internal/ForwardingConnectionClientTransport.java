@@ -33,7 +33,6 @@ package io.grpc.internal;
 
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
-import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 
@@ -57,14 +56,13 @@ abstract class ForwardingConnectionClientTransport implements ConnectionClientTr
 
   @Override
   public ClientStream newStream(
-      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
-      StatsTraceContext statsTraceCtx) {
-    return delegate().newStream(method, headers, callOptions, statsTraceCtx);
+      MethodDescriptor<?, ?> method, CallOptions callOptions, StatsTraceContext statsTraceCtx) {
+    return delegate().newStream(method, callOptions, statsTraceCtx);
   }
 
   @Override
-  public ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers) {
-    return delegate().newStream(method, headers);
+  public ClientStream newStream(MethodDescriptor<?, ?> method) {
+    return delegate().newStream(method);
   }
 
   @Override

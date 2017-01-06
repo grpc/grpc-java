@@ -202,7 +202,7 @@ public class ManagedChannelImplTransportManagerTest {
     // Subsequent getTransport() will use the next address
     ClientTransport t2 = tm.getTransport(addressGroup);
     assertNotNull(t2);
-    t2.newStream(method, new Metadata(), callOptions, statsTraceCtx);
+    t2.newStream(method, callOptions, statsTraceCtx);
     // Will keep the previous back-off policy, and not consult back-off policy
     verify(mockTransportFactory, timeout(1000)).newClientTransport(addr2, AUTHORITY, USER_AGENT);
     verify(mockBackoffPolicyProvider, times(backoffReset)).get();
@@ -211,7 +211,7 @@ public class ManagedChannelImplTransportManagerTest {
     // Make the second transport ready
     transportInfo.listener.transportReady();
     verify(rt2, timeout(1000)).newStream(
-        same(method), any(Metadata.class), same(callOptions), same(statsTraceCtx));
+        same(method), same(callOptions), same(statsTraceCtx));
     verify(mockNameResolver, times(0)).refresh();
     // Disconnect the second transport
     transportInfo.listener.transportShutdown(Status.UNAVAILABLE);
@@ -220,7 +220,7 @@ public class ManagedChannelImplTransportManagerTest {
 
     // Subsequent getTransport() will use the first address, since last attempt was successful.
     ClientTransport t3 = tm.getTransport(addressGroup);
-    t3.newStream(method2, new Metadata(), callOptions2, statsTraceCtx2);
+    t3.newStream(method2, callOptions2, statsTraceCtx2);
     verify(mockTransportFactory, timeout(1000).times(2))
         .newClientTransport(addr1, AUTHORITY, USER_AGENT);
     // Still no back-off policy creation, because an address succeeded.
@@ -229,9 +229,9 @@ public class ManagedChannelImplTransportManagerTest {
     ClientTransport rt3 = transportInfo.transport;
     transportInfo.listener.transportReady();
     verify(rt3, timeout(1000)).newStream(
-        same(method2), any(Metadata.class), same(callOptions2), same(statsTraceCtx2));
+        same(method2), same(callOptions2), same(statsTraceCtx2));
 
-    verify(rt1, times(0)).newStream(any(MethodDescriptor.class), any(Metadata.class));
+    verify(rt1, times(0)).newStream(any(MethodDescriptor.class));
     // Back-off policy was never consulted.
     verify(mockBackoffPolicy, times(0)).nextBackoffMillis();
     verifyNoMoreInteractions(mockTransportFactory);
@@ -290,7 +290,7 @@ public class ManagedChannelImplTransportManagerTest {
     ClientTransport t4 = tm.getTransport(addressGroup);
     assertNotNull(t4);
     // If backoff's DelayedTransport is still active, this is necessary. Otherwise it would be racy.
-    t4.newStream(method, new Metadata(), CallOptions.DEFAULT.withWaitForReady(), statsTraceCtx);
+    t4.newStream(method, CallOptions.DEFAULT.withWaitForReady(), statsTraceCtx);
     verify(mockTransportFactory, timeout(1000).times(++transportsAddr1))
         .newClientTransport(addr1, AUTHORITY, USER_AGENT);
     // Back-off policy was reset and consulted.
@@ -311,14 +311,14 @@ public class ManagedChannelImplTransportManagerTest {
     InterimTransport<ClientTransport> interimTransport = tm.createInterimTransport();
     ClientTransport transport = interimTransport.transport();
     assertTrue(transport instanceof DelayedClientTransport);
-    ClientStream s1 = transport.newStream(method, new Metadata());
+    ClientStream s1 = transport.newStream(method);
     ClientStreamListener sl1 = mock(ClientStreamListener.class);
     s1.start(sl1, new Metadata());
 
     // Shutting down the channel will shutdown the interim transport, thus refusing further streams,
     // but will continue existing streams.
     channel.shutdown();
-    ClientStream s2 = transport.newStream(method, new Metadata());
+    ClientStream s2 = transport.newStream(method);
     ClientStreamListener sl2 = mock(ClientStreamListener.class);
     s2.start(sl2, new Metadata());
     verify(sl2).closed(any(Status.class), any(Metadata.class));
@@ -328,7 +328,7 @@ public class ManagedChannelImplTransportManagerTest {
     // After channel has shut down, createInterimTransport() will get you a transport that has
     // already set error.
     ClientTransport transportAfterShutdown = tm.createInterimTransport().transport();
-    ClientStream s3 = transportAfterShutdown.newStream(method, new Metadata());
+    ClientStream s3 = transportAfterShutdown.newStream(method);
     ClientStreamListener sl3 = mock(ClientStreamListener.class);
     s3.start(sl3, new Metadata());
     verify(sl3).closed(any(Status.class), any(Metadata.class));
@@ -391,7 +391,7 @@ public class ManagedChannelImplTransportManagerTest {
     InterimTransport<ClientTransport> interimTransport = tm.createInterimTransport();
     ClientTransport transport = interimTransport.transport();
     assertTrue(transport instanceof DelayedClientTransport);
-    ClientStream s1 = transport.newStream(method, new Metadata());
+    ClientStream s1 = transport.newStream(method);
     ClientStreamListener sl1 = mock(ClientStreamListener.class);
     s1.start(sl1, new Metadata());
 

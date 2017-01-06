@@ -158,7 +158,7 @@ public class ClientCallImplTest {
     MockitoAnnotations.initMocks(this);
     assertNotNull(censusCtx);
     when(provider.get(any(CallOptions.class))).thenReturn(transport);
-    when(transport.newStream(any(MethodDescriptor.class), any(Metadata.class),
+    when(transport.newStream(any(MethodDescriptor.class),
             any(CallOptions.class), any(StatsTraceContext.class))).thenReturn(stream);
   }
 
@@ -307,8 +307,9 @@ public class ClientCallImplTest {
     call.start(callListener, new Metadata());
 
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
-    verify(transport).newStream(eq(method), metadataCaptor.capture(), same(CallOptions.DEFAULT),
+    verify(transport).newStream(eq(method), same(CallOptions.DEFAULT),
         same(statsTraceCtx));
+    verify(stream).start(any(ClientStreamListener.class), metadataCaptor.capture());
     Metadata actual = metadataCaptor.getValue();
 
     Set<String> acceptedEncodings =
@@ -346,7 +347,7 @@ public class ClientCallImplTest {
 
     call.start(callListener, metadata);
 
-    verify(transport).newStream(same(method), same(metadata), same(callOptions),
+    verify(transport).newStream(same(method), same(callOptions),
         same(statsTraceCtx));
   }
 
@@ -615,7 +616,7 @@ public class ClientCallImplTest {
         deadlineCancellationExecutor)
             .setDecompressorRegistry(decompressorRegistry);
     call.start(callListener, new Metadata());
-    verify(transport, times(0)).newStream(any(MethodDescriptor.class), any(Metadata.class));
+    verify(transport, times(0)).newStream(any(MethodDescriptor.class));
     verify(callListener, timeout(1000)).onClose(statusCaptor.capture(), any(Metadata.class));
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertStatusInStats(Status.Code.DEADLINE_EXCEEDED);

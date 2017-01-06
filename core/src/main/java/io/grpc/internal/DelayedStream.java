@@ -71,6 +71,7 @@ class DelayedStream implements ClientStream {
   private List<Runnable> pendingCalls = new ArrayList<Runnable>();
   @GuardedBy("this")
   private DelayedStreamListener delayedListener;
+  private Metadata headers;
 
   /**
    * Transfers all pending and future requests and mutations to the given stream.
@@ -79,12 +80,32 @@ class DelayedStream implements ClientStream {
    */
   // When this method returns, passThrough is guaranteed to be true
   final void setStream(ClientStream stream) {
+    setStream(stream, null);
+  }
+
+  /**
+   * Transfers all pending and future requests and mutations to the given stream.
+   *
+   * <p>No-op if either this method or {@link #cancel} have already been called.
+   *
+   * <p>If {@code additionalHeaders} is not null, it will be merged with the {@code headers} given
+   * in the {@link #start} call.
+   */
+  // When this method returns, passThrough is guaranteed to be true
+  final void setStream(ClientStream stream, Metadata additionalHeaders) {
     synchronized (this) {
       // If realStream != null, then either setStream() or cancel() has been called.
       if (realStream != null) {
         return;
       }
       realStream = checkNotNull(stream, "stream");
+      if (additionalHeaders != null) {
+        if (headers == null) {
+          headers = additionalHeaders;
+        } else {
+          headers.merge(additionalHeaders);
+        }
+      }
     }
 
     drainPendingCalls();
@@ -170,6 +191,12 @@ class DelayedStream implements ClientStream {
       if (!savedPassThrough) {
         listener = delayedListener = new DelayedStreamListener(listener);
       }
+
+      if (this.headers == null) {
+        this.headers = headers;
+      } else {
+        this.headers.merge(headers);
+      }
     }
     if (savedError != null) {
       listener.closed(savedError, new Metadata());
@@ -177,17 +204,17 @@ class DelayedStream implements ClientStream {
     }
 
     if (savedPassThrough) {
-      realStream.start(listener, headers);
+      realStream.start(listener, this.headers);
     } else {
       final ClientStreamListener finalListener = listener;
-      final Metadata finalHeaders = headers;
+      final Metadata finalHeaders = this.headers;
       delayOrExecute(new Runnable() {
         @Override
         public void run() {
           realStream.start(finalListener, finalHeaders);
         }
       });
-    }
+    }      
   }
 
   @Override

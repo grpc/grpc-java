@@ -126,7 +126,7 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
 
   @Override
   public synchronized ClientStream newStream(
-      final MethodDescriptor<?, ?> method, final Metadata headers, final CallOptions callOptions,
+      final MethodDescriptor<?, ?> method, final CallOptions callOptions,
       StatsTraceContext clientStatsTraceContext) {
     if (shutdownStatus != null) {
       final Status capturedStatus = shutdownStatus;
@@ -137,15 +137,14 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
         }
       };
     }
-    StatsTraceContext serverStatsTraceContext = serverTransportListener.methodDetermined(
-        method.getFullMethodName(), headers);
-    return new InProcessStream(method, serverStatsTraceContext).clientStream;
+
+    return new InProcessStream(method).clientStream;
   }
 
   @Override
   public synchronized ClientStream newStream(
-      final MethodDescriptor<?, ?> method, final Metadata headers) {
-    return newStream(method, headers, CallOptions.DEFAULT, StatsTraceContext.NOOP);
+      final MethodDescriptor<?, ?> method) {
+    return newStream(method, CallOptions.DEFAULT, StatsTraceContext.NOOP);
   }
 
   @Override
@@ -239,14 +238,11 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
   private class InProcessStream {
     private final InProcessServerStream serverStream = new InProcessServerStream();
     private final InProcessClientStream clientStream = new InProcessClientStream();
-    private final StatsTraceContext serverStatsTraceContext;
+    private StatsTraceContext serverStatsTraceContext;
     private final MethodDescriptor<?, ?> method;
 
-    private InProcessStream(MethodDescriptor<?, ?> method,
-        StatsTraceContext serverStatsTraceContext) {
+    private InProcessStream(MethodDescriptor<?, ?> method) {
       this.method = checkNotNull(method, "method");
-      this.serverStatsTraceContext =
-          checkNotNull(serverStatsTraceContext, "serverStatsTraceContext");
     }
 
     // Can be called multiple times due to races on both client and server closing at same time.
@@ -555,6 +551,9 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
 
       @Override
       public void start(ClientStreamListener listener, Metadata headers) {
+        serverStatsTraceContext = serverTransportListener.methodDetermined(
+            method.getFullMethodName(), headers);
+
         serverStream.setListener(listener);
 
         synchronized (InProcessTransport.this) {

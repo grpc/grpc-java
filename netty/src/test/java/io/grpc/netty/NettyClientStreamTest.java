@@ -360,7 +360,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     listener = mock(ClientStreamListener.class);
 
     stream = new NettyClientStream(new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE),
-        methodDescriptor, new Metadata(), channel, AsciiString.of("localhost"),
+        methodDescriptor, channel, AsciiString.of("localhost"),
         AsciiString.of("http"), AsciiString.of("agent"), StatsTraceContext.NOOP);
     stream.start(listener, new Metadata());
     stream().transportState().setId(STREAM_ID);
@@ -380,7 +380,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     when(writeQueue.enqueue(any(QueuedCommand.class), any(boolean.class))).thenReturn(future);
 
     stream = new NettyClientStream(new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE),
-        methodDescriptor, new Metadata(), channel, AsciiString.of("localhost"),
+        methodDescriptor, channel, AsciiString.of("localhost"),
         AsciiString.of("http"), AsciiString.of("good agent"), StatsTraceContext.NOOP);
     stream.start(listener, new Metadata());
 
@@ -404,7 +404,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     }).when(writeQueue).enqueue(any(QueuedCommand.class), any(ChannelPromise.class), anyBoolean());
     when(writeQueue.enqueue(any(QueuedCommand.class), anyBoolean())).thenReturn(future);
     NettyClientStream stream = new NettyClientStream(
-        new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE), methodDescriptor, new Metadata(),
+        new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE), methodDescriptor,
         channel, AsciiString.of("localhost"), AsciiString.of("http"), AsciiString.of("agent"),
         StatsTraceContext.NOOP);
     stream.start(listener, new Metadata());

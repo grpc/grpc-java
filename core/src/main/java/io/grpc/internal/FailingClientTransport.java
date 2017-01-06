@@ -35,7 +35,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
 import io.grpc.CallOptions;
-import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 
@@ -55,14 +54,14 @@ class FailingClientTransport implements ClientTransport {
   }
 
   @Override
-  public ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers,
+  public ClientStream newStream(MethodDescriptor<?, ?> method,
       CallOptions callOptions, StatsTraceContext statsTraceCtx) {
     return new FailingClientStream(error);
   }
 
   @Override
-  public ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers) {
-    return newStream(method, headers, CallOptions.DEFAULT, StatsTraceContext.NOOP);
+  public ClientStream newStream(MethodDescriptor<?, ?> method) {
+    return newStream(method, CallOptions.DEFAULT, StatsTraceContext.NOOP);
   }
 
   @Override

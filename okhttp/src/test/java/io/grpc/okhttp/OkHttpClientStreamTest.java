@@ -84,7 +84,7 @@ public class OkHttpClientStreamTest {
     MockitoAnnotations.initMocks(this);
     methodDescriptor = MethodDescriptor.create(
         MethodType.UNARY, "/testService/test", marshaller, marshaller);
-    stream = new OkHttpClientStream(methodDescriptor, new Metadata(), frameWriter, transport,
+    stream = new OkHttpClientStream(methodDescriptor, frameWriter, transport,
         flowController, lock, MAX_MESSAGE_SIZE, "localhost", "userAgent", StatsTraceContext.NOOP);
   }
 
@@ -140,7 +140,7 @@ public class OkHttpClientStreamTest {
   public void start_userAgentRemoved() {
     Metadata metaData = new Metadata();
     metaData.put(GrpcUtil.USER_AGENT_KEY, "misbehaving-application");
-    stream = new OkHttpClientStream(methodDescriptor, metaData, frameWriter, transport,
+    stream = new OkHttpClientStream(methodDescriptor, frameWriter, transport,
         flowController, lock, MAX_MESSAGE_SIZE, "localhost", "good-application",
         StatsTraceContext.NOOP);
     stream.start(new BaseClientStreamListener(), new Metadata());
@@ -155,7 +155,7 @@ public class OkHttpClientStreamTest {
   public void start_headerFieldOrder() {
     Metadata metaData = new Metadata();
     metaData.put(GrpcUtil.USER_AGENT_KEY, "misbehaving-application");
-    stream = new OkHttpClientStream(methodDescriptor, metaData, frameWriter, transport,
+    stream = new OkHttpClientStream(methodDescriptor, frameWriter, transport,
         flowController, lock, MAX_MESSAGE_SIZE, "localhost", "good-application",
         StatsTraceContext.NOOP);
     stream.start(new BaseClientStreamListener(), new Metadata());

@@ -38,7 +38,6 @@ import com.google.common.base.Ticker;
 
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
-import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientStream;
@@ -118,10 +117,9 @@ class NettyClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers,
+  public ClientStream newStream(MethodDescriptor<?, ?> method,
       CallOptions callOptions, StatsTraceContext statsTraceCtx) {
     Preconditions.checkNotNull(method, "method");
-    Preconditions.checkNotNull(headers, "headers");
     Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
     return new NettyClientStream(
         new NettyClientStream.TransportState(handler, maxMessageSize, statsTraceCtx) {
@@ -130,13 +128,13 @@ class NettyClientTransport implements ConnectionClientTransport {
             return NettyClientTransport.this.statusFromFailedFuture(f);
           }
         },
-        method, headers, channel, authority, negotiationHandler.scheme(), userAgent,
+        method, channel, authority, negotiationHandler.scheme(), userAgent,
         statsTraceCtx);
   }
 
   @Override
-  public ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers) {
-    return newStream(method, headers, CallOptions.DEFAULT, StatsTraceContext.NOOP);
+  public ClientStream newStream(MethodDescriptor<?, ?> method) {
+    return newStream(method, CallOptions.DEFAULT, StatsTraceContext.NOOP);
   }
 
   @Override

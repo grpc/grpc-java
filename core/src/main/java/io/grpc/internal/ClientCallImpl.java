@@ -226,7 +226,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
           && transport.supportGetMethod();
       Context origContext = context.attach();
       try {
-        stream = transport.newStream(method, headers, callOptions, statsTraceCtx);
+        stream = transport.newStream(method, callOptions, statsTraceCtx);
       } finally {
         context.detach(origContext);
       }

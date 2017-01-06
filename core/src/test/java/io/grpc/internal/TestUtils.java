@@ -37,7 +37,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import io.grpc.CallOptions;
-import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 
 import org.mockito.invocation.InvocationOnMock;
@@ -85,7 +84,7 @@ final class TestUtils {
       @Override
       public ConnectionClientTransport answer(InvocationOnMock invocation) throws Throwable {
         final ConnectionClientTransport mockTransport = mock(ConnectionClientTransport.class);
-        when(mockTransport.newStream(any(MethodDescriptor.class), any(Metadata.class),
+        when(mockTransport.newStream(any(MethodDescriptor.class),
                 any(CallOptions.class), any(StatsTraceContext.class)))
             .thenReturn(mock(ClientStream.class));
         // Save the listener
