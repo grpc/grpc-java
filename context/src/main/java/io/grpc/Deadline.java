@@ -163,6 +163,27 @@ public final class Deadline implements Comparable<Deadline> {
     return 0;
   }
 
+  @Override
+  public boolean equals(Object obj) {
+    if (!(obj instanceof Deadline)) {
+      return false;
+    }
+    Deadline that = (Deadline) obj;
+    return this.deadlineNanos == that.deadlineNanos
+        && this.ticker == that.ticker
+        && this.expired == that.expired;
+  }
+
+  /**
+   * It is not expected that this will be used, but is added for completeness.
+   */
+  @Override
+  public int hashCode() {
+    return ((int)(deadlineNanos ^ (deadlineNanos >>> 32)))
+        ^ (expired ? 1231 : 1237)
+        ^ ticker.hashCode();
+  }
+
   /**
    * Time source representing nanoseconds since fixed but arbitrary point in time.
    *
