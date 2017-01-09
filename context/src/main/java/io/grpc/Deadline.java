@@ -52,7 +52,7 @@ public final class Deadline implements Comparable<Deadline> {
    */
   public static Deadline after(long duration, TimeUnit units) {
     checkNotNull(units, "units");
-    return new Deadline(SystemTicker.INTANCE, units.toNanos(duration), true);
+    return new Deadline(SystemTicker.INSTANCE, units.toNanos(duration), true);
   }
 
   public static Deadline after(long duration, TimeUnit units, DeadlineTicker ticker) {
@@ -174,7 +174,7 @@ public final class Deadline implements Comparable<Deadline> {
   }
 
   private enum SystemTicker implements DeadlineTicker {
-    INTANCE;
+    INSTANCE;
 
     @Override
     public long read() {
