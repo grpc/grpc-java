@@ -35,9 +35,9 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
-import com.google.census.CensusContextFactory;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.instrumentation.stats.StatsContextFactory;
 
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -72,7 +72,7 @@ final class OobChannel extends ManagedChannel implements WithLogId {
   private SubchannelPicker subchannelPicker;
 
   private final LogId logId = LogId.allocate(getClass().getName());
-  private final CensusContextFactory censusFactory;
+  private final StatsContextFactory statsFactory;
   private final String authority;
   private final DelayedClientTransport2 delayedTransport;
   private final ObjectPool<? extends Executor> executorPool;
@@ -92,11 +92,11 @@ final class OobChannel extends ManagedChannel implements WithLogId {
     }
   };
 
-  OobChannel(CensusContextFactory censusFactory, String authority,
+  OobChannel(StatsContextFactory statsFactory, String authority,
       ObjectPool<? extends Executor> executorPool,
       ScheduledExecutorService deadlineCancellationExecutor, Supplier<Stopwatch> stopwatchSupplier,
       ChannelExecutor channelExecutor) {
-    this.censusFactory = checkNotNull(censusFactory, "censusFactory");
+    this.statsFactory = checkNotNull(statsFactory, "statsFactory");
     this.authority = checkNotNull(authority, "authority");
     this.executorPool = checkNotNull(executorPool, "executorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
@@ -172,7 +172,7 @@ final class OobChannel extends ManagedChannel implements WithLogId {
   public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
       MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
     StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(
-        methodDescriptor.getFullMethodName(), censusFactory, stopwatchSupplier);
+        methodDescriptor.getFullMethodName(), statsFactory, stopwatchSupplier);
     return new ClientCallImpl<RequestT, ResponseT>(methodDescriptor,
         callOptions.getExecutor() == null ? executor : callOptions.getExecutor(),
         callOptions, statsTraceCtx, transportProvider,
