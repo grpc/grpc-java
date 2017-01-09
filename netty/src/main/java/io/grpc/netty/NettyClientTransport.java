@@ -95,7 +95,6 @@ class NettyClientTransport implements ConnectionClientTransport {
   private Channel channel;
   /** Since not thread-safe, may only be used from event loop. */
   private ClientTransportLifecycleManager lifecycleManager;
-  private Attributes attributes = Attributes.EMPTY;
   private Attributes attributesForTest;
 
   NettyClientTransport(
@@ -185,10 +184,6 @@ class NettyClientTransport implements ConnectionClientTransport {
     HandlerSettings.setAutoWindow(handler);
 
     negotiationHandler = negotiator.newHandler(handler);
-    attributes = Attributes.newBuilder()
-        .setAll(attributes)
-        .setAll(negotiationHandler.getAttributes())
-        .build();
 
     Bootstrap b = new Bootstrap();
     b.group(group);
@@ -284,8 +279,11 @@ class NettyClientTransport implements ConnectionClientTransport {
     if (attributesForTest != null) {
       return attributesForTest;
     }
+    if (handler == null) {
+      return Attributes.EMPTY;
+    }
     // TODO(zhangkun83): fill channel security attributes
-    return attributes;
+    return handler.getAttributes();
   }
 
   /**

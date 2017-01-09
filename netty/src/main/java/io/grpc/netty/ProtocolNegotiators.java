@@ -102,11 +102,6 @@ public final class ProtocolNegotiators {
           public AsciiString scheme() {
             return Utils.HTTP;
           }
-
-          @Override
-          public Attributes getAttributes() {
-            return Attributes.EMPTY;
-          }
         }
 
         return new PlaintextHandler();
@@ -189,11 +184,6 @@ public final class ProtocolNegotiators {
     @Override
     public AsciiString scheme() {
       return Utils.HTTPS;
-    }
-
-    @Override
-    public Attributes getAttributes() {
-      return Attributes.EMPTY;
     }
   }
 
@@ -508,11 +498,6 @@ public final class ProtocolNegotiators {
     }
 
     @Override
-    public Attributes getAttributes() {
-      return Attributes.EMPTY;
-    }
-
-    @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
       if (evt instanceof SslHandshakeCompletionEvent) {
         SslHandshakeCompletionEvent handshakeEvent = (SslHandshakeCompletionEvent) evt;
@@ -559,11 +544,6 @@ public final class ProtocolNegotiators {
     }
 
     @Override
-    public Attributes getAttributes() {
-      return Attributes.EMPTY;
-    }
-
-    @Override
     public void handlerAdded(ChannelHandlerContext ctx) {
       writeBufferedAndRemove(ctx);
     }
@@ -588,11 +568,6 @@ public final class ProtocolNegotiators {
     @Override
     public AsciiString scheme() {
       return Utils.HTTP;
-    }
-
-    @Override
-    public Attributes getAttributes() {
-      return Attributes.EMPTY;
     }
 
     @Override

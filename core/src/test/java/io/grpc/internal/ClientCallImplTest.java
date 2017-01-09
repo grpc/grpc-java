@@ -846,6 +846,7 @@ public class ClientCallImplTest {
     verify(stream).setMaxOutboundMessageSize(2);
   }
 
+  @Test
   public void getAttributes() {
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
         DESCRIPTOR, MoreExecutors.directExecutor(), CallOptions.DEFAULT, statsTraceCtx, provider,

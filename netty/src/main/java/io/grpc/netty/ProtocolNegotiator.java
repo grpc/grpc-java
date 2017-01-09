@@ -31,9 +31,7 @@
 
 package io.grpc.netty;
 
-import io.grpc.Attributes;
 import io.grpc.Internal;
-
 import io.netty.channel.ChannelHandler;
 import io.netty.util.AsciiString;
 
@@ -51,11 +49,6 @@ public interface ProtocolNegotiator {
      * The HTTP/2 scheme to be used when sending {@code HEADERS}.
      */
     AsciiString scheme();
-
-    /**
-     * Returns a set of attributes, which varies depending on the handler implementation.
-     */
-    Attributes getAttributes();
   }
 
   /**
