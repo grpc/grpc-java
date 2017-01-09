@@ -59,7 +59,7 @@ public class CallOptionsTest {
   private String sampleAuthority = "authority";
   private String sampleCompressor = "compressor";
   private Deadline.DeadlineTicker ticker = new FakeTicker();
-  private Deadline sampleDeadline = Deadline.forTest(1, NANOSECONDS, ticker);
+  private Deadline sampleDeadline = Deadline.after(1, NANOSECONDS, ticker);
   private Key<String> sampleKey = Attributes.Key.of("sample");
   private Attributes sampleAffinity = Attributes.newBuilder().set(sampleKey, "blah").build();
   private CallCredentials sampleCreds = mock(CallCredentials.class);

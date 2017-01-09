@@ -55,8 +55,7 @@ public final class Deadline implements Comparable<Deadline> {
     return new Deadline(SystemTicker.INTANCE, units.toNanos(duration), true);
   }
 
-  //For testing
-  public static Deadline forTest(long duration, TimeUnit units, DeadlineTicker ticker) {
+  public static Deadline after(long duration, TimeUnit units, DeadlineTicker ticker) {
     checkNotNull(units, "units");
     return new Deadline(ticker, units.toNanos(duration), true);
   }
