@@ -55,20 +55,20 @@ public final class Deadline implements Comparable<Deadline> {
     return new Deadline(SystemTicker.INSTANCE, units.toNanos(duration), true);
   }
 
-  public static Deadline after(long duration, TimeUnit units, DeadlineTicker ticker) {
+  public static Deadline after(long duration, TimeUnit units, Ticker ticker) {
     checkNotNull(units, "units");
     return new Deadline(ticker, units.toNanos(duration), true);
   }
 
-  private final DeadlineTicker ticker;
+  private final Ticker ticker;
   private final long deadlineNanos;
   private volatile boolean expired;
 
-  private Deadline(DeadlineTicker ticker, long offset, boolean baseInstantAlreadyExpired) {
+  private Deadline(Ticker ticker, long offset, boolean baseInstantAlreadyExpired) {
     this(ticker, ticker.read(), offset, baseInstantAlreadyExpired);
   }
 
-  private Deadline(DeadlineTicker ticker, long baseInstant, long offset,
+  private Deadline(Ticker ticker, long baseInstant, long offset,
       boolean baseInstantAlreadyExpired) {
     this.ticker = ticker;
     // Clamp to range [MIN_OFFSET, MAX_OFFSET]
@@ -170,8 +170,7 @@ public final class Deadline implements Comparable<Deadline> {
     }
     Deadline that = (Deadline) obj;
     return this.deadlineNanos == that.deadlineNanos
-        && this.ticker == that.ticker
-        && this.expired == that.expired;
+        && ticker.equals(that.ticker);
   }
 
   /**
@@ -179,9 +178,7 @@ public final class Deadline implements Comparable<Deadline> {
    */
   @Override
   public int hashCode() {
-    return ((int)(deadlineNanos ^ (deadlineNanos >>> 32)))
-        ^ (expired ? 1231 : 1237)
-        ^ ticker.hashCode();
+    return ((int)(deadlineNanos ^ (deadlineNanos >>> 32))) ^ ticker.hashCode();
   }
 
   /**
@@ -189,12 +186,12 @@ public final class Deadline implements Comparable<Deadline> {
    *
    * <p>This is public for testing purposes.
    */
-  public interface DeadlineTicker {
+  public interface Ticker {
     /** Returns the number of nanoseconds since this source's epoch. */
     long read();
   }
 
-  private enum SystemTicker implements DeadlineTicker {
+  private enum SystemTicker implements Ticker {
     INSTANCE;
 
     @Override
