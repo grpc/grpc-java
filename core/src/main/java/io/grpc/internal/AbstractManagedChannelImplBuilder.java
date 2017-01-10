@@ -97,9 +97,6 @@ public abstract class AbstractManagedChannelImplBuilder
   @Nullable
   private Executor executor;
 
-  @Nullable
-  private Executor oobExecutor;
-
   private final List<ClientInterceptor> interceptors = new ArrayList<ClientInterceptor>();
 
   private final String target;
@@ -175,8 +172,7 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Override
   public final T directExecutor() {
-    executor(MoreExecutors.directExecutor());
-    return loadBalancerOobExecutor(MoreExecutors.directExecutor());
+    return executor(MoreExecutors.directExecutor());
   }
 
   @Override
@@ -222,11 +218,6 @@ public abstract class AbstractManagedChannelImplBuilder
         "directServerAddress is set (%s), which forbids the use of LoadBalancerFactory",
         directServerAddress);
     this.loadBalancer2Factory = loadBalancerFactory;
-    return thisT();
-  }
-
-  public final T loadBalancerOobExecutor(Executor oobExecutor) {
-    this.oobExecutor = oobExecutor;
     return thisT();
   }
 
@@ -317,7 +308,8 @@ public abstract class AbstractManagedChannelImplBuilder
           firstNonNull(decompressorRegistry, DecompressorRegistry.getDefaultInstance()),
           firstNonNull(compressorRegistry, CompressorRegistry.getDefaultInstance()),
           SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE),
-          getExecutorPool(executor), getExecutorPool(oobExecutor),
+          getExecutorPool(executor),
+          SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
           GrpcUtil.STOPWATCH_SUPPLIER, idleTimeoutMillis,
           userAgent, interceptors, firstNonNull(statsFactory,
               firstNonNull(Stats.getStatsContextFactory(), NoopStatsContextFactory.INSTANCE)));
