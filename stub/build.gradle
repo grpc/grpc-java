@@ -4,7 +4,8 @@ plugins {
 
 description = "gRPC: Stub"
 dependencies {
-    compile project(':grpc-core')
+    compile project(':grpc-core'),
+    libraries.jsr305
     testCompile libraries.truth,
     project(':grpc-testing')
 }

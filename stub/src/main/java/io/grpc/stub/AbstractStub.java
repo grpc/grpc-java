@@ -44,6 +44,7 @@ import io.grpc.ManagedChannelBuilder;
 
 import java.util.concurrent.TimeUnit;
 
+import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 
 /**
@@ -108,6 +109,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    *
    * @param deadline the deadline or {@code null} for unsetting the deadline.
    */
+  @CheckReturnValue
   public final S withDeadline(@Nullable Deadline deadline) {
     return build(channel, callOptions.withDeadline(deadline));
   }
@@ -123,6 +125,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    * @deprecated  Use {@link #withDeadline(Deadline)} instead.
    */
   @Deprecated
+  @CheckReturnValue
   public final S withDeadlineNanoTime(@Nullable Long deadlineNanoTime) {
     return build(channel, callOptions.withDeadlineNanoTime(deadlineNanoTime));
   }
@@ -132,6 +135,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    *
    * @see CallOptions#withDeadlineAfter
    */
+  @CheckReturnValue
   public final S withDeadlineAfter(long duration, TimeUnit unit) {
     return build(channel, callOptions.withDeadlineAfter(duration, unit));
   }
@@ -146,6 +150,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    * @param compressorName the name (e.g. "gzip") of the compressor to use.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
+  @CheckReturnValue
   public final S withCompression(String compressorName) {
     return build(channel, callOptions.withCompression(compressorName));
   }
@@ -153,6 +158,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   /**
    * Returns a new stub that uses the given channel.
    */
+  @CheckReturnValue
   public final S withChannel(Channel newChannel) {
     return build(newChannel, callOptions);
   }
@@ -164,6 +170,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    * @param value the value for the key
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1869")
+  @CheckReturnValue
   public final <T> S withOption(CallOptions.Key<T> key, T value) {
     return build(channel, callOptions.withOption(key, value));
   }
@@ -171,6 +178,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   /**
    * Returns a new stub that has the given interceptors attached to the underlying channel.
    */
+  @CheckReturnValue
   public final S withInterceptors(ClientInterceptor... interceptors) {
     return build(ClientInterceptors.intercept(channel, interceptors), callOptions);
   }
@@ -179,6 +187,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    * Returns a new stub that uses the given call credentials.
    */
   @ExperimentalApi("https//github.com/grpc/grpc-java/issues/1914")
+  @CheckReturnValue
   public final S withCallCredentials(CallCredentials credentials) {
     return build(channel, callOptions.withCallCredentials(credentials));
   }

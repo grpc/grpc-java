@@ -47,6 +47,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.TreeMap;
 
+import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
@@ -308,6 +309,7 @@ public final class Status {
   /**
    * Return a {@link Status} given a canonical error {@link Code} value.
    */
+  @CheckReturnValue
   public static Status fromCodeValue(int codeValue) {
     if (codeValue < 0 || codeValue > STATUS_LIST.size()) {
       return UNKNOWN.withDescription("Unknown code " + codeValue);
@@ -352,6 +354,7 @@ public final class Status {
   /**
    * Return a {@link Status} given a canonical error {@link Code} object.
    */
+  @CheckReturnValue
   public static Status fromCode(Code code) {
     return code.toStatus();
   }
@@ -422,6 +425,7 @@ public final class Status {
    * @return the trailers or {@code null} if not found.
    */
   @ExperimentalApi
+  @CheckReturnValue
   public static Metadata trailersFromThrowable(Throwable t) {
     Throwable cause = checkNotNull(t, "t");
     while (cause != null) {
@@ -461,6 +465,7 @@ public final class Status {
    * Create a derived instance of {@link Status} with the given cause.
    * However, the cause is not transmitted from server to client.
    */
+  @CheckReturnValue
   public Status withCause(Throwable cause) {
     if (Objects.equal(this.cause, cause)) {
       return this;
@@ -472,6 +477,7 @@ public final class Status {
    * Create a derived instance of {@link Status} with the given description.  Leading and trailing
    * whitespace may be removed; this may change in the future.
    */
+  @CheckReturnValue
   public Status withDescription(String description) {
     if (Objects.equal(this.description, description)) {
       return this;
@@ -484,6 +490,7 @@ public final class Status {
    * additional detail.  Leading and trailing whitespace may be removed; this may change in the
    * future.
    */
+  @CheckReturnValue
   public Status augmentDescription(String additionalDetail) {
     if (additionalDetail == null) {
       return this;
@@ -497,6 +504,7 @@ public final class Status {
   /**
    * The canonical status code.
    */
+  @CheckReturnValue
   public Code getCode() {
     return code;
   }
@@ -505,6 +513,7 @@ public final class Status {
    * A description of this status for human consumption.
    */
   @Nullable
+  @CheckReturnValue
   public String getDescription() {
     return description;
   }
@@ -514,6 +523,7 @@ public final class Status {
    * Note that the cause is not transmitted from server to client.
    */
   @Nullable
+  @CheckReturnValue
   public Throwable getCause() {
     return cause;
   }
@@ -521,6 +531,7 @@ public final class Status {
   /**
    * Is this status OK, i.e., not an error.
    */
+  @CheckReturnValue
   public boolean isOk() {
     return Code.OK == code;
   }
@@ -529,6 +540,7 @@ public final class Status {
    * Convert this {@link Status} to a {@link RuntimeException}. Use {@link #fromThrowable}
    * to recover this {@link Status} instance when the returned exception is in the causal chain.
    */
+  @CheckReturnValue
   public StatusRuntimeException asRuntimeException() {
     return new StatusRuntimeException(this);
   }
@@ -538,6 +550,7 @@ public final class Status {
    * exception.
    */
   @ExperimentalApi
+  @CheckReturnValue
   public StatusRuntimeException asRuntimeException(Metadata trailers) {
     return new StatusRuntimeException(this, trailers);
   }
@@ -546,6 +559,7 @@ public final class Status {
    * Convert this {@link Status} to an {@link Exception}. Use {@link #fromThrowable}
    * to recover this {@link Status} instance when the returned exception is in the causal chain.
    */
+  @CheckReturnValue
   public StatusException asException() {
     return new StatusException(this);
   }
@@ -554,6 +568,7 @@ public final class Status {
    * Same as {@link #asException()} but includes the provided trailers in the returned exception.
    */
   @ExperimentalApi
+  @CheckReturnValue
   public StatusException asException(Metadata trailers) {
     return new StatusException(this, trailers);
   }
