@@ -45,10 +45,10 @@ public final class TestMethodDescriptors {
   private TestMethodDescriptors() {}
 
   public static MethodDescriptor<Void, Void> noopMethod() {
-    return noopMarshaller("service_foo", "method_bar");
+    return noopMethod("service_foo", "method_bar");
   }
 
-  private static MethodDescriptor<Void, Void> noopMarshaller(
+  private static MethodDescriptor<Void, Void> noopMethod(
       String serviceName, String methodName) {
     return MethodDescriptor.create(
         MethodType.UNARY,
