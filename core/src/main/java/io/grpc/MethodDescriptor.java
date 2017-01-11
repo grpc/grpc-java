@@ -197,7 +197,6 @@ public class MethodDescriptor<ReqT, RespT> {
    * @param requestMarshaller the marshaller used to encode and decode requests
    * @param responseMarshaller the marshaller used to encode and decode responses
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1774")
   public static <RequestT, ResponseT> MethodDescriptor<RequestT, ResponseT> create(
       MethodType type, String fullMethodName,
       Marshaller<RequestT> requestMarshaller,
@@ -343,7 +342,6 @@ public class MethodDescriptor<ReqT, RespT> {
    * @param fullServiceName the fully qualified service name that is prefixed with the package name
    * @param methodName the short method name
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1774")
   public static String generateFullMethodName(String fullServiceName, String methodName) {
     return fullServiceName + "/" + methodName;
   }
@@ -353,7 +351,6 @@ public class MethodDescriptor<ReqT, RespT> {
    * {@code null} if the input is malformed, but you cannot rely on it for the validity of the
    * input.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1774")
   @Nullable
   public static String extractFullServiceName(String fullMethodName) {
     int index = fullMethodName.lastIndexOf('/');
