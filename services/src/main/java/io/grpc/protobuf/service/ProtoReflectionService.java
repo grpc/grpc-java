@@ -31,7 +31,9 @@
 
 package io.grpc.protobuf.service;
 
-import com.google.common.base.Preconditions;
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
+
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Descriptors.FileDescriptor;
@@ -79,22 +81,22 @@ import javax.annotation.concurrent.GuardedBy;
 public final class ProtoReflectionService extends ServerReflectionGrpc.ServerReflectionImplBase
     implements InternalNotifyOnServerBuild {
 
-  private ServerReflectionIndex serverReflectionIndex;
+  private volatile ServerReflectionIndex serverReflectionIndex;
 
   /**
    * Receives a reference to the server at build time.
    */
   @Override
   public void notifyOnBuild(Server server) {
-    Preconditions.checkState(serverReflectionIndex == null);
-    serverReflectionIndex = new ServerReflectionIndex(Preconditions.checkNotNull(server, "server"));
+    checkState(serverReflectionIndex == null);
+    serverReflectionIndex = new ServerReflectionIndex(checkNotNull(server, "server"));
   }
 
   @Override
   public StreamObserver<ServerReflectionRequest> serverReflectionInfo(
       final StreamObserver<ServerReflectionResponse> responseObserver) {
 
-    Preconditions.checkState(serverReflectionIndex != null);
+    checkState(serverReflectionIndex != null);
     serverReflectionIndex.initializeImmutableServicesIndex();
 
     final ServerCallStreamObserver<ServerReflectionResponse> serverCallStreamObserver =
@@ -116,7 +118,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
 
     ProtoReflectionStreamObserver(
         ServerCallStreamObserver<ServerReflectionResponse> serverCallStreamObserver) {
-      this.serverCallStreamObserver = serverCallStreamObserver;
+      this.serverCallStreamObserver = checkNotNull(serverCallStreamObserver, "observer");
     }
 
     @Override
@@ -128,7 +130,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
 
     @Override
     public void onNext(ServerReflectionRequest request) {
-      Preconditions.checkState(this.request == null);
+      checkState(this.request == null);
       this.request = request;
       handleReflectionRequest();
     }
@@ -338,7 +340,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
                 ((ProtoFileDescriptorSupplier) serviceDescriptor.getMarshallerDescriptor())
                     .getFileDescriptor();
             currentFileDescriptors.add(fileDescriptor);
-            Preconditions.checkState(!currentServiceNames.contains(serviceName),
+            checkState(!currentServiceNames.contains(serviceName),
                 "Service already defined: %s", serviceName);
             currentServiceNames.add(serviceName);
           }
@@ -433,7 +435,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
               ((ProtoFileDescriptorSupplier) serviceDescriptor.getMarshallerDescriptor())
                   .getFileDescriptor();
           String serviceName = serviceDescriptor.getName();
-          Preconditions.checkState(!serviceNames.contains(serviceName),
+          checkState(!serviceNames.contains(serviceName),
               "Service already defined: %s", serviceName);
           serviceFileDescriptors.add(fileDescriptor);
           serviceNames.add(serviceName);
@@ -496,7 +498,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
 
     private void processFileDescriptor(FileDescriptor fd) {
       String fdName = fd.getName();
-      Preconditions.checkState(!fileDescriptorsByName.containsKey(fdName),
+      checkState(!fileDescriptorsByName.containsKey(fdName),
           "File name already used: %s", fdName);
       fileDescriptorsByName.put(fdName, fd);
       for (ServiceDescriptor service : fd.getServices()) {
@@ -512,12 +514,12 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
 
     private void processService(ServiceDescriptor service, FileDescriptor fd) {
       String serviceName = service.getFullName();
-      Preconditions.checkState(!fileDescriptorsBySymbol.containsKey(serviceName),
+      checkState(!fileDescriptorsBySymbol.containsKey(serviceName),
           "Service already defined: %s", serviceName);
       fileDescriptorsBySymbol.put(serviceName, fd);
       for (MethodDescriptor method : service.getMethods()) {
         String methodName = method.getFullName();
-        Preconditions.checkState(!fileDescriptorsBySymbol.containsKey(methodName),
+        checkState(!fileDescriptorsBySymbol.containsKey(methodName),
             "Method already defined: %s", methodName);
         fileDescriptorsBySymbol.put(methodName, fd);
       }
@@ -525,7 +527,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
 
     private void processType(Descriptor type, FileDescriptor fd) {
       String typeName = type.getFullName();
-      Preconditions.checkState(!fileDescriptorsBySymbol.containsKey(typeName),
+      checkState(!fileDescriptorsBySymbol.containsKey(typeName),
           "Type already defined: %s", typeName);
       fileDescriptorsBySymbol.put(typeName, fd);
       for (FieldDescriptor extension : type.getExtensions()) {
@@ -543,7 +545,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
         fileDescriptorsByExtensionAndNumber.put(
             extensionName, new HashMap<Integer, FileDescriptor>());
       }
-      Preconditions.checkState(
+      checkState(
           !fileDescriptorsByExtensionAndNumber.get(extensionName).containsKey(extensionNumber),
           "Extension name and number already defined: %s, %s", extensionName, extensionNumber);
       fileDescriptorsByExtensionAndNumber.get(extensionName).put(extensionNumber, fd);
