@@ -273,8 +273,7 @@ public final static Context.Key<SSLSession> SSL_SESSION_CONTEXT = Context.key("S
 
 @Override
 public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<RespT> call, 
-                                                             Metadata headers, 
-                                                             ServerCallHandler<ReqT, RespT> next) {
+    Metadata headers, ServerCallHandler<ReqT, RespT> next) {
     SSLSession sslSession = call.attributes().get(ServerCall.SSL_SESSION_KEY);
     if (sslSession == null) {
         return next.startCall(call, headers)
