@@ -86,7 +86,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
    */
   @Override
   public void notifyOnBuild(Server server) {
-    Preconditions.checkState(this.serverReflectionIndex == null);
+    Preconditions.checkState(serverReflectionIndex == null);
     serverReflectionIndex = new ServerReflectionIndex(Preconditions.checkNotNull(server, "server"));
   }
 
@@ -94,7 +94,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
   public StreamObserver<ServerReflectionRequest> serverReflectionInfo(
       final StreamObserver<ServerReflectionResponse> responseObserver) {
 
-    Preconditions.checkState(this.serverReflectionIndex != null);
+    Preconditions.checkState(serverReflectionIndex != null);
     serverReflectionIndex.initializeImmutableServicesIndex();
 
     final ServerCallStreamObserver<ServerReflectionResponse> serverCallStreamObserver =
