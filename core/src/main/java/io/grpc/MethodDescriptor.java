@@ -31,6 +31,8 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.base.Preconditions;
 
 import java.io.InputStream;
@@ -343,7 +345,9 @@ public class MethodDescriptor<ReqT, RespT> {
    * @param methodName the short method name
    */
   public static String generateFullMethodName(String fullServiceName, String methodName) {
-    return fullServiceName + "/" + methodName;
+    return checkNotNull(fullServiceName, "fullServiceName")
+        + "/"
+        + checkNotNull(methodName, "methodName");
   }
 
   /**
@@ -353,7 +357,7 @@ public class MethodDescriptor<ReqT, RespT> {
    */
   @Nullable
   public static String extractFullServiceName(String fullMethodName) {
-    int index = fullMethodName.lastIndexOf('/');
+    int index = checkNotNull(fullMethodName, "fullMethodName").lastIndexOf('/');
     if (index == -1) {
       return null;
     }
