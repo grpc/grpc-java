@@ -49,7 +49,8 @@ public abstract class Server {
    *
    * @return {@code this} object
    * @throws IllegalStateException if already started
-   * @throws IOException if unable to bind
+   * @throws IOException if unable to bind.  {@link #shutdown} or {@link #shutdownNow} still needs
+   *         to be called to release any resource that may have been acquired by the server
    */
   public abstract Server start() throws IOException;
 

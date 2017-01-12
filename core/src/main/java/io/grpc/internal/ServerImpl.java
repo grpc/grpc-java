@@ -302,8 +302,12 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
           throw new AssertionError("Server already terminated");
         }
         terminated = true;
-        timeoutServicePool.returnObject(timeoutService);
-        executorPool.returnObject(executor);
+        if (timeoutService != null) {
+          timeoutService = timeoutServicePool.returnObject(timeoutService);
+        }
+        if (executor != null) {
+          executor = executorPool.returnObject(executor);
+        }
         // TODO(carl-mastrangelo): move this outside the synchronized block.
         lock.notifyAll();
       }

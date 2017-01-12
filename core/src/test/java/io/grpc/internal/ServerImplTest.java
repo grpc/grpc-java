@@ -46,6 +46,7 @@ import static org.mockito.Matchers.notNull;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -80,6 +81,7 @@ import io.grpc.internal.testing.StatsTestUtils;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsContextFactory;
 import io.grpc.util.MutableHandlerRegistry;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -161,6 +163,12 @@ public class ServerImplTest {
     when(timerPool.getObject()).thenReturn(timer.getScheduledExecutorService());
   }
 
+  @After
+  public void noPendingTasks() {
+    assertEquals(0, executor.numPendingTasks());
+    assertEquals(0, timer.numPendingTasks());
+  }
+
   @Test
   public void startStopImmediate() throws IOException {
     transportServer = new SimpleServer() {
@@ -187,11 +195,14 @@ public class ServerImplTest {
     server.shutdown();
     assertTrue(server.isShutdown());
     assertTrue(server.isTerminated());
+    verifyNoMoreInteractions(executorPool);
+    verifyNoMoreInteractions(timerPool);
   }
 
   @Test
   public void startStopImmediateWithChildTransport() throws IOException {
     createAndStartServer(NO_FILTERS);
+    verifyExecutorsAcquired();
     class DelayedShutdownServerTransport extends SimpleServerTransport {
       boolean shutdown;
 
@@ -207,13 +218,17 @@ public class ServerImplTest {
     assertTrue(server.isShutdown());
     assertFalse(server.isTerminated());
     assertTrue(serverTransport.shutdown);
+    verifyExecutorsNotReturned();
+
     serverTransport.listener.transportTerminated();
     assertTrue(server.isTerminated());
+    verifyExecutorsReturned();
   }
 
   @Test
   public void startShutdownNowImmediateWithChildTransport() throws IOException {
     createAndStartServer(NO_FILTERS);
+    verifyExecutorsAcquired();
     class DelayedShutdownServerTransport extends SimpleServerTransport {
       boolean shutdown;
 
@@ -232,13 +247,17 @@ public class ServerImplTest {
     assertTrue(server.isShutdown());
     assertFalse(server.isTerminated());
     assertTrue(serverTransport.shutdown);
+    verifyExecutorsNotReturned();
+
     serverTransport.listener.transportTerminated();
     assertTrue(server.isTerminated());
+    verifyExecutorsReturned();
   }
 
   @Test
   public void shutdownNowAfterShutdown() throws IOException {
     createAndStartServer(NO_FILTERS);
+    verifyExecutorsAcquired();
     class DelayedShutdownServerTransport extends SimpleServerTransport {
       boolean shutdown;
 
@@ -258,8 +277,11 @@ public class ServerImplTest {
     server.shutdownNow();
     assertFalse(server.isTerminated());
     assertTrue(serverTransport.shutdown);
+    verifyExecutorsNotReturned();
+
     serverTransport.listener.transportTerminated();
     assertTrue(server.isTerminated());
+    verifyExecutorsReturned();
   }
 
   @Test
@@ -271,6 +293,7 @@ public class ServerImplTest {
       }
     };
     createAndStartServer(NO_FILTERS);
+    verifyExecutorsAcquired();
     class DelayedShutdownServerTransport extends SimpleServerTransport {
       boolean shutdown;
 
@@ -290,7 +313,10 @@ public class ServerImplTest {
     transportServer.listener.serverShutdown();
     assertTrue(server.isShutdown());
     assertFalse(server.isTerminated());
+
+    verifyExecutorsNotReturned();
     serverTransport.listener.transportTerminated();
+    verifyExecutorsReturned();
     assertTrue(server.isTerminated());
   }
 
@@ -312,6 +338,10 @@ public class ServerImplTest {
     } catch (IOException e) {
       assertSame(ex, e);
     }
+    verifyExecutorsAcquired();
+    verifyExecutorsNotReturned();
+    server.shutdown();
+    verifyExecutorsReturned();
   }
 
   @Test
@@ -880,6 +910,25 @@ public class ServerImplTest {
     server = new ServerImpl(executorPool, timerPool, registry, fallbackRegistry,
         transportServer, SERVER_CONTEXT, decompressorRegistry, compressorRegistry, filters,
         statsCtxFactory, GrpcUtil.STOPWATCH_SUPPLIER);
+  }
+
+  private void verifyExecutorsAcquired() {
+    verify(executorPool).getObject();
+    verify(timerPool).getObject();
+    verifyNoMoreInteractions(executorPool);
+    verifyNoMoreInteractions(timerPool);
+  }
+
+  private void verifyExecutorsNotReturned() {
+    verify(executorPool, never()).returnObject(any(Executor.class));
+    verify(timerPool, never()).returnObject(any(ScheduledExecutorService.class));
+  }
+
+  private void verifyExecutorsReturned() {
+    verify(executorPool).returnObject(same(executor.getScheduledExecutorService()));
+    verify(timerPool).returnObject(same(timer.getScheduledExecutorService()));
+    verifyNoMoreInteractions(executorPool);
+    verifyNoMoreInteractions(timerPool);
   }
 
   private static class SimpleServer implements io.grpc.internal.InternalServer {
