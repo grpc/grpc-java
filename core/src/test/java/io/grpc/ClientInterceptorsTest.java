@@ -339,7 +339,7 @@ public class ClientInterceptorsTest {
     assertSame(listener, call.listener);
     assertSame(headers, call.headers);
     interceptedCall.sendMessage(null /*request*/);
-    assertThat(call.messages).containsExactly(null /*request*/);
+    assertThat(call.messages).containsExactly((Void) null /*request*/);
     interceptedCall.halfClose();
     assertTrue(call.halfClosed);
     interceptedCall.request(1);
