@@ -79,7 +79,7 @@ public class GrpcHttp2HeadersDecoderTest {
         .add(of(":path"), of("index.html")).add(of(":authority"), of("foo.grpc.io"))
         .add(of("custom"), of("header"));
     ByteBuf encodedHeaders = ReferenceCountUtil.releaseLater(Unpooled.buffer());
-    encoder.encodeHeaders(headers, encodedHeaders);
+    encoder.encodeHeaders(1 /* randomly chosen */, headers, encodedHeaders);
 
     Http2Headers decodedHeaders = decoder.decodeHeaders(3 /* randomly chosen */, encodedHeaders);
     assertEquals(headers.get(of(":scheme")), decodedHeaders.scheme());
@@ -106,7 +106,7 @@ public class GrpcHttp2HeadersDecoderTest {
     Http2Headers headers = new DefaultHttp2Headers(false);
     headers.add(of(":status"), of("200")).add(of("custom"), of("header"));
     ByteBuf encodedHeaders = ReferenceCountUtil.releaseLater(Unpooled.buffer());
-    encoder.encodeHeaders(headers, encodedHeaders);
+    encoder.encodeHeaders(1 /* randomly chosen */, headers, encodedHeaders);
 
     Http2Headers decodedHeaders = decoder.decodeHeaders(3 /* randomly chosen */, encodedHeaders);
     assertEquals(headers.get(of(":status")), decodedHeaders.get(of(":status")));
@@ -125,7 +125,7 @@ public class GrpcHttp2HeadersDecoderTest {
         new DefaultHttp2HeadersEncoder(NEVER_SENSITIVE);
 
     ByteBuf encodedHeaders = ReferenceCountUtil.releaseLater(Unpooled.buffer());
-    encoder.encodeHeaders(new DefaultHttp2Headers(false), encodedHeaders);
+    encoder.encodeHeaders(1 /* randomly chosen */, new DefaultHttp2Headers(false), encodedHeaders);
 
     Http2Headers decodedHeaders = decoder.decodeHeaders(3 /* randomly chosen */, encodedHeaders);
     assertEquals(0, decodedHeaders.size());
