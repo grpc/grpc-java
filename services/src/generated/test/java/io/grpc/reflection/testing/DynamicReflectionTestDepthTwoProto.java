@@ -53,8 +53,8 @@ public final class DynamicReflectionTestDepthTwoProto {
       "\nBio/grpc/reflection/testing/dynamic_ref" +
       "lection_test_depth_two.proto\022\027grpc.refle" +
       "ction.testing\"!\n\016DynamicRequest\022\017\n\007messa" +
-      "ge\030\001 \002(\t\"\037\n\014DynamicReply\022\017\n\007message\030\001 \002(" +
-      "\t\"-\n\022TypeWithExtensions\022\017\n\007message\030\001 \002(\t" +
+      "ge\030\001 \001(\t\"\037\n\014DynamicReply\022\017\n\007message\030\001 \001(" +
+      "\t\"-\n\022TypeWithExtensions\022\017\n\007message\030\001 \001(\t" +
       "*\006\010\310\001\020\254\002:?\n\textension\022+.grpc.reflection." +
       "testing.TypeWithExtensions\030\310\001 \001(\005BB\n\032io." +
       "grpc.reflection.testingB\"DynamicReflecti" +

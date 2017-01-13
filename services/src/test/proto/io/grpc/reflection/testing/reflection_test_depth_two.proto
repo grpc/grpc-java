@@ -40,11 +40,11 @@ option java_outer_classname = "ReflectionTestDepthTwoProto";
 package grpc.reflection.testing;
 
 message Request {
-  required string message = 1;
+  optional string message = 1;
 }
 
 message Reply {
-  required string message = 1;
+  optional string message = 1;
 }
 
 extend ThirdLevelType {

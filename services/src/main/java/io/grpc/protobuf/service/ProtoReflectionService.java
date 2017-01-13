@@ -40,6 +40,7 @@ import com.google.protobuf.Descriptors.FileDescriptor;
 import com.google.protobuf.Descriptors.MethodDescriptor;
 import com.google.protobuf.Descriptors.ServiceDescriptor;
 
+import io.grpc.BindableService;
 import io.grpc.ExperimentalApi;
 import io.grpc.InternalNotifyOnServerBuild;
 import io.grpc.Server;
@@ -82,6 +83,12 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
     implements InternalNotifyOnServerBuild {
 
   private volatile ServerReflectionIndex serverReflectionIndex;
+
+  private ProtoReflectionService() {}
+
+  public static BindableService getInstance() {
+    return new ProtoReflectionService();
+  }
 
   /**
    * Receives a reference to the server at build time.
@@ -131,7 +138,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
     @Override
     public void onNext(ServerReflectionRequest request) {
       checkState(this.request == null);
-      this.request = request;
+      this.request = checkNotNull(request);
       handleReflectionRequest();
     }
 
@@ -219,10 +226,9 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
       Set<Integer> extensions = serverReflectionIndex.getExtensionNumbersOfType(type);
       if (extensions != null) {
         ExtensionNumberResponse.Builder builder =
-            ExtensionNumberResponse.newBuilder().setBaseTypeName(type);
-        for (int extensionNumber : extensions) {
-          builder.addExtensionNumber(extensionNumber);
-        }
+            ExtensionNumberResponse.newBuilder()
+                .setBaseTypeName(type)
+                .addAllExtensionNumber(extensions);
         serverCallStreamObserver.onNext(
             ServerReflectionResponse.newBuilder()
                 .setValidHost(request.getHost())
@@ -328,9 +334,9 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
      * the mutable services or a change in the service names.
      */
     private void updateMutableIndexIfNecessary() {
+      Set<FileDescriptor> currentFileDescriptors = new HashSet<FileDescriptor>();
+      Set<String> currentServiceNames = new HashSet<String>();
       synchronized (lock) {
-        Set<FileDescriptor> currentFileDescriptors = new HashSet<FileDescriptor>();
-        Set<String> currentServiceNames = new HashSet<String>();
         List<ServerServiceDefinition> currentMutableServices = server.getMutableServices();
         for (ServerServiceDefinition mutableService : currentMutableServices) {
           io.grpc.ServiceDescriptor serviceDescriptor = mutableService.getServiceDescriptor();
