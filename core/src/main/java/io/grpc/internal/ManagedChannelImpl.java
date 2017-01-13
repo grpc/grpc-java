@@ -775,7 +775,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       try {
         balancer.handleResolvedAddresses(servers, config);
       } catch (Throwable e) {
-        log.log(Level.WARNING, "[" + getLogId() + "] Caught exception from LoadBalancer", e);
+        log.log(Level.WARNING, "[" + getLogId() + "] Unexpected exception from LoadBalancer", e);
         // It must be a bug! Push the exception back to LoadBalancer in the hope that it may be
         // propagated to the application.
         balancer.handleNameResolutionError(Status.INTERNAL.withCause(e)
