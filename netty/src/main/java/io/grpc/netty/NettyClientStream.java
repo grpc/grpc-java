@@ -48,7 +48,6 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2ClientStreamTransportState;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.WritableBuffer;
-import io.grpc.netty.NettyClientTransport.TransportAttributesProvider;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
@@ -78,12 +77,11 @@ class NettyClientStream extends AbstractClientStream2 {
   private AsciiString authority;
   private final AsciiString scheme;
   private final AsciiString userAgent;
-  private final TransportAttributesProvider attrsProvider;
 
   NettyClientStream(
       TransportState state, MethodDescriptor<?, ?> method, Metadata headers,
       Channel channel, AsciiString authority, AsciiString scheme, AsciiString userAgent,
-      StatsTraceContext statsTraceCtx, @Nullable TransportAttributesProvider attrsProvider) {
+      StatsTraceContext statsTraceCtx) {
     super(new NettyWritableBufferAllocator(channel.alloc()), statsTraceCtx);
     this.state = checkNotNull(state, "transportState");
     this.writeQueue = state.handler.getWriteQueue();
@@ -93,7 +91,6 @@ class NettyClientStream extends AbstractClientStream2 {
     this.authority = checkNotNull(authority, "authority");
     this.scheme = checkNotNull(scheme, "scheme");
     this.userAgent = userAgent;
-    this.attrsProvider = attrsProvider;
   }
 
   @Override
@@ -145,10 +142,7 @@ class NettyClientStream extends AbstractClientStream2 {
 
   @Override
   public Attributes getAttributes() {
-    if (attrsProvider != null) {
-      return attrsProvider.getAttributes();
-    }
-    return Attributes.EMPTY;
+    return state.handler.getAttributes();
   }
 
   private class Sink implements AbstractClientStream2.Sink {

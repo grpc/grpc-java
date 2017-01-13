@@ -49,7 +49,6 @@ import io.grpc.internal.Http2Ping;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.LogId;
 import io.grpc.internal.StatsTraceContext;
-
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -95,7 +94,6 @@ class NettyClientTransport implements ConnectionClientTransport {
   private Channel channel;
   /** Since not thread-safe, may only be used from event loop. */
   private ClientTransportLifecycleManager lifecycleManager;
-  private Attributes attributesForTest;
 
   NettyClientTransport(
       SocketAddress address, Class<? extends Channel> channelType,
@@ -155,13 +153,8 @@ class NettyClientTransport implements ConnectionClientTransport {
             return NettyClientTransport.this.statusFromFailedFuture(f);
           }
         },
-        method, headers, channel, authority, negotiationHandler.scheme(), userAgent, statsTraceCtx,
-        new TransportAttributesProvider() {
-          @Override
-          public Attributes getAttributes() {
-            return NettyClientTransport.this.getAttrs();
-          }
-        });
+        method, headers, channel, authority, negotiationHandler.scheme(), userAgent,
+        statsTraceCtx);
   }
 
   @Override
@@ -276,21 +269,8 @@ class NettyClientTransport implements ConnectionClientTransport {
 
   @Override
   public Attributes getAttrs() {
-    if (attributesForTest != null) {
-      return attributesForTest;
-    }
-    if (handler == null) {
-      return Attributes.EMPTY;
-    }
     // TODO(zhangkun83): fill channel security attributes
-    return handler.getAttributes();
-  }
-
-  /**
-   * For test only. Sets the transport attributes directly, ignoring other attributes modification.
-   */
-  void setAttrsForTest(Attributes attributes) {
-    attributesForTest = attributes;
+    return Attributes.EMPTY;
   }
 
   @VisibleForTesting
@@ -324,9 +304,5 @@ class NettyClientTransport implements ConnectionClientTransport {
   private NettyClientHandler newHandler() {
     return NettyClientHandler.newHandler(lifecycleManager, keepAliveManager, flowControlWindow,
         maxHeaderListSize, Ticker.systemTicker());
-  }
-
-  interface TransportAttributesProvider {
-    Attributes getAttributes();
   }
 }

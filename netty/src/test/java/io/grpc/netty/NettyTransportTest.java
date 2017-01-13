@@ -31,18 +31,28 @@
 
 package io.grpc.netty;
 
+import io.grpc.Attributes;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.testing.AbstractTransportTest;
+import io.grpc.netty.InternalNettyChannelBuilder.TransportCreationParamsFilter;
+import io.grpc.netty.InternalNettyChannelBuilder.TransportCreationParamsFilterFactory;
+import io.grpc.netty.ProtocolNegotiators.AbstractBufferingHandler;
+
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.util.AsciiString;
 
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import javax.annotation.Nullable;
 
 /** Unit tests for Netty transport. */
 @RunWith(JUnit4.class)
@@ -50,12 +60,61 @@ public class NettyTransportTest extends AbstractTransportTest {
   // Avoid LocalChannel for testing because LocalChannel can fail with
   // io.netty.channel.ChannelException instead of java.net.ConnectException which breaks
   // serverNotListening test.
-  private ClientTransportFactory clientFactory = NettyChannelBuilder
-      // Although specified here, address is ignored because we never call build.
-      .forAddress("localhost", 0)
-      .flowControlWindow(65 * 1024)
-      .negotiationType(NegotiationType.PLAINTEXT)
-      .buildTransportFactory();
+  private ClientTransportFactory clientFactory;
+  private static final Attributes PROTOCOL_NEGOTIATION_ATTRIBUTES = Attributes.newBuilder()
+      .set(Attributes.Key.<String>of("fakeKey"), "fakeValue")
+      .build();
+
+  @Before
+  public void setUpClientFactory() {
+    NettyChannelBuilder builder = NettyChannelBuilder
+        // Although specified here, address is ignored because we never call build.
+        .forAddress("localhost", 0)
+        .flowControlWindow(65 * 1024);
+
+    TransportCreationParamsFilterFactory paramsFilterFactory =
+        new TransportCreationParamsFilterFactory() {
+          @Override
+          public TransportCreationParamsFilter create(
+              final SocketAddress targetServerAddress, final String authority,
+              final String userAgent) {
+            final ProtocolNegotiator negotiator = new ProtocolNegotiator() {
+              @Override
+              public Handler newHandler(GrpcHttp2ConnectionHandler handler) {
+                return new TestNegotiatorHandler(handler);
+              }
+            };
+
+            return new TransportCreationParamsFilter() {
+              @Override
+              public ProtocolNegotiator getProtocolNegotiator() {
+                return negotiator;
+              }
+
+              @Override
+              public SocketAddress getTargetServerAddress() {
+                return targetServerAddress;
+              }
+
+              @Override
+              public String getAuthority() {
+                return authority;
+              }
+
+              @Nullable
+              @Override
+              public String getUserAgent() {
+                return userAgent;
+              }
+            };
+          }
+        };
+
+    InternalNettyChannelBuilder.setDynamicTransportParamsFactory(builder, paramsFilterFactory);
+    clientFactory = builder.buildTransportFactory();
+
+    expectedClientStreamAttributes = PROTOCOL_NEGOTIATION_ATTRIBUTES;
+  }
 
   @After
   public void releaseClientFactory() {
@@ -82,22 +141,43 @@ public class NettyTransportTest extends AbstractTransportTest {
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     int port = server.getPort();
-    NettyClientTransport transport = (NettyClientTransport) clientFactory.newClientTransport(
+    return clientFactory.newClientTransport(
         new InetSocketAddress("localhost", port),
         "localhost:" + port,
         null /* agent */);
-    transport.setAttrsForTest(clientTransportAttributes);
-    return transport;
-  }
-
-  @Override
-  @Test
-  public void clientStreamGetAttributes() throws Exception {
-    super.clientStreamGetAttributes();
   }
 
   @Test
   @Ignore("flaky")
   @Override
   public void flowControlPushBack() {}
+
+  private static final class TestNegotiatorHandler extends AbstractBufferingHandler
+      implements ProtocolNegotiator.Handler {
+
+    final GrpcHttp2ConnectionHandler handler;
+
+    TestNegotiatorHandler(GrpcHttp2ConnectionHandler handler) {
+      super(handler);
+      this.handler = handler;
+    }
+
+    @Override
+    public AsciiString scheme() {
+      return Utils.HTTP;
+    }
+
+    @Override
+    public void handlerAdded(ChannelHandlerContext ctx) {
+      writeBufferedAndRemove(ctx);
+    }
+
+    @Override
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+      handler.handleProtocolNegotiationCompleted(PROTOCOL_NEGOTIATION_ATTRIBUTES);
+      writeBufferedAndRemove(ctx);
+      super.channelActive(ctx);
+    }
+  }
+
 }

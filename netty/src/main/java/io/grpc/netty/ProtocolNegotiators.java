@@ -42,7 +42,6 @@ import io.grpc.Grpc;
 import io.grpc.Internal;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
-
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;

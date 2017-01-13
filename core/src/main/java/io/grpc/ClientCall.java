@@ -258,6 +258,7 @@ public abstract class ClientCall<ReqT, RespT> {
    * implementation and the state of the call, channel, or transport at the moment it is being
    * called. By default it returns EMPTY attributes.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2607")
   public Attributes getAttributes() {
     return Attributes.EMPTY;
   }

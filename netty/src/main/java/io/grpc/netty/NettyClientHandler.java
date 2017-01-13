@@ -212,6 +212,10 @@ class NettyClientHandler extends AbstractNettyHandler {
     });
   }
 
+  /**
+   * The protocol negotiation attributes, available once the protocol negotiation completes;
+   * otherwise returns {@code Attributes.EMPTY}.
+   */
   Attributes getAttributes() {
     return attributes;
   }

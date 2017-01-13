@@ -417,7 +417,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
     if (stream != null) {
       return stream.getAttributes();
     }
-    return super.getAttributes();
+    return Attributes.EMPTY;
   }
 
   private void closeObserver(Listener<RespT> observer, Status status, Metadata trailers) {

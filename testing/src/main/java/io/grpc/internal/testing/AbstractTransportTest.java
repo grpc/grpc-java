@@ -102,8 +102,7 @@ import java.util.concurrent.TimeoutException;
 public abstract class AbstractTransportTest {
   private static final int TIMEOUT_MS = 1000;
 
-  protected final Attributes clientTransportAttributes =
-      Attributes.newBuilder().set(Attributes.Key.<String>of("fakeKey"), "fakeValue").build();
+  protected Attributes expectedClientStreamAttributes = Attributes.EMPTY;
 
   private static final Attributes.Key<String> ADDITIONAL_TRANSPORT_ATTR_KEY =
       Attributes.Key.of("additional-attr");
@@ -1057,17 +1056,20 @@ public abstract class AbstractTransportTest {
     assertEquals(status.getDescription(), statusCaptor.getValue().getDescription());
   }
 
-  /**
-   * Overriding methods will set non-trivial transport attributes first and then call this method.
-   */
-  protected void clientStreamGetAttributes() throws Exception {
+  @Test
+  public void clientStreamGetAttributes() throws Exception {
     server.start(serverListener);
     client = newClientTransport(server);
     runIfNotNull(client.start(mockClientTransportListener));
+    MockServerTransportListener serverTransportListener
+        = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     ClientStream clientStream = client.newStream(methodDescriptor, new Metadata());
+    clientStream.start(mockClientStreamListener);
+    serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
-    assertEquals(clientTransportAttributes, clientStream.getAttributes());
+    // note that the expectedClientStreamAttributes is overwritten for netty transport.
+    assertEquals(expectedClientStreamAttributes, clientStream.getAttributes());
   }
 
   /**
