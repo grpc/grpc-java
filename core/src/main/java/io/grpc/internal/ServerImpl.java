@@ -159,10 +159,10 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
     synchronized (lock) {
       checkState(!started, "Already started");
       checkState(!shutdown, "Shutting down");
-      timeoutService = Preconditions.checkNotNull(timeoutServicePool.getObject(), "timeoutService");
-      executor = Preconditions.checkNotNull(executorPool.getObject(), "executor");
       // Start and wait for any port to actually be bound.
       transportServer.start(new ServerListenerImpl());
+      timeoutService = Preconditions.checkNotNull(timeoutServicePool.getObject(), "timeoutService");
+      executor = Preconditions.checkNotNull(executorPool.getObject(), "executor");
       started = true;
       return this;
     }

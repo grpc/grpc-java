@@ -338,10 +338,8 @@ public class ServerImplTest {
     } catch (IOException e) {
       assertSame(ex, e);
     }
-    verifyExecutorsAcquired();
-    verifyExecutorsNotReturned();
-    server.shutdown();
-    verifyExecutorsReturned();
+    verifyNoMoreInteractions(executorPool);
+    verifyNoMoreInteractions(timerPool);
   }
 
   @Test
