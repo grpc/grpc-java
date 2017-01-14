@@ -94,7 +94,7 @@ public class MetricsServiceGrpc {
       asyncUnimplementedUnaryCall(METHOD_GET_GAUGE, responseObserver);
     }
 
-    @java.lang.Override public io.grpc.ServerServiceDefinition bindService() {
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
           .addMethod(
             METHOD_GET_ALL_GAUGES,
@@ -278,16 +278,22 @@ public class MetricsServiceGrpc {
     }
   }
 
-  private static io.grpc.ServiceDescriptor serviceDescriptor;
+  private static volatile io.grpc.ServiceDescriptor serviceDescriptor;
 
-  public static synchronized io.grpc.ServiceDescriptor getServiceDescriptor() {
-    if (serviceDescriptor == null) {
-      serviceDescriptor = new io.grpc.ServiceDescriptor(SERVICE_NAME,
-          new MetricsServiceDescriptorSupplier(),
-          METHOD_GET_ALL_GAUGES,
-          METHOD_GET_GAUGE);
+  public static io.grpc.ServiceDescriptor getServiceDescriptor() {
+    io.grpc.ServiceDescriptor result = serviceDescriptor;
+    if (result == null) {
+      synchronized (MetricsServiceGrpc.class) {
+        result = serviceDescriptor;
+        if (result == null) {
+          serviceDescriptor = result = new io.grpc.ServiceDescriptor(
+              SERVICE_NAME,
+              new MetricsServiceDescriptorSupplier(),
+              METHOD_GET_ALL_GAUGES,
+              METHOD_GET_GAUGE);
+        }
+      }
     }
-
-    return serviceDescriptor;
+    return result;
   }
 }

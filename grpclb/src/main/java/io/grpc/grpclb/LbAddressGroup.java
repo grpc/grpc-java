@@ -29,62 +29,43 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.internal;
+package io.grpc.grpclb;
 
-import com.google.census.CensusContext;
-import com.google.census.CensusContextFactory;
-import com.google.census.MetricMap;
-import com.google.census.TagKey;
-import com.google.census.TagValue;
+import static com.google.common.base.Preconditions.checkNotNull;
 
-import java.nio.ByteBuffer;
+import io.grpc.EquivalentAddressGroup;
 
-public final class NoopCensusContextFactory extends CensusContextFactory {
-  private static final byte[] SERIALIZED_BYTES = new byte[0];
-  private static final CensusContext DEFAULT_CONTEXT = new NoopCensusContext();
-  private static final CensusContext.Builder BUILDER = new NoopContextBuilder();
+/**
+ * Represents a balancer address entry.
+ */
+class LbAddressGroup {
+  private final EquivalentAddressGroup addresses;
+  private final String authority;
 
-  public static final CensusContextFactory INSTANCE = new NoopCensusContextFactory();
-
-  private NoopCensusContextFactory() {
+  LbAddressGroup(EquivalentAddressGroup addresses, String authority) {
+    this.addresses = checkNotNull(addresses, "addresses");
+    this.authority = checkNotNull(authority, "authority");
   }
 
   @Override
-  public CensusContext deserialize(ByteBuffer buffer) {
-    return DEFAULT_CONTEXT;
+  public boolean equals(Object other) {
+    if (!(other instanceof LbAddressGroup)) {
+      return false;
+    }
+    LbAddressGroup otherGroup = (LbAddressGroup) other;
+    return addresses.equals(otherGroup.addresses) && authority.equals(otherGroup.authority);
   }
 
   @Override
-  public CensusContext getDefault() {
-    return DEFAULT_CONTEXT;
+  public int hashCode() {
+    return addresses.hashCode();
   }
 
-  private static class NoopCensusContext extends CensusContext {
-    @Override
-    public Builder builder() {
-      return BUILDER;
-    }
-
-    @Override
-    public CensusContext record(MetricMap metrics) {
-      return DEFAULT_CONTEXT;
-    }
-
-    @Override
-    public ByteBuffer serialize() {
-      return ByteBuffer.wrap(SERIALIZED_BYTES).asReadOnlyBuffer();
-    }
+  EquivalentAddressGroup getAddresses() {
+    return addresses;
   }
 
-  private static class NoopContextBuilder extends CensusContext.Builder {
-    @Override
-    public CensusContext.Builder set(TagKey key, TagValue value) {
-      return this;
-    }
-
-    @Override
-    public CensusContext build() {
-      return DEFAULT_CONTEXT;
-    }
+  String getAuthority() {
+    return authority;
   }
 }

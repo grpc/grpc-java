@@ -160,25 +160,30 @@ public class CallOptionsTest {
 
   @Test
   public void toStringMatches_noDeadline_default() {
-    String expected = "CallOptions{deadline=null, authority=authority, callCredentials=null, "
-        + "affinity={sample=blah}, "
-        + "executor=class io.grpc.internal.SerializingExecutor, compressorName=compressor, "
-        + "customOptions=[[option1, value1], [option2, value2]], waitForReady=true}";
     String actual = allSet
         .withDeadline(null)
         .withExecutor(new SerializingExecutor(directExecutor()))
         .withCallCredentials(null)
+        .withMaxInboundMessageSize(44)
+        .withMaxOutboundMessageSize(55)
         .toString();
 
-    assertThat(actual).isEqualTo(expected);
+    assertThat(actual).contains("deadline=null");
+    assertThat(actual).contains("authority=authority");
+    assertThat(actual).contains("callCredentials=null");
+    assertThat(actual).contains("affinity={sample=blah}");
+    assertThat(actual).contains("executor=class io.grpc.internal.SerializingExecutor");
+    assertThat(actual).contains("compressorName=compressor");
+    assertThat(actual).contains("customOptions=[[option1, value1], [option2, value2]]");
+    assertThat(actual).contains("waitForReady=true");
+    assertThat(actual).contains("maxInboundMessageSize=44");
+    assertThat(actual).contains("maxOutboundMessageSize=55");
   }
 
   @Test
   public void toStringMatches_noDeadline() {
-    assertThat("CallOptions{deadline=null, authority=null, callCredentials=null, "
-        + "affinity={}, executor=null, compressorName=null, customOptions=[], "
-        + "waitForReady=false}")
-        .isEqualTo(CallOptions.DEFAULT.toString());
+    String actual = CallOptions.DEFAULT.toString();
+    assertThat(actual).contains("deadline=null");
   }
 
   @Test
@@ -187,39 +192,23 @@ public class CallOptionsTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
-  public void withDeadlineNanoTime() {
-    // Create Deadline near calling System.nanoTime to reduce clock differences
-    Deadline reference = Deadline.after(-1, NANOSECONDS);
-    long rawDeadline = System.nanoTime() - 1;
-    CallOptions opts = CallOptions.DEFAULT.withDeadlineNanoTime(rawDeadline);
-    assertThat(opts.getDeadlineNanoTime()).isNotNull();
-    // This is not technically correct, since nanoTime is permitted to overflow, but the chances of
-    // that impacting this test are very remote.
-    assertThat(opts.getDeadlineNanoTime()).isAtMost(System.nanoTime());
-    assertThat(opts.getDeadline().isExpired()).isTrue();
-
-    assertAbout(deadline()).that(opts.getDeadline()).isWithin(50, MILLISECONDS).of(reference);
-  }
-
-  @Test
   public void withCustomOptionDefault() {
     CallOptions opts = CallOptions.DEFAULT;
     assertThat(opts.getOption(option1)).isEqualTo("default");
   }
-  
+
   @Test
   public void withCustomOption() {
     CallOptions opts = CallOptions.DEFAULT.withOption(option1, "v1");
     assertThat(opts.getOption(option1)).isEqualTo("v1");
   }
-  
+
   @Test
   public void withCustomOptionLastOneWins() {
     CallOptions opts = CallOptions.DEFAULT.withOption(option1, "v1").withOption(option1, "v2");
     assertThat(opts.getOption(option1)).isEqualTo("v2");
   }
-  
+
   @Test
   public void withMultipleCustomOption() {
     CallOptions opts = CallOptions.DEFAULT.withOption(option1, "v1").withOption(option2, "v2");

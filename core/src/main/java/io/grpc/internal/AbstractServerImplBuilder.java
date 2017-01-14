@@ -34,10 +34,10 @@ package io.grpc.internal;
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.census.Census;
-import com.google.census.CensusContextFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.instrumentation.stats.Stats;
+import com.google.instrumentation.stats.StatsContextFactory;
 
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
@@ -101,7 +101,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   private CompressorRegistry compressorRegistry;
 
   @Nullable
-  private CensusContextFactory censusFactory;
+  private StatsContextFactory statsFactory;
 
   @Override
   public final T directExecutor() {
@@ -153,30 +153,49 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   }
 
   /**
-   * Override the default Census implementation.  This is meant to be used in tests.
+   * Override the default stats implementation.  This is meant to be used in tests.
    */
   @VisibleForTesting
   @Internal
-  public T censusContextFactory(CensusContextFactory censusFactory) {
-    this.censusFactory = censusFactory;
+  public T statsContextFactory(StatsContextFactory statsFactory) {
+    this.statsFactory = statsFactory;
     return thisT();
   }
 
   @Override
   public ServerImpl build() {
     io.grpc.internal.InternalServer transportServer = buildTransportServer();
-    ServerImpl server = new ServerImpl(executor, registryBuilder.build(),
+    ServerImpl server = new ServerImpl(getExecutorPool(),
+        SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE), registryBuilder.build(),
         firstNonNull(fallbackRegistry, EMPTY_FALLBACK_REGISTRY), transportServer,
         Context.ROOT, firstNonNull(decompressorRegistry, DecompressorRegistry.getDefaultInstance()),
         firstNonNull(compressorRegistry, CompressorRegistry.getDefaultInstance()),
         transportFilters,
-        firstNonNull(censusFactory,
-            firstNonNull(Census.getCensusContextFactory(), NoopCensusContextFactory.INSTANCE)),
+        firstNonNull(statsFactory,
+            firstNonNull(Stats.getStatsContextFactory(), NoopStatsContextFactory.INSTANCE)),
         GrpcUtil.STOPWATCH_SUPPLIER);
     for (InternalNotifyOnServerBuild notifyTarget : notifyOnBuildList) {
       notifyTarget.notifyOnBuild(server);
     }
     return server;
+  }
+
+  private ObjectPool<? extends Executor> getExecutorPool() {
+    final Executor savedExecutor = executor;
+    if (savedExecutor == null) {
+      return SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
+    }
+    return new ObjectPool<Executor>() {
+      @Override
+      public Executor getObject() {
+        return savedExecutor;
+      }
+
+      @Override
+      public Executor returnObject(Object object) {
+        return null;
+      }
+    };
   }
 
   /**

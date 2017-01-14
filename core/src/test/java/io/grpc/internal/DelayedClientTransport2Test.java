@@ -105,15 +105,14 @@ public class DelayedClientTransport2Test {
 
   private final Metadata headers = new Metadata();
   private final Metadata headers2 = new Metadata();
-  private final Metadata headers3 = new Metadata();
 
   private final CallOptions callOptions = CallOptions.DEFAULT.withAuthority("dummy_value");
   private final CallOptions callOptions2 = CallOptions.DEFAULT.withAuthority("dummy_value2");
   private final StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(
-      method.getFullMethodName(), NoopCensusContextFactory.INSTANCE,
+      method.getFullMethodName(), NoopStatsContextFactory.INSTANCE,
       GrpcUtil.STOPWATCH_SUPPLIER);
   private final StatsTraceContext statsTraceCtx2 = StatsTraceContext.newClientContext(
-      method2.getFullMethodName(), NoopCensusContextFactory.INSTANCE,
+      method2.getFullMethodName(), NoopStatsContextFactory.INSTANCE,
       GrpcUtil.STOPWATCH_SUPPLIER);
 
   private final FakeClock fakeExecutor = new FakeClock();

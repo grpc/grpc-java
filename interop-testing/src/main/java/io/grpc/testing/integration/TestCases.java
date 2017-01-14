@@ -48,6 +48,8 @@ public enum TestCases {
   JWT_TOKEN_CREDS("JWT-based auth"),
   OAUTH2_AUTH_TOKEN("raw oauth2 access token auth"),
   PER_RPC_CREDS("per rpc raw oauth2 access token auth"),
+  CUSTOM_METADATA("unary and full duplex calls with metadata"),
+  STATUS_CODE_AND_MESSAGE("request error code and message"),
   UNIMPLEMENTED_METHOD("call an unimplemented RPC method"),
   UNIMPLEMENTED_SERVICE("call an unimplemented RPC service"),
   CANCEL_AFTER_BEGIN("cancel stream after starting it"),

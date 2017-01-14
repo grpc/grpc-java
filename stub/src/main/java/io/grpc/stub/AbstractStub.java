@@ -40,6 +40,7 @@ import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.Deadline;
 import io.grpc.ExperimentalApi;
+import io.grpc.ManagedChannelBuilder;
 
 import java.util.concurrent.TimeUnit;
 
@@ -112,21 +113,6 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   }
 
   /**
-   * Returns a new stub with an absolute deadline in nanoseconds in the clock as per {@link
-   * System#nanoTime()}.
-   *
-   * <p>This is mostly used for propagating an existing deadline. {@link #withDeadlineAfter} is the
-   * recommended way of setting a new deadline,
-   *
-   * @param deadlineNanoTime nanoseconds in the clock as per {@link System#nanoTime()}
-   * @deprecated  Use {@link #withDeadline(Deadline)} instead.
-   */
-  @Deprecated
-  public final S withDeadlineNanoTime(@Nullable Long deadlineNanoTime) {
-    return build(channel, callOptions.withDeadlineNanoTime(deadlineNanoTime));
-  }
-
-  /**
    * Returns a new stub with a deadline that is after the given {@code duration} from now.
    *
    * @see CallOptions#withDeadlineAfter
@@ -188,5 +174,23 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1915")
   public final S withWaitForReady() {
     return build(channel, callOptions.withWaitForReady());
+  }
+
+  /**
+   * Returns a new stub that limits the maximum acceptable message size from a remote peer.
+   *
+   * <p>If unset, the {@link ManagedChannelBuilder#maxInboundMessageSize(int)} limit is used.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
+  public final S withMaxInboundMessageSize(int maxSize) {
+    return build(channel, callOptions.withMaxInboundMessageSize(maxSize));
+  }
+
+  /**
+   * Returns a new stub that limits the maximum acceptable message size to send a remote peer.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
+  public final S withMaxOutboundMessageSize(int maxSize) {
+    return build(channel, callOptions.withMaxOutboundMessageSize(maxSize));
   }
 }

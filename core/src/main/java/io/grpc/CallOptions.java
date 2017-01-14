@@ -31,6 +31,8 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 
@@ -76,6 +78,12 @@ public final class CallOptions {
    * Opposite to fail fast.
    */
   private boolean waitForReady;
+
+  @Nullable
+  private Integer maxInboundMessageSize;
+  @Nullable
+  private Integer maxOutboundMessageSize;
+
 
   /**
    * Override the HTTP/2 authority the channel claims to be connecting to. <em>This is not
@@ -129,44 +137,11 @@ public final class CallOptions {
   }
 
   /**
-   * Returns a new {@code CallOptions} with the given absolute deadline in nanoseconds in the clock
-   * as per {@link System#nanoTime()}.
-   *
-   * <p>This is mostly used for propagating an existing deadline. {@link #withDeadlineAfter} is the
-   * recommended way of setting a new deadline,
-   *
-   * @param deadlineNanoTime the deadline in the clock as per {@link System#nanoTime()}.
-   *                         {@code null} for unsetting the deadline.
-   * @deprecated  Use {@link #withDeadline(Deadline)} instead.
-   */
-  @Deprecated
-  public CallOptions withDeadlineNanoTime(@Nullable Long deadlineNanoTime) {
-    Deadline deadline = deadlineNanoTime != null
-        ? Deadline.after(deadlineNanoTime - System.nanoTime(), TimeUnit.NANOSECONDS)
-        : null;
-    return withDeadline(deadline);
-  }
-
-  /**
    * Returns a new {@code CallOptions} with a deadline that is after the given {@code duration} from
    * now.
    */
   public CallOptions withDeadlineAfter(long duration, TimeUnit unit) {
     return withDeadline(Deadline.after(duration, unit));
-  }
-
-  /**
-   * Returns the deadline in nanoseconds in the clock as per {@link System#nanoTime()}. {@code null}
-   * if the deadline is not set.
-   *
-   * @deprecated  Use {@link #getDeadline()} instead.
-   */
-  @Deprecated
-  public Long getDeadlineNanoTime() {
-    if (getDeadline() == null) {
-      return null;
-    }
-    return System.nanoTime() + getDeadline().timeRemaining(TimeUnit.NANOSECONDS);
   }
 
   /**
@@ -363,6 +338,47 @@ public final class CallOptions {
   }
 
   /**
+   * Sets the maximum allowed message size acceptable from the remote peer.  If unset, this will
+   * default to the value set on the {@link ManagedChannelBuilder#maxInboundMessageSize(int)}.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
+  public CallOptions withMaxInboundMessageSize(int maxSize) {
+    checkArgument(maxSize >= 0, "invalid maxsize %s", maxSize);
+    CallOptions newOptions = new CallOptions(this);
+    newOptions.maxInboundMessageSize = maxSize;
+    return newOptions;
+  }
+
+  /**
+   * Sets the maximum allowed message size acceptable sent to the remote peer.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
+  public CallOptions withMaxOutboundMessageSize(int maxSize) {
+    checkArgument(maxSize >= 0, "invalid maxsize %s", maxSize);
+    CallOptions newOptions = new CallOptions(this);
+    newOptions.maxOutboundMessageSize = maxSize;
+    return newOptions;
+  }
+
+  /**
+   * Gets the maximum allowed message size acceptable from the remote peer.
+   */
+  @Nullable
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
+  public Integer getMaxInboundMessageSize() {
+    return maxInboundMessageSize;
+  }
+
+  /**
+   * Gets the maximum allowed message size acceptable to send the remote peer.
+   */
+  @Nullable
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
+  public Integer getMaxOutboundMessageSize() {
+    return maxOutboundMessageSize;
+  }
+
+  /**
    * Copy constructor.
    */
   private CallOptions(CallOptions other) {
@@ -374,20 +390,23 @@ public final class CallOptions {
     compressorName = other.compressorName;
     customOptions = other.customOptions;
     waitForReady = other.waitForReady;
+    maxInboundMessageSize = other.maxInboundMessageSize;
+    maxOutboundMessageSize = other.maxOutboundMessageSize;
   }
 
   @Override
   public String toString() {
-    MoreObjects.ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
-    toStringHelper.add("deadline", deadline);
-    toStringHelper.add("authority", authority);
-    toStringHelper.add("callCredentials", credentials);
-    toStringHelper.add("affinity", affinity);
-    toStringHelper.add("executor", executor != null ? executor.getClass() : null);
-    toStringHelper.add("compressorName", compressorName);
-    toStringHelper.add("customOptions", Arrays.deepToString(customOptions));
-    toStringHelper.add("waitForReady", isWaitForReady());
-
-    return toStringHelper.toString();
+    return MoreObjects.toStringHelper(this)
+        .add("deadline", deadline)
+        .add("authority", authority)
+        .add("callCredentials", credentials)
+        .add("affinity", affinity)
+        .add("executor", executor != null ? executor.getClass() : null)
+        .add("compressorName", compressorName)
+        .add("customOptions", Arrays.deepToString(customOptions))
+        .add("waitForReady", isWaitForReady())
+        .add("maxInboundMessageSize", maxInboundMessageSize)
+        .add("maxOutboundMessageSize", maxOutboundMessageSize)
+        .toString();
   }
 }

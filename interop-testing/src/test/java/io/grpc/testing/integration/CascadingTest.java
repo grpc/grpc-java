@@ -43,6 +43,7 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Context;
 import io.grpc.Context.CancellableContext;
 import io.grpc.Deadline;
+import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
@@ -52,7 +53,6 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
-import io.grpc.internal.ManagedChannelImpl;
 import io.grpc.internal.ServerImpl;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
@@ -65,7 +65,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import java.io.IOException;
@@ -85,7 +84,7 @@ public class CascadingTest {
 
   @Mock
   TestServiceGrpc.TestServiceImplBase service;
-  private ManagedChannelImpl channel;
+  private ManagedChannel channel;
   private ServerImpl server;
   private CountDownLatch observedCancellations;
   private CountDownLatch receivedCancellations;
@@ -97,7 +96,6 @@ public class CascadingTest {
   @Before
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
-    Mockito.when(service.bindService()).thenCallRealMethod();
     // Use a cached thread pool as we need a thread for each blocked call
     otherWork = Executors.newCachedThreadPool();
     channel = InProcessChannelBuilder.forName("channel").executor(otherWork).build();

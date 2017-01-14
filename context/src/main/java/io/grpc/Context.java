@@ -120,29 +120,37 @@ public class Context {
    */
   public static final Context ROOT = new Context(null);
 
-  private static Storage storage;
+  // One and only one of them is non-null
+  private static final Storage storage;
+  private static final Exception storageInitError;
 
-  private static synchronized Storage initializeStorage() {
-    if (storage != null) {
-      return storage;
-    }
+  static {
+    Storage newStorage = null;
+    Exception error = null;
     try {
-      Class<?> clazz = Class.forName("io.grpc.ContextStorageOverride");
-      storage = (Storage) clazz.getConstructor().newInstance();
-      return storage;
+      Class<?> clazz = Class.forName("io.grpc.override.ContextStorageOverride");
+      newStorage = (Storage) clazz.getConstructor().newInstance();
     } catch (ClassNotFoundException e) {
-      log.log(Level.FINE, "Storage override doesn't exist. Using default.", e);
+      if (log.isLoggable(Level.FINE)) {
+        // Avoid writing to logger because custom log handlers may try to use Context, which is
+        // problemantic (e.g., NullPointerException) because the Context class has not done loading
+        // at this point.  The caveat is that in environments stderr may be disabled, thus this
+        // message would go nowhere.
+        System.err.println("io.grpc.Context: Storage override doesn't exist. Using default.");
+        e.printStackTrace();
+      }
+      newStorage = new ThreadLocalContextStorage();
     } catch (Exception e) {
-      throw new RuntimeException("Failed to initialize Storage implementation", e);
+      error = e;
     }
-    storage = new ThreadLocalContextStorage();
-    return storage;
+    storage = newStorage;
+    storageInitError = error;
   }
 
   // For testing
   static Storage storage() {
     if (storage == null) {
-      return initializeStorage();
+      throw new RuntimeException("Storage override had failed to initialize", storageInitError);
     }
     return storage;
   }
@@ -826,7 +834,7 @@ public class Context {
    * Defines the mechanisms for attaching and detaching the "current" context.
    *
    * <p>The default implementation will put the current context in a {@link ThreadLocal}.  If an
-   * alternative implementation named {@code io.grpc.ContextStorageOverride} exists in the
+   * alternative implementation named {@code io.grpc.override.ContextStorageOverride} exists in the
    * classpath, it will be used instead of the default implementation.
    *
    * <p>This API is <a href="https://github.com/grpc/grpc-java/issues/2462">experimental</a> and

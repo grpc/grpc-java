@@ -84,6 +84,7 @@ import io.grpc.okhttp.internal.framed.FrameWriter;
 import io.grpc.okhttp.internal.framed.Header;
 import io.grpc.okhttp.internal.framed.HeadersMode;
 import io.grpc.okhttp.internal.framed.Settings;
+import io.grpc.testing.TestMethodDescriptors;
 
 import okio.Buffer;
 
@@ -112,6 +113,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nullable;
@@ -123,6 +125,7 @@ import javax.annotation.Nullable;
 public class OkHttpClientTransportTest {
   private static final int TIME_OUT_MS = 2000;
   private static final String NETWORK_ISSUE_MESSAGE = "network issue";
+  private static final String ERROR_MESSAGE = "simulated error";
   // The gRPC header length, which includes 1 byte compression flag and 4 bytes message length.
   private static final int HEADER_LENGTH = 5;
 
@@ -131,8 +134,9 @@ public class OkHttpClientTransportTest {
 
   @Mock
   private FrameWriter frameWriter;
-  @Mock
-  MethodDescriptor<?, ?> method;
+
+  private MethodDescriptor<Void, Void> method = TestMethodDescriptors.noopMethod();
+
   @Mock
   private ManagedClientTransport.Listener transportListener;
   private OkHttpClientTransport clientTransport;
@@ -147,8 +151,6 @@ public class OkHttpClientTransportTest {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     executor = Executors.newCachedThreadPool();
-    when(method.getFullMethodName()).thenReturn("fakemethod");
-    when(method.getType()).thenReturn(MethodType.UNARY);
     when(frameWriter.maxDataLength()).thenReturn(Integer.MAX_VALUE);
     frameReader = new MockFrameReader();
   }
@@ -243,11 +245,37 @@ public class OkHttpClientTransportTest {
     frameReader.throwIoExceptionForNextFrame();
     listener1.waitUntilStreamClosed();
     listener2.waitUntilStreamClosed();
+
     assertEquals(0, activeStreamCount());
     assertEquals(Status.UNAVAILABLE.getCode(), listener1.status.getCode());
     assertEquals(NETWORK_ISSUE_MESSAGE, listener1.status.getCause().getMessage());
     assertEquals(Status.UNAVAILABLE.getCode(), listener2.status.getCode());
     assertEquals(NETWORK_ISSUE_MESSAGE, listener2.status.getCause().getMessage());
+    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(isA(Status.class));
+    verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
+    shutdownAndVerify();
+  }
+
+  /**
+   * Test that even if an Error is thrown from the reading loop of the transport,
+   * it can still clean up and call transportShutdown() and transportTerminated() as expected
+   * by the channel.
+   */
+  @Test
+  public void nextFrameThrowsError() throws Exception {
+    initTransport();
+    MockStreamListener listener = new MockStreamListener();
+    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    stream.start(listener);
+    stream.request(1);
+    assertEquals(1, activeStreamCount());
+    assertContainStream(3);
+    frameReader.throwErrorForNextFrame();
+    listener.waitUntilStreamClosed();
+
+    assertEquals(0, activeStreamCount());
+    assertEquals(Status.UNAVAILABLE.getCode(), listener.status.getCode());
+    assertEquals(ERROR_MESSAGE, listener.status.getCause().getMessage());
     verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(isA(Status.class));
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
     shutdownAndVerify();
@@ -413,7 +441,7 @@ public class OkHttpClientTransportTest {
             GrpcUtil.getGrpcUserAgent("okhttp", null));
     List<Header> expectedHeaders = Arrays.asList(SCHEME_HEADER, METHOD_HEADER,
             new Header(Header.TARGET_AUTHORITY, "notarealauthority:80"),
-            new Header(Header.TARGET_PATH, "/fakemethod"),
+            new Header(Header.TARGET_PATH, "/" + method.getFullMethodName()),
             userAgentHeader, CONTENT_TYPE_HEADER, TE_HEADER);
     verify(frameWriter, timeout(TIME_OUT_MS))
         .synStream(eq(false), eq(false), eq(3), eq(0), eq(expectedHeaders));
@@ -429,7 +457,7 @@ public class OkHttpClientTransportTest {
     stream.start(listener);
     List<Header> expectedHeaders = Arrays.asList(SCHEME_HEADER, METHOD_HEADER,
         new Header(Header.TARGET_AUTHORITY, "notarealauthority:80"),
-        new Header(Header.TARGET_PATH, "/fakemethod"),
+        new Header(Header.TARGET_PATH, "/" + method.getFullMethodName()),
         new Header(GrpcUtil.USER_AGENT_KEY.name(),
             GrpcUtil.getGrpcUserAgent("okhttp", "fakeUserAgent")),
         CONTENT_TYPE_HEADER, TE_HEADER);
@@ -939,21 +967,33 @@ public class OkHttpClientTransportTest {
 
   @Test
   public void serverStreamingHeadersShouldNotBeFlushed() throws Exception {
-    when(method.getType()).thenReturn(MethodType.SERVER_STREAMING);
+    method = MethodDescriptor.create(
+        MethodType.SERVER_STREAMING,
+        method.getFullMethodName(),
+        TestMethodDescriptors.noopMarshaller(),
+        TestMethodDescriptors.noopMarshaller());
     shouldHeadersBeFlushed(false);
     shutdownAndVerify();
   }
 
   @Test
   public void clientStreamingHeadersShouldBeFlushed() throws Exception {
-    when(method.getType()).thenReturn(MethodType.CLIENT_STREAMING);
+    method = MethodDescriptor.create(
+        MethodType.CLIENT_STREAMING,
+        method.getFullMethodName(),
+        TestMethodDescriptors.noopMarshaller(),
+        TestMethodDescriptors.noopMarshaller());
     shouldHeadersBeFlushed(true);
     shutdownAndVerify();
   }
 
   @Test
   public void duplexStreamingHeadersShouldNotBeFlushed() throws Exception {
-    when(method.getType()).thenReturn(MethodType.BIDI_STREAMING);
+    method = MethodDescriptor.create(
+        MethodType.BIDI_STREAMING,
+        method.getFullMethodName(),
+        TestMethodDescriptors.noopMarshaller(),
+        TestMethodDescriptors.noopMarshaller());
     shouldHeadersBeFlushed(true);
     shutdownAndVerify();
   }
@@ -1423,9 +1463,15 @@ public class OkHttpClientTransportTest {
   }
 
   private static class MockFrameReader implements FrameReader {
-    CountDownLatch closed = new CountDownLatch(1);
-    boolean throwExceptionForNextFrame;
-    boolean returnFalseInNextFrame;
+    final CountDownLatch closed = new CountDownLatch(1);
+
+    enum Result {
+      THROW_EXCEPTION,
+      RETURN_FALSE,
+      THROW_ERROR
+    }
+
+    final LinkedBlockingQueue<Result> nextResults = new LinkedBlockingQueue<Result>();
 
     @Override
     public void close() throws IOException {
@@ -1444,33 +1490,36 @@ public class OkHttpClientTransportTest {
     }
 
     @Override
-    public synchronized boolean nextFrame(Handler handler) throws IOException {
-      if (throwExceptionForNextFrame) {
-        throw new IOException(NETWORK_ISSUE_MESSAGE);
-      }
-      if (returnFalseInNextFrame) {
-        return false;
-      }
+    public boolean nextFrame(Handler handler) throws IOException {
+      Result result;
       try {
-        wait();
+        result = nextResults.take();
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
         throw new IOException(e);
       }
-      if (throwExceptionForNextFrame) {
-        throw new IOException(NETWORK_ISSUE_MESSAGE);
+      switch (result) {
+        case THROW_EXCEPTION:
+          throw new IOException(NETWORK_ISSUE_MESSAGE);
+        case RETURN_FALSE:
+          return false;
+        case THROW_ERROR:
+          throw new Error(ERROR_MESSAGE);
+        default:
+          throw new UnsupportedOperationException("unimplemented: " + result);
       }
-      return !returnFalseInNextFrame;
     }
 
-    synchronized void throwIoExceptionForNextFrame() {
-      throwExceptionForNextFrame = true;
-      notifyAll();
+    void throwIoExceptionForNextFrame() {
+      nextResults.add(Result.THROW_EXCEPTION);
     }
 
-    synchronized void nextFrameAtEndOfStream() {
-      returnFalseInNextFrame = true;
-      notifyAll();
+    void throwErrorForNextFrame() {
+      nextResults.add(Result.THROW_ERROR);
+    }
+
+    void nextFrameAtEndOfStream() {
+      nextResults.add(Result.RETURN_FALSE);
     }
 
     @Override
@@ -1538,7 +1587,7 @@ public class OkHttpClientTransportTest {
         try {
           message.close();
         } catch (IOException e) {
-          throw new RuntimeException(e);
+          // Ignore
         }
       }
     }

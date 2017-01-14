@@ -36,13 +36,12 @@ import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static io.grpc.Contexts.statusFromCancelled;
 import static io.grpc.Status.DEADLINE_EXCEEDED;
 import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
-import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
-import com.google.census.CensusContextFactory;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.instrumentation.stats.StatsContextFactory;
 
 import io.grpc.Attributes;
 import io.grpc.CompressorRegistry;
@@ -64,7 +63,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -88,14 +86,13 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
   private static final ServerStreamListener NOOP_LISTENER = new NoopListener();
 
   private final LogId logId = LogId.allocate(getClass().getName());
+  private final ObjectPool<? extends Executor> executorPool;
   /** Executor for application processing. Safe to read after {@link #start()}. */
   private Executor executor;
-  /** Safe to read after {@link #start()}. */
-  private boolean usingSharedExecutor;
   private final InternalHandlerRegistry registry;
   private final HandlerRegistry fallbackRegistry;
   private final List<ServerTransportFilter> transportFilters;
-  private final CensusContextFactory censusFactory;
+  private final StatsContextFactory statsFactory;
   @GuardedBy("lock") private boolean started;
   @GuardedBy("lock") private boolean shutdown;
   /** non-{@code null} if immediate shutdown has been requested. */
@@ -111,7 +108,8 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
   @GuardedBy("lock") private final Collection<ServerTransport> transports =
       new HashSet<ServerTransport>();
 
-  private final ScheduledExecutorService timeoutService = SharedResourceHolder.get(TIMER_SERVICE);
+  private final ObjectPool<ScheduledExecutorService> timeoutServicePool;
+  private ScheduledExecutorService timeoutService;
   private final Context rootContext;
 
   private final DecompressorRegistry decompressorRegistry;
@@ -126,12 +124,15 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
    *        doesn't have the method
    * @param executor to call methods on behalf of remote clients
    */
-  ServerImpl(Executor executor, InternalHandlerRegistry registry, HandlerRegistry fallbackRegistry,
+  ServerImpl(ObjectPool<? extends Executor> executorPool,
+      ObjectPool<ScheduledExecutorService> timeoutServicePool,
+      InternalHandlerRegistry registry, HandlerRegistry fallbackRegistry,
       InternalServer transportServer, Context rootContext,
       DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
-      List<ServerTransportFilter> transportFilters, CensusContextFactory censusFactory,
+      List<ServerTransportFilter> transportFilters, StatsContextFactory statsFactory,
       Supplier<Stopwatch> stopwatchSupplier) {
-    this.executor = executor;
+    this.executorPool = Preconditions.checkNotNull(executorPool, "executorPool");
+    this.timeoutServicePool = Preconditions.checkNotNull(timeoutServicePool, "timeoutServicePool");
     this.registry = Preconditions.checkNotNull(registry, "registry");
     this.fallbackRegistry = Preconditions.checkNotNull(fallbackRegistry, "fallbackRegistry");
     this.transportServer = Preconditions.checkNotNull(transportServer, "transportServer");
@@ -142,7 +143,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
     this.compressorRegistry = compressorRegistry;
     this.transportFilters = Collections.unmodifiableList(
         new ArrayList<ServerTransportFilter>(transportFilters));
-    this.censusFactory = Preconditions.checkNotNull(censusFactory, "censusFactory");
+    this.statsFactory = Preconditions.checkNotNull(statsFactory, "statsFactory");
     this.stopwatchSupplier = Preconditions.checkNotNull(stopwatchSupplier, "stopwatchSupplier");
   }
 
@@ -158,12 +159,10 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
     synchronized (lock) {
       checkState(!started, "Already started");
       checkState(!shutdown, "Shutting down");
-      usingSharedExecutor = executor == null;
-      if (usingSharedExecutor) {
-        executor = SharedResourceHolder.get(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
-      }
       // Start and wait for any port to actually be bound.
       transportServer.start(new ServerListenerImpl());
+      timeoutService = Preconditions.checkNotNull(timeoutServicePool.getObject(), "timeoutService");
+      executor = Preconditions.checkNotNull(executorPool.getObject(), "executor");
       started = true;
       return this;
     }
@@ -223,10 +222,6 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
     }
     if (shutdownTransportServer) {
       transportServer.shutdown();
-    }
-    SharedResourceHolder.release(TIMER_SERVICE, timeoutService);
-    if (usingSharedExecutor) {
-      SharedResourceHolder.release(GrpcUtil.SHARED_CHANNEL_EXECUTOR, (ExecutorService) executor);
     }
     return this;
   }
@@ -317,6 +312,12 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
           throw new AssertionError("Server already terminated");
         }
         terminated = true;
+        if (timeoutService != null) {
+          timeoutService = timeoutServicePool.returnObject(timeoutService);
+        }
+        if (executor != null) {
+          executor = executorPool.returnObject(executor);
+        }
         // TODO(carl-mastrangelo): move this outside the synchronized block.
         lock.notifyAll();
       }
@@ -386,7 +387,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
     @Override
     public StatsTraceContext methodDetermined(String methodName, Metadata headers) {
       return StatsTraceContext.newServerContext(
-          methodName, censusFactory, headers, stopwatchSupplier);
+          methodName, statsFactory, headers, stopwatchSupplier);
     }
 
     @Override
@@ -452,7 +453,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
         final ServerStream stream, Metadata headers) {
       Long timeoutNanos = headers.get(TIMEOUT_KEY);
 
-      // TODO(zhangkun83): attach the CensusContext from StatsTraceContext to baseContext
+      // TODO(zhangkun83): attach the StatsContext from StatsTraceContext to baseContext
       Context baseContext = rootContext;
 
       if (timeoutNanos == null) {

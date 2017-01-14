@@ -34,11 +34,11 @@ package io.grpc.internal;
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkArgument;
 
-import com.google.census.Census;
-import com.google.census.CensusContextFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.instrumentation.stats.Stats;
+import com.google.instrumentation.stats.StatsContextFactory;
 
 import io.grpc.Attributes;
 import io.grpc.ClientInterceptor;
@@ -46,6 +46,8 @@ import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer2;
+import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
@@ -94,6 +96,7 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Nullable
   private Executor executor;
+
   private final List<ClientInterceptor> interceptors = new ArrayList<ClientInterceptor>();
 
   private final String target;
@@ -112,6 +115,9 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Nullable
   private LoadBalancer.Factory loadBalancerFactory;
+
+  @Nullable
+  private LoadBalancer2.Factory loadBalancer2Factory;
 
   @Nullable
   private DecompressorRegistry decompressorRegistry;
@@ -136,7 +142,7 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   @Nullable
-  private CensusContextFactory censusFactory;
+  private StatsContextFactory statsFactory;
 
   protected AbstractManagedChannelImplBuilder(String target) {
     this.target = Preconditions.checkNotNull(target, "target");
@@ -204,6 +210,17 @@ public abstract class AbstractManagedChannelImplBuilder
     return thisT();
   }
 
+  /**
+   * DO NOT CALL THIS, as its argument type will soon be renamed.
+   */
+  public final T loadBalancerFactory(LoadBalancer2.Factory loadBalancerFactory) {
+    Preconditions.checkState(directServerAddress == null,
+        "directServerAddress is set (%s), which forbids the use of LoadBalancerFactory",
+        directServerAddress);
+    this.loadBalancer2Factory = loadBalancerFactory;
+    return thisT();
+  }
+
   @Override
   public final T decompressorRegistry(DecompressorRegistry registry) {
     this.decompressorRegistry = registry;
@@ -242,12 +259,12 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   /**
-   * Override the default Census implementation.  This is meant to be used in tests.
+   * Override the default stats implementation.  This is meant to be used in tests.
    */
   @VisibleForTesting
   @Internal
-  public T censusContextFactory(CensusContextFactory censusFactory) {
-    this.censusFactory = censusFactory;
+  public T statsContextFactory(StatsContextFactory statsFactory) {
+    this.statsFactory = statsFactory;
     return thisT();
   }
 
@@ -266,7 +283,7 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   @Override
-  public ManagedChannelImpl build() {
+  public ManagedChannel build() {
     ClientTransportFactory transportFactory = buildTransportFactory();
     if (authorityOverride != null) {
       transportFactory = new AuthorityOverridingTransportFactory(
@@ -279,20 +296,39 @@ public abstract class AbstractManagedChannelImplBuilder
       // getResource(), then this shouldn't be a problem unless called on the UI thread.
       nameResolverFactory = NameResolverProvider.asFactory();
     }
-    return new ManagedChannelImpl(
-        target,
-        // TODO(carl-mastrangelo): Allow clients to pass this in
-        new ExponentialBackoffPolicy.Provider(),
-        nameResolverFactory,
-        getNameResolverParams(),
-        firstNonNull(loadBalancerFactory, PickFirstBalancerFactory.getInstance()),
-        transportFactory,
-        firstNonNull(decompressorRegistry, DecompressorRegistry.getDefaultInstance()),
-        firstNonNull(compressorRegistry, CompressorRegistry.getDefaultInstance()),
-        GrpcUtil.TIMER_SERVICE, GrpcUtil.STOPWATCH_SUPPLIER, idleTimeoutMillis,
-        executor, userAgent, interceptors,
-        firstNonNull(censusFactory,
-            firstNonNull(Census.getCensusContextFactory(), NoopCensusContextFactory.INSTANCE)));
+    if (loadBalancer2Factory != null) {
+      return new ManagedChannelImpl2(
+          target,
+          // TODO(carl-mastrangelo): Allow clients to pass this in
+          new ExponentialBackoffPolicy.Provider(),
+          nameResolverFactory,
+          getNameResolverParams(),
+          loadBalancer2Factory,
+          transportFactory,
+          firstNonNull(decompressorRegistry, DecompressorRegistry.getDefaultInstance()),
+          firstNonNull(compressorRegistry, CompressorRegistry.getDefaultInstance()),
+          SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE),
+          getExecutorPool(executor),
+          SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
+          GrpcUtil.STOPWATCH_SUPPLIER, idleTimeoutMillis,
+          userAgent, interceptors, firstNonNull(statsFactory,
+              firstNonNull(Stats.getStatsContextFactory(), NoopStatsContextFactory.INSTANCE)));
+    } else {
+      return new ManagedChannelImpl(
+          target,
+          // TODO(carl-mastrangelo): Allow clients to pass this in
+          new ExponentialBackoffPolicy.Provider(),
+          nameResolverFactory,
+          getNameResolverParams(),
+          firstNonNull(loadBalancerFactory, PickFirstBalancerFactory.getInstance()),
+          transportFactory,
+          firstNonNull(decompressorRegistry, DecompressorRegistry.getDefaultInstance()),
+          firstNonNull(compressorRegistry, CompressorRegistry.getDefaultInstance()),
+          GrpcUtil.TIMER_SERVICE, GrpcUtil.STOPWATCH_SUPPLIER, idleTimeoutMillis,
+          executor, userAgent, interceptors,
+          firstNonNull(statsFactory,
+              firstNonNull(Stats.getStatsContextFactory(), NoopStatsContextFactory.INSTANCE)));
+    }
   }
 
   /**
@@ -309,6 +345,24 @@ public abstract class AbstractManagedChannelImplBuilder
    */
   protected Attributes getNameResolverParams() {
     return Attributes.EMPTY;
+  }
+
+  private static ObjectPool<? extends Executor> getExecutorPool(final @Nullable Executor executor) {
+    if (executor != null) {
+      return new ObjectPool<Executor>() {
+        @Override
+        public Executor getObject() {
+          return executor;
+        }
+
+        @Override
+        public Executor returnObject(Object returned) {
+          return null;
+        }
+      };
+    } else {
+      return SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
+    }
   }
 
   private static class AuthorityOverridingTransportFactory implements ClientTransportFactory {
@@ -367,5 +421,14 @@ public abstract class AbstractManagedChannelImplBuilder
     public String getDefaultScheme() {
       return DIRECT_ADDRESS_SCHEME;
     }
+  }
+
+  /**
+   * Returns the correctly typed version of the builder.
+   */
+  private T thisT() {
+    @SuppressWarnings("unchecked")
+    T thisT = (T) this;
+    return thisT;
   }
 }

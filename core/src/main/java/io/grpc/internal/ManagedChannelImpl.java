@@ -35,10 +35,10 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import com.google.census.CensusContextFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.instrumentation.stats.StatsContextFactory;
 
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -51,6 +51,7 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
 import io.grpc.ResolvedServerInfoGroup;
@@ -139,7 +140,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   private final Supplier<Stopwatch> stopwatchSupplier;
   /** The timout before entering idle mode, less {@link #IDLE_GRACE_PERIOD_MILLIS}. */
   private final long idleTimeoutMillis;
-  private final CensusContextFactory censusFactory;
+  private final StatsContextFactory statsFactory;
 
   /**
    * Executor that runs deadline timers for requests.
@@ -359,7 +360,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
   private final ClientTransportProvider transportProvider = new ClientTransportProvider() {
     @Override
-    public ClientTransport get(CallOptions callOptions) {
+    public ClientTransport get(CallOptions callOptions, Metadata headers) {
       LoadBalancer<ClientTransport> balancer = loadBalancer;
       if (balancer == null) {
         // Current state is either idle or in grace period
@@ -379,7 +380,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       SharedResourceHolder.Resource<ScheduledExecutorService> timerService,
       Supplier<Stopwatch> stopwatchSupplier, long idleTimeoutMillis,
       @Nullable Executor executor, @Nullable String userAgent,
-      List<ClientInterceptor> interceptors, CensusContextFactory censusFactory) {
+      List<ClientInterceptor> interceptors, StatsContextFactory statsFactory) {
     this.target = checkNotNull(target, "target");
     this.nameResolverFactory = checkNotNull(nameResolverFactory, "nameResolverFactory");
     this.nameResolverParams = checkNotNull(nameResolverParams, "nameResolverParams");
@@ -411,7 +412,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     this.decompressorRegistry = decompressorRegistry;
     this.compressorRegistry = compressorRegistry;
     this.userAgent = userAgent;
-    this.censusFactory = checkNotNull(censusFactory, "censusFactory");
+    this.statsFactory = checkNotNull(statsFactory, "statsFactory");
 
     if (log.isLoggable(Level.INFO)) {
       log.log(Level.INFO, "[{0}] Created with target {1}", new Object[] {getLogId(), target});
@@ -615,7 +616,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
         executor = ManagedChannelImpl.this.executor;
       }
       StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(
-          method.getFullMethodName(), censusFactory, stopwatchSupplier);
+          method.getFullMethodName(), statsFactory, stopwatchSupplier);
       return new ClientCallImpl<ReqT, RespT>(
           method,
           executor,
@@ -725,7 +726,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     @Override
     public Channel makeChannel(ClientTransport transport) {
       return new SingleTransportChannel(
-          censusFactory, transport, executor, scheduledExecutor, authority(), stopwatchSupplier);
+          statsFactory, transport, executor, scheduledExecutor, authority(), stopwatchSupplier);
     }
 
     @Override

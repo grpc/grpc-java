@@ -40,12 +40,13 @@ import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 
 import java.io.BufferedInputStream;
-import java.io.BufferedWriter;
+import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileWriter;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
@@ -100,6 +101,60 @@ public class TestUtils {
                 super.close(status, trailers);
               }
             }, requestHeaders);
+      }
+    };
+  }
+
+  /**
+   * Echoes request headers with the specified key(s) from a client into response headers only.
+   */
+  public static ServerInterceptor echoRequestMetadataInHeaders(final Metadata.Key<?>... keys) {
+    final Set<Metadata.Key<?>> keySet = new HashSet<Metadata.Key<?>>(Arrays.asList(keys));
+    return new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+          ServerCall<ReqT, RespT> call,
+          final Metadata requestHeaders,
+          ServerCallHandler<ReqT, RespT> next) {
+        return next.startCall(new SimpleForwardingServerCall<ReqT, RespT>(call) {
+          @Override
+          public void sendHeaders(Metadata responseHeaders) {
+            responseHeaders.merge(requestHeaders, keySet);
+            super.sendHeaders(responseHeaders);
+          }
+
+          @Override
+          public void close(Status status, Metadata trailers) {
+            super.close(status, trailers);
+          }
+        }, requestHeaders);
+      }
+    };
+  }
+
+  /**
+   * Echoes request headers with the specified key(s) from a client into response trailers only.
+   */
+  public static ServerInterceptor echoRequestMetadataInTrailers(final Metadata.Key<?>... keys) {
+    final Set<Metadata.Key<?>> keySet = new HashSet<Metadata.Key<?>>(Arrays.asList(keys));
+    return new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+          ServerCall<ReqT, RespT> call,
+          final Metadata requestHeaders,
+          ServerCallHandler<ReqT, RespT> next) {
+        return next.startCall(new SimpleForwardingServerCall<ReqT, RespT>(call) {
+          @Override
+          public void sendHeaders(Metadata responseHeaders) {
+            super.sendHeaders(responseHeaders);
+          }
+
+          @Override
+          public void close(Status status, Metadata trailers) {
+            trailers.merge(requestHeaders, keySet);
+            super.close(status, trailers);
+          }
+        }, requestHeaders);
       }
     };
   }
@@ -198,18 +253,20 @@ public class TestUtils {
    * @param name  name of a file in src/main/resources/certs.
    */
   public static File loadCert(String name) throws IOException {
-    InputStream in = TestUtils.class.getResourceAsStream("/certs/" + name);
+    InputStream in = new BufferedInputStream(TestUtils.class.getResourceAsStream("/certs/" + name));
     File tmpFile = File.createTempFile(name, "");
     tmpFile.deleteOnExit();
 
-    BufferedWriter writer = new BufferedWriter(new FileWriter(tmpFile));
+    OutputStream os = new BufferedOutputStream(new FileOutputStream(tmpFile));
     try {
       int b;
       while ((b = in.read()) != -1) {
-        writer.write(b);
+        os.write(b);
       }
+      os.flush();
     } finally {
-      writer.close();
+      in.close();
+      os.close();
     }
 
     return tmpFile;
