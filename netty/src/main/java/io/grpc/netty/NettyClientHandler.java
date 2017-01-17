@@ -385,7 +385,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         logger.fine("Stream IDs have been exhausted for this connection. "
                 + "Initiating graceful shutdown of the connection.");
         lifecycleManager.notifyShutdown(e.getStatus());
-        close(ctx(), ctx().newPromise());
+        close(ctx(), ctx().voidPromise());
       }
       return;
     }
@@ -526,11 +526,11 @@ class NettyClientHandler extends AbstractNettyHandler {
     close(ctx, promise);
     connection().forEachActiveStream(new Http2StreamVisitor() {
       @Override
-      public boolean visit(Http2Stream stream) throws Http2Exception {
+      public boolean visit(Http2Stream stream) {
         NettyClientStream.TransportState clientStream = clientStream(stream);
         if (clientStream != null) {
           clientStream.transportReportStatus(msg.getStatus(), true, new Metadata());
-          resetStream(ctx, stream.id(), Http2Error.CANCEL.code(), ctx.newPromise());
+          resetStream(ctx, stream.id(), Http2Error.CANCEL.code(), ctx.voidPromise());
         }
         stream.close();
         return true;

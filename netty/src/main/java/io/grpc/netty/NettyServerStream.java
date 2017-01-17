@@ -127,6 +127,9 @@ class NettyServerStream extends AbstractServerStream {
               // Remove the bytes from outbound flow control, optionally notifying
               // the client that they can send more bytes.
               transportState().onSentBytes(numBytes);
+              if (!future.isSuccess()) {
+                transportState().transportReportStatus(Utils.statusFromThrowable(future.cause()));
+              }
             }
           }), flush);
     }

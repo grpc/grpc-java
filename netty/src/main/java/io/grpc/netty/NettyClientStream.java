@@ -76,6 +76,17 @@ class NettyClientStream extends AbstractClientStream2 {
   private final AsciiString scheme;
   private final AsciiString userAgent;
 
+  private final ChannelFutureListener failureListener = new ChannelFutureListener() {
+    @Override
+    public void operationComplete(ChannelFuture future) throws Exception {
+      if (!future.isSuccess()) {
+        // Stream creation failed. Close the stream if not already closed.
+        Status s = transportState().statusFromFailedFuture(future);
+        transportState().transportReportStatus(s, true, new Metadata());
+      }
+    }
+  };
+
   NettyClientStream(TransportState state, MethodDescriptor<?, ?> method, Metadata headers,
       Channel channel, AsciiString authority, AsciiString scheme,
       AsciiString userAgent, StatsTraceContext statsTraceCtx) {
@@ -121,20 +132,10 @@ class NettyClientStream extends AbstractClientStream2 {
         = Utils.convertClientHeaders(headers, scheme, defaultPath, authority, userAgent);
     headers = null;
 
-    ChannelFutureListener failureListener = new ChannelFutureListener() {
-      @Override
-      public void operationComplete(ChannelFuture future) throws Exception {
-        if (!future.isSuccess()) {
-          // Stream creation failed. Close the stream if not already closed.
-          Status s = transportState().statusFromFailedFuture(future);
-          transportState().transportReportStatus(s, true, new Metadata());
-        }
-      }
-    };
-
     // Write the command requesting the creation of the stream.
     writeQueue.enqueue(new CreateStreamCommand(http2Headers, transportState()),
-        !method.getType().clientSendsOneMessage()).addListener(failureListener);
+        channel.newPromise().addListener(failureListener),
+        !method.getType().clientSendsOneMessage());
   }
 
   private class Sink implements AbstractClientStream2.Sink {
@@ -155,11 +156,13 @@ class NettyClientStream extends AbstractClientStream2 {
                   // the client that they can send more bytes.
                   transportState().onSentBytes(numBytes);
                 }
+                failureListener.operationComplete(future);
               }
             }), flush);
       } else {
         // The frame is empty and will not impact outbound flow control. Just send it.
-        writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream), flush);
+        writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream),
+            channel.newPromise().addListener(failureListener), flush);
       }
     }
 

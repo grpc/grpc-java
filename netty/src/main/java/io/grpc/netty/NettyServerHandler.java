@@ -37,6 +37,7 @@ import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
 import static io.grpc.netty.Utils.HTTP_METHOD;
 import static io.grpc.netty.Utils.TE_HEADER;
 import static io.grpc.netty.Utils.TE_TRAILERS;
+import static io.grpc.netty.Utils.statusFromThrowable;
 import static io.netty.handler.codec.http2.DefaultHttp2LocalFlowController.DEFAULT_WINDOW_UPDATE_RATIO;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -327,12 +328,16 @@ class NettyServerHandler extends AbstractNettyHandler {
     }
   }
 
-  private void closeStreamWhenDone(ChannelPromise promise, int streamId) throws Http2Exception {
+  private void closeStreamWhenDone(ChannelPromise promise, int streamId) {
     final NettyServerStream.TransportState stream = serverStream(requireHttp2Stream(streamId));
     promise.addListener(new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) {
-        stream.complete();
+        if (!future.isSuccess()) {
+          stream.transportReportStatus(statusFromThrowable(future.cause()));
+        } else {
+          stream.complete();
+        }
       }
     });
   }
@@ -341,8 +346,9 @@ class NettyServerHandler extends AbstractNettyHandler {
    * Sends the given gRPC frame to the client.
    */
   private void sendGrpcFrame(ChannelHandlerContext ctx, SendGrpcFrameCommand cmd,
-      ChannelPromise promise) throws Http2Exception {
+      ChannelPromise promise) {
     if (cmd.endStream()) {
+      promise = promise.unvoid();
       closeStreamWhenDone(promise, cmd.streamId());
     }
     // Call the base class to write the HTTP/2 DATA frame.
@@ -353,8 +359,9 @@ class NettyServerHandler extends AbstractNettyHandler {
    * Sends the response headers to the client.
    */
   private void sendResponseHeaders(ChannelHandlerContext ctx, SendResponseHeadersCommand cmd,
-      ChannelPromise promise) throws Http2Exception {
+      ChannelPromise promise) {
     if (cmd.endOfStream()) {
+      promise = promise.unvoid();
       closeStreamWhenDone(promise, cmd.stream().id());
     }
     encoder().writeHeaders(ctx, cmd.stream().id(), cmd.headers(), 0, cmd.endOfStream(), promise);
@@ -373,11 +380,11 @@ class NettyServerHandler extends AbstractNettyHandler {
     close(ctx, promise);
     connection().forEachActiveStream(new Http2StreamVisitor() {
       @Override
-      public boolean visit(Http2Stream stream) throws Http2Exception {
+      public boolean visit(Http2Stream stream) {
         NettyServerStream.TransportState serverStream = serverStream(stream);
         if (serverStream != null) {
           serverStream.transportReportStatus(msg.getStatus());
-          resetStream(ctx, stream.id(), Http2Error.CANCEL.code(), ctx.newPromise());
+          resetStream(ctx, stream.id(), Http2Error.CANCEL.code(), ctx.voidPromise());
         }
         stream.close();
         return true;
