@@ -177,7 +177,7 @@ public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
      */
     private static List<Subchannel> filterNonFailingSubchannels(
         Collection<Subchannel> subchannels) {
-      List<Subchannel> readySubchannels = new ArrayList<Subchannel>();
+      List<Subchannel> readySubchannels = new ArrayList<Subchannel>(subchannels.size());
       for (Subchannel subchannel : subchannels) {
         if (getSubchannelStateInfoRef(subchannel).get().getState() == READY) {
           readySubchannels.add(subchannel);
