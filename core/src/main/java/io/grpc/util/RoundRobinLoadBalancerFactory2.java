@@ -211,9 +211,8 @@ public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
         ConnectivityStateInfo stateInfo = getSubchannelStateInfoRef(subchannel).get();
         if (stateInfo.getState() != TRANSIENT_FAILURE) {
           return null;
-        } else {
-          status = stateInfo.getStatus();
         }
+        status = stateInfo.getStatus();
       }
       return status;
     }
@@ -253,12 +252,13 @@ public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
     public PickResult pickSubchannel(Attributes affinity, Metadata headers) {
       if (!empty) {
         return PickResult.withSubchannel(nextSubchannel());
-      } else {
-        if (status != null) {
-          return PickResult.withError(status);
-        }
-        return PickResult.withNoResult();
       }
+
+      if (status != null) {
+        return PickResult.withError(status);
+      }
+
+      return PickResult.withNoResult();
     }
 
     private Subchannel nextSubchannel() {
