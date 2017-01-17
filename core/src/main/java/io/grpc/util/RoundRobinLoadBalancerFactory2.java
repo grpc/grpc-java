@@ -237,7 +237,7 @@ public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
   @VisibleForTesting
   static class Picker extends SubchannelPicker {
     @Nullable
-    final Status status;
+    private final Status status;
     private final List<Subchannel> list;
     private int index;
     private final boolean empty;
@@ -278,6 +278,11 @@ public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
     @VisibleForTesting
     List<Subchannel> getList() {
       return Collections.unmodifiableList(list);
+    }
+
+    @VisibleForTesting
+    Status getStatus() {
+      return status;
     }
   }
 }
