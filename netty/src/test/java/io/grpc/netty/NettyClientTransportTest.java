@@ -38,6 +38,7 @@ import static io.grpc.internal.GrpcUtil.USER_AGENT_KEY;
 import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -47,6 +48,7 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.Attributes.Key;
 import io.grpc.Context;
+import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
@@ -334,6 +336,17 @@ public class NettyClientTransportTest {
     assertEquals(Attributes.EMPTY, transport.getAttrs());
 
     transports.clear();
+  }
+
+  @Test
+  public void clientStreamGetsSslSessionAttributes() throws Exception {
+    startServer();
+    NettyClientTransport transport = newTransport(newNegotiator());
+    transport.start(clientTransportListener);
+    Rpc rpc = new Rpc(transport).halfClose();
+    rpc.waitForResponse();
+
+    assertNotNull(rpc.stream.getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION));
   }
 
   private Throwable getRootCause(Throwable t) {

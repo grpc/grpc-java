@@ -102,8 +102,6 @@ import java.util.concurrent.TimeoutException;
 public abstract class AbstractTransportTest {
   private static final int TIMEOUT_MS = 1000;
 
-  protected Attributes expectedClientStreamAttributes = Attributes.EMPTY;
-
   private static final Attributes.Key<String> ADDITIONAL_TRANSPORT_ATTR_KEY =
       Attributes.Key.of("additional-attr");
 
@@ -1054,22 +1052,6 @@ public abstract class AbstractTransportTest {
         .closed(statusCaptor.capture(), any(Metadata.class));
     assertEquals(status.getCode(), statusCaptor.getValue().getCode());
     assertEquals(status.getDescription(), statusCaptor.getValue().getDescription());
-  }
-
-  @Test
-  public void clientStreamGetAttributes() throws Exception {
-    server.start(serverListener);
-    client = newClientTransport(server);
-    runIfNotNull(client.start(mockClientTransportListener));
-    MockServerTransportListener serverTransportListener
-        = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
-
-    ClientStream clientStream = client.newStream(methodDescriptor, new Metadata());
-    clientStream.start(mockClientStreamListener);
-    serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
-
-    // note that the expectedClientStreamAttributes is overwritten for netty transport.
-    assertEquals(expectedClientStreamAttributes, clientStream.getAttributes());
   }
 
   /**
