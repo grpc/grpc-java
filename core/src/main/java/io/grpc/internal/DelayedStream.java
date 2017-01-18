@@ -275,7 +275,12 @@ class DelayedStream implements ClientStream {
     }
   }
 
-  // When this method returns, passThrough is guaranteed to be true
+  /**
+   * {@inheritDoc}
+   *
+   * <p>When this method returns, passThrough is guaranteed to be true.  This method may be called
+   * concurrently with other methods.
+   */
   @Override
   public void cancel(final Status reason) {
     checkNotNull(reason, "reason");
