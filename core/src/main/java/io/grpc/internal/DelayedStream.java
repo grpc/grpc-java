@@ -56,6 +56,21 @@ import javax.annotation.concurrent.GuardedBy;
  * necessary.
  */
 class DelayedStream implements ClientStream {
+  @VisibleForTesting
+  static final ClientStreamListener NOOP_STREAM_LISTENER = new ClientStreamListener() {
+      @Override
+      public void messageRead(InputStream message) {}
+
+      @Override
+      public void onReady() {}
+
+      @Override
+      public void headersRead(Metadata headers) {}
+
+      @Override
+      public void closed(Status status, Metadata trailers) {}
+    };
+
   /** {@code true} once realStream is valid and all pending calls have been drained. */
   private volatile boolean passThrough;
   /**
@@ -73,7 +88,7 @@ class DelayedStream implements ClientStream {
   private DelayedStreamListener delayedListener;
 
   @Override
-  public void setMaxInboundMessageSize(final int maxSize) {
+  public final void setMaxInboundMessageSize(final int maxSize) {
     if (passThrough) {
       realStream.setMaxInboundMessageSize(maxSize);
     } else {
@@ -87,7 +102,7 @@ class DelayedStream implements ClientStream {
   }
 
   @Override
-  public void setMaxOutboundMessageSize(final int maxSize) {
+  public final void setMaxOutboundMessageSize(final int maxSize) {
     if (passThrough) {
       realStream.setMaxOutboundMessageSize(maxSize);
     } else {
@@ -103,19 +118,40 @@ class DelayedStream implements ClientStream {
   /**
    * Transfers all pending and future requests and mutations to the given stream.
    *
-   * <p>No-op if either this method or {@link #cancel} have already been called.
+   * <p>This method must be called at most once.  Extraneous calls will throw and end up cancelling
+   * the given streams.
+   *
+   * <p>If {@link #cancel} has been called, this method will cancel the given stream.
    */
   // When this method returns, passThrough is guaranteed to be true
   final void setStream(ClientStream stream) {
+    ClientStream savedRealStream;
+    Status savedError;
     synchronized (this) {
-      // If realStream != null, then either setStream() or cancel() has been called.
-      if (realStream != null) {
-        return;
+      savedRealStream = realStream;
+      savedError = error;
+      if (savedRealStream == null) {
+        realStream = checkNotNull(stream, "stream");
       }
-      realStream = checkNotNull(stream, "stream");
     }
 
-    drainPendingCalls();
+    if (savedRealStream == null) {
+      drainPendingCalls();
+    } else {
+      // If realStream was not null, then either setStream() or cancel() must had been called,
+      // we will cancel and discard the given stream.
+      // ClientStream.cancel() must be called after start()
+      stream.start(NOOP_STREAM_LISTENER);
+      if (savedError != null) {
+        stream.cancel(savedError);
+      } else {
+        // If cancel() were called, error must have been non-null.
+        IllegalStateException exception = new IllegalStateException(
+            "DelayedStream.setStream() is called more than once");
+        stream.cancel(Status.CANCELLED.withCause(exception));
+        throw exception;
+      }
+    }
   }
 
   /**
@@ -173,7 +209,7 @@ class DelayedStream implements ClientStream {
   }
 
   @Override
-  public void setAuthority(final String authority) {
+  public final void setAuthority(final String authority) {
     checkState(listener == null, "May only be called before start");
     checkNotNull(authority, "authority");
     delayOrExecute(new Runnable() {
@@ -188,22 +224,15 @@ class DelayedStream implements ClientStream {
   public void start(ClientStreamListener listener) {
     checkState(this.listener == null, "already started");
 
-    Status savedError;
     boolean savedPassThrough;
     synchronized (this) {
       this.listener = checkNotNull(listener, "listener");
-      // If error != null, then cancel() has been called and was unable to close the listener
-      savedError = error;
+      assert error == null;
       savedPassThrough = passThrough;
       if (!savedPassThrough) {
         listener = delayedListener = new DelayedStreamListener(listener);
       }
     }
-    if (savedError != null) {
-      listener.closed(savedError, new Metadata());
-      return;
-    }
-
     if (savedPassThrough) {
       realStream.start(listener);
     } else {
@@ -218,7 +247,7 @@ class DelayedStream implements ClientStream {
   }
 
   @Override
-  public void writeMessage(final InputStream message) {
+  public final void writeMessage(final InputStream message) {
     checkNotNull(message, "message");
     if (passThrough) {
       realStream.writeMessage(message);
@@ -233,7 +262,7 @@ class DelayedStream implements ClientStream {
   }
 
   @Override
-  public void flush() {
+  public final void flush() {
     if (passThrough) {
       realStream.flush();
     } else {
@@ -253,12 +282,12 @@ class DelayedStream implements ClientStream {
     boolean delegateToRealStream = true;
     ClientStreamListener listenerToClose = null;
     synchronized (this) {
-      // If realStream != null, then either setStream() or cancel() has been called
+      if (listener == null) {
+        throw new IllegalStateException("cancel() must be called after start()");
+      }
       if (realStream == null) {
         realStream = NoopClientStream.INSTANCE;
         delegateToRealStream = false;
-
-        // If listener == null, then start() will later call listener with 'error'
         listenerToClose = listener;
         error = reason;
       }
@@ -271,15 +300,13 @@ class DelayedStream implements ClientStream {
         }
       });
     } else {
-      if (listenerToClose != null) {
-        listenerToClose.closed(reason, new Metadata());
-      }
+      listenerToClose.closed(reason, new Metadata());
       drainPendingCalls();
     }
   }
 
   @Override
-  public void halfClose() {
+  public final void halfClose() {
     delayOrExecute(new Runnable() {
       @Override
       public void run() {
@@ -289,7 +316,7 @@ class DelayedStream implements ClientStream {
   }
 
   @Override
-  public void request(final int numMessages) {
+  public final void request(final int numMessages) {
     if (passThrough) {
       realStream.request(numMessages);
     } else {
@@ -303,7 +330,7 @@ class DelayedStream implements ClientStream {
   }
 
   @Override
-  public void setCompressor(final Compressor compressor) {
+  public final void setCompressor(final Compressor compressor) {
     checkNotNull(compressor, "compressor");
     delayOrExecute(new Runnable() {
       @Override
@@ -314,7 +341,7 @@ class DelayedStream implements ClientStream {
   }
 
   @Override
-  public void setDecompressor(Decompressor decompressor) {
+  public final void setDecompressor(Decompressor decompressor) {
     checkNotNull(decompressor, "decompressor");
     // This method being called only makes sense after setStream() has been called (but not
     // necessarily returned), but there is not necessarily a happens-before relationship. This
@@ -327,7 +354,7 @@ class DelayedStream implements ClientStream {
   }
 
   @Override
-  public boolean isReady() {
+  public final boolean isReady() {
     if (passThrough) {
       return realStream.isReady();
     } else {
@@ -336,7 +363,7 @@ class DelayedStream implements ClientStream {
   }
 
   @Override
-  public void setMessageCompression(final boolean enable) {
+  public final void setMessageCompression(final boolean enable) {
     if (passThrough) {
       realStream.setMessageCompression(enable);
     } else {

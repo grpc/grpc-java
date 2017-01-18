@@ -210,7 +210,9 @@ public class DelayedClientTransport2Test {
   @Test public void cancelStreamWithoutSetTransport() {
     ClientStream stream = delayedTransport.newStream(method, new Metadata());
     assertEquals(1, delayedTransport.getPendingStreamsCount());
+    stream.start(streamListener);
     stream.cancel(Status.CANCELLED);
+    verify(streamListener).closed(any(Status.class), any(Metadata.class));
     assertEquals(0, delayedTransport.getPendingStreamsCount());
     verifyNoMoreInteractions(mockRealTransport);
     verifyNoMoreInteractions(mockRealStream);
@@ -265,7 +267,9 @@ public class DelayedClientTransport2Test {
     verify(transportListener).transportShutdown(any(Status.class));
     verify(transportListener, times(0)).transportTerminated();
     assertEquals(1, delayedTransport.getPendingStreamsCount());
+    stream.start(streamListener);
     stream.cancel(Status.CANCELLED);
+    verify(streamListener).closed(any(Status.class), any(Metadata.class));
     verify(transportListener).transportTerminated();
     assertEquals(0, delayedTransport.getPendingStreamsCount());
     verifyNoMoreInteractions(mockRealTransport);
@@ -277,6 +281,16 @@ public class DelayedClientTransport2Test {
     verify(transportListener).transportShutdown(any(Status.class));
     verify(transportListener).transportTerminated();
     ClientStream stream = delayedTransport.newStream(method, new Metadata());
+    stream.start(streamListener);
+    verify(streamListener).closed(statusCaptor.capture(), any(Metadata.class));
+    assertEquals(Status.Code.UNAVAILABLE, statusCaptor.getValue().getCode());
+  }
+
+  @Test public void newStreamThenShutdownNow() {
+    ClientStream stream = delayedTransport.newStream(method, new Metadata());
+    delayedTransport.shutdownNow(Status.UNAVAILABLE);
+    verify(transportListener).transportShutdown(any(Status.class));
+    verify(transportListener).transportTerminated();
     stream.start(streamListener);
     verify(streamListener).closed(statusCaptor.capture(), any(Metadata.class));
     assertEquals(Status.Code.UNAVAILABLE, statusCaptor.getValue().getCode());
