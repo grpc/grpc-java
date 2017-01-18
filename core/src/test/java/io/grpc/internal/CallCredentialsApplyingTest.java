@@ -131,7 +131,7 @@ public class CallCredentialsApplyingTest {
   @Test
   public void parameterPropagation_base() {
     Attributes transportAttrs = Attributes.newBuilder().set(ATTR_KEY, ATTR_VALUE).build();
-    when(mockTransport.getAttrs()).thenReturn(transportAttrs);
+    when(mockTransport.getAttributes()).thenReturn(transportAttrs);
 
     transport.newStream(method, origHeaders, callOptions, statsTraceCtx);
 
@@ -151,7 +151,7 @@ public class CallCredentialsApplyingTest {
         .set(CallCredentials.ATTR_AUTHORITY, "transport-override-authority")
         .set(CallCredentials.ATTR_SECURITY_LEVEL, SecurityLevel.INTEGRITY)
         .build();
-    when(mockTransport.getAttrs()).thenReturn(transportAttrs);
+    when(mockTransport.getAttributes()).thenReturn(transportAttrs);
 
     transport.newStream(method, origHeaders, callOptions, statsTraceCtx);
 
@@ -171,7 +171,7 @@ public class CallCredentialsApplyingTest {
         .set(CallCredentials.ATTR_AUTHORITY, "transport-override-authority")
         .set(CallCredentials.ATTR_SECURITY_LEVEL, SecurityLevel.INTEGRITY)
         .build();
-    when(mockTransport.getAttrs()).thenReturn(transportAttrs);
+    when(mockTransport.getAttributes()).thenReturn(transportAttrs);
     Executor anotherExecutor = mock(Executor.class);
 
     transport.newStream(method, origHeaders,
@@ -189,7 +189,7 @@ public class CallCredentialsApplyingTest {
 
   @Test
   public void applyMetadata_inline() {
-    when(mockTransport.getAttrs()).thenReturn(Attributes.EMPTY);
+    when(mockTransport.getAttributes()).thenReturn(Attributes.EMPTY);
     doAnswer(new Answer<Void>() {
         @Override
         public Void answer(InvocationOnMock invocation) throws Throwable {
@@ -213,7 +213,7 @@ public class CallCredentialsApplyingTest {
   @Test
   public void fail_inline() {
     final Status error = Status.FAILED_PRECONDITION.withDescription("channel not secure for creds");
-    when(mockTransport.getAttrs()).thenReturn(Attributes.EMPTY);
+    when(mockTransport.getAttributes()).thenReturn(Attributes.EMPTY);
     doAnswer(new Answer<Void>() {
         @Override
         public Void answer(InvocationOnMock invocation) throws Throwable {
@@ -233,7 +233,7 @@ public class CallCredentialsApplyingTest {
 
   @Test
   public void applyMetadata_delayed() {
-    when(mockTransport.getAttrs()).thenReturn(Attributes.EMPTY);
+    when(mockTransport.getAttributes()).thenReturn(Attributes.EMPTY);
 
     // Will call applyRequestMetadata(), which is no-op.
     DelayedStream stream = (DelayedStream) transport.newStream(method, origHeaders, callOptions,
@@ -256,7 +256,7 @@ public class CallCredentialsApplyingTest {
 
   @Test
   public void fail_delayed() {
-    when(mockTransport.getAttrs()).thenReturn(Attributes.EMPTY);
+    when(mockTransport.getAttributes()).thenReturn(Attributes.EMPTY);
 
     // Will call applyRequestMetadata(), which is no-op.
     DelayedStream stream = (DelayedStream) transport.newStream(method, origHeaders, callOptions,
