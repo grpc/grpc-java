@@ -45,10 +45,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import io.grpc.Attributes;
+import io.grpc.Attributes.Key;
 import io.grpc.Codec;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import io.grpc.internal.NoopClientStream;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -205,6 +206,19 @@ public class DelayedStreamTest {
     when(realStream.isReady()).thenReturn(true);
     assertTrue(stream.isReady());
     verify(realStream, times(2)).isReady();
+  }
+
+  @Test
+  public void setStream_getAttributes() {
+    Attributes attributes =
+        Attributes.newBuilder().set(Key.<String>of("fakeKey"), "fakeValue").build();
+    when(realStream.getAttributes()).thenReturn(attributes);
+
+    stream.start(listener);
+    assertEquals(Attributes.EMPTY, stream.getAttributes());
+
+    stream.setStream(realStream);
+    assertEquals(attributes, stream.getAttributes());
   }
 
   @Test
