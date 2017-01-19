@@ -208,7 +208,8 @@ public final class MethodDescriptor<ReqT, RespT> {
   }
 
   private MethodDescriptor(
-      MethodType type, String fullMethodName,
+      MethodType type,
+      String fullMethodName,
       Marshaller<ReqT> requestMarshaller,
       Marshaller<RespT> responseMarshaller,
       boolean idempotent,
@@ -364,5 +365,96 @@ public final class MethodDescriptor<ReqT, RespT> {
       return null;
     }
     return fullMethodName.substring(0, index);
+  }
+
+  /**
+   * Creates a new builder for a {@link MethodDescriptor}.
+   */
+  public static Builder<?, ?> newBuilder() {
+    return new Builder<Object, Object>();
+  }
+
+  /**
+   * A builder for a {@link MethodDescriptor}.
+   */
+  public static final class Builder<ReqT, RespT> {
+
+    private Marshaller<ReqT> requestMarshaller;
+    private Marshaller<RespT> responseMarshaller;
+    private MethodType type;
+    private String fullMethodName;
+    private boolean idempotent;
+    private boolean safe;
+
+    private Builder() {}
+
+    /**
+     * Sets the request marshaller.
+     * @param requestMarshaller the marshaller to use.
+     */
+    @SuppressWarnings("unchecked")
+    public <T> Builder<T, RespT> setRequestMarshaller(Marshaller<T> requestMarshaller) {
+      this.requestMarshaller = (Marshaller<ReqT>) requestMarshaller;
+      return (Builder<T, RespT>) this;
+    }
+
+    /**
+     * Sets the response marshaller.
+     * @param responseMarshaller the marshaller to use.
+     */
+    @SuppressWarnings("unchecked")
+    public <T> Builder<ReqT, T> setResponseMarshaller(Marshaller<T> responseMarshaller) {
+      this.responseMarshaller = (Marshaller<RespT>) responseMarshaller;
+      return (Builder<ReqT, T>) this;
+    }
+
+    /**
+     * Sets the method type.
+     * @param type the type of the method.
+     */
+    public Builder<ReqT, RespT> setType(MethodType type) {
+      this.type = type;
+      return this;
+    }
+
+    /**
+     * Sets the fully qualified (service and method) method name.
+     * @see MethodDescriptor#generateFullMethodName
+     */
+    public Builder<ReqT, RespT> setFullMethodName(String fullMethodName) {
+      this.fullMethodName = fullMethodName;
+      return this;
+    }
+
+    /**
+     * Sets whether the method is idempotent.  If true, calling this method more than once doesn't
+     * have additional side effects.
+     */
+    public Builder<ReqT, RespT> setIdempotent(boolean idempotent) {
+      this.idempotent = idempotent;
+      return this;
+    }
+
+    /**
+     * Sets whether this method is safe.  If true, calling this method any number of times doesn't
+     * have side effects.
+     */
+    public Builder<ReqT, RespT> setSafe(boolean safe) {
+      this.safe = safe;
+      return this;
+    }
+
+    /**
+     * Builds the method descriptor.
+     */
+    public MethodDescriptor<ReqT, RespT> build() {
+      return new MethodDescriptor<ReqT, RespT>(
+          type,
+          fullMethodName,
+          requestMarshaller,
+          responseMarshaller,
+          idempotent,
+          safe);
+    }
   }
 }
