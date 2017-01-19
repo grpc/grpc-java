@@ -167,7 +167,6 @@ public final class CallOptions {
    * <a href="https://github.com/grpc/grpc/blob/master/doc/fail_fast.md">'Fail fast'</a>
    * is the default option for gRPC calls and 'wait for ready' is the opposite to it.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1915")
   public CallOptions withWaitForReady() {
     CallOptions newOptions = new CallOptions(this);
     newOptions.waitForReady = true;
@@ -178,7 +177,6 @@ public final class CallOptions {
    * Disables 'wait for ready' feature for the call.
    * This method should be rarely used because the default is without 'wait for ready'.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1915")
   public CallOptions withoutWaitForReady() {
     CallOptions newOptions = new CallOptions(this);
     newOptions.waitForReady = false;
@@ -236,7 +234,6 @@ public final class CallOptions {
     return newOptions;
   }
 
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1869")
   public static final class Key<T> {
     private final String name;
     private final T defaultValue;
@@ -307,7 +304,6 @@ public final class CallOptions {
    * Get the value for a custom option or its inherent default.
    * @param key Key identifying option
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1869")
   @SuppressWarnings("unchecked")
   public <T> T getOption(Key<T> key) {
     Preconditions.checkNotNull(key, "key");
@@ -332,7 +328,6 @@ public final class CallOptions {
    * <a href="https://github.com/grpc/grpc/blob/master/doc/fail_fast.md">'Fail fast'</a>
    * is the default option for gRPC calls and 'wait for ready' is the opposite to it.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1915")
   public boolean isWaitForReady() {
     return waitForReady;
   }

@@ -148,7 +148,6 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    * @param key the option being set
    * @param value the value for the key
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1869")
   public final <T> S withOption(CallOptions.Key<T> key, T value) {
     return build(channel, callOptions.withOption(key, value));
   }
@@ -171,7 +170,6 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   /**
    * Returns a new stub that uses the 'wait for ready' call option.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1915")
   public final S withWaitForReady() {
     return build(channel, callOptions.withWaitForReady());
   }
