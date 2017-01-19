@@ -42,13 +42,13 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 
-import com.google.api.client.repackaged.com.google.common.base.Throwables;
 import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.ComputeEngineCredentials;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.auth.oauth2.OAuth2Credentials;
 import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.net.HostAndPort;
@@ -1241,19 +1241,19 @@ public abstract class AbstractInteropTest {
     }
   }
 
-  /** Helper for asserting remote address {@link io.grpc.ServerCall#attributes()} */
+  /** Helper for asserting remote address {@link io.grpc.ServerCall#getAttributes()} */
   protected void assertRemoteAddr(String expectedRemoteAddress) {
     TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(channel)
             .withDeadlineAfter(5, TimeUnit.SECONDS);
 
     stub.unaryCall(SimpleRequest.getDefaultInstance());
 
-    HostAndPort remoteAddress = HostAndPort.fromString(serverCallCapture.get().attributes()
+    HostAndPort remoteAddress = HostAndPort.fromString(serverCallCapture.get().getAttributes()
             .get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR).toString());
     assertEquals(expectedRemoteAddress, remoteAddress.getHost());
   }
 
-  /** Helper for asserting TLS info in SSLSession {@link io.grpc.ServerCall#attributes()} */
+  /** Helper for asserting TLS info in SSLSession {@link io.grpc.ServerCall#getAttributes()} */
   protected void assertX500SubjectDn(String tlsInfo) {
     TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(channel)
             .withDeadlineAfter(5, TimeUnit.SECONDS);
@@ -1262,7 +1262,7 @@ public abstract class AbstractInteropTest {
 
     List<Certificate> certificates = Lists.newArrayList();
     SSLSession sslSession =
-        serverCallCapture.get().attributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
+        serverCallCapture.get().getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
     try {
       certificates = Arrays.asList(sslSession.getPeerCertificates());
     } catch (SSLPeerUnverifiedException e) {
