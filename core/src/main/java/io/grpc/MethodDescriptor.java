@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import java.io.InputStream;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
+import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
@@ -370,8 +371,23 @@ public final class MethodDescriptor<ReqT, RespT> {
   /**
    * Creates a new builder for a {@link MethodDescriptor}.
    */
+  @CheckReturnValue
   public static Builder<?, ?> newBuilder() {
     return new Builder<Object, Object>();
+  }
+
+  /**
+   * Turns this descriptor into a builder.
+   */
+  @CheckReturnValue
+  public Builder<ReqT, RespT> toBuilder() {
+    return newBuilder()
+        .setRequestMarshaller(requestMarshaller)
+        .setResponseMarshaller(responseMarshaller)
+        .setType(type)
+        .setFullMethodName(fullMethodName)
+        .setIdempotent(idempotent)
+        .setSafe(safe);
   }
 
   /**
@@ -447,6 +463,7 @@ public final class MethodDescriptor<ReqT, RespT> {
     /**
      * Builds the method descriptor.
      */
+    @CheckReturnValue
     public MethodDescriptor<ReqT, RespT> build() {
       return new MethodDescriptor<ReqT, RespT>(
           type,
