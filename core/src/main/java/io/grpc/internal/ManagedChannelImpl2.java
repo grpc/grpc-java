@@ -628,12 +628,12 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
               }
 
               @Override
-              protected void onInUse(InternalSubchannel is) {
+              void onInUse(InternalSubchannel is) {
                 inUseStateAggregator.updateObjectInUse(is, true);
               }
 
               @Override
-              protected void onNotInUse(InternalSubchannel is) {
+              void onNotInUse(InternalSubchannel is) {
                 inUseStateAggregator.updateObjectInUse(is, false);
               }
             });
