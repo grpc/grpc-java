@@ -264,7 +264,8 @@ public final class NettyChannelBuilder
   protected ClientTransportFactory buildTransportFactory() {
     return new NettyTransportFactory(dynamicParamsFactory, channelType, channelOptions,
         negotiationType, sslContext, eventLoopGroup, flowControlWindow, maxInboundMessageSize(),
-        maxHeaderListSize, enableKeepAlive, keepAliveDelayNanos, keepAliveTimeoutNanos);
+        maxHeaderListSize, enableKeepAlive, keepAliveDelayNanos, keepAliveTimeoutNanos,
+        proxyAddress, proxyPassword, proxyUsername);
   }
 
   @Override
@@ -361,6 +362,9 @@ public final class NettyChannelBuilder
     private final boolean enableKeepAlive;
     private final long keepAliveDelayNanos;
     private final long keepAliveTimeoutNanos;
+    @Nullable private final SocketAddress proxyAddress;
+    @Nullable private final String proxyUsername;
+    @Nullable private final String proxyPassword;
 
     private boolean closed;
 
@@ -368,7 +372,8 @@ public final class NettyChannelBuilder
         Class<? extends Channel> channelType, Map<ChannelOption<?>, ?> channelOptions,
         NegotiationType negotiationType, SslContext sslContext, EventLoopGroup group,
         int flowControlWindow, int maxMessageSize, int maxHeaderListSize, boolean enableKeepAlive,
-        long keepAliveDelayNanos, long keepAliveTimeoutNanos) {
+        long keepAliveDelayNanos, long keepAliveTimeoutNanos, SocketAddress proxyAddress,
+        String proxyPassword, String proxyUsername) {
       this.channelType = channelType;
       this.negotiationType = negotiationType;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
@@ -391,6 +396,9 @@ public final class NettyChannelBuilder
       this.enableKeepAlive = enableKeepAlive;
       this.keepAliveDelayNanos = keepAliveDelayNanos;
       this.keepAliveTimeoutNanos = keepAliveTimeoutNanos;
+      this.proxyAddress = proxyAddress;
+      this.proxyUsername = proxyUsername;
+      this.proxyPassword = proxyPassword;
       usingSharedGroup = group == null;
       if (usingSharedGroup) {
         // The group was unspecified, using the shared group.
@@ -408,10 +416,17 @@ public final class NettyChannelBuilder
       TransportCreationParamsFilter dparams =
           transportCreationParamsFilterFactory.create(serverAddress, authority, userAgent);
 
+      ProtocolNegotiator negotiator = dparams.getProtocolNegotiator();
+      // If proxy information is passed, wrap negotiator in proxy negotiation.
+      if (proxyAddress != null) {
+        negotiator = ProtocolNegotiators.httpProxy(proxyAddress, proxyUsername,
+            proxyPassword, negotiator);
+      }
+
       NettyClientTransport transport = new NettyClientTransport(
           dparams.getTargetServerAddress(), channelType, channelOptions, group,
-          dparams.getProtocolNegotiator(), flowControlWindow,
-          maxMessageSize, maxHeaderListSize, dparams.getAuthority(), dparams.getUserAgent());
+          negotiator, flowControlWindow, maxMessageSize, maxHeaderListSize,
+          dparams.getAuthority(), dparams.getUserAgent());
       if (enableKeepAlive) {
         transport.enableKeepAlive(true, keepAliveDelayNanos, keepAliveTimeoutNanos);
       }
