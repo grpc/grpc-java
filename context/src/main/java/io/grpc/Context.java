@@ -379,8 +379,13 @@ public class Context {
 
   /**
    * Detach the current context and attach the provided replacement which should be the context of
-   * the outer scope, thus exit the current scope.  If this context is not {@link #current()} a
-   * SEVERE message will be logged but the context to attach will still be bound.
+   * the outer scope, thus exit the current scope.
+   *
+   * <p>This context should be {@link #current()}.  If it's not the case, a SEVERE message will be
+   * logged but the context to attach will still be bound.
+   *
+   * <p>The provided replacement should be what was returned when {@link #attach attaching} the
+   * current context.
    */
   public void detach(Context toAttach) {
     checkNotNull(toAttach, "toAttach");
