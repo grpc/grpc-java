@@ -14,3 +14,6 @@
 -dontwarn org.mockito.**
 -dontwarn sun.reflect.**
 -dontwarn android.test.**
+-dontwarn com.google.errorprone.annotations.**
+-keep class io.grpc.internal.DnsNameResolverProvider
+-keep class io.grpc.okhttp.OkHttpChannelProvider

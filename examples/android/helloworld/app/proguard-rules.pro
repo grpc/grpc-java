@@ -12,3 +12,6 @@
 -dontwarn sun.misc.Unsafe
 -dontwarn com.google.common.**
 -dontwarn okio.**
+-dontwarn com.google.errorprone.annotations.**
+-keep class io.grpc.internal.DnsNameResolverProvider
+-keep class io.grpc.okhttp.OkHttpChannelProvider
