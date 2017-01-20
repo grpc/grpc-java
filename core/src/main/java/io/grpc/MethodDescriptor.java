@@ -438,9 +438,9 @@ public final class MethodDescriptor<ReqT, RespT> {
      * @param responseMarshaller the marshaller to use.
      */
     @SuppressWarnings("unchecked")
-    public <T> Builder<ReqT, T> setResponseMarshaller(Marshaller<T> responseMarshaller) {
-      this.responseMarshaller = (Marshaller<RespT>) responseMarshaller;
-      return (Builder<ReqT, T>) this;
+    public Builder<ReqT, RespT> setResponseMarshaller(Marshaller<RespT> responseMarshaller) {
+      this.responseMarshaller = responseMarshaller;
+      return this;
     }
 
     /**
