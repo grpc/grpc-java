@@ -88,7 +88,7 @@ public class MutableHandlerRegistryTest {
   @Before
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
-    MethodDescriptor<String, Integer> flowMethod = MethodDescriptor.newBuilder()
+    MethodDescriptor<String, Integer> flowMethod = MethodDescriptor.<String, Integer>newBuilder()
         .setType(MethodType.UNKNOWN)
         .setFullMethodName("basic/flow")
         .setRequestMarshaller(requestMarshaller)
@@ -177,7 +177,7 @@ public class MutableHandlerRegistryTest {
   public void replaceAndLookup() {
     assertNull(registry.addService(basicServiceDefinition));
     assertNotNull(registry.lookupMethod("basic/flow"));
-    MethodDescriptor<String, Integer> anotherMethod = MethodDescriptor.newBuilder()
+    MethodDescriptor<String, Integer> anotherMethod = MethodDescriptor.<String, Integer>newBuilder()
         .setType(MethodType.UNKNOWN)
         .setFullMethodName("basic/another")
         .setRequestMarshaller(requestMarshaller)

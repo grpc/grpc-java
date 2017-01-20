@@ -82,7 +82,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ClientCallsTest {
 
   private static final MethodDescriptor<Integer, Integer> STREAMING_METHOD =
-      MethodDescriptor.newBuilder()
+      MethodDescriptor.<Integer, Integer>newBuilder()
           .setType(MethodDescriptor.MethodType.BIDI_STREAMING)
           .setFullMethodName("some/method")
           .setRequestMarshaller(new IntegerMarshaller())

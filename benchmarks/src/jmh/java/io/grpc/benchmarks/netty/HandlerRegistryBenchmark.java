@@ -90,7 +90,7 @@ public class HandlerRegistryBenchmark {
       for (int methodIndex = 0; methodIndex < methodCountPerService; ++methodIndex) {
         String methodName = randomString();
 
-        MethodDescriptor<Void, Void> methodDescriptor = MethodDescriptor.newBuilder()
+        MethodDescriptor<Void, Void> methodDescriptor = MethodDescriptor.<Void, Void>newBuilder()
             .setType(MethodDescriptor.MethodType.UNKNOWN)
             .setFullMethodName(MethodDescriptor.generateFullMethodName(serviceName, methodName))
             .setRequestMarshaller(TestMethodDescriptors.noopMarshaller())

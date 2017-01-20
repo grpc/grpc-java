@@ -114,12 +114,13 @@ public class GrpclbLoadBalancer2Test {
       Attributes.Key.of("resolution-attr");
   private static final String SERVICE_AUTHORITY = "api.google.com";
 
-  private static final MethodDescriptor<String, String> TRASH_METHOD = MethodDescriptor.newBuilder()
-      .setType(MethodDescriptor.MethodType.UNARY)
-      .setFullMethodName("/service/trashmethod")
-      .setRequestMarshaller(StringMarshaller.INSTANCE)
-      .setResponseMarshaller(StringMarshaller.INSTANCE)
-      .build();
+  private static final MethodDescriptor<String, String> TRASH_METHOD =
+      MethodDescriptor.<String, String>newBuilder()
+          .setType(MethodDescriptor.MethodType.UNARY)
+          .setFullMethodName("/service/trashmethod")
+          .setRequestMarshaller(StringMarshaller.INSTANCE)
+          .setResponseMarshaller(StringMarshaller.INSTANCE)
+          .build();
 
   private static class StringMarshaller implements Marshaller<String> {
     static final StringMarshaller INSTANCE = new StringMarshaller();

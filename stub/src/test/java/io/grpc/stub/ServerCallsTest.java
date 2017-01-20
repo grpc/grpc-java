@@ -76,13 +76,13 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @RunWith(JUnit4.class)
 public class ServerCallsTest {
-  static final MethodDescriptor<Integer, Integer> STREAMING_METHOD = MethodDescriptor.newBuilder()
-      .setType(MethodDescriptor.MethodType.BIDI_STREAMING)
-      .setFullMethodName("some/method")
-      .setRequestMarshaller(new IntegerMarshaller())
-      .setResponseMarshaller(new IntegerMarshaller())
-      .build();
-
+  static final MethodDescriptor<Integer, Integer> STREAMING_METHOD =
+      MethodDescriptor.<Integer, Integer>newBuilder()
+          .setType(MethodDescriptor.MethodType.BIDI_STREAMING)
+          .setFullMethodName("some/method")
+          .setRequestMarshaller(new IntegerMarshaller())
+          .setResponseMarshaller(new IntegerMarshaller())
+          .build();
 
   static final MethodDescriptor<Integer, Integer> UNARY_METHOD = STREAMING_METHOD.toBuilder()
       .setType(MethodDescriptor.MethodType.UNARY)

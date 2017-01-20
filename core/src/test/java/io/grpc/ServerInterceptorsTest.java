@@ -89,7 +89,7 @@ public class ServerInterceptorsTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    flowMethod = MethodDescriptor.newBuilder()
+    flowMethod = MethodDescriptor.<String, Integer>newBuilder()
         .setType(MethodType.UNKNOWN)
         .setFullMethodName("basic/flow")
         .setRequestMarshaller(requestMarshaller)
@@ -338,7 +338,7 @@ public class ServerInterceptorsTest {
       }
     };
 
-    MethodDescriptor<Holder, Holder> wrappedMethod = MethodDescriptor.newBuilder()
+    MethodDescriptor<Holder, Holder> wrappedMethod = MethodDescriptor.<Holder, Holder>newBuilder()
         .setType(MethodType.UNKNOWN)
         .setFullMethodName("basic/wrapped")
         .setRequestMarshaller(marshaller)

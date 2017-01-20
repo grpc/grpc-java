@@ -102,12 +102,13 @@ public class ManagedChannelImpl2IdlenessTest {
   private static final long IDLE_TIMEOUT_SECONDS = 30;
   private ManagedChannelImpl2 channel;
 
-  private final MethodDescriptor<String, Integer> method = MethodDescriptor.newBuilder()
-      .setType(MethodType.UNKNOWN)
-      .setFullMethodName("/service/method")
-      .setRequestMarshaller(new StringMarshaller())
-      .setResponseMarshaller(new IntegerMarshaller())
-      .build();
+  private final MethodDescriptor<String, Integer> method =
+      MethodDescriptor.<String, Integer>newBuilder()
+          .setType(MethodType.UNKNOWN)
+          .setFullMethodName("/service/method")
+          .setRequestMarshaller(new StringMarshaller())
+          .setResponseMarshaller(new IntegerMarshaller())
+          .build();
 
   private final List<ResolvedServerInfoGroup> servers = Lists.newArrayList();
   private final List<EquivalentAddressGroup> addressGroupList =

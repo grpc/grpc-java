@@ -86,7 +86,7 @@ public class ServerCallImplTest {
   private ServerCallImpl<Long, Long> call;
   private Context.CancellableContext context;
 
-  private final MethodDescriptor<Long, Long> method = MethodDescriptor.newBuilder()
+  private final MethodDescriptor<Long, Long> method = MethodDescriptor.<Long, Long>newBuilder()
       .setType(MethodType.UNARY)
       .setFullMethodName("/service/method")
       .setRequestMarshaller(new LongMarshaller())

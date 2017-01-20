@@ -372,8 +372,19 @@ public final class MethodDescriptor<ReqT, RespT> {
    * Creates a new builder for a {@link MethodDescriptor}.
    */
   @CheckReturnValue
-  public static Builder<?, ?> newBuilder() {
-    return new Builder<Object, Object>();
+  public static <ReqT, RespT> Builder<ReqT, RespT> newBuilder() {
+    return newBuilder(null, null);
+  }
+
+  /**
+   * Creates a new builder for a {@link MethodDescriptor}.
+   */
+  @CheckReturnValue
+  public static <ReqT, RespT> Builder<ReqT, RespT> newBuilder(
+      Marshaller<ReqT> requestMarshaller, Marshaller<RespT> responseMarshaller) {
+    return new Builder<ReqT, RespT>()
+        .setRequestMarshaller(requestMarshaller)
+        .setResponseMarshaller(responseMarshaller);
   }
 
   /**
@@ -381,7 +392,16 @@ public final class MethodDescriptor<ReqT, RespT> {
    */
   @CheckReturnValue
   public Builder<ReqT, RespT> toBuilder() {
-    return newBuilder()
+    return toBuilder(requestMarshaller, responseMarshaller);
+  }
+
+  /**
+   * Turns this descriptor into a builder, replacing the request and response marshallers.
+   */
+  @CheckReturnValue
+  public <NewReqT, NewRespT> Builder<NewReqT, NewRespT> toBuilder(
+      Marshaller<NewReqT> requestMarshaller, Marshaller<NewRespT> responseMarshaller) {
+    return MethodDescriptor.<NewReqT, NewRespT>newBuilder()
         .setRequestMarshaller(requestMarshaller)
         .setResponseMarshaller(responseMarshaller)
         .setType(type)
@@ -408,10 +428,9 @@ public final class MethodDescriptor<ReqT, RespT> {
      * Sets the request marshaller.
      * @param requestMarshaller the marshaller to use.
      */
-    @SuppressWarnings("unchecked")
-    public <T> Builder<T, RespT> setRequestMarshaller(Marshaller<T> requestMarshaller) {
-      this.requestMarshaller = (Marshaller<ReqT>) requestMarshaller;
-      return (Builder<T, RespT>) this;
+    public Builder<ReqT, RespT> setRequestMarshaller(Marshaller<ReqT> requestMarshaller) {
+      this.requestMarshaller = requestMarshaller;
+      return this;
     }
 
     /**

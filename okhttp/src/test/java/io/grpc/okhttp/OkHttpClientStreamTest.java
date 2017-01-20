@@ -82,7 +82,7 @@ public class OkHttpClientStreamTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    methodDescriptor = MethodDescriptor.newBuilder()
+    methodDescriptor = MethodDescriptor.<Void, Void>newBuilder()
         .setType(MethodDescriptor.MethodType.UNARY)
         .setFullMethodName("/testService/test")
         .setRequestMarshaller(marshaller)

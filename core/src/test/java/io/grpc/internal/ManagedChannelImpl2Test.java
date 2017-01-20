@@ -126,12 +126,13 @@ public class ManagedChannelImpl2Test {
       Collections.<ClientInterceptor>emptyList();
   private static final Attributes NAME_RESOLVER_PARAMS =
       Attributes.newBuilder().set(NameResolver.Factory.PARAMS_DEFAULT_PORT, 447).build();
-  private static final MethodDescriptor<String, Integer> method = MethodDescriptor.newBuilder()
-      .setType(MethodType.UNKNOWN)
-      .setFullMethodName("/service/method")
-      .setRequestMarshaller(new StringMarshaller())
-      .setResponseMarshaller(new IntegerMarshaller())
-      .build();
+  private static final MethodDescriptor<String, Integer> method =
+      MethodDescriptor.<String, Integer>newBuilder()
+          .setType(MethodType.UNKNOWN)
+          .setFullMethodName("/service/method")
+          .setRequestMarshaller(new StringMarshaller())
+          .setResponseMarshaller(new IntegerMarshaller())
+          .build();
   private static final Attributes.Key<String> SUBCHANNEL_ATTR_KEY =
       Attributes.Key.of("subchannel-attr-key");
   private final String serviceName = "fake.example.com";

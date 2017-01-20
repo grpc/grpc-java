@@ -256,7 +256,7 @@ public abstract class AbstractBenchmark {
     response.writerIndex(response.capacity() - 1);
 
     // Simple method that sends and receives NettyByteBuf
-    unaryMethod = MethodDescriptor.newBuilder()
+    unaryMethod = MethodDescriptor.<ByteBuf, ByteBuf>newBuilder()
         .setType(MethodType.UNARY)
         .setFullMethodName("benchmark/unary")
         .setRequestMarshaller(new ByteBufOutputMarshaller())

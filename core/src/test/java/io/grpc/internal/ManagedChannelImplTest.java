@@ -116,12 +116,13 @@ public class ManagedChannelImplTest {
       Collections.<ClientInterceptor>emptyList();
   private static final Attributes NAME_RESOLVER_PARAMS =
       Attributes.newBuilder().set(NameResolver.Factory.PARAMS_DEFAULT_PORT, 447).build();
-  private final MethodDescriptor<String, Integer> method = MethodDescriptor.newBuilder()
-      .setType(MethodType.UNKNOWN)
-      .setFullMethodName("/service/method")
-      .setRequestMarshaller(new StringMarshaller())
-      .setResponseMarshaller(new IntegerMarshaller())
-      .build();
+  private final MethodDescriptor<String, Integer> method =
+      MethodDescriptor.<String, Integer>newBuilder()
+          .setType(MethodType.UNKNOWN)
+          .setFullMethodName("/service/method")
+          .setRequestMarshaller(new StringMarshaller())
+          .setResponseMarshaller(new IntegerMarshaller())
+          .build();
   private final String serviceName = "fake.example.com";
   private final String authority = serviceName;
   private final String userAgent = "userAgent";

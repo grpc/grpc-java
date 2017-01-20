@@ -111,7 +111,7 @@ public class ClientAuthInterceptorTest {
   @Before
   public void startUp() {
     MockitoAnnotations.initMocks(this);
-    descriptor = MethodDescriptor.newBuilder()
+    descriptor = MethodDescriptor.<String, Integer>newBuilder()
         .setType(MethodDescriptor.MethodType.UNKNOWN)
         .setFullMethodName("a.service/method")
         .setRequestMarshaller(stringMarshaller)

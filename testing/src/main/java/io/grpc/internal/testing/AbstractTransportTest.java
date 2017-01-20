@@ -129,12 +129,13 @@ public abstract class AbstractTransportTest {
   private InternalServer server;
   private ServerTransport serverTransport;
   private ManagedClientTransport client;
-  private MethodDescriptor<String, String> methodDescriptor = MethodDescriptor.newBuilder()
-      .setType(MethodDescriptor.MethodType.UNKNOWN)
-      .setFullMethodName("service/method")
-      .setRequestMarshaller(StringMarshaller.INSTANCE)
-      .setResponseMarshaller(StringMarshaller.INSTANCE)
-      .build();
+  private MethodDescriptor<String, String> methodDescriptor =
+      MethodDescriptor.<String, String>newBuilder()
+          .setType(MethodDescriptor.MethodType.UNKNOWN)
+          .setFullMethodName("service/method")
+          .setRequestMarshaller(StringMarshaller.INSTANCE)
+          .setResponseMarshaller(StringMarshaller.INSTANCE)
+          .build();
 
   private Metadata.Key<String> asciiKey = Metadata.Key.of(
       "ascii-key", Metadata.ASCII_STRING_MARSHALLER);

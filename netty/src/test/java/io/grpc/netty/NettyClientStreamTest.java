@@ -99,7 +99,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
   private MethodDescriptor.Marshaller<Void> marshaller = mock(MethodDescriptor.Marshaller.class);
 
   // Must be initialized before @Before, because it is used by createStream()
-  private MethodDescriptor<?, ?> methodDescriptor = MethodDescriptor.newBuilder()
+  private MethodDescriptor<?, ?> methodDescriptor = MethodDescriptor.<Void, Void>newBuilder()
       .setType(MethodDescriptor.MethodType.UNARY)
       .setFullMethodName("/testService/test")
       .setRequestMarshaller(marshaller)

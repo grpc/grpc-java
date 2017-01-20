@@ -197,10 +197,8 @@ public final class ServerInterceptors {
     // Wrap the descriptors
     for (final ServerMethodDefinition<?, ?> definition : serviceDef.getMethods()) {
       final MethodDescriptor<?, ?> originalMethodDescriptor = definition.getMethodDescriptor();
-      final MethodDescriptor<T, T> wrappedMethodDescriptor = originalMethodDescriptor.toBuilder()
-          .setRequestMarshaller(marshaller)
-          .setResponseMarshaller(marshaller)
-          .build();
+      final MethodDescriptor<T, T> wrappedMethodDescriptor =
+          originalMethodDescriptor.toBuilder(marshaller, marshaller).build();
       wrappedDescriptors.add(wrappedMethodDescriptor);
       wrappedMethods.add(wrapMethod(definition, wrappedMethodDescriptor));
     }

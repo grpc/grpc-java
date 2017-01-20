@@ -39,6 +39,7 @@ import com.sun.management.OperatingSystemMXBean;
 
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCall;
@@ -73,22 +74,19 @@ import java.util.logging.Logger;
  */
 final class LoadServer {
 
+  private static final Marshaller<ByteBuf> marshaller = new ByteBufOutputMarshaller();
   /**
    * Generic version of the unary method call.
    */
   static final MethodDescriptor<ByteBuf, ByteBuf> GENERIC_UNARY_METHOD =
-      BenchmarkServiceGrpc.METHOD_UNARY_CALL.toBuilder()
-          .setRequestMarshaller(new ByteBufOutputMarshaller())
-          .setResponseMarshaller(new ByteBufOutputMarshaller())
+      BenchmarkServiceGrpc.METHOD_UNARY_CALL.toBuilder(marshaller, marshaller)
           .build();
 
   /**
    * Generic version of the streaming ping-pong method call.
    */
   static final MethodDescriptor<ByteBuf, ByteBuf> GENERIC_STREAMING_PING_PONG_METHOD =
-      BenchmarkServiceGrpc.METHOD_STREAMING_CALL.toBuilder()
-          .setRequestMarshaller(new ByteBufOutputMarshaller())
-          .setResponseMarshaller(new ByteBufOutputMarshaller())
+      BenchmarkServiceGrpc.METHOD_STREAMING_CALL.toBuilder(marshaller, marshaller)
           .build();
 
   private static final Logger log = Logger.getLogger(LoadServer.class.getName());

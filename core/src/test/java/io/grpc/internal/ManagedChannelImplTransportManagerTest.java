@@ -94,12 +94,13 @@ public class ManagedChannelImplTransportManagerTest {
   private static final String USER_AGENT = "mosaic";
 
   private final ExecutorService executor = Executors.newSingleThreadExecutor();
-  private final MethodDescriptor<String, String> method = MethodDescriptor.newBuilder()
-      .setType(MethodType.UNKNOWN)
-      .setFullMethodName("/service/method")
-      .setRequestMarshaller(new StringMarshaller())
-      .setResponseMarshaller(new StringMarshaller())
-      .build();
+  private final MethodDescriptor<String, String> method =
+      MethodDescriptor.<String, String>newBuilder()
+          .setType(MethodType.UNKNOWN)
+          .setFullMethodName("/service/method")
+          .setRequestMarshaller(new StringMarshaller())
+          .setResponseMarshaller(new StringMarshaller())
+          .build();
 
   private final MethodDescriptor<String, String> method2 = method.toBuilder()
       .setFullMethodName("/service/method2")

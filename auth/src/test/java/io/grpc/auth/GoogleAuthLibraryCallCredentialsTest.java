@@ -127,7 +127,7 @@ public class GoogleAuthLibraryCallCredentialsTest {
   @Before
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
-    method = MethodDescriptor.newBuilder()
+    method = MethodDescriptor.<String, Integer>newBuilder()
         .setType(MethodDescriptor.MethodType.UNKNOWN)
         .setFullMethodName("a.service/method")
         .setRequestMarshaller(stringMarshaller)

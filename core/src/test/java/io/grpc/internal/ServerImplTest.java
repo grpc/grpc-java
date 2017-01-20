@@ -379,7 +379,7 @@ public class ServerImplTest {
         = StatsTraceContext.createStatsHeader(statsCtxFactory);
     final AtomicReference<ServerCall<String, Integer>> callReference
         = new AtomicReference<ServerCall<String, Integer>>();
-    MethodDescriptor<String, Integer> method = MethodDescriptor.newBuilder()
+    MethodDescriptor<String, Integer> method = MethodDescriptor.<String, Integer>newBuilder()
         .setType(MethodDescriptor.MethodType.UNKNOWN)
         .setFullMethodName("Waiter/serve")
         .setRequestMarshaller(STRING_MARSHALLER)
@@ -571,7 +571,7 @@ public class ServerImplTest {
   public void exceptionInStartCallPropagatesToStream() throws Exception {
     createAndStartServer(NO_FILTERS);
     final Status status = Status.ABORTED.withDescription("Oh, no!");
-    MethodDescriptor<String, Integer> method = MethodDescriptor.newBuilder()
+    MethodDescriptor<String, Integer> method = MethodDescriptor.<String, Integer>newBuilder()
         .setType(MethodDescriptor.MethodType.UNKNOWN)
         .setFullMethodName("Waiter/serve")
         .setRequestMarshaller(STRING_MARSHALLER)
@@ -693,7 +693,7 @@ public class ServerImplTest {
   @Test
   public void testCallContextIsBoundInListenerCallbacks() throws Exception {
     createAndStartServer(NO_FILTERS);
-    MethodDescriptor<String, Integer> method = MethodDescriptor.newBuilder()
+    MethodDescriptor<String, Integer> method = MethodDescriptor.<String, Integer>newBuilder()
         .setType(MethodDescriptor.MethodType.UNKNOWN)
         .setFullMethodName("Waiter/serve")
         .setRequestMarshaller(STRING_MARSHALLER)
@@ -807,7 +807,7 @@ public class ServerImplTest {
 
     final AtomicReference<ServerCall<String, Integer>> callReference
         = new AtomicReference<ServerCall<String, Integer>>();
-    MethodDescriptor<String, Integer> method = MethodDescriptor.newBuilder()
+    MethodDescriptor<String, Integer> method = MethodDescriptor.<String, Integer>newBuilder()
         .setType(MethodDescriptor.MethodType.UNKNOWN)
         .setFullMethodName("Waiter/serve")
         .setRequestMarshaller(STRING_MARSHALLER)
@@ -881,7 +881,7 @@ public class ServerImplTest {
   @Test
   public void handlerRegistryPriorities() throws Exception {
     fallbackRegistry = mock(HandlerRegistry.class);
-    MethodDescriptor<String, Integer> method1 = MethodDescriptor.newBuilder()
+    MethodDescriptor<String, Integer> method1 = MethodDescriptor.<String, Integer>newBuilder()
         .setType(MethodDescriptor.MethodType.UNKNOWN)
         .setFullMethodName("Service1/Method1")
         .setRequestMarshaller(STRING_MARSHALLER)

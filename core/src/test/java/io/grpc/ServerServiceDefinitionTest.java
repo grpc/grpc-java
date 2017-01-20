@@ -48,7 +48,7 @@ import java.util.HashSet;
 @RunWith(JUnit4.class)
 public class ServerServiceDefinitionTest {
   private String serviceName = "com.example.service";
-  private MethodDescriptor<String, Integer> method1 = MethodDescriptor.newBuilder()
+  private MethodDescriptor<String, Integer> method1 = MethodDescriptor.<String, Integer>newBuilder()
       .setType(MethodDescriptor.MethodType.UNKNOWN)
       .setFullMethodName(MethodDescriptor.generateFullMethodName(serviceName, "method1"))
       .setRequestMarshaller(StringMarshaller.INSTANCE)

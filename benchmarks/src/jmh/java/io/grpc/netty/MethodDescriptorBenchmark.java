@@ -66,7 +66,7 @@ public class MethodDescriptorBenchmark {
     }
   };
 
-  MethodDescriptor<Void, Void> method = MethodDescriptor.newBuilder()
+  MethodDescriptor<Void, Void> method = MethodDescriptor.<Void, Void>newBuilder()
       .setType(MethodDescriptor.MethodType.UNARY)
       .setFullMethodName("Service/Method")
       .setRequestMarshaller(marshaller)

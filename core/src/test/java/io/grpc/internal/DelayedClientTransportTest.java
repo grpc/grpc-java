@@ -92,12 +92,13 @@ public class DelayedClientTransportTest {
 
   private static final Attributes.Key<Integer> SHARD_ID = Attributes.Key.of("shard-id");
 
-  private final MethodDescriptor<String, Integer> method = MethodDescriptor.newBuilder()
-      .setType(MethodType.UNKNOWN)
-      .setFullMethodName("/service/method")
-      .setRequestMarshaller(new StringMarshaller())
-      .setResponseMarshaller(new IntegerMarshaller())
-      .build();
+  private final MethodDescriptor<String, Integer> method =
+      MethodDescriptor.<String, Integer>newBuilder()
+          .setType(MethodType.UNKNOWN)
+          .setFullMethodName("/service/method")
+          .setRequestMarshaller(new StringMarshaller())
+          .setResponseMarshaller(new IntegerMarshaller())
+          .build();
   private final MethodDescriptor<String, Integer> method2 =
       method.toBuilder().setFullMethodName("/service/method2").build();
   private final Metadata headers = new Metadata();

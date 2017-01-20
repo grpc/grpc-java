@@ -112,7 +112,7 @@ public class ClientCallImplTest {
       fakeClock.getScheduledExecutorService();
   private final DecompressorRegistry decompressorRegistry =
       DecompressorRegistry.getDefaultInstance().with(new Codec.Gzip(), true);
-  private final MethodDescriptor<Void, Void> method = MethodDescriptor.newBuilder()
+  private final MethodDescriptor<Void, Void> method = MethodDescriptor.<Void, Void>newBuilder()
       .setType(MethodType.UNARY)
       .setFullMethodName("service/method")
       .setRequestMarshaller(TestMethodDescriptors.noopMarshaller())
