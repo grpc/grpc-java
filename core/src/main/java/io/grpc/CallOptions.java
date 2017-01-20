@@ -234,6 +234,7 @@ public final class CallOptions {
     return newOptions;
   }
 
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1869")
   public static final class Key<T> {
     private final String name;
     private final T defaultValue;
@@ -304,6 +305,7 @@ public final class CallOptions {
    * Get the value for a custom option or its inherent default.
    * @param key Key identifying option
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1869")
   @SuppressWarnings("unchecked")
   public <T> T getOption(Key<T> key) {
     Preconditions.checkNotNull(key, "key");
