@@ -105,7 +105,7 @@ public final class ServiceDescriptor {
       String methodServiceName =
           MethodDescriptor.extractFullServiceName(method.getFullMethodName());
       checkArgument(serviceName.equals(methodServiceName),
-          "service names %s !=%s", methodServiceName, serviceName);
+          "service names %s != %s", methodServiceName, serviceName);
       checkArgument(allNames.add(method.getFullMethodName()),
           "duplicate name %s", method.getFullMethodName());
     }
