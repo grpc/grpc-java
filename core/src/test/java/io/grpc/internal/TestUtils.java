@@ -128,4 +128,7 @@ public final class TestUtils {
       AbstractServerImplBuilder<?> builder, StatsContextFactory factory) {
     builder.statsContextFactory(factory);
   }
+
+  private TestUtils() {
+  }
 }
