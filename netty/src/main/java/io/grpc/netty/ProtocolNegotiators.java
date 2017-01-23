@@ -93,12 +93,12 @@ public final class ProtocolNegotiators {
         class PlaintextHandler extends ChannelHandlerAdapter implements Handler {
           @Override
           public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-            // Just replace this handler with the gRPC handler.
-            ctx.pipeline().replace(this, null, handler);
-            // TODO(lukaszx0) not sure if this it the best/right place to do this
+            // Set sttributes before replace to be sure we pass it before accepting any requests.
             handler.handleProtocolNegotiationCompleted(Attributes.newBuilder()
                 .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
                 .build());
+            // Just replace this handler with the gRPC handler.
+            ctx.pipeline().replace(this, null, handler);
           }
 
           @Override
