@@ -331,7 +331,7 @@ public final class MethodDescriptor<ReqT, RespT> {
    *
    * <p>A safe request does nothing except retrieval so it has no side effects on the server side.
    * The method will try to fetch cached responses if it's both safe and idempotent. This is best
-   * effort and may have performance impact if the method is not desgined to be cacheable.
+   * effort and may have performance impact if the method is not designed to be cacheable.
    *
    * @param safe whether the method is safe.
    * @return a new copy of MethodDescriptor.
