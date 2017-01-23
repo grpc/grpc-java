@@ -413,6 +413,7 @@ public final class MethodDescriptor<ReqT, RespT> {
   /**
    * A builder for a {@link MethodDescriptor}.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2641")
   public static final class Builder<ReqT, RespT> {
 
     private Marshaller<ReqT> requestMarshaller;
