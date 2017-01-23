@@ -95,6 +95,10 @@ public final class ProtocolNegotiators {
           public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
             // Just replace this handler with the gRPC handler.
             ctx.pipeline().replace(this, null, handler);
+            // TODO(lukaszx0) not sure if this it the best/right place to do this
+            handler.handleProtocolNegotiationCompleted(Attributes.newBuilder()
+                .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
+                .build());
           }
 
           @Override
@@ -157,6 +161,7 @@ public final class ProtocolNegotiators {
                 Attributes.newBuilder()
                     .set(Grpc.TRANSPORT_ATTR_SSL_SESSION,
                         sslHandler(ctx.pipeline()).engine().getSession())
+                    .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
                     .build());
             // Replace this handler with the GRPC handler.
             ctx.pipeline().replace(this, null, grpcHandler);
@@ -511,6 +516,7 @@ public final class ProtocolNegotiators {
             grpcHandler.handleProtocolNegotiationCompleted(
                 Attributes.newBuilder()
                     .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, handler.engine().getSession())
+                    .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
                     .build());
             writeBufferedAndRemove(ctx);
           } else {
