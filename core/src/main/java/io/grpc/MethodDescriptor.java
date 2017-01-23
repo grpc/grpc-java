@@ -372,6 +372,7 @@ public final class MethodDescriptor<ReqT, RespT> {
    * Creates a new builder for a {@link MethodDescriptor}.
    */
   @CheckReturnValue
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2641")
   public static <ReqT, RespT> Builder<ReqT, RespT> newBuilder() {
     return newBuilder(null, null);
   }
@@ -380,6 +381,7 @@ public final class MethodDescriptor<ReqT, RespT> {
    * Creates a new builder for a {@link MethodDescriptor}.
    */
   @CheckReturnValue
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2641")
   public static <ReqT, RespT> Builder<ReqT, RespT> newBuilder(
       Marshaller<ReqT> requestMarshaller, Marshaller<RespT> responseMarshaller) {
     return new Builder<ReqT, RespT>()
@@ -391,6 +393,7 @@ public final class MethodDescriptor<ReqT, RespT> {
    * Turns this descriptor into a builder.
    */
   @CheckReturnValue
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2641")
   public Builder<ReqT, RespT> toBuilder() {
     return toBuilder(requestMarshaller, responseMarshaller);
   }
@@ -399,6 +402,7 @@ public final class MethodDescriptor<ReqT, RespT> {
    * Turns this descriptor into a builder, replacing the request and response marshallers.
    */
   @CheckReturnValue
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2641")
   public <NewReqT, NewRespT> Builder<NewReqT, NewRespT> toBuilder(
       Marshaller<NewReqT> requestMarshaller, Marshaller<NewRespT> responseMarshaller) {
     return MethodDescriptor.<NewReqT, NewRespT>newBuilder()
