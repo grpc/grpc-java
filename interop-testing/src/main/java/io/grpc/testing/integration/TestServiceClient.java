@@ -44,9 +44,6 @@ import io.netty.handler.ssl.SslContext;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
 import java.nio.charset.Charset;
 
 import javax.net.ssl.SSLSocketFactory;
