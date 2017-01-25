@@ -63,6 +63,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.SSLPeerUnverifiedException;
 
@@ -137,10 +138,9 @@ public class Http2OkHttpTest extends AbstractInteropTest {
         asyncStub.fullDuplexCall(recorder);
     Messages.StreamingOutputCallRequest request = requestBuilder.build();
     requestStream.onNext(request);
-    recorder.firstValue().get();
+    recorder.getValues().take();
     requestStream.onError(new Exception("failed"));
-
-    recorder.awaitCompletion();
+    recorder.awaitCompletion(10000, TimeUnit.MILLISECONDS);
 
     assertEquals(EMPTY, blockingStub.emptyCall(EMPTY));
   }

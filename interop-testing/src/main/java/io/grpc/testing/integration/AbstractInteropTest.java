@@ -272,7 +272,7 @@ public abstract class AbstractInteropTest {
     asyncStub.streamingOutputCall(request, recorder);
     recorder.awaitCompletion();
     assertSuccess(recorder);
-    assertEquals(goldenResponses, recorder.getValues());
+    assertEquals(goldenResponses, new ArrayList<StreamingOutputCallResponse>(recorder.getValues()));
   }
 
   @Test(timeout = 10000)
@@ -305,8 +305,8 @@ public abstract class AbstractInteropTest {
       requestObserver.onNext(request);
     }
     requestObserver.onCompleted();
-    assertEquals(goldenResponse, responseObserver.firstValue().get());
-    responseObserver.awaitCompletion();
+    responseObserver.awaitCompletion(10000, TimeUnit.MILLISECONDS);
+    assertEquals(goldenResponse, responseObserver.firstValue());
   }
 
   @Test(timeout = 10000)
@@ -390,7 +390,7 @@ public abstract class AbstractInteropTest {
         asyncStub.streamingInputCall(responseObserver);
     requestObserver.onError(new RuntimeException());
     responseObserver.awaitCompletion();
-    assertEquals(Arrays.<StreamingInputCallResponse>asList(), responseObserver.getValues());
+    assertTrue(responseObserver.getValues().isEmpty());
     assertEquals(Status.Code.CANCELLED,
         Status.fromThrowable(responseObserver.getError()).getCode());
 
@@ -459,9 +459,11 @@ public abstract class AbstractInteropTest {
     requestStream.onCompleted();
     recorder.awaitCompletion();
     assertSuccess(recorder);
-    assertEquals(responseSizes.size() * numRequests, recorder.getValues().size());
-    for (int ix = 0; ix < recorder.getValues().size(); ++ix) {
-      StreamingOutputCallResponse response = recorder.getValues().get(ix);
+    List<StreamingOutputCallResponse> responses =
+        new ArrayList<StreamingOutputCallResponse>(recorder.getValues());
+    assertEquals(responseSizes.size() * numRequests, responses.size());
+    for (int ix = 0; ix < responses.size(); ++ix) {
+      StreamingOutputCallResponse response = responses.get(ix);
       assertEquals(COMPRESSABLE, response.getPayload().getType());
       int length = response.getPayload().getBody().size();
       int expectedSize = responseSizes.get(ix % responseSizes.size());
@@ -469,8 +471,7 @@ public abstract class AbstractInteropTest {
     }
 
     if (metricsExpected()) {
-      assertMetrics("grpc.testing.TestService/FullDuplexCall", Status.Code.OK, requests,
-          recorder.getValues());
+      assertMetrics("grpc.testing.TestService/FullDuplexCall", Status.Code.OK, requests, responses);
     }
   }
 
@@ -501,7 +502,7 @@ public abstract class AbstractInteropTest {
     assertSuccess(recorder);
     assertEquals(responseSizes.size() * numRequests, recorder.getValues().size());
     for (int ix = 0; ix < recorder.getValues().size(); ++ix) {
-      StreamingOutputCallResponse response = recorder.getValues().get(ix);
+      StreamingOutputCallResponse response = recorder.getValues().remove();
       assertEquals(COMPRESSABLE, response.getPayload().getType());
       int length = response.getPayload().getBody().size();
       int expectedSize = responseSizes.get(ix % responseSizes.size());

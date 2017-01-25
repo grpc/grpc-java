@@ -31,25 +31,24 @@
 
 package io.grpc.testing;
 
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.SettableFuture;
-
 import io.grpc.ExperimentalApi;
 import io.grpc.stub.StreamObserver;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Utility implementation of {@link StreamObserver} used in testing. Records all the observed
  * values produced by the stream as well as any errors.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1791")
+@ThreadSafe
 public class StreamRecorder<T> implements StreamObserver<T> {
 
   /**
@@ -59,39 +58,27 @@ public class StreamRecorder<T> implements StreamObserver<T> {
     return new StreamRecorder<T>();
   }
 
-  private final CountDownLatch latch;
-  private final List<T> results;
-  private Throwable error;
-  private final SettableFuture<T> firstValue;
+  private final CountDownLatch latch = new CountDownLatch(1);
+  private final BlockingQueue<T> results = new LinkedBlockingQueue<T>();
+  private final AtomicReference<Throwable> error = new AtomicReference<Throwable>();
+  private final AtomicReference<T> firstValue = new AtomicReference<T>();
 
-  private StreamRecorder() {
-    firstValue = SettableFuture.create();
-    latch = new CountDownLatch(1);
-    results = Collections.synchronizedList(new ArrayList<T>());
-  }
+  private StreamRecorder() {}
 
   @Override
   public void onNext(T value) {
-    if (!firstValue.isDone()) {
-      firstValue.set(value);
-    }
+    firstValue.compareAndSet(null, value);
     results.add(value);
   }
 
   @Override
   public void onError(Throwable t) {
-    if (!firstValue.isDone()) {
-      firstValue.setException(t);
-    }
-    error = t;
+    error.compareAndSet(null, t);
     latch.countDown();
   }
 
   @Override
   public void onCompleted() {
-    if (!firstValue.isDone()) {
-      firstValue.setException(new IllegalStateException("No first value provided"));
-    }
     latch.countDown();
   }
 
@@ -112,22 +99,22 @@ public class StreamRecorder<T> implements StreamObserver<T> {
   /**
    * Returns the current set of received values.
    */
-  public List<T> getValues() {
-    return Collections.unmodifiableList(results);
+  public BlockingQueue<T> getValues() {
+    return results;
   }
 
   /**
    * Returns the stream terminating error.
    */
-  @Nullable public Throwable getError() {
-    return error;
+  @Nullable
+  public Throwable getError() {
+    return error.get();
   }
 
   /**
-   * Returns a {@link ListenableFuture} for the first value received from the stream. Useful
-   * for testing unary call patterns.
+   * Returns the first value received from the stream. Useful for testing unary call patterns.
    */
-  public ListenableFuture<T> firstValue() {
-    return firstValue;
+  public T firstValue() {
+    return firstValue.get();
   }
 }
