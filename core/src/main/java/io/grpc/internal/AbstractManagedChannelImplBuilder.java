@@ -205,6 +205,7 @@ public abstract class AbstractManagedChannelImplBuilder
         "directServerAddress is set (%s), which forbids the use of LoadBalancerFactory",
         directServerAddress);
     this.loadBalancerFactory = loadBalancerFactory;
+    this.channelFactory = null;
     return thisT();
   }
 
