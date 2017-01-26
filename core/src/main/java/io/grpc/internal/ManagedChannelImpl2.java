@@ -600,16 +600,18 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
     }
 
     @Override
-    public SubchannelImpl createSubchannel(EquivalentAddressGroup addressGroup, Attributes attrs) {
+    public SubchannelImpl createSubchannel(EquivalentAddressGroup addressGroup, Attributes attrs,
+        String authority) {
       checkNotNull(addressGroup, "addressGroup");
       checkNotNull(attrs, "attrs");
+      checkNotNull(authority, "authority");
       ScheduledExecutorService scheduledExecutorCopy = scheduledExecutor;
       checkState(scheduledExecutorCopy != null,
           "scheduledExecutor is already cleared. Looks like you are calling this method after "
           + "you've already shut down");
       final SubchannelImplImpl subchannel = new SubchannelImplImpl(attrs);
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
-            addressGroup, authority(), userAgent, backoffPolicyProvider, transportFactory,
+            addressGroup, authority, userAgent, backoffPolicyProvider, transportFactory,
             scheduledExecutorCopy, stopwatchSupplier, channelExecutor,
             new InternalSubchannel.Callback() {
               // All callbacks are run in channelExecutor
