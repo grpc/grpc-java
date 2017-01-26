@@ -53,7 +53,8 @@ public interface ProtocolNegotiator {
 
   /**
    * Creates a new handler to control the protocol negotiation. Once the negotiation
-   * has completed successfully, the provided handler is installed.
+   * has completed successfully, the provided handler is installed. Must call {@code
+   * grpcHandler.onHandleProtocolNegotiationCompleted()} at certain point.
    */
-  Handler newHandler(GrpcHttp2ConnectionHandler handler);
+  Handler newHandler(GrpcHttp2ConnectionHandler grpcHandler);
 }
