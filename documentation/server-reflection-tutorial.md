@@ -5,14 +5,15 @@ services on a server, and assists clients at runtime with constructing RPC
 requests and responses without precompiled service information. It is used by
 the gRPC command line tool (gRPC CLI), which can be used to introspect server
 protos and send/receive test RPCs. Reflection is only supported for
-protobuf-backed services.
+proto-based services.
 
 ## Enable Server Reflection
 
-gRPC-Java Server Reflection is implemented as a service in the
-[services](https://github.com/grpc/grpc-java/tree/master/services) package. To
-enable server reflection, you need to add the `ProtoReflectionService` to your
-gRPC server.
+gRPC-Java Server Reflection is implemented in
+[ProtoReflectionService.java](https://github.com/grpc/grpc-java/tree/master/services/src/main/java/io/grpc/protobuf/service/ProtoReflectionService.java)
+in the [services](https://github.com/grpc/grpc-java/tree/master/services)
+package. To enable server reflection, you need to add the
+`ProtoReflectionService` to your gRPC server.
 
 For example, to enable server reflection in
 `examples/src/main/java/io/grpc/examples/helloworld/HelloWorldServer.java`, we
