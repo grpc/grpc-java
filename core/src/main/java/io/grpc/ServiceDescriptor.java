@@ -55,7 +55,7 @@ public final class ServiceDescriptor {
   private final Object schemaDescriptor;
 
   /**
-   * Constructs a new Service Descriptor.  Users are encouraged to used {@link #newBuilder()}
+   * Constructs a new Service Descriptor.  Users are encouraged to use {@link #newBuilder()}
    * instead.
    *
    * @param name The name of the service
@@ -67,7 +67,7 @@ public final class ServiceDescriptor {
   }
 
   /**
-   * Constructs a new Service Descriptor.  Users are encouraged to used {@link #newBuilder()}
+   * Constructs a new Service Descriptor.  Users are encouraged to use {@link #newBuilder()}
    * instead.
    *
    * @param name The name of the service
@@ -134,7 +134,8 @@ public final class ServiceDescriptor {
   }
 
   /**
-   * @return Creates a new builder for a {@link ServiceDescriptor}.
+   * Creates a new builder for a {@link ServiceDescriptor}.
+   *
    * @since 1.1.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2666")
