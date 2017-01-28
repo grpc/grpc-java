@@ -169,7 +169,7 @@ public final class ServiceDescriptor {
     }
 
     /**
-     * Adds a methods to this builder.  This should be non-{@code null}.
+     * Adds a method to this service.  This should be non-{@code null}.
      *
      * @param method the method to add to the descriptor.
      * @return this builder.
@@ -208,7 +208,8 @@ public final class ServiceDescriptor {
     }
 
     /**
-     * Constructs a new {@link ServiceDescriptor}.
+     * Constructs a new {@link ServiceDescriptor}.  {@link #setName} should have been called with a
+     * non-{@code null} value before calling this.
      *
      * @return a new ServiceDescriptor
      * @since 1.1.0
