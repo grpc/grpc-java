@@ -138,7 +138,6 @@ public final class ServiceDescriptor {
    *
    * @since 1.1.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2666")
   public static Builder newBuilder() {
     return new Builder();
   }
@@ -148,7 +147,6 @@ public final class ServiceDescriptor {
    *
    * @since 1.1.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2666")
   public static final class Builder {
     private Builder() {}
 
