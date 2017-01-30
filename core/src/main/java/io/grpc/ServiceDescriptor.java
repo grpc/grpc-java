@@ -55,7 +55,7 @@ public final class ServiceDescriptor {
   private final Object schemaDescriptor;
 
   /**
-   * Constructs a new Service Descriptor.  Users are encouraged to use {@link #newBuilder()}
+   * Constructs a new Service Descriptor.  Users are encouraged to use {@link #newBuilder}
    * instead.
    *
    * @param name The name of the service
@@ -67,7 +67,7 @@ public final class ServiceDescriptor {
   }
 
   /**
-   * Constructs a new Service Descriptor.  Users are encouraged to use {@link #newBuilder()}
+   * Constructs a new Service Descriptor.  Users are encouraged to use {@link #newBuilder}
    * instead.
    *
    * @param name The name of the service
@@ -75,7 +75,7 @@ public final class ServiceDescriptor {
    * @since 1.0.0
    */
   public ServiceDescriptor(String name, Collection<MethodDescriptor<?, ?>> methods) {
-    this(newBuilder().setName(name).addAllMethods(checkNotNull(methods, "methods")));
+    this(newBuilder(name).addAllMethods(checkNotNull(methods, "methods")));
   }
 
   private ServiceDescriptor(Builder b) {
@@ -138,8 +138,8 @@ public final class ServiceDescriptor {
    *
    * @since 1.1.0
    */
-  public static Builder newBuilder() {
-    return new Builder();
+  public static Builder newBuilder(String name) {
+    return new Builder(name);
   }
 
   /**
@@ -148,7 +148,9 @@ public final class ServiceDescriptor {
    * @since 1.1.0
    */
   public static final class Builder {
-    private Builder() {}
+    private Builder(String name) {
+      setName(name);
+    }
 
     private String name;
     private List<MethodDescriptor<?, ?>> methods = new ArrayList<MethodDescriptor<?, ?>>();
@@ -162,7 +164,7 @@ public final class ServiceDescriptor {
      * @since 1.1.0
      */
     public Builder setName(String name) {
-      this.name = name;
+      this.name = checkNotNull(name, "name");
       return this;
     }
 

@@ -930,10 +930,9 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
 
   p->Print(
       *vars,
-      "serviceDescriptor = result = $ServiceDescriptor$.newBuilder()\n");
+      "serviceDescriptor = result = $ServiceDescriptor$.newBuilder(SERVICE_NAME)");
   p->Indent();
   p->Indent();
-  p->Print(".setName(SERVICE_NAME)");
   if (flavor == ProtoFlavor::NORMAL) {
     p->Print(
         *vars,

@@ -571,8 +571,7 @@ public class TestServiceGrpc {
       synchronized (TestServiceGrpc.class) {
         result = serviceDescriptor;
         if (result == null) {
-          serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder()
-              .setName(SERVICE_NAME)
+          serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
               .setSchemaDescriptor(new TestServiceDescriptorSupplier())
               .addMethod(METHOD_EMPTY_CALL)
               .addMethod(METHOD_UNARY_CALL)

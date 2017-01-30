@@ -277,8 +277,7 @@ public class BenchmarkServiceGrpc {
       synchronized (BenchmarkServiceGrpc.class) {
         result = serviceDescriptor;
         if (result == null) {
-          serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder()
-              .setName(SERVICE_NAME)
+          serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
               .setSchemaDescriptor(new BenchmarkServiceDescriptorSupplier())
               .addMethod(METHOD_UNARY_CALL)
               .addMethod(METHOD_STREAMING_CALL)

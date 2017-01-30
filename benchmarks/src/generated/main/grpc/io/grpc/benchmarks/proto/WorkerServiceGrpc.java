@@ -395,8 +395,7 @@ public class WorkerServiceGrpc {
       synchronized (WorkerServiceGrpc.class) {
         result = serviceDescriptor;
         if (result == null) {
-          serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder()
-              .setName(SERVICE_NAME)
+          serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
               .setSchemaDescriptor(new WorkerServiceDescriptorSupplier())
               .addMethod(METHOD_RUN_SERVER)
               .addMethod(METHOD_RUN_CLIENT)

@@ -218,8 +218,7 @@ public class ReflectableServiceGrpc {
       synchronized (ReflectableServiceGrpc.class) {
         result = serviceDescriptor;
         if (result == null) {
-          serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder()
-              .setName(SERVICE_NAME)
+          serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
               .setSchemaDescriptor(new ReflectableServiceDescriptorSupplier())
               .addMethod(METHOD_METHOD)
               .build();

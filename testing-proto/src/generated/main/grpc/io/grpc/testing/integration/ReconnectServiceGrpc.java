@@ -284,8 +284,7 @@ public class ReconnectServiceGrpc {
       synchronized (ReconnectServiceGrpc.class) {
         result = serviceDescriptor;
         if (result == null) {
-          serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder()
-              .setName(SERVICE_NAME)
+          serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
               .setSchemaDescriptor(new ReconnectServiceDescriptorSupplier())
               .addMethod(METHOD_START)
               .addMethod(METHOD_STOP)

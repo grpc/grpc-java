@@ -210,8 +210,7 @@ public class ServerReflectionGrpc {
       synchronized (ServerReflectionGrpc.class) {
         result = serviceDescriptor;
         if (result == null) {
-          serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder()
-              .setName(SERVICE_NAME)
+          serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
               .setSchemaDescriptor(new ServerReflectionDescriptorSupplier())
               .addMethod(METHOD_SERVER_REFLECTION_INFO)
               .build();
