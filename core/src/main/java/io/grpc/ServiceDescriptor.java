@@ -79,7 +79,7 @@ public final class ServiceDescriptor {
   }
 
   private ServiceDescriptor(Builder b) {
-    this.name = checkNotNull(b.name, "name");
+    this.name = b.name;
     validateMethodNames(name, b.methods);
     this.methods = Collections.unmodifiableList(new ArrayList<MethodDescriptor<?, ?>>(b.methods));
     this.schemaDescriptor = b.schemaDescriptor;
