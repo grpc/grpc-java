@@ -163,6 +163,7 @@ public final class ServiceDescriptor {
      * @return this builder.
      * @since 1.1.0
      */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2666")
     public Builder setName(String name) {
       this.name = checkNotNull(name, "name");
       return this;
@@ -176,7 +177,7 @@ public final class ServiceDescriptor {
      * @since 1.1.0
      */
     public Builder addMethod(MethodDescriptor<?, ?> method) {
-      methods.add(method);
+      methods.add(checkNotNull(method, "method"));
       return this;
     }
 
