@@ -509,10 +509,7 @@ public class ServerImplTest {
               .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddr)
               .build(), attrs);
           readyCallbackCalled.incrementAndGet();
-          return Attributes.newBuilder(attrs)
-              .set(key1, "yalayala")
-              .set(key2, "blabla")
-              .build();
+          return attrs.withKey(key1, "yalayala").withKey(key2, "blabla");
         }
 
         @Override
@@ -530,10 +527,7 @@ public class ServerImplTest {
               .set(key2, "blabla")
               .build(), attrs);
           readyCallbackCalled.incrementAndGet();
-          return Attributes.newBuilder(attrs)
-              .set(key1, "ouch")
-              .set(key3, "puff")
-              .build();
+          return attrs.withKey(key1, "ouch").withKey(key3, "puff");
         }
 
         @Override
