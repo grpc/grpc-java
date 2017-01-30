@@ -123,13 +123,6 @@ class NettyServer implements InternalServer {
     b.childHandler(new ChannelInitializer<Channel>() {
       @Override
       public void initChannel(Channel ch) throws Exception {
-        eventLoopReferenceCounter.retain();
-        ch.closeFuture().addListener(new ChannelFutureListener() {
-          @Override
-          public void operationComplete(ChannelFuture future) {
-            eventLoopReferenceCounter.release();
-          }
-        });
         NettyServerTransport transport = new NettyServerTransport(ch, protocolNegotiator,
             maxStreamsPerConnection, flowControlWindow, maxMessageSize, maxHeaderListSize);
         ServerTransportListener transportListener;
@@ -140,6 +133,15 @@ class NettyServer implements InternalServer {
             ch.close();
             return;
           }
+          // `channel` shutdown can race with `ch` initialization, so this is only safe to increment
+          // inside the lock.
+          eventLoopReferenceCounter.retain();
+          ch.closeFuture().addListener(new ChannelFutureListener() {
+            @Override
+            public void operationComplete(ChannelFuture future) {
+              eventLoopReferenceCounter.release();
+            }
+          });
 
           transportListener = listener.transportCreated(transport);
         }
