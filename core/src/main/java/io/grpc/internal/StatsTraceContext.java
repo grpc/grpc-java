@@ -32,6 +32,7 @@
 package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.instrumentation.stats.MeasurementDescriptor;
@@ -72,6 +73,7 @@ public final class StatsTraceContext {
   private final Stopwatch stopwatch;
   private final Side side;
   private final Metadata.Key<StatsContext> statsHeader;
+  private volatile long clientPendingMillis = -1;
   private volatile long wireBytesSent;
   private volatile long wireBytesReceived;
   private volatile long uncompressedBytesSent;
@@ -205,6 +207,18 @@ public final class StatsTraceContext {
   }
 
   /**
+   * Mark the time when the headers, which are the first bytes of the RPC, are sent from the client.
+   * This is specific to transport implementation, thus should be called from transports.  Calling
+   * it the second time or more is a no-op.
+   */
+  public void clientHeadersSent() {
+    Preconditions.checkState(side == Side.CLIENT, "Must be called on client-side");
+    if (clientPendingMillis < 0) {
+      clientPendingMillis = stopwatch.elapsed(TimeUnit.MILLISECONDS);
+    }
+  }
+
+  /**
    * Record a finished all and mark the current time as the end time.
    *
    * <p>Can be called from any thread without synchronization.  Calling it the second time or more
@@ -233,14 +247,20 @@ public final class StatsTraceContext {
       uncompressedBytesSentMetric = RpcConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES;
       uncompressedBytesReceivedMetric = RpcConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES;
     }
-    statsCtx
-        .with(RpcConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
-        .record(MeasurementMap.builder()
-            .put(latencyMetric, stopwatch.elapsed(TimeUnit.MILLISECONDS))
-            .put(wireBytesSentMetric, wireBytesSent)
-            .put(wireBytesReceivedMetric, wireBytesReceived)
-            .put(uncompressedBytesSentMetric, uncompressedBytesSent)
-            .put(uncompressedBytesReceivedMetric, uncompressedBytesReceived)
-            .build());
+    long roundtrip = stopwatch.elapsed(TimeUnit.MILLISECONDS);
+    MeasurementMap.Builder builder = MeasurementMap.builder()
+        .put(latencyMetric, roundtrip)
+        .put(wireBytesSentMetric, wireBytesSent)
+        .put(wireBytesReceivedMetric, wireBytesReceived)
+        .put(uncompressedBytesSentMetric, uncompressedBytesSent)
+        .put(uncompressedBytesReceivedMetric, uncompressedBytesReceived);
+    if (side == Side.CLIENT) {
+      long serverTime;
+      if (clientPendingMillis >= 0) {
+        builder.put(RpcConstants.RPC_CLIENT_SERVER_ELAPSED_TIME, roundtrip - clientPendingMillis);
+      }
+    }
+    statsCtx.with(RpcConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
+        .record(builder.build());
   }
 }
