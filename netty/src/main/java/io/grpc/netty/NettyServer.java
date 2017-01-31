@@ -136,16 +136,15 @@ class NettyServer implements InternalServer {
           // `channel` shutdown can race with `ch` initialization, so this is only safe to increment
           // inside the lock.
           eventLoopReferenceCounter.retain();
-          ch.closeFuture().addListener(new ChannelFutureListener() {
-            @Override
-            public void operationComplete(ChannelFuture future) {
-              eventLoopReferenceCounter.release();
-            }
-          });
-
           transportListener = listener.transportCreated(transport);
         }
         transport.start(transportListener);
+        ch.closeFuture().addListener(new ChannelFutureListener() {
+          @Override
+          public void operationComplete(ChannelFuture future) {
+            eventLoopReferenceCounter.release();
+          }
+        });
       }
     });
     // Bind and start to accept incoming connections.
