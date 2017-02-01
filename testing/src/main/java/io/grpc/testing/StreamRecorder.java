@@ -40,6 +40,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 /**
@@ -58,13 +59,14 @@ public class StreamRecorder<T> implements StreamObserver<T> {
 
   private final CountDownLatch latch;
   private final List<T> results;
-  private Throwable error;
+  private final AtomicReference<Throwable> error;
   private final SettableFuture<T> firstValue;
 
   private StreamRecorder() {
     firstValue = SettableFuture.create();
     latch = new CountDownLatch(1);
     results = Collections.synchronizedList(new ArrayList<T>());
+    error = new AtomicReference<Throwable>(null);
   }
 
   @Override
@@ -80,7 +82,7 @@ public class StreamRecorder<T> implements StreamObserver<T> {
     if (!firstValue.isDone()) {
       firstValue.setException(t);
     }
-    error = t;
+    error.set(t);
     latch.countDown();
   }
 
@@ -117,7 +119,7 @@ public class StreamRecorder<T> implements StreamObserver<T> {
    * Returns the stream terminating error.
    */
   @Nullable public Throwable getError() {
-    return error;
+    return error.get();
   }
 
   /**
