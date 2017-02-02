@@ -99,7 +99,7 @@ class OkHttpClientStream extends Http2ClientStream {
       String userAgent,
       StatsTraceContext statsTraceCtx) {
     super(new OkHttpWritableBufferAllocator(), maxMessageSize, statsTraceCtx);
-    this.statsTraceCtx = statsTraceCtx;
+    this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
     this.method = method;
     this.headers = headers;
     this.frameWriter = frameWriter;

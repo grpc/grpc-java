@@ -65,6 +65,8 @@ public final class StatsTraceContext {
       "noopservice/noopmethod", NoopStatsContextFactory.INSTANCE,
       GrpcUtil.STOPWATCH_SUPPLIER);
 
+  private static final double NANOS_PER_MILLI = 1000 * 1000;
+
   private enum Side {
     CLIENT, SERVER
   }
@@ -73,7 +75,7 @@ public final class StatsTraceContext {
   private final Stopwatch stopwatch;
   private final Side side;
   private final Metadata.Key<StatsContext> statsHeader;
-  private volatile long clientPendingMillis = -1;
+  private volatile long clientPendingNanos = -1;
   private volatile long wireBytesSent;
   private volatile long wireBytesReceived;
   private volatile long uncompressedBytesSent;
@@ -213,8 +215,8 @@ public final class StatsTraceContext {
    */
   public void clientHeadersSent() {
     Preconditions.checkState(side == Side.CLIENT, "Must be called on client-side");
-    if (clientPendingMillis < 0) {
-      clientPendingMillis = stopwatch.elapsed(TimeUnit.MILLISECONDS);
+    if (clientPendingNanos < 0) {
+      clientPendingNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
     }
   }
 
@@ -247,17 +249,18 @@ public final class StatsTraceContext {
       uncompressedBytesSentMetric = RpcConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES;
       uncompressedBytesReceivedMetric = RpcConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES;
     }
-    long roundtrip = stopwatch.elapsed(TimeUnit.MILLISECONDS);
+    long roundtripNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
     MeasurementMap.Builder builder = MeasurementMap.builder()
-        .put(latencyMetric, roundtrip)
+        .put(latencyMetric, roundtripNanos / NANOS_PER_MILLI)
         .put(wireBytesSentMetric, wireBytesSent)
         .put(wireBytesReceivedMetric, wireBytesReceived)
         .put(uncompressedBytesSentMetric, uncompressedBytesSent)
         .put(uncompressedBytesReceivedMetric, uncompressedBytesReceived);
     if (side == Side.CLIENT) {
       long serverTime;
-      if (clientPendingMillis >= 0) {
-        builder.put(RpcConstants.RPC_CLIENT_SERVER_ELAPSED_TIME, roundtrip - clientPendingMillis);
+      if (clientPendingNanos >= 0) {
+        builder.put(RpcConstants.RPC_CLIENT_SERVER_ELAPSED_TIME,
+            (roundtripNanos - clientPendingNanos) / NANOS_PER_MILLI);
       }
     }
     statsCtx.with(RpcConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))

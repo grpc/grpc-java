@@ -43,7 +43,6 @@ import io.grpc.Status;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsContextFactory;
 import io.grpc.internal.testing.StatsTestUtils;
 import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -53,14 +52,8 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class StatsTraceContextTest {
-  private FakeClock fakeClock;
-  private FakeStatsContextFactory statsCtxFactory;
-
-  @Before
-  public void setUp() {
-    fakeClock = new FakeClock();
-    statsCtxFactory = new FakeStatsContextFactory();
-  }
+  private FakeClock fakeClock = new FakeClock();
+  private FakeStatsContextFactory statsCtxFactory = new FakeStatsContextFactory();
 
   @After
   public void allRecordsVerified() {
