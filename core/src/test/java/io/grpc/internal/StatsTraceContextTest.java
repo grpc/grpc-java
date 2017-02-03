@@ -39,6 +39,7 @@ import com.google.instrumentation.stats.RpcConstants;
 import com.google.instrumentation.stats.StatsContext;
 import com.google.instrumentation.stats.TagValue;
 import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsContextFactory;
 import io.grpc.internal.testing.StatsTestUtils;
@@ -62,8 +63,9 @@ public class StatsTraceContextTest {
 
   @Test
   public void clientBasic() {
+    String methodName = MethodDescriptor.generateFullMethodName("Service1", "method1");
     StatsTraceContext ctx = StatsTraceContext.newClientContextForTesting(
-        "Service1/method1", statsCtxFactory, statsCtxFactory.getDefault(),
+        methodName, statsCtxFactory, statsCtxFactory.getDefault(),
         fakeClock.getStopwatchSupplier());
     fakeClock.forwardMillis(30);
     ctx.clientHeadersSent();
@@ -87,7 +89,7 @@ public class StatsTraceContextTest {
     assertNotNull(record);
     assertNoServerContent(record);
     TagValue methodTag = record.tags.get(RpcConstants.RPC_CLIENT_METHOD);
-    assertEquals("Service1/method1", methodTag.toString());
+    assertEquals(methodName, methodTag.toString());
     TagValue statusTag = record.tags.get(RpcConstants.RPC_STATUS);
     assertEquals(Status.Code.OK.toString(), statusTag.toString());
     assertEquals(1028 + 99, record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_REQUEST_BYTES));
@@ -104,8 +106,9 @@ public class StatsTraceContextTest {
 
   @Test
   public void clientNotSent() {
+    String methodName = MethodDescriptor.generateFullMethodName("Service1", "method2");
     StatsTraceContext ctx = StatsTraceContext.newClientContextForTesting(
-        "Service1/method2", statsCtxFactory, statsCtxFactory.getDefault(),
+        methodName, statsCtxFactory, statsCtxFactory.getDefault(),
         fakeClock.getStopwatchSupplier());
     fakeClock.forwardMillis(3000);
     ctx.callEnded(Status.DEADLINE_EXCEEDED.withDescription("3 seconds"));
@@ -114,7 +117,7 @@ public class StatsTraceContextTest {
     assertNotNull(record);
     assertNoServerContent(record);
     TagValue methodTag = record.tags.get(RpcConstants.RPC_CLIENT_METHOD);
-    assertEquals("Service1/method2", methodTag.toString());
+    assertEquals(methodName, methodTag.toString());
     TagValue statusTag = record.tags.get(RpcConstants.RPC_STATUS);
     assertEquals(Status.Code.DEADLINE_EXCEEDED.toString(), statusTag.toString());
     assertEquals(0, record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_REQUEST_BYTES));
@@ -129,15 +132,16 @@ public class StatsTraceContextTest {
 
   @Test
   public void tagPropagation() {
+    String methodName = MethodDescriptor.generateFullMethodName("Service1", "method3");
     StatsContext parentCtx = statsCtxFactory.getDefault().with(
         StatsTestUtils.EXTRA_TAG, TagValue.create("extra-tag-value-897"));
     StatsTraceContext clientCtx = StatsTraceContext.newClientContextForTesting(
-        "Service1/method3", statsCtxFactory, parentCtx, fakeClock.getStopwatchSupplier());
+        methodName, statsCtxFactory, parentCtx, fakeClock.getStopwatchSupplier());
     Metadata headers = new Metadata();
     clientCtx.propagateToHeaders(headers);
 
     StatsTraceContext serverCtx = StatsTraceContext.newServerContext(
-        "Service1/method3", statsCtxFactory, headers, fakeClock.getStopwatchSupplier());
+        methodName, statsCtxFactory, headers, fakeClock.getStopwatchSupplier());
 
     serverCtx.callEnded(Status.OK);
     clientCtx.callEnded(Status.OK);
@@ -146,7 +150,7 @@ public class StatsTraceContextTest {
     assertNotNull(serverRecord);
     assertNoClientContent(serverRecord);
     TagValue serverMethodTag = serverRecord.tags.get(RpcConstants.RPC_SERVER_METHOD);
-    assertEquals("Service1/method3", serverMethodTag.toString());
+    assertEquals(methodName, serverMethodTag.toString());
     TagValue serverStatusTag = serverRecord.tags.get(RpcConstants.RPC_STATUS);
     assertEquals(Status.Code.OK.toString(), serverStatusTag.toString());
     TagValue serverPropagatedTag = serverRecord.tags.get(StatsTestUtils.EXTRA_TAG);
@@ -156,7 +160,7 @@ public class StatsTraceContextTest {
     assertNotNull(clientRecord);
     assertNoServerContent(clientRecord);
     TagValue clientMethodTag = clientRecord.tags.get(RpcConstants.RPC_CLIENT_METHOD);
-    assertEquals("Service1/method3", clientMethodTag.toString());
+    assertEquals(methodName, clientMethodTag.toString());
     TagValue clientStatusTag = clientRecord.tags.get(RpcConstants.RPC_STATUS);
     assertEquals(Status.Code.OK.toString(), clientStatusTag.toString());
     TagValue clientPropagatedTag = clientRecord.tags.get(StatsTestUtils.EXTRA_TAG);
@@ -165,8 +169,9 @@ public class StatsTraceContextTest {
 
   @Test
   public void serverBasic() {
+    String methodName = MethodDescriptor.generateFullMethodName("Service1", "method4");
     StatsTraceContext ctx = StatsTraceContext.newServerContext(
-        "Service1/method4", statsCtxFactory, new Metadata(), fakeClock.getStopwatchSupplier());
+        methodName, statsCtxFactory, new Metadata(), fakeClock.getStopwatchSupplier());
     ctx.wireBytesReceived(34);
     ctx.uncompressedBytesReceived(67);
 
@@ -187,7 +192,7 @@ public class StatsTraceContextTest {
     assertNotNull(record);
     assertNoClientContent(record);
     TagValue methodTag = record.tags.get(RpcConstants.RPC_SERVER_METHOD);
-    assertEquals("Service1/method4", methodTag.toString());
+    assertEquals(methodName, methodTag.toString());
     TagValue statusTag = record.tags.get(RpcConstants.RPC_STATUS);
     assertEquals(Status.Code.CANCELLED.toString(), statusTag.toString());
     assertEquals(1028 + 99, record.getMetricAsLongOrFail(RpcConstants.RPC_SERVER_RESPONSE_BYTES));
