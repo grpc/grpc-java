@@ -257,7 +257,6 @@ public final class StatsTraceContext {
         .put(uncompressedBytesSentMetric, uncompressedBytesSent)
         .put(uncompressedBytesReceivedMetric, uncompressedBytesReceived);
     if (side == Side.CLIENT) {
-      long serverTime;
       if (clientPendingNanos >= 0) {
         builder.put(RpcConstants.RPC_CLIENT_SERVER_ELAPSED_TIME,
             (roundtripNanos - clientPendingNanos) / NANOS_PER_MILLI);

@@ -130,9 +130,17 @@ public class StatsTraceContextTest {
     assertNull(record.getMetric(RpcConstants.RPC_CLIENT_SERVER_ELAPSED_TIME));
   }
 
+  /**
+   * Tags that are propagated by the {@link StatsContextFactory} are properly propagated via
+   * the headers.
+   */
   @Test
   public void tagPropagation() {
     String methodName = MethodDescriptor.generateFullMethodName("Service1", "method3");
+
+    // EXTRA_TAG is propagated by the FakeStatsContextFactory. Note that not all tags are
+    // propagated.  The StatsContextFactory decides which tags are to propagated.  gRPC facilitates
+    // the propagation by putting them in the headers.
     StatsContext parentCtx = statsCtxFactory.getDefault().with(
         StatsTestUtils.EXTRA_TAG, TagValue.create("extra-tag-value-897"));
     StatsTraceContext clientCtx = StatsTraceContext.newClientContextForTesting(
@@ -140,6 +148,8 @@ public class StatsTraceContextTest {
     Metadata headers = new Metadata();
     clientCtx.propagateToHeaders(headers);
 
+    // The server gets the propagated tag from the headers, and puts it on the server-side
+    // StatsContext.
     StatsTraceContext serverCtx = StatsTraceContext.newServerContext(
         methodName, statsCtxFactory, headers, fakeClock.getStopwatchSupplier());
 
