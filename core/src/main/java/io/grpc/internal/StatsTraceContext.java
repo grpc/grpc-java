@@ -251,7 +251,7 @@ public final class StatsTraceContext {
     }
     long roundtripNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
     MeasurementMap.Builder builder = MeasurementMap.builder()
-        .put(latencyMetric, roundtripNanos / NANOS_PER_MILLI)
+        .put(latencyMetric, roundtripNanos / NANOS_PER_MILLI)  // in double
         .put(wireBytesSentMetric, wireBytesSent)
         .put(wireBytesReceivedMetric, wireBytesReceived)
         .put(uncompressedBytesSentMetric, uncompressedBytesSent)
@@ -260,7 +260,7 @@ public final class StatsTraceContext {
       if (clientPendingNanos >= 0) {
         builder.put(
             RpcConstants.RPC_CLIENT_SERVER_ELAPSED_TIME,
-            (roundtripNanos - clientPendingNanos) / NANOS_PER_MILLI);
+            (roundtripNanos - clientPendingNanos) / NANOS_PER_MILLI);  // in double
       }
     }
     statsCtx.with(RpcConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
