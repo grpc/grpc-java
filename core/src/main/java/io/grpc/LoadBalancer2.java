@@ -32,7 +32,9 @@
 package io.grpc;
 
 import com.google.common.base.Preconditions;
+import io.grpc.internal.ClientTransport;
 import java.util.List;
+import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -408,6 +410,13 @@ public abstract class LoadBalancer2 {
      * Subchannel belongs to.
      */
     public abstract Attributes getAttributes();
+
+    /**
+     * Sends ping on the underlying connection (aka transport).
+     *
+     * {@link ClientTransport#ping(ClientTransport.PingCallback, Executor)}
+     */
+    public abstract void ping(ClientTransport.PingCallback callback, Executor executor);
   }
 
   @ThreadSafe
