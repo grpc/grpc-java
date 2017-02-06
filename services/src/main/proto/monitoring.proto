@@ -32,6 +32,7 @@
 syntax = "proto3";
 
 import "google/protobuf/any.proto";
+import "google/protobuf/empty.proto";
 import "census.proto";
 
 package grpc.instrumentation.v1alpha;
@@ -43,7 +44,7 @@ option java_outer_classname = "MonitoringProto";
 service Monitoring {
 
   // Return canonical RPC stats
-  rpc GetCanonicalRpcStats(Empty) returns (CanonicalRpcStats) {
+  rpc GetCanonicalRpcStats(google.protobuf.Empty) returns (CanonicalRpcStats) {
   }
 
   // Query the server for specific stats
@@ -125,6 +126,4 @@ message CustomMonitoringData {
   // can be any application specific monitoring data
   google.protobuf.Any contents = 1;
 }
-
-message Empty {}
 

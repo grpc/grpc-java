@@ -28,13 +28,13 @@ public class MonitoringGrpc {
 
   // Static method descriptors that strictly reflect the proto.
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
-  public static final io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.Empty,
+  public static final io.grpc.MethodDescriptor<com.google.protobuf.Empty,
       io.grpc.instrumentation.v1alpha.CanonicalRpcStats> METHOD_GET_CANONICAL_RPC_STATS =
       io.grpc.MethodDescriptor.create(
           io.grpc.MethodDescriptor.MethodType.UNARY,
           generateFullMethodName(
               "grpc.instrumentation.v1alpha.Monitoring", "GetCanonicalRpcStats"),
-          io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.instrumentation.v1alpha.Empty.getDefaultInstance()),
+          io.grpc.protobuf.ProtoUtils.marshaller(com.google.protobuf.Empty.getDefaultInstance()),
           io.grpc.protobuf.ProtoUtils.marshaller(io.grpc.instrumentation.v1alpha.CanonicalRpcStats.getDefaultInstance()));
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.StatsRequest,
@@ -105,7 +105,7 @@ public class MonitoringGrpc {
      * Return canonical RPC stats
      * </pre>
      */
-    public void getCanonicalRpcStats(io.grpc.instrumentation.v1alpha.Empty request,
+    public void getCanonicalRpcStats(com.google.protobuf.Empty request,
         io.grpc.stub.StreamObserver<io.grpc.instrumentation.v1alpha.CanonicalRpcStats> responseObserver) {
       asyncUnimplementedUnaryCall(METHOD_GET_CANONICAL_RPC_STATS, responseObserver);
     }
@@ -159,7 +159,7 @@ public class MonitoringGrpc {
             METHOD_GET_CANONICAL_RPC_STATS,
             asyncUnaryCall(
               new MethodHandlers<
-                io.grpc.instrumentation.v1alpha.Empty,
+                com.google.protobuf.Empty,
                 io.grpc.instrumentation.v1alpha.CanonicalRpcStats>(
                   this, METHODID_GET_CANONICAL_RPC_STATS)))
           .addMethod(
@@ -217,7 +217,7 @@ public class MonitoringGrpc {
      * Return canonical RPC stats
      * </pre>
      */
-    public void getCanonicalRpcStats(io.grpc.instrumentation.v1alpha.Empty request,
+    public void getCanonicalRpcStats(com.google.protobuf.Empty request,
         io.grpc.stub.StreamObserver<io.grpc.instrumentation.v1alpha.CanonicalRpcStats> responseObserver) {
       asyncUnaryCall(
           getChannel().newCall(METHOD_GET_CANONICAL_RPC_STATS, getCallOptions()), request, responseObserver);
@@ -294,7 +294,7 @@ public class MonitoringGrpc {
      * Return canonical RPC stats
      * </pre>
      */
-    public io.grpc.instrumentation.v1alpha.CanonicalRpcStats getCanonicalRpcStats(io.grpc.instrumentation.v1alpha.Empty request) {
+    public io.grpc.instrumentation.v1alpha.CanonicalRpcStats getCanonicalRpcStats(com.google.protobuf.Empty request) {
       return blockingUnaryCall(
           getChannel(), METHOD_GET_CANONICAL_RPC_STATS, getCallOptions(), request);
     }
@@ -368,7 +368,7 @@ public class MonitoringGrpc {
      * </pre>
      */
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.instrumentation.v1alpha.CanonicalRpcStats> getCanonicalRpcStats(
-        io.grpc.instrumentation.v1alpha.Empty request) {
+        com.google.protobuf.Empty request) {
       return futureUnaryCall(
           getChannel().newCall(METHOD_GET_CANONICAL_RPC_STATS, getCallOptions()), request);
     }
@@ -434,7 +434,7 @@ public class MonitoringGrpc {
     public void invoke(Req request, io.grpc.stub.StreamObserver<Resp> responseObserver) {
       switch (methodId) {
         case METHODID_GET_CANONICAL_RPC_STATS:
-          serviceImpl.getCanonicalRpcStats((io.grpc.instrumentation.v1alpha.Empty) request,
+          serviceImpl.getCanonicalRpcStats((com.google.protobuf.Empty) request,
               (io.grpc.stub.StreamObserver<io.grpc.instrumentation.v1alpha.CanonicalRpcStats>) responseObserver);
           break;
         case METHODID_GET_STATS:

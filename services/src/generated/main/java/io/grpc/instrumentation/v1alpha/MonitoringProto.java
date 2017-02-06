@@ -54,11 +54,6 @@ public final class MonitoringProto {
   static final 
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
       internal_static_grpc_instrumentation_v1alpha_CustomMonitoringData_fieldAccessorTable;
-  static final com.google.protobuf.Descriptors.Descriptor
-    internal_static_grpc_instrumentation_v1alpha_Empty_descriptor;
-  static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-      internal_static_grpc_instrumentation_v1alpha_Empty_fieldAccessorTable;
 
   public static com.google.protobuf.Descriptors.FileDescriptor
       getDescriptor() {
@@ -69,70 +64,70 @@ public final class MonitoringProto {
   static {
     java.lang.String[] descriptorData = {
       "\n\020monitoring.proto\022\034grpc.instrumentation" +
-      ".v1alpha\032\031google/protobuf/any.proto\032\014cen" +
-      "sus.proto\"\201\r\n\021CanonicalRpcStats\022O\n\021rpc_c" +
-      "lient_errors\030\001 \001(\01324.grpc.instrumentatio" +
-      "n.v1alpha.CanonicalRpcStats.View\022W\n\031rpc_" +
-      "client_completed_rpcs\030\002 \001(\01324.grpc.instr" +
-      "umentation.v1alpha.CanonicalRpcStats.Vie" +
-      "w\022U\n\027rpc_client_started_rpcs\030\003 \001(\01324.grp" +
-      "c.instrumentation.v1alpha.CanonicalRpcSt" +
-      "ats.View\022]\n\037rpc_client_elapsed_time_in_u",
-      "sec\030\004 \001(\01324.grpc.instrumentation.v1alpha" +
-      ".CanonicalRpcStats.View\022d\n&rpc_client_se" +
-      "rver_elapsed_time_in_usec\030\005 \001(\01324.grpc.i" +
+      ".v1alpha\032\031google/protobuf/any.proto\032\033goo" +
+      "gle/protobuf/empty.proto\032\014census.proto\"\201" +
+      "\r\n\021CanonicalRpcStats\022O\n\021rpc_client_error" +
+      "s\030\001 \001(\01324.grpc.instrumentation.v1alpha.C" +
+      "anonicalRpcStats.View\022W\n\031rpc_client_comp" +
+      "leted_rpcs\030\002 \001(\01324.grpc.instrumentation." +
+      "v1alpha.CanonicalRpcStats.View\022U\n\027rpc_cl" +
+      "ient_started_rpcs\030\003 \001(\01324.grpc.instrumen" +
+      "tation.v1alpha.CanonicalRpcStats.View\022]\n",
+      "\037rpc_client_elapsed_time_in_usec\030\004 \001(\01324" +
+      ".grpc.instrumentation.v1alpha.CanonicalR" +
+      "pcStats.View\022d\n&rpc_client_server_elapse" +
+      "d_time_in_usec\030\005 \001(\01324.grpc.instrumentat" +
+      "ion.v1alpha.CanonicalRpcStats.View\022V\n\030rp" +
+      "c_client_request_bytes\030\006 \001(\01324.grpc.inst" +
+      "rumentation.v1alpha.CanonicalRpcStats.Vi" +
+      "ew\022W\n\031rpc_client_response_bytes\030\007 \001(\01324." +
+      "grpc.instrumentation.v1alpha.CanonicalRp" +
+      "cStats.View\022V\n\030rpc_client_request_count\030",
+      "\010 \001(\01324.grpc.instrumentation.v1alpha.Can" +
+      "onicalRpcStats.View\022W\n\031rpc_client_respon" +
+      "se_count\030\t \001(\01324.grpc.instrumentation.v1" +
+      "alpha.CanonicalRpcStats.View\022O\n\021rpc_serv" +
+      "er_errors\030\n \001(\01324.grpc.instrumentation.v" +
+      "1alpha.CanonicalRpcStats.View\022W\n\031rpc_ser" +
+      "ver_completed_rpcs\030\013 \001(\01324.grpc.instrume" +
+      "ntation.v1alpha.CanonicalRpcStats.View\022d" +
+      "\n&rpc_server_server_elapsed_time_in_usec" +
+      "\030\014 \001(\01324.grpc.instrumentation.v1alpha.Ca",
+      "nonicalRpcStats.View\022V\n\030rpc_server_reque" +
+      "st_bytes\030\r \001(\01324.grpc.instrumentation.v1" +
+      "alpha.CanonicalRpcStats.View\022W\n\031rpc_serv" +
+      "er_response_bytes\030\016 \001(\01324.grpc.instrumen" +
+      "tation.v1alpha.CanonicalRpcStats.View\022V\n" +
+      "\030rpc_server_request_count\030\017 \001(\01324.grpc.i" +
       "nstrumentation.v1alpha.CanonicalRpcStats" +
-      ".View\022V\n\030rpc_client_request_bytes\030\006 \001(\0132" +
-      "4.grpc.instrumentation.v1alpha.Canonical" +
-      "RpcStats.View\022W\n\031rpc_client_response_byt" +
-      "es\030\007 \001(\01324.grpc.instrumentation.v1alpha." +
-      "CanonicalRpcStats.View\022V\n\030rpc_client_req" +
-      "uest_count\030\010 \001(\01324.grpc.instrumentation.",
-      "v1alpha.CanonicalRpcStats.View\022W\n\031rpc_cl" +
-      "ient_response_count\030\t \001(\01324.grpc.instrum" +
-      "entation.v1alpha.CanonicalRpcStats.View\022" +
-      "O\n\021rpc_server_errors\030\n \001(\01324.grpc.instru" +
-      "mentation.v1alpha.CanonicalRpcStats.View" +
-      "\022W\n\031rpc_server_completed_rpcs\030\013 \001(\01324.gr" +
-      "pc.instrumentation.v1alpha.CanonicalRpcS" +
-      "tats.View\022d\n&rpc_server_server_elapsed_t" +
-      "ime_in_usec\030\014 \001(\01324.grpc.instrumentation" +
-      ".v1alpha.CanonicalRpcStats.View\022V\n\030rpc_s",
-      "erver_request_bytes\030\r \001(\01324.grpc.instrum" +
-      "entation.v1alpha.CanonicalRpcStats.View\022" +
-      "W\n\031rpc_server_response_bytes\030\016 \001(\01324.grp" +
-      "c.instrumentation.v1alpha.CanonicalRpcSt" +
-      "ats.View\022V\n\030rpc_server_request_count\030\017 \001" +
-      "(\01324.grpc.instrumentation.v1alpha.Canoni" +
-      "calRpcStats.View\022W\n\031rpc_server_response_" +
-      "count\030\020 \001(\01324.grpc.instrumentation.v1alp" +
-      "ha.CanonicalRpcStats.View\022]\n\037rpc_server_" +
-      "elapsed_time_in_usec\030\021 \001(\01324.grpc.instru",
-      "mentation.v1alpha.CanonicalRpcStats.View" +
-      "\032s\n\004View\022*\n\004view\030\001 \001(\0132\034.google.instrume" +
-      "ntation.View\022?\n\017view_descriptor\030\002 \001(\0132&." +
-      "google.instrumentation.ViewDescriptor\"\016\n" +
-      "\014StatsRequest\"\017\n\rStatsResponse\"\016\n\014TraceR" +
-      "equest\"\017\n\rTraceResponse\"#\n\023MonitoringDat" +
-      "aGroup\022\014\n\004name\030\001 \001(\t\">\n\024CustomMonitoring" +
-      "Data\022&\n\010contents\030\001 \001(\0132\024.google.protobuf" +
-      ".Any\"\007\n\005Empty2\302\004\n\nMonitoring\022n\n\024GetCanon" +
-      "icalRpcStats\022#.grpc.instrumentation.v1al",
-      "pha.Empty\032/.grpc.instrumentation.v1alpha" +
-      ".CanonicalRpcStats\"\000\022e\n\010GetStats\022*.grpc." +
-      "instrumentation.v1alpha.StatsRequest\032+.g" +
-      "rpc.instrumentation.v1alpha.StatsRespons" +
-      "e\"\000\022i\n\nWatchStats\022*.grpc.instrumentation" +
-      ".v1alpha.StatsRequest\032+.grpc.instrumenta" +
-      "tion.v1alpha.StatsResponse\"\0000\001\022m\n\020GetReq" +
-      "uestTraces\022*.grpc.instrumentation.v1alph" +
-      "a.TraceRequest\032+.grpc.instrumentation.v1" +
-      "alpha.TraceResponse\"\000\022\202\001\n\027GetCustomMonit",
-      "oringData\0221.grpc.instrumentation.v1alpha" +
-      ".MonitoringDataGroup\0322.grpc.instrumentat" +
-      "ion.v1alpha.CustomMonitoringData\"\000B4\n\037io" +
-      ".grpc.instrumentation.v1alphaB\017Monitorin" +
-      "gProtoP\001b\006proto3"
+      ".View\022W\n\031rpc_server_response_count\030\020 \001(\013" +
+      "24.grpc.instrumentation.v1alpha.Canonica" +
+      "lRpcStats.View\022]\n\037rpc_server_elapsed_tim",
+      "e_in_usec\030\021 \001(\01324.grpc.instrumentation.v" +
+      "1alpha.CanonicalRpcStats.View\032s\n\004View\022*\n" +
+      "\004view\030\001 \001(\0132\034.google.instrumentation.Vie" +
+      "w\022?\n\017view_descriptor\030\002 \001(\0132&.google.inst" +
+      "rumentation.ViewDescriptor\"\016\n\014StatsReque" +
+      "st\"\017\n\rStatsResponse\"\016\n\014TraceRequest\"\017\n\rT" +
+      "raceResponse\"#\n\023MonitoringDataGroup\022\014\n\004n" +
+      "ame\030\001 \001(\t\">\n\024CustomMonitoringData\022&\n\010con" +
+      "tents\030\001 \001(\0132\024.google.protobuf.Any2\265\004\n\nMo" +
+      "nitoring\022a\n\024GetCanonicalRpcStats\022\026.googl",
+      "e.protobuf.Empty\032/.grpc.instrumentation." +
+      "v1alpha.CanonicalRpcStats\"\000\022e\n\010GetStats\022" +
+      "*.grpc.instrumentation.v1alpha.StatsRequ" +
+      "est\032+.grpc.instrumentation.v1alpha.Stats" +
+      "Response\"\000\022i\n\nWatchStats\022*.grpc.instrume" +
+      "ntation.v1alpha.StatsRequest\032+.grpc.inst" +
+      "rumentation.v1alpha.StatsResponse\"\0000\001\022m\n" +
+      "\020GetRequestTraces\022*.grpc.instrumentation" +
+      ".v1alpha.TraceRequest\032+.grpc.instrumenta" +
+      "tion.v1alpha.TraceResponse\"\000\022\202\001\n\027GetCust",
+      "omMonitoringData\0221.grpc.instrumentation." +
+      "v1alpha.MonitoringDataGroup\0322.grpc.instr" +
+      "umentation.v1alpha.CustomMonitoringData\"" +
+      "\000B4\n\037io.grpc.instrumentation.v1alphaB\017Mo" +
+      "nitoringProtoP\001b\006proto3"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
         new com.google.protobuf.Descriptors.FileDescriptor.    InternalDescriptorAssigner() {
@@ -146,6 +141,7 @@ public final class MonitoringProto {
       .internalBuildGeneratedFileFrom(descriptorData,
         new com.google.protobuf.Descriptors.FileDescriptor[] {
           com.google.protobuf.AnyProto.getDescriptor(),
+          com.google.protobuf.EmptyProto.getDescriptor(),
           com.google.instrumentation.stats.proto.CensusProto.getDescriptor(),
         }, assigner);
     internal_static_grpc_instrumentation_v1alpha_CanonicalRpcStats_descriptor =
@@ -196,13 +192,8 @@ public final class MonitoringProto {
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_grpc_instrumentation_v1alpha_CustomMonitoringData_descriptor,
         new java.lang.String[] { "Contents", });
-    internal_static_grpc_instrumentation_v1alpha_Empty_descriptor =
-      getDescriptor().getMessageTypes().get(7);
-    internal_static_grpc_instrumentation_v1alpha_Empty_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
-        internal_static_grpc_instrumentation_v1alpha_Empty_descriptor,
-        new java.lang.String[] { });
     com.google.protobuf.AnyProto.getDescriptor();
+    com.google.protobuf.EmptyProto.getDescriptor();
     com.google.instrumentation.stats.proto.CensusProto.getDescriptor();
   }
 
