@@ -45,9 +45,7 @@ import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.ServerTransportListener;
-import io.grpc.internal.StatsTraceContext;
+import io.grpc.internal.*;
 import io.grpc.netty.GrpcHttp2HeadersDecoder.GrpcHttp2ServerHeadersDecoder;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelFuture;
@@ -195,8 +193,13 @@ class NettyServerHandler extends AbstractNettyHandler {
           checkNotNull(transportListener.methodDetermined(method, metadata), "statsTraceCtx");
       NettyServerStream.TransportState state = new NettyServerStream.TransportState(
           this, http2Stream, maxMessageSize, statsTraceCtx);
-      NettyServerStream stream = new NettyServerStream(ctx.channel(), state, attributes,
+      Attributes attributesWithAuthority = Attributes
+              .newBuilder()
+              .setAll(attributes).set(ServerImpl.ATTR_AUTHORITY, headers.authority().toString())
+              .build();
+      NettyServerStream stream = new NettyServerStream(ctx.channel(), state, attributesWithAuthority,
           statsTraceCtx);
+
       transportListener.streamCreated(stream, method, metadata);
       state.onStreamAllocated();
       http2Stream.setProperty(streamKey, state);

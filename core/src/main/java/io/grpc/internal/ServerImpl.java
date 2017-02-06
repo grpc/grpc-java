@@ -81,6 +81,8 @@ import javax.annotation.concurrent.GuardedBy;
  * server stops servicing new requests and waits for all connections to terminate.
  */
 public final class ServerImpl extends io.grpc.Server implements WithLogId {
+  public static final Attributes.Key<String> ATTR_AUTHORITY = Attributes.Key.of("io.grpc.authority");
+
   private static final ServerStreamListener NOOP_LISTENER = new NoopListener();
 
   private final LogId logId = LogId.allocate(getClass().getName());
@@ -418,7 +420,9 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
             try {
               ServerMethodDefinition<?, ?> method = registry.lookupMethod(methodName);
               if (method == null) {
-                method = fallbackRegistry.lookupMethod(methodName);
+                String authority = stream.getAttributes()
+                                         .get(ATTR_AUTHORITY);
+                method = fallbackRegistry.lookupMethod(methodName, authority);
               }
               if (method == null) {
                 Status status = Status.UNIMPLEMENTED.withDescription(
