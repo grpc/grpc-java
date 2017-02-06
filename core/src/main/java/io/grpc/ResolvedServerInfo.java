@@ -31,10 +31,14 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Objects;
 import java.net.SocketAddress;
+import java.util.Collections;
+import java.util.List;
+
 import javax.annotation.concurrent.Immutable;
 
 /**
@@ -43,34 +47,48 @@ import javax.annotation.concurrent.Immutable;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
 @Immutable
 public final class ResolvedServerInfo {
-  private final SocketAddress address;
+  private final List<? extends SocketAddress> addrs;
   private final Attributes attributes;
 
   /**
-   * Constructs a new resolved server without attributes.
+   * Constructs a new resolved server for a single address, without attributes.
    *
-   * @param address the address of the server
+   * @param addresses the addresses of the server
    */
-  public ResolvedServerInfo(SocketAddress address) {
-    this(address, Attributes.EMPTY);
+  public ResolvedServerInfo(List<? extends SocketAddress> addrs) {
+    this(addrs, Attributes.EMPTY);
   }
 
   /**
-   * Constructs a new resolved server with attributes.
+   * Constructs a new resolved server for a single address, without attributes.
+   *
+   * @param address the address of the server
+   */
+  public ResolvedServerInfo(SocketAddress addrs) {
+    this(Collections.singletonList(addrs), Attributes.EMPTY);
+  }
+
+  /**
+   * Constructs a new resolved server for a single address, with attributes.
    *
    * @param address the address of the server
    * @param attributes attributes associated with this address.
    */
-  public ResolvedServerInfo(SocketAddress address, Attributes attributes) {
-    this.address = checkNotNull(address);
-    this.attributes = checkNotNull(attributes);
+  public ResolvedServerInfo(List<? extends SocketAddress> addrs, Attributes attributes) {
+    checkArgument(addrs.isEmpty(), "addresses can't be empty");
+    this.addrs = Collections.unmodifiableList(addrs);
+    this.attributes = checkNotNull(attributes, "attributes");
   }
 
   /**
    * Returns the address.
    */
   public SocketAddress getAddress() {
-    return address;
+    return addrs.get(0);
+  }
+
+  public List<? extends SocketAddress> getAddresses() {
+    return addrs;
   }
 
   /**
@@ -82,7 +100,7 @@ public final class ResolvedServerInfo {
 
   @Override
   public String toString() {
-    return "[address=" + address + ", attrs=" + attributes + "]";
+    return "[addrs=" + addrs + ", attrs=" + attributes + "]";
   }
 
   /**
@@ -106,7 +124,7 @@ public final class ResolvedServerInfo {
       return false;
     }
     ResolvedServerInfo that = (ResolvedServerInfo) o;
-    return Objects.equal(address, that.address) && Objects.equal(attributes, that.attributes);
+    return Objects.equal(addrs, that.addrs) && Objects.equal(attributes, that.attributes);
   }
 
   /**
@@ -120,6 +138,6 @@ public final class ResolvedServerInfo {
    */
   @Override
   public int hashCode() {
-    return Objects.hashCode(address, attributes);
+    return Objects.hashCode(addrs, attributes);
   }
 }

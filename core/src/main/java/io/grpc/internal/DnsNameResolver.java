@@ -32,7 +32,11 @@
 package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
+
 import io.grpc.Attributes;
 import io.grpc.NameResolver;
 import io.grpc.ResolvedServerInfo;
@@ -43,7 +47,10 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -142,8 +149,7 @@ class DnsNameResolver extends NameResolver {
         try {
           if (System.getenv("GRPC_PROXY_EXP") != null) {
             ResolvedServerInfoGroup servers = ResolvedServerInfoGroup.builder()
-                .add(new ResolvedServerInfo(
-                    InetSocketAddress.createUnresolved(host, port), Attributes.EMPTY))
+                .add(new ResolvedServerInfo(InetSocketAddress.createUnresolved(host, port)))
                 .build();
             savedListener.onUpdate(Collections.singletonList(servers), Attributes.EMPTY);
             return;
@@ -165,13 +171,18 @@ class DnsNameResolver extends NameResolver {
             savedListener.onError(Status.UNAVAILABLE.withCause(e));
             return;
           }
-          ResolvedServerInfoGroup.Builder servers = ResolvedServerInfoGroup.builder();
+
+          List<InetSocketAddress> inetSocketAddrs = new ArrayList<InetSocketAddress>(
+              inetAddrs.length);
           for (int i = 0; i < inetAddrs.length; i++) {
-            InetAddress inetAddr = inetAddrs[i];
-            servers.add(
-                new ResolvedServerInfo(new InetSocketAddress(inetAddr, port), Attributes.EMPTY));
+            inetSocketAddrs.add(new InetSocketAddress(inetAddrs[i], port));
           }
-          savedListener.onUpdate(Collections.singletonList(servers.build()), Attributes.EMPTY);
+
+          ResolvedServerInfoGroup servers = ResolvedServerInfoGroup.builder()
+              .add(new ResolvedServerInfo(inetSocketAddrs))
+              .build();
+
+          savedListener.onUpdate(Collections.singletonList(servers), Attributes.EMPTY);
         } finally {
           synchronized (DnsNameResolver.this) {
             resolving = false;

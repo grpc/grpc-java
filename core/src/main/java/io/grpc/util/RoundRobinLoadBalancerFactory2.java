@@ -95,8 +95,7 @@ public class RoundRobinLoadBalancerFactory2 extends LoadBalancer2.Factory {
   @VisibleForTesting
   static class RoundRobinLoadBalancer extends LoadBalancer2 {
     private final Helper helper;
-    private final Map<EquivalentAddressGroup, Subchannel> subchannels =
-        new HashMap<EquivalentAddressGroup, Subchannel>();
+    private final Map<EquivalentAddressGroup, Subchannel> subchannels = new HashMap<EquivalentAddressGroup, Subchannel>();
 
     @VisibleForTesting
     static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
