@@ -12,7 +12,7 @@ public interface CustomMonitoringDataOrBuilder extends
    * can be any application specific monitoring data
    * </pre>
    *
-   * <code>optional .google.protobuf.Any contents = 1;</code>
+   * <code>.google.protobuf.Any contents = 1;</code>
    */
   boolean hasContents();
   /**
@@ -20,7 +20,7 @@ public interface CustomMonitoringDataOrBuilder extends
    * can be any application specific monitoring data
    * </pre>
    *
-   * <code>optional .google.protobuf.Any contents = 1;</code>
+   * <code>.google.protobuf.Any contents = 1;</code>
    */
   com.google.protobuf.Any getContents();
   /**
@@ -28,7 +28,7 @@ public interface CustomMonitoringDataOrBuilder extends
    * can be any application specific monitoring data
    * </pre>
    *
-   * <code>optional .google.protobuf.Any contents = 1;</code>
+   * <code>.google.protobuf.Any contents = 1;</code>
    */
   com.google.protobuf.AnyOrBuilder getContentsOrBuilder();
 }

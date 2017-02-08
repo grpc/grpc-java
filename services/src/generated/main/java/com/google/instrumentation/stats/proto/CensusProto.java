@@ -24,7 +24,7 @@ public final class CensusProto {
      * to +315,576,000,000 inclusive.
      * </pre>
      *
-     * <code>optional int64 seconds = 1;</code>
+     * <code>int64 seconds = 1;</code>
      */
     long getSeconds();
 
@@ -38,7 +38,7 @@ public final class CensusProto {
      * to +999,999,999 inclusive.
      * </pre>
      *
-     * <code>optional int32 nanos = 2;</code>
+     * <code>int32 nanos = 2;</code>
      */
     int getNanos();
   }
@@ -124,7 +124,7 @@ public final class CensusProto {
      * to +315,576,000,000 inclusive.
      * </pre>
      *
-     * <code>optional int64 seconds = 1;</code>
+     * <code>int64 seconds = 1;</code>
      */
     public long getSeconds() {
       return seconds_;
@@ -142,7 +142,7 @@ public final class CensusProto {
      * to +999,999,999 inclusive.
      * </pre>
      *
-     * <code>optional int32 nanos = 2;</code>
+     * <code>int32 nanos = 2;</code>
      */
     public int getNanos() {
       return nanos_;
@@ -210,7 +210,7 @@ public final class CensusProto {
         return memoizedHashCode;
       }
       int hash = 41;
-      hash = (19 * hash) + getDescriptorForType().hashCode();
+      hash = (19 * hash) + getDescriptor().hashCode();
       hash = (37 * hash) + SECONDS_FIELD_NUMBER;
       hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
           getSeconds());
@@ -442,7 +442,7 @@ public final class CensusProto {
        * to +315,576,000,000 inclusive.
        * </pre>
        *
-       * <code>optional int64 seconds = 1;</code>
+       * <code>int64 seconds = 1;</code>
        */
       public long getSeconds() {
         return seconds_;
@@ -453,7 +453,7 @@ public final class CensusProto {
        * to +315,576,000,000 inclusive.
        * </pre>
        *
-       * <code>optional int64 seconds = 1;</code>
+       * <code>int64 seconds = 1;</code>
        */
       public Builder setSeconds(long value) {
         
@@ -467,7 +467,7 @@ public final class CensusProto {
        * to +315,576,000,000 inclusive.
        * </pre>
        *
-       * <code>optional int64 seconds = 1;</code>
+       * <code>int64 seconds = 1;</code>
        */
       public Builder clearSeconds() {
         
@@ -487,7 +487,7 @@ public final class CensusProto {
        * to +999,999,999 inclusive.
        * </pre>
        *
-       * <code>optional int32 nanos = 2;</code>
+       * <code>int32 nanos = 2;</code>
        */
       public int getNanos() {
         return nanos_;
@@ -502,7 +502,7 @@ public final class CensusProto {
        * to +999,999,999 inclusive.
        * </pre>
        *
-       * <code>optional int32 nanos = 2;</code>
+       * <code>int32 nanos = 2;</code>
        */
       public Builder setNanos(int value) {
         
@@ -520,7 +520,7 @@ public final class CensusProto {
        * to +999,999,999 inclusive.
        * </pre>
        *
-       * <code>optional int32 nanos = 2;</code>
+       * <code>int32 nanos = 2;</code>
        */
       public Builder clearNanos() {
         
@@ -588,7 +588,7 @@ public final class CensusProto {
      * 9999-12-31T23:59:59Z inclusive.
      * </pre>
      *
-     * <code>optional int64 seconds = 1;</code>
+     * <code>int64 seconds = 1;</code>
      */
     long getSeconds();
 
@@ -600,7 +600,7 @@ public final class CensusProto {
      * inclusive.
      * </pre>
      *
-     * <code>optional int32 nanos = 2;</code>
+     * <code>int32 nanos = 2;</code>
      */
     int getNanos();
   }
@@ -687,7 +687,7 @@ public final class CensusProto {
      * 9999-12-31T23:59:59Z inclusive.
      * </pre>
      *
-     * <code>optional int64 seconds = 1;</code>
+     * <code>int64 seconds = 1;</code>
      */
     public long getSeconds() {
       return seconds_;
@@ -703,7 +703,7 @@ public final class CensusProto {
      * inclusive.
      * </pre>
      *
-     * <code>optional int32 nanos = 2;</code>
+     * <code>int32 nanos = 2;</code>
      */
     public int getNanos() {
       return nanos_;
@@ -771,7 +771,7 @@ public final class CensusProto {
         return memoizedHashCode;
       }
       int hash = 41;
-      hash = (19 * hash) + getDescriptorForType().hashCode();
+      hash = (19 * hash) + getDescriptor().hashCode();
       hash = (37 * hash) + SECONDS_FIELD_NUMBER;
       hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
           getSeconds());
@@ -1004,7 +1004,7 @@ public final class CensusProto {
        * 9999-12-31T23:59:59Z inclusive.
        * </pre>
        *
-       * <code>optional int64 seconds = 1;</code>
+       * <code>int64 seconds = 1;</code>
        */
       public long getSeconds() {
         return seconds_;
@@ -1016,7 +1016,7 @@ public final class CensusProto {
        * 9999-12-31T23:59:59Z inclusive.
        * </pre>
        *
-       * <code>optional int64 seconds = 1;</code>
+       * <code>int64 seconds = 1;</code>
        */
       public Builder setSeconds(long value) {
         
@@ -1031,7 +1031,7 @@ public final class CensusProto {
        * 9999-12-31T23:59:59Z inclusive.
        * </pre>
        *
-       * <code>optional int64 seconds = 1;</code>
+       * <code>int64 seconds = 1;</code>
        */
       public Builder clearSeconds() {
         
@@ -1049,7 +1049,7 @@ public final class CensusProto {
        * inclusive.
        * </pre>
        *
-       * <code>optional int32 nanos = 2;</code>
+       * <code>int32 nanos = 2;</code>
        */
       public int getNanos() {
         return nanos_;
@@ -1062,7 +1062,7 @@ public final class CensusProto {
        * inclusive.
        * </pre>
        *
-       * <code>optional int32 nanos = 2;</code>
+       * <code>int32 nanos = 2;</code>
        */
       public Builder setNanos(int value) {
         
@@ -1078,7 +1078,7 @@ public final class CensusProto {
        * inclusive.
        * </pre>
        *
-       * <code>optional int32 nanos = 2;</code>
+       * <code>int32 nanos = 2;</code>
        */
       public Builder clearNanos() {
         
@@ -1144,7 +1144,7 @@ public final class CensusProto {
      * A descriptive name, e.g. rpc_latency, cpu. Must be unique.
      * </pre>
      *
-     * <code>optional string name = 1;</code>
+     * <code>string name = 1;</code>
      */
     java.lang.String getName();
     /**
@@ -1152,7 +1152,7 @@ public final class CensusProto {
      * A descriptive name, e.g. rpc_latency, cpu. Must be unique.
      * </pre>
      *
-     * <code>optional string name = 1;</code>
+     * <code>string name = 1;</code>
      */
     com.google.protobuf.ByteString
         getNameBytes();
@@ -1162,7 +1162,7 @@ public final class CensusProto {
      * More detailed description of the resource, used in documentation.
      * </pre>
      *
-     * <code>optional string description = 2;</code>
+     * <code>string description = 2;</code>
      */
     java.lang.String getDescription();
     /**
@@ -1170,7 +1170,7 @@ public final class CensusProto {
      * More detailed description of the resource, used in documentation.
      * </pre>
      *
-     * <code>optional string description = 2;</code>
+     * <code>string description = 2;</code>
      */
     com.google.protobuf.ByteString
         getDescriptionBytes();
@@ -1180,7 +1180,7 @@ public final class CensusProto {
      * The units used by this type of measurement.
      * </pre>
      *
-     * <code>optional .google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
+     * <code>.google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
      */
     boolean hasUnit();
     /**
@@ -1188,7 +1188,7 @@ public final class CensusProto {
      * The units used by this type of measurement.
      * </pre>
      *
-     * <code>optional .google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
+     * <code>.google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
      */
     com.google.instrumentation.stats.proto.CensusProto.MeasurementDescriptor.MeasurementUnit getUnit();
     /**
@@ -1196,7 +1196,7 @@ public final class CensusProto {
      * The units used by this type of measurement.
      * </pre>
      *
-     * <code>optional .google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
+     * <code>.google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
      */
     com.google.instrumentation.stats.proto.CensusProto.MeasurementDescriptor.MeasurementUnitOrBuilder getUnitOrBuilder();
   }
@@ -1502,7 +1502,7 @@ public final class CensusProto {
         com.google.protobuf.MessageOrBuilder {
 
       /**
-       * <code>optional int32 power10 = 1;</code>
+       * <code>int32 power10 = 1;</code>
        */
       int getPower10();
 
@@ -1701,7 +1701,7 @@ public final class CensusProto {
       public static final int POWER10_FIELD_NUMBER = 1;
       private int power10_;
       /**
-       * <code>optional int32 power10 = 1;</code>
+       * <code>int32 power10 = 1;</code>
        */
       public int getPower10() {
         return power10_;
@@ -1891,7 +1891,7 @@ public final class CensusProto {
           return memoizedHashCode;
         }
         int hash = 41;
-        hash = (19 * hash) + getDescriptorForType().hashCode();
+        hash = (19 * hash) + getDescriptor().hashCode();
         hash = (37 * hash) + POWER10_FIELD_NUMBER;
         hash = (53 * hash) + getPower10();
         if (getNumeratorsCount() > 0) {
@@ -2180,13 +2180,13 @@ public final class CensusProto {
 
         private int power10_ ;
         /**
-         * <code>optional int32 power10 = 1;</code>
+         * <code>int32 power10 = 1;</code>
          */
         public int getPower10() {
           return power10_;
         }
         /**
-         * <code>optional int32 power10 = 1;</code>
+         * <code>int32 power10 = 1;</code>
          */
         public Builder setPower10(int value) {
           
@@ -2195,7 +2195,7 @@ public final class CensusProto {
           return this;
         }
         /**
-         * <code>optional int32 power10 = 1;</code>
+         * <code>int32 power10 = 1;</code>
          */
         public Builder clearPower10() {
           
@@ -2495,7 +2495,7 @@ public final class CensusProto {
      * A descriptive name, e.g. rpc_latency, cpu. Must be unique.
      * </pre>
      *
-     * <code>optional string name = 1;</code>
+     * <code>string name = 1;</code>
      */
     public java.lang.String getName() {
       java.lang.Object ref = name_;
@@ -2514,7 +2514,7 @@ public final class CensusProto {
      * A descriptive name, e.g. rpc_latency, cpu. Must be unique.
      * </pre>
      *
-     * <code>optional string name = 1;</code>
+     * <code>string name = 1;</code>
      */
     public com.google.protobuf.ByteString
         getNameBytes() {
@@ -2537,7 +2537,7 @@ public final class CensusProto {
      * More detailed description of the resource, used in documentation.
      * </pre>
      *
-     * <code>optional string description = 2;</code>
+     * <code>string description = 2;</code>
      */
     public java.lang.String getDescription() {
       java.lang.Object ref = description_;
@@ -2556,7 +2556,7 @@ public final class CensusProto {
      * More detailed description of the resource, used in documentation.
      * </pre>
      *
-     * <code>optional string description = 2;</code>
+     * <code>string description = 2;</code>
      */
     public com.google.protobuf.ByteString
         getDescriptionBytes() {
@@ -2579,7 +2579,7 @@ public final class CensusProto {
      * The units used by this type of measurement.
      * </pre>
      *
-     * <code>optional .google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
+     * <code>.google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
      */
     public boolean hasUnit() {
       return unit_ != null;
@@ -2589,7 +2589,7 @@ public final class CensusProto {
      * The units used by this type of measurement.
      * </pre>
      *
-     * <code>optional .google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
+     * <code>.google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
      */
     public com.google.instrumentation.stats.proto.CensusProto.MeasurementDescriptor.MeasurementUnit getUnit() {
       return unit_ == null ? com.google.instrumentation.stats.proto.CensusProto.MeasurementDescriptor.MeasurementUnit.getDefaultInstance() : unit_;
@@ -2599,7 +2599,7 @@ public final class CensusProto {
      * The units used by this type of measurement.
      * </pre>
      *
-     * <code>optional .google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
+     * <code>.google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
      */
     public com.google.instrumentation.stats.proto.CensusProto.MeasurementDescriptor.MeasurementUnitOrBuilder getUnitOrBuilder() {
       return getUnit();
@@ -2677,7 +2677,7 @@ public final class CensusProto {
         return memoizedHashCode;
       }
       int hash = 41;
-      hash = (19 * hash) + getDescriptorForType().hashCode();
+      hash = (19 * hash) + getDescriptor().hashCode();
       hash = (37 * hash) + NAME_FIELD_NUMBER;
       hash = (53 * hash) + getName().hashCode();
       hash = (37 * hash) + DESCRIPTION_FIELD_NUMBER;
@@ -2931,7 +2931,7 @@ public final class CensusProto {
        * A descriptive name, e.g. rpc_latency, cpu. Must be unique.
        * </pre>
        *
-       * <code>optional string name = 1;</code>
+       * <code>string name = 1;</code>
        */
       public java.lang.String getName() {
         java.lang.Object ref = name_;
@@ -2950,7 +2950,7 @@ public final class CensusProto {
        * A descriptive name, e.g. rpc_latency, cpu. Must be unique.
        * </pre>
        *
-       * <code>optional string name = 1;</code>
+       * <code>string name = 1;</code>
        */
       public com.google.protobuf.ByteString
           getNameBytes() {
@@ -2970,7 +2970,7 @@ public final class CensusProto {
        * A descriptive name, e.g. rpc_latency, cpu. Must be unique.
        * </pre>
        *
-       * <code>optional string name = 1;</code>
+       * <code>string name = 1;</code>
        */
       public Builder setName(
           java.lang.String value) {
@@ -2987,7 +2987,7 @@ public final class CensusProto {
        * A descriptive name, e.g. rpc_latency, cpu. Must be unique.
        * </pre>
        *
-       * <code>optional string name = 1;</code>
+       * <code>string name = 1;</code>
        */
       public Builder clearName() {
         
@@ -3000,7 +3000,7 @@ public final class CensusProto {
        * A descriptive name, e.g. rpc_latency, cpu. Must be unique.
        * </pre>
        *
-       * <code>optional string name = 1;</code>
+       * <code>string name = 1;</code>
        */
       public Builder setNameBytes(
           com.google.protobuf.ByteString value) {
@@ -3020,7 +3020,7 @@ public final class CensusProto {
        * More detailed description of the resource, used in documentation.
        * </pre>
        *
-       * <code>optional string description = 2;</code>
+       * <code>string description = 2;</code>
        */
       public java.lang.String getDescription() {
         java.lang.Object ref = description_;
@@ -3039,7 +3039,7 @@ public final class CensusProto {
        * More detailed description of the resource, used in documentation.
        * </pre>
        *
-       * <code>optional string description = 2;</code>
+       * <code>string description = 2;</code>
        */
       public com.google.protobuf.ByteString
           getDescriptionBytes() {
@@ -3059,7 +3059,7 @@ public final class CensusProto {
        * More detailed description of the resource, used in documentation.
        * </pre>
        *
-       * <code>optional string description = 2;</code>
+       * <code>string description = 2;</code>
        */
       public Builder setDescription(
           java.lang.String value) {
@@ -3076,7 +3076,7 @@ public final class CensusProto {
        * More detailed description of the resource, used in documentation.
        * </pre>
        *
-       * <code>optional string description = 2;</code>
+       * <code>string description = 2;</code>
        */
       public Builder clearDescription() {
         
@@ -3089,7 +3089,7 @@ public final class CensusProto {
        * More detailed description of the resource, used in documentation.
        * </pre>
        *
-       * <code>optional string description = 2;</code>
+       * <code>string description = 2;</code>
        */
       public Builder setDescriptionBytes(
           com.google.protobuf.ByteString value) {
@@ -3111,7 +3111,7 @@ public final class CensusProto {
        * The units used by this type of measurement.
        * </pre>
        *
-       * <code>optional .google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
+       * <code>.google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
        */
       public boolean hasUnit() {
         return unitBuilder_ != null || unit_ != null;
@@ -3121,7 +3121,7 @@ public final class CensusProto {
        * The units used by this type of measurement.
        * </pre>
        *
-       * <code>optional .google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
+       * <code>.google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.MeasurementDescriptor.MeasurementUnit getUnit() {
         if (unitBuilder_ == null) {
@@ -3135,7 +3135,7 @@ public final class CensusProto {
        * The units used by this type of measurement.
        * </pre>
        *
-       * <code>optional .google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
+       * <code>.google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
        */
       public Builder setUnit(com.google.instrumentation.stats.proto.CensusProto.MeasurementDescriptor.MeasurementUnit value) {
         if (unitBuilder_ == null) {
@@ -3155,7 +3155,7 @@ public final class CensusProto {
        * The units used by this type of measurement.
        * </pre>
        *
-       * <code>optional .google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
+       * <code>.google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
        */
       public Builder setUnit(
           com.google.instrumentation.stats.proto.CensusProto.MeasurementDescriptor.MeasurementUnit.Builder builderForValue) {
@@ -3173,7 +3173,7 @@ public final class CensusProto {
        * The units used by this type of measurement.
        * </pre>
        *
-       * <code>optional .google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
+       * <code>.google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
        */
       public Builder mergeUnit(com.google.instrumentation.stats.proto.CensusProto.MeasurementDescriptor.MeasurementUnit value) {
         if (unitBuilder_ == null) {
@@ -3195,7 +3195,7 @@ public final class CensusProto {
        * The units used by this type of measurement.
        * </pre>
        *
-       * <code>optional .google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
+       * <code>.google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
        */
       public Builder clearUnit() {
         if (unitBuilder_ == null) {
@@ -3213,7 +3213,7 @@ public final class CensusProto {
        * The units used by this type of measurement.
        * </pre>
        *
-       * <code>optional .google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
+       * <code>.google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.MeasurementDescriptor.MeasurementUnit.Builder getUnitBuilder() {
         
@@ -3225,7 +3225,7 @@ public final class CensusProto {
        * The units used by this type of measurement.
        * </pre>
        *
-       * <code>optional .google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
+       * <code>.google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.MeasurementDescriptor.MeasurementUnitOrBuilder getUnitOrBuilder() {
         if (unitBuilder_ != null) {
@@ -3240,7 +3240,7 @@ public final class CensusProto {
        * The units used by this type of measurement.
        * </pre>
        *
-       * <code>optional .google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
+       * <code>.google.instrumentation.MeasurementDescriptor.MeasurementUnit unit = 3;</code>
        */
       private com.google.protobuf.SingleFieldBuilderV3<
           com.google.instrumentation.stats.proto.CensusProto.MeasurementDescriptor.MeasurementUnit, com.google.instrumentation.stats.proto.CensusProto.MeasurementDescriptor.MeasurementUnit.Builder, com.google.instrumentation.stats.proto.CensusProto.MeasurementDescriptor.MeasurementUnitOrBuilder> 
@@ -3313,7 +3313,7 @@ public final class CensusProto {
      * The number of values in the population. Must be non-negative.
      * </pre>
      *
-     * <code>optional int64 count = 1;</code>
+     * <code>int64 count = 1;</code>
      */
     long getCount();
 
@@ -3323,7 +3323,7 @@ public final class CensusProto {
      * then this field must be zero.
      * </pre>
      *
-     * <code>optional double mean = 2;</code>
+     * <code>double mean = 2;</code>
      */
     double getMean();
 
@@ -3333,7 +3333,7 @@ public final class CensusProto {
      * field must be zero.
      * </pre>
      *
-     * <code>optional double sum = 3;</code>
+     * <code>double sum = 3;</code>
      */
     double getSum();
 
@@ -3343,7 +3343,7 @@ public final class CensusProto {
      * be defined.
      * </pre>
      *
-     * <code>optional .google.instrumentation.DistributionAggregation.Range range = 4;</code>
+     * <code>.google.instrumentation.DistributionAggregation.Range range = 4;</code>
      */
     boolean hasRange();
     /**
@@ -3352,7 +3352,7 @@ public final class CensusProto {
      * be defined.
      * </pre>
      *
-     * <code>optional .google.instrumentation.DistributionAggregation.Range range = 4;</code>
+     * <code>.google.instrumentation.DistributionAggregation.Range range = 4;</code>
      */
     com.google.instrumentation.stats.proto.CensusProto.DistributionAggregation.Range getRange();
     /**
@@ -3361,7 +3361,7 @@ public final class CensusProto {
      * be defined.
      * </pre>
      *
-     * <code>optional .google.instrumentation.DistributionAggregation.Range range = 4;</code>
+     * <code>.google.instrumentation.DistributionAggregation.Range range = 4;</code>
      */
     com.google.instrumentation.stats.proto.CensusProto.DistributionAggregation.RangeOrBuilder getRangeOrBuilder();
 
@@ -3621,7 +3621,7 @@ public final class CensusProto {
        * The minimum of the population values.
        * </pre>
        *
-       * <code>optional double min = 1;</code>
+       * <code>double min = 1;</code>
        */
       double getMin();
 
@@ -3630,7 +3630,7 @@ public final class CensusProto {
        * The maximum of the population values.
        * </pre>
        *
-       * <code>optional double max = 2;</code>
+       * <code>double max = 2;</code>
        */
       double getMax();
     }
@@ -3719,7 +3719,7 @@ public final class CensusProto {
        * The minimum of the population values.
        * </pre>
        *
-       * <code>optional double min = 1;</code>
+       * <code>double min = 1;</code>
        */
       public double getMin() {
         return min_;
@@ -3732,7 +3732,7 @@ public final class CensusProto {
        * The maximum of the population values.
        * </pre>
        *
-       * <code>optional double max = 2;</code>
+       * <code>double max = 2;</code>
        */
       public double getMax() {
         return max_;
@@ -3804,7 +3804,7 @@ public final class CensusProto {
           return memoizedHashCode;
         }
         int hash = 41;
-        hash = (19 * hash) + getDescriptorForType().hashCode();
+        hash = (19 * hash) + getDescriptor().hashCode();
         hash = (37 * hash) + MIN_FIELD_NUMBER;
         hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
             java.lang.Double.doubleToLongBits(getMin()));
@@ -4040,7 +4040,7 @@ public final class CensusProto {
          * The minimum of the population values.
          * </pre>
          *
-         * <code>optional double min = 1;</code>
+         * <code>double min = 1;</code>
          */
         public double getMin() {
           return min_;
@@ -4050,7 +4050,7 @@ public final class CensusProto {
          * The minimum of the population values.
          * </pre>
          *
-         * <code>optional double min = 1;</code>
+         * <code>double min = 1;</code>
          */
         public Builder setMin(double value) {
           
@@ -4063,7 +4063,7 @@ public final class CensusProto {
          * The minimum of the population values.
          * </pre>
          *
-         * <code>optional double min = 1;</code>
+         * <code>double min = 1;</code>
          */
         public Builder clearMin() {
           
@@ -4078,7 +4078,7 @@ public final class CensusProto {
          * The maximum of the population values.
          * </pre>
          *
-         * <code>optional double max = 2;</code>
+         * <code>double max = 2;</code>
          */
         public double getMax() {
           return max_;
@@ -4088,7 +4088,7 @@ public final class CensusProto {
          * The maximum of the population values.
          * </pre>
          *
-         * <code>optional double max = 2;</code>
+         * <code>double max = 2;</code>
          */
         public Builder setMax(double value) {
           
@@ -4101,7 +4101,7 @@ public final class CensusProto {
          * The maximum of the population values.
          * </pre>
          *
-         * <code>optional double max = 2;</code>
+         * <code>double max = 2;</code>
          */
         public Builder clearMax() {
           
@@ -4166,7 +4166,7 @@ public final class CensusProto {
      * The number of values in the population. Must be non-negative.
      * </pre>
      *
-     * <code>optional int64 count = 1;</code>
+     * <code>int64 count = 1;</code>
      */
     public long getCount() {
       return count_;
@@ -4180,7 +4180,7 @@ public final class CensusProto {
      * then this field must be zero.
      * </pre>
      *
-     * <code>optional double mean = 2;</code>
+     * <code>double mean = 2;</code>
      */
     public double getMean() {
       return mean_;
@@ -4194,7 +4194,7 @@ public final class CensusProto {
      * field must be zero.
      * </pre>
      *
-     * <code>optional double sum = 3;</code>
+     * <code>double sum = 3;</code>
      */
     public double getSum() {
       return sum_;
@@ -4208,7 +4208,7 @@ public final class CensusProto {
      * be defined.
      * </pre>
      *
-     * <code>optional .google.instrumentation.DistributionAggregation.Range range = 4;</code>
+     * <code>.google.instrumentation.DistributionAggregation.Range range = 4;</code>
      */
     public boolean hasRange() {
       return range_ != null;
@@ -4219,7 +4219,7 @@ public final class CensusProto {
      * be defined.
      * </pre>
      *
-     * <code>optional .google.instrumentation.DistributionAggregation.Range range = 4;</code>
+     * <code>.google.instrumentation.DistributionAggregation.Range range = 4;</code>
      */
     public com.google.instrumentation.stats.proto.CensusProto.DistributionAggregation.Range getRange() {
       return range_ == null ? com.google.instrumentation.stats.proto.CensusProto.DistributionAggregation.Range.getDefaultInstance() : range_;
@@ -4230,7 +4230,7 @@ public final class CensusProto {
      * be defined.
      * </pre>
      *
-     * <code>optional .google.instrumentation.DistributionAggregation.Range range = 4;</code>
+     * <code>.google.instrumentation.DistributionAggregation.Range range = 4;</code>
      */
     public com.google.instrumentation.stats.proto.CensusProto.DistributionAggregation.RangeOrBuilder getRangeOrBuilder() {
       return getRange();
@@ -4481,7 +4481,7 @@ public final class CensusProto {
         return memoizedHashCode;
       }
       int hash = 41;
-      hash = (19 * hash) + getDescriptorForType().hashCode();
+      hash = (19 * hash) + getDescriptor().hashCode();
       hash = (37 * hash) + COUNT_FIELD_NUMBER;
       hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
           getCount());
@@ -4823,7 +4823,7 @@ public final class CensusProto {
        * The number of values in the population. Must be non-negative.
        * </pre>
        *
-       * <code>optional int64 count = 1;</code>
+       * <code>int64 count = 1;</code>
        */
       public long getCount() {
         return count_;
@@ -4833,7 +4833,7 @@ public final class CensusProto {
        * The number of values in the population. Must be non-negative.
        * </pre>
        *
-       * <code>optional int64 count = 1;</code>
+       * <code>int64 count = 1;</code>
        */
       public Builder setCount(long value) {
         
@@ -4846,7 +4846,7 @@ public final class CensusProto {
        * The number of values in the population. Must be non-negative.
        * </pre>
        *
-       * <code>optional int64 count = 1;</code>
+       * <code>int64 count = 1;</code>
        */
       public Builder clearCount() {
         
@@ -4862,7 +4862,7 @@ public final class CensusProto {
        * then this field must be zero.
        * </pre>
        *
-       * <code>optional double mean = 2;</code>
+       * <code>double mean = 2;</code>
        */
       public double getMean() {
         return mean_;
@@ -4873,7 +4873,7 @@ public final class CensusProto {
        * then this field must be zero.
        * </pre>
        *
-       * <code>optional double mean = 2;</code>
+       * <code>double mean = 2;</code>
        */
       public Builder setMean(double value) {
         
@@ -4887,7 +4887,7 @@ public final class CensusProto {
        * then this field must be zero.
        * </pre>
        *
-       * <code>optional double mean = 2;</code>
+       * <code>double mean = 2;</code>
        */
       public Builder clearMean() {
         
@@ -4903,7 +4903,7 @@ public final class CensusProto {
        * field must be zero.
        * </pre>
        *
-       * <code>optional double sum = 3;</code>
+       * <code>double sum = 3;</code>
        */
       public double getSum() {
         return sum_;
@@ -4914,7 +4914,7 @@ public final class CensusProto {
        * field must be zero.
        * </pre>
        *
-       * <code>optional double sum = 3;</code>
+       * <code>double sum = 3;</code>
        */
       public Builder setSum(double value) {
         
@@ -4928,7 +4928,7 @@ public final class CensusProto {
        * field must be zero.
        * </pre>
        *
-       * <code>optional double sum = 3;</code>
+       * <code>double sum = 3;</code>
        */
       public Builder clearSum() {
         
@@ -4946,7 +4946,7 @@ public final class CensusProto {
        * be defined.
        * </pre>
        *
-       * <code>optional .google.instrumentation.DistributionAggregation.Range range = 4;</code>
+       * <code>.google.instrumentation.DistributionAggregation.Range range = 4;</code>
        */
       public boolean hasRange() {
         return rangeBuilder_ != null || range_ != null;
@@ -4957,7 +4957,7 @@ public final class CensusProto {
        * be defined.
        * </pre>
        *
-       * <code>optional .google.instrumentation.DistributionAggregation.Range range = 4;</code>
+       * <code>.google.instrumentation.DistributionAggregation.Range range = 4;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.DistributionAggregation.Range getRange() {
         if (rangeBuilder_ == null) {
@@ -4972,7 +4972,7 @@ public final class CensusProto {
        * be defined.
        * </pre>
        *
-       * <code>optional .google.instrumentation.DistributionAggregation.Range range = 4;</code>
+       * <code>.google.instrumentation.DistributionAggregation.Range range = 4;</code>
        */
       public Builder setRange(com.google.instrumentation.stats.proto.CensusProto.DistributionAggregation.Range value) {
         if (rangeBuilder_ == null) {
@@ -4993,7 +4993,7 @@ public final class CensusProto {
        * be defined.
        * </pre>
        *
-       * <code>optional .google.instrumentation.DistributionAggregation.Range range = 4;</code>
+       * <code>.google.instrumentation.DistributionAggregation.Range range = 4;</code>
        */
       public Builder setRange(
           com.google.instrumentation.stats.proto.CensusProto.DistributionAggregation.Range.Builder builderForValue) {
@@ -5012,7 +5012,7 @@ public final class CensusProto {
        * be defined.
        * </pre>
        *
-       * <code>optional .google.instrumentation.DistributionAggregation.Range range = 4;</code>
+       * <code>.google.instrumentation.DistributionAggregation.Range range = 4;</code>
        */
       public Builder mergeRange(com.google.instrumentation.stats.proto.CensusProto.DistributionAggregation.Range value) {
         if (rangeBuilder_ == null) {
@@ -5035,7 +5035,7 @@ public final class CensusProto {
        * be defined.
        * </pre>
        *
-       * <code>optional .google.instrumentation.DistributionAggregation.Range range = 4;</code>
+       * <code>.google.instrumentation.DistributionAggregation.Range range = 4;</code>
        */
       public Builder clearRange() {
         if (rangeBuilder_ == null) {
@@ -5054,7 +5054,7 @@ public final class CensusProto {
        * be defined.
        * </pre>
        *
-       * <code>optional .google.instrumentation.DistributionAggregation.Range range = 4;</code>
+       * <code>.google.instrumentation.DistributionAggregation.Range range = 4;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.DistributionAggregation.Range.Builder getRangeBuilder() {
         
@@ -5067,7 +5067,7 @@ public final class CensusProto {
        * be defined.
        * </pre>
        *
-       * <code>optional .google.instrumentation.DistributionAggregation.Range range = 4;</code>
+       * <code>.google.instrumentation.DistributionAggregation.Range range = 4;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.DistributionAggregation.RangeOrBuilder getRangeOrBuilder() {
         if (rangeBuilder_ != null) {
@@ -5083,7 +5083,7 @@ public final class CensusProto {
        * be defined.
        * </pre>
        *
-       * <code>optional .google.instrumentation.DistributionAggregation.Range range = 4;</code>
+       * <code>.google.instrumentation.DistributionAggregation.Range range = 4;</code>
        */
       private com.google.protobuf.SingleFieldBuilderV3<
           com.google.instrumentation.stats.proto.CensusProto.DistributionAggregation.Range, com.google.instrumentation.stats.proto.CensusProto.DistributionAggregation.Range.Builder, com.google.instrumentation.stats.proto.CensusProto.DistributionAggregation.RangeOrBuilder> 
@@ -5941,7 +5941,7 @@ public final class CensusProto {
         return memoizedHashCode;
       }
       int hash = 41;
-      hash = (19 * hash) + getDescriptorForType().hashCode();
+      hash = (19 * hash) + getDescriptor().hashCode();
       if (getBucketBoundsCount() > 0) {
         hash = (37 * hash) + BUCKET_BOUNDS_FIELD_NUMBER;
         hash = (53 * hash) + getBucketBoundsList().hashCode();
@@ -6613,7 +6613,7 @@ public final class CensusProto {
        * The interval duration. Must be positive.
        * </pre>
        *
-       * <code>optional .google.instrumentation.Duration interval_size = 1;</code>
+       * <code>.google.instrumentation.Duration interval_size = 1;</code>
        */
       boolean hasIntervalSize();
       /**
@@ -6621,7 +6621,7 @@ public final class CensusProto {
        * The interval duration. Must be positive.
        * </pre>
        *
-       * <code>optional .google.instrumentation.Duration interval_size = 1;</code>
+       * <code>.google.instrumentation.Duration interval_size = 1;</code>
        */
       com.google.instrumentation.stats.proto.CensusProto.Duration getIntervalSize();
       /**
@@ -6629,7 +6629,7 @@ public final class CensusProto {
        * The interval duration. Must be positive.
        * </pre>
        *
-       * <code>optional .google.instrumentation.Duration interval_size = 1;</code>
+       * <code>.google.instrumentation.Duration interval_size = 1;</code>
        */
       com.google.instrumentation.stats.proto.CensusProto.DurationOrBuilder getIntervalSizeOrBuilder();
 
@@ -6638,7 +6638,7 @@ public final class CensusProto {
        * Approximate number of measurements recorded in this interval.
        * </pre>
        *
-       * <code>optional double count = 2;</code>
+       * <code>double count = 2;</code>
        */
       double getCount();
 
@@ -6647,7 +6647,7 @@ public final class CensusProto {
        * The cumulative sum of measurements in this interval.
        * </pre>
        *
-       * <code>optional double sum = 3;</code>
+       * <code>double sum = 3;</code>
        */
       double getSum();
     }
@@ -6749,7 +6749,7 @@ public final class CensusProto {
        * The interval duration. Must be positive.
        * </pre>
        *
-       * <code>optional .google.instrumentation.Duration interval_size = 1;</code>
+       * <code>.google.instrumentation.Duration interval_size = 1;</code>
        */
       public boolean hasIntervalSize() {
         return intervalSize_ != null;
@@ -6759,7 +6759,7 @@ public final class CensusProto {
        * The interval duration. Must be positive.
        * </pre>
        *
-       * <code>optional .google.instrumentation.Duration interval_size = 1;</code>
+       * <code>.google.instrumentation.Duration interval_size = 1;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.Duration getIntervalSize() {
         return intervalSize_ == null ? com.google.instrumentation.stats.proto.CensusProto.Duration.getDefaultInstance() : intervalSize_;
@@ -6769,7 +6769,7 @@ public final class CensusProto {
        * The interval duration. Must be positive.
        * </pre>
        *
-       * <code>optional .google.instrumentation.Duration interval_size = 1;</code>
+       * <code>.google.instrumentation.Duration interval_size = 1;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.DurationOrBuilder getIntervalSizeOrBuilder() {
         return getIntervalSize();
@@ -6782,7 +6782,7 @@ public final class CensusProto {
        * Approximate number of measurements recorded in this interval.
        * </pre>
        *
-       * <code>optional double count = 2;</code>
+       * <code>double count = 2;</code>
        */
       public double getCount() {
         return count_;
@@ -6795,7 +6795,7 @@ public final class CensusProto {
        * The cumulative sum of measurements in this interval.
        * </pre>
        *
-       * <code>optional double sum = 3;</code>
+       * <code>double sum = 3;</code>
        */
       public double getSum() {
         return sum_;
@@ -6879,7 +6879,7 @@ public final class CensusProto {
           return memoizedHashCode;
         }
         int hash = 41;
-        hash = (19 * hash) + getDescriptorForType().hashCode();
+        hash = (19 * hash) + getDescriptor().hashCode();
         if (hasIntervalSize()) {
           hash = (37 * hash) + INTERVAL_SIZE_FIELD_NUMBER;
           hash = (53 * hash) + getIntervalSize().hashCode();
@@ -7135,7 +7135,7 @@ public final class CensusProto {
          * The interval duration. Must be positive.
          * </pre>
          *
-         * <code>optional .google.instrumentation.Duration interval_size = 1;</code>
+         * <code>.google.instrumentation.Duration interval_size = 1;</code>
          */
         public boolean hasIntervalSize() {
           return intervalSizeBuilder_ != null || intervalSize_ != null;
@@ -7145,7 +7145,7 @@ public final class CensusProto {
          * The interval duration. Must be positive.
          * </pre>
          *
-         * <code>optional .google.instrumentation.Duration interval_size = 1;</code>
+         * <code>.google.instrumentation.Duration interval_size = 1;</code>
          */
         public com.google.instrumentation.stats.proto.CensusProto.Duration getIntervalSize() {
           if (intervalSizeBuilder_ == null) {
@@ -7159,7 +7159,7 @@ public final class CensusProto {
          * The interval duration. Must be positive.
          * </pre>
          *
-         * <code>optional .google.instrumentation.Duration interval_size = 1;</code>
+         * <code>.google.instrumentation.Duration interval_size = 1;</code>
          */
         public Builder setIntervalSize(com.google.instrumentation.stats.proto.CensusProto.Duration value) {
           if (intervalSizeBuilder_ == null) {
@@ -7179,7 +7179,7 @@ public final class CensusProto {
          * The interval duration. Must be positive.
          * </pre>
          *
-         * <code>optional .google.instrumentation.Duration interval_size = 1;</code>
+         * <code>.google.instrumentation.Duration interval_size = 1;</code>
          */
         public Builder setIntervalSize(
             com.google.instrumentation.stats.proto.CensusProto.Duration.Builder builderForValue) {
@@ -7197,7 +7197,7 @@ public final class CensusProto {
          * The interval duration. Must be positive.
          * </pre>
          *
-         * <code>optional .google.instrumentation.Duration interval_size = 1;</code>
+         * <code>.google.instrumentation.Duration interval_size = 1;</code>
          */
         public Builder mergeIntervalSize(com.google.instrumentation.stats.proto.CensusProto.Duration value) {
           if (intervalSizeBuilder_ == null) {
@@ -7219,7 +7219,7 @@ public final class CensusProto {
          * The interval duration. Must be positive.
          * </pre>
          *
-         * <code>optional .google.instrumentation.Duration interval_size = 1;</code>
+         * <code>.google.instrumentation.Duration interval_size = 1;</code>
          */
         public Builder clearIntervalSize() {
           if (intervalSizeBuilder_ == null) {
@@ -7237,7 +7237,7 @@ public final class CensusProto {
          * The interval duration. Must be positive.
          * </pre>
          *
-         * <code>optional .google.instrumentation.Duration interval_size = 1;</code>
+         * <code>.google.instrumentation.Duration interval_size = 1;</code>
          */
         public com.google.instrumentation.stats.proto.CensusProto.Duration.Builder getIntervalSizeBuilder() {
           
@@ -7249,7 +7249,7 @@ public final class CensusProto {
          * The interval duration. Must be positive.
          * </pre>
          *
-         * <code>optional .google.instrumentation.Duration interval_size = 1;</code>
+         * <code>.google.instrumentation.Duration interval_size = 1;</code>
          */
         public com.google.instrumentation.stats.proto.CensusProto.DurationOrBuilder getIntervalSizeOrBuilder() {
           if (intervalSizeBuilder_ != null) {
@@ -7264,7 +7264,7 @@ public final class CensusProto {
          * The interval duration. Must be positive.
          * </pre>
          *
-         * <code>optional .google.instrumentation.Duration interval_size = 1;</code>
+         * <code>.google.instrumentation.Duration interval_size = 1;</code>
          */
         private com.google.protobuf.SingleFieldBuilderV3<
             com.google.instrumentation.stats.proto.CensusProto.Duration, com.google.instrumentation.stats.proto.CensusProto.Duration.Builder, com.google.instrumentation.stats.proto.CensusProto.DurationOrBuilder> 
@@ -7286,7 +7286,7 @@ public final class CensusProto {
          * Approximate number of measurements recorded in this interval.
          * </pre>
          *
-         * <code>optional double count = 2;</code>
+         * <code>double count = 2;</code>
          */
         public double getCount() {
           return count_;
@@ -7296,7 +7296,7 @@ public final class CensusProto {
          * Approximate number of measurements recorded in this interval.
          * </pre>
          *
-         * <code>optional double count = 2;</code>
+         * <code>double count = 2;</code>
          */
         public Builder setCount(double value) {
           
@@ -7309,7 +7309,7 @@ public final class CensusProto {
          * Approximate number of measurements recorded in this interval.
          * </pre>
          *
-         * <code>optional double count = 2;</code>
+         * <code>double count = 2;</code>
          */
         public Builder clearCount() {
           
@@ -7324,7 +7324,7 @@ public final class CensusProto {
          * The cumulative sum of measurements in this interval.
          * </pre>
          *
-         * <code>optional double sum = 3;</code>
+         * <code>double sum = 3;</code>
          */
         public double getSum() {
           return sum_;
@@ -7334,7 +7334,7 @@ public final class CensusProto {
          * The cumulative sum of measurements in this interval.
          * </pre>
          *
-         * <code>optional double sum = 3;</code>
+         * <code>double sum = 3;</code>
          */
         public Builder setSum(double value) {
           
@@ -7347,7 +7347,7 @@ public final class CensusProto {
          * The cumulative sum of measurements in this interval.
          * </pre>
          *
-         * <code>optional double sum = 3;</code>
+         * <code>double sum = 3;</code>
          */
         public Builder clearSum() {
           
@@ -7581,7 +7581,7 @@ public final class CensusProto {
         return memoizedHashCode;
       }
       int hash = 41;
-      hash = (19 * hash) + getDescriptorForType().hashCode();
+      hash = (19 * hash) + getDescriptor().hashCode();
       if (getIntervalsCount() > 0) {
         hash = (37 * hash) + INTERVALS_FIELD_NUMBER;
         hash = (53 * hash) + getIntervalsList().hashCode();
@@ -8595,7 +8595,7 @@ public final class CensusProto {
      * unspecified.
      * </pre>
      *
-     * <code>optional int32 n_sub_intervals = 1;</code>
+     * <code>int32 n_sub_intervals = 1;</code>
      */
     int getNSubIntervals();
 
@@ -8748,7 +8748,7 @@ public final class CensusProto {
      * unspecified.
      * </pre>
      *
-     * <code>optional int32 n_sub_intervals = 1;</code>
+     * <code>int32 n_sub_intervals = 1;</code>
      */
     public int getNSubIntervals() {
       return nSubIntervals_;
@@ -8876,7 +8876,7 @@ public final class CensusProto {
         return memoizedHashCode;
       }
       int hash = 41;
-      hash = (19 * hash) + getDescriptorForType().hashCode();
+      hash = (19 * hash) + getDescriptor().hashCode();
       hash = (37 * hash) + N_SUB_INTERVALS_FIELD_NUMBER;
       hash = (53 * hash) + getNSubIntervals();
       if (getIntervalSizesCount() > 0) {
@@ -9159,7 +9159,7 @@ public final class CensusProto {
        * unspecified.
        * </pre>
        *
-       * <code>optional int32 n_sub_intervals = 1;</code>
+       * <code>int32 n_sub_intervals = 1;</code>
        */
       public int getNSubIntervals() {
         return nSubIntervals_;
@@ -9175,7 +9175,7 @@ public final class CensusProto {
        * unspecified.
        * </pre>
        *
-       * <code>optional int32 n_sub_intervals = 1;</code>
+       * <code>int32 n_sub_intervals = 1;</code>
        */
       public Builder setNSubIntervals(int value) {
         
@@ -9194,7 +9194,7 @@ public final class CensusProto {
        * unspecified.
        * </pre>
        *
-       * <code>optional int32 n_sub_intervals = 1;</code>
+       * <code>int32 n_sub_intervals = 1;</code>
        */
       public Builder clearNSubIntervals() {
         
@@ -9586,21 +9586,21 @@ public final class CensusProto {
       com.google.protobuf.MessageOrBuilder {
 
     /**
-     * <code>optional string key = 1;</code>
+     * <code>string key = 1;</code>
      */
     java.lang.String getKey();
     /**
-     * <code>optional string key = 1;</code>
+     * <code>string key = 1;</code>
      */
     com.google.protobuf.ByteString
         getKeyBytes();
 
     /**
-     * <code>optional string value = 2;</code>
+     * <code>string value = 2;</code>
      */
     java.lang.String getValue();
     /**
-     * <code>optional string value = 2;</code>
+     * <code>string value = 2;</code>
      */
     com.google.protobuf.ByteString
         getValueBytes();
@@ -9688,7 +9688,7 @@ public final class CensusProto {
     public static final int KEY_FIELD_NUMBER = 1;
     private volatile java.lang.Object key_;
     /**
-     * <code>optional string key = 1;</code>
+     * <code>string key = 1;</code>
      */
     public java.lang.String getKey() {
       java.lang.Object ref = key_;
@@ -9703,7 +9703,7 @@ public final class CensusProto {
       }
     }
     /**
-     * <code>optional string key = 1;</code>
+     * <code>string key = 1;</code>
      */
     public com.google.protobuf.ByteString
         getKeyBytes() {
@@ -9722,7 +9722,7 @@ public final class CensusProto {
     public static final int VALUE_FIELD_NUMBER = 2;
     private volatile java.lang.Object value_;
     /**
-     * <code>optional string value = 2;</code>
+     * <code>string value = 2;</code>
      */
     public java.lang.String getValue() {
       java.lang.Object ref = value_;
@@ -9737,7 +9737,7 @@ public final class CensusProto {
       }
     }
     /**
-     * <code>optional string value = 2;</code>
+     * <code>string value = 2;</code>
      */
     public com.google.protobuf.ByteString
         getValueBytes() {
@@ -9813,7 +9813,7 @@ public final class CensusProto {
         return memoizedHashCode;
       }
       int hash = 41;
-      hash = (19 * hash) + getDescriptorForType().hashCode();
+      hash = (19 * hash) + getDescriptor().hashCode();
       hash = (37 * hash) + KEY_FIELD_NUMBER;
       hash = (53 * hash) + getKey().hashCode();
       hash = (37 * hash) + VALUE_FIELD_NUMBER;
@@ -10045,7 +10045,7 @@ public final class CensusProto {
 
       private java.lang.Object key_ = "";
       /**
-       * <code>optional string key = 1;</code>
+       * <code>string key = 1;</code>
        */
       public java.lang.String getKey() {
         java.lang.Object ref = key_;
@@ -10060,7 +10060,7 @@ public final class CensusProto {
         }
       }
       /**
-       * <code>optional string key = 1;</code>
+       * <code>string key = 1;</code>
        */
       public com.google.protobuf.ByteString
           getKeyBytes() {
@@ -10076,7 +10076,7 @@ public final class CensusProto {
         }
       }
       /**
-       * <code>optional string key = 1;</code>
+       * <code>string key = 1;</code>
        */
       public Builder setKey(
           java.lang.String value) {
@@ -10089,7 +10089,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional string key = 1;</code>
+       * <code>string key = 1;</code>
        */
       public Builder clearKey() {
         
@@ -10098,7 +10098,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional string key = 1;</code>
+       * <code>string key = 1;</code>
        */
       public Builder setKeyBytes(
           com.google.protobuf.ByteString value) {
@@ -10114,7 +10114,7 @@ public final class CensusProto {
 
       private java.lang.Object value_ = "";
       /**
-       * <code>optional string value = 2;</code>
+       * <code>string value = 2;</code>
        */
       public java.lang.String getValue() {
         java.lang.Object ref = value_;
@@ -10129,7 +10129,7 @@ public final class CensusProto {
         }
       }
       /**
-       * <code>optional string value = 2;</code>
+       * <code>string value = 2;</code>
        */
       public com.google.protobuf.ByteString
           getValueBytes() {
@@ -10145,7 +10145,7 @@ public final class CensusProto {
         }
       }
       /**
-       * <code>optional string value = 2;</code>
+       * <code>string value = 2;</code>
        */
       public Builder setValue(
           java.lang.String value) {
@@ -10158,7 +10158,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional string value = 2;</code>
+       * <code>string value = 2;</code>
        */
       public Builder clearValue() {
         
@@ -10167,7 +10167,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional string value = 2;</code>
+       * <code>string value = 2;</code>
        */
       public Builder setValueBytes(
           com.google.protobuf.ByteString value) {
@@ -10238,7 +10238,7 @@ public final class CensusProto {
      * Name of view. Must be unique.
      * </pre>
      *
-     * <code>optional string name = 1;</code>
+     * <code>string name = 1;</code>
      */
     java.lang.String getName();
     /**
@@ -10246,7 +10246,7 @@ public final class CensusProto {
      * Name of view. Must be unique.
      * </pre>
      *
-     * <code>optional string name = 1;</code>
+     * <code>string name = 1;</code>
      */
     com.google.protobuf.ByteString
         getNameBytes();
@@ -10256,7 +10256,7 @@ public final class CensusProto {
      * More detailed description, for documentation purposes.
      * </pre>
      *
-     * <code>optional string description = 2;</code>
+     * <code>string description = 2;</code>
      */
     java.lang.String getDescription();
     /**
@@ -10264,7 +10264,7 @@ public final class CensusProto {
      * More detailed description, for documentation purposes.
      * </pre>
      *
-     * <code>optional string description = 2;</code>
+     * <code>string description = 2;</code>
      */
     com.google.protobuf.ByteString
         getDescriptionBytes();
@@ -10274,7 +10274,7 @@ public final class CensusProto {
      * Name of a MeasurementDescriptor to be used for this view.
      * </pre>
      *
-     * <code>optional string measurement_descriptor_name = 3;</code>
+     * <code>string measurement_descriptor_name = 3;</code>
      */
     java.lang.String getMeasurementDescriptorName();
     /**
@@ -10282,26 +10282,26 @@ public final class CensusProto {
      * Name of a MeasurementDescriptor to be used for this view.
      * </pre>
      *
-     * <code>optional string measurement_descriptor_name = 3;</code>
+     * <code>string measurement_descriptor_name = 3;</code>
      */
     com.google.protobuf.ByteString
         getMeasurementDescriptorNameBytes();
 
     /**
-     * <code>optional .google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
+     * <code>.google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
      */
     com.google.instrumentation.stats.proto.CensusProto.IntervalAggregationDescriptor getIntervalAggregation();
     /**
-     * <code>optional .google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
+     * <code>.google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
      */
     com.google.instrumentation.stats.proto.CensusProto.IntervalAggregationDescriptorOrBuilder getIntervalAggregationOrBuilder();
 
     /**
-     * <code>optional .google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
+     * <code>.google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
      */
     com.google.instrumentation.stats.proto.CensusProto.DistributionAggregationDescriptor getDistributionAggregation();
     /**
-     * <code>optional .google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
+     * <code>.google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
      */
     com.google.instrumentation.stats.proto.CensusProto.DistributionAggregationDescriptorOrBuilder getDistributionAggregationOrBuilder();
 
@@ -10522,7 +10522,7 @@ public final class CensusProto {
      * Name of view. Must be unique.
      * </pre>
      *
-     * <code>optional string name = 1;</code>
+     * <code>string name = 1;</code>
      */
     public java.lang.String getName() {
       java.lang.Object ref = name_;
@@ -10541,7 +10541,7 @@ public final class CensusProto {
      * Name of view. Must be unique.
      * </pre>
      *
-     * <code>optional string name = 1;</code>
+     * <code>string name = 1;</code>
      */
     public com.google.protobuf.ByteString
         getNameBytes() {
@@ -10564,7 +10564,7 @@ public final class CensusProto {
      * More detailed description, for documentation purposes.
      * </pre>
      *
-     * <code>optional string description = 2;</code>
+     * <code>string description = 2;</code>
      */
     public java.lang.String getDescription() {
       java.lang.Object ref = description_;
@@ -10583,7 +10583,7 @@ public final class CensusProto {
      * More detailed description, for documentation purposes.
      * </pre>
      *
-     * <code>optional string description = 2;</code>
+     * <code>string description = 2;</code>
      */
     public com.google.protobuf.ByteString
         getDescriptionBytes() {
@@ -10606,7 +10606,7 @@ public final class CensusProto {
      * Name of a MeasurementDescriptor to be used for this view.
      * </pre>
      *
-     * <code>optional string measurement_descriptor_name = 3;</code>
+     * <code>string measurement_descriptor_name = 3;</code>
      */
     public java.lang.String getMeasurementDescriptorName() {
       java.lang.Object ref = measurementDescriptorName_;
@@ -10625,7 +10625,7 @@ public final class CensusProto {
      * Name of a MeasurementDescriptor to be used for this view.
      * </pre>
      *
-     * <code>optional string measurement_descriptor_name = 3;</code>
+     * <code>string measurement_descriptor_name = 3;</code>
      */
     public com.google.protobuf.ByteString
         getMeasurementDescriptorNameBytes() {
@@ -10643,7 +10643,7 @@ public final class CensusProto {
 
     public static final int INTERVAL_AGGREGATION_FIELD_NUMBER = 4;
     /**
-     * <code>optional .google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
+     * <code>.google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
      */
     public com.google.instrumentation.stats.proto.CensusProto.IntervalAggregationDescriptor getIntervalAggregation() {
       if (aggregationCase_ == 4) {
@@ -10652,7 +10652,7 @@ public final class CensusProto {
       return com.google.instrumentation.stats.proto.CensusProto.IntervalAggregationDescriptor.getDefaultInstance();
     }
     /**
-     * <code>optional .google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
+     * <code>.google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
      */
     public com.google.instrumentation.stats.proto.CensusProto.IntervalAggregationDescriptorOrBuilder getIntervalAggregationOrBuilder() {
       if (aggregationCase_ == 4) {
@@ -10663,7 +10663,7 @@ public final class CensusProto {
 
     public static final int DISTRIBUTION_AGGREGATION_FIELD_NUMBER = 5;
     /**
-     * <code>optional .google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
+     * <code>.google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
      */
     public com.google.instrumentation.stats.proto.CensusProto.DistributionAggregationDescriptor getDistributionAggregation() {
       if (aggregationCase_ == 5) {
@@ -10672,7 +10672,7 @@ public final class CensusProto {
       return com.google.instrumentation.stats.proto.CensusProto.DistributionAggregationDescriptor.getDefaultInstance();
     }
     /**
-     * <code>optional .google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
+     * <code>.google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
      */
     public com.google.instrumentation.stats.proto.CensusProto.DistributionAggregationDescriptorOrBuilder getDistributionAggregationOrBuilder() {
       if (aggregationCase_ == 5) {
@@ -10840,7 +10840,7 @@ public final class CensusProto {
         return memoizedHashCode;
       }
       int hash = 41;
-      hash = (19 * hash) + getDescriptorForType().hashCode();
+      hash = (19 * hash) + getDescriptor().hashCode();
       hash = (37 * hash) + NAME_FIELD_NUMBER;
       hash = (53 * hash) + getName().hashCode();
       hash = (37 * hash) + DESCRIPTION_FIELD_NUMBER;
@@ -11169,7 +11169,7 @@ public final class CensusProto {
        * Name of view. Must be unique.
        * </pre>
        *
-       * <code>optional string name = 1;</code>
+       * <code>string name = 1;</code>
        */
       public java.lang.String getName() {
         java.lang.Object ref = name_;
@@ -11188,7 +11188,7 @@ public final class CensusProto {
        * Name of view. Must be unique.
        * </pre>
        *
-       * <code>optional string name = 1;</code>
+       * <code>string name = 1;</code>
        */
       public com.google.protobuf.ByteString
           getNameBytes() {
@@ -11208,7 +11208,7 @@ public final class CensusProto {
        * Name of view. Must be unique.
        * </pre>
        *
-       * <code>optional string name = 1;</code>
+       * <code>string name = 1;</code>
        */
       public Builder setName(
           java.lang.String value) {
@@ -11225,7 +11225,7 @@ public final class CensusProto {
        * Name of view. Must be unique.
        * </pre>
        *
-       * <code>optional string name = 1;</code>
+       * <code>string name = 1;</code>
        */
       public Builder clearName() {
         
@@ -11238,7 +11238,7 @@ public final class CensusProto {
        * Name of view. Must be unique.
        * </pre>
        *
-       * <code>optional string name = 1;</code>
+       * <code>string name = 1;</code>
        */
       public Builder setNameBytes(
           com.google.protobuf.ByteString value) {
@@ -11258,7 +11258,7 @@ public final class CensusProto {
        * More detailed description, for documentation purposes.
        * </pre>
        *
-       * <code>optional string description = 2;</code>
+       * <code>string description = 2;</code>
        */
       public java.lang.String getDescription() {
         java.lang.Object ref = description_;
@@ -11277,7 +11277,7 @@ public final class CensusProto {
        * More detailed description, for documentation purposes.
        * </pre>
        *
-       * <code>optional string description = 2;</code>
+       * <code>string description = 2;</code>
        */
       public com.google.protobuf.ByteString
           getDescriptionBytes() {
@@ -11297,7 +11297,7 @@ public final class CensusProto {
        * More detailed description, for documentation purposes.
        * </pre>
        *
-       * <code>optional string description = 2;</code>
+       * <code>string description = 2;</code>
        */
       public Builder setDescription(
           java.lang.String value) {
@@ -11314,7 +11314,7 @@ public final class CensusProto {
        * More detailed description, for documentation purposes.
        * </pre>
        *
-       * <code>optional string description = 2;</code>
+       * <code>string description = 2;</code>
        */
       public Builder clearDescription() {
         
@@ -11327,7 +11327,7 @@ public final class CensusProto {
        * More detailed description, for documentation purposes.
        * </pre>
        *
-       * <code>optional string description = 2;</code>
+       * <code>string description = 2;</code>
        */
       public Builder setDescriptionBytes(
           com.google.protobuf.ByteString value) {
@@ -11347,7 +11347,7 @@ public final class CensusProto {
        * Name of a MeasurementDescriptor to be used for this view.
        * </pre>
        *
-       * <code>optional string measurement_descriptor_name = 3;</code>
+       * <code>string measurement_descriptor_name = 3;</code>
        */
       public java.lang.String getMeasurementDescriptorName() {
         java.lang.Object ref = measurementDescriptorName_;
@@ -11366,7 +11366,7 @@ public final class CensusProto {
        * Name of a MeasurementDescriptor to be used for this view.
        * </pre>
        *
-       * <code>optional string measurement_descriptor_name = 3;</code>
+       * <code>string measurement_descriptor_name = 3;</code>
        */
       public com.google.protobuf.ByteString
           getMeasurementDescriptorNameBytes() {
@@ -11386,7 +11386,7 @@ public final class CensusProto {
        * Name of a MeasurementDescriptor to be used for this view.
        * </pre>
        *
-       * <code>optional string measurement_descriptor_name = 3;</code>
+       * <code>string measurement_descriptor_name = 3;</code>
        */
       public Builder setMeasurementDescriptorName(
           java.lang.String value) {
@@ -11403,7 +11403,7 @@ public final class CensusProto {
        * Name of a MeasurementDescriptor to be used for this view.
        * </pre>
        *
-       * <code>optional string measurement_descriptor_name = 3;</code>
+       * <code>string measurement_descriptor_name = 3;</code>
        */
       public Builder clearMeasurementDescriptorName() {
         
@@ -11416,7 +11416,7 @@ public final class CensusProto {
        * Name of a MeasurementDescriptor to be used for this view.
        * </pre>
        *
-       * <code>optional string measurement_descriptor_name = 3;</code>
+       * <code>string measurement_descriptor_name = 3;</code>
        */
       public Builder setMeasurementDescriptorNameBytes(
           com.google.protobuf.ByteString value) {
@@ -11433,7 +11433,7 @@ public final class CensusProto {
       private com.google.protobuf.SingleFieldBuilderV3<
           com.google.instrumentation.stats.proto.CensusProto.IntervalAggregationDescriptor, com.google.instrumentation.stats.proto.CensusProto.IntervalAggregationDescriptor.Builder, com.google.instrumentation.stats.proto.CensusProto.IntervalAggregationDescriptorOrBuilder> intervalAggregationBuilder_;
       /**
-       * <code>optional .google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
+       * <code>.google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.IntervalAggregationDescriptor getIntervalAggregation() {
         if (intervalAggregationBuilder_ == null) {
@@ -11449,7 +11449,7 @@ public final class CensusProto {
         }
       }
       /**
-       * <code>optional .google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
+       * <code>.google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
        */
       public Builder setIntervalAggregation(com.google.instrumentation.stats.proto.CensusProto.IntervalAggregationDescriptor value) {
         if (intervalAggregationBuilder_ == null) {
@@ -11465,7 +11465,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
+       * <code>.google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
        */
       public Builder setIntervalAggregation(
           com.google.instrumentation.stats.proto.CensusProto.IntervalAggregationDescriptor.Builder builderForValue) {
@@ -11479,7 +11479,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
+       * <code>.google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
        */
       public Builder mergeIntervalAggregation(com.google.instrumentation.stats.proto.CensusProto.IntervalAggregationDescriptor value) {
         if (intervalAggregationBuilder_ == null) {
@@ -11501,7 +11501,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
+       * <code>.google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
        */
       public Builder clearIntervalAggregation() {
         if (intervalAggregationBuilder_ == null) {
@@ -11520,13 +11520,13 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
+       * <code>.google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.IntervalAggregationDescriptor.Builder getIntervalAggregationBuilder() {
         return getIntervalAggregationFieldBuilder().getBuilder();
       }
       /**
-       * <code>optional .google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
+       * <code>.google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.IntervalAggregationDescriptorOrBuilder getIntervalAggregationOrBuilder() {
         if ((aggregationCase_ == 4) && (intervalAggregationBuilder_ != null)) {
@@ -11539,7 +11539,7 @@ public final class CensusProto {
         }
       }
       /**
-       * <code>optional .google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
+       * <code>.google.instrumentation.IntervalAggregationDescriptor interval_aggregation = 4;</code>
        */
       private com.google.protobuf.SingleFieldBuilderV3<
           com.google.instrumentation.stats.proto.CensusProto.IntervalAggregationDescriptor, com.google.instrumentation.stats.proto.CensusProto.IntervalAggregationDescriptor.Builder, com.google.instrumentation.stats.proto.CensusProto.IntervalAggregationDescriptorOrBuilder> 
@@ -11563,7 +11563,7 @@ public final class CensusProto {
       private com.google.protobuf.SingleFieldBuilderV3<
           com.google.instrumentation.stats.proto.CensusProto.DistributionAggregationDescriptor, com.google.instrumentation.stats.proto.CensusProto.DistributionAggregationDescriptor.Builder, com.google.instrumentation.stats.proto.CensusProto.DistributionAggregationDescriptorOrBuilder> distributionAggregationBuilder_;
       /**
-       * <code>optional .google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
+       * <code>.google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.DistributionAggregationDescriptor getDistributionAggregation() {
         if (distributionAggregationBuilder_ == null) {
@@ -11579,7 +11579,7 @@ public final class CensusProto {
         }
       }
       /**
-       * <code>optional .google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
+       * <code>.google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
        */
       public Builder setDistributionAggregation(com.google.instrumentation.stats.proto.CensusProto.DistributionAggregationDescriptor value) {
         if (distributionAggregationBuilder_ == null) {
@@ -11595,7 +11595,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
+       * <code>.google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
        */
       public Builder setDistributionAggregation(
           com.google.instrumentation.stats.proto.CensusProto.DistributionAggregationDescriptor.Builder builderForValue) {
@@ -11609,7 +11609,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
+       * <code>.google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
        */
       public Builder mergeDistributionAggregation(com.google.instrumentation.stats.proto.CensusProto.DistributionAggregationDescriptor value) {
         if (distributionAggregationBuilder_ == null) {
@@ -11631,7 +11631,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
+       * <code>.google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
        */
       public Builder clearDistributionAggregation() {
         if (distributionAggregationBuilder_ == null) {
@@ -11650,13 +11650,13 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
+       * <code>.google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.DistributionAggregationDescriptor.Builder getDistributionAggregationBuilder() {
         return getDistributionAggregationFieldBuilder().getBuilder();
       }
       /**
-       * <code>optional .google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
+       * <code>.google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.DistributionAggregationDescriptorOrBuilder getDistributionAggregationOrBuilder() {
         if ((aggregationCase_ == 5) && (distributionAggregationBuilder_ != null)) {
@@ -11669,7 +11669,7 @@ public final class CensusProto {
         }
       }
       /**
-       * <code>optional .google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
+       * <code>.google.instrumentation.DistributionAggregationDescriptor distribution_aggregation = 5;</code>
        */
       private com.google.protobuf.SingleFieldBuilderV3<
           com.google.instrumentation.stats.proto.CensusProto.DistributionAggregationDescriptor, com.google.instrumentation.stats.proto.CensusProto.DistributionAggregationDescriptor.Builder, com.google.instrumentation.stats.proto.CensusProto.DistributionAggregationDescriptorOrBuilder> 
@@ -11935,7 +11935,7 @@ public final class CensusProto {
      * Start and end timestamps over which aggregations was accumulated.
      * </pre>
      *
-     * <code>optional .google.instrumentation.Timestamp start = 2;</code>
+     * <code>.google.instrumentation.Timestamp start = 2;</code>
      */
     boolean hasStart();
     /**
@@ -11943,7 +11943,7 @@ public final class CensusProto {
      * Start and end timestamps over which aggregations was accumulated.
      * </pre>
      *
-     * <code>optional .google.instrumentation.Timestamp start = 2;</code>
+     * <code>.google.instrumentation.Timestamp start = 2;</code>
      */
     com.google.instrumentation.stats.proto.CensusProto.Timestamp getStart();
     /**
@@ -11951,20 +11951,20 @@ public final class CensusProto {
      * Start and end timestamps over which aggregations was accumulated.
      * </pre>
      *
-     * <code>optional .google.instrumentation.Timestamp start = 2;</code>
+     * <code>.google.instrumentation.Timestamp start = 2;</code>
      */
     com.google.instrumentation.stats.proto.CensusProto.TimestampOrBuilder getStartOrBuilder();
 
     /**
-     * <code>optional .google.instrumentation.Timestamp end = 3;</code>
+     * <code>.google.instrumentation.Timestamp end = 3;</code>
      */
     boolean hasEnd();
     /**
-     * <code>optional .google.instrumentation.Timestamp end = 3;</code>
+     * <code>.google.instrumentation.Timestamp end = 3;</code>
      */
     com.google.instrumentation.stats.proto.CensusProto.Timestamp getEnd();
     /**
-     * <code>optional .google.instrumentation.Timestamp end = 3;</code>
+     * <code>.google.instrumentation.Timestamp end = 3;</code>
      */
     com.google.instrumentation.stats.proto.CensusProto.TimestampOrBuilder getEndOrBuilder();
   }
@@ -12142,7 +12142,7 @@ public final class CensusProto {
      * Start and end timestamps over which aggregations was accumulated.
      * </pre>
      *
-     * <code>optional .google.instrumentation.Timestamp start = 2;</code>
+     * <code>.google.instrumentation.Timestamp start = 2;</code>
      */
     public boolean hasStart() {
       return start_ != null;
@@ -12152,7 +12152,7 @@ public final class CensusProto {
      * Start and end timestamps over which aggregations was accumulated.
      * </pre>
      *
-     * <code>optional .google.instrumentation.Timestamp start = 2;</code>
+     * <code>.google.instrumentation.Timestamp start = 2;</code>
      */
     public com.google.instrumentation.stats.proto.CensusProto.Timestamp getStart() {
       return start_ == null ? com.google.instrumentation.stats.proto.CensusProto.Timestamp.getDefaultInstance() : start_;
@@ -12162,7 +12162,7 @@ public final class CensusProto {
      * Start and end timestamps over which aggregations was accumulated.
      * </pre>
      *
-     * <code>optional .google.instrumentation.Timestamp start = 2;</code>
+     * <code>.google.instrumentation.Timestamp start = 2;</code>
      */
     public com.google.instrumentation.stats.proto.CensusProto.TimestampOrBuilder getStartOrBuilder() {
       return getStart();
@@ -12171,19 +12171,19 @@ public final class CensusProto {
     public static final int END_FIELD_NUMBER = 3;
     private com.google.instrumentation.stats.proto.CensusProto.Timestamp end_;
     /**
-     * <code>optional .google.instrumentation.Timestamp end = 3;</code>
+     * <code>.google.instrumentation.Timestamp end = 3;</code>
      */
     public boolean hasEnd() {
       return end_ != null;
     }
     /**
-     * <code>optional .google.instrumentation.Timestamp end = 3;</code>
+     * <code>.google.instrumentation.Timestamp end = 3;</code>
      */
     public com.google.instrumentation.stats.proto.CensusProto.Timestamp getEnd() {
       return end_ == null ? com.google.instrumentation.stats.proto.CensusProto.Timestamp.getDefaultInstance() : end_;
     }
     /**
-     * <code>optional .google.instrumentation.Timestamp end = 3;</code>
+     * <code>.google.instrumentation.Timestamp end = 3;</code>
      */
     public com.google.instrumentation.stats.proto.CensusProto.TimestampOrBuilder getEndOrBuilder() {
       return getEnd();
@@ -12266,7 +12266,7 @@ public final class CensusProto {
         return memoizedHashCode;
       }
       int hash = 41;
-      hash = (19 * hash) + getDescriptorForType().hashCode();
+      hash = (19 * hash) + getDescriptor().hashCode();
       if (getAggregationsCount() > 0) {
         hash = (37 * hash) + AGGREGATIONS_FIELD_NUMBER;
         hash = (53 * hash) + getAggregationsList().hashCode();
@@ -12903,7 +12903,7 @@ public final class CensusProto {
        * Start and end timestamps over which aggregations was accumulated.
        * </pre>
        *
-       * <code>optional .google.instrumentation.Timestamp start = 2;</code>
+       * <code>.google.instrumentation.Timestamp start = 2;</code>
        */
       public boolean hasStart() {
         return startBuilder_ != null || start_ != null;
@@ -12913,7 +12913,7 @@ public final class CensusProto {
        * Start and end timestamps over which aggregations was accumulated.
        * </pre>
        *
-       * <code>optional .google.instrumentation.Timestamp start = 2;</code>
+       * <code>.google.instrumentation.Timestamp start = 2;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.Timestamp getStart() {
         if (startBuilder_ == null) {
@@ -12927,7 +12927,7 @@ public final class CensusProto {
        * Start and end timestamps over which aggregations was accumulated.
        * </pre>
        *
-       * <code>optional .google.instrumentation.Timestamp start = 2;</code>
+       * <code>.google.instrumentation.Timestamp start = 2;</code>
        */
       public Builder setStart(com.google.instrumentation.stats.proto.CensusProto.Timestamp value) {
         if (startBuilder_ == null) {
@@ -12947,7 +12947,7 @@ public final class CensusProto {
        * Start and end timestamps over which aggregations was accumulated.
        * </pre>
        *
-       * <code>optional .google.instrumentation.Timestamp start = 2;</code>
+       * <code>.google.instrumentation.Timestamp start = 2;</code>
        */
       public Builder setStart(
           com.google.instrumentation.stats.proto.CensusProto.Timestamp.Builder builderForValue) {
@@ -12965,7 +12965,7 @@ public final class CensusProto {
        * Start and end timestamps over which aggregations was accumulated.
        * </pre>
        *
-       * <code>optional .google.instrumentation.Timestamp start = 2;</code>
+       * <code>.google.instrumentation.Timestamp start = 2;</code>
        */
       public Builder mergeStart(com.google.instrumentation.stats.proto.CensusProto.Timestamp value) {
         if (startBuilder_ == null) {
@@ -12987,7 +12987,7 @@ public final class CensusProto {
        * Start and end timestamps over which aggregations was accumulated.
        * </pre>
        *
-       * <code>optional .google.instrumentation.Timestamp start = 2;</code>
+       * <code>.google.instrumentation.Timestamp start = 2;</code>
        */
       public Builder clearStart() {
         if (startBuilder_ == null) {
@@ -13005,7 +13005,7 @@ public final class CensusProto {
        * Start and end timestamps over which aggregations was accumulated.
        * </pre>
        *
-       * <code>optional .google.instrumentation.Timestamp start = 2;</code>
+       * <code>.google.instrumentation.Timestamp start = 2;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.Timestamp.Builder getStartBuilder() {
         
@@ -13017,7 +13017,7 @@ public final class CensusProto {
        * Start and end timestamps over which aggregations was accumulated.
        * </pre>
        *
-       * <code>optional .google.instrumentation.Timestamp start = 2;</code>
+       * <code>.google.instrumentation.Timestamp start = 2;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.TimestampOrBuilder getStartOrBuilder() {
         if (startBuilder_ != null) {
@@ -13032,7 +13032,7 @@ public final class CensusProto {
        * Start and end timestamps over which aggregations was accumulated.
        * </pre>
        *
-       * <code>optional .google.instrumentation.Timestamp start = 2;</code>
+       * <code>.google.instrumentation.Timestamp start = 2;</code>
        */
       private com.google.protobuf.SingleFieldBuilderV3<
           com.google.instrumentation.stats.proto.CensusProto.Timestamp, com.google.instrumentation.stats.proto.CensusProto.Timestamp.Builder, com.google.instrumentation.stats.proto.CensusProto.TimestampOrBuilder> 
@@ -13052,13 +13052,13 @@ public final class CensusProto {
       private com.google.protobuf.SingleFieldBuilderV3<
           com.google.instrumentation.stats.proto.CensusProto.Timestamp, com.google.instrumentation.stats.proto.CensusProto.Timestamp.Builder, com.google.instrumentation.stats.proto.CensusProto.TimestampOrBuilder> endBuilder_;
       /**
-       * <code>optional .google.instrumentation.Timestamp end = 3;</code>
+       * <code>.google.instrumentation.Timestamp end = 3;</code>
        */
       public boolean hasEnd() {
         return endBuilder_ != null || end_ != null;
       }
       /**
-       * <code>optional .google.instrumentation.Timestamp end = 3;</code>
+       * <code>.google.instrumentation.Timestamp end = 3;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.Timestamp getEnd() {
         if (endBuilder_ == null) {
@@ -13068,7 +13068,7 @@ public final class CensusProto {
         }
       }
       /**
-       * <code>optional .google.instrumentation.Timestamp end = 3;</code>
+       * <code>.google.instrumentation.Timestamp end = 3;</code>
        */
       public Builder setEnd(com.google.instrumentation.stats.proto.CensusProto.Timestamp value) {
         if (endBuilder_ == null) {
@@ -13084,7 +13084,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.Timestamp end = 3;</code>
+       * <code>.google.instrumentation.Timestamp end = 3;</code>
        */
       public Builder setEnd(
           com.google.instrumentation.stats.proto.CensusProto.Timestamp.Builder builderForValue) {
@@ -13098,7 +13098,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.Timestamp end = 3;</code>
+       * <code>.google.instrumentation.Timestamp end = 3;</code>
        */
       public Builder mergeEnd(com.google.instrumentation.stats.proto.CensusProto.Timestamp value) {
         if (endBuilder_ == null) {
@@ -13116,7 +13116,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.Timestamp end = 3;</code>
+       * <code>.google.instrumentation.Timestamp end = 3;</code>
        */
       public Builder clearEnd() {
         if (endBuilder_ == null) {
@@ -13130,7 +13130,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.Timestamp end = 3;</code>
+       * <code>.google.instrumentation.Timestamp end = 3;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.Timestamp.Builder getEndBuilder() {
         
@@ -13138,7 +13138,7 @@ public final class CensusProto {
         return getEndFieldBuilder().getBuilder();
       }
       /**
-       * <code>optional .google.instrumentation.Timestamp end = 3;</code>
+       * <code>.google.instrumentation.Timestamp end = 3;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.TimestampOrBuilder getEndOrBuilder() {
         if (endBuilder_ != null) {
@@ -13149,7 +13149,7 @@ public final class CensusProto {
         }
       }
       /**
-       * <code>optional .google.instrumentation.Timestamp end = 3;</code>
+       * <code>.google.instrumentation.Timestamp end = 3;</code>
        */
       private com.google.protobuf.SingleFieldBuilderV3<
           com.google.instrumentation.stats.proto.CensusProto.Timestamp, com.google.instrumentation.stats.proto.CensusProto.Timestamp.Builder, com.google.instrumentation.stats.proto.CensusProto.TimestampOrBuilder> 
@@ -13459,7 +13459,7 @@ public final class CensusProto {
         return memoizedHashCode;
       }
       int hash = 41;
-      hash = (19 * hash) + getDescriptorForType().hashCode();
+      hash = (19 * hash) + getDescriptor().hashCode();
       if (getAggregationsCount() > 0) {
         hash = (37 * hash) + AGGREGATIONS_FIELD_NUMBER;
         hash = (53 * hash) + getAggregationsList().hashCode();
@@ -14107,7 +14107,7 @@ public final class CensusProto {
      * ViewDescriptor name associated with this set of View.
      * </pre>
      *
-     * <code>optional string view_name = 1;</code>
+     * <code>string view_name = 1;</code>
      */
     java.lang.String getViewName();
     /**
@@ -14115,26 +14115,26 @@ public final class CensusProto {
      * ViewDescriptor name associated with this set of View.
      * </pre>
      *
-     * <code>optional string view_name = 1;</code>
+     * <code>string view_name = 1;</code>
      */
     com.google.protobuf.ByteString
         getViewNameBytes();
 
     /**
-     * <code>optional .google.instrumentation.DistributionView distribution_view = 2;</code>
+     * <code>.google.instrumentation.DistributionView distribution_view = 2;</code>
      */
     com.google.instrumentation.stats.proto.CensusProto.DistributionView getDistributionView();
     /**
-     * <code>optional .google.instrumentation.DistributionView distribution_view = 2;</code>
+     * <code>.google.instrumentation.DistributionView distribution_view = 2;</code>
      */
     com.google.instrumentation.stats.proto.CensusProto.DistributionViewOrBuilder getDistributionViewOrBuilder();
 
     /**
-     * <code>optional .google.instrumentation.IntervalView interval_view = 3;</code>
+     * <code>.google.instrumentation.IntervalView interval_view = 3;</code>
      */
     com.google.instrumentation.stats.proto.CensusProto.IntervalView getIntervalView();
     /**
-     * <code>optional .google.instrumentation.IntervalView interval_view = 3;</code>
+     * <code>.google.instrumentation.IntervalView interval_view = 3;</code>
      */
     com.google.instrumentation.stats.proto.CensusProto.IntervalViewOrBuilder getIntervalViewOrBuilder();
 
@@ -14286,7 +14286,7 @@ public final class CensusProto {
      * ViewDescriptor name associated with this set of View.
      * </pre>
      *
-     * <code>optional string view_name = 1;</code>
+     * <code>string view_name = 1;</code>
      */
     public java.lang.String getViewName() {
       java.lang.Object ref = viewName_;
@@ -14305,7 +14305,7 @@ public final class CensusProto {
      * ViewDescriptor name associated with this set of View.
      * </pre>
      *
-     * <code>optional string view_name = 1;</code>
+     * <code>string view_name = 1;</code>
      */
     public com.google.protobuf.ByteString
         getViewNameBytes() {
@@ -14323,7 +14323,7 @@ public final class CensusProto {
 
     public static final int DISTRIBUTION_VIEW_FIELD_NUMBER = 2;
     /**
-     * <code>optional .google.instrumentation.DistributionView distribution_view = 2;</code>
+     * <code>.google.instrumentation.DistributionView distribution_view = 2;</code>
      */
     public com.google.instrumentation.stats.proto.CensusProto.DistributionView getDistributionView() {
       if (viewCase_ == 2) {
@@ -14332,7 +14332,7 @@ public final class CensusProto {
       return com.google.instrumentation.stats.proto.CensusProto.DistributionView.getDefaultInstance();
     }
     /**
-     * <code>optional .google.instrumentation.DistributionView distribution_view = 2;</code>
+     * <code>.google.instrumentation.DistributionView distribution_view = 2;</code>
      */
     public com.google.instrumentation.stats.proto.CensusProto.DistributionViewOrBuilder getDistributionViewOrBuilder() {
       if (viewCase_ == 2) {
@@ -14343,7 +14343,7 @@ public final class CensusProto {
 
     public static final int INTERVAL_VIEW_FIELD_NUMBER = 3;
     /**
-     * <code>optional .google.instrumentation.IntervalView interval_view = 3;</code>
+     * <code>.google.instrumentation.IntervalView interval_view = 3;</code>
      */
     public com.google.instrumentation.stats.proto.CensusProto.IntervalView getIntervalView() {
       if (viewCase_ == 3) {
@@ -14352,7 +14352,7 @@ public final class CensusProto {
       return com.google.instrumentation.stats.proto.CensusProto.IntervalView.getDefaultInstance();
     }
     /**
-     * <code>optional .google.instrumentation.IntervalView interval_view = 3;</code>
+     * <code>.google.instrumentation.IntervalView interval_view = 3;</code>
      */
     public com.google.instrumentation.stats.proto.CensusProto.IntervalViewOrBuilder getIntervalViewOrBuilder() {
       if (viewCase_ == 3) {
@@ -14442,7 +14442,7 @@ public final class CensusProto {
         return memoizedHashCode;
       }
       int hash = 41;
-      hash = (19 * hash) + getDescriptorForType().hashCode();
+      hash = (19 * hash) + getDescriptor().hashCode();
       hash = (37 * hash) + VIEW_NAME_FIELD_NUMBER;
       hash = (53 * hash) + getViewName().hashCode();
       switch (viewCase_) {
@@ -14726,7 +14726,7 @@ public final class CensusProto {
        * ViewDescriptor name associated with this set of View.
        * </pre>
        *
-       * <code>optional string view_name = 1;</code>
+       * <code>string view_name = 1;</code>
        */
       public java.lang.String getViewName() {
         java.lang.Object ref = viewName_;
@@ -14745,7 +14745,7 @@ public final class CensusProto {
        * ViewDescriptor name associated with this set of View.
        * </pre>
        *
-       * <code>optional string view_name = 1;</code>
+       * <code>string view_name = 1;</code>
        */
       public com.google.protobuf.ByteString
           getViewNameBytes() {
@@ -14765,7 +14765,7 @@ public final class CensusProto {
        * ViewDescriptor name associated with this set of View.
        * </pre>
        *
-       * <code>optional string view_name = 1;</code>
+       * <code>string view_name = 1;</code>
        */
       public Builder setViewName(
           java.lang.String value) {
@@ -14782,7 +14782,7 @@ public final class CensusProto {
        * ViewDescriptor name associated with this set of View.
        * </pre>
        *
-       * <code>optional string view_name = 1;</code>
+       * <code>string view_name = 1;</code>
        */
       public Builder clearViewName() {
         
@@ -14795,7 +14795,7 @@ public final class CensusProto {
        * ViewDescriptor name associated with this set of View.
        * </pre>
        *
-       * <code>optional string view_name = 1;</code>
+       * <code>string view_name = 1;</code>
        */
       public Builder setViewNameBytes(
           com.google.protobuf.ByteString value) {
@@ -14812,7 +14812,7 @@ public final class CensusProto {
       private com.google.protobuf.SingleFieldBuilderV3<
           com.google.instrumentation.stats.proto.CensusProto.DistributionView, com.google.instrumentation.stats.proto.CensusProto.DistributionView.Builder, com.google.instrumentation.stats.proto.CensusProto.DistributionViewOrBuilder> distributionViewBuilder_;
       /**
-       * <code>optional .google.instrumentation.DistributionView distribution_view = 2;</code>
+       * <code>.google.instrumentation.DistributionView distribution_view = 2;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.DistributionView getDistributionView() {
         if (distributionViewBuilder_ == null) {
@@ -14828,7 +14828,7 @@ public final class CensusProto {
         }
       }
       /**
-       * <code>optional .google.instrumentation.DistributionView distribution_view = 2;</code>
+       * <code>.google.instrumentation.DistributionView distribution_view = 2;</code>
        */
       public Builder setDistributionView(com.google.instrumentation.stats.proto.CensusProto.DistributionView value) {
         if (distributionViewBuilder_ == null) {
@@ -14844,7 +14844,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.DistributionView distribution_view = 2;</code>
+       * <code>.google.instrumentation.DistributionView distribution_view = 2;</code>
        */
       public Builder setDistributionView(
           com.google.instrumentation.stats.proto.CensusProto.DistributionView.Builder builderForValue) {
@@ -14858,7 +14858,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.DistributionView distribution_view = 2;</code>
+       * <code>.google.instrumentation.DistributionView distribution_view = 2;</code>
        */
       public Builder mergeDistributionView(com.google.instrumentation.stats.proto.CensusProto.DistributionView value) {
         if (distributionViewBuilder_ == null) {
@@ -14880,7 +14880,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.DistributionView distribution_view = 2;</code>
+       * <code>.google.instrumentation.DistributionView distribution_view = 2;</code>
        */
       public Builder clearDistributionView() {
         if (distributionViewBuilder_ == null) {
@@ -14899,13 +14899,13 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.DistributionView distribution_view = 2;</code>
+       * <code>.google.instrumentation.DistributionView distribution_view = 2;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.DistributionView.Builder getDistributionViewBuilder() {
         return getDistributionViewFieldBuilder().getBuilder();
       }
       /**
-       * <code>optional .google.instrumentation.DistributionView distribution_view = 2;</code>
+       * <code>.google.instrumentation.DistributionView distribution_view = 2;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.DistributionViewOrBuilder getDistributionViewOrBuilder() {
         if ((viewCase_ == 2) && (distributionViewBuilder_ != null)) {
@@ -14918,7 +14918,7 @@ public final class CensusProto {
         }
       }
       /**
-       * <code>optional .google.instrumentation.DistributionView distribution_view = 2;</code>
+       * <code>.google.instrumentation.DistributionView distribution_view = 2;</code>
        */
       private com.google.protobuf.SingleFieldBuilderV3<
           com.google.instrumentation.stats.proto.CensusProto.DistributionView, com.google.instrumentation.stats.proto.CensusProto.DistributionView.Builder, com.google.instrumentation.stats.proto.CensusProto.DistributionViewOrBuilder> 
@@ -14942,7 +14942,7 @@ public final class CensusProto {
       private com.google.protobuf.SingleFieldBuilderV3<
           com.google.instrumentation.stats.proto.CensusProto.IntervalView, com.google.instrumentation.stats.proto.CensusProto.IntervalView.Builder, com.google.instrumentation.stats.proto.CensusProto.IntervalViewOrBuilder> intervalViewBuilder_;
       /**
-       * <code>optional .google.instrumentation.IntervalView interval_view = 3;</code>
+       * <code>.google.instrumentation.IntervalView interval_view = 3;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.IntervalView getIntervalView() {
         if (intervalViewBuilder_ == null) {
@@ -14958,7 +14958,7 @@ public final class CensusProto {
         }
       }
       /**
-       * <code>optional .google.instrumentation.IntervalView interval_view = 3;</code>
+       * <code>.google.instrumentation.IntervalView interval_view = 3;</code>
        */
       public Builder setIntervalView(com.google.instrumentation.stats.proto.CensusProto.IntervalView value) {
         if (intervalViewBuilder_ == null) {
@@ -14974,7 +14974,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.IntervalView interval_view = 3;</code>
+       * <code>.google.instrumentation.IntervalView interval_view = 3;</code>
        */
       public Builder setIntervalView(
           com.google.instrumentation.stats.proto.CensusProto.IntervalView.Builder builderForValue) {
@@ -14988,7 +14988,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.IntervalView interval_view = 3;</code>
+       * <code>.google.instrumentation.IntervalView interval_view = 3;</code>
        */
       public Builder mergeIntervalView(com.google.instrumentation.stats.proto.CensusProto.IntervalView value) {
         if (intervalViewBuilder_ == null) {
@@ -15010,7 +15010,7 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.IntervalView interval_view = 3;</code>
+       * <code>.google.instrumentation.IntervalView interval_view = 3;</code>
        */
       public Builder clearIntervalView() {
         if (intervalViewBuilder_ == null) {
@@ -15029,13 +15029,13 @@ public final class CensusProto {
         return this;
       }
       /**
-       * <code>optional .google.instrumentation.IntervalView interval_view = 3;</code>
+       * <code>.google.instrumentation.IntervalView interval_view = 3;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.IntervalView.Builder getIntervalViewBuilder() {
         return getIntervalViewFieldBuilder().getBuilder();
       }
       /**
-       * <code>optional .google.instrumentation.IntervalView interval_view = 3;</code>
+       * <code>.google.instrumentation.IntervalView interval_view = 3;</code>
        */
       public com.google.instrumentation.stats.proto.CensusProto.IntervalViewOrBuilder getIntervalViewOrBuilder() {
         if ((viewCase_ == 3) && (intervalViewBuilder_ != null)) {
@@ -15048,7 +15048,7 @@ public final class CensusProto {
         }
       }
       /**
-       * <code>optional .google.instrumentation.IntervalView interval_view = 3;</code>
+       * <code>.google.instrumentation.IntervalView interval_view = 3;</code>
        */
       private com.google.protobuf.SingleFieldBuilderV3<
           com.google.instrumentation.stats.proto.CensusProto.IntervalView, com.google.instrumentation.stats.proto.CensusProto.IntervalView.Builder, com.google.instrumentation.stats.proto.CensusProto.IntervalViewOrBuilder> 

@@ -89,7 +89,7 @@ public  final class CustomMonitoringData extends
    * can be any application specific monitoring data
    * </pre>
    *
-   * <code>optional .google.protobuf.Any contents = 1;</code>
+   * <code>.google.protobuf.Any contents = 1;</code>
    */
   public boolean hasContents() {
     return contents_ != null;
@@ -99,7 +99,7 @@ public  final class CustomMonitoringData extends
    * can be any application specific monitoring data
    * </pre>
    *
-   * <code>optional .google.protobuf.Any contents = 1;</code>
+   * <code>.google.protobuf.Any contents = 1;</code>
    */
   public com.google.protobuf.Any getContents() {
     return contents_ == null ? com.google.protobuf.Any.getDefaultInstance() : contents_;
@@ -109,7 +109,7 @@ public  final class CustomMonitoringData extends
    * can be any application specific monitoring data
    * </pre>
    *
-   * <code>optional .google.protobuf.Any contents = 1;</code>
+   * <code>.google.protobuf.Any contents = 1;</code>
    */
   public com.google.protobuf.AnyOrBuilder getContentsOrBuilder() {
     return getContents();
@@ -171,7 +171,7 @@ public  final class CustomMonitoringData extends
       return memoizedHashCode;
     }
     int hash = 41;
-    hash = (19 * hash) + getDescriptorForType().hashCode();
+    hash = (19 * hash) + getDescriptor().hashCode();
     if (hasContents()) {
       hash = (37 * hash) + CONTENTS_FIELD_NUMBER;
       hash = (53 * hash) + getContents().hashCode();
@@ -409,7 +409,7 @@ public  final class CustomMonitoringData extends
      * can be any application specific monitoring data
      * </pre>
      *
-     * <code>optional .google.protobuf.Any contents = 1;</code>
+     * <code>.google.protobuf.Any contents = 1;</code>
      */
     public boolean hasContents() {
       return contentsBuilder_ != null || contents_ != null;
@@ -419,7 +419,7 @@ public  final class CustomMonitoringData extends
      * can be any application specific monitoring data
      * </pre>
      *
-     * <code>optional .google.protobuf.Any contents = 1;</code>
+     * <code>.google.protobuf.Any contents = 1;</code>
      */
     public com.google.protobuf.Any getContents() {
       if (contentsBuilder_ == null) {
@@ -433,7 +433,7 @@ public  final class CustomMonitoringData extends
      * can be any application specific monitoring data
      * </pre>
      *
-     * <code>optional .google.protobuf.Any contents = 1;</code>
+     * <code>.google.protobuf.Any contents = 1;</code>
      */
     public Builder setContents(com.google.protobuf.Any value) {
       if (contentsBuilder_ == null) {
@@ -453,7 +453,7 @@ public  final class CustomMonitoringData extends
      * can be any application specific monitoring data
      * </pre>
      *
-     * <code>optional .google.protobuf.Any contents = 1;</code>
+     * <code>.google.protobuf.Any contents = 1;</code>
      */
     public Builder setContents(
         com.google.protobuf.Any.Builder builderForValue) {
@@ -471,7 +471,7 @@ public  final class CustomMonitoringData extends
      * can be any application specific monitoring data
      * </pre>
      *
-     * <code>optional .google.protobuf.Any contents = 1;</code>
+     * <code>.google.protobuf.Any contents = 1;</code>
      */
     public Builder mergeContents(com.google.protobuf.Any value) {
       if (contentsBuilder_ == null) {
@@ -493,7 +493,7 @@ public  final class CustomMonitoringData extends
      * can be any application specific monitoring data
      * </pre>
      *
-     * <code>optional .google.protobuf.Any contents = 1;</code>
+     * <code>.google.protobuf.Any contents = 1;</code>
      */
     public Builder clearContents() {
       if (contentsBuilder_ == null) {
@@ -511,7 +511,7 @@ public  final class CustomMonitoringData extends
      * can be any application specific monitoring data
      * </pre>
      *
-     * <code>optional .google.protobuf.Any contents = 1;</code>
+     * <code>.google.protobuf.Any contents = 1;</code>
      */
     public com.google.protobuf.Any.Builder getContentsBuilder() {
       
@@ -523,7 +523,7 @@ public  final class CustomMonitoringData extends
      * can be any application specific monitoring data
      * </pre>
      *
-     * <code>optional .google.protobuf.Any contents = 1;</code>
+     * <code>.google.protobuf.Any contents = 1;</code>
      */
     public com.google.protobuf.AnyOrBuilder getContentsOrBuilder() {
       if (contentsBuilder_ != null) {
@@ -538,7 +538,7 @@ public  final class CustomMonitoringData extends
      * can be any application specific monitoring data
      * </pre>
      *
-     * <code>optional .google.protobuf.Any contents = 1;</code>
+     * <code>.google.protobuf.Any contents = 1;</code>
      */
     private com.google.protobuf.SingleFieldBuilderV3<
         com.google.protobuf.Any, com.google.protobuf.Any.Builder, com.google.protobuf.AnyOrBuilder> 
