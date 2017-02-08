@@ -82,9 +82,12 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
   private Status shutdownStatus;
   @GuardedBy("this")
   private Set<InProcessStream> streams = new HashSet<InProcessStream>();
+  @GuardedBy("this")
+  private String authority;
 
-  public InProcessTransport(String name) {
+  public InProcessTransport(String name, String authority) {
     this.name = name;
+    this.authority = authority;
   }
 
   @CheckReturnValue
@@ -420,6 +423,11 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
       }
 
       @Override
+      public String getAuthority() {
+        return authority;
+      }
+
+      @Override
       public StatsTraceContext statsTraceContext() {
         return serverStatsTraceContext;
       }
@@ -550,8 +558,7 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
 
       @Override
       public void setAuthority(String string) {
-        // TODO(ejona): Do something with this? Could be useful for testing, but can we "validate"
-        // it?
+        authority = string;
       }
 
       @Override
