@@ -84,6 +84,10 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
   @GuardedBy("this")
   private Set<InProcessStream> streams = new HashSet<InProcessStream>();
 
+  public InProcessTransport(String name) {
+    this(name, null);
+  }
+
   public InProcessTransport(String name, String authority) {
     this.name = name;
     this.authority = authority;
@@ -238,7 +242,7 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
     private final StatsTraceContext serverStatsTraceContext;
     private final Metadata headers;
     private final MethodDescriptor<?, ?> method;
-    private String authority;
+    private volatile String authority;
 
     private InProcessStream(MethodDescriptor<?, ?> method, Metadata headers,
         StatsTraceContext serverStatsTraceContext, String authority) {
