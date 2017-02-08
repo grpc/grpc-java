@@ -211,8 +211,8 @@ class NettyServerHandler extends AbstractNettyHandler {
 
   private String getOrUpdateAuthority(AsciiString authority) {
     if (authority == null) {
-      return "";
-    } else if (lastKnownAuthority == null || !lastKnownAuthority.equals(authority)) {
+      return null;
+    } else if (!authority.equals(lastKnownAuthority)) {
       lastKnownAuthority = authority;
     }
 

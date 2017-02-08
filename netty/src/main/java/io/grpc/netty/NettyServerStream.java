@@ -69,7 +69,7 @@ class NettyServerStream extends AbstractServerStream {
     this.channel = checkNotNull(channel, "channel");
     this.writeQueue = state.handler.getWriteQueue();
     this.attributes = checkNotNull(transportAttrs);
-    this.authority = checkNotNull(authority);
+    this.authority = authority;
   }
 
   @Override

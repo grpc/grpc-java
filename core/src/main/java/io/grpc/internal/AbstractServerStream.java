@@ -169,7 +169,7 @@ public abstract class AbstractServerStream extends AbstractStream2
 
   @Override
   public String getAuthority() {
-    return "";
+    return null;
   }
 
   @Override

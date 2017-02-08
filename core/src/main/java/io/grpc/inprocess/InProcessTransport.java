@@ -71,6 +71,7 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
 
   private final LogId logId = LogId.allocate(getClass().getName());
   private final String name;
+  private final String authority;
   private ServerTransportListener serverTransportListener;
   private Attributes serverStreamAttributes;
   private ManagedClientTransport.Listener clientTransportListener;
@@ -82,8 +83,6 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
   private Status shutdownStatus;
   @GuardedBy("this")
   private Set<InProcessStream> streams = new HashSet<InProcessStream>();
-  @GuardedBy("this")
-  private String authority;
 
   public InProcessTransport(String name, String authority) {
     this.name = name;
@@ -141,7 +140,7 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
     }
     StatsTraceContext serverStatsTraceContext = serverTransportListener.methodDetermined(
         method.getFullMethodName(), headers);
-    return new InProcessStream(method, headers, serverStatsTraceContext).clientStream;
+    return new InProcessStream(method, headers, serverStatsTraceContext, authority).clientStream;
   }
 
   @Override
@@ -239,13 +238,15 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
     private final StatsTraceContext serverStatsTraceContext;
     private final Metadata headers;
     private final MethodDescriptor<?, ?> method;
+    private String authority;
 
     private InProcessStream(MethodDescriptor<?, ?> method, Metadata headers,
-        StatsTraceContext serverStatsTraceContext) {
+        StatsTraceContext serverStatsTraceContext, String authority) {
       this.method = checkNotNull(method, "method");
       this.headers = checkNotNull(headers, "headers");
       this.serverStatsTraceContext =
           checkNotNull(serverStatsTraceContext, "serverStatsTraceContext");
+      this.authority = authority;
     }
 
     // Can be called multiple times due to races on both client and server closing at same time.
@@ -424,7 +425,7 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
 
       @Override
       public String getAuthority() {
-        return authority;
+        return InProcessStream.this.authority;
       }
 
       @Override
@@ -558,7 +559,7 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
 
       @Override
       public void setAuthority(String string) {
-        authority = string;
+        InProcessStream.this.authority = string;
       }
 
       @Override
