@@ -209,10 +209,12 @@ public class DelayedStreamTest {
     try {
       stream.getAttributes(); // expect to throw IllegalStateException, otherwise fail()
       fail();
-    } catch (IllegalStateException e) {
-      stream.setStream(realStream);
-      assertEquals(attributes, stream.getAttributes());
+    } catch (IllegalStateException expected) {
+      // ignore
     }
+
+    stream.setStream(realStream);
+    assertEquals(attributes, stream.getAttributes());
   }
 
   @Test
