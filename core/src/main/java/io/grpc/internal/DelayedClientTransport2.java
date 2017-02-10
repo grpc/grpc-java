@@ -244,7 +244,7 @@ final class DelayedClientTransport2 implements ManagedClientTransport {
     }
     if (savedPendingStreams != null) {
       for (PendingStream stream : savedPendingStreams) {
-        stream.cancel(status);
+        stream.cancelInternal(status);
       }
       channelExecutor.executeLater(reportTransportTerminated).drain();
     }
@@ -350,6 +350,12 @@ final class DelayedClientTransport2 implements ManagedClientTransport {
     private final Context context;
     private final StatsTraceContext statsTraceCtx;
 
+    private final Object pendingStreamLock = new Object();
+    @GuardedBy("pendingStreamLock")
+    private boolean started;
+    @GuardedBy("pendingStreamLock")
+    private Status pendingCancelReason;
+
     private PendingStream(MethodDescriptor<?, ?> method, Metadata headers,
         CallOptions callOptions, StatsTraceContext statsTraceCtx) {
       this.method = method;
@@ -370,8 +376,32 @@ final class DelayedClientTransport2 implements ManagedClientTransport {
       setStream(realStream);
     }
 
+    // This may be called concurrently with other methods on the stream
+    private void cancelInternal(Status reason) {
+      synchronized (pendingStreamLock) {
+        if (!started) {
+          pendingCancelReason = reason;
+          return;
+        }
+      }
+      cancel(reason);
+    }
+
     @Override
-    public void cancel(Status reason) {
+    public final void start(ClientStreamListener listener) {
+      Status savedPendingCancelReason;
+      synchronized (pendingStreamLock) {
+        started = true;
+        savedPendingCancelReason = pendingCancelReason;
+      }
+      super.start(listener);
+      if (savedPendingCancelReason != null) {
+        cancel(savedPendingCancelReason);
+      }
+    }
+
+    @Override
+    public final void cancel(Status reason) {
       super.cancel(reason);
       synchronized (lock) {
         if (pendingStreams != null) {

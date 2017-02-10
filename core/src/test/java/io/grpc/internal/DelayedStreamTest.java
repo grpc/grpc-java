@@ -34,8 +34,8 @@ package io.grpc.internal;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -75,6 +75,7 @@ public class DelayedStreamTest {
   @Mock private ClientStreamListener listener;
   @Mock private ClientStream realStream;
   @Captor private ArgumentCaptor<ClientStreamListener> listenerCaptor;
+  @Captor private ArgumentCaptor<Status> statusCaptor;
   private DelayedStream stream = new DelayedStream();
 
   @Before
@@ -114,6 +115,8 @@ public class DelayedStreamTest {
   @Test
   public void setStream_sendsAllMessages() {
     stream.start(listener);
+    stream.setMaxInboundMessageSize(9897);
+    stream.setMaxOutboundMessageSize(5586);
     stream.setCompressor(Codec.Identity.NONE);
 
     stream.setMessageCompression(true);
@@ -125,6 +128,8 @@ public class DelayedStreamTest {
     stream.setStream(realStream);
     stream.setDecompressor(Codec.Identity.NONE);
 
+    verify(realStream).setMaxInboundMessageSize(9897);
+    verify(realStream).setMaxOutboundMessageSize(5586);
     verify(realStream).setCompressor(Codec.Identity.NONE);
     verify(realStream).setDecompressor(Codec.Identity.NONE);
 
@@ -215,10 +220,14 @@ public class DelayedStreamTest {
   }
 
   @Test
-  public void startThenCancelled() {
+  public void startCancelThenSetStream() {
     stream.start(listener);
-    stream.cancel(Status.CANCELLED);
-    verify(listener).closed(eq(Status.CANCELLED), any(Metadata.class));
+    Status status = Status.CANCELLED.withDescription("Yes do it");
+    stream.cancel(status);
+    verify(listener).closed(same(status), any(Metadata.class));
+    stream.setStream(realStream);
+    verify(realStream).start(same(DelayedStream.NOOP_STREAM_LISTENER));
+    verify(realStream).cancel(status);
   }
 
   @Test
@@ -242,8 +251,44 @@ public class DelayedStreamTest {
   @Test
   public void setStreamThenCancelled() {
     stream.setStream(realStream);
-    stream.cancel(Status.CANCELLED);
-    verify(realStream).cancel(same(Status.CANCELLED));
+    try {
+      stream.cancel(Status.CANCELLED);
+      fail("Should have thrown");
+    } catch (IllegalStateException e) {
+      assertEquals("cancel() must be called after start()", e.getMessage());
+    }
+    stream.start(listener);
+    verify(realStream).start(same(listener));
+    verifyNoMoreInteractions(realStream);
+    verifyNoMoreInteractions(listener);
+  }
+
+  @Test
+  public void cancelThenSetStream() {
+    try {
+      stream.cancel(Status.CANCELLED);
+      fail("Should have thrown");
+    } catch (IllegalStateException e) {
+      assertEquals("cancel() must be called after start()", e.getMessage());
+    }
+    stream.setStream(realStream);
+    stream.start(listener);
+    stream.isReady();
+    verify(realStream).start(same(listener));
+    verify(realStream).isReady();
+    verifyNoMoreInteractions(realStream);
+  }
+
+  @Test
+  public void setStreamThensetMaxMessageSizes() {
+    InOrder inOrder = inOrder(realStream);
+    stream.setStream(realStream);
+    stream.setMaxInboundMessageSize(9897);
+    inOrder.verify(realStream).setMaxInboundMessageSize(9897);
+    stream.setMaxOutboundMessageSize(5586);
+    inOrder.verify(realStream).setMaxOutboundMessageSize(5586);
+    stream.start(listener);
+    inOrder.verify(realStream).start(same(listener));
   }
 
   @Test
@@ -251,33 +296,36 @@ public class DelayedStreamTest {
     stream.start(listener);
     stream.setStream(realStream);
     verify(realStream).start(any(ClientStreamListener.class));
-    stream.setStream(mock(ClientStream.class));
+    ClientStream realStream2 = mock(ClientStream.class);
+    InOrder inOrder = inOrder(realStream2);
+    try {
+      stream.setStream(realStream2);
+      fail("Should have thrown");
+    } catch (IllegalStateException e) {
+      assertEquals("DelayedStream.setStream() is called more than once", e.getMessage());
+    }
+    inOrder.verify(realStream2).start(same(DelayedStream.NOOP_STREAM_LISTENER));
+    inOrder.verify(realStream2).cancel(statusCaptor.capture());
+    assertEquals(Status.Code.CANCELLED, statusCaptor.getValue().getCode());
     stream.flush();
     verify(realStream).flush();
-  }
-
-  @Test
-  public void cancelThenSetStream() {
-    stream.cancel(Status.CANCELLED);
-    stream.setStream(realStream);
-    stream.start(listener);
-    stream.isReady();
     verifyNoMoreInteractions(realStream);
   }
 
   @Test
   public void cancel_beforeStart() {
     Status status = Status.CANCELLED.withDescription("that was quick");
-    stream.cancel(status);
+    try {
+      stream.cancel(status);
+      fail("Should have thrown");
+    } catch (IllegalStateException e) {
+      assertEquals("cancel() must be called after start()", e.getMessage());
+    }
     stream.start(listener);
-    verify(listener).closed(same(status), any(Metadata.class));
-  }
-
-  @Test
-  public void cancelledThenStart() {
-    stream.cancel(Status.CANCELLED);
-    stream.start(listener);
-    verify(listener).closed(eq(Status.CANCELLED), any(Metadata.class));
+    verifyNoMoreInteractions(listener);
+    stream.setStream(realStream);
+    verify(realStream).start(any(ClientStreamListener.class));
+    verifyNoMoreInteractions(realStream);
   }
 
   @Test
