@@ -146,6 +146,11 @@ How to Build
 If you are making changes to gRPC-Java, see the [compiling
 instructions](COMPILING.md).
 
+Documentation
+-------------
+
+You can find more detailed documentation and examples in the [grpc-common repository](http://github.com/grpc/grpc-common).
+
 Navigating Around the Source
 ----------------------------
 
