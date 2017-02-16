@@ -35,6 +35,7 @@ import static com.google.common.base.Charsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
@@ -46,21 +47,40 @@ import static org.mockito.Mockito.when;
 import com.google.common.io.CharStreams;
 import com.google.instrumentation.stats.RpcConstants;
 import com.google.instrumentation.stats.TagValue;
+import io.grpc.BindableService;
+import io.grpc.CallOptions;
+import io.grpc.Channel;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
+import io.grpc.Metadata.Key;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerServiceDefinition;
+import io.grpc.ServerServiceDefinition.Builder;
 import io.grpc.Status;
+import io.grpc.Status.Code;
+import io.grpc.StatusRuntimeException;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
 import io.grpc.internal.testing.StatsTestUtils;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsContextFactory;
+import io.grpc.stub.ClientCalls;
+import io.grpc.stub.ServerCalls;
+import io.grpc.stub.ServerCalls.UnaryMethod;
+import io.grpc.stub.StreamObserver;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import org.hamcrest.BaseMatcher;
+import org.hamcrest.Description;
+import org.hamcrest.Matcher;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -79,6 +99,7 @@ public class ServerCallImplTest {
   @Mock private ServerStream stream;
   @Mock private ServerCall.Listener<Long> callListener;
   @Captor private ArgumentCaptor<Status> statusCaptor;
+  @Captor private ArgumentCaptor<Metadata> metadataCaptor;
 
   private ServerCallImpl<Long, Long> call;
   private Context.CancellableContext context;
@@ -327,6 +348,129 @@ public class ServerCallImplTest {
     streamListener.messageRead(method.streamRequest(1234L));
   }
 
+  @Test
+  public void callListenerStatusRuntimeExceptions_trailersArePropagated() {
+    final Key<String> headerKey = Key.of("example-header-key", Metadata.ASCII_STRING_MARSHALLER);
+    final Metadata trailer = new Metadata();
+    trailer.put(headerKey, "example-trailer");
+
+    MethodDescriptor<Long, Long> errorMethod = MethodDescriptor.<Long, Long>newBuilder()
+        .setType(MethodType.UNARY)
+        .setFullMethodName("/service/method")
+        .setRequestMarshaller(new LongMarshaller())
+        .setResponseMarshaller(new LongMarshaller() {
+          @Override
+          public InputStream stream(Long value) {
+            throw new StatusRuntimeException(Status.INVALID_ARGUMENT, trailer);
+          }
+        }).build();
+
+    call = new ServerCallImpl<Long, Long>(stream, errorMethod, requestHeaders, context,
+        statsTraceCtx, DecompressorRegistry.getDefaultInstance(),
+        CompressorRegistry.getDefaultInstance());
+
+    call.sendHeaders(new Metadata());
+    try {
+      call.sendMessage(1234L);
+      fail();
+    } catch (StatusRuntimeException e) {
+      // expected
+      assertThat(e, hasTrailer(headerKey, "example-trailer"));
+    }
+
+    verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
+    assertEquals(statusCaptor.getValue().getCode(), Code.INVALID_ARGUMENT);
+    assertTrue(metadataCaptor.getValue().containsKey(headerKey));
+    assertEquals(metadataCaptor.getValue().get(headerKey), "example-trailer");
+  }
+
+  @Test
+  public void callListenerStatusRuntimeExceptions_trailersArePropagatedWhenCause() {
+    final Key<String> headerKey = Key.of("example-header-key", Metadata.ASCII_STRING_MARSHALLER);
+    final Metadata trailer = new Metadata();
+    trailer.put(headerKey, "example-trailer");
+
+    MethodDescriptor<Long, Long> errorMethod = MethodDescriptor.<Long, Long>newBuilder()
+        .setType(MethodType.UNARY)
+        .setFullMethodName("/service/method")
+        .setRequestMarshaller(new LongMarshaller())
+        .setResponseMarshaller(new LongMarshaller() {
+          @Override
+          public InputStream stream(Long value) {
+            throw new RuntimeException(
+                new StatusRuntimeException(Status.INVALID_ARGUMENT, trailer));
+          }
+        }).build();
+
+    call = new ServerCallImpl<Long, Long>(stream, errorMethod, requestHeaders, context,
+        statsTraceCtx, DecompressorRegistry.getDefaultInstance(),
+        CompressorRegistry.getDefaultInstance());
+
+    call.sendHeaders(new Metadata());
+    try {
+      call.sendMessage(1234L);
+      fail();
+    } catch (RuntimeException e) {
+      // expected
+      assertTrue(e.getCause() instanceof StatusRuntimeException);
+      assertThat((StatusRuntimeException) e.getCause(), hasTrailer(headerKey, "example-trailer"));
+    }
+
+    verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
+    assertEquals(statusCaptor.getValue().getCode(), Code.INVALID_ARGUMENT);
+    assertTrue(metadataCaptor.getValue().containsKey(headerKey));
+    assertEquals(metadataCaptor.getValue().get(headerKey), "example-trailer");
+  }
+
+  @Test
+  public void callListenerStatusRuntimeExceptions_trailersArePropagatedAcrossChannel()
+      throws IOException {
+    final Key<String> headerKey = Key.of("example-header-key", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata trailer = new Metadata();
+    trailer.put(headerKey, "example-trailer");
+
+    Channel channel = InProcessChannelBuilder.forName("boom").build();
+    InProcessServerBuilder serverBuilder = InProcessServerBuilder.forName("boom");
+    serverBuilder.addService(
+        getThrowingBindableService(new StatusRuntimeException(Status.INVALID_ARGUMENT, trailer)));
+    ServerImpl server = serverBuilder.build();
+
+    thrown.expect(StatusRuntimeException.class);
+    thrown.expect(hasTrailer(headerKey, "example-trailer"));
+    try {
+      server.start();
+      ClientCalls.blockingUnaryCall(channel, method, CallOptions.DEFAULT, 1234L);
+    } finally {
+      server.shutdownNow();
+    }
+  }
+
+  @Test
+  public void callListenerStatusRuntimeExceptions_trailersArePropagatedAcrossChannelWhenCause()
+      throws IOException {
+    final Key<String> headerKey = Key.of("example-header-key", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata trailer = new Metadata();
+    trailer.put(headerKey, "example-trailer");
+
+    Channel channel = InProcessChannelBuilder.forName("boom").build();
+    InProcessServerBuilder serverBuilder = InProcessServerBuilder.forName("boom");
+    serverBuilder.addService(
+        getThrowingBindableService(
+            new RuntimeException(
+                new StatusRuntimeException(Status.INVALID_ARGUMENT, trailer))));
+    ServerImpl server = serverBuilder.build();
+
+    thrown.expect(StatusRuntimeException.class);
+    thrown.expect(hasTrailer(headerKey, "example-trailer"));
+    try {
+      server.start();
+      ClientCalls.blockingUnaryCall(channel, method, CallOptions.DEFAULT, 1234L);
+    } finally {
+      server.shutdownNow();
+    }
+  }
+
+
   private void checkStats(Status.Code statusCode) {
     StatsTestUtils.MetricsRecord record = statsCtxFactory.pollRecord();
     assertNotNull(record);
@@ -363,5 +507,46 @@ public class ServerCallImplTest {
         throw new RuntimeException(e);
       }
     }
+  }
+
+  private Matcher<StatusRuntimeException> hasTrailer(final Key<String> trailerKey,
+      final String trailerValue) {
+    return new BaseMatcher<StatusRuntimeException>() {
+      @Override
+      public void describeTo(Description description) {
+        description.appendText("contain trailer " + trailerValue + " for key " + trailerKey);
+      }
+
+      @Override
+      public boolean matches(Object item) {
+        if (!(item instanceof StatusRuntimeException)) {
+          return false;
+        }
+
+        StatusRuntimeException exception = (StatusRuntimeException) item;
+
+        return exception.getTrailers().containsKey(trailerKey)
+            && exception.getTrailers().get(trailerKey).equals(trailerValue);
+      }
+    };
+  }
+
+  private BindableService getThrowingBindableService(final RuntimeException exception) {
+    return new BindableService() {
+      @Override
+      public ServerServiceDefinition bindService() {
+        Builder builder = ServerServiceDefinition.builder("/service");
+        ServerCallHandler<Long, Long> handler = ServerCalls.asyncUnaryCall(
+            new UnaryMethod<Long, Long>() {
+              @Override
+              public void invoke(Long request, StreamObserver<Long> responseObserver) {
+                throw exception;
+              }
+            }
+        );
+        builder.addMethod(method, handler);
+        return builder.build();
+      }
+    };
   }
 }

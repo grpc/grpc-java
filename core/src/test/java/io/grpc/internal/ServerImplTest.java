@@ -68,6 +68,7 @@ import io.grpc.Grpc;
 import io.grpc.HandlerRegistry;
 import io.grpc.IntegerMarshaller;
 import io.grpc.Metadata;
+import io.grpc.Metadata.Key;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
@@ -75,6 +76,8 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerTransportFilter;
 import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
+import io.grpc.StatusException;
+import io.grpc.StatusRuntimeException;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
 import io.grpc.internal.testing.StatsTestUtils;
@@ -143,6 +146,8 @@ public class ServerImplTest {
 
   @Captor
   private ArgumentCaptor<Status> statusCaptor;
+  @Captor
+  private ArgumentCaptor<Metadata> metadataCaptor;
   @Captor
   private ArgumentCaptor<ServerStreamListener> streamListenerCaptor;
 
@@ -935,8 +940,9 @@ public class ServerImplTest {
       fail("Expected exception");
     } catch (Throwable t) {
       assertSame(expectedT, t);
-      verify(stream).close(statusCaptor.capture(), any(Metadata.class));
+      verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
       assertSame(expectedT, statusCaptor.getValue().getCause());
+      assertSame(0, metadataCaptor.getValue().headerCount());
     }
   }
 
@@ -957,8 +963,63 @@ public class ServerImplTest {
       fail("Expected exception");
     } catch (Throwable t) {
       assertSame(expectedT, t);
-      verify(stream).close(statusCaptor.capture(), any(Metadata.class));
+      verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
       assertSame(expectedT, statusCaptor.getValue().getCause());
+      assertSame(0, metadataCaptor.getValue().headerCount());
+    }
+  }
+
+  @Test
+  public void messageRead_statusExceptionCancelsCallWithMetadata() throws Exception {
+    JumpToApplicationThreadServerStreamListener listener
+        = new JumpToApplicationThreadServerStreamListener(
+            executor.getScheduledExecutorService(), stream, Context.ROOT.withCancellation());
+    ServerStreamListener mockListener = mock(ServerStreamListener.class);
+    listener.setListener(mockListener);
+    final Key<String> headerKey = Key.of("example-header-key", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata trailer = new Metadata();
+    trailer.put(headerKey, "example-trailer");
+
+    Throwable wrappedException = new Error("bad-assertion",
+        new StatusException(Status.INVALID_ARGUMENT, trailer));
+    doThrow(wrappedException).when(mockListener).messageRead(any(InputStream.class));
+    // Closing the InputStream is done by the delegated listener (generally ServerCallImpl)
+    listener.messageRead(mock(InputStream.class));
+    try {
+      executor.runDueTasks();
+      fail("Expected exception");
+    } catch (Throwable t) {
+      assertSame(wrappedException, t);
+      verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
+      assertSame(Status.INVALID_ARGUMENT, statusCaptor.getValue());
+      assertSame(trailer, metadataCaptor.getValue());
+    }
+  }
+
+  @Test
+  public void messageRead_errorCancelsCallWithMetadata() throws Exception {
+    JumpToApplicationThreadServerStreamListener listener
+        = new JumpToApplicationThreadServerStreamListener(
+            executor.getScheduledExecutorService(), stream, Context.ROOT.withCancellation());
+    ServerStreamListener mockListener = mock(ServerStreamListener.class);
+    listener.setListener(mockListener);
+    final Key<String> headerKey = Key.of("example-header-key", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata trailer = new Metadata();
+    trailer.put(headerKey, "example-trailer");
+
+    Throwable wrappedException = new RuntimeException(
+        new StatusRuntimeException(Status.INVALID_ARGUMENT, trailer));
+    doThrow(wrappedException).when(mockListener).messageRead(any(InputStream.class));
+    // Closing the InputStream is done by the delegated listener (generally ServerCallImpl)
+    listener.messageRead(mock(InputStream.class));
+    try {
+      executor.runDueTasks();
+      fail("Expected exception");
+    } catch (Throwable t) {
+      assertSame(wrappedException, t);
+      verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
+      assertSame(Status.INVALID_ARGUMENT, statusCaptor.getValue());
+      assertSame(trailer, metadataCaptor.getValue());
     }
   }
 
@@ -978,8 +1039,9 @@ public class ServerImplTest {
       fail("Expected exception");
     } catch (Throwable t) {
       assertSame(expectedT, t);
-      verify(stream).close(statusCaptor.capture(), any(Metadata.class));
+      verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
       assertSame(expectedT, statusCaptor.getValue().getCause());
+      assertSame(0, metadataCaptor.getValue().headerCount());
     }
   }
 
@@ -999,8 +1061,63 @@ public class ServerImplTest {
       fail("Expected exception");
     } catch (Throwable t) {
       assertSame(expectedT, t);
-      verify(stream).close(statusCaptor.capture(), any(Metadata.class));
+      verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
       assertSame(expectedT, statusCaptor.getValue().getCause());
+      assertSame(0, metadataCaptor.getValue().headerCount());
+    }
+  }
+
+  @Test
+  public void halfClosed_statusExceptionCancelsCallWithMetadata() throws Exception {
+    JumpToApplicationThreadServerStreamListener listener
+        = new JumpToApplicationThreadServerStreamListener(
+            executor.getScheduledExecutorService(), stream, Context.ROOT.withCancellation());
+    ServerStreamListener mockListener = mock(ServerStreamListener.class);
+    listener.setListener(mockListener);
+    final Key<String> headerKey = Key.of("example-header-key", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata trailer = new Metadata();
+    trailer.put(headerKey, "example-trailer");
+
+    Throwable wrappedException = new Error("bad-assertion",
+        new StatusException(Status.INVALID_ARGUMENT, trailer));
+    doThrow(wrappedException).when(mockListener).halfClosed();
+    // Closing the InputStream is done by the delegated listener (generally ServerCallImpl)
+    listener.halfClosed();
+    try {
+      executor.runDueTasks();
+      fail("Expected exception");
+    } catch (Throwable t) {
+      assertSame(wrappedException, t);
+      verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
+      assertSame(Status.INVALID_ARGUMENT, statusCaptor.getValue());
+      assertSame(trailer, metadataCaptor.getValue());
+    }
+  }
+
+  @Test
+  public void halfClosed_errorCancelsCallWithMetadata() throws Exception {
+    JumpToApplicationThreadServerStreamListener listener
+        = new JumpToApplicationThreadServerStreamListener(
+            executor.getScheduledExecutorService(), stream, Context.ROOT.withCancellation());
+    ServerStreamListener mockListener = mock(ServerStreamListener.class);
+    listener.setListener(mockListener);
+    final Key<String> headerKey = Key.of("example-header-key", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata trailer = new Metadata();
+    trailer.put(headerKey, "example-trailer");
+
+    Throwable wrappedException = new RuntimeException(
+        new StatusRuntimeException(Status.INVALID_ARGUMENT, trailer));
+    doThrow(wrappedException).when(mockListener).halfClosed();
+    // Closing the InputStream is done by the delegated listener (generally ServerCallImpl)
+    listener.halfClosed();
+    try {
+      executor.runDueTasks();
+      fail("Expected exception");
+    } catch (Throwable t) {
+      assertSame(wrappedException, t);
+      verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
+      assertSame(Status.INVALID_ARGUMENT, statusCaptor.getValue());
+      assertSame(trailer, metadataCaptor.getValue());
     }
   }
 
@@ -1020,8 +1137,9 @@ public class ServerImplTest {
       fail("Expected exception");
     } catch (Throwable t) {
       assertSame(expectedT, t);
-      verify(stream).close(statusCaptor.capture(), any(Metadata.class));
+      verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
       assertSame(expectedT, statusCaptor.getValue().getCause());
+      assertSame(0, metadataCaptor.getValue().headerCount());
     }
   }
 
@@ -1041,10 +1159,66 @@ public class ServerImplTest {
       fail("Expected exception");
     } catch (Throwable t) {
       assertSame(expectedT, t);
-      verify(stream).close(statusCaptor.capture(), any(Metadata.class));
+      verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
       assertSame(expectedT, statusCaptor.getValue().getCause());
+      assertSame(0, metadataCaptor.getValue().headerCount());
     }
   }
+
+  @Test
+  public void onReady_statusExceptionCancelsCallWithMetadata() throws Exception {
+    JumpToApplicationThreadServerStreamListener listener
+        = new JumpToApplicationThreadServerStreamListener(
+            executor.getScheduledExecutorService(), stream, Context.ROOT.withCancellation());
+    ServerStreamListener mockListener = mock(ServerStreamListener.class);
+    listener.setListener(mockListener);
+    final Key<String> headerKey = Key.of("example-header-key", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata trailer = new Metadata();
+    trailer.put(headerKey, "example-trailer");
+
+    Throwable wrappedException = new Error("bad-assertion",
+        new StatusException(Status.INVALID_ARGUMENT, trailer));
+    doThrow(wrappedException).when(mockListener).onReady();
+    // Closing the InputStream is done by the delegated listener (generally ServerCallImpl)
+    listener.onReady();
+    try {
+      executor.runDueTasks();
+      fail("Expected exception");
+    } catch (Throwable t) {
+      assertSame(wrappedException, t);
+      verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
+      assertSame(Status.INVALID_ARGUMENT, statusCaptor.getValue());
+      assertSame(trailer, metadataCaptor.getValue());
+    }
+  }
+
+  @Test
+  public void onReady_errorCancelsCallWithMetadata() throws Exception {
+    JumpToApplicationThreadServerStreamListener listener
+        = new JumpToApplicationThreadServerStreamListener(
+            executor.getScheduledExecutorService(), stream, Context.ROOT.withCancellation());
+    ServerStreamListener mockListener = mock(ServerStreamListener.class);
+    listener.setListener(mockListener);
+    final Key<String> headerKey = Key.of("example-header-key", Metadata.ASCII_STRING_MARSHALLER);
+    Metadata trailer = new Metadata();
+    trailer.put(headerKey, "example-trailer");
+
+    Throwable wrappedException = new RuntimeException(
+        new StatusRuntimeException(Status.INVALID_ARGUMENT, trailer));
+    doThrow(wrappedException).when(mockListener).onReady();
+    // Closing the InputStream is done by the delegated listener (generally ServerCallImpl)
+    listener.onReady();
+    try {
+      executor.runDueTasks();
+      fail("Expected exception");
+    } catch (Throwable t) {
+      assertSame(wrappedException, t);
+      verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
+      assertSame(Status.INVALID_ARGUMENT, statusCaptor.getValue());
+      assertSame(trailer, metadataCaptor.getValue());
+    }
+  }
+
 
   private void createAndStartServer(List<ServerTransportFilter> filters) throws IOException {
     createServer(filters);
