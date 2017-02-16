@@ -423,9 +423,11 @@ public final class Status {
     Throwable cause = checkNotNull(t, "t");
     while (cause != null) {
       if (cause instanceof StatusException) {
-        return ((StatusException) cause).getTrailers();
+        Metadata trailers = ((StatusException) cause).getTrailers();
+        return (trailers == null) ? new Metadata() : trailers;
       } else if (cause instanceof StatusRuntimeException) {
-        return ((StatusRuntimeException) cause).getTrailers();
+        Metadata trailers = ((StatusRuntimeException) cause).getTrailers();
+        return (trailers == null) ? new Metadata() : trailers;
       }
       cause = cause.getCause();
     }
