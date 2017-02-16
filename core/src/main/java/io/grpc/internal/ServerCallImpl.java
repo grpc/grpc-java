@@ -146,10 +146,10 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       stream.writeMessage(resp);
       stream.flush();
     } catch (RuntimeException e) {
-      close(Status.fromThrowable(e), new Metadata());
+      close(Status.fromThrowable(e), Status.trailersFromThrowable(e));
       throw e;
     } catch (Throwable t) {
-      close(Status.fromThrowable(t), new Metadata());
+      close(Status.fromThrowable(t), Status.trailersFromThrowable(t));
       throw new RuntimeException(t);
     }
   }
