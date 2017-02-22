@@ -77,17 +77,15 @@ public final class PickFirstBalancerFactory2 extends LoadBalancer2.Factory {
     @Override
     public void handleResolvedAddresses(List<ResolvedServerInfoGroup> servers,
         Attributes attributes) {
-      // Flatten servers list received from name resolver into single address group. This means that
-      // as far as load balancer is concerned, there's virtually one single server with multiple
-      // addresses so the connection will be created only for the first address (pick first).
-      EquivalentAddressGroup newEag =
-          flattenResolvedServerInfoGroupsIntoEquivalentAddressGroup(servers);
-      if (subchannel == null || !newEag.equals(subchannel.getAddresses())) {
+      // Select first server from first group
+      ResolvedServerInfo first = servers.get(0).getResolvedServerInfoList().get(0);
+
+      if (subchannel == null || !first.equals(subchannel.getAddresses())) {
         if (subchannel != null) {
           subchannel.shutdown();
         }
 
-        subchannel = helper.createSubchannel(newEag, Attributes.EMPTY);
+        subchannel = helper.createSubchannel(first, Attributes.EMPTY);
         helper.updatePicker(new Picker(PickResult.withSubchannel(subchannel)));
       }
     }
@@ -135,21 +133,6 @@ public final class PickFirstBalancerFactory2 extends LoadBalancer2.Factory {
         subchannel.shutdown();
       }
     }
-
-    /**
-     * Flattens list of ResolvedServerInfoGroup objects into one EquivalentAddressGroup object.
-     */
-    private static EquivalentAddressGroup flattenResolvedServerInfoGroupsIntoEquivalentAddressGroup(
-        List<ResolvedServerInfoGroup> groupList) {
-      List<SocketAddress> addrs = new ArrayList<SocketAddress>();
-      for (ResolvedServerInfoGroup group : groupList) {
-        for (ResolvedServerInfo srv : group.getResolvedServerInfoList()) {
-          addrs.add(srv.getAddress());
-        }
-      }
-      return new EquivalentAddressGroup(addrs);
-    }
-
   }
 
   /**

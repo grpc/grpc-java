@@ -43,7 +43,7 @@ import com.google.common.base.Supplier;
 import com.google.errorprone.annotations.ForOverride;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
-import io.grpc.EquivalentAddressGroup;
+import io.grpc.ResolvedServerInfo;
 import io.grpc.Status;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -68,7 +68,7 @@ final class InternalSubchannel implements WithLogId {
   private static final Logger log = Logger.getLogger(InternalSubchannel.class.getName());
 
   private final LogId logId = LogId.allocate(getClass().getName());
-  private final EquivalentAddressGroup addressGroup;
+  private final ResolvedServerInfo addressGroup;
   private final String authority;
   private final String userAgent;
   private final BackoffPolicy.Provider backoffPolicyProvider;
@@ -148,7 +148,7 @@ final class InternalSubchannel implements WithLogId {
   @GuardedBy("lock")
   private ConnectivityStateInfo state = ConnectivityStateInfo.forNonError(IDLE);
 
-  InternalSubchannel(EquivalentAddressGroup addressGroup, String authority, String userAgent,
+  InternalSubchannel(ResolvedServerInfo addressGroup, String authority, String userAgent,
       BackoffPolicy.Provider backoffPolicyProvider,
       ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
       Supplier<Stopwatch> stopwatchSupplier, ChannelExecutor channelExecutor, Callback callback) {
@@ -199,7 +199,7 @@ final class InternalSubchannel implements WithLogId {
     if (nextAddressIndex == 0) {
       connectingTimer.reset().start();
     }
-    List<SocketAddress> addrs = addressGroup.getAddresses();
+    List<? extends SocketAddress> addrs = addressGroup.getAddresses();
     final SocketAddress address = addrs.get(nextAddressIndex++);
     if (nextAddressIndex >= addrs.size()) {
       nextAddressIndex = 0;
@@ -351,7 +351,7 @@ final class InternalSubchannel implements WithLogId {
     }
   }
 
-  EquivalentAddressGroup getAddressGroup() {
+  ResolvedServerInfo getAddressGroup() {
     return addressGroup;
   }
 

@@ -330,7 +330,7 @@ public abstract class LoadBalancer2 {
      * <p>The LoadBalancer is responsible for closing unused Subchannels, and closing all
      * Subchannels within {@link #shutdown}.
      */
-    public abstract Subchannel createSubchannel(EquivalentAddressGroup addrs, Attributes attrs);
+    public abstract Subchannel createSubchannel(ResolvedServerInfo addrs, Attributes attrs);
 
     /**
      * Out-of-band channel for LoadBalancer’s own RPC needs, e.g., talking to an external
@@ -339,8 +339,7 @@ public abstract class LoadBalancer2 {
      * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
      * channels within {@link #shutdown}.
      */
-    public abstract ManagedChannel createOobChannel(
-        EquivalentAddressGroup eag, String authority);
+    public abstract ManagedChannel createOobChannel(ResolvedServerInfo eag, String authority);
 
     /**
      * Set a new picker to the channel.
@@ -400,7 +399,7 @@ public abstract class LoadBalancer2 {
     /**
      * Returns the addresses that this Subchannel is bound to.
      */
-    public abstract EquivalentAddressGroup getAddresses();
+    public abstract ResolvedServerInfo getAddresses();
 
     /**
      * The same attributes passed to {@link Helper#createSubchannel Helper.createSubchannel()}.

@@ -58,9 +58,11 @@ import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
+import io.grpc.ResolvedServerInfo;
 import io.grpc.ResolvedServerInfoGroup;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
+
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.HashSet;
@@ -597,7 +599,8 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
     }
 
     @Override
-    public SubchannelImpl createSubchannel(EquivalentAddressGroup addressGroup, Attributes attrs) {
+    public SubchannelImpl createSubchannel(ResolvedServerInfo addressGroup,
+        Attributes attrs) {
       checkNotNull(addressGroup, "addressGroup");
       checkNotNull(attrs, "attrs");
       ScheduledExecutorService scheduledExecutorCopy = scheduledExecutor;
@@ -659,7 +662,7 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
     }
 
     @Override
-    public ManagedChannel createOobChannel(EquivalentAddressGroup addressGroup, String authority) {
+    public ManagedChannel createOobChannel(ResolvedServerInfo addressGroup, String authority) {
       ScheduledExecutorService scheduledExecutorCopy = scheduledExecutor;
       checkState(scheduledExecutorCopy != null,
           "scheduledExecutor is already cleared. Looks like you are calling this method after "
@@ -859,7 +862,7 @@ public final class ManagedChannelImpl2 extends ManagedChannel implements WithLog
     }
 
     @Override
-    public EquivalentAddressGroup getAddresses() {
+    public ResolvedServerInfo getAddresses() {
       return subchannel.getAddressGroup();
     }
 
