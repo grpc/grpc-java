@@ -330,7 +330,17 @@ public abstract class LoadBalancer2 {
      * <p>The LoadBalancer is responsible for closing unused Subchannels, and closing all
      * Subchannels within {@link #shutdown}.
      */
-    public abstract Subchannel createSubchannel(EquivalentAddressGroup addrs, Attributes attrs);
+    public abstract Subchannel createSubchannel(EquivalentAddressGroup addrs, Attributes attrs,
+        String authority);
+
+    /**
+     * Creates a Subchannel with the default authority of the load balancer.
+     *
+     * @see LoadBalancer2.Helper#createSubchannel(EquivalentAddressGroup, Attributes, String).
+     */
+    public Subchannel createSubchannel(EquivalentAddressGroup addrs, Attributes attrs) {
+      return createSubchannel(addrs, attrs, getAuthority());
+    }
 
     /**
      * Out-of-band channel for LoadBalancer’s own RPC needs, e.g., talking to an external
