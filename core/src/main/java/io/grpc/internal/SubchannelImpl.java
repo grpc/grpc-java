@@ -32,6 +32,9 @@
 package io.grpc.internal;
 
 import io.grpc.LoadBalancer2;
+import io.grpc.Status;
+import io.grpc.internal.ClientTransport.PingCallback;
+import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
 /**
@@ -44,4 +47,23 @@ abstract class SubchannelImpl extends LoadBalancer2.Subchannel {
    */
   @Nullable
   abstract ClientTransport obtainActiveTransport();
+
+  /**
+   * Sends ping using currently active transport. If there's no active transports, calls {@link
+   * PingCallback#onFailure(Throwable)} and returns immediately.
+   *
+   * @see ClientTransport#ping(PingCallback, Executor)
+   */
+  @Override
+  public void ping(PingCallback callback, Executor executor) {
+    ClientTransport activeTransport = obtainActiveTransport();
+    if (activeTransport == null) {
+      // TODO(lukaszx0) not sure what's the best status to return here. Other candidates:
+      // ABORT or INTERNAL.
+      callback.onFailure(Status.UNAVAILABLE.withDescription("Couldn't obtain active transport")
+          .asException());
+      return;
+    }
+    activeTransport.ping(callback, executor);
+  }
 }
