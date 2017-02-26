@@ -155,7 +155,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
       }
       if (picker != null) {
         while (true) {
-          PickResult pickResult = picker.pickSubchannel(callOptions.getAffinity(), headers);
+          PickResult pickResult = picker.pickSubchannel(
+              new PickSubchannelArgsImpl(method, headers, callOptions));
           ClientTransport transport = GrpcUtil.getTransportFromPickResult(
               pickResult, callOptions.isWaitForReady());
           if (transport != null) {
@@ -291,7 +292,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
 
     for (final PendingStream stream : toProcess) {
       PickResult pickResult = picker.pickSubchannel(
-          stream.callOptions.getAffinity(), stream.headers);
+          new PickSubchannelArgsImpl(stream.method, stream.headers, stream.callOptions));
       final ClientTransport transport = GrpcUtil.getTransportFromPickResult(
           pickResult, stream.callOptions.isWaitForReady());
       if (transport != null) {

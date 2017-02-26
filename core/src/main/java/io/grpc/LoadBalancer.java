@@ -31,6 +31,7 @@
 
 package io.grpc;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import java.util.List;
 import javax.annotation.Nullable;
@@ -169,8 +170,75 @@ public abstract class LoadBalancer {
      *
      * @param affinity the affinity attributes provided via {@link CallOptions#withAffinity}
      * @param headers the headers container of the RPC. It can be mutated within this method.
+     * @deprecated use {@link #pickSubchannel(PickSubchannelArgs)}
      */
-    public abstract PickResult pickSubchannel(Attributes affinity, Metadata headers);
+    @Deprecated
+    public PickResult pickSubchannel(Attributes affinity, Metadata headers) {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Make a balancing decision for a new RPC.
+     *
+     * @param args the pick arguments
+     */
+    // TODO(lukaszx0) make it abstract once deprecated overload will be removed.
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      return pickSubchannel(args.getCallOptions().getAffinity(), args.getHeaders());
+    }
+  }
+
+  /**
+   * Provides arguments for a {@link SubchannelPicker#pickSubchannel(PickSubchannelArgs)}.
+   */
+  public abstract static class PickSubchannelArgs {
+
+    /**
+     * Call options.
+     */
+    public abstract CallOptions getCallOptions();
+
+    /**
+     * Call metadata.
+     */
+    public abstract Metadata getHeaders();
+
+    /**
+     * Call method.
+     */
+    public abstract MethodDescriptor<?, ?> getMethodDescriptor();
+
+    /**
+     * Returns true if the given object is also a {@link PickSubchannelArgs} with an equal
+     * getter values.
+     */
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      PickSubchannelArgs that = (PickSubchannelArgs) o;
+      return Objects.equal(getCallOptions(), that.getCallOptions())
+          && Objects.equal(getHeaders(), that.getHeaders())
+          && Objects.equal(getMethodDescriptor(), that.getMethodDescriptor());
+    }
+
+    /**
+     * Returns a hash code for the subchannel args object.
+     */
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(getCallOptions(), getHeaders(), getMethodDescriptor());
+    }
+
+    @Override
+    public String toString() {
+      return "[callOptions=" + getCallOptions() + " headers=" + getHeaders() + " method="
+          + getMethodDescriptor() + "]";
+    }
   }
 
   /**
@@ -340,8 +408,8 @@ public abstract class LoadBalancer {
      * Set a new picker to the channel.
      *
      * <p>When a new picker is provided via {@code updatePicker()}, the channel will apply the
-     * picker on all buffered RPCs, by calling {@link SubchannelPicker#pickSubchannel
-     * SubchannelPicker.pickSubchannel()}.
+     * picker on all buffered RPCs, by calling {@link SubchannelPicker#pickSubchannel(
+     * PickSubchannelArgs)}.
      *
      * <p>The channel will hold the picker and use it for all RPCs, until {@code updatePicker()} is
      * called again and a new picker replaces the old one.  If {@code updatePicker()} has never been

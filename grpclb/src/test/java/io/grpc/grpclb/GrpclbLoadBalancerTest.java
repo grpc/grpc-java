@@ -65,10 +65,10 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.ManagedChannel;
-import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.ResolvedServerInfo;
@@ -157,7 +157,7 @@ public class GrpclbLoadBalancerTest {
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
   private final SerializingExecutor channelExecutor =
       new SerializingExecutor(MoreExecutors.directExecutor());
-  private final Metadata headers = new Metadata();
+  private static final PickSubchannelArgs EMPTY_ARGS = mock(PickSubchannelArgs.class);
   @Mock
   private LoadBalancer.Factory pickFirstBalancerFactory;
   @Mock
@@ -245,6 +245,7 @@ public class GrpclbLoadBalancerTest {
 
   @After
   public void tearDown() {
+    verifyNoMoreInteractions(EMPTY_ARGS);
     try {
       if (balancer != null) {
         channelExecutor.execute(new Runnable() {
@@ -273,7 +274,7 @@ public class GrpclbLoadBalancerTest {
   public void errorPicker() {
     Status error = Status.UNAVAILABLE.withDescription("Just don't know why");
     ErrorPicker picker = new ErrorPicker(error);
-    assertSame(error, picker.pickSubchannel(Attributes.EMPTY, headers).getStatus());
+    assertSame(error, picker.pickSubchannel(EMPTY_ARGS).getStatus());
   }
 
   @Test
@@ -282,15 +283,15 @@ public class GrpclbLoadBalancerTest {
     PickResult pr2 = PickResult.withSubchannel(mockSubchannel);
     List<PickResult> list = Arrays.asList(pr1, pr2);
     RoundRobinPicker picker = new RoundRobinPicker(list);
-    assertSame(pr1, picker.pickSubchannel(Attributes.EMPTY, headers));
-    assertSame(pr2, picker.pickSubchannel(Attributes.EMPTY, headers));
-    assertSame(pr1, picker.pickSubchannel(Attributes.EMPTY, headers));
+    assertSame(pr1, picker.pickSubchannel(EMPTY_ARGS));
+    assertSame(pr2, picker.pickSubchannel(EMPTY_ARGS));
+    assertSame(pr1, picker.pickSubchannel(EMPTY_ARGS));
   }
 
   @Test
   public void bufferPicker() {
     assertEquals(PickResult.withNoResult(),
-        GrpclbLoadBalancer.BUFFER_PICKER.pickSubchannel(Attributes.EMPTY, headers));
+        GrpclbLoadBalancer.BUFFER_PICKER.pickSubchannel(EMPTY_ARGS));
   }
 
   @Test
