@@ -23,10 +23,8 @@ test {
     jvmArgs "-javaagent:" + configurations.alpnagent.asPath
 }
 
-// The application plugin uses the distribution plugin and configures the jars to be
 // placed into the "lib" folder. Since we don't include netty_tcnative as a dependency,
 // we have to manually copy it into the lib folder so that it's available to the scripts.
-distributions {
     main {
         contents {
             from(configurations.tcnative) {

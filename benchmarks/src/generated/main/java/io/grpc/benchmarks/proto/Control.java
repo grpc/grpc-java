@@ -323,7 +323,6 @@ public final class Control {
 
     /**
      * <pre>
-     * The rate of arrivals (a.k.a. lambda parameter of the exp distribution).
      * </pre>
      *
      * <code>double offered_load = 1;</code>
@@ -332,7 +331,6 @@ public final class Control {
   }
   /**
    * <pre>
-   * Parameters of poisson process distribution, which is a good representation
    * of activity coming in from independent identical stationary sources.
    * </pre>
    *
@@ -407,7 +405,6 @@ public final class Control {
     private double offeredLoad_;
     /**
      * <pre>
-     * The rate of arrivals (a.k.a. lambda parameter of the exp distribution).
      * </pre>
      *
      * <code>double offered_load = 1;</code>
@@ -559,7 +556,6 @@ public final class Control {
     }
     /**
      * <pre>
-     * Parameters of poisson process distribution, which is a good representation
      * of activity coming in from independent identical stationary sources.
      * </pre>
      *
@@ -696,7 +692,6 @@ public final class Control {
       private double offeredLoad_ ;
       /**
        * <pre>
-       * The rate of arrivals (a.k.a. lambda parameter of the exp distribution).
        * </pre>
        *
        * <code>double offered_load = 1;</code>
@@ -706,7 +701,6 @@ public final class Control {
       }
       /**
        * <pre>
-       * The rate of arrivals (a.k.a. lambda parameter of the exp distribution).
        * </pre>
        *
        * <code>double offered_load = 1;</code>
@@ -719,7 +713,6 @@ public final class Control {
       }
       /**
        * <pre>
-       * The rate of arrivals (a.k.a. lambda parameter of the exp distribution).
        * </pre>
        *
        * <code>double offered_load = 1;</code>

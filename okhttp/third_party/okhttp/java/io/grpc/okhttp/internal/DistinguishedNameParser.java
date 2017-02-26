@@ -263,7 +263,6 @@ final class DistinguishedNameParser {
   }
 
   // decodes UTF-8 char
-  // see http://www.unicode.org for UTF-8 bit distribution table
   private char getUTF8() {
     int res = getByte(pos);
     pos++; //FIXME tmp
