@@ -95,7 +95,6 @@ static inline string MessageFullJavaName(bool nano, const Descriptor* desc) {
   return name;
 }
 
-// TODO(nmittler): Remove once protobuf includes javadoc methods in distribution.
 template <typename ITR>
 static void GrpcSplitStringToIteratorUsing(const string& full,
                                        const char* delim,
@@ -130,7 +129,6 @@ static void GrpcSplitStringToIteratorUsing(const string& full,
   }
 }
 
-// TODO(nmittler): Remove once protobuf includes javadoc methods in distribution.
 static void GrpcSplitStringUsing(const string& full,
                              const char* delim,
                              std::vector<string>* result) {
@@ -138,14 +136,12 @@ static void GrpcSplitStringUsing(const string& full,
   GrpcSplitStringToIteratorUsing(full, delim, it);
 }
 
-// TODO(nmittler): Remove once protobuf includes javadoc methods in distribution.
 static std::vector<string> GrpcSplit(const string& full, const char* delim) {
   std::vector<string> result;
   GrpcSplitStringUsing(full, delim, &result);
   return result;
 }
 
-// TODO(nmittler): Remove once protobuf includes javadoc methods in distribution.
 static string GrpcEscapeJavadoc(const string& input) {
   string result;
   result.reserve(input.size() * 2);
@@ -204,7 +200,6 @@ static string GrpcEscapeJavadoc(const string& input) {
   return result;
 }
 
-// TODO(nmittler): Remove once protobuf includes javadoc methods in distribution.
 template <typename DescriptorType>
 static string GrpcGetCommentsForDescriptor(const DescriptorType* descriptor) {
   SourceLocation location;
@@ -215,7 +210,6 @@ static string GrpcGetCommentsForDescriptor(const DescriptorType* descriptor) {
   return string();
 }
 
-// TODO(nmittler): Remove once protobuf includes javadoc methods in distribution.
 static std::vector<string> GrpcGetDocLines(const string& comments) {
   if (!comments.empty()) {
     // TODO(kenton):  Ideally we should parse the comment text as Markdown and
@@ -235,13 +229,11 @@ static std::vector<string> GrpcGetDocLines(const string& comments) {
   return std::vector<string>();
 }
 
-// TODO(nmittler): Remove once protobuf includes javadoc methods in distribution.
 template <typename DescriptorType>
 static std::vector<string> GrpcGetDocLinesForDescriptor(const DescriptorType* descriptor) {
   return GrpcGetDocLines(GrpcGetCommentsForDescriptor(descriptor));
 }
 
-// TODO(nmittler): Remove once protobuf includes javadoc methods in distribution.
 static void GrpcWriteDocCommentBody(Printer* printer,
                                     const std::vector<string>& lines,
                                     bool surroundWithPreTag) {
@@ -267,7 +259,6 @@ static void GrpcWriteDocCommentBody(Printer* printer,
   }
 }
 
-// TODO(nmittler): Remove once protobuf includes javadoc methods in distribution.
 static void GrpcWriteDocComment(Printer* printer, const string& comments) {
   printer->Print("/**\n");
   std::vector<string> lines = GrpcGetDocLines(comments);
@@ -275,7 +266,6 @@ static void GrpcWriteDocComment(Printer* printer, const string& comments) {
   printer->Print(" */\n");
 }
 
-// TODO(nmittler): Remove once protobuf includes javadoc methods in distribution.
 static void GrpcWriteServiceDocComment(Printer* printer,
                                        const ServiceDescriptor* service) {
   // Deviating from protobuf to avoid extraneous docs
@@ -286,7 +276,6 @@ static void GrpcWriteServiceDocComment(Printer* printer,
   printer->Print(" */\n");
 }
 
-// TODO(nmittler): Remove once protobuf includes javadoc methods in distribution.
 void GrpcWriteMethodDocComment(Printer* printer,
                            const MethodDescriptor* method) {
   // Deviating from protobuf to avoid extraneous docs
