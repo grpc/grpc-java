@@ -58,7 +58,6 @@ import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
-import io.grpc.ResolvedServerInfoGroup;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import java.net.URI;
@@ -742,7 +741,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     }
 
     @Override
-    public void onUpdate(final List<ResolvedServerInfoGroup> servers, final Attributes config) {
+    public void onUpdate(final List<EquivalentAddressGroup> servers, final Attributes config) {
       if (servers.isEmpty()) {
         onError(Status.UNAVAILABLE.withDescription("NameResolver returned an empty list"));
         return;

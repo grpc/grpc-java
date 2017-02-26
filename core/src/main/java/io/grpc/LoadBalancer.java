@@ -119,7 +119,7 @@ public abstract class LoadBalancer {
    * @param attributes extra metadata from naming system.
    */
   public abstract void handleResolvedAddresses(
-      List<ResolvedServerInfoGroup> servers, Attributes attributes);
+      List<EquivalentAddressGroup> servers, Attributes attributes);
 
   /**
    * Handles an error from the name resolution system.

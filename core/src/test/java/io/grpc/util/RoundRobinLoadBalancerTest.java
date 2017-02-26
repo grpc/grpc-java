@@ -57,8 +57,6 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.Metadata;
-import io.grpc.ResolvedServerInfo;
-import io.grpc.ResolvedServerInfoGroup;
 import io.grpc.Status;
 import io.grpc.util.RoundRobinLoadBalancerFactory.Picker;
 import io.grpc.util.RoundRobinLoadBalancerFactory.RoundRobinLoadBalancer;
@@ -83,7 +81,7 @@ import org.mockito.stubbing.Answer;
 @RunWith(JUnit4.class)
 public class RoundRobinLoadBalancerTest {
   private RoundRobinLoadBalancer loadBalancer;
-  private Map<ResolvedServerInfoGroup, EquivalentAddressGroup> servers = Maps.newHashMap();
+  private List<EquivalentAddressGroup> servers = Lists.newArrayList();
   private Map<EquivalentAddressGroup, Subchannel> subchannels = Maps.newLinkedHashMap();
   private static final Attributes.Key<String> MAJOR_KEY = Attributes.Key.of("major-key");
   private Attributes affinity = Attributes.newBuilder().set(MAJOR_KEY, "I got the keys").build();
@@ -104,7 +102,7 @@ public class RoundRobinLoadBalancerTest {
     for (int i = 0; i < 3; i++) {
       SocketAddress addr = new FakeSocketAddress("server" + i);
       EquivalentAddressGroup eag = new EquivalentAddressGroup(addr);
-      servers.put(ResolvedServerInfoGroup.builder().add(new ResolvedServerInfo(addr)).build(), eag);
+      servers.add(eag);
       subchannels.put(eag, createMockSubchannel());
     }
 
@@ -123,12 +121,12 @@ public class RoundRobinLoadBalancerTest {
 
   @Test
   public void pickAfterResolved() throws Exception {
-    Subchannel readySubchannel = subchannels.get(servers.get(servers.keySet().iterator().next()));
+    Subchannel readySubchannel = subchannels.get(servers.iterator().next());
     when(readySubchannel.getAttributes()).thenReturn(Attributes.newBuilder()
         .set(STATE_INFO, new AtomicReference<ConnectivityStateInfo>(
             ConnectivityStateInfo.forNonError(READY)))
         .build());
-    loadBalancer.handleResolvedAddresses(Lists.newArrayList(servers.keySet()), affinity);
+    loadBalancer.handleResolvedAddresses(servers, affinity);
 
     verify(mockHelper, times(3)).createSubchannel(eagCaptor.capture(),
         any(Attributes.class));
@@ -167,11 +165,10 @@ public class RoundRobinLoadBalancerTest {
     subchannels2.put(new EquivalentAddressGroup(removedAddr), removedSubchannel);
     subchannels2.put(new EquivalentAddressGroup(oldAddr), oldSubchannel);
 
-    List<ResolvedServerInfoGroup> currentServers = Lists.newArrayList(
-        ResolvedServerInfoGroup.builder()
-            .add(new ResolvedServerInfo(removedAddr))
-            .add(new ResolvedServerInfo(oldAddr))
-            .build());
+    List<EquivalentAddressGroup> currentServers =
+        Lists.newArrayList(
+            new EquivalentAddressGroup(removedAddr),
+            new EquivalentAddressGroup(oldAddr));
 
     when(mockHelper.createSubchannel(any(EquivalentAddressGroup.class), any(Attributes.class)))
         .then(new Answer<Subchannel>() {
@@ -201,11 +198,10 @@ public class RoundRobinLoadBalancerTest {
     subchannels2.put(new EquivalentAddressGroup(oldAddr), oldSubchannel);
     subchannels2.put(new EquivalentAddressGroup(newAddr), newSubchannel);
 
-    List<ResolvedServerInfoGroup> latestServers = Lists.newArrayList(
-        ResolvedServerInfoGroup.builder()
-            .add(new ResolvedServerInfo(oldAddr))
-            .add(new ResolvedServerInfo(newAddr))
-            .build());
+    List<EquivalentAddressGroup> latestServers =
+        Lists.newArrayList(
+            new EquivalentAddressGroup(oldAddr),
+            new EquivalentAddressGroup(newAddr));
 
     loadBalancer.handleResolvedAddresses(latestServers, affinity);
 
@@ -252,7 +248,7 @@ public class RoundRobinLoadBalancerTest {
             return createMockSubchannel();
           }
         });
-    loadBalancer.handleResolvedAddresses(Lists.newArrayList(servers.keySet()), Attributes.EMPTY);
+    loadBalancer.handleResolvedAddresses(servers, Attributes.EMPTY);
     Subchannel subchannel = loadBalancer.getSubchannels().iterator().next();
     AtomicReference<ConnectivityStateInfo> subchannelStateInfo = subchannel.getAttributes().get(
         STATE_INFO);
@@ -334,7 +330,7 @@ public class RoundRobinLoadBalancerTest {
   public void nameResolutionErrorWithActiveChannels() throws Exception {
     Subchannel readySubchannel = subchannels.values().iterator().next();
     readySubchannel.getAttributes().get(STATE_INFO).set(ConnectivityStateInfo.forNonError(READY));
-    loadBalancer.handleResolvedAddresses(Lists.newArrayList(servers.keySet()), affinity);
+    loadBalancer.handleResolvedAddresses(servers, affinity);
     loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
 
     verify(mockHelper, times(3)).createSubchannel(any(EquivalentAddressGroup.class),

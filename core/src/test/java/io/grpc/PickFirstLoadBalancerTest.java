@@ -66,7 +66,7 @@ import org.mockito.MockitoAnnotations;
 @RunWith(JUnit4.class)
 public class PickFirstLoadBalancerTest {
   private PickFirstBalancer loadBalancer;
-  private List<ResolvedServerInfoGroup> servers = Lists.newArrayList();
+  private List<EquivalentAddressGroup> servers = Lists.newArrayList();
   private List<SocketAddress> socketAddresses = Lists.newArrayList();
 
   private static final Attributes.Key<String> FOO = Attributes.Key.of("foo");
@@ -88,7 +88,7 @@ public class PickFirstLoadBalancerTest {
     MockitoAnnotations.initMocks(this);
     for (int i = 0; i < 3; i++) {
       SocketAddress addr = new FakeSocketAddress("server" + i);
-      servers.add(ResolvedServerInfoGroup.builder().add(new ResolvedServerInfo(addr)).build());
+      servers.add(new EquivalentAddressGroup(addr));
       socketAddresses.add(addr);
     }
 
@@ -130,8 +130,8 @@ public class PickFirstLoadBalancerTest {
   public void pickAfterResolvedAndChanged() throws Exception {
     SocketAddress socketAddr = new FakeSocketAddress("newserver");
     List<SocketAddress> newSocketAddresses = Lists.newArrayList(socketAddr);
-    List<ResolvedServerInfoGroup> newServers = Lists.newArrayList(
-        ResolvedServerInfoGroup.builder().add(new ResolvedServerInfo(socketAddr)).build());
+    List<EquivalentAddressGroup> newServers =
+        Lists.newArrayList(new EquivalentAddressGroup(socketAddr));
 
     final Subchannel oldSubchannel = mock(Subchannel.class);
     final EquivalentAddressGroup oldEag = new EquivalentAddressGroup(socketAddresses);

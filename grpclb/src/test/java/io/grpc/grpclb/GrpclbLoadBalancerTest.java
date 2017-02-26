@@ -71,8 +71,6 @@ import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
-import io.grpc.ResolvedServerInfo;
-import io.grpc.ResolvedServerInfoGroup;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.grpclb.GrpclbConstants.LbPolicy;
@@ -302,7 +300,7 @@ public class GrpclbLoadBalancerTest {
     assertSame(error, errorPicker.result.getStatus());
 
     // Recover with a subsequent success
-    List<ResolvedServerInfoGroup> resolvedServers = createResolvedServerInfoGroupList(false);
+    List<EquivalentAddressGroup> resolvedServers = createResolvedServerAddresses(false);
 
     Attributes resolutionAttrs = Attributes.newBuilder().set(RESOLUTION_ATTR, "yeah").build();
     deliverResolvedAddresses(resolvedServers, resolutionAttrs);
@@ -322,8 +320,8 @@ public class GrpclbLoadBalancerTest {
     assertSame(error, errorPicker.result.getStatus());
 
     // Recover with a subsequent success
-    List<ResolvedServerInfoGroup> resolvedServers = createResolvedServerInfoGroupList(true);
-    EquivalentAddressGroup eag = resolvedServers.get(0).toEquivalentAddressGroup();
+    List<EquivalentAddressGroup> resolvedServers = createResolvedServerAddresses(true);
+    EquivalentAddressGroup eag = resolvedServers.get(0);
 
     Attributes resolutionAttrs = Attributes.newBuilder()
         .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.GRPCLB).build();
@@ -342,7 +340,7 @@ public class GrpclbLoadBalancerTest {
 
   @Test
   public void delegatingPickFirstThenNameResolutionFails() {
-    List<ResolvedServerInfoGroup> resolvedServers = createResolvedServerInfoGroupList(false);
+    List<EquivalentAddressGroup> resolvedServers = createResolvedServerAddresses(false);
 
     Attributes resolutionAttrs = Attributes.newBuilder().set(RESOLUTION_ATTR, "yeah").build();
     deliverResolvedAddresses(resolvedServers, resolutionAttrs);
@@ -361,7 +359,7 @@ public class GrpclbLoadBalancerTest {
 
   @Test
   public void delegatingRoundRobinThenNameResolutionFails() {
-    List<ResolvedServerInfoGroup> resolvedServers = createResolvedServerInfoGroupList(false, false);
+    List<EquivalentAddressGroup> resolvedServers = createResolvedServerAddresses(false, false);
 
     Attributes resolutionAttrs = Attributes.newBuilder()
         .set(RESOLUTION_ATTR, "yeah")
@@ -385,16 +383,14 @@ public class GrpclbLoadBalancerTest {
   public void grpclbThenNameResolutionFails() {
     InOrder inOrder = inOrder(helper);
     // Go to GRPCLB first
-    List<ResolvedServerInfoGroup> grpclbResolutionList =
-        createResolvedServerInfoGroupList(true, true);
+    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true, true);
     Attributes grpclbResolutionAttrs = Attributes.newBuilder()
         .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.GRPCLB).build();
     deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
 
     assertSame(LbPolicy.GRPCLB, balancer.getLbPolicy());
     assertNull(balancer.getDelegate());
-    verify(helper).createOobChannel(eq(grpclbResolutionList.get(0).toEquivalentAddressGroup()),
-        eq(lbAuthority(0)));
+    verify(helper).createOobChannel(eq(grpclbResolutionList.get(0)), eq(lbAuthority(0)));
     assertEquals(1, fakeOobChannels.size());
     ManagedChannel oobChannel = fakeOobChannels.poll();
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
@@ -428,23 +424,22 @@ public class GrpclbLoadBalancerTest {
   @Test
   public void switchPolicy() {
     // Go to GRPCLB first
-    List<ResolvedServerInfoGroup> grpclbResolutionList =
-        createResolvedServerInfoGroupList(true, false, true);
+    List<EquivalentAddressGroup> grpclbResolutionList =
+        createResolvedServerAddresses(true, false, true);
     Attributes grpclbResolutionAttrs = Attributes.newBuilder()
         .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.GRPCLB).build();
     deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
 
     assertSame(LbPolicy.GRPCLB, balancer.getLbPolicy());
     assertNull(balancer.getDelegate());
-    verify(helper).createOobChannel(eq(grpclbResolutionList.get(0).toEquivalentAddressGroup()),
-        eq(lbAuthority(0)));
+    verify(helper).createOobChannel(eq(grpclbResolutionList.get(0)), eq(lbAuthority(0)));
     assertEquals(1, fakeOobChannels.size());
     ManagedChannel oobChannel = fakeOobChannels.poll();
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
 
     // Switch to PICK_FIRST
-    List<ResolvedServerInfoGroup> pickFirstResolutionList =
-        createResolvedServerInfoGroupList(true, false, true);
+    List<EquivalentAddressGroup> pickFirstResolutionList =
+        createResolvedServerAddresses(true, false, true);
     Attributes pickFirstResolutionAttrs = Attributes.newBuilder()
         .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.PICK_FIRST).build();
     verify(pickFirstBalancerFactory, never()).newLoadBalancer(any(Helper.class));
@@ -466,8 +461,8 @@ public class GrpclbLoadBalancerTest {
     assertTrue(oobChannel.isShutdown());
 
     // Switch to ROUND_ROBIN
-    List<ResolvedServerInfoGroup> roundRobinResolutionList =
-        createResolvedServerInfoGroupList(true, false, false);
+    List<EquivalentAddressGroup> roundRobinResolutionList =
+        createResolvedServerAddresses(true, false, false);
     Attributes roundRobinResolutionAttrs = Attributes.newBuilder()
         .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.ROUND_ROBIN).build();
     verify(roundRobinBalancerFactory, never()).newLoadBalancer(any(Helper.class));
@@ -482,23 +477,21 @@ public class GrpclbLoadBalancerTest {
 
     // Special case: if all addresses are loadbalancers, use GRPCLB no matter what the NameResolver
     // says.
-    grpclbResolutionList = createResolvedServerInfoGroupList(true, true, true);
+    grpclbResolutionList = createResolvedServerAddresses(true, true, true);
     grpclbResolutionAttrs = Attributes.newBuilder()
         .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.PICK_FIRST).build();
     deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
 
     assertSame(LbPolicy.GRPCLB, balancer.getLbPolicy());
     assertNull(balancer.getDelegate());
-    verify(helper, times(2)).createOobChannel(
-        eq(grpclbResolutionList.get(0).toEquivalentAddressGroup()),
-        eq(lbAuthority(0)));
+    verify(helper, times(2)).createOobChannel(eq(grpclbResolutionList.get(0)), eq(lbAuthority(0)));
     verify(helper, times(2)).createOobChannel(any(EquivalentAddressGroup.class), any(String.class));
     assertEquals(1, fakeOobChannels.size());
     oobChannel = fakeOobChannels.poll();
     verify(mockLbService, times(2)).balanceLoad(lbResponseObserverCaptor.capture());
 
     // Special case: PICK_FIRST is the default
-    pickFirstResolutionList = createResolvedServerInfoGroupList(true, false, false);
+    pickFirstResolutionList = createResolvedServerAddresses(true, false, false);
     pickFirstResolutionAttrs = Attributes.EMPTY;
     verify(pickFirstBalancerFactory).newLoadBalancer(any(Helper.class));
     assertFalse(oobChannel.isShutdown());
@@ -517,16 +510,14 @@ public class GrpclbLoadBalancerTest {
   @Test
   public void grpclbWorking() {
     InOrder inOrder = inOrder(helper);
-    List<ResolvedServerInfoGroup> grpclbResolutionList =
-        createResolvedServerInfoGroupList(true, true);
+    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true, true);
     Attributes grpclbResolutionAttrs = Attributes.newBuilder()
         .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.GRPCLB).build();
     deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
 
     assertSame(LbPolicy.GRPCLB, balancer.getLbPolicy());
     assertNull(balancer.getDelegate());
-    verify(helper).createOobChannel(eq(grpclbResolutionList.get(0).toEquivalentAddressGroup()),
-        eq(lbAuthority(0)));
+    verify(helper).createOobChannel(eq(grpclbResolutionList.get(0)), eq(lbAuthority(0)));
     assertEquals(1, fakeOobChannels.size());
     ManagedChannel oobChannel = fakeOobChannels.poll();
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
@@ -643,25 +634,21 @@ public class GrpclbLoadBalancerTest {
     InOrder inOrder = inOrder(helper, mockLbService);
     // Make the first LB address fail to connect
     failingLbAuthorities.add(lbAuthority(0));
-    List<ResolvedServerInfoGroup> grpclbResolutionList =
-        createResolvedServerInfoGroupList(true, true, true);
+    List<EquivalentAddressGroup> grpclbResolutionList =
+        createResolvedServerAddresses(true, true, true);
 
     Attributes grpclbResolutionAttrs = Attributes.newBuilder()
         .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.GRPCLB).build();
     deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
 
     // First LB addr fails to connect
-    inOrder.verify(helper).createOobChannel(
-        eq(grpclbResolutionList.get(0).toEquivalentAddressGroup()),
-        eq(lbAuthority(0)));
+    inOrder.verify(helper).createOobChannel(eq(grpclbResolutionList.get(0)), eq(lbAuthority(0)));
     inOrder.verify(helper).updatePicker(isA(ErrorPicker.class));
 
     assertEquals(2, fakeOobChannels.size());
     assertTrue(fakeOobChannels.poll().isShutdown());
     // Will move on to second LB addr
-    inOrder.verify(helper).createOobChannel(
-        eq(grpclbResolutionList.get(1).toEquivalentAddressGroup()),
-        eq(lbAuthority(1)));
+    inOrder.verify(helper).createOobChannel(eq(grpclbResolutionList.get(1)), eq(lbAuthority(1)));
     inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
     StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
     assertEquals(1, lbRequestObservers.size());
@@ -679,9 +666,7 @@ public class GrpclbLoadBalancerTest {
     assertEquals(error1.getCode(), errorPicker.result.getStatus().getCode());
     assertTrue(errorPicker.result.getStatus().getDescription().contains(error1.getDescription()));
     // Move on to the third LB.
-    inOrder.verify(helper).createOobChannel(
-        eq(grpclbResolutionList.get(2).toEquivalentAddressGroup()),
-        eq(lbAuthority(2)));
+    inOrder.verify(helper).createOobChannel(eq(grpclbResolutionList.get(2)), eq(lbAuthority(2)));
 
     inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
     lbResponseObserver = lbResponseObserverCaptor.getValue();
@@ -696,17 +681,13 @@ public class GrpclbLoadBalancerTest {
     assertTrue(fakeOobChannels.poll().isShutdown());
 
     // Loop back to the first LB addr, which still fails.
-    inOrder.verify(helper).createOobChannel(
-        eq(grpclbResolutionList.get(0).toEquivalentAddressGroup()),
-        eq(lbAuthority(0)));
+    inOrder.verify(helper).createOobChannel(eq(grpclbResolutionList.get(0)), eq(lbAuthority(0)));
     inOrder.verify(helper).updatePicker(isA(ErrorPicker.class));
 
     assertEquals(2, fakeOobChannels.size());
     assertTrue(fakeOobChannels.poll().isShutdown());
     // Will move on to second LB addr
-    inOrder.verify(helper).createOobChannel(
-        eq(grpclbResolutionList.get(1).toEquivalentAddressGroup()),
-        eq(lbAuthority(1)));
+    inOrder.verify(helper).createOobChannel(eq(grpclbResolutionList.get(1)), eq(lbAuthority(1)));
     inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
     lbResponseObserver = lbResponseObserverCaptor.getValue();
     assertEquals(1, lbRequestObservers.size());
@@ -748,7 +729,7 @@ public class GrpclbLoadBalancerTest {
   }
 
   private void deliverResolvedAddresses(
-      final List<ResolvedServerInfoGroup> addrs, final Attributes attrs) {
+      final List<EquivalentAddressGroup> addrs, final Attributes attrs) {
     channelExecutor.execute(new Runnable() {
         @Override
         public void run() {
@@ -757,18 +738,17 @@ public class GrpclbLoadBalancerTest {
       });
   }
 
-  private static List<ResolvedServerInfoGroup> createResolvedServerInfoGroupList(boolean ... isLb) {
-    ArrayList<ResolvedServerInfoGroup> list = new ArrayList<ResolvedServerInfoGroup>();
+  private static List<EquivalentAddressGroup> createResolvedServerAddresses(boolean ... isLb) {
+    ArrayList<EquivalentAddressGroup> list = new ArrayList<EquivalentAddressGroup>();
     for (int i = 0; i < isLb.length; i++) {
       SocketAddress addr = new FakeSocketAddress("fake-address-" + i);
-      ResolvedServerInfoGroup serverInfoGroup = ResolvedServerInfoGroup
-          .builder(isLb[i] ? Attributes.newBuilder()
-              .set(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY, lbAuthority(i))
-              .build()
-              : Attributes.EMPTY)
-          .add(new ResolvedServerInfo(addr))
-          .build();
-      list.add(serverInfoGroup);
+      EquivalentAddressGroup eag =
+          new EquivalentAddressGroup(
+              addr,
+              isLb[i] ? Attributes.newBuilder()
+                  .set(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY, lbAuthority(i))
+                  .build() : Attributes.EMPTY);
+      list.add(eag);
     }
     return list;
   }

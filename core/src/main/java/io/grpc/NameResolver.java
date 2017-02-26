@@ -123,11 +123,10 @@ public abstract class NameResolver {
      *
      * <p>Implementations will not modify the given {@code servers}.
      *
-     * @param servers the resolved server groups, containing {@link ResolvedServerInfo} objects. An
-     *                empty list will trigger {@link #onError}
+     * @param servers the resolved server addresses. An empty list will trigger {@link #onError}
      * @param attributes extra metadata from naming system
      */
-    void onUpdate(List<ResolvedServerInfoGroup> servers, Attributes attributes);
+    void onUpdate(List<EquivalentAddressGroup> servers, Attributes attributes);
 
     /**
      * Handles an error from the resolver.

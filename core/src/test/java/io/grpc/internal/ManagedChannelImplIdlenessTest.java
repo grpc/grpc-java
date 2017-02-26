@@ -62,8 +62,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
-import io.grpc.ResolvedServerInfo;
-import io.grpc.ResolvedServerInfoGroup;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
@@ -107,9 +105,7 @@ public class ManagedChannelImplIdlenessTest {
           .setResponseMarshaller(new IntegerMarshaller())
           .build();
 
-  private final List<ResolvedServerInfoGroup> servers = Lists.newArrayList();
-  private final List<EquivalentAddressGroup> addressGroupList =
-      new ArrayList<EquivalentAddressGroup>();
+  private final List<EquivalentAddressGroup> servers = Lists.newArrayList();
 
   @Mock private ObjectPool<ScheduledExecutorService> timerServicePool;
   @Mock private ObjectPool<Executor> executorPool;
@@ -146,13 +142,11 @@ public class ManagedChannelImplIdlenessTest {
     newTransports = TestUtils.captureTransports(mockTransportFactory);
 
     for (int i = 0; i < 2; i++) {
-      ResolvedServerInfoGroup.Builder resolvedServerInfoGroup = ResolvedServerInfoGroup.builder();
+      ArrayList<SocketAddress> addrs = Lists.newArrayList();
       for (int j = 0; j < 2; j++) {
-        resolvedServerInfoGroup.add(
-            new ResolvedServerInfo(new FakeSocketAddress("servergroup" + i + "server" + j)));
+        addrs.add(new FakeSocketAddress("servergroup" + i + "server" + j));
       }
-      servers.add(resolvedServerInfoGroup.build());
-      addressGroupList.add(resolvedServerInfoGroup.build().toEquivalentAddressGroup());
+      servers.add(new EquivalentAddressGroup(addrs));
     }
     verify(mockNameResolverFactory).newNameResolver(any(URI.class), any(Attributes.class));
     // Verify the initial idleness
@@ -244,7 +238,7 @@ public class ManagedChannelImplIdlenessTest {
 
   @Test
   public void realTransportsHoldsOffIdleness() throws Exception {
-    final EquivalentAddressGroup addressGroup = addressGroupList.get(1);
+    final EquivalentAddressGroup addressGroup = servers.get(1);
 
     // Start a call, which goes to delayed transport
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
@@ -312,7 +306,7 @@ public class ManagedChannelImplIdlenessTest {
     assertFalse(channel.inUseStateAggregator.isInUse());
 
     // Now make an RPC on an OOB channel
-    ManagedChannel oob = helper.createOobChannel(addressGroupList.get(0), "oobauthority");
+    ManagedChannel oob = helper.createOobChannel(servers.get(0), "oobauthority");
     verify(mockTransportFactory, never())
         .newClientTransport(any(SocketAddress.class), same("oobauthority"), same(USER_AGENT));
     ClientCall<String, Integer> oobCall = oob.newCall(method, CallOptions.DEFAULT);
