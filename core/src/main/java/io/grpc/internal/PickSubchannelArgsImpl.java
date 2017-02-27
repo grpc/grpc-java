@@ -38,7 +38,7 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 
-class PickSubchannelArgsImpl extends PickSubchannelArgs {
+final class PickSubchannelArgsImpl extends PickSubchannelArgs {
   private final CallOptions callOptions;
   private final Metadata headers;
   private final MethodDescriptor<?, ?> method;
