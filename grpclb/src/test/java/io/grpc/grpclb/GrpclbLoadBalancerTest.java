@@ -157,7 +157,8 @@ public class GrpclbLoadBalancerTest {
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
   private final SerializingExecutor channelExecutor =
       new SerializingExecutor(MoreExecutors.directExecutor());
-  private static final PickSubchannelArgs EMPTY_ARGS = mock(PickSubchannelArgs.class);
+  @Mock // This LoadBalancer doesn't use any of the arg fields, as verified in tearDown().
+  private PickSubchannelArgs mockArgs;
   @Mock
   private LoadBalancer.Factory pickFirstBalancerFactory;
   @Mock
@@ -245,7 +246,7 @@ public class GrpclbLoadBalancerTest {
 
   @After
   public void tearDown() {
-    verifyNoMoreInteractions(EMPTY_ARGS);
+    verifyNoMoreInteractions(mockArgs);
     try {
       if (balancer != null) {
         channelExecutor.execute(new Runnable() {
@@ -274,7 +275,7 @@ public class GrpclbLoadBalancerTest {
   public void errorPicker() {
     Status error = Status.UNAVAILABLE.withDescription("Just don't know why");
     ErrorPicker picker = new ErrorPicker(error);
-    assertSame(error, picker.pickSubchannel(EMPTY_ARGS).getStatus());
+    assertSame(error, picker.pickSubchannel(mockArgs).getStatus());
   }
 
   @Test
@@ -283,15 +284,15 @@ public class GrpclbLoadBalancerTest {
     PickResult pr2 = PickResult.withSubchannel(mockSubchannel);
     List<PickResult> list = Arrays.asList(pr1, pr2);
     RoundRobinPicker picker = new RoundRobinPicker(list);
-    assertSame(pr1, picker.pickSubchannel(EMPTY_ARGS));
-    assertSame(pr2, picker.pickSubchannel(EMPTY_ARGS));
-    assertSame(pr1, picker.pickSubchannel(EMPTY_ARGS));
+    assertSame(pr1, picker.pickSubchannel(mockArgs));
+    assertSame(pr2, picker.pickSubchannel(mockArgs));
+    assertSame(pr1, picker.pickSubchannel(mockArgs));
   }
 
   @Test
   public void bufferPicker() {
     assertEquals(PickResult.withNoResult(),
-        GrpclbLoadBalancer.BUFFER_PICKER.pickSubchannel(EMPTY_ARGS));
+        GrpclbLoadBalancer.BUFFER_PICKER.pickSubchannel(mockArgs));
   }
 
   @Test
