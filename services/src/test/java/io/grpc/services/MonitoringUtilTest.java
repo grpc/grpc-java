@@ -64,311 +64,302 @@ public class MonitoringUtilTest {
   @Test
   public void buildCanonicalRpcStatsViewForDistributionView() throws Exception {
     assertEquals(
-        distributionCanonicalStatsProto,
-        MonitoringUtil.buildCanonicalRpcStatsView(distributionView));
+        DISTRIBUTION_CANONICAL_STATS_PROTO,
+        MonitoringUtil.buildCanonicalRpcStatsView(DISTRIBUTION_VIEW));
   }
 
   @Test
   public void buildCanonicalRpcStatsViewForIntervalView() throws Exception {
     assertEquals(
-        intervalCanonicalStatsProto,
-        MonitoringUtil.buildCanonicalRpcStatsView(intervalView));
+        INTERVAL_CANONICAL_STATS_PROTO, MonitoringUtil.buildCanonicalRpcStatsView(INTERVAL_VIEW));
   }
 
   @Test
   public void serializeMeasurementDescriptor() throws Exception {
     assertEquals(
-        measurementDescriptorProto,
+        MEASUREMENT_DESC_PROTO,
         MonitoringUtil.serializeMeasurementDescriptor(measurementDescriptor));
   }
 
   @Test
   public void serializeMeasurementUnit() throws Exception {
-    assertEquals(
-        measurementUnitProto, MonitoringUtil.serializeMeasurementUnit(measurementUnit));
+    assertEquals(MEASUREMENT_UNIT_PROTO, MonitoringUtil.serializeMeasurementUnit(MEASUREMENT_UNIT));
   }
 
   @Test
   public void serializeViewDescriptorForDistributionView() throws Exception {
     assertEquals(
-        distributionViewDescriptorProto,
-        MonitoringUtil.serializeViewDescriptor(distributionViewDescriptor));
+        DISTRIBUTION_VIEW_DESC_PROTO,
+        MonitoringUtil.serializeViewDescriptor(DISTRIBUTION_VIEW_DESC));
   }
 
   @Test
   public void serializeViewDescriptorForIntervalView() throws Exception {
     assertEquals(
-        intervalViewDescriptorProto,
-        MonitoringUtil.serializeViewDescriptor(intervalViewDescriptor));
+        INTERVAL_VIEW_DESC_PROTO, MonitoringUtil.serializeViewDescriptor(INTERVAL_VIEW_DESC));
   }
 
   @Test
   public void serializeDistributionAggregationDescriptor() throws Exception {
     assertEquals(
-        distributionAggregationDescriptorProto,
-        MonitoringUtil.serializeDistributionAggregationDescriptor(
-            distributionAggregationDescriptor));
+        DISTRIBUTION_AGG_DESC_PROTO,
+        MonitoringUtil.serializeDistributionAggregationDescriptor(DISTRIBUTION_AGG_DESC));
   }
 
   @Test
   public void serializeIntervalAggregationDescriptor() throws Exception {
     assertEquals(
-        intervalAggregationDescriptorProto,
-        MonitoringUtil.serializeIntervalAggregationDescriptor(
-            intervalAggregationDescriptor));
+        INTERVAL_AGG_DESC_PROTO,
+        MonitoringUtil.serializeIntervalAggregationDescriptor(INTERVAL_AGG_DESC));
   }
 
   @Test
   public void serializeDuration() throws Exception {
-    assertEquals(durationProto, MonitoringUtil.serializeDuration(duration));
+    assertEquals(DURATION_PROTO, MonitoringUtil.serializeDuration(DURATION));
   }
 
   @Test
   public void serializeViewWithDistributionView() throws Exception {
     assertEquals(
-        viewWithDistributionViewProto, MonitoringUtil.serializeView(distributionView));
+        VIEW_WITH_DISTRIBUTION_VIEW_PROTO, MonitoringUtil.serializeView(DISTRIBUTION_VIEW));
   }
 
   @Test
   public void serializeViewWithIntervalView() throws Exception {
-    assertEquals(viewWithIntervalViewProto, MonitoringUtil.serializeView(intervalView));
+    assertEquals(VIEW_WITH_INTERVAL_VIEW_PROTO, MonitoringUtil.serializeView(INTERVAL_VIEW));
   }
 
   @Test
   public void serializeDistributionView() throws Exception {
     assertEquals(
-        distributionViewProto,
-        MonitoringUtil.serializeDistributionView(distributionView));
+        DISTRIBUTION_VIEW_PROTO, MonitoringUtil.serializeDistributionView(DISTRIBUTION_VIEW));
   }
 
   @Test
   public void serializeTimestamp() throws Exception {
-    assertEquals(startTimestampProto, MonitoringUtil.serializeTimestamp(startTimestamp));
+    assertEquals(START_TIMESTAMP_PROTO, MonitoringUtil.serializeTimestamp(START_TIMESTAMP));
   }
 
   @Test
   public void serializeDistributionAggregation() throws Exception {
     assertEquals(
-        distributionAggregationProto,
-        MonitoringUtil.serializeDistributionAggregation(distributionAggregation));
+        DISTRIBUTION_AGG_PROTO, MonitoringUtil.serializeDistributionAggregation(DISTRIBUTION_AGG));
   }
 
   @Test
   public void serializeRange() throws Exception {
-    assertEquals(rangeProto, MonitoringUtil.serializeRange(range));
+    assertEquals(RANGE_PROTO, MonitoringUtil.serializeRange(RANGE));
   }
 
   @Test
   public void serializeTag() throws Exception {
-    assertEquals(tagProto, MonitoringUtil.serializeTag(tag));
+    assertEquals(TAG_PROTO, MonitoringUtil.serializeTag(TAG));
   }
 
   @Test
   public void serializeIntervalView() throws Exception {
-    assertEquals(intervalViewProto, MonitoringUtil.serializeIntervalView(intervalView));
+    assertEquals(INTERVAL_VIEW_PROTO, MonitoringUtil.serializeIntervalView(INTERVAL_VIEW));
   }
 
   @Test
   public void serializeIntervalAggregation() throws Exception {
-    assertEquals(
-        intervalAggregationProto,
-        MonitoringUtil.serializeIntervalAggregation(intervalAggregation));
+    assertEquals(INTERVAL_AGG_PROTO, MonitoringUtil.serializeIntervalAggregation(INTERVAL_AGG));
   }
 
   @Test
   public void serializeInterval() throws Exception {
-    assertEquals(intervalProto, MonitoringUtil.serializeInterval(interval));
+    assertEquals(INTERVAL_PROTO, MonitoringUtil.serializeInterval(INTERVAL));
   }
 
-  private int measurementUnitPower = -3;
-  private MeasurementUnit measurementUnit =
+  private static final int UNIT_POWER = -3;
+  private static final MeasurementUnit MEASUREMENT_UNIT =
       MeasurementUnit.create(
-          measurementUnitPower,
+          UNIT_POWER,
           Arrays.asList(BasicUnit.SCALAR),
           Arrays.asList(BasicUnit.SECONDS, BasicUnit.SECONDS));
-  private CensusProto.MeasurementDescriptor.MeasurementUnit measurementUnitProto =
+  private static final CensusProto.MeasurementDescriptor.MeasurementUnit MEASUREMENT_UNIT_PROTO =
       CensusProto.MeasurementDescriptor.MeasurementUnit.newBuilder()
-          .setPower10(measurementUnitPower)
+          .setPower10(UNIT_POWER)
           .addNumerators(MonitoringUtil.serializeBasicUnit(BasicUnit.SCALAR))
           .addDenominators(MonitoringUtil.serializeBasicUnit(BasicUnit.SECONDS))
           .addDenominators(MonitoringUtil.serializeBasicUnit(BasicUnit.SECONDS))
           .build();
 
-  private String measurementDescriptorName = "measurement descriptor name";
-  private String measurementDescriptorDescription = "measurement descriptor description";
-  private MeasurementDescriptor measurementDescriptor =
+  private static final String MEASUREMENT_DESC_NAME = "measurement descriptor name";
+  private static final String MEASUREMENT_DESC_DESCRIPTION = "measurement descriptor description";
+  private static final MeasurementDescriptor measurementDescriptor =
       MeasurementDescriptor.create(
-          measurementDescriptorName, measurementDescriptorDescription, measurementUnit);
-  private CensusProto.MeasurementDescriptor measurementDescriptorProto =
+          MEASUREMENT_DESC_NAME, MEASUREMENT_DESC_DESCRIPTION, MEASUREMENT_UNIT);
+  private static final CensusProto.MeasurementDescriptor MEASUREMENT_DESC_PROTO =
       CensusProto.MeasurementDescriptor.newBuilder()
-          .setName(measurementDescriptorName)
-          .setDescription(measurementDescriptorDescription)
-          .setUnit(measurementUnitProto)
+          .setName(MEASUREMENT_DESC_NAME)
+          .setDescription(MEASUREMENT_DESC_DESCRIPTION)
+          .setUnit(MEASUREMENT_UNIT_PROTO)
           .build();
 
-  private long startSeconds = 1L;
-  private int startNanos = 1;
-  private long endSeconds = 100000L;
-  private int endNanos = 9999;
-  private Timestamp startTimestamp = Timestamp.create(startSeconds, startNanos);
-  private Timestamp endTimestamp = Timestamp.create(endSeconds, endNanos);
-  private CensusProto.Timestamp startTimestampProto =
-      CensusProto.Timestamp.newBuilder().setSeconds(startSeconds).setNanos(startNanos).build();
-  private CensusProto.Timestamp endTimestampProto =
-      CensusProto.Timestamp.newBuilder().setSeconds(endSeconds).setNanos(endNanos).build();
+  private static final long START_SECONDS = 1L;
+  private static final int START_NANOS = 1;
+  private static final long END_SECONDS = 100000L;
+  private static final int END_NANOS = 9999;
+  private static final Timestamp START_TIMESTAMP = Timestamp.create(START_SECONDS, START_NANOS);
+  private static final Timestamp END_TIMESTAMP = Timestamp.create(END_SECONDS, END_NANOS);
+  private static final CensusProto.Timestamp START_TIMESTAMP_PROTO =
+      CensusProto.Timestamp.newBuilder().setSeconds(START_SECONDS).setNanos(START_NANOS).build();
+  private static final CensusProto.Timestamp END_TIMESTAMP_PROTO =
+      CensusProto.Timestamp.newBuilder().setSeconds(END_SECONDS).setNanos(END_NANOS).build();
 
-  private String tagKey = "tag key";
-  private String tagValue = "tag value";
-  private Tag tag = Tag.create(TagKey.create(tagKey), TagValue.create(tagValue));
-  private CensusProto.Tag tagProto =
-      CensusProto.Tag.newBuilder().setKey(tagKey).setValue(tagValue).build();
+  private static final String TAG_KEY = "tag key";
+  private static final String TAG_VALUE = "tag value";
+  private static final Tag TAG = Tag.create(TagKey.create(TAG_KEY), TagValue.create(TAG_VALUE));
+  private static final CensusProto.Tag TAG_PROTO =
+      CensusProto.Tag.newBuilder().setKey(TAG_KEY).setValue(TAG_VALUE).build();
 
-  private double rangeMin = 0.1;
-  private double rangeMax = 999.9;
-  private Range range = Range.create(rangeMin, rangeMax);
-  private CensusProto.DistributionAggregation.Range rangeProto =
+  private static final double RANGE_MIN = 0.1;
+  private static final double RANGE_MAX = 999.9;
+  private static final Range RANGE = Range.create(RANGE_MIN, RANGE_MAX);
+  private static final CensusProto.DistributionAggregation.Range RANGE_PROTO =
       CensusProto.DistributionAggregation.Range.newBuilder()
-          .setMin(rangeMin)
-          .setMax(rangeMax)
+          .setMin(RANGE_MIN)
+          .setMax(RANGE_MAX)
           .build();
 
-  private long distributionAggregationCount = 100L;
-  private double distributionAggregationMean = 55.1;
-  private double distributionAggregationSum = 4098.5;
-  private long bucketCount = 11L;
-  private DistributionAggregation distributionAggregation =
+  private static final long DISTRIBUTION_AGG_COUNT = 100L;
+  private static final double DISTRIBUTION_AGG_MEAN = 55.1;
+  private static final double DISTRIBUTION_AGG_SUM = 4098.5;
+  private static final long BUCKET_COUNT = 11L;
+  private static final DistributionAggregation DISTRIBUTION_AGG =
       DistributionAggregation.create(
-          distributionAggregationCount,
-          distributionAggregationMean,
-          distributionAggregationSum,
-          range,
-          Arrays.asList(tag),
-          Arrays.asList(bucketCount));
-  private CensusProto.DistributionAggregation distributionAggregationProto =
+          DISTRIBUTION_AGG_COUNT,
+          DISTRIBUTION_AGG_MEAN,
+          DISTRIBUTION_AGG_SUM,
+          RANGE,
+          Arrays.asList(TAG),
+          Arrays.asList(BUCKET_COUNT));
+  private static final CensusProto.DistributionAggregation DISTRIBUTION_AGG_PROTO =
       CensusProto.DistributionAggregation.newBuilder()
-          .setCount(distributionAggregationCount)
-          .setMean(distributionAggregationMean)
-          .setSum(distributionAggregationSum)
-          .setRange(rangeProto)
-          .addAllBucketCounts(Arrays.asList(bucketCount))
-          .addTags(tagProto)
+          .setCount(DISTRIBUTION_AGG_COUNT)
+          .setMean(DISTRIBUTION_AGG_MEAN)
+          .setSum(DISTRIBUTION_AGG_SUM)
+          .setRange(RANGE_PROTO)
+          .addAllBucketCounts(Arrays.asList(BUCKET_COUNT))
+          .addTags(TAG_PROTO)
           .build();
 
-  private double bucketBoundary = 14.0;
-  private DistributionAggregationDescriptor distributionAggregationDescriptor =
-      DistributionAggregationDescriptor.create(Arrays.asList(bucketBoundary));
-  private CensusProto.DistributionAggregationDescriptor distributionAggregationDescriptorProto =
+  private static final double BUCKET_BOUNDARY = 14.0;
+  private static final DistributionAggregationDescriptor DISTRIBUTION_AGG_DESC =
+      DistributionAggregationDescriptor.create(Arrays.asList(BUCKET_BOUNDARY));
+  private static final CensusProto.DistributionAggregationDescriptor DISTRIBUTION_AGG_DESC_PROTO =
       CensusProto.DistributionAggregationDescriptor.newBuilder()
-          .addBucketBounds(bucketBoundary)
+          .addBucketBounds(BUCKET_BOUNDARY)
           .build();
 
-  private String distributionViewName = "distribution view name";
-  private String distributionViewDescription = "distribution view description";
-  private DistributionViewDescriptor distributionViewDescriptor =
+  private static final String DISTRIBUTION_VIEW_NAME = "distribution view name";
+  private static final String DISTRIBUTION_VIEW_DESCRIPTION = "distribution view description";
+  private static final DistributionViewDescriptor DISTRIBUTION_VIEW_DESC =
       DistributionViewDescriptor.create(
-          distributionViewName,
-          distributionViewDescription,
+          DISTRIBUTION_VIEW_NAME,
+          DISTRIBUTION_VIEW_DESCRIPTION,
           measurementDescriptor,
-          distributionAggregationDescriptor,
-          Arrays.asList(TagKey.create(tagKey)));
-  private CensusProto.ViewDescriptor distributionViewDescriptorProto =
+          DISTRIBUTION_AGG_DESC,
+          Arrays.asList(TagKey.create(TAG_KEY)));
+  private static final CensusProto.ViewDescriptor DISTRIBUTION_VIEW_DESC_PROTO =
       CensusProto.ViewDescriptor.newBuilder()
-          .setName(distributionViewName)
-          .setDescription(distributionViewDescription)
-          .setMeasurementDescriptorName(measurementDescriptorName)
-          .setDistributionAggregation(distributionAggregationDescriptorProto)
-          .addTagKeys(tagKey)
+          .setName(DISTRIBUTION_VIEW_NAME)
+          .setDescription(DISTRIBUTION_VIEW_DESCRIPTION)
+          .setMeasurementDescriptorName(MEASUREMENT_DESC_NAME)
+          .setDistributionAggregation(DISTRIBUTION_AGG_DESC_PROTO)
+          .addTagKeys(TAG_KEY)
           .build();
 
-  private DistributionView distributionView =
+  static final DistributionView DISTRIBUTION_VIEW =
       DistributionView.create(
-          distributionViewDescriptor,
-          Arrays.asList(distributionAggregation),
-          startTimestamp,
-          endTimestamp);
-  private CensusProto.DistributionView distributionViewProto =
+          DISTRIBUTION_VIEW_DESC, Arrays.asList(DISTRIBUTION_AGG), START_TIMESTAMP, END_TIMESTAMP);
+  private static final CensusProto.DistributionView DISTRIBUTION_VIEW_PROTO =
       CensusProto.DistributionView.newBuilder()
-          .addAggregations(distributionAggregationProto)
+          .addAggregations(DISTRIBUTION_AGG_PROTO)
           // TODO(ericgribkoff) Re-enable once getter methods are public in instrumentation.
-          //.setStart(startTimestampProto)
-          //.setEnd(endTimestampProto)
+          //.setStart(START_TIMESTAMP_PROTO)
+          //.setEnd(END_TIMESTAMP_PROTO)
           .build();
-  private CensusProto.View viewWithDistributionViewProto =
+  private static final CensusProto.View VIEW_WITH_DISTRIBUTION_VIEW_PROTO =
       CensusProto.View.newBuilder()
-          .setViewName(distributionViewName)
-          .setDistributionView(distributionViewProto)
+          .setViewName(DISTRIBUTION_VIEW_NAME)
+          .setDistributionView(DISTRIBUTION_VIEW_PROTO)
           .build();
-  private CanonicalRpcStats.View distributionCanonicalStatsProto =
+  private static final CanonicalRpcStats.View DISTRIBUTION_CANONICAL_STATS_PROTO =
       CanonicalRpcStats.View.newBuilder()
-          .setMeasurementDescriptor(measurementDescriptorProto)
-          .setViewDescriptor(distributionViewDescriptorProto)
-          .setView(viewWithDistributionViewProto)
+          .setMeasurementDescriptor(MEASUREMENT_DESC_PROTO)
+          .setViewDescriptor(DISTRIBUTION_VIEW_DESC_PROTO)
+          .setView(VIEW_WITH_DISTRIBUTION_VIEW_PROTO)
           .build();
 
-  private long durationSeconds = 100L;
-  private int durationNanos = 9999;
-  private Duration duration = Duration.create(durationSeconds, durationNanos);
-  private CensusProto.Duration durationProto =
-      CensusProto.Duration.newBuilder().setSeconds(durationSeconds).setNanos(durationNanos).build();
+  private static final long DURATION_SECONDS = 100L;
+  private static final int DURATION_NANOS = 9999;
+  private static final Duration DURATION = Duration.create(DURATION_SECONDS, DURATION_NANOS);
+  private static final CensusProto.Duration DURATION_PROTO =
+      CensusProto.Duration.newBuilder()
+          .setSeconds(DURATION_SECONDS)
+          .setNanos(DURATION_NANOS)
+          .build();
 
-  private int numSubIntervals = 2;
-  private IntervalAggregationDescriptor intervalAggregationDescriptor =
-      IntervalAggregationDescriptor.create(numSubIntervals, Arrays.asList(duration));
-  private CensusProto.IntervalAggregationDescriptor intervalAggregationDescriptorProto =
+  private static final int NUM_SUB_INTERVALS = 2;
+  private static final IntervalAggregationDescriptor INTERVAL_AGG_DESC =
+      IntervalAggregationDescriptor.create(NUM_SUB_INTERVALS, Arrays.asList(DURATION));
+  private static final CensusProto.IntervalAggregationDescriptor INTERVAL_AGG_DESC_PROTO =
       CensusProto.IntervalAggregationDescriptor.newBuilder()
-          .setNSubIntervals(numSubIntervals)
-          .addIntervalSizes(durationProto)
+          .setNSubIntervals(NUM_SUB_INTERVALS)
+          .addIntervalSizes(DURATION_PROTO)
           .build();
 
-  private String intervalViewName = "interval view name";
-  private String intervalViewDescription = "interval view description";
-  private IntervalViewDescriptor intervalViewDescriptor =
+  private static final String INTERVAL_VIEW_NAME = "interval view name";
+  private static final String INTERVAL_VIEW_DESCRIPTION = "interval view description";
+  private static final IntervalViewDescriptor INTERVAL_VIEW_DESC =
       IntervalViewDescriptor.create(
-          intervalViewName,
-          intervalViewDescription,
+          INTERVAL_VIEW_NAME,
+          INTERVAL_VIEW_DESCRIPTION,
           measurementDescriptor,
-          intervalAggregationDescriptor,
-          Arrays.asList(TagKey.create(tagKey)));
-  private CensusProto.ViewDescriptor intervalViewDescriptorProto =
+          INTERVAL_AGG_DESC,
+          Arrays.asList(TagKey.create(TAG_KEY)));
+  private static final CensusProto.ViewDescriptor INTERVAL_VIEW_DESC_PROTO =
       CensusProto.ViewDescriptor.newBuilder()
-          .setName(intervalViewName)
-          .setDescription(intervalViewDescription)
-          .setMeasurementDescriptorName(measurementDescriptorName)
-          .setIntervalAggregation(intervalAggregationDescriptorProto)
-          .addTagKeys(tagKey)
+          .setName(INTERVAL_VIEW_NAME)
+          .setDescription(INTERVAL_VIEW_DESCRIPTION)
+          .setMeasurementDescriptorName(MEASUREMENT_DESC_NAME)
+          .setIntervalAggregation(INTERVAL_AGG_DESC_PROTO)
+          .addTagKeys(TAG_KEY)
           .build();
 
-  private double intervalCount = 6.0;
-  private double intervalSum = 98.5;
-  private Interval interval = Interval.create(duration, intervalCount, intervalSum);
-  private CensusProto.IntervalAggregation.Interval intervalProto =
+  private static final double INTERVAL_COUNT = 6.0;
+  private static final double INTERVAL_SUM = 98.5;
+  private static final Interval INTERVAL = Interval.create(DURATION, INTERVAL_COUNT, INTERVAL_SUM);
+  private static final CensusProto.IntervalAggregation.Interval INTERVAL_PROTO =
       CensusProto.IntervalAggregation.Interval.newBuilder()
-          .setIntervalSize(durationProto)
-          .setCount(intervalCount)
-          .setSum(intervalSum)
+          .setIntervalSize(DURATION_PROTO)
+          .setCount(INTERVAL_COUNT)
+          .setSum(INTERVAL_SUM)
           .build();
 
-  private IntervalAggregation intervalAggregation =
-      IntervalAggregation.create(Arrays.asList(tag), Arrays.asList(interval));
-  private CensusProto.IntervalAggregation intervalAggregationProto =
+  private static final IntervalAggregation INTERVAL_AGG =
+      IntervalAggregation.create(Arrays.asList(TAG), Arrays.asList(INTERVAL));
+  private static final CensusProto.IntervalAggregation INTERVAL_AGG_PROTO =
       CensusProto.IntervalAggregation.newBuilder()
-          .addIntervals(intervalProto)
-          .addTags(tagProto)
+          .addIntervals(INTERVAL_PROTO)
+          .addTags(TAG_PROTO)
           .build();
 
-  private IntervalView intervalView =
-      IntervalView.create(intervalViewDescriptor, Arrays.asList(intervalAggregation));
-  private CensusProto.IntervalView intervalViewProto =
-      CensusProto.IntervalView.newBuilder().addAggregations(intervalAggregationProto).build();
-  private CensusProto.View viewWithIntervalViewProto =
+  static final IntervalView INTERVAL_VIEW =
+      IntervalView.create(INTERVAL_VIEW_DESC, Arrays.asList(INTERVAL_AGG));
+  private static final CensusProto.IntervalView INTERVAL_VIEW_PROTO =
+      CensusProto.IntervalView.newBuilder().addAggregations(INTERVAL_AGG_PROTO).build();
+  private static final CensusProto.View VIEW_WITH_INTERVAL_VIEW_PROTO =
       CensusProto.View.newBuilder()
-          .setViewName(intervalViewName)
-          .setIntervalView(intervalViewProto)
+          .setViewName(INTERVAL_VIEW_NAME)
+          .setIntervalView(INTERVAL_VIEW_PROTO)
           .build();
-  private CanonicalRpcStats.View intervalCanonicalStatsProto =
+  private static final CanonicalRpcStats.View INTERVAL_CANONICAL_STATS_PROTO =
       CanonicalRpcStats.View.newBuilder()
-          .setMeasurementDescriptor(measurementDescriptorProto)
-          .setViewDescriptor(intervalViewDescriptorProto)
-          .setView(viewWithIntervalViewProto)
+          .setMeasurementDescriptor(MEASUREMENT_DESC_PROTO)
+          .setViewDescriptor(INTERVAL_VIEW_DESC_PROTO)
+          .setView(VIEW_WITH_INTERVAL_VIEW_PROTO)
           .build();
 }

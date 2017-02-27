@@ -31,8 +31,9 @@
 
 package io.grpc.services;
 
-import static com.google.common.base.Preconditions.checkState;
+import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.instrumentation.stats.RpcConstants;
 import com.google.instrumentation.stats.Stats;
 import com.google.instrumentation.stats.StatsManager;
@@ -48,21 +49,24 @@ import io.grpc.stub.StreamObserver;
  * Stats#getStatsManager}) or instantiating this service will fail.
  */
 public final class MonitoringService extends MonitoringGrpc.MonitoringImplBase {
-  private static final StatsManager STATS_MANAGER = Stats.getStatsManager();
-
   private static MonitoringService instance;
 
-  private MonitoringService() {}
+  private final StatsManager statsManager;
+
+  @VisibleForTesting
+  MonitoringService(StatsManager statsManager) {
+    checkNotNull(statsManager, "StatsManager implementation unavailable");
+    this.statsManager = statsManager;
+  }
 
   /**
    * Gets the singleton instance of the MonitoringService.
    *
-   * @throws IllegalStateException if {@link Stats#getStatsManager} returned null
+   * @throws IllegalStateException if {@link Stats#getStatsManager} returns null
    */
   public static synchronized MonitoringService getInstance() {
     if (instance == null) {
-      checkState(STATS_MANAGER != null, "StatsManager implementation unavailable");
-      instance = new MonitoringService();
+      instance = new MonitoringService(Stats.getStatsManager());
     }
     return instance;
   }
@@ -76,28 +80,28 @@ public final class MonitoringService extends MonitoringGrpc.MonitoringImplBase {
         CanonicalRpcStats.newBuilder()
             .setRpcClientElapsedTime(
                 MonitoringUtil.buildCanonicalRpcStatsView(
-                    STATS_MANAGER.getView(RpcConstants.RPC_CLIENT_ROUNDTRIP_LATENCY_VIEW)))
+                    statsManager.getView(RpcConstants.RPC_CLIENT_ROUNDTRIP_LATENCY_VIEW)))
             .setRpcClientServerElapsedTime(
                 MonitoringUtil.buildCanonicalRpcStatsView(
-                    STATS_MANAGER.getView(RpcConstants.RPC_CLIENT_SERVER_ELAPSED_TIME_VIEW)))
+                    statsManager.getView(RpcConstants.RPC_CLIENT_SERVER_ELAPSED_TIME_VIEW)))
             .setRpcClientRequestBytes(
                 MonitoringUtil.buildCanonicalRpcStatsView(
-                    STATS_MANAGER.getView(RpcConstants.RPC_CLIENT_REQUEST_BYTES_VIEW)))
+                    statsManager.getView(RpcConstants.RPC_CLIENT_REQUEST_BYTES_VIEW)))
             .setRpcClientResponseBytes(
                 MonitoringUtil.buildCanonicalRpcStatsView(
-                    STATS_MANAGER.getView(RpcConstants.RPC_CLIENT_RESPONSE_BYTES_VIEW)))
+                    statsManager.getView(RpcConstants.RPC_CLIENT_RESPONSE_BYTES_VIEW)))
             .setRpcServerServerElapsedTime(
                 MonitoringUtil.buildCanonicalRpcStatsView(
-                    STATS_MANAGER.getView(RpcConstants.RPC_SERVER_SERVER_LATENCY_VIEW)))
+                    statsManager.getView(RpcConstants.RPC_SERVER_SERVER_LATENCY_VIEW)))
             .setRpcServerRequestBytes(
                 MonitoringUtil.buildCanonicalRpcStatsView(
-                    STATS_MANAGER.getView(RpcConstants.RPC_SERVER_REQUEST_BYTES_VIEW)))
+                    statsManager.getView(RpcConstants.RPC_SERVER_REQUEST_BYTES_VIEW)))
             .setRpcServerResponseBytes(
                 MonitoringUtil.buildCanonicalRpcStatsView(
-                    STATS_MANAGER.getView(RpcConstants.RPC_SERVER_RESPONSE_BYTES_VIEW)))
+                    statsManager.getView(RpcConstants.RPC_SERVER_RESPONSE_BYTES_VIEW)))
             .setRpcServerElapsedTime(
                 MonitoringUtil.buildCanonicalRpcStatsView(
-                    STATS_MANAGER.getView(RpcConstants.RPC_SERVER_SERVER_ELAPSED_TIME_VIEW)))
+                    statsManager.getView(RpcConstants.RPC_SERVER_SERVER_ELAPSED_TIME_VIEW)))
             .build();
     responseObserver.onNext(response);
     responseObserver.onCompleted();

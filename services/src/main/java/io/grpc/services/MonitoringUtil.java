@@ -57,7 +57,7 @@ import io.grpc.instrumentation.v1alpha.CanonicalRpcStats;
 final class MonitoringUtil {
 
   /** Serialize a {@link View} and associated descriptors to a {@link CanonicalRpcStats.View}. */
-  public static CanonicalRpcStats.View buildCanonicalRpcStatsView(View view) {
+  static CanonicalRpcStats.View buildCanonicalRpcStatsView(View view) {
     return CanonicalRpcStats.View.newBuilder()
         .setMeasurementDescriptor(
             serializeMeasurementDescriptor(view.getViewDescriptor().getMeasurementDescriptor()))
