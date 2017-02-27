@@ -318,7 +318,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
   // Must be run from channelExecutor
   private void cancelIdleTimer() {
-    if (idleModeTimerFuture != null && idleModeTimer != null) {
+    if (idleModeTimerFuture != null) {
       idleModeTimerFuture.cancel(false);
       idleModeTimer.cancelled = true;
       idleModeTimerFuture = null;
