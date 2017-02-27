@@ -31,6 +31,7 @@
 
 package io.grpc;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import java.util.List;
 import javax.annotation.Nullable;
@@ -215,7 +216,7 @@ public abstract class LoadBalancer {
      * getter values.
      */
     @Override
-    public boolean equals(Object o) {
+    public final boolean equals(Object o) {
       if (this == o) {
         return true;
       }
@@ -232,7 +233,7 @@ public abstract class LoadBalancer {
      * Returns a hash code for the subchannel args object.
      */
     @Override
-    public int hashCode() {
+    public final int hashCode() {
       return Objects.hashCode(getCallOptions(), getHeaders(), getMethodDescriptor());
     }
   }
