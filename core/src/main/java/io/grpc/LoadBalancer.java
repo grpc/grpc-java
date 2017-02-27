@@ -233,12 +233,6 @@ public abstract class LoadBalancer {
     public int hashCode() {
       return Objects.hashCode(getCallOptions(), getHeaders(), getMethodDescriptor());
     }
-
-    @Override
-    public String toString() {
-      return "[callOptions=" + getCallOptions() + " headers=" + getHeaders() + " method="
-          + getMethodDescriptor() + "]";
-    }
   }
 
   /**

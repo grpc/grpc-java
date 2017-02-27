@@ -66,4 +66,9 @@ final class PickSubchannelArgsImpl extends PickSubchannelArgs {
   public MethodDescriptor<?, ?> getMethodDescriptor() {
     return method;
   }
+
+  @Override
+  public final String toString() {
+    return "[method=" + method + " headers=" + headers + " callOptions=" + callOptions + "]";
+  }
 }
