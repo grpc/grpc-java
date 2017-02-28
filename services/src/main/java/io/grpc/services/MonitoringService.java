@@ -38,6 +38,7 @@ import com.google.instrumentation.stats.RpcConstants;
 import com.google.instrumentation.stats.Stats;
 import com.google.instrumentation.stats.StatsManager;
 import com.google.protobuf.Empty;
+import io.grpc.ExperimentalApi;
 import io.grpc.instrumentation.v1alpha.CanonicalRpcStats;
 import io.grpc.instrumentation.v1alpha.MonitoringGrpc;
 import io.grpc.stub.StreamObserver;
@@ -48,6 +49,7 @@ import io.grpc.stub.StreamObserver;
  * <p>An implementation of {@link StatsManager} must be available at runtime (determined via {@link
  * Stats#getStatsManager}) or instantiating this service will fail.
  */
+@ExperimentalApi
 public final class MonitoringService extends MonitoringGrpc.MonitoringImplBase {
   private static MonitoringService instance;
 
