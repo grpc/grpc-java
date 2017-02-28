@@ -38,6 +38,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
+import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
@@ -131,12 +132,12 @@ public class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
         subchannel.shutdown();
       }
 
-      updatePicker(getAggregatedError());
+      updatePicker(getAggregatedState());
     }
 
     @Override
     public void handleNameResolutionError(Status error) {
-      updatePicker(error);
+      updatePicker(ConnectivityStateInfo.forTransientFailure(error));
     }
 
     @Override
@@ -148,7 +149,7 @@ public class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
         subchannel.requestConnection();
       }
       getSubchannelStateInfoRef(subchannel).set(stateInfo);
-      updatePicker(getAggregatedError());
+      updatePicker(getAggregatedState());
     }
 
     @Override
@@ -161,9 +162,9 @@ public class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     /**
      * Updates picker with the list of active subchannels (state == READY).
      */
-    private void updatePicker(@Nullable Status error) {
+    private void updatePicker(ConnectivityStateInfo state) {
       List<Subchannel> activeList = filterNonFailingSubchannels(getSubchannels());
-      helper.updatePicker(new Picker(activeList, error));
+      helper.updatePicker(new Picker(state, activeList));
     }
 
     /**
@@ -197,16 +198,15 @@ public class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
      * subchannel otherwise, return null.
      */
     @Nullable
-    private Status getAggregatedError() {
-      Status status = null;
+    private ConnectivityStateInfo getAggregatedState() {
+      ConnectivityStateInfo stateInfo = null;
       for (Subchannel subchannel : getSubchannels()) {
-        ConnectivityStateInfo stateInfo = getSubchannelStateInfoRef(subchannel).get();
+        stateInfo = getSubchannelStateInfoRef(subchannel).get();
         if (stateInfo.getState() != TRANSIENT_FAILURE) {
-          return null;
+          return stateInfo;
         }
-        status = stateInfo.getStatus();
       }
-      return status;
+      return stateInfo;
     }
 
     @VisibleForTesting
@@ -228,17 +228,17 @@ public class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
 
   @VisibleForTesting
   static final class Picker extends SubchannelPicker {
-    @Nullable
-    private final Status status;
+
+    private final ConnectivityStateInfo state;
     private final List<Subchannel> list;
     private final int size;
     @GuardedBy("this")
     private int index = 0;
 
-    Picker(List<Subchannel> list, @Nullable Status status) {
+    Picker(ConnectivityStateInfo state, List<Subchannel> list) {
+      this.state = state;
       this.list = Collections.unmodifiableList(list);
       this.size = list.size();
-      this.status = status;
     }
 
     @Override
@@ -247,11 +247,16 @@ public class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
         return PickResult.withSubchannel(nextSubchannel());
       }
 
-      if (status != null) {
-        return PickResult.withError(status);
+      if (state.getState() == TRANSIENT_FAILURE) {
+        return PickResult.withError(state.getStatus());
       }
 
       return PickResult.withNoResult();
+    }
+
+    @Override
+    public ConnectivityState getState() {
+      return state.getState();
     }
 
     private Subchannel nextSubchannel() {
@@ -275,7 +280,7 @@ public class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
 
     @VisibleForTesting
     Status getStatus() {
-      return status;
+      return state.getStatus();
     }
   }
 }

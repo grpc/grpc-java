@@ -209,6 +209,8 @@ public abstract class LoadBalancer {
      * @param args the pick arguments
      */
     public abstract PickResult pickSubchannel(PickSubchannelArgs args);
+
+    public abstract ConnectivityState getState();
   }
 
   /**
