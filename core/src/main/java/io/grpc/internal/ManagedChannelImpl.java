@@ -559,6 +559,10 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
   private void runStateUpdateCallbacks(ConnectivityState state) {
     Queue<Runnable> queue = stateChangeCallbacks.get(state);
+    if (queue == null) {
+      return;
+    }
+
     for (Runnable callback : queue) {
       executor.execute(callback);
     }
