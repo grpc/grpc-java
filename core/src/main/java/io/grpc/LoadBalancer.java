@@ -210,32 +210,6 @@ public abstract class LoadBalancer {
      * Call method.
      */
     public abstract MethodDescriptor<?, ?> getMethodDescriptor();
-
-    /**
-     * Returns true if the given object is also a {@link PickSubchannelArgs} with an equal
-     * getter values.
-     */
-    @Override
-    public final boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      PickSubchannelArgs that = (PickSubchannelArgs) o;
-      return Objects.equal(getCallOptions(), that.getCallOptions())
-          && Objects.equal(getHeaders(), that.getHeaders())
-          && Objects.equal(getMethodDescriptor(), that.getMethodDescriptor());
-    }
-
-    /**
-     * Returns a hash code for the subchannel args object.
-     */
-    @Override
-    public final int hashCode() {
-      return Objects.hashCode(getCallOptions(), getHeaders(), getMethodDescriptor());
-    }
   }
 
   /**

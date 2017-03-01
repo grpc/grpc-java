@@ -33,6 +33,7 @@ package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.base.Objects;
 import io.grpc.CallOptions;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
@@ -65,6 +66,21 @@ final class PickSubchannelArgsImpl extends PickSubchannelArgs {
   @Override
   public MethodDescriptor<?, ?> getMethodDescriptor() {
     return method;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    PickSubchannelArgsImpl that = (PickSubchannelArgsImpl) o;
+    return Objects.equal(callOptions, that.callOptions) &&
+        Objects.equal(headers, that.headers) &&
+        Objects.equal(method, that.method);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hashCode(callOptions, headers, method);
   }
 
   @Override
