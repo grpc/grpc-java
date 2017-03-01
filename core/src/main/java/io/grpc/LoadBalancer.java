@@ -31,7 +31,6 @@
 
 package io.grpc;
 
-import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import java.util.List;
 import javax.annotation.Nullable;
@@ -163,7 +162,7 @@ public abstract class LoadBalancer {
    * The main balancing logic.  It <strong>must be thread-safe</strong>. Typically it should only
    * synchronize on its own state, and avoid synchronizing with the LoadBalancer's state.
    *
-   * Note: Implementations should override exactly one {@code pickSubchannel}.
+   * <p>Note: Implementations should override exactly one {@code pickSubchannel}.
    */
   @ThreadSafe
   public abstract static class SubchannelPicker {
@@ -173,7 +172,7 @@ public abstract class LoadBalancer {
      * @param affinity the affinity attributes provided via {@link CallOptions#withAffinity}
      * @param headers the headers container of the RPC. It can be mutated within this method.
      * @deprecated this signature is going to be removed in the next minor release. Implementations
-     * should instead override the {@link #pickSubchannel(PickSubchannelArgs)}.
+     *     should instead override the {@link #pickSubchannel(PickSubchannelArgs)}.
      */
     @Deprecated
     public PickResult pickSubchannel(Attributes affinity, Metadata headers) {

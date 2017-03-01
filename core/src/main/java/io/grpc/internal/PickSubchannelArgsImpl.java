@@ -70,12 +70,16 @@ final class PickSubchannelArgsImpl extends PickSubchannelArgs {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
     PickSubchannelArgsImpl that = (PickSubchannelArgsImpl) o;
-    return Objects.equal(callOptions, that.callOptions) &&
-        Objects.equal(headers, that.headers) &&
-        Objects.equal(method, that.method);
+    return Objects.equal(callOptions, that.callOptions)
+        && Objects.equal(headers, that.headers)
+        && Objects.equal(method, that.method);
   }
 
   @Override
