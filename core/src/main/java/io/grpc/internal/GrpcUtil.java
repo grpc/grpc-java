@@ -523,7 +523,7 @@ public final class GrpcUtil {
       char unit = serialized.charAt(serialized.length() - 1);
       switch (unit) {
         case 'n':
-          return TimeUnit.NANOSECONDS.toNanos(value);
+          return value;
         case 'u':
           return TimeUnit.MICROSECONDS.toNanos(value);
         case 'm':
