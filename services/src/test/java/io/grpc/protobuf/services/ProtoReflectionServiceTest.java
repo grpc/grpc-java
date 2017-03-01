@@ -116,7 +116,9 @@ public class ProtoReflectionServiceTest {
   @Test
   @SuppressWarnings("deprecation")
   public void deprecatedGetterReturnsCorrectType() throws Exception {
-    assertEquals(io.grpc.protobuf.service.ProtoReflectionService.getInstance().getClass(), ProtoReflectionService.class);
+    assertEquals(
+        io.grpc.protobuf.service.ProtoReflectionService.getInstance().getClass(),
+        ProtoReflectionService.class);
   }
 
   @Test
