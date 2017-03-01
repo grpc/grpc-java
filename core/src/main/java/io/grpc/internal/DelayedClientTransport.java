@@ -291,8 +291,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
     }
 
     for (final PendingStream stream : toProcess) {
-      PickResult pickResult = picker.pickSubchannel(stream.getArgs());
-      CallOptions callOptions = stream.getArgs().getCallOptions();
+      PickResult pickResult = picker.pickSubchannel(stream.args);
+      CallOptions callOptions = stream.args.getCallOptions();
       final ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
           callOptions.isWaitForReady());
       if (transport != null) {
@@ -355,10 +355,6 @@ final class DelayedClientTransport implements ManagedClientTransport {
     private PendingStream(PickSubchannelArgs args, StatsTraceContext statsTraceCtx) {
       this.args = args;
       this.statsTraceCtx = statsTraceCtx;
-    }
-
-    public PickSubchannelArgs getArgs() {
-      return args;
     }
 
     private void createRealStream(ClientTransport transport) {
