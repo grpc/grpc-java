@@ -304,11 +304,11 @@ final class DelayedClientTransport implements ManagedClientTransport {
           executor = callOptions.getExecutor();
         }
         executor.execute(new Runnable() {
-          @Override
-          public void run() {
-            stream.createRealStream(transport);
-          }
-        });
+            @Override
+            public void run() {
+              stream.createRealStream(transport);
+            }
+          });
         toRemove.add(stream);
       }  // else: stay pending
     }

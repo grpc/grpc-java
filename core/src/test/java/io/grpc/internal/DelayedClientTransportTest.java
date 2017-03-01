@@ -470,7 +470,6 @@ public class DelayedClientTransportTest {
     verify(transportListener).transportTerminated();
   }
 
-
   @Test
   public void reprocess_NoPendingStream() {
     SubchannelPicker picker = mock(SubchannelPicker.class);
@@ -501,18 +500,18 @@ public class DelayedClientTransportTest {
     SubchannelPicker picker = mock(SubchannelPicker.class);
 
     doAnswer(new Answer<PickResult>() {
-      @Override
-      public PickResult answer(InvocationOnMock invocation) throws Throwable {
-        if (nextPickShouldWait.compareAndSet(true, false)) {
-          try {
-            barrier.await();
-            return PickResult.withNoResult();
-          } catch (Exception e) {
-            e.printStackTrace();
+        @Override
+        public PickResult answer(InvocationOnMock invocation) throws Throwable {
+          if (nextPickShouldWait.compareAndSet(true, false)) {
+            try {
+              barrier.await();
+              return PickResult.withNoResult();
+            } catch (Exception e) {
+              e.printStackTrace();
+            }
           }
+          return PickResult.withNoResult();
         }
-        return PickResult.withNoResult();
-      }
     }).when(picker).pickSubchannel(any(PickSubchannelArgs.class));
 
     // Because there is no pending stream yet, it will do nothing but save the picker.
@@ -520,12 +519,12 @@ public class DelayedClientTransportTest {
     verify(picker, never()).pickSubchannel(any(PickSubchannelArgs.class));
 
     Thread sideThread = new Thread("sideThread") {
-      @Override
-      public void run() {
-        // Will call pickSubchannel and wait on barrier
-        delayedTransport.newStream(method, headers, callOptions, statsTraceCtx);
-      }
-    };
+        @Override
+        public void run() {
+          // Will call pickSubchannel and wait on barrier
+          delayedTransport.newStream(method, headers, callOptions, statsTraceCtx);
+        }
+      };
     sideThread.start();
 
     PickSubchannelArgsImpl args = new PickSubchannelArgsImpl(method, headers, callOptions);
@@ -553,12 +552,12 @@ public class DelayedClientTransportTest {
     ////////// Phase 2: reprocess() with a different picker
     // Create the second stream
     Thread sideThread2 = new Thread("sideThread2") {
-      @Override
-      public void run() {
-        // Will call pickSubchannel and wait on barrier
-        delayedTransport.newStream(method, headers2, callOptions, statsTraceCtx);
-      }
-    };
+        @Override
+        public void run() {
+          // Will call pickSubchannel and wait on barrier
+          delayedTransport.newStream(method, headers2, callOptions, statsTraceCtx);
+        }
+      };
     sideThread2.start();
     // The second stream will see the first picker
     verify(picker, timeout(5000)).pickSubchannel(args2);
