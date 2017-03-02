@@ -352,11 +352,40 @@ public class RoundRobinLoadBalancerTest {
     verifyNoMoreInteractions(mockHelper);
   }
 
+  @Test
+  public void subchannelStateIsolation() throws Exception {
+    final List<Subchannel> createdSubchannels = Lists.newArrayList();
+    when(mockHelper.createSubchannel(any(EquivalentAddressGroup.class), any(Attributes.class)))
+        .then(new Answer<Subchannel>() {
+          @Override
+          public Subchannel answer(InvocationOnMock invocation) throws Throwable {
+            Subchannel sc = createMockSubchannel((Attributes)invocation.getArguments()[1]);
+            createdSubchannels.add(sc);
+            return sc;
+          }
+        });
+
+    loadBalancer.handleResolvedAddresses(Lists.newArrayList(servers.keySet()), Attributes.EMPTY);
+
+    Subchannel sc1 = createdSubchannels.get(0);
+    Subchannel sc2 = createdSubchannels.get(1);
+    assertEquals(IDLE, sc1.getAttributes().get(STATE_INFO).get().getState());
+    assertEquals(IDLE, sc2.getAttributes().get(STATE_INFO).get().getState());
+
+    loadBalancer.handleSubchannelState(sc1, ConnectivityStateInfo.forNonError(READY));
+    assertEquals(READY, sc1.getAttributes().get(STATE_INFO).get().getState());
+    assertEquals(IDLE, sc2.getAttributes().get(STATE_INFO).get().getState());
+  }
+
   private Subchannel createMockSubchannel() {
-    Subchannel subchannel = mock(Subchannel.class);
-    when(subchannel.getAttributes()).thenReturn(Attributes.newBuilder().set(STATE_INFO,
+    return createMockSubchannel(Attributes.newBuilder().set(STATE_INFO,
         new AtomicReference<ConnectivityStateInfo>(
             ConnectivityStateInfo.forNonError(IDLE))).build());
+  }
+
+  private Subchannel createMockSubchannel(Attributes attributes) {
+    Subchannel subchannel = mock(Subchannel.class);
+    when(subchannel.getAttributes()).thenReturn(attributes);
     return subchannel;
   }
 
