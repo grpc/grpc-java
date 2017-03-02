@@ -49,7 +49,7 @@ import io.grpc.stub.StreamObserver;
  * <p>An implementation of {@link StatsManager} must be available at runtime (determined via {@link
  * Stats#getStatsManager}) or instantiating this service will fail.
  */
-@ExperimentalApi
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/2776")
 public final class MonitoringService extends MonitoringGrpc.MonitoringImplBase {
   private static MonitoringService instance;
 

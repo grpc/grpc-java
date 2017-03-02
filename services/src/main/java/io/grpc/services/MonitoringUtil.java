@@ -51,10 +51,14 @@ import com.google.instrumentation.stats.ViewDescriptor;
 import com.google.instrumentation.stats.ViewDescriptor.DistributionViewDescriptor;
 import com.google.instrumentation.stats.ViewDescriptor.IntervalViewDescriptor;
 import com.google.instrumentation.stats.proto.CensusProto;
+import io.grpc.ExperimentalApi;
 import io.grpc.instrumentation.v1alpha.CanonicalRpcStats;
 
 /** Utility methods to support {@link MonitoringService}. */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/2776")
 final class MonitoringUtil {
+
+  private MonitoringUtil() {}
 
   /** Serialize a {@link View} and associated descriptors to a {@link CanonicalRpcStats.View}. */
   static CanonicalRpcStats.View buildCanonicalRpcStatsView(View view) {
