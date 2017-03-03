@@ -39,6 +39,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.isA;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -64,6 +65,7 @@ import io.grpc.util.RoundRobinLoadBalancerFactory.Picker;
 import io.grpc.util.RoundRobinLoadBalancerFactory.RoundRobinLoadBalancer;
 import java.net.SocketAddress;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -113,7 +115,9 @@ public class RoundRobinLoadBalancerTest {
           @Override
           public Subchannel answer(InvocationOnMock invocation) throws Throwable {
             Object[] args = invocation.getArguments();
-            return subchannels.get(args[0]);
+            Subchannel subchannel = subchannels.get(args[0]);
+            mockSubchannelAttributes(subchannel, (Attributes)args[1]);
+            return subchannel;
           }
         });
 
@@ -123,11 +127,8 @@ public class RoundRobinLoadBalancerTest {
 
   @Test
   public void pickAfterResolved() throws Exception {
-    Subchannel readySubchannel = subchannels.get(servers.get(servers.keySet().iterator().next()));
-    when(readySubchannel.getAttributes()).thenReturn(Attributes.newBuilder()
-        .set(STATE_INFO, new AtomicReference<ConnectivityStateInfo>(
-            ConnectivityStateInfo.forNonError(READY)))
-        .build());
+    final Subchannel readySubchannel = subchannels.values().iterator().next();
+    mockSubchannelToConnect(readySubchannel);
     loadBalancer.handleResolvedAddresses(Lists.newArrayList(servers.keySet()), affinity);
 
     verify(mockHelper, times(3)).createSubchannel(eagCaptor.capture(),
@@ -154,9 +155,7 @@ public class RoundRobinLoadBalancerTest {
 
     for (Subchannel subchannel : Lists.newArrayList(removedSubchannel, oldSubchannel,
         newSubchannel)) {
-      when(subchannel.getAttributes()).thenReturn(Attributes.newBuilder().set(STATE_INFO,
-          new AtomicReference<ConnectivityStateInfo>(
-              ConnectivityStateInfo.forNonError(READY))).build());
+      mockSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     }
 
     FakeSocketAddress removedAddr = new FakeSocketAddress("removed");
@@ -173,14 +172,13 @@ public class RoundRobinLoadBalancerTest {
             .add(new ResolvedServerInfo(oldAddr))
             .build());
 
-    when(mockHelper.createSubchannel(any(EquivalentAddressGroup.class), any(Attributes.class)))
-        .then(new Answer<Subchannel>() {
-          @Override
-          public Subchannel answer(InvocationOnMock invocation) throws Throwable {
-            Object[] args = invocation.getArguments();
-            return subchannels2.get(args[0]);
-          }
-        });
+    doAnswer(new Answer<Subchannel>() {
+      @Override
+      public Subchannel answer(InvocationOnMock invocation) throws Throwable {
+        Object[] args = invocation.getArguments();
+        return subchannels2.get(args[0]);
+      }
+    }).when(mockHelper).createSubchannel(any(EquivalentAddressGroup.class), any(Attributes.class));
 
     loadBalancer.handleResolvedAddresses(currentServers, affinity);
 
@@ -245,13 +243,6 @@ public class RoundRobinLoadBalancerTest {
   @Test
   public void pickAfterStateChange() throws Exception {
     InOrder inOrder = inOrder(mockHelper);
-    when(mockHelper.createSubchannel(any(EquivalentAddressGroup.class), any(Attributes.class)))
-        .then(new Answer<Subchannel>() {
-          @Override
-          public Subchannel answer(InvocationOnMock invocation) throws Throwable {
-            return createMockSubchannel();
-          }
-        });
     loadBalancer.handleResolvedAddresses(Lists.newArrayList(servers.keySet()), Attributes.EMPTY);
     Subchannel subchannel = loadBalancer.getSubchannels().iterator().next();
     AtomicReference<ConnectivityStateInfo> subchannelStateInfo = subchannel.getAttributes().get(
@@ -332,8 +323,8 @@ public class RoundRobinLoadBalancerTest {
 
   @Test
   public void nameResolutionErrorWithActiveChannels() throws Exception {
-    Subchannel readySubchannel = subchannels.values().iterator().next();
-    readySubchannel.getAttributes().get(STATE_INFO).set(ConnectivityStateInfo.forNonError(READY));
+    final Subchannel readySubchannel = subchannels.values().iterator().next();
+    mockSubchannelToConnect(readySubchannel);
     loadBalancer.handleResolvedAddresses(Lists.newArrayList(servers.keySet()), affinity);
     loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
 
@@ -354,39 +345,55 @@ public class RoundRobinLoadBalancerTest {
 
   @Test
   public void subchannelStateIsolation() throws Exception {
-    final List<Subchannel> createdSubchannels = Lists.newArrayList();
-    when(mockHelper.createSubchannel(any(EquivalentAddressGroup.class), any(Attributes.class)))
-        .then(new Answer<Subchannel>() {
-          @Override
-          public Subchannel answer(InvocationOnMock invocation) throws Throwable {
-            Subchannel sc = createMockSubchannel((Attributes)invocation.getArguments()[1]);
-            createdSubchannels.add(sc);
-            return sc;
-          }
-        });
+    Iterator<Subchannel> subchannelIterator = subchannels.values().iterator();
+    Subchannel sc1 = subchannelIterator.next();
+    Subchannel sc2 = subchannelIterator.next();
+    Subchannel sc3 = subchannelIterator.next();
+    mockSubchannelToConnect(sc1);
+    mockSubchannelToConnect(sc2);
+    mockSubchannelToConnect(sc3);
 
     loadBalancer.handleResolvedAddresses(Lists.newArrayList(servers.keySet()), Attributes.EMPTY);
+    loadBalancer
+        .handleSubchannelState(sc2, ConnectivityStateInfo.forNonError(IDLE));
+    mockSubchannelState(sc2, ConnectivityStateInfo.forNonError(READY));
+    loadBalancer
+        .handleSubchannelState(sc3, ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
 
-    Subchannel sc1 = createdSubchannels.get(0);
-    Subchannel sc2 = createdSubchannels.get(1);
-    assertEquals(IDLE, sc1.getAttributes().get(STATE_INFO).get().getState());
-    assertEquals(IDLE, sc2.getAttributes().get(STATE_INFO).get().getState());
-
-    loadBalancer.handleSubchannelState(sc1, ConnectivityStateInfo.forNonError(READY));
-    assertEquals(READY, sc1.getAttributes().get(STATE_INFO).get().getState());
-    assertEquals(IDLE, sc2.getAttributes().get(STATE_INFO).get().getState());
+    verify(mockHelper, times(3)).updatePicker(pickerCaptor.capture());
+    List<Picker> pickers = pickerCaptor.getAllValues();
+    assertThat(pickers.get(0).getList()).containsExactly(sc1, sc2, sc3);
+    // the IDLE subchannel is dropped from the picker, but a reconnection is requested
+    assertThat(pickers.get(1).getList()).containsExactly(sc1, sc3);
+    verify(sc2, times(2)).requestConnection();
+    assertThat(pickers.get(2).getList()).containsExactly(sc1, sc2);
   }
 
   private Subchannel createMockSubchannel() {
-    return createMockSubchannel(Attributes.newBuilder().set(STATE_INFO,
+    Subchannel subchannel = mock(Subchannel.class);
+    when(subchannel.getAttributes()).thenReturn(Attributes.newBuilder().set(STATE_INFO,
         new AtomicReference<ConnectivityStateInfo>(
             ConnectivityStateInfo.forNonError(IDLE))).build());
+    return subchannel;
   }
 
-  private Subchannel createMockSubchannel(Attributes attributes) {
-    Subchannel subchannel = mock(Subchannel.class);
+  private void mockSubchannelAttributes(Subchannel subchannel, Attributes attributes) {
     when(subchannel.getAttributes()).thenReturn(attributes);
-    return subchannel;
+  }
+
+  private void mockSubchannelState(Subchannel subchannel, ConnectivityStateInfo state) {
+    mockSubchannelAttributes(subchannel, Attributes.newBuilder().set(STATE_INFO,
+        new AtomicReference<ConnectivityStateInfo>(state)).build());
+  }
+
+  private void mockSubchannelToConnect(final Subchannel subchannel) {
+    doAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) throws Throwable {
+        subchannel.getAttributes().get(STATE_INFO).set(ConnectivityStateInfo.forNonError(READY));
+        return null;
+      }
+    }).when(subchannel).requestConnection();
   }
 
   private static class FakeSocketAddress extends SocketAddress {
