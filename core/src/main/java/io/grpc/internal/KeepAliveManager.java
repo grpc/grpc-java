@@ -177,6 +177,8 @@ public class KeepAliveManager {
       state = State.PING_SCHEDULED;
       pingFuture = scheduler.schedule(sendPing, nextKeepaliveTime - ticker.read(),
           TimeUnit.NANOSECONDS);
+    } else if (state == State.IDLE_AND_PING_SENT) {
+      state = State.PING_SENT;
     }
   }
 
