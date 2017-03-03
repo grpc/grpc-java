@@ -31,10 +31,13 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkState;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Status;
+import io.grpc.internal.ClientTransport.PingCallback;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -47,28 +50,19 @@ public class KeepAliveManager {
   private static final long MIN_KEEPALIVE_DELAY_NANOS = TimeUnit.MINUTES.toNanos(1);
 
   private final ScheduledExecutorService scheduler;
-  private final ManagedClientTransport transport;
+  private final KeepAlivePinger keepAlivePinger;
   private final Ticker ticker;
-  private State state = State.IDLE;
-  private long nextKeepaliveTime;
+  private final boolean noPingWhenIdle;
+  private State state;
+  private boolean isIdle = true;
+  private boolean isShutdown;
+  private long nextKeepAliveTime;
   private ScheduledFuture<?> shutdownFuture;
   private ScheduledFuture<?> pingFuture;
   private final Runnable shutdown = new Runnable() {
     @Override
     public void run() {
-      boolean shouldShutdown = false;
-      synchronized (KeepAliveManager.this) {
-        if (state != State.DISCONNECTED) {
-          // We haven't received a ping response within the timeout. The connection is likely gone
-          // already. Shutdown the transport and fail all existing rpcs.
-          state = State.DISCONNECTED;
-          shouldShutdown = true;
-        }
-      }
-      if (shouldShutdown) {
-        transport.shutdownNow(Status.UNAVAILABLE.withDescription(
-            "Keepalive failed. The connection is likely gone"));
-      }
+      keepAlivePinger.onKeepAliveTimeout();
     }
   };
   private final Runnable sendPing = new Runnable() {
@@ -76,92 +70,107 @@ public class KeepAliveManager {
     public void run() {
       boolean shouldSendPing = false;
       synchronized (KeepAliveManager.this) {
+        if (isShutdown) {
+          return;
+        }
+        checkState(state != State.PING_SENT, "Keep-alive in weird state.");
+        if (isIdle && noPingWhenIdle) {
+          // delay ping indefinitely until onTransportActive
+          state = State.PING_DELAYED;
+          pingFuture = null;
+          return;
+        }
         if (state == State.PING_SCHEDULED) {
           shouldSendPing = true;
           state = State.PING_SENT;
           // Schedule a shutdown. It fires if we don't receive the ping response within the timeout.
-          shutdownFuture = scheduler.schedule(shutdown, keepAliveTimeoutInNanos,
-              TimeUnit.NANOSECONDS);
+          shutdownFuture =
+              scheduler.schedule(shutdown, keepAliveTimeoutInNanos, TimeUnit.NANOSECONDS);
         } else if (state == State.PING_DELAYED) {
           // We have received some data. Reschedule the ping with the new time.
-          pingFuture = scheduler.schedule(sendPing, nextKeepaliveTime - ticker.read(),
-              TimeUnit.NANOSECONDS);
+          pingFuture = scheduler
+              .schedule(sendPing, nextKeepAliveTime - ticker.read(), TimeUnit.NANOSECONDS);
           state = State.PING_SCHEDULED;
         }
       }
       if (shouldSendPing) {
-        // Send the ping.
-        transport.ping(pingCallback, MoreExecutors.directExecutor());
+        keepAlivePinger.ping();
       }
     }
   };
-  private final KeepAlivePingCallback pingCallback = new KeepAlivePingCallback();
   private long keepAliveDelayInNanos;
   private long keepAliveTimeoutInNanos;
 
   private enum State {
-    /*
-     * Transport has no active rpcs. We don't need to do any keepalives.
-     */
-    IDLE,
     /*
      * We have scheduled a ping to be sent in the future. We may decide to delay it if we receive
      * some data.
      */
     PING_SCHEDULED,
     /*
-     * We need to delay the scheduled keepalive ping.
+     * We need to delay the scheduled keepalive ping, or we do not want to schedule any ping during
+     * idle.
      */
     PING_DELAYED,
     /*
-     * The ping has been sent out. Waiting for a ping response.
+     * The ping has been sent out. Waiting for a ping response or any inbound data.
      */
     PING_SENT,
-    /*
-     * Transport goes idle after ping has been sent.
-     */
-    IDLE_AND_PING_SENT,
-    /*
-     * The transport has been disconnected. We won't do keepalives any more.
-     */
-    DISCONNECTED,
   }
 
   /**
    * Creates a KeepAliverManager.
    */
-  public KeepAliveManager(ManagedClientTransport transport, ScheduledExecutorService scheduler,
-                          long keepAliveDelayInNanos, long keepAliveTimeoutInNanos) {
-    this.transport = Preconditions.checkNotNull(transport, "transport");
-    this.scheduler = Preconditions.checkNotNull(scheduler, "scheduler");
-    this.ticker = SYSTEM_TICKER;
+  public KeepAliveManager(
+      KeepAlivePinger keepAlivePinger, ScheduledExecutorService scheduler,
+      long keepAliveDelayInNanos, long keepAliveTimeoutInNanos) {
+    this(keepAlivePinger, scheduler, SYSTEM_TICKER, keepAliveDelayInNanos, keepAliveTimeoutInNanos);
     // Set a minimum cap on keepalive dealy.
     this.keepAliveDelayInNanos = Math.max(MIN_KEEPALIVE_DELAY_NANOS, keepAliveDelayInNanos);
-    this.keepAliveTimeoutInNanos = keepAliveTimeoutInNanos;
-    nextKeepaliveTime = ticker.read() + keepAliveDelayInNanos;
   }
 
   @VisibleForTesting
-  KeepAliveManager(ManagedClientTransport transport, ScheduledExecutorService scheduler,
-                   Ticker ticker, long keepAliveDelayInNanos, long keepAliveTimeoutInNanos) {
-    this.transport = Preconditions.checkNotNull(transport, "transport");
+  KeepAliveManager(
+      KeepAlivePinger keepAlivePinger, ScheduledExecutorService scheduler, Ticker ticker,
+      long keepAliveDelayInNanos, long keepAliveTimeoutInNanos) {
+    this.keepAlivePinger = Preconditions.checkNotNull(keepAlivePinger, "transport");
     this.scheduler = Preconditions.checkNotNull(scheduler, "scheduler");
     this.ticker = Preconditions.checkNotNull(ticker, "ticker");
     this.keepAliveDelayInNanos = keepAliveDelayInNanos;
     this.keepAliveTimeoutInNanos = keepAliveTimeoutInNanos;
-    nextKeepaliveTime = ticker.read() + keepAliveDelayInNanos;
+    this.noPingWhenIdle = keepAlivePinger.isNoPingWhenIdle();
+    nextKeepAliveTime = ticker.read() + keepAliveDelayInNanos;
   }
 
   /**
    * Transport has received some data so that we can delay sending keepalives.
    */
   public synchronized void onDataReceived() {
-    nextKeepaliveTime = ticker.read() + keepAliveDelayInNanos;
+    if (isShutdown) {
+      return;
+    }
+    nextKeepAliveTime = ticker.read() + keepAliveDelayInNanos;
     // We do not cancel the ping future here. This avoids constantly scheduling and cancellation in
     // a busy transport. Instead, we update the status here and reschedule later. So we actually
     // keep one sendPing task always in flight when there're active rpcs.
     if (state == State.PING_SCHEDULED) {
       state = State.PING_DELAYED;
+    } else if (state == State.PING_SENT) {
+      // Ping acked or effectively ping acked. Cancel shutdown, and then if noPingWhenIdle does not
+      // apply, schedule a new keep-alive ping.
+      if (shutdownFuture != null) {
+        shutdownFuture.cancel(false);
+      }
+      if (isIdle && noPingWhenIdle) {
+        // delay ping indefinitely until onTransportActive
+        state = State.PING_DELAYED;
+        pingFuture = null;
+        return;
+      }
+      // schedule a new ping
+      state = State.PING_SCHEDULED;
+      pingFuture =
+          scheduler.schedule(sendPing, nextKeepAliveTime - ticker.read(), TimeUnit.NANOSECONDS);
     }
   }
 
@@ -169,14 +178,23 @@ public class KeepAliveManager {
    * Transport has active streams. Start sending keepalives if necessary.
    */
   public synchronized void onTransportActive() {
-    if (state == State.IDLE) {
+    checkState(isIdle, "Keep-alive in weird state.");
+    isIdle = false;
+    if (isShutdown) {
+      return;
+    }
+
+    // If a ping was just sent, schedule new keep-alive in onDataReceived(), not here.
+
+    if (pingFuture == null) {
+      // pingFuture here could be null either at initialization, or when noPingWhenIdle is true.
+      // As no outstanding ping or pingFuture, it is necessary to schedule a new keep-alive ping.
+
       // When the transport goes active, we do not reset the nextKeepaliveTime. This allows us to
       // quickly check whether the conneciton is still working.
       state = State.PING_SCHEDULED;
-      pingFuture = scheduler.schedule(sendPing, nextKeepaliveTime - ticker.read(),
-          TimeUnit.NANOSECONDS);
-    } else if (state == State.IDLE_AND_PING_SENT) {
-      state = State.PING_SENT;
+      pingFuture =
+          scheduler.schedule(sendPing, nextKeepAliveTime - ticker.read(), TimeUnit.NANOSECONDS);
     }
   }
 
@@ -184,57 +202,25 @@ public class KeepAliveManager {
    * Transport has finished all streams.
    */
   public synchronized void onTransportIdle() {
-    if (state == State.PING_SCHEDULED || state == State.PING_DELAYED) {
-      state = State.IDLE;
-    }
-    if (state == State.PING_SENT) {
-      state = State.IDLE_AND_PING_SENT;
-    }
+    checkState(!isIdle, "Keep-alive in weird state.");
+    isIdle = true;
   }
 
   /**
    * Transport is shutting down. We no longer need to do keepalives.
    */
   public synchronized void onTransportShutdown() {
-    if (state != State.DISCONNECTED) {
-      state = State.DISCONNECTED;
-      if (shutdownFuture != null) {
-        shutdownFuture.cancel(false);
-      }
-      if (pingFuture != null) {
-        pingFuture.cancel(false);
-      }
+    if (isShutdown) {
+      return;
     }
-  }
-
-  private class KeepAlivePingCallback implements ClientTransport.PingCallback {
-
-    @Override
-    public void onSuccess(long roundTripTimeNanos) {
-      synchronized (KeepAliveManager.this) {
-        shutdownFuture.cancel(false);
-        nextKeepaliveTime = ticker.read() + keepAliveDelayInNanos;
-        if (state == State.PING_SENT) {
-          // We have received the ping response so there's no need to shutdown the transport.
-          // Schedule a new keepalive ping.
-          pingFuture = scheduler.schedule(sendPing, keepAliveDelayInNanos, TimeUnit.NANOSECONDS);
-          state = State.PING_SCHEDULED;
-        }
-        if (state == State.IDLE_AND_PING_SENT) {
-          // Transport went idle after we had sent out the ping. We don't need to schedule a new
-          // ping.
-          state = State.IDLE;
-        }
-      }
+    isShutdown = true;
+    if (shutdownFuture != null) {
+      shutdownFuture.cancel(false);
+      shutdownFuture = null;
     }
-
-    @Override
-    public void onFailure(Throwable cause) {
-      // Keepalive ping has failed. Shutdown the transport now.
-      synchronized (KeepAliveManager.this) {
-        shutdownFuture.cancel(false);
-      }
-      shutdown.run();
+    if (pingFuture != null) {
+      pingFuture.cancel(false);
+      pingFuture = null;
     }
   }
 
@@ -254,5 +240,58 @@ public class KeepAliveManager {
     }
   }
 
+  public interface KeepAlivePinger {
+    /**
+     * Sends out a keep-alive ping.
+     */
+    void ping();
+
+    /**
+     * Callback when Ping Ack was not received in KEEPALIVE_TIMEOUT. Should shutdown the transport.
+     */
+    void onKeepAliveTimeout();
+
+    /**
+     * Specifies whether not to send keep-alive pings when the transport has no active RPCs.
+     */
+    boolean isNoPingWhenIdle();
+  }
+
+
+  /**
+   * Default client side {@link KeepAlivePinger}.
+   */
+  public static final class ClientKeepAlivePinger implements KeepAlivePinger {
+    private final ConnectionClientTransport transport;
+
+    public ClientKeepAlivePinger(ConnectionClientTransport transport) {
+      this.transport = transport;
+    }
+
+    @Override
+    public void ping() {
+      transport.ping(new PingCallback() {
+        @Override
+        public void onSuccess(long roundTripTimeNanos) {}
+
+        @Override
+        public void onFailure(Throwable cause) {
+          transport.shutdownNow(Status.UNAVAILABLE.withDescription(
+              "Keepalive failed. The connection is likely gone"));
+        }
+      }, MoreExecutors.directExecutor());
+    }
+
+    @Override
+    public void onKeepAliveTimeout() {
+      transport.shutdownNow(Status.UNAVAILABLE.withDescription(
+          "Keepalive failed. The connection is likely gone"));
+    }
+
+    @Override
+    public boolean isNoPingWhenIdle() {
+      return true;
+    }
+  }
 }
 
