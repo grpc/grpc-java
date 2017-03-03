@@ -41,9 +41,11 @@ for reviewers:
 
   `package-name: summary of change`
 
+  where the summary finishes the sentence: `This commit improves gRPC to ____________.`
+
   for example:
 
-  `core: fix infinite loop`
+  `core,netty,interop-testing: add capacitive duractance to turbo encabulators`
 
 * Every time you receive a feedback on your pull request, push changes that
   address it as a separate one or multiple commits with a descriptive commit
