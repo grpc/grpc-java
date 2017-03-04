@@ -1,5 +1,14 @@
 description = 'gRPC: Protobuf'
 
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath libraries.protobuf_plugin
+    }
+}
+
 dependencies {
     compile project(':grpc-core'),
             libraries.protobuf,
@@ -11,4 +20,13 @@ dependencies {
     }
 
     signature "org.codehaus.mojo.signature:java16:+@signature"
+}
+
+configureProtoCompilation()
+
+idea {
+    module {
+        sourceDirs += file("${projectDir}/src/generated/main/grpc");
+        sourceDirs += file("${projectDir}/src/generated/main/java");
+    }
 }
