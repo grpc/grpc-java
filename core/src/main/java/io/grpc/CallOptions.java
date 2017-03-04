@@ -152,8 +152,10 @@ public final class CallOptions {
 
   /**
    * Returns a new {@code CallOptions} with attributes for affinity-based routing.
+   *
+   * @deprecated use {@link #withOption(Key, Object)}.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1766")
+  @Deprecated
   public CallOptions withAffinity(Attributes affinity) {
     CallOptions newOptions = new CallOptions(this);
     newOptions.affinity = Preconditions.checkNotNull(affinity, "affinity");
@@ -183,8 +185,10 @@ public final class CallOptions {
 
   /**
    * Returns the attributes for affinity-based routing.
+   *
+   * @deprecated use {@link #getOption(Key)}.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1766")
+  @Deprecated
   public Attributes getAffinity() {
     return affinity;
   }
