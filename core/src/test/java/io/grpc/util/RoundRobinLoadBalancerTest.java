@@ -116,7 +116,7 @@ public class RoundRobinLoadBalancerTest {
           public Subchannel answer(InvocationOnMock invocation) throws Throwable {
             Object[] args = invocation.getArguments();
             Subchannel subchannel = subchannels.get(args[0]);
-            when(subchannel.getAttributes()).thenReturn((Attributes)args[1]);
+            when(subchannel.getAttributes()).thenReturn((Attributes) args[1]);
             return subchannel;
           }
         });
