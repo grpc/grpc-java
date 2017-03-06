@@ -74,9 +74,7 @@ public class NettyChannelBuilderTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Invalid authority:");
 
-    Object unused = builder.overrideAuthority("[invalidauthority")
-        .negotiationType(NegotiationType.PLAINTEXT)
-        .buildTransportFactory();
+    builder.overrideAuthority("[invalidauthority");
   }
 
   @Test
