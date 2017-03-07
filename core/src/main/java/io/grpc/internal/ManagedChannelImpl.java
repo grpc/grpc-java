@@ -186,8 +186,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   private final CountDownLatch terminatedLatch = new CountDownLatch(1);
 
   private ConnectivityState state;
-  private final Map<ConnectivityState, Queue<Runnable>> stateChangeCallbacks =
-      new HashMap<ConnectivityState, Queue<Runnable>>();
+  private final Queue<Runnable> stateChangeCallbacks = new LinkedList<Runnable>();
 
   // Called from channelExecutor
   private final ManagedClientTransport.Listener delayedTransportListener =
@@ -541,32 +540,26 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
   @Override
   public void notifyWhenStateChanged(ConnectivityState source, Runnable callback) {
-    Queue<Runnable> queue = stateChangeCallbacks.get(source);
-    if (queue == null) {
-      queue = new LinkedList<Runnable>();
-      stateChangeCallbacks.put(source, queue);
+    if (source != state) {
+      executor.execute(callback);
+      return;
     }
-    queue.add(callback);
+    stateChangeCallbacks.add(callback);
   }
 
   private void maybeUpdateState(SubchannelPicker subchannelPicker) {
     ConnectivityState subchannelState = subchannelPicker.getState();
     if (state != subchannelState) {
-      runStateUpdateCallbacks(subchannelState);
+      runStateUpdateCallbacks();
       state = subchannelState;
     }
   }
 
-  private void runStateUpdateCallbacks(ConnectivityState state) {
-    Queue<Runnable> queue = stateChangeCallbacks.get(state);
-    if (queue == null) {
-      return;
-    }
-
-    for (Runnable callback : queue) {
+  private void runStateUpdateCallbacks() {
+    for (Runnable callback : stateChangeCallbacks) {
       executor.execute(callback);
     }
-    stateChangeCallbacks.remove(state);
+    stateChangeCallbacks.clear();
   }
 
   /**
