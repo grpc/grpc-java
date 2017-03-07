@@ -156,6 +156,7 @@ public final class CallOptions {
    * @deprecated use {@link #withOption(Key, Object)}.
    */
   @Deprecated
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1766")
   public CallOptions withAffinity(Attributes affinity) {
     CallOptions newOptions = new CallOptions(this);
     newOptions.affinity = Preconditions.checkNotNull(affinity, "affinity");
@@ -189,6 +190,7 @@ public final class CallOptions {
    * @deprecated use {@link #getOption(Key)}.
    */
   @Deprecated
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1766")
   public Attributes getAffinity() {
     return affinity;
   }

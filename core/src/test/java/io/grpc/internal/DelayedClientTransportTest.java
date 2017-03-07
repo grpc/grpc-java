@@ -48,7 +48,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer.PickResult;
