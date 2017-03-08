@@ -85,6 +85,7 @@ public final class Attributes {
     return new Builder();
   }
 
+  @Immutable
   public static final class Key<T> {
     private final String name;
 
