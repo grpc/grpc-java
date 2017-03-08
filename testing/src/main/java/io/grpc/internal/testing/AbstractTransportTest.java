@@ -477,6 +477,14 @@ public abstract class AbstractTransportTest {
     // Stream prevents termination
     ClientStream stream = client.newStream(methodDescriptor, new Metadata());
     stream.start(mockClientStreamListener);
+
+    // Let server recv the stream (header)
+    MockServerTransportListener serverTransportListener
+        = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    serverTransport = serverTransportListener.transport;
+    StreamCreation serverStreamCreation
+        = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
     client.shutdown();
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportShutdown(any(Status.class));
     ClientStream stream2 = client.newStream(methodDescriptor, new Metadata());
@@ -486,12 +494,9 @@ public abstract class AbstractTransportTest {
         .closed(statusCaptor.capture(), any(Metadata.class));
     assertCodeEquals(Status.UNAVAILABLE, statusCaptor.getValue());
 
-    // Make sure earlier stream works.
-    MockServerTransportListener serverTransportListener
-        = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
-    serverTransport = serverTransportListener.transport;
-    StreamCreation serverStreamCreation
-        = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    // Make sure earlier stream is still alive and works.
+    verify(mockClientStreamListener, never())
+        .closed(statusCaptor.capture(), any(Metadata.class));
     serverStreamCreation.stream.close(Status.OK, new Metadata());
     verify(mockClientStreamListener, timeout(TIMEOUT_MS))
         .closed(statusCaptor.capture(), any(Metadata.class));
