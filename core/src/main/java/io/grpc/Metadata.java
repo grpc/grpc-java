@@ -491,7 +491,6 @@ public final class Metadata {
   }
 
   /** Marshaller for metadata values that are serialized into raw binary. */
-  @Immutable
   public interface BinaryMarshaller<T> {
     /**
      * Serialize a metadata value to bytes.
@@ -523,7 +522,6 @@ public final class Metadata {
    * <p>Note this has to be the subset of valid characters in {@code field-content} from RFC 7230
    * Section 3.2.
    */
-  @Immutable
   public interface AsciiMarshaller<T> {
     /**
      * Serialize a metadata value to a ASCII string that contains only the characters listed in the
@@ -567,6 +565,9 @@ public final class Metadata {
    *
    * <p>Note this has to be the subset of valid HTTP/2 token characters as defined in RFC7230
    * Section 3.2.6 and RFC5234 Section B.1
+   *
+   * <p>Note that a key is immutable but it may not be deeply immutable, because the key depends on
+   * its marshaller, and the marshaller can be mutable though not recommended.
    *
    * @see <a href="https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md">Wire Spec</a>
    * @see <a href="https://tools.ietf.org/html/rfc7230#section-3.2.6">RFC7230</a>
