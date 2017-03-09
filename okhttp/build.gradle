@@ -19,6 +19,29 @@ project.sourceSets {
     }
 }
 
+
+class LoadTest extends Test{
+    private numberOfClients = 10000
+
+    public LoadTest(){
+        super()
+        setTestNameIncludePatterns(['io.grpc.okhttp.OkHttpTransportTest.newStream_duringShutdown'])
+    }
+    public FileTree getCandidateClassFiles() {
+        FileTree candidateTimes = super.getCandidateClassFiles()
+        for(int client  = 1; client<numberOfClients;client++){
+            candidateTimes = candidateTimes + super.getCandidateClassFiles()
+        }
+        return candidateTimes
+    }
+
+}
+
+task loadTest(type:LoadTest){
+}
+
+test.dependsOn loadTest
+
 checkstyleMain.exclude '**/io/grpc/okhttp/internal/**'
 
 javadoc.exclude 'io/grpc/okhttp/internal/**'
