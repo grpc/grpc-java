@@ -40,6 +40,7 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
@@ -487,7 +488,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   static final class RoundRobinEntry {
     final PickResult result;
     @Nullable
-    final String token;
+    private final String token;
 
     /**
      * A non-drop result.
@@ -514,7 +515,10 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
 
     @Override
     public String toString() {
-      return "[result=" + result + ", token=" + token + "]";
+      return MoreObjects.toStringHelper(this)
+          .add("result", result)
+          .add("token", token)
+          .toString();
     }
 
     @Override
@@ -535,7 +539,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   @VisibleForTesting
   static final class RoundRobinPicker extends SubchannelPicker {
     final List<RoundRobinEntry> list;
-    int index;
+    private int index;
 
     RoundRobinPicker(List<RoundRobinEntry> resultList) {
       checkArgument(!resultList.isEmpty(), "resultList is empty");

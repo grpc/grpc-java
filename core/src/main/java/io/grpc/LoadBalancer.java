@@ -31,6 +31,7 @@
 
 package io.grpc;
 
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import java.util.List;
@@ -346,7 +347,10 @@ public abstract class LoadBalancer {
 
     @Override
     public String toString() {
-      return "[subchannel=" + subchannel + " status=" + status + "]";
+      return MoreObjects.toStringHelper(this)
+          .add("subchannel", subchannel)
+          .add("status", status)
+          .toString();
     }
 
     @Override
