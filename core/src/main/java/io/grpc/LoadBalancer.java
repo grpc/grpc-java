@@ -204,7 +204,7 @@ public abstract class LoadBalancer {
     public abstract CallOptions getCallOptions();
 
     /**
-     * Call metadata.
+     * Headers of the call. {@code pickSubchannel()} may mutate it before before returning.
      */
     public abstract Metadata getHeaders();
 
