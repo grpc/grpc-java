@@ -70,7 +70,7 @@ public final class KeepAliveManagerTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    keepAliveManager = new KeepAliveManager(transport, scheduler, ticker, 1000, 2000);
+    keepAliveManager = new KeepAliveManager(transport, scheduler, ticker, 1000, 2000, 10);
   }
 
   @Test
