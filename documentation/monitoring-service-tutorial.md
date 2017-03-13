@@ -1,5 +1,9 @@
 # gRPC Monitoring Service Tutorial
 
+***Note:*** *The monitoring service requires the `instrumentation-java` library
+implementations, which are still being developed. The steps in this tutorial
+will not work until the `instrumentation-java` implementation is released.*
+
 The gRPC monitoring service provides access to metrics such as RPC latencies,
 bytes sent and received, and error counts. By default, the monitoring service
 will expose metrics recorded by all gRPC clients and servers in the same
