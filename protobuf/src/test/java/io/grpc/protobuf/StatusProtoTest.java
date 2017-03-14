@@ -29,7 +29,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.protobuf.status;
+package io.grpc.protobuf;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -45,9 +45,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link GoogleRpcStatus}. */
+/** Unit tests for {@link StatusProto}. */
 @RunWith(JUnit4.class)
-public class GoogleRpcStatusTest {
+public class StatusProtoTest {
   private Metadata metadata;
 
   @Before
@@ -58,13 +58,13 @@ public class GoogleRpcStatusTest {
 
   @Test
   public void statusRuntimeException() throws Exception {
-    StatusRuntimeException sre = GoogleRpcStatus.toStatusRuntimeException(STATUS_PROTO);
+    StatusRuntimeException sre = StatusProto.toStatusRuntimeException(STATUS_PROTO);
     verifyStatusRuntimeException(sre);
   }
 
   @Test
   public void statusRuntimeExceptionWithMetadata() throws Exception {
-    StatusRuntimeException sre = GoogleRpcStatus.toStatusRuntimeException(STATUS_PROTO, metadata);
+    StatusRuntimeException sre = StatusProto.toStatusRuntimeException(STATUS_PROTO, metadata);
     verifyStatusRuntimeException(sre);
     verifyMetadata(sre.getTrailers());
   }
@@ -72,7 +72,7 @@ public class GoogleRpcStatusTest {
   @Test
   public void statusRuntimeExceptionWithNullMetadata() throws Exception {
     try {
-      GoogleRpcStatus.toStatusRuntimeException(STATUS_PROTO, null);
+      StatusProto.toStatusRuntimeException(STATUS_PROTO, null);
       fail("NullPointerException expected");
     } catch (NullPointerException expectedException) {
     }
@@ -80,13 +80,13 @@ public class GoogleRpcStatusTest {
 
   @Test
   public void statusException() throws Exception {
-    StatusException se = GoogleRpcStatus.toStatusException(STATUS_PROTO);
+    StatusException se = StatusProto.toStatusException(STATUS_PROTO);
     verifyStatusException(se);
   }
 
   @Test
   public void statusExceptionWithMetadata() throws Exception {
-    StatusException se = GoogleRpcStatus.toStatusException(STATUS_PROTO, metadata);
+    StatusException se = StatusProto.toStatusException(STATUS_PROTO, metadata);
     verifyStatusException(se);
     verifyMetadata(se.getTrailers());
   }
@@ -94,7 +94,7 @@ public class GoogleRpcStatusTest {
   @Test
   public void statusExceptionWithNullMetadata() throws Exception {
     try {
-      GoogleRpcStatus.toStatusException(STATUS_PROTO, null);
+      StatusProto.toStatusException(STATUS_PROTO, null);
       fail("NullPointerException expected");
     } catch (NullPointerException expectedException) {
     }
@@ -103,7 +103,7 @@ public class GoogleRpcStatusTest {
   @Test
   public void invalidStatusCodeToStatusRuntimeException() throws Exception {
     try {
-      GoogleRpcStatus.toStatusRuntimeException(INVALID_STATUS_PROTO);
+      StatusProto.toStatusRuntimeException(INVALID_STATUS_PROTO);
       fail("IllegalArgumentException expected");
     } catch (IllegalArgumentException expectedException) {
     }
@@ -112,7 +112,7 @@ public class GoogleRpcStatusTest {
   @Test
   public void invalidStatusCodeToStatusException() throws Exception {
     try {
-      GoogleRpcStatus.toStatusException(INVALID_STATUS_PROTO);
+      StatusProto.toStatusException(INVALID_STATUS_PROTO);
       fail("IllegalArgumentException expected");
     } catch (IllegalArgumentException expectedException) {
     }
@@ -121,20 +121,20 @@ public class GoogleRpcStatusTest {
   @Test
   public void fromThrowableForNullTrailers() {
     Status status = Status.fromCodeValue(0);
-    assertNull(GoogleRpcStatus.fromThrowable(status.asRuntimeException()));
-    assertNull(GoogleRpcStatus.fromThrowable(status.asException()));
+    assertNull(StatusProto.fromThrowable(status.asRuntimeException()));
+    assertNull(StatusProto.fromThrowable(status.asException()));
   }
 
   private void verifyStatusRuntimeException(StatusRuntimeException sre) {
     assertEquals(STATUS_PROTO.getCode(), sre.getStatus().getCode().value());
     assertEquals(STATUS_PROTO.getMessage(), sre.getStatus().getDescription());
-    assertEquals(STATUS_PROTO, GoogleRpcStatus.fromThrowable(sre));
+    assertEquals(STATUS_PROTO, StatusProto.fromThrowable(sre));
   }
 
   private void verifyStatusException(StatusException se) {
     assertEquals(STATUS_PROTO.getCode(), se.getStatus().getCode().value());
     assertEquals(STATUS_PROTO.getMessage(), se.getStatus().getDescription());
-    assertEquals(STATUS_PROTO, GoogleRpcStatus.fromThrowable(se));
+    assertEquals(STATUS_PROTO, StatusProto.fromThrowable(se));
   }
 
   private void verifyMetadata(Metadata m) {

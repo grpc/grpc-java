@@ -29,7 +29,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package io.grpc.protobuf.status;
+package io.grpc.protobuf;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -44,8 +44,13 @@ import javax.annotation.Nullable;
 
 /** Utility methods for working with {@link com.google.rpc.Status}. */
 @ExperimentalApi
-public final class GoogleRpcStatus {
-  private GoogleRpcStatus() {}
+public final class StatusProto {
+  private StatusProto() {}
+
+  private static final Metadata.Key<com.google.rpc.Status> STATUS_DETAILS_KEY =
+      Metadata.Key.of(
+          "grpc-status-details-bin",
+          ProtoLiteUtils.metadataMarshaller(com.google.rpc.Status.getDefaultInstance()));
 
   /**
    * Convert a {@link com.google.rpc.Status} instance to a {@link StatusRuntimeException}.
@@ -115,11 +120,6 @@ public final class GoogleRpcStatus {
     return status.withDescription(statusProto.getMessage());
   }
 
-  private static final Metadata.Key<com.google.rpc.Status> STATUS_DETAILS_KEY =
-      Metadata.Key.of(
-          "grpc-status-details-bin",
-          ProtoLiteUtils.metadataMarshaller(com.google.rpc.Status.getDefaultInstance()));
-
   private static Metadata toMetadata(com.google.rpc.Status statusProto) {
     Metadata metadata = new Metadata();
     metadata.put(STATUS_DETAILS_KEY, statusProto);
@@ -146,10 +146,10 @@ public final class GoogleRpcStatus {
     while (cause != null) {
       if (cause instanceof StatusException) {
         StatusException e = (StatusException) cause;
-        return toGoogleRpcStatus(e.getStatus(), e.getTrailers());
+        return toStatusProto(e.getStatus(), e.getTrailers());
       } else if (cause instanceof StatusRuntimeException) {
         StatusRuntimeException e = (StatusRuntimeException) cause;
-        return toGoogleRpcStatus(e.getStatus(), e.getTrailers());
+        return toStatusProto(e.getStatus(), e.getTrailers());
       }
       cause = cause.getCause();
     }
@@ -157,7 +157,7 @@ public final class GoogleRpcStatus {
   }
 
   @Nullable
-  private static com.google.rpc.Status toGoogleRpcStatus(Status status, Metadata trailers) {
+  private static com.google.rpc.Status toStatusProto(Status status, Metadata trailers) {
     if (trailers != null) {
       com.google.rpc.Status statusProto = trailers.get(STATUS_DETAILS_KEY);
       checkArgument(
