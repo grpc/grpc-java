@@ -32,7 +32,6 @@
 package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.isA;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -40,6 +39,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.Status;
+import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
+import io.grpc.internal.KeepAliveManager.KeepAlivePinger;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -56,7 +57,8 @@ import org.mockito.MockitoAnnotations;
 public final class KeepAliveManagerTest {
   private final FakeTicker ticker = new FakeTicker();
   private KeepAliveManager keepAliveManager;
-  @Mock private ManagedClientTransport transport;
+  private KeepAlivePinger keepAlivePinger;
+  @Mock private ConnectionClientTransport transport;
   @Mock private ScheduledExecutorService scheduler;
 
   static class FakeTicker extends KeepAliveManager.Ticker {
@@ -71,8 +73,8 @@ public final class KeepAliveManagerTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    keepAliveManager = new KeepAliveManager(transport, scheduler, ticker, 1000, 2000, false);
-    keepAliveManager.onTransportStarted();
+    keepAlivePinger = new ClientKeepAlivePinger(transport);
+    keepAliveManager = new KeepAliveManager(keepAlivePinger, scheduler, ticker, 1000, 2000);
   }
 
   @Test
@@ -165,6 +167,9 @@ public final class KeepAliveManagerTest {
     // Ping fails. Shutdown the transport.
     ticker.time = 1100;
     pingCallback.onFailure(new Throwable());
+    verify(transport).shutdownNow(isA(Status.class));
+    keepAliveManager.onTransportTermination();
+
     // Shutdown task has been cancelled.
     verify(shutdownFuture).cancel(isA(Boolean.class));
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
@@ -199,13 +204,8 @@ public final class KeepAliveManagerTest {
 
     // We do not receive the ping response. Shutdown runnable runs.
     ticker.time = 3000;
-    shutdown.run();
+    keepAlivePinger.onPingTimeout();
     verify(transport).shutdownNow(isA(Status.class));
-
-    // We receive the ping error after we shutdown the transport.
-    pingCallback.onFailure(new Throwable());
-    // We should not shutdown transport again.
-    verify(transport, times(1)).shutdownNow(isA(Status.class));
   }
 
   @Test
@@ -265,8 +265,10 @@ public final class KeepAliveManagerTest {
 
   @Test
   public void transportGoesIdle_doesntCauseIdleWhenEnabled() {
+    KeepAlivePinger pinger = mock(KeepAlivePinger.class);
+    doReturn(true).when(pinger).stillPingWhileIdle();
     keepAliveManager.onTransportTermination();
-    keepAliveManager = new KeepAliveManager(transport, scheduler, ticker, 1000, 2000, true);
+    keepAliveManager = new KeepAliveManager(pinger, scheduler, ticker, 1000, 2000);
     keepAliveManager.onTransportStarted();
 
     // Keepalive scheduling should have started immediately.
@@ -281,13 +283,13 @@ public final class KeepAliveManagerTest {
     keepAliveManager.onTransportIdle();
     sendPing.run();
     // Ping was sent.
-    verify(transport).ping(isA(ClientTransport.PingCallback.class), isA(Executor.class));
+    verify(pinger).ping();
     // Shutdown is scheduled.
     verify(scheduler, times(2)).schedule(runnableCaptor.capture(), isA(Long.class),
         isA(TimeUnit.class));
     // Shutdown is triggered.
     runnableCaptor.getValue().run();
-    verify(transport).shutdownNow(any(Status.class));
+    verify(pinger).onPingTimeout();
   }
 
   @Test
@@ -350,6 +352,9 @@ public final class KeepAliveManagerTest {
     // Ping fails. Shutdown the transport.
     ticker.time = 1100;
     pingCallback.onFailure(new Throwable());
+    verify(transport).shutdownNow(isA(Status.class));
+    keepAliveManager.onTransportTermination();
+
     // Shutdown task has been cancelled.
     verify(shutdownFuture).cancel(isA(Boolean.class));
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
@@ -397,11 +402,6 @@ public final class KeepAliveManagerTest {
     keepAliveManager.onTransportTermination();
     // Shutdown task has been cancelled.
     verify(shutdownFuture).cancel(isA(Boolean.class));
-
-    ClientTransport.PingCallback pingCallback = pingCallbackCaptor.getValue();
-    // Ping fails after transport shutting down. We will not shutdown the transport again.
-    pingCallback.onFailure(new Throwable());
-    verify(transport, times(0)).shutdownNow(isA(Status.class));
   }
 
   @Test
