@@ -15,6 +15,10 @@ dependencies {
             libraries.guava,
             libraries.protobuf_util
 
+    compile (libraries.google_api_protos) {
+        exclude group: 'io.grpc'
+    }
+
     compile (project(':grpc-protobuf-lite')) {
         exclude group: 'com.google.protobuf', module: 'protobuf-lite'
     }
