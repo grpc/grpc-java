@@ -72,7 +72,7 @@ public final class KeepAliveManagerTest {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     keepAliveManager = new KeepAliveManager(transport, scheduler, ticker, 1000, 2000, false);
-    keepAliveManager.start();
+    keepAliveManager.onTransportStarted();
   }
 
   @Test
@@ -268,7 +268,7 @@ public final class KeepAliveManagerTest {
   public void transportGoesIdle_doesntCauseIdleWhenEnabled() {
     keepAliveManager.onTransportShutdown();
     keepAliveManager = new KeepAliveManager(transport, scheduler, ticker, 1000, 2000, true);
-    keepAliveManager.start();
+    keepAliveManager.onTransportStarted();
 
     // Keepalive scheduling should have started immediately.
     ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);

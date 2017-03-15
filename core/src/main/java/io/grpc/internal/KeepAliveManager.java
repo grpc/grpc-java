@@ -155,7 +155,7 @@ public class KeepAliveManager {
   }
 
   /** Start keepalive monitoring. */
-  public synchronized void start() {
+  public synchronized void onTransportStarted() {
     if (keepAliveDuringTransportIdle) {
       onTransportActive();
     }
