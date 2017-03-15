@@ -176,7 +176,7 @@ public class KeepAliveManager {
       // schedule a new ping
       state = State.PING_SCHEDULED;
       pingFuture =
-          scheduler.schedule(sendPing, nextKeepaliveTime - ticker.read(), TimeUnit.NANOSECONDS);
+          scheduler.schedule(sendPing, keepAliveDelayInNanos, TimeUnit.NANOSECONDS);
     }
   }
 
