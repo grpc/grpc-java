@@ -131,13 +131,14 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
     lifecycleManager = new ClientTransportLifecycleManager(listener);
+    initChannel(new GrpcHttp2ClientHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
     // This mocks the keepalive manager only for there's in which we verify it. For other tests
     // it'll be null which will be testing if we behave correctly when it's not present.
     if (setKeepaliveManagerFor.contains(testNameRule.getMethodName())) {
       mockKeepAliveManager = mock(KeepAliveManager.class);
+      handler().setKeepAliveManager(mockKeepAliveManager);
     }
 
-    initChannel(new GrpcHttp2ClientHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
     streamTransportState = new TransportStateImpl(handler(), DEFAULT_MAX_MESSAGE_SIZE);
     streamTransportState.setListener(streamListener);
 
@@ -575,7 +576,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     };
 
     return NettyClientHandler.newHandler(connection, frameReader(), frameWriter(),
-        lifecycleManager, mockKeepAliveManager, flowControlWindow, maxHeaderListSize, ticker);
+        lifecycleManager, flowControlWindow, maxHeaderListSize, ticker);
   }
 
   @Override
