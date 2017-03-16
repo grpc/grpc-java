@@ -57,51 +57,32 @@ public class StatusProtoTest {
   }
 
   @Test
-  public void statusRuntimeException() throws Exception {
+  public void toStatusRuntimeException() throws Exception {
     StatusRuntimeException sre = StatusProto.toStatusRuntimeException(STATUS_PROTO);
+
     verifyStatusRuntimeException(sre);
   }
 
   @Test
-  public void statusRuntimeExceptionWithMetadata() throws Exception {
+  public void toStatusRuntimeExceptionWithMetadata_shouldIncludeMetadata() throws Exception {
     StatusRuntimeException sre = StatusProto.toStatusRuntimeException(STATUS_PROTO, metadata);
+
     verifyStatusRuntimeException(sre);
     verifyMetadata(sre.getTrailers());
   }
 
   @Test
-  public void statusRuntimeExceptionWithNullMetadata() throws Exception {
+  public void toStatusRuntimeExceptionWithMetadata_shouldThrowIfMetadataIsNull() throws Exception {
     try {
       StatusProto.toStatusRuntimeException(STATUS_PROTO, null);
       fail("NullPointerException expected");
-    } catch (NullPointerException expectedException) {
+    } catch (NullPointerException npe) {
+      assertEquals("metadata must not be null", npe.getMessage());
     }
   }
 
   @Test
-  public void statusException() throws Exception {
-    StatusException se = StatusProto.toStatusException(STATUS_PROTO);
-    verifyStatusException(se);
-  }
-
-  @Test
-  public void statusExceptionWithMetadata() throws Exception {
-    StatusException se = StatusProto.toStatusException(STATUS_PROTO, metadata);
-    verifyStatusException(se);
-    verifyMetadata(se.getTrailers());
-  }
-
-  @Test
-  public void statusExceptionWithNullMetadata() throws Exception {
-    try {
-      StatusProto.toStatusException(STATUS_PROTO, null);
-      fail("NullPointerException expected");
-    } catch (NullPointerException expectedException) {
-    }
-  }
-
-  @Test
-  public void invalidStatusCodeToStatusRuntimeException() throws Exception {
+  public void toStatusRuntimeException_shouldThrowIfStatusCodeInvalid() throws Exception {
     try {
       StatusProto.toStatusRuntimeException(INVALID_STATUS_PROTO);
       fail("IllegalArgumentException expected");
@@ -110,7 +91,32 @@ public class StatusProtoTest {
   }
 
   @Test
-  public void invalidStatusCodeToStatusException() throws Exception {
+  public void toStatusException() throws Exception {
+    StatusException se = StatusProto.toStatusException(STATUS_PROTO);
+
+    verifyStatusException(se);
+  }
+
+  @Test
+  public void toStatusExceptionWithMetadata_shouldIncludeMetadata() throws Exception {
+    StatusException se = StatusProto.toStatusException(STATUS_PROTO, metadata);
+
+    verifyStatusException(se);
+    verifyMetadata(se.getTrailers());
+  }
+
+  @Test
+  public void toStatusExceptionWithMetadata_shouldThrowIfMetadataIsNull() throws Exception {
+    try {
+      StatusProto.toStatusException(STATUS_PROTO, null);
+      fail("NullPointerException expected");
+    } catch (NullPointerException npe) {
+      assertEquals("metadata must not be null", npe.getMessage());
+    }
+  }
+
+  @Test
+  public void toStatusException_shouldThrowIfStatusCodeInvalid() throws Exception {
     try {
       StatusProto.toStatusException(INVALID_STATUS_PROTO);
       fail("IllegalArgumentException expected");
@@ -119,8 +125,9 @@ public class StatusProtoTest {
   }
 
   @Test
-  public void fromThrowableForNullTrailers() {
+  public void fromThrowable_shouldReturnNullIfTrailersAreNull() {
     Status status = Status.fromCodeValue(0);
+
     assertNull(StatusProto.fromThrowable(status.asRuntimeException()));
     assertNull(StatusProto.fromThrowable(status.asException()));
   }

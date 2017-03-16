@@ -127,7 +127,7 @@ public final class StatusProto {
   }
 
   private static Metadata toMetadata(com.google.rpc.Status statusProto, Metadata metadata) {
-    checkNotNull(metadata);
+    checkNotNull(metadata, "metadata must not be null");
     metadata.discardAll(STATUS_DETAILS_KEY);
     metadata.put(STATUS_DETAILS_KEY, statusProto);
     return metadata;
