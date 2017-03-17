@@ -751,8 +751,8 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     stopped = true;
 
     if (keepAliveManager != null) {
-      keepAliveManager.onTransportShutdown();
-      // KeepAliveManager should stop using the scheduler after onTransportShutdown gets called.
+      keepAliveManager.onTransportTermination();
+      // KeepAliveManager should stop using the scheduler after onTransportTermination gets called.
       scheduler = SharedResourceHolder.release(TIMER_SERVICE, scheduler);
     }
 
