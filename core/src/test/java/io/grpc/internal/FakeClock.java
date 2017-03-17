@@ -51,7 +51,7 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>To simulate the locking scenario of using real executors, it never runs tasks within {@code
  * schedule()} or {@code execute()}. Instead, you should call {@link #runDueTasks} in your test
- * method to run all due tasks. {@link #forwardTime} and {@link #forwardMillis} call {@link
+ * method to run all due tasks. {@link #forwardTime} and {@link #forwardNanos} call {@link
  * #runDueTasks} automatically.
  */
 public final class FakeClock {
@@ -266,8 +266,8 @@ public final class FakeClock {
    *
    * @return the number of tasks run by this call
    */
-  public int forwardMillis(long millis) {
-    return forwardTime(millis, TimeUnit.MILLISECONDS);
+  public int forwardNanos(long nanos) {
+    return forwardTime(nanos, TimeUnit.NANOSECONDS);
   }
 
   /**
