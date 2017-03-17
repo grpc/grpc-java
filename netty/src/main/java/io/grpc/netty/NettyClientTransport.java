@@ -190,6 +190,14 @@ class NettyClientTransport implements ConnectionClientTransport {
      */
     b.handler(negotiationHandler);
     channel = b.register().channel();
+    // Start the write queue as soon as the channel is constructed.
+    handler.startWriteQueue(channel);
+    // Set the keepAliveManager as soon as the channel is constructed.
+    if (enableKeepAlive) {
+      keepAliveManager = new KeepAliveManager(this, channel.eventLoop(), keepAliveDelayNanos,
+                                              keepAliveTimeoutNanos, false);
+      handler.setKeepAliveManager(keepAliveManager);
+    }
     // Start the connection operation to the server.
     channel.connect(address).addListener(new ChannelFutureListener() {
       @Override
@@ -206,8 +214,6 @@ class NettyClientTransport implements ConnectionClientTransport {
         }
       }
     });
-    // Start the write queue as soon as the channel is constructed
-    handler.startWriteQueue(channel);
     // This write will have no effect, yet it will only complete once the negotiationHandler
     // flushes any pending writes.
     channel.write(NettyClientHandler.NOOP_MESSAGE).addListener(new ChannelFutureListener() {
@@ -229,12 +235,6 @@ class NettyClientTransport implements ConnectionClientTransport {
             Status.INTERNAL.withDescription("Connection closed with unknown cause"));
       }
     });
-
-    if (enableKeepAlive) {
-      keepAliveManager = new KeepAliveManager(this, channel.eventLoop(), keepAliveDelayNanos,
-          keepAliveTimeoutNanos, false);
-      keepAliveManager.onTransportStarted();
-    }
 
     return null;
   }
@@ -307,7 +307,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   }
 
   private NettyClientHandler newHandler() {
-    return NettyClientHandler.newHandler(lifecycleManager, keepAliveManager, flowControlWindow,
+    return NettyClientHandler.newHandler(lifecycleManager, flowControlWindow,
         maxHeaderListSize, Ticker.systemTicker());
   }
 }
