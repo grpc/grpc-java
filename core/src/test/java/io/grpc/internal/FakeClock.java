@@ -262,7 +262,7 @@ public final class FakeClock {
   }
 
   /**
-   * Forward the time by the given milliseconds and run all due tasks.
+   * Forward the time by the given nanoseconds and run all due tasks.
    *
    * @return the number of tasks run by this call
    */
