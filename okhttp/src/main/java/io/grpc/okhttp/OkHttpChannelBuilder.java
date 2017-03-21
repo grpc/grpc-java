@@ -53,13 +53,18 @@ import io.grpc.okhttp.internal.Platform;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.GeneralSecurityException;
+import java.security.KeyStore;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
+import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManagerFactory;
 
 /** Convenience class for building channels with the OkHttp transport. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1785")
@@ -252,8 +257,7 @@ public class OkHttpChannelBuilder extends
       case TLS:
         try {
           if (sslSocketFactory == null) {
-            SSLContext sslContext = SSLContext.getInstance("Default", Platform.get().getProvider());
-            sslSocketFactory = sslContext.getSocketFactory();
+            sslSocketFactory = getSslContext().getSocketFactory();
           }
           return sslSocketFactory;
         } catch (GeneralSecurityException gse) {
@@ -264,6 +268,29 @@ public class OkHttpChannelBuilder extends
       default:
         throw new RuntimeException("Unknown negotiation type: " + negotiationType);
     }
+  }
+
+  private static SSLContext getSslContext() throws NoSuchAlgorithmException {
+    if (GrpcUtil.IS_RESTRICTED_APPENGINE) {
+      try {
+        SSLContext tlsContext = SSLContext.getInstance("TLS", Platform.get().getProvider());
+        KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+        keyStore.load(null, null);
+        KeyManagerFactory keyManagerFactory =
+            KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+        keyManagerFactory.init(keyStore, null);
+        TrustManagerFactory trustManagerFactory =
+            TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        trustManagerFactory.init((KeyStore) null);
+        tlsContext.init(
+            null,
+            trustManagerFactory.getTrustManagers(),
+            SecureRandom.getInstance("SHA1PRNG", Platform.get().getProvider()));
+        return tlsContext;
+      } catch (Exception ex) {
+      }
+    }
+    return SSLContext.getInstance("Default", Platform.get().getProvider());
   }
 
   /**
