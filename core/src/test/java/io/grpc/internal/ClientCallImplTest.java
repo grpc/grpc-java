@@ -150,7 +150,7 @@ public class ClientCallImplTest {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     assertNotNull(statsCtx);
-    when(provider.get(any(CallOptions.class), any(Metadata.class))).thenReturn(transport);
+    when(provider.get(any(PickSubchannelArgsImpl.class))).thenReturn(transport);
     when(transport.newStream(any(MethodDescriptor.class), any(Metadata.class),
             any(CallOptions.class), any(StatsTraceContext.class))).thenReturn(stream);
   }
@@ -304,8 +304,9 @@ public class ClientCallImplTest {
         same(statsTraceCtx));
     Metadata actual = metadataCaptor.getValue();
 
-    Set<String> acceptedEncodings =
-        ImmutableSet.copyOf(actual.getAll(GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY));
+    // there should only be one.
+    Set<String> acceptedEncodings = ImmutableSet.of(
+        new String(actual.get(GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY), GrpcUtil.US_ASCII));
     assertEquals(decompressorRegistry.getAdvertisedMessageEncodings(), acceptedEncodings);
   }
 
@@ -417,8 +418,8 @@ public class ClientCallImplTest {
 
     ClientCallImpl.prepareHeaders(m, customRegistry, Codec.Identity.NONE, statsTraceCtx);
 
-    Iterable<String> acceptedEncodings =
-        ACCEPT_ENCODING_SPLITTER.split(m.get(GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY));
+    Iterable<String> acceptedEncodings = ACCEPT_ENCODING_SPLITTER.split(
+        new String(m.get(GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY), GrpcUtil.US_ASCII));
 
     // Order may be different, since decoder priorities have not yet been implemented.
     assertEquals(ImmutableSet.of("b", "a"), ImmutableSet.copyOf(acceptedEncodings));
@@ -428,7 +429,7 @@ public class ClientCallImplTest {
   public void prepareHeaders_removeReservedHeaders() {
     Metadata m = new Metadata();
     m.put(GrpcUtil.MESSAGE_ENCODING_KEY, "gzip");
-    m.put(GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY, "gzip");
+    m.put(GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY, "gzip".getBytes(GrpcUtil.US_ASCII));
 
     ClientCallImpl.prepareHeaders(m, DecompressorRegistry.emptyInstance(), Codec.Identity.NONE,
         statsTraceCtx);
@@ -702,17 +703,19 @@ public class ClientCallImplTest {
   @Test
   public void expiredDeadlineCancelsStream_CallOptions() {
     fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
+    // The deadline needs to be a number large enough to get encompass the call to start, otherwise
+    // the scheduled cancellation won't be created, and the call will fail early.
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
         method,
         MoreExecutors.directExecutor(),
-        CallOptions.DEFAULT.withDeadline(Deadline.after(1000, TimeUnit.MILLISECONDS)),
+        CallOptions.DEFAULT.withDeadline(Deadline.after(1, TimeUnit.SECONDS)),
         statsTraceCtx,
         provider,
         deadlineCancellationExecutor);
 
     call.start(callListener, new Metadata());
 
-    fakeClock.forwardMillis(1001);
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(1) + 1);
 
     verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
@@ -723,7 +726,7 @@ public class ClientCallImplTest {
     fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
 
     Context.current()
-        .withDeadlineAfter(1000, TimeUnit.MILLISECONDS, deadlineCancellationExecutor)
+        .withDeadlineAfter(1, TimeUnit.SECONDS, deadlineCancellationExecutor)
         .attach();
 
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
@@ -736,7 +739,7 @@ public class ClientCallImplTest {
 
     call.start(callListener, new Metadata());
 
-    fakeClock.forwardMillis(TimeUnit.SECONDS.toMillis(1001));
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(1) + 1);
 
     verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
@@ -749,7 +752,7 @@ public class ClientCallImplTest {
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
         method,
         MoreExecutors.directExecutor(),
-        CallOptions.DEFAULT.withDeadline(Deadline.after(1000, TimeUnit.MILLISECONDS)),
+        CallOptions.DEFAULT.withDeadline(Deadline.after(1, TimeUnit.SECONDS)),
         statsTraceCtx,
         provider,
         deadlineCancellationExecutor);
@@ -757,7 +760,7 @@ public class ClientCallImplTest {
     call.cancel("canceled", null);
 
     // Run the deadline timer, which should have been cancelled by the previous call to cancel()
-    fakeClock.forwardMillis(1001);
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(1) + 1);
 
     verify(stream, times(1)).cancel(statusCaptor.capture());
 

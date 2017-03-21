@@ -55,6 +55,7 @@ import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.ManagedChannel;
@@ -257,7 +258,7 @@ public class ManagedChannelImplIdlenessTest {
     t0.listener.transportReady();
 
     SubchannelPicker mockPicker = mock(SubchannelPicker.class);
-    when(mockPicker.pickSubchannel(any(Attributes.class), any(Metadata.class)))
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
     helper.updatePicker(mockPicker);
     // Delayed transport creates real streams in the app executor
@@ -296,7 +297,7 @@ public class ManagedChannelImplIdlenessTest {
 
     // Fail the RPC
     SubchannelPicker failingPicker = mock(SubchannelPicker.class);
-    when(failingPicker.pickSubchannel(any(Attributes.class), any(Metadata.class)))
+    when(failingPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withError(Status.UNAVAILABLE));
     helper.updatePicker(failingPicker);
     executor.runDueTasks();
@@ -329,7 +330,7 @@ public class ManagedChannelImplIdlenessTest {
     public BackoffPolicy get() {
       return new BackoffPolicy() {
         @Override
-        public long nextBackoffMillis() {
+        public long nextBackoffNanos() {
           return 1;
         }
       };

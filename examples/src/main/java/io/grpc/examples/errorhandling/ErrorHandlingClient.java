@@ -31,12 +31,13 @@
 
 package io.grpc.examples.errorhandling;
 
+import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
+
 import com.google.common.base.Verify;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.Uninterruptibles;
-
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ManagedChannel;
@@ -52,11 +53,9 @@ import io.grpc.examples.helloworld.GreeterGrpc.GreeterStub;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.stub.StreamObserver;
-
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-
 import javax.annotation.Nullable;
 
 /**
@@ -130,21 +129,24 @@ public class ErrorHandlingClient {
 
     final CountDownLatch latch = new CountDownLatch(1);
 
-    Futures.addCallback(response, new FutureCallback<HelloReply>() {
-      @Override
-      public void onSuccess(@Nullable HelloReply result) {
-        // Won't be called, since the server in this example always fails.
-      }
+    Futures.addCallback(
+        response,
+        new FutureCallback<HelloReply>() {
+          @Override
+          public void onSuccess(@Nullable HelloReply result) {
+            // Won't be called, since the server in this example always fails.
+          }
 
-      @Override
-      public void onFailure(Throwable t) {
-        Status status = Status.fromThrowable(t);
-        Verify.verify(status.getCode() == Status.Code.INTERNAL);
-        Verify.verify(status.getDescription().contains("Crybaby"));
-        // Cause is not transmitted over the wire..
-        latch.countDown();
-      }
-    });
+          @Override
+          public void onFailure(Throwable t) {
+            Status status = Status.fromThrowable(t);
+            Verify.verify(status.getCode() == Status.Code.INTERNAL);
+            Verify.verify(status.getDescription().contains("Crybaby"));
+            // Cause is not transmitted over the wire..
+            latch.countDown();
+          }
+        },
+        directExecutor());
 
     if (!Uninterruptibles.awaitUninterruptibly(latch, 1, TimeUnit.SECONDS)) {
       throw new RuntimeException("timeout!");

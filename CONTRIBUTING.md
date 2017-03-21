@@ -32,9 +32,44 @@ channel on Freenode](http://webchat.freenode.net/?channels=grpc), or send an
 email to [grpc-io@googlegroups.com](grpc-io@googlegroups.com) to discuss
 beforehand.
 
+## Pull Requests & Commits
+
+We have few conventions for keeping history clean and making code reviews easier
+for reviewers:
+
+* First line of commit messages should be in format of
+
+  `package-name: summary of change`
+
+  where the summary finishes the sentence: `This commit improves gRPC to ____________.`
+
+  for example:
+
+  `core,netty,interop-testing: add capacitive duractance to turbo encabulators`
+
+* Every time you receive a feedback on your pull request, push changes that
+  address it as a separate one or multiple commits with a descriptive commit
+  message (try avoid using vauge `addressed pr feedback` type of messages).
+
+  Project maintainers are obligated to squash those commits into one
+  merging.
+
 ## Proposing changes
 
 Make sure that `./gradlew build` (`gradlew build` on Windows) completes
 successfully without any new warnings. Then create a Pull Request with your
 changes. When the changes are accepted, they will be merged or cherry-picked by
 a gRPC core developer.
+
+## Running tests
+
+### Jetty ALPN setup for IntelliJ
+
+The tests in interop-testing project require jetty-alpn agent running in the background
+otherwise they'll fail. Here are instructions on how to setup IntellJ IDEA to enable running
+those tests in IDE:
+
+* Settings -> Build Tools -> Gradle -> Runner -> select Gradle Test Runner
+* View -> Tool Windows -> Gradle -> Edit Run Configuration -> Defaults -> JUnit -> Before lauch -> + -> Run Gradle task, enter the task in the build.gradle that sets the javaagent.
+
+Step 1 must be taken, otherwise by the default JUnit Test Runner running a single test in IDE will trigger all the tests.

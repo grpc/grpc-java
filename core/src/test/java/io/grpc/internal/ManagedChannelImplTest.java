@@ -74,6 +74,7 @@ import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.ManagedChannel;
@@ -221,9 +222,6 @@ public class ManagedChannelImplTest {
     assertEquals(executor.getPendingTasks() + " should be empty", 0, executor.numPendingTasks());
   }
 
-  /**
-   * The counterpart of {@link ManagedChannelImplIdlenessTest#enterIdleModeAfterForceExit}.
-   */
   @Test
   @SuppressWarnings("unchecked")
   public void idleModeDisabled() {
@@ -306,9 +304,11 @@ public class ManagedChannelImplTest {
             any(StatsTraceContext.class)))
         .thenReturn(mockStream2);
     transportListener.transportReady();
-    when(mockPicker.pickSubchannel(any(Attributes.class), same(headers))).thenReturn(
+    when(mockPicker.pickSubchannel(
+        new PickSubchannelArgsImpl(method, headers, CallOptions.DEFAULT))).thenReturn(
         PickResult.withNoResult());
-    when(mockPicker.pickSubchannel(any(Attributes.class), same(headers2))).thenReturn(
+    when(mockPicker.pickSubchannel(
+        new PickSubchannelArgsImpl(method, headers2, CallOptions.DEFAULT))).thenReturn(
         PickResult.withSubchannel(subchannel));
     helper.updatePicker(mockPicker);
 
@@ -370,8 +370,8 @@ public class ManagedChannelImplTest {
       assertFalse(nameResolverFactory.resolvers.get(0).shutdown);
       // call and call2 are still alive, and can still be assigned to a real transport
       SubchannelPicker picker2 = mock(SubchannelPicker.class);
-      when(picker2.pickSubchannel(any(Attributes.class), same(headers))).thenReturn(
-          PickResult.withSubchannel(subchannel));
+      when(picker2.pickSubchannel(new PickSubchannelArgsImpl(method, headers, CallOptions.DEFAULT)))
+          .thenReturn(PickResult.withSubchannel(subchannel));
       helper.updatePicker(picker2);
       executor.runDueTasks();
       verify(mockTransport).newStream(same(method), same(headers), same(CallOptions.DEFAULT),
@@ -459,7 +459,7 @@ public class ManagedChannelImplTest {
             any(StatsTraceContext.class)))
         .thenReturn(mockStream);
     transportListener.transportReady();
-    when(mockPicker.pickSubchannel(any(Attributes.class), any(Metadata.class)))
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
     assertEquals(0, callExecutor.numPendingTasks());
     helper.updatePicker(mockPicker);
@@ -575,7 +575,7 @@ public class ManagedChannelImplTest {
     inOrder.verify(mockLoadBalancer).handleResolvedAddresses(
         eq(Arrays.asList(addressGroup)), eq(Attributes.EMPTY));
     Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
-    when(mockPicker.pickSubchannel(any(Attributes.class), any(Metadata.class)))
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
     subchannel.requestConnection();
     inOrder.verify(mockLoadBalancer).handleSubchannelState(
@@ -658,7 +658,7 @@ public class ManagedChannelImplTest {
     inOrder.verify(mockLoadBalancer).handleResolvedAddresses(
         eq(Arrays.asList(addressGroup)), eq(Attributes.EMPTY));
     Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
-    when(mockPicker.pickSubchannel(any(Attributes.class), any(Metadata.class)))
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
     subchannel.requestConnection();
     inOrder.verify(mockLoadBalancer).handleSubchannelState(
@@ -689,7 +689,7 @@ public class ManagedChannelImplTest {
 
     // A typical LoadBalancer would create a picker with error
     SubchannelPicker picker2 = mock(SubchannelPicker.class);
-    when(picker2.pickSubchannel(any(Attributes.class), any(Metadata.class)))
+    when(picker2.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withError(server2Error));
     helper.updatePicker(picker2);
     executor.runDueTasks();
@@ -1041,7 +1041,7 @@ public class ManagedChannelImplTest {
 
     // applyRequestMetadata() is called after the transport becomes ready.
     transportInfo.listener.transportReady();
-    when(mockPicker.pickSubchannel(any(Attributes.class), any(Metadata.class)))
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
     helper.updatePicker(mockPicker);
     executor.runDueTasks();
@@ -1097,7 +1097,7 @@ public class ManagedChannelImplTest {
     public BackoffPolicy get() {
       return new BackoffPolicy() {
         @Override
-        public long nextBackoffMillis() {
+        public long nextBackoffNanos() {
           return 1;
         }
       };
