@@ -94,6 +94,7 @@ public class StatusProtoTest {
       StatusProto.toStatusRuntimeException(INVALID_STATUS_PROTO);
       fail("IllegalArgumentException expected");
     } catch (IllegalArgumentException expectedException) {
+      assertEquals("invalid status code", expectedException.getMessage());
     }
   }
 
@@ -135,6 +136,7 @@ public class StatusProtoTest {
       StatusProto.toStatusException(INVALID_STATUS_PROTO);
       fail("IllegalArgumentException expected");
     } catch (IllegalArgumentException expectedException) {
+      assertEquals("invalid status code", expectedException.getMessage());
     }
   }
 
