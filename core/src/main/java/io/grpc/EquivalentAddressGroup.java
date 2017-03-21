@@ -56,20 +56,19 @@ public final class EquivalentAddressGroup {
   private final int hashCode;
 
   /**
-   * List constructor without Attributes.
+   * List constructor without {@link Attributes}.
    */
   public EquivalentAddressGroup(List<SocketAddress> addrs) {
     this(addrs, Attributes.EMPTY);
   }
 
   /**
-   * List constructor with Attributes.
+   * List constructor with {@link Attributes}.
    */
   public EquivalentAddressGroup(List<SocketAddress> addrs, Attributes attrs) {
     Preconditions.checkArgument(!addrs.isEmpty(), "addrs is empty");
-    Preconditions.checkNotNull(attrs, "attrs");
     this.addrs = Collections.unmodifiableList(new ArrayList<SocketAddress>(addrs));
-    this.attrs = attrs;
+    this.attrs = Preconditions.checkNotNull(attrs, "attrs");
     // Attributes may contain mutable objects, which means Attributes' hashCode may change over
     // time, thus we don't cache Attributes' hashCode.
     hashCode = this.addrs.hashCode();
@@ -114,6 +113,14 @@ public final class EquivalentAddressGroup {
     return hashCode;
   }
 
+  /**
+   * Returns true if the given object is also an {@link EquivalentAddressGroup} with an equal
+   * address list and equal attribute values.
+   *
+   * <p>Note that if the attributes include mutable values, it is possible for two objects to be
+   * considered equal at one point in time and not equal at another (due to concurrent mutation of
+   * attribute values).
+   */
   @Override
   public boolean equals(Object other) {
     if (!(other instanceof EquivalentAddressGroup)) {
