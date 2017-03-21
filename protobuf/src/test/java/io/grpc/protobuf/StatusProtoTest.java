@@ -59,16 +59,23 @@ public class StatusProtoTest {
   @Test
   public void toStatusRuntimeException() throws Exception {
     StatusRuntimeException sre = StatusProto.toStatusRuntimeException(STATUS_PROTO);
+    com.google.rpc.Status extractedStatusProto = StatusProto.fromThrowable(sre);
 
-    verifyStatusRuntimeException(sre);
+    assertEquals(STATUS_PROTO.getCode(), sre.getStatus().getCode().value());
+    assertEquals(STATUS_PROTO.getMessage(), sre.getStatus().getDescription());
+    assertEquals(STATUS_PROTO, extractedStatusProto);
   }
 
   @Test
   public void toStatusRuntimeExceptionWithMetadata_shouldIncludeMetadata() throws Exception {
     StatusRuntimeException sre = StatusProto.toStatusRuntimeException(STATUS_PROTO, metadata);
+    com.google.rpc.Status extractedStatusProto = StatusProto.fromThrowable(sre);
 
-    verifyStatusRuntimeException(sre);
-    verifyMetadata(sre.getTrailers());
+    assertEquals(STATUS_PROTO.getCode(), sre.getStatus().getCode().value());
+    assertEquals(STATUS_PROTO.getMessage(), sre.getStatus().getDescription());
+    assertEquals(STATUS_PROTO, extractedStatusProto);
+    assertNotNull(sre.getTrailers());
+    assertEquals(METADATA_VALUE, sre.getTrailers().get(METADATA_KEY));
   }
 
   @Test
@@ -93,16 +100,23 @@ public class StatusProtoTest {
   @Test
   public void toStatusException() throws Exception {
     StatusException se = StatusProto.toStatusException(STATUS_PROTO);
+    com.google.rpc.Status extractedStatusProto = StatusProto.fromThrowable(se);
 
-    verifyStatusException(se);
+    assertEquals(STATUS_PROTO.getCode(), se.getStatus().getCode().value());
+    assertEquals(STATUS_PROTO.getMessage(), se.getStatus().getDescription());
+    assertEquals(STATUS_PROTO, extractedStatusProto);
   }
 
   @Test
   public void toStatusExceptionWithMetadata_shouldIncludeMetadata() throws Exception {
     StatusException se = StatusProto.toStatusException(STATUS_PROTO, metadata);
+    com.google.rpc.Status extractedStatusProto = StatusProto.fromThrowable(se);
 
-    verifyStatusException(se);
-    verifyMetadata(se.getTrailers());
+    assertEquals(STATUS_PROTO.getCode(), se.getStatus().getCode().value());
+    assertEquals(STATUS_PROTO.getMessage(), se.getStatus().getDescription());
+    assertEquals(STATUS_PROTO, extractedStatusProto);
+    assertNotNull(se.getTrailers());
+    assertEquals(METADATA_VALUE, se.getTrailers().get(METADATA_KEY));
   }
 
   @Test
@@ -132,21 +146,33 @@ public class StatusProtoTest {
     assertNull(StatusProto.fromThrowable(status.asException()));
   }
 
-  private void verifyStatusRuntimeException(StatusRuntimeException sre) {
-    assertEquals(STATUS_PROTO.getCode(), sre.getStatus().getCode().value());
-    assertEquals(STATUS_PROTO.getMessage(), sre.getStatus().getDescription());
-    assertEquals(STATUS_PROTO, StatusProto.fromThrowable(sre));
+  @Test
+  public void fromThrowableWithNestedStatusRuntimeException() {
+    StatusRuntimeException sre = StatusProto.toStatusRuntimeException(STATUS_PROTO);
+    Throwable nestedSre = new Throwable(sre);
+
+    com.google.rpc.Status extractedStatusProto = StatusProto.fromThrowable(sre);
+    com.google.rpc.Status extractedStatusProtoFromNestedSre = StatusProto.fromThrowable(nestedSre);
+
+    assertEquals(extractedStatusProto, extractedStatusProtoFromNestedSre);
   }
 
-  private void verifyStatusException(StatusException se) {
-    assertEquals(STATUS_PROTO.getCode(), se.getStatus().getCode().value());
-    assertEquals(STATUS_PROTO.getMessage(), se.getStatus().getDescription());
-    assertEquals(STATUS_PROTO, StatusProto.fromThrowable(se));
+  @Test
+  public void fromThrowableWithNestedStatusException() {
+    StatusException se = StatusProto.toStatusException(STATUS_PROTO);
+    Throwable nestedSe = new Throwable(se);
+
+    com.google.rpc.Status extractedStatusProto = StatusProto.fromThrowable(se);
+    com.google.rpc.Status extractedStatusProtoFromNestedSe = StatusProto.fromThrowable(nestedSe);
+
+    assertEquals(extractedStatusProto, extractedStatusProtoFromNestedSe);
   }
 
-  private void verifyMetadata(Metadata m) {
-    assertNotNull(m);
-    assertEquals(METADATA_VALUE, m.get(METADATA_KEY));
+  @Test
+  public void fromThrowable_shouldReturnNullIfNoEmbeddedStatus() {
+    Throwable nestedSe = new Throwable(new Throwable("no status found"));
+
+    assertNull(StatusProto.fromThrowable(nestedSe));
   }
 
   private static final Metadata.Key<String> METADATA_KEY =
