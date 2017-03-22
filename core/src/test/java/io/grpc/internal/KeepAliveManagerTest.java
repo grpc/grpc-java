@@ -204,7 +204,7 @@ public final class KeepAliveManagerTest {
 
     // We do not receive the ping response. Shutdown runnable runs.
     ticker.time = 3000;
-    keepAlivePinger.onPingTimeout();
+    shutdown.run();
     verify(transport).shutdownNow(isA(Status.class));
   }
 
