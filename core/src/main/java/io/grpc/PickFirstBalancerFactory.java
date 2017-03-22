@@ -74,7 +74,7 @@ public final class PickFirstBalancerFactory extends LoadBalancer.Factory {
     }
 
     @Override
-    public void handleResolvedAddresses(
+    public void handleResolvedAddressGroups(
         List<EquivalentAddressGroup> servers, Attributes attributes) {
       // Flatten servers list received from name resolver into single address group. This means that
       // as far as load balancer is concerned, there's virtually one single server with multiple

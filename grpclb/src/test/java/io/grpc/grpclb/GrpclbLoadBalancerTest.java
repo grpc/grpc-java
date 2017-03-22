@@ -342,7 +342,7 @@ public class GrpclbLoadBalancerTest {
     deliverResolvedAddresses(resolvedServers, resolutionAttrs);
 
     verify(pickFirstBalancerFactory).newLoadBalancer(helper);
-    verify(pickFirstBalancer).handleResolvedAddresses(eq(resolvedServers), eq(resolutionAttrs));
+    verify(pickFirstBalancer).handleResolvedAddressGroups(eq(resolvedServers), eq(resolutionAttrs));
     verifyNoMoreInteractions(roundRobinBalancerFactory);
     verifyNoMoreInteractions(roundRobinBalancer);
   }
@@ -382,7 +382,7 @@ public class GrpclbLoadBalancerTest {
     deliverResolvedAddresses(resolvedServers, resolutionAttrs);
 
     verify(pickFirstBalancerFactory).newLoadBalancer(helper);
-    verify(pickFirstBalancer).handleResolvedAddresses(eq(resolvedServers), eq(resolutionAttrs));
+    verify(pickFirstBalancer).handleResolvedAddressGroups(eq(resolvedServers), eq(resolutionAttrs));
 
     // Then let name resolution fail.  The error will be passed directly to the delegate.
     Status error = Status.NOT_FOUND.withDescription("www.google.com not found");
@@ -404,7 +404,7 @@ public class GrpclbLoadBalancerTest {
     deliverResolvedAddresses(resolvedServers, resolutionAttrs);
 
     verify(roundRobinBalancerFactory).newLoadBalancer(helper);
-    verify(roundRobinBalancer).handleResolvedAddresses(resolvedServers, resolutionAttrs);
+    verify(roundRobinBalancer).handleResolvedAddressGroups(resolvedServers, resolutionAttrs);
 
     // Then let name resolution fail.  The error will be passed directly to the delegate.
     Status error = Status.NOT_FOUND.withDescription("www.google.com not found");
@@ -488,7 +488,7 @@ public class GrpclbLoadBalancerTest {
 
     verify(pickFirstBalancerFactory).newLoadBalancer(same(helper));
     // Only non-LB addresses are passed to the delegate
-    verify(pickFirstBalancer).handleResolvedAddresses(
+    verify(pickFirstBalancer).handleResolvedAddressGroups(
         eq(Arrays.asList(pickFirstResolutionList.get(1))), same(pickFirstResolutionAttrs));
     assertSame(LbPolicy.PICK_FIRST, balancer.getLbPolicy());
     assertSame(pickFirstBalancer, balancer.getDelegate());
@@ -506,7 +506,7 @@ public class GrpclbLoadBalancerTest {
 
     verify(roundRobinBalancerFactory).newLoadBalancer(same(helper));
     // Only non-LB addresses are passed to the delegate
-    verify(roundRobinBalancer).handleResolvedAddresses(
+    verify(roundRobinBalancer).handleResolvedAddressGroups(
         eq(roundRobinResolutionList.subList(1, 3)), same(roundRobinResolutionAttrs));
     assertSame(LbPolicy.ROUND_ROBIN, balancer.getLbPolicy());
     assertSame(roundRobinBalancer, balancer.getDelegate());
@@ -535,7 +535,7 @@ public class GrpclbLoadBalancerTest {
 
     verify(pickFirstBalancerFactory, times(2)).newLoadBalancer(same(helper));
     // Only non-LB addresses are passed to the delegate
-    verify(pickFirstBalancer).handleResolvedAddresses(
+    verify(pickFirstBalancer).handleResolvedAddressGroups(
         eq(pickFirstResolutionList.subList(1, 3)), same(pickFirstResolutionAttrs));
     assertSame(LbPolicy.PICK_FIRST, balancer.getLbPolicy());
     assertSame(pickFirstBalancer, balancer.getDelegate());
@@ -790,7 +790,7 @@ public class GrpclbLoadBalancerTest {
     channelExecutor.execute(new Runnable() {
         @Override
         public void run() {
-          balancer.handleResolvedAddresses(addrs, attrs);
+          balancer.handleResolvedAddressGroups(addrs, attrs);
         }
       });
   }

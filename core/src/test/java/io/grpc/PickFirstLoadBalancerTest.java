@@ -111,7 +111,7 @@ public class PickFirstLoadBalancerTest {
 
   @Test
   public void pickAfterResolved() throws Exception {
-    loadBalancer.handleResolvedAddresses(servers, affinity);
+    loadBalancer.handleResolvedAddressGroups(servers, affinity);
 
     verify(mockHelper).createSubchannel(eagCaptor.capture(), attrsCaptor.capture());
     verify(mockHelper).updatePicker(pickerCaptor.capture());
@@ -125,8 +125,8 @@ public class PickFirstLoadBalancerTest {
 
   @Test
   public void pickAfterResolvedAndUnchanged() throws Exception {
-    loadBalancer.handleResolvedAddresses(servers, affinity);
-    loadBalancer.handleResolvedAddresses(servers, affinity);
+    loadBalancer.handleResolvedAddressGroups(servers, affinity);
+    loadBalancer.handleResolvedAddressGroups(servers, affinity);
 
     verify(mockHelper).createSubchannel(any(EquivalentAddressGroup.class),
         any(Attributes.class));
@@ -155,12 +155,12 @@ public class PickFirstLoadBalancerTest {
 
     InOrder inOrder = inOrder(mockHelper);
 
-    loadBalancer.handleResolvedAddresses(servers, affinity);
+    loadBalancer.handleResolvedAddressGroups(servers, affinity);
     inOrder.verify(mockHelper).createSubchannel(eagCaptor.capture(), any(Attributes.class));
     inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
     assertEquals(socketAddresses, eagCaptor.getValue().getAddresses());
 
-    loadBalancer.handleResolvedAddresses(newServers, affinity);
+    loadBalancer.handleResolvedAddressGroups(newServers, affinity);
     inOrder.verify(mockHelper).createSubchannel(eagCaptor.capture(), any(Attributes.class));
     inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
     assertEquals(newSocketAddresses, eagCaptor.getValue().getAddresses());
@@ -187,7 +187,7 @@ public class PickFirstLoadBalancerTest {
 
   @Test
   public void pickAfterStateChangeAfterResolution() throws Exception {
-    loadBalancer.handleResolvedAddresses(servers, affinity);
+    loadBalancer.handleResolvedAddressGroups(servers, affinity);
     verify(mockHelper).updatePicker(pickerCaptor.capture());
     Subchannel subchannel = pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel();
     reset(mockHelper);
@@ -232,7 +232,7 @@ public class PickFirstLoadBalancerTest {
     loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
     inOrder.verify(mockHelper).updatePicker(any(Picker.class));
 
-    loadBalancer.handleResolvedAddresses(servers, affinity);
+    loadBalancer.handleResolvedAddressGroups(servers, affinity);
     inOrder.verify(mockHelper).createSubchannel(eq(new EquivalentAddressGroup(socketAddresses)),
         eq(Attributes.EMPTY));
     inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());

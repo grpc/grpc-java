@@ -99,7 +99,7 @@ public class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     }
 
     @Override
-    public void handleResolvedAddresses(
+    public void handleResolvedAddressGroups(
         List<EquivalentAddressGroup> servers, Attributes attributes) {
       Set<EquivalentAddressGroup> currentAddrs = subchannels.keySet();
       Set<EquivalentAddressGroup> latestAddrs = stripAttrs(servers);

@@ -372,7 +372,7 @@ public abstract class AbstractManagedChannelImplBuilder
 
         @Override
         public void start(final Listener listener) {
-          listener.onUpdate(
+          listener.onAddresses(
               Collections.singletonList(new EquivalentAddressGroup(address)),
               Attributes.EMPTY);
         }

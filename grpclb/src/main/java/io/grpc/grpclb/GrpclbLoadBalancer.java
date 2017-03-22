@@ -166,7 +166,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   }
 
   @Override
-  public void handleResolvedAddresses(
+  public void handleResolvedAddressGroups(
       List<EquivalentAddressGroup> updatedServers, Attributes attributes) {
     LbPolicy newLbPolicy = attributes.get(GrpclbConstants.ATTR_LB_POLICY);
     // LB addresses and backend addresses are treated separately
@@ -182,7 +182,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     }
 
     if (newBackendServers.isEmpty()) {
-      // handleResolvedAddresses()'s javadoc has guaranteed updatedServers is never empty.
+      // handleResolvedAddressGroups()'s javadoc has guaranteed updatedServers is never empty.
       checkState(!newLbAddressGroups.isEmpty(),
           "No backend address nor LB address.  updatedServers=%s", updatedServers);
       if (newLbPolicy != LbPolicy.GRPCLB) {
@@ -222,7 +222,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       case PICK_FIRST:
       case ROUND_ROBIN:
         checkNotNull(delegate, "delegate should not be null. newLbPolicy=" + newLbPolicy);
-        delegate.handleResolvedAddresses(newBackendServers, attributes);
+        delegate.handleResolvedAddressGroups(newBackendServers, attributes);
         break;
       case GRPCLB:
         if (newLbAddressGroups.isEmpty()) {

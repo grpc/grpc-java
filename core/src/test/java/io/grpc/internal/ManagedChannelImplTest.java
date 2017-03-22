@@ -512,7 +512,7 @@ public class ManagedChannelImplTest {
     createChannel(nameResolverFactory, NO_INTERCEPTOR);
 
     verify(mockLoadBalancerFactory).newLoadBalancer(any(Helper.class));
-    doThrow(ex).when(mockLoadBalancer).handleResolvedAddresses(
+    doThrow(ex).when(mockLoadBalancer).handleResolvedAddressGroups(
         Matchers.<List<EquivalentAddressGroup>>anyObject(), any(Attributes.class));
 
     // NameResolver returns addresses.
@@ -572,7 +572,7 @@ public class ManagedChannelImplTest {
 
     // Simulate name resolution results
     EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(resolvedAddrs);
-    inOrder.verify(mockLoadBalancer).handleResolvedAddresses(
+    inOrder.verify(mockLoadBalancer).handleResolvedAddressGroups(
         eq(Arrays.asList(addressGroup)), eq(Attributes.EMPTY));
     Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
@@ -655,7 +655,7 @@ public class ManagedChannelImplTest {
 
     // Simulate name resolution results
     EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(resolvedAddrs);
-    inOrder.verify(mockLoadBalancer).handleResolvedAddresses(
+    inOrder.verify(mockLoadBalancer).handleResolvedAddressGroups(
         eq(Arrays.asList(addressGroup)), eq(Attributes.EMPTY));
     Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
@@ -1162,7 +1162,7 @@ public class ManagedChannelImplTest {
       }
 
       void resolved() {
-        listener.onUpdate(servers, Attributes.EMPTY);
+        listener.onAddresses(servers, Attributes.EMPTY);
       }
 
       @Override public void shutdown() {

@@ -62,6 +62,7 @@ import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -740,8 +741,20 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       this.helper = helperImpl;
     }
 
+    @Deprecated
     @Override
-    public void onUpdate(final List<EquivalentAddressGroup> servers, final Attributes config) {
+    public void onUpdate(
+        final List<io.grpc.ResolvedServerInfoGroup> servers, final Attributes config) {
+      ArrayList<EquivalentAddressGroup> eags =
+          new ArrayList<EquivalentAddressGroup>(servers.size());
+      for (io.grpc.ResolvedServerInfoGroup infoGroup : servers) {
+        eags.add(infoGroup.toEquivalentAddressGroup());
+      }
+      onAddresses(eags, config);
+    }
+
+    @Override
+    public void onAddresses(final List<EquivalentAddressGroup> servers, final Attributes config) {
       if (servers.isEmpty()) {
         onError(Status.UNAVAILABLE.withDescription("NameResolver returned an empty list"));
         return;
@@ -755,7 +768,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
               return;
             }
             try {
-              balancer.handleResolvedAddresses(servers, config);
+              balancer.handleResolvedAddressGroups(servers, config);
             } catch (Throwable e) {
               log.log(
                   Level.WARNING, "[" + getLogId() + "] Unexpected exception from LoadBalancer", e);

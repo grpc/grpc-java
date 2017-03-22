@@ -146,7 +146,7 @@ class DnsNameResolver extends NameResolver {
           if (System.getenv("GRPC_PROXY_EXP") != null) {
             EquivalentAddressGroup server =
                 new EquivalentAddressGroup(InetSocketAddress.createUnresolved(host, port));
-            savedListener.onUpdate(Collections.singletonList(server), Attributes.EMPTY);
+            savedListener.onAddresses(Collections.singletonList(server), Attributes.EMPTY);
             return;
           }
 
@@ -172,7 +172,7 @@ class DnsNameResolver extends NameResolver {
             InetAddress inetAddr = inetAddrs[i];
             servers.add(new EquivalentAddressGroup(new InetSocketAddress(inetAddr, port)));
           }
-          savedListener.onUpdate(servers, Attributes.EMPTY);
+          savedListener.onAddresses(servers, Attributes.EMPTY);
         } finally {
           synchronized (DnsNameResolver.this) {
             resolving = false;

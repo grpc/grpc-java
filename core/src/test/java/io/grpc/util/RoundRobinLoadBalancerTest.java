@@ -134,7 +134,7 @@ public class RoundRobinLoadBalancerTest {
   @Test
   public void pickAfterResolved() throws Exception {
     final Subchannel readySubchannel = subchannels.values().iterator().next();
-    loadBalancer.handleResolvedAddresses(servers, affinity);
+    loadBalancer.handleResolvedAddressGroups(servers, affinity);
     loadBalancer.handleSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
 
     verify(mockHelper, times(3)).createSubchannel(eagCaptor.capture(),
@@ -187,7 +187,7 @@ public class RoundRobinLoadBalancerTest {
       }
     }).when(mockHelper).createSubchannel(any(EquivalentAddressGroup.class), any(Attributes.class));
 
-    loadBalancer.handleResolvedAddresses(currentServers, affinity);
+    loadBalancer.handleResolvedAddressGroups(currentServers, affinity);
 
     InOrder inOrder = inOrder(mockHelper);
 
@@ -211,7 +211,7 @@ public class RoundRobinLoadBalancerTest {
             new EquivalentAddressGroup(oldAddr),
             new EquivalentAddressGroup(newAddr));
 
-    loadBalancer.handleResolvedAddresses(latestServers, affinity);
+    loadBalancer.handleResolvedAddressGroups(latestServers, affinity);
 
     verify(newSubchannel, times(1)).requestConnection();
     verify(removedSubchannel, times(1)).shutdown();
@@ -249,7 +249,7 @@ public class RoundRobinLoadBalancerTest {
   @Test
   public void pickAfterStateChange() throws Exception {
     InOrder inOrder = inOrder(mockHelper);
-    loadBalancer.handleResolvedAddresses(servers, Attributes.EMPTY);
+    loadBalancer.handleResolvedAddressGroups(servers, Attributes.EMPTY);
     Subchannel subchannel = loadBalancer.getSubchannels().iterator().next();
     AtomicReference<ConnectivityStateInfo> subchannelStateInfo = subchannel.getAttributes().get(
         STATE_INFO);
@@ -325,7 +325,7 @@ public class RoundRobinLoadBalancerTest {
   @Test
   public void nameResolutionErrorWithActiveChannels() throws Exception {
     final Subchannel readySubchannel = subchannels.values().iterator().next();
-    loadBalancer.handleResolvedAddresses(servers, affinity);
+    loadBalancer.handleResolvedAddressGroups(servers, affinity);
     loadBalancer.handleSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
     loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
 
@@ -349,7 +349,7 @@ public class RoundRobinLoadBalancerTest {
     Subchannel sc2 = subchannelIterator.next();
     Subchannel sc3 = subchannelIterator.next();
 
-    loadBalancer.handleResolvedAddresses(servers, Attributes.EMPTY);
+    loadBalancer.handleResolvedAddressGroups(servers, Attributes.EMPTY);
     verify(sc1, times(1)).requestConnection();
     verify(sc2, times(1)).requestConnection();
     verify(sc3, times(1)).requestConnection();

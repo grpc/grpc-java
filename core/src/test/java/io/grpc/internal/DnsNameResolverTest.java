@@ -149,14 +149,14 @@ public class DnsNameResolverTest {
     MockResolver resolver = new MockResolver(name, 81, answer1, answer2);
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockListener).onUpdate(resultCaptor.capture(), any(Attributes.class));
+    verify(mockListener).onAddresses(resultCaptor.capture(), any(Attributes.class));
     assertEquals(name, resolver.invocations.poll());
     assertAnswerMatches(answer1, 81, resultCaptor.getValue());
     assertEquals(0, fakeClock.numPendingTasks());
 
     resolver.refresh();
     assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockListener, times(2)).onUpdate(resultCaptor.capture(), any(Attributes.class));
+    verify(mockListener, times(2)).onAddresses(resultCaptor.capture(), any(Attributes.class));
     assertEquals(name, resolver.invocations.poll());
     assertAnswerMatches(answer2, 81, resultCaptor.getValue());
     assertEquals(0, fakeClock.numPendingTasks());
@@ -201,7 +201,7 @@ public class DnsNameResolverTest {
     fakeClock.forwardNanos(1);
     assertEquals(0, fakeClock.numPendingTasks());
     assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockListener).onUpdate(resultCaptor.capture(), any(Attributes.class));
+    verify(mockListener).onAddresses(resultCaptor.capture(), any(Attributes.class));
     assertEquals(name, resolver.invocations.poll());
     assertAnswerMatches(answer, 81, resultCaptor.getValue());
 
@@ -229,7 +229,7 @@ public class DnsNameResolverTest {
     assertEquals(1, fakeExecutor.runDueTasks());
     // Refresh cancelled the retry
     assertEquals(0, fakeClock.numPendingTasks());
-    verify(mockListener).onUpdate(resultCaptor.capture(), any(Attributes.class));
+    verify(mockListener).onAddresses(resultCaptor.capture(), any(Attributes.class));
     assertEquals(name, resolver.invocations.poll());
     assertAnswerMatches(answer, 81, resultCaptor.getValue());
 

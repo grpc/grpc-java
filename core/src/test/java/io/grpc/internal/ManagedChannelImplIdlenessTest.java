@@ -173,8 +173,8 @@ public class ManagedChannelImplIdlenessTest {
     verify(mockNameResolver).start(nameResolverListenerCaptor.capture());
     // Simulate new address resolved to make sure the LoadBalancer is correctly linked to
     // the NameResolver.
-    nameResolverListenerCaptor.getValue().onUpdate(servers, Attributes.EMPTY);
-    verify(mockLoadBalancer).handleResolvedAddresses(servers, Attributes.EMPTY);
+    nameResolverListenerCaptor.getValue().onAddresses(servers, Attributes.EMPTY);
+    verify(mockLoadBalancer).handleResolvedAddressGroups(servers, Attributes.EMPTY);
   }
 
   @Test
