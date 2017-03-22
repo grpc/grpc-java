@@ -57,7 +57,7 @@ import org.mockito.MockitoAnnotations;
 public final class KeepAliveManagerTest {
   private final FakeTicker ticker = new FakeTicker();
   private KeepAliveManager keepAliveManager;
-  private KeepAlivePinger keepAlivePinger;
+  @Mock private KeepAlivePinger keepAlivePinger;
   @Mock private ConnectionClientTransport transport;
   @Mock private ScheduledExecutorService scheduler;
 
@@ -73,7 +73,6 @@ public final class KeepAliveManagerTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    keepAlivePinger = new ClientKeepAlivePinger(transport);
     keepAliveManager = new KeepAliveManager(keepAlivePinger, scheduler, ticker, 1000, 2000, false);
   }
 
@@ -96,9 +95,7 @@ public final class KeepAliveManagerTest {
     // Mannually running the Runnable will send the ping. Shutdown task should be scheduled.
     ticker.time = 1000;
     sendPing.run();
-    ArgumentCaptor<ClientTransport.PingCallback> pingCallbackCaptor =
-        ArgumentCaptor.forClass(ClientTransport.PingCallback.class);
-    verify(transport).ping(pingCallbackCaptor.capture(), isA(Executor.class));
+    verify(keepAlivePinger).ping();
     verify(scheduler, times(2)).schedule(isA(Runnable.class), delayCaptor.capture(),
         isA(TimeUnit.class));
     delay = delayCaptor.getValue();
@@ -144,6 +141,8 @@ public final class KeepAliveManagerTest {
 
   @Test
   public void keepAlivePingFails() {
+    keepAliveManager = new KeepAliveManager(
+        new ClientKeepAlivePinger(transport), scheduler, ticker, 1000, 2000, false);
     // Transport becomes active. We should schedule keepalive pings.
     keepAliveManager.onTransportActive();
     ArgumentCaptor<Runnable> sendPingCaptor = ArgumentCaptor.forClass(Runnable.class);
@@ -180,6 +179,8 @@ public final class KeepAliveManagerTest {
 
   @Test
   public void keepAlivePingFailsAfterItTimesOut() {
+    keepAliveManager = new KeepAliveManager(
+        new ClientKeepAlivePinger(transport), scheduler, ticker, 1000, 2000, false);
     // Transport becomes active. We should schedule keepalive pings.
     keepAliveManager.onTransportActive();
     ArgumentCaptor<Runnable> sendPingCaptor = ArgumentCaptor.forClass(Runnable.class);
@@ -223,22 +224,20 @@ public final class KeepAliveManagerTest {
     // Mannually running the Runnable will send the ping. Shutdown task should be scheduled.
     ticker.time = 1000;
     sendPing.run();
-    ArgumentCaptor<ClientTransport.PingCallback> pingCallbackCaptor =
-        ArgumentCaptor.forClass(ClientTransport.PingCallback.class);
-    verify(transport).ping(pingCallbackCaptor.capture(), isA(Executor.class));
-    ClientTransport.PingCallback pingCallback = pingCallbackCaptor.getValue();
+    verify(keepAlivePinger).ping();
     ArgumentCaptor<Runnable> shutdownCaptor = ArgumentCaptor.forClass(Runnable.class);
     verify(scheduler, times(2)).schedule(shutdownCaptor.capture(), isA(Long.class),
         isA(TimeUnit.class));
     Runnable shutdown = shutdownCaptor.getValue();
 
     // We do not receive the ping response. Shutdown runnable runs.
+    // TODO(zdapeng): use FakeClock.ScheduledExecutorService
     ticker.time = 3000;
     shutdown.run();
-    verify(transport).shutdownNow(isA(Status.class));
+    verify(keepAlivePinger).onPingTimeout();
 
     // We receive the ping response too late.
-    pingCallback.onSuccess(3000);
+    keepAliveManager.onDataReceived();
     // No more ping should be scheduled.
     verify(scheduler, times(2)).schedule(isA(Runnable.class), isA(Long.class),
         isA(TimeUnit.class));
@@ -304,11 +303,10 @@ public final class KeepAliveManagerTest {
     doReturn(shutdownFuture)
         .when(scheduler).schedule(isA(Runnable.class), isA(Long.class), isA(TimeUnit.class));
     // Mannually running the Runnable will send the ping. Shutdown task should be scheduled.
+    // TODO(zdapeng): user FakeClock.ScheduledExecutorService
     ticker.time = 1000;
     sendPing.run();
-    ArgumentCaptor<ClientTransport.PingCallback> pingCallbackCaptor =
-        ArgumentCaptor.forClass(ClientTransport.PingCallback.class);
-    verify(transport).ping(pingCallbackCaptor.capture(), isA(Executor.class));
+    verify(keepAlivePinger).ping();
     verify(scheduler, times(2)).schedule(isA(Runnable.class), isA(Long.class), isA(TimeUnit.class));
 
     // Transport becomes idle. No more ping should be scheduled after we receive a ping response.
@@ -326,6 +324,8 @@ public final class KeepAliveManagerTest {
 
   @Test
   public void transportGoesIdleAndPingFails() {
+    keepAliveManager = new KeepAliveManager(
+        new ClientKeepAlivePinger(transport), scheduler, ticker, 1000, 2000, false);
     // Transport becomes active. We should schedule keepalive pings.
     keepAliveManager.onTransportActive();
     ArgumentCaptor<Runnable> sendPingCaptor = ArgumentCaptor.forClass(Runnable.class);
@@ -391,9 +391,7 @@ public final class KeepAliveManagerTest {
     // Mannually running the Runnable will send the ping. Shutdown task should be scheduled.
     ticker.time = 1000;
     sendPing.run();
-    ArgumentCaptor<ClientTransport.PingCallback> pingCallbackCaptor =
-        ArgumentCaptor.forClass(ClientTransport.PingCallback.class);
-    verify(transport).ping(pingCallbackCaptor.capture(), isA(Executor.class));
+    verify(keepAlivePinger).ping();
     verify(scheduler, times(2)).schedule(isA(Runnable.class), isA(Long.class),
         isA(TimeUnit.class));
 
@@ -422,9 +420,7 @@ public final class KeepAliveManagerTest {
     // shutdown scheduled
     verify(scheduler, times(2))
         .schedule(sendPingCaptor.capture(), isA(Long.class), isA(TimeUnit.class));
-    ArgumentCaptor<ClientTransport.PingCallback> pingCallbackCaptor =
-        ArgumentCaptor.forClass(ClientTransport.PingCallback.class);
-    verify(transport).ping(pingCallbackCaptor.capture(), isA(Executor.class));
+    verify(keepAlivePinger).ping();
 
     keepAliveManager.onTransportIdle();
 
