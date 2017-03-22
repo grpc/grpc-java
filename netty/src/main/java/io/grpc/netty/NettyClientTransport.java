@@ -234,7 +234,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     if (enableKeepAlive) {
       keepAliveManager = new KeepAliveManager(
           new ClientKeepAlivePinger(this), channel.eventLoop(), keepAliveDelayNanos,
-          keepAliveTimeoutNanos);
+          keepAliveTimeoutNanos, false);
       keepAliveManager.onTransportStarted();
     }
 

@@ -74,7 +74,7 @@ public final class KeepAliveManagerTest {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     keepAlivePinger = new ClientKeepAlivePinger(transport);
-    keepAliveManager = new KeepAliveManager(keepAlivePinger, scheduler, ticker, 1000, 2000);
+    keepAliveManager = new KeepAliveManager(keepAlivePinger, scheduler, ticker, 1000, 2000, false);
   }
 
   @Test
@@ -266,9 +266,8 @@ public final class KeepAliveManagerTest {
   @Test
   public void transportGoesIdle_doesntCauseIdleWhenEnabled() {
     KeepAlivePinger pinger = mock(KeepAlivePinger.class);
-    doReturn(true).when(pinger).stillPingWhileIdle();
     keepAliveManager.onTransportTermination();
-    keepAliveManager = new KeepAliveManager(pinger, scheduler, ticker, 1000, 2000);
+    keepAliveManager = new KeepAliveManager(pinger, scheduler, ticker, 1000, 2000, true);
     keepAliveManager.onTransportStarted();
 
     // Keepalive scheduling should have started immediately.

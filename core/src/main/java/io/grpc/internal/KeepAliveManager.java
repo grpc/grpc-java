@@ -132,24 +132,25 @@ public class KeepAliveManager {
   /**
    * Creates a KeepAliverManager.
    */
-  public KeepAliveManager(
-      KeepAlivePinger keepAlivePinger, ScheduledExecutorService scheduler,
-      long keepAliveDelayInNanos, long keepAliveTimeoutInNanos) {
+  public KeepAliveManager(KeepAlivePinger keepAlivePinger, ScheduledExecutorService scheduler,
+                          long keepAliveDelayInNanos, long keepAliveTimeoutInNanos,
+                          boolean keepAliveDuringTransportIdle) {
     this(keepAlivePinger, scheduler, SYSTEM_TICKER,
         // Set a minimum cap on keepalive dealy.
-        Math.max(MIN_KEEPALIVE_DELAY_NANOS, keepAliveDelayInNanos), keepAliveTimeoutInNanos);
+        Math.max(MIN_KEEPALIVE_DELAY_NANOS, keepAliveDelayInNanos), keepAliveTimeoutInNanos,
+        keepAliveDuringTransportIdle);
   }
 
   @VisibleForTesting
-  KeepAliveManager(
-      KeepAlivePinger keepAlivePinger, ScheduledExecutorService scheduler, Ticker ticker,
-      long keepAliveDelayInNanos, long keepAliveTimeoutInNanos) {
+  KeepAliveManager(KeepAlivePinger keepAlivePinger, ScheduledExecutorService scheduler,
+                   Ticker ticker, long keepAliveDelayInNanos, long keepAliveTimeoutInNanos,
+                   boolean keepAliveDuringTransportIdle) {
     this.keepAlivePinger = checkNotNull(keepAlivePinger, "keepAlivePinger");
     this.scheduler = checkNotNull(scheduler, "scheduler");
     this.ticker = checkNotNull(ticker, "ticker");
     this.keepAliveDelayInNanos = keepAliveDelayInNanos;
     this.keepAliveTimeoutInNanos = keepAliveTimeoutInNanos;
-    keepAliveDuringTransportIdle = keepAlivePinger.stillPingWhileIdle();;
+    this.keepAliveDuringTransportIdle = keepAliveDuringTransportIdle;
     nextKeepaliveTime = ticker.read() + keepAliveDelayInNanos;
   }
 
@@ -243,12 +244,6 @@ public class KeepAliveManager {
      * Callback when Ping Ack was not received in KEEPALIVE_TIMEOUT. Should shutdown the transport.
      */
     void onPingTimeout();
-
-    /**
-     * Specifies whether the pinger should keep sending keep-alive pings when the transport has no
-     * active RPCs.
-     */
-    boolean stillPingWhileIdle();
   }
 
   /**
@@ -279,11 +274,6 @@ public class KeepAliveManager {
     public void onPingTimeout() {
       transport.shutdownNow(Status.UNAVAILABLE.withDescription(
           "Keepalive failed. The connection is likely gone"));
-    }
-
-    @Override
-    public boolean stillPingWhileIdle() {
-      return false;
     }
   }
 

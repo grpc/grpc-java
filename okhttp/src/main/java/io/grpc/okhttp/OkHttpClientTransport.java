@@ -371,7 +371,8 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     if (enableKeepAlive) {
       scheduler = SharedResourceHolder.get(TIMER_SERVICE);
       keepAliveManager = new KeepAliveManager(
-          new ClientKeepAlivePinger(this), scheduler, keepAliveDelayNanos, keepAliveTimeoutNanos);
+          new ClientKeepAlivePinger(this), scheduler, keepAliveDelayNanos, keepAliveTimeoutNanos,
+          false);
       keepAliveManager.onTransportStarted();
     }
 
