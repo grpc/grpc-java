@@ -35,6 +35,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.netty.channel.ChannelOption.SO_BACKLOG;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
+import io.grpc.ServerStreamTracer;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerTransportListener;
@@ -52,6 +53,7 @@ import io.netty.util.ReferenceCounted;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -76,16 +78,20 @@ class NettyServer implements InternalServer {
   private final int maxMessageSize;
   private final int maxHeaderListSize;
   private final ReferenceCounted eventLoopReferenceCounter = new EventLoopReferenceCounter();
+  private final List<ServerStreamTracer.Factory> streamTracerFactories;
 
-  NettyServer(SocketAddress address, Class<? extends ServerChannel> channelType,
-              @Nullable EventLoopGroup bossGroup, @Nullable EventLoopGroup workerGroup,
-              ProtocolNegotiator protocolNegotiator, int maxStreamsPerConnection,
-              int flowControlWindow, int maxMessageSize, int maxHeaderListSize) {
+  NettyServer(
+      SocketAddress address, Class<? extends ServerChannel> channelType,
+      @Nullable EventLoopGroup bossGroup, @Nullable EventLoopGroup workerGroup,
+      ProtocolNegotiator protocolNegotiator, List<ServerStreamTracer.Factory> streamTracerFactories,
+      int maxStreamsPerConnection, int flowControlWindow, int maxMessageSize,
+      int maxHeaderListSize) {
     this.address = address;
     this.channelType = checkNotNull(channelType, "channelType");
     this.bossGroup = bossGroup;
     this.workerGroup = workerGroup;
     this.protocolNegotiator = checkNotNull(protocolNegotiator, "protocolNegotiator");
+    this.streamTracerFactories = checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.usingSharedBossGroup = bossGroup == null;
     this.usingSharedWorkerGroup = workerGroup == null;
     this.maxStreamsPerConnection = maxStreamsPerConnection;
@@ -123,8 +129,9 @@ class NettyServer implements InternalServer {
     b.childHandler(new ChannelInitializer<Channel>() {
       @Override
       public void initChannel(Channel ch) throws Exception {
-        NettyServerTransport transport = new NettyServerTransport(ch, protocolNegotiator,
-            maxStreamsPerConnection, flowControlWindow, maxMessageSize, maxHeaderListSize);
+        NettyServerTransport transport =
+            new NettyServerTransport(ch, protocolNegotiator, streamTracerFactories,
+                maxStreamsPerConnection, flowControlWindow, maxMessageSize, maxHeaderListSize);
         ServerTransportListener transportListener;
         // This is to order callbacks on the listener, not to guard access to channel.
         synchronized (NettyServer.this) {

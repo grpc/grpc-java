@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
+import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.GrpcUtil;
 import io.netty.channel.EventLoopGroup;
@@ -47,6 +48,7 @@ import io.netty.handler.ssl.SslContext;
 import java.io.File;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.List;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
@@ -229,15 +231,16 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
 
   @Override
   @CheckReturnValue
-  protected NettyServer buildTransportServer() {
+  protected NettyServer buildTransportServer(
+      List<ServerStreamTracer.Factory> streamTracerFactories) {
     ProtocolNegotiator negotiator = protocolNegotiator;
     if (negotiator == null) {
       negotiator = sslContext != null ? ProtocolNegotiators.serverTls(sslContext) :
               ProtocolNegotiators.serverPlaintext();
     }
     return new NettyServer(address, channelType, bossEventLoopGroup, workerEventLoopGroup,
-        negotiator, maxConcurrentCallsPerConnection, flowControlWindow, maxMessageSize,
-        maxHeaderListSize);
+        negotiator, streamTracerFactories, maxConcurrentCallsPerConnection, flowControlWindow,
+        maxMessageSize, maxHeaderListSize);
   }
 
   @Override
