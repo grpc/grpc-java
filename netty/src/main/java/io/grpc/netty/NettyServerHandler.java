@@ -300,6 +300,16 @@ class NettyServerHandler extends AbstractNettyHandler {
     }
   }
 
+  @VisibleForTesting
+  KeepAliveManager getKeepAliveManagerForTest() {
+    return keepAliveManager;
+  }
+
+  @VisibleForTesting
+  void setKeepAliveManagerForTest(KeepAliveManager keepAliveManager) {
+    this.keepAliveManager = keepAliveManager;
+  }
+
   /**
    * Handler for the Channel shutting down.
    */
