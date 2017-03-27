@@ -43,6 +43,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import io.grpc.Attributes;
+import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
@@ -82,7 +83,12 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       public PickResult pickSubchannel(PickSubchannelArgs args) {
         return PickResult.withNoResult();
       }
-    };
+
+    @Override
+    public ConnectivityState getState() {
+      return ConnectivityState.CONNECTING;
+    }
+  };
 
   private final LogId logId = LogId.allocate(getClass().getName());
 
@@ -454,7 +460,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       }
     } else {
       logger.log(Level.FINE, "[{0}] Using list {1}", new Object[] {logId, resultList});
-      maybeUpdatePicker(new RoundRobinPicker(resultList));
+      maybeUpdatePicker(new RoundRobinPicker(resultList, READY));
     }
   }
 
@@ -500,6 +506,11 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       return result;
+    }
+
+    @Override
+    public ConnectivityState getState() {
+      return ConnectivityState.TRANSIENT_FAILURE;
     }
   }
 
@@ -559,10 +570,12 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   static final class RoundRobinPicker extends SubchannelPicker {
     final List<RoundRobinEntry> list;
     private int index;
+    final ConnectivityState state;
 
-    RoundRobinPicker(List<RoundRobinEntry> resultList) {
+    RoundRobinPicker(List<RoundRobinEntry> resultList, ConnectivityState state) {
       checkArgument(!resultList.isEmpty(), "resultList is empty");
       list = resultList;
+      this.state = state;
     }
 
     @Override
@@ -576,6 +589,11 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
         result.updateHeaders(args.getHeaders());
         return result.result;
       }
+    }
+
+    @Override
+    public ConnectivityState getState() {
+      return state;
     }
   }
 }

@@ -193,7 +193,7 @@ public class RoundRobinLoadBalancerTest {
 
     inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
     Picker picker = pickerCaptor.getValue();
-    assertNull(picker.getStatus());
+    assertThat(picker.getState()).isEqualTo(ConnectivityState.READY);
     assertThat(picker.getList()).containsExactly(removedSubchannel, oldSubchannel);
 
     verify(removedSubchannel, times(1)).requestConnection();
@@ -224,7 +224,7 @@ public class RoundRobinLoadBalancerTest {
     inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
 
     picker = pickerCaptor.getValue();
-    assertNull(picker.getStatus());
+    assertThat(picker.getState()).isEqualTo(ConnectivityState.READY);
     assertThat(picker.getList()).containsExactly(oldSubchannel, newSubchannel);
 
     verifyNoMoreInteractions(mockHelper);
@@ -260,9 +260,7 @@ public class RoundRobinLoadBalancerTest {
     loadBalancer.handleSubchannelState(subchannel,
         ConnectivityStateInfo.forNonError(ConnectivityState.READY));
     inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
-    assertNull(pickerCaptor.getValue().getStatus());
-    assertThat(subchannelStateInfo.get()).isEqualTo(
-        ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    assertThat(pickerCaptor.getValue().getState()).isEqualTo(ConnectivityState.READY);
 
     Status error = Status.UNKNOWN.withDescription("¯\\_(ツ)_//¯");
     loadBalancer.handleSubchannelState(subchannel,
@@ -270,12 +268,12 @@ public class RoundRobinLoadBalancerTest {
     assertThat(subchannelStateInfo.get()).isEqualTo(
         ConnectivityStateInfo.forTransientFailure(error));
     inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
-    assertNull(pickerCaptor.getValue().getStatus());
+    assertThat(pickerCaptor.getValue().getState()).isEqualTo(ConnectivityState.IDLE);
 
     loadBalancer.handleSubchannelState(subchannel,
         ConnectivityStateInfo.forNonError(ConnectivityState.IDLE));
     inOrder.verify(mockHelper).updatePicker(pickerCaptor.capture());
-    assertNull(pickerCaptor.getValue().getStatus());
+    assertThat(pickerCaptor.getValue().getState()).isEqualTo(ConnectivityState.IDLE);
     assertThat(subchannelStateInfo.get()).isEqualTo(
         ConnectivityStateInfo.forNonError(ConnectivityState.IDLE));
 
@@ -291,8 +289,8 @@ public class RoundRobinLoadBalancerTest {
     Subchannel subchannel1 = mock(Subchannel.class);
     Subchannel subchannel2 = mock(Subchannel.class);
 
-    Picker picker = new Picker(Collections.unmodifiableList(
-        Lists.<Subchannel>newArrayList(subchannel, subchannel1, subchannel2)), null);
+    Picker picker = new Picker(null, Collections.unmodifiableList(
+        Lists.newArrayList(subchannel, subchannel1, subchannel2)));
 
     assertThat(picker.getList()).containsExactly(subchannel, subchannel1, subchannel2);
 
@@ -304,7 +302,8 @@ public class RoundRobinLoadBalancerTest {
 
   @Test
   public void pickerEmptyList() throws Exception {
-    Picker picker = new Picker(Lists.<Subchannel>newArrayList(), Status.UNKNOWN);
+    Picker picker = new Picker(ConnectivityStateInfo.forTransientFailure(Status.UNKNOWN),
+        Lists.<Subchannel>newArrayList());
 
     assertEquals(null, picker.pickSubchannel(mockArgs).getSubchannel());
     assertEquals(Status.UNKNOWN,

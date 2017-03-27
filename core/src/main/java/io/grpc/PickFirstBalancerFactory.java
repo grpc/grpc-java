@@ -165,5 +165,10 @@ public final class PickFirstBalancerFactory extends LoadBalancer.Factory {
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       return result;
     }
+
+    @Override
+    public ConnectivityState getState() {
+      return null;
+    }
   }
 }

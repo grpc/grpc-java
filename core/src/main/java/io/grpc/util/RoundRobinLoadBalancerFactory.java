@@ -32,6 +32,7 @@
 package io.grpc.util;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
@@ -194,19 +195,38 @@ public class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     }
 
     /**
-     * If all subchannels are TRANSIENT_FAILURE, return the Status associated with an arbitrary
-     * subchannel otherwise, return null.
+     * Returns aggregated state.
+     *
+     * <p>If there is at least one {@code READY}, the aggregated state should be {@code READY}.
+     * Otherwise, if there is at least one {@code CONNECTING}, the aggregated state should be {@code
+     * CONNECTING}. Otherwise, if there is at least one {@code IDLE}, the aggregated state should be
+     * {@code IDLE}.
      */
     @Nullable
     private ConnectivityStateInfo getAggregatedState() {
-      ConnectivityStateInfo stateInfo = null;
+      // TODO(lukaszx0): this could be extracted to a helper class
+      Map<ConnectivityState, Integer> stateIndex = new HashMap<ConnectivityState, Integer>() {
+        {
+          put(READY, 0);
+          put(CONNECTING, 0);
+          put(IDLE, 0);
+        }
+      };
       for (Subchannel subchannel : getSubchannels()) {
-        stateInfo = getSubchannelStateInfoRef(subchannel).get();
-        if (stateInfo.getState() != TRANSIENT_FAILURE) {
-          return stateInfo;
+        ConnectivityState state = getSubchannelStateInfoRef(subchannel).get().getState();
+        Integer numChann = stateIndex.get(state);
+        if (numChann != null) {
+          stateIndex.put(state, ++numChann);
         }
       }
-      return stateInfo;
+      if (stateIndex.get(READY) > 0) {
+        return ConnectivityStateInfo.forNonError(READY);
+      } else if (stateIndex.get(CONNECTING) > 0) {
+        return ConnectivityStateInfo.forNonError(CONNECTING);
+      } else if (stateIndex.get(IDLE) > 0) {
+        return ConnectivityStateInfo.forNonError(IDLE);
+      }
+      return ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE);
     }
 
     @VisibleForTesting
