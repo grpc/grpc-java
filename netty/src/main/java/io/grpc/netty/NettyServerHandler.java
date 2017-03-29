@@ -565,8 +565,20 @@ class NettyServerHandler extends AbstractNettyHandler {
 
     @Override
     public void onPingTimeout() {
-      ctx.channel().writeAndFlush(new ForcefulCloseCommand(
-          Status.UNAVAILABLE.withDescription("Keepalive failed. The connection is likely gone")));
+      try {
+        forcefulClose(
+            ctx,
+            new ForcefulCloseCommand(Status.UNAVAILABLE
+                .withDescription("Keepalive failed. The connection is likely gone")),
+            ctx.newPromise());
+      } catch (Exception ex) {
+        try {
+          exceptionCaught(ctx, ex);
+        } catch (Exception ex2) {
+          logger.log(Level.WARNING, "Exception while propagating exception", ex2);
+          logger.log(Level.WARNING, "Original failure", ex);
+        }
+      }
     }
   }
 }
