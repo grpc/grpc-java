@@ -60,7 +60,7 @@ class NettyServerTransport implements ServerTransport {
   private final int maxMessageSize;
   private final int maxHeaderListSize;
   // TODO(zdapeng): allow custom keep alive config values by NettyServerBuilder
-  private final long keepAliveTimeInNanos = TimeUnit.NANOSECONDS.convert(2L, TimeUnit.HOURS);
+  private final long keepAliveTimeInNanos = Long.MAX_VALUE; // this disables keepalive
   private final long keepAliveTimeoutInNanos = TimeUnit.NANOSECONDS.convert(20L, TimeUnit.SECONDS);
 
   NettyServerTransport(Channel channel, ProtocolNegotiator protocolNegotiator, int maxStreams,
