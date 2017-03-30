@@ -237,36 +237,37 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   }
 
   /**
-   * Sets a custom KEEPALIVE_TIME. An unreasonably small value will be bumped to a reasonable value,
-   * and {@code Long.MAX_VALUE} nano seconds or an unreasonably large value will disable keep alive.
+   * Sets a custom keepalive time, the delay time for sending next keepalive ping.An unreasonably
+   * small value will be bumped to a reasonable value, and {@code Long.MAX_VALUE} nano seconds or an
+   * unreasonably large value will disable keepalive.
    *
    * @since 1.3.0
    */
   public NettyServerBuilder keepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
-    checkArgument(keepAliveTime > 0L, "KEEPALIVE_TIME must be positive");
+    checkArgument(keepAliveTime > 0L, "keepalive time must be positive");
     keepAliveTimeInNanos = timeUnit.toNanos(keepAliveTime);
     if (keepAliveTimeInNanos >= AS_LARGE_AS_INFINITE) {
-      // Bump KEEPALIVE_TIME to infinite. This disables keep alive.
+      // Bump keepalive time to infinite. This disables keep alive.
       keepAliveTimeInNanos = Long.MAX_VALUE;
     }
     if (keepAliveTimeInNanos < MIN_KEEPALIVE_TIME_NANO) {
-      // Bump KEEPALIVE_TIME.
+      // Bump keepalive time.
       keepAliveTimeInNanos = MIN_KEEPALIVE_TIME_NANO;
     }
     return this;
   }
 
   /**
-   * Sets a custom KEEPALIVE_TIMEOUT. An unreasonably small value will be bumped to a reasonable
-   * value. KEEPALIVE_TIMEOUT must be much smaller than KEEPALIVE_TIME.
+   * Sets a custom keepalive timeout, the timeout for keepalive ping requests. An unreasonably small
+   * value will be bumped to a reasonable value.
    *
    * @since 1.3.0
    */
   public NettyServerBuilder keepAliveTimeout(long keepAliveTimeout, TimeUnit timeUnit) {
-    checkArgument(keepAliveTimeout > 0L, "KEEPALIVE_TIMEOUT must be positive");
+    checkArgument(keepAliveTimeout > 0L, "keepalive timeout must be positive");
     keepAliveTimeoutInNanos = timeUnit.toNanos(keepAliveTimeout);
     if (keepAliveTimeoutInNanos < MIN_KEEPALIVE_TIMEOUT_NANO) {
-      // Bump KEEPALIVE_TIMEOUT.
+      // Bump keepalive timeout.
       keepAliveTimeoutInNanos = MIN_KEEPALIVE_TIMEOUT_NANO;
     }
     return this;
@@ -275,10 +276,6 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   @Override
   @CheckReturnValue
   protected NettyServer buildTransportServer() {
-    checkArgument(
-        keepAliveTimeoutInNanos * 2L < keepAliveTimeInNanos,
-        "KEEPALIVE_TIMEOUT must be much smaller than KEEPALIVE_TIME");
-
     ProtocolNegotiator negotiator = protocolNegotiator;
     if (negotiator == null) {
       negotiator = sslContext != null ? ProtocolNegotiators.serverTls(sslContext) :

@@ -70,13 +70,18 @@ public class NettyServerBuilderTest {
   }
 
   @Test
-  public void failIfKeepAliveTimeoutNotMuchSmallerThanKeepAliveTime() {
-    NettyServerBuilder builder = NettyServerBuilder.forPort(8080)
-        .keepAliveTime(10L, TimeUnit.HOURS)
-        .keepAliveTimeout(7L, TimeUnit.HOURS);
-
+  public void failIfKeepAliveTimeNegative() {
     thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("KEEPALIVE_TIMEOUT must be much smaller than KEEPALIVE_TIME");
-    builder.build();
+    thrown.expectMessage("keepalive time must be positive");
+
+    NettyServerBuilder.forPort(8080).keepAliveTime(-10L, TimeUnit.HOURS);
+  }
+
+  @Test
+  public void failIfKeepAliveTimeoutNegative() {
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("keepalive timeout must be positive");
+
+    NettyServerBuilder.forPort(8080).keepAliveTimeout(-10L, TimeUnit.HOURS);
   }
 }
