@@ -238,9 +238,9 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   }
 
   /**
-   * Sets a custom keepalive time, the delay time for sending next keepalive ping.An unreasonably
-   * small value will be bumped to a reasonable value, and {@code Long.MAX_VALUE} nano seconds or an
-   * unreasonably large value will disable keepalive.
+   * Sets a custom keepalive time, the delay time for sending next keepalive ping. An unreasonably
+   * small value might be increased, and {@code Long.MAX_VALUE} nano seconds or an unreasonably
+   * large value will disable keepalive.
    *
    * @since 1.3.0
    */
@@ -260,7 +260,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
 
   /**
    * Sets a custom keepalive timeout, the timeout for keepalive ping requests. An unreasonably small
-   * value will be bumped to a reasonable value.
+   * value might be increased.
    *
    * @since 1.3.0
    */
