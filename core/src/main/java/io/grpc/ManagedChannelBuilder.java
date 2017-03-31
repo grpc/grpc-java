@@ -193,8 +193,9 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>In idle mode the channel shuts down all connections, the NameResolver and the
    * LoadBalancer. A new RPC would take the channel out of idle mode. A channel starts in idle mode.
    *
-   * <p>By default the channel will never go to idle mode after it leaves the initial idle
-   * mode.
+   * <p>By default the channel will not actively go idle after it leaves the initial idle mode.
+   * But there are ways for a channel to go idle, like via I/O errors and if directed by a server
+   * (i.e., GOAWAY).
    *
    * <p>This is an advisory option. Do not rely on any specific behavior related to this option.
    */
