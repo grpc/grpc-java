@@ -173,7 +173,8 @@ class NettyClientTransport implements ConnectionClientTransport {
           false);
     }
 
-    handler = newHandler(lifecycleManager, keepAliveManager);
+    handler = NettyClientHandler.newHandler(lifecycleManager, keepAliveManager, flowControlWindow,
+        maxHeaderListSize, Ticker.systemTicker());
     HandlerSettings.setAutoWindow(handler);
 
     negotiationHandler = negotiator.newHandler(handler);
@@ -310,13 +311,5 @@ class NettyClientTransport implements ConnectionClientTransport {
       return shutdownStatus;
     }
     return Utils.statusFromThrowable(t);
-  }
-
-  private NettyClientHandler newHandler(ClientTransportLifecycleManager lifecycleManager,
-      KeepAliveManager keepAliveManager) {
-    // Only use fields initialized before start(); have fields initialized in start() be passed in.
-    // Otherwise it is hard to ensure the fields are initialized in time.
-    return NettyClientHandler.newHandler(lifecycleManager, keepAliveManager, flowControlWindow,
-        maxHeaderListSize, Ticker.systemTicker());
   }
 }
