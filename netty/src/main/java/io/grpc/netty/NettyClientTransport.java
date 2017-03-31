@@ -55,6 +55,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http2.StreamBufferingEncoder.Http2ChannelClosedException;
@@ -165,14 +166,20 @@ class NettyClientTransport implements ConnectionClientTransport {
   public Runnable start(Listener transportListener) {
     lifecycleManager = new ClientTransportLifecycleManager(
         Preconditions.checkNotNull(transportListener, "listener"));
+    EventLoop eventLoop = group.next();
+    if (enableKeepAlive) {
+      keepAliveManager = new KeepAliveManager(
+          new ClientKeepAlivePinger(this), eventLoop, keepAliveDelayNanos, keepAliveTimeoutNanos,
+          false);
+    }
 
-    handler = newHandler();
+    handler = newHandler(lifecycleManager, keepAliveManager);
     HandlerSettings.setAutoWindow(handler);
 
     negotiationHandler = negotiator.newHandler(handler);
 
     Bootstrap b = new Bootstrap();
-    b.group(group);
+    b.group(eventLoop);
     b.channel(channelType);
     if (NioSocketChannel.class.isAssignableFrom(channelType)) {
       b.option(SO_KEEPALIVE, true);
@@ -231,10 +238,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       }
     });
 
-    if (enableKeepAlive) {
-      keepAliveManager = new KeepAliveManager(
-          new ClientKeepAlivePinger(this), channel.eventLoop(), keepAliveDelayNanos,
-          keepAliveTimeoutNanos, false);
+    if (keepAliveManager != null) {
       keepAliveManager.onTransportStarted();
     }
 
@@ -308,7 +312,10 @@ class NettyClientTransport implements ConnectionClientTransport {
     return Utils.statusFromThrowable(t);
   }
 
-  private NettyClientHandler newHandler() {
+  private NettyClientHandler newHandler(ClientTransportLifecycleManager lifecycleManager,
+      KeepAliveManager keepAliveManager) {
+    // Only use fields initialized before start(); have fields initialized in start() be passed in.
+    // Otherwise it is hard to ensure the fields are initialized in time.
     return NettyClientHandler.newHandler(lifecycleManager, keepAliveManager, flowControlWindow,
         maxHeaderListSize, Ticker.systemTicker());
   }
