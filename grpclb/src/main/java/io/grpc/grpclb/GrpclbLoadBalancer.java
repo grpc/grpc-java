@@ -478,6 +478,20 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       return result;
     }
+
+    @Override
+    public int hashCode() {
+      return result.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      if (!(other instanceof ErrorPicker)) {
+        return false;
+      }
+      ErrorPicker that = (ErrorPicker) other;
+      return result.equals(that.result);
+    }
   }
 
   @VisibleForTesting
@@ -553,6 +567,20 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
         result.updateHeaders(args.getHeaders());
         return result.result;
       }
+    }
+
+    @Override
+    public int hashCode() {
+      return list.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      if (!(other instanceof RoundRobinPicker)) {
+        return false;
+      }
+      RoundRobinPicker that = (RoundRobinPicker) other;
+      return list.equals(that.list);
     }
   }
 }

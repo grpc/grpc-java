@@ -39,6 +39,7 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -274,6 +275,15 @@ public class GrpclbLoadBalancerTest {
     ErrorPicker picker = new ErrorPicker(error);
     assertSame(error, picker.pickSubchannel(mockArgs).getStatus());
     verifyNoMoreInteractions(mockArgs);
+
+    // Test equality check
+    ErrorPicker picker2 = new ErrorPicker(error);
+    ErrorPicker picker3 = new ErrorPicker(Status.CANCELLED);
+    assertEquals(picker, picker2);
+    assertEquals(picker.hashCode(), picker2.hashCode());
+    assertNotEquals(picker, picker3);
+    assertNotEquals(picker2, picker3);
+    assertNotEquals(picker, GrpclbLoadBalancer.BUFFER_PICKER);
   }
 
   @Test
@@ -283,8 +293,7 @@ public class GrpclbLoadBalancerTest {
     RoundRobinEntry r2 = new RoundRobinEntry(subchannel, "LBTOKEN0001");
     RoundRobinEntry r3 = new RoundRobinEntry(subchannel, "LBTOKEN0002");
 
-    List<RoundRobinEntry> list = Arrays.asList(r1, r2, r3);
-    RoundRobinPicker picker = new RoundRobinPicker(list);
+    RoundRobinPicker picker = new RoundRobinPicker(Arrays.asList(r1, r2, r3));
 
     PickSubchannelArgs args1 = mock(PickSubchannelArgs.class);
     Metadata headers1 = new Metadata();
@@ -315,6 +324,15 @@ public class GrpclbLoadBalancerTest {
     assertSame(r1.result, picker.pickSubchannel(args4));
     verify(args4).getHeaders();
     assertFalse(headers4.containsKey(GrpclbLoadBalancer.TOKEN_KEY));
+
+    // Test equality check
+    RoundRobinPicker picker2 = new RoundRobinPicker(Arrays.asList(r2, r3, r1));
+    RoundRobinPicker picker3 = new RoundRobinPicker(Arrays.asList(r1, r2, r3));
+    assertEquals(picker, picker3);
+    assertEquals(picker.hashCode(), picker3.hashCode());
+    assertNotEquals(picker, picker2);
+    assertNotEquals(picker2, picker3);
+    assertNotEquals(picker, GrpclbLoadBalancer.BUFFER_PICKER);
 
     verify(subchannel, never()).getAttributes();
   }

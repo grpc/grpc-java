@@ -413,6 +413,7 @@ public class ManagedChannelImplTest {
 
   @Test
   public void shutdownNowWithMultipleOobChannels() {
+    // TODO(zhangkun83): write it
   }
 
   @Test
@@ -478,6 +479,31 @@ public class ManagedChannelImplTest {
     verify(mockCallListener, never()).onClose(same(Status.CANCELLED), same(trailers));
     assertEquals(1, callExecutor.runDueTasks());
     verify(mockCallListener).onClose(same(Status.CANCELLED), same(trailers));
+  }
+
+  @Test
+  public void skipSamePicker() {
+    createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, new Metadata());
+
+    SubchannelPicker picker1 = mock(SubchannelPicker.class);
+    SubchannelPicker picker2 = mock(SubchannelPicker.class);
+    when(picker1.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withNoResult());
+    when(picker2.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withNoResult());
+
+    helper.updatePicker(picker1);
+    verify(picker1).pickSubchannel(any(PickSubchannelArgs.class));
+
+    helper.updatePicker(picker1);
+
+    helper.updatePicker(picker2);
+    verify(picker2).pickSubchannel(any(PickSubchannelArgs.class));
+
+    // The second update using picker1 was ignored, thus picker1 was used only once.
+    verify(picker1).pickSubchannel(any(PickSubchannelArgs.class));
   }
 
   @Test

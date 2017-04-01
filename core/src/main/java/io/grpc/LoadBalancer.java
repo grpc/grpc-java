@@ -423,6 +423,9 @@ public abstract class LoadBalancer {
      * <p>The channel will hold the picker and use it for all RPCs, until {@code updatePicker()} is
      * called again and a new picker replaces the old one.  If {@code updatePicker()} has never been
      * called, the channel will buffer all RPCs until a picker is provided.
+     *
+     * <p>If the new picker {@link Object#equals equals to} the current one, this update will be
+     * ignored.
      */
     public abstract void updatePicker(SubchannelPicker picker);
 
