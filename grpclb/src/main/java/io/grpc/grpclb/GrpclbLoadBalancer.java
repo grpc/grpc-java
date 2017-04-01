@@ -480,12 +480,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     }
 
     @Override
-    public int hashCode() {
-      return result.hashCode();
-    }
-
-    @Override
-    public boolean equals(Object other) {
+    public boolean isEquivalentTo(SubchannelPicker other) {
       if (!(other instanceof ErrorPicker)) {
         return false;
       }
@@ -570,12 +565,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     }
 
     @Override
-    public int hashCode() {
-      return list.hashCode();
-    }
-
-    @Override
-    public boolean equals(Object other) {
+    public boolean isEquivalentTo(SubchannelPicker other) {
       if (!(other instanceof RoundRobinPicker)) {
         return false;
       }

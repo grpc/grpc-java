@@ -720,7 +720,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       runSerialized(new Runnable() {
           @Override
           public void run() {
-            if (!(picker.equals(subchannelPicker))) {
+            if (!(picker.isEquivalentTo(subchannelPicker))) {
               subchannelPicker = picker;
               delayedTransport.reprocess(picker);
             }

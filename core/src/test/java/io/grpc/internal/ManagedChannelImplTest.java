@@ -482,28 +482,32 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void skipSamePicker() {
+  public void skipEquivalentPicker() {
     createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());
 
     SubchannelPicker picker1 = mock(SubchannelPicker.class);
     SubchannelPicker picker2 = mock(SubchannelPicker.class);
+    SubchannelPicker picker3 = mock(SubchannelPicker.class);
     when(picker1.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withNoResult());
-    when(picker2.pickSubchannel(any(PickSubchannelArgs.class)))
+    // picker1 and picker2 are equivalent
+    when(picker1.isEquivalentTo(same(picker2))).thenReturn(true);
+    when(picker2.isEquivalentTo(same(picker1))).thenReturn(true);
+    when(picker3.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withNoResult());
 
     helper.updatePicker(picker1);
     verify(picker1).pickSubchannel(any(PickSubchannelArgs.class));
 
-    helper.updatePicker(picker1);
-
     helper.updatePicker(picker2);
-    verify(picker2).pickSubchannel(any(PickSubchannelArgs.class));
 
-    // The second update using picker1 was ignored, thus picker1 was used only once.
+    helper.updatePicker(picker3);
+    verify(picker3).pickSubchannel(any(PickSubchannelArgs.class));
+
     verify(picker1).pickSubchannel(any(PickSubchannelArgs.class));
+    verify(picker2, never()).pickSubchannel(any(PickSubchannelArgs.class));
   }
 
   @Test

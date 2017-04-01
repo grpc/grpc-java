@@ -39,7 +39,6 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -279,11 +278,10 @@ public class GrpclbLoadBalancerTest {
     // Test equality check
     ErrorPicker picker2 = new ErrorPicker(error);
     ErrorPicker picker3 = new ErrorPicker(Status.CANCELLED);
-    assertEquals(picker, picker2);
-    assertEquals(picker.hashCode(), picker2.hashCode());
-    assertNotEquals(picker, picker3);
-    assertNotEquals(picker2, picker3);
-    assertNotEquals(picker, GrpclbLoadBalancer.BUFFER_PICKER);
+    assertTrue(picker.isEquivalentTo(picker2));
+    assertFalse(picker.isEquivalentTo(picker3));
+    assertFalse(picker2.isEquivalentTo(picker3));
+    assertFalse(picker.isEquivalentTo(GrpclbLoadBalancer.BUFFER_PICKER));
   }
 
   @Test
@@ -325,14 +323,13 @@ public class GrpclbLoadBalancerTest {
     verify(args4).getHeaders();
     assertFalse(headers4.containsKey(GrpclbLoadBalancer.TOKEN_KEY));
 
-    // Test equality check
+    // Test isEquivalentTo()
     RoundRobinPicker picker2 = new RoundRobinPicker(Arrays.asList(r2, r3, r1));
     RoundRobinPicker picker3 = new RoundRobinPicker(Arrays.asList(r1, r2, r3));
-    assertEquals(picker, picker3);
-    assertEquals(picker.hashCode(), picker3.hashCode());
-    assertNotEquals(picker, picker2);
-    assertNotEquals(picker2, picker3);
-    assertNotEquals(picker, GrpclbLoadBalancer.BUFFER_PICKER);
+    assertTrue(picker.isEquivalentTo(picker3));
+    assertFalse(picker.isEquivalentTo(picker2));
+    assertFalse(picker2.isEquivalentTo(picker3));
+    assertFalse(picker.isEquivalentTo(GrpclbLoadBalancer.BUFFER_PICKER));
 
     verify(subchannel, never()).getAttributes();
   }
