@@ -86,15 +86,21 @@ class KeepAliveEnforcer {
     }
   }
 
+  /**
+   * Reset any counters because PINGs are allowed in response to something sent. Typically called
+   * when sending HEADERS and DATA frames.
+   */
   public void resetCounters() {
     lastValidPingTime = epoch;
     pingStrikes = 0;
   }
 
+  /** There are outstanding RPCs on the transport. */
   public void onTransportActive() {
     hasOutstandingCalls = true;
   }
 
+  /** There are no outstanding RPCs on the transport. */
   public void onTransportIdle() {
     hasOutstandingCalls = false;
   }
@@ -116,7 +122,7 @@ class KeepAliveEnforcer {
 
   @VisibleForTesting
   static class SystemTicker implements Ticker {
-    public static SystemTicker INSTANCE = new SystemTicker();
+    public static final SystemTicker INSTANCE = new SystemTicker();
 
     @Override
     public long nanoTime() {
