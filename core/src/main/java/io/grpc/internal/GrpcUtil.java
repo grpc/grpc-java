@@ -176,7 +176,14 @@ public final class GrpcUtil {
   /**
    * The default timeout in nanos for a keepalive ping request.
    */
-  public static final long DEFAULT_KEEPALIVE_TIMEOUT_NANOS = TimeUnit.MINUTES.toNanos(2);
+  public static final long DEFAULT_KEEPALIVE_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(20L);
+
+  /**
+   * The magic keepalive time value that disables client keepalive.
+   *
+   * @since 1.3.0
+   */
+  public static final long KEEPALIVE_TIME_NANOS_DISABLED = Long.MAX_VALUE;
 
   /**
    * The default delay in nanos for server keepalive.
