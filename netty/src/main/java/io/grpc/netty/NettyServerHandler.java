@@ -561,21 +561,11 @@ class NettyServerHandler extends AbstractNettyHandler {
         ByteBuf debugData = ByteBufUtil.writeAscii(ctx.alloc(), "too_many_pings");
         goAway(ctx, connection().remote().lastStreamCreated(), Http2Error.ENHANCE_YOUR_CALM.code(),
             debugData, ctx.newPromise());
-        flush(ctx);
         Status status = Status.RESOURCE_EXHAUSTED.withDescription("Too many pings from client");
         try {
           forcefulClose(ctx, new ForcefulCloseCommand(status), ctx.newPromise());
-        } catch (Http2Exception ex) {
-          throw ex;
-        } catch (RuntimeException ex) {
-          throw ex;
         } catch (Exception ex) {
-          try {
-            exceptionCaught(ctx, ex);
-          } catch (Exception ex2) {
-            logger.log(Level.WARNING, "Exception while propagating exception", ex2);
-            logger.log(Level.WARNING, "Original failure", ex);
-          }
+          onError(ctx, ex);
         }
       }
     }
