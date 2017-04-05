@@ -474,7 +474,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       }
     }
     // No need to skip ErrorPicker. If the current picker is ErrorPicker, there won't be any pending
-    // stream thus now time is wasted in re-process.
+    // stream thus no time is wasted in re-process.
     currentPicker = picker;
     helper.updatePicker(picker);
   }
