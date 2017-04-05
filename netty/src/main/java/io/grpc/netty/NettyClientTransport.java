@@ -172,7 +172,7 @@ class NettyClientTransport implements ConnectionClientTransport {
 
   @SuppressWarnings("unchecked")
   @Override
-  public Runnable start(final Listener transportListener) {
+  public Runnable start(Listener transportListener) {
     lifecycleManager = new ClientTransportLifecycleManager(
         Preconditions.checkNotNull(transportListener, "listener"));
     EventLoop eventLoop = group.next();
