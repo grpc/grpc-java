@@ -216,14 +216,15 @@ class NettyClientTransport implements ConnectionClientTransport {
         t = new IllegalStateException("Channel is null, but future doesn't have a cause");
       }
       statusExplainingWhyTheChannelIsNull = Utils.statusFromThrowable(t);
+      // Use a Runnable since lifecycleManager calls transportListener
       return new Runnable() {
         @Override
         public void run() {
-          // NOTICE: we are calling lifecycleManager from the event loop. But there isn't really an
-          // event loop in this case, so nothing should be accessing the lifecycleManager. We could
-          // use GlobalEventExecutor (which is what regFuture would use for notifying listeners in
-          // this case), but avoiding on-demand thread creation in an error case seems a good idea
-          // and is probably clearer threading.
+          // NOTICE: we not are calling lifecycleManager from the event loop. But there isn't really
+          // an event loop in this case, so nothing should be accessing the lifecycleManager. We
+          // could use GlobalEventExecutor (which is what regFuture would use for notifying
+          // listeners in this case), but avoiding on-demand thread creation in an error case seems
+          // a good idea and is probably clearer threading.
           lifecycleManager.notifyTerminated(statusExplainingWhyTheChannelIsNull);
         }
       };
