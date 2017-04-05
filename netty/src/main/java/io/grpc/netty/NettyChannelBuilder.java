@@ -34,6 +34,7 @@ package io.grpc.netty;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_DELAY_NANOS;
 import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 
@@ -241,6 +242,34 @@ public final class NettyChannelBuilder
       negotiationType(NegotiationType.PLAINTEXT_UPGRADE);
     }
     return this;
+  }
+
+  /**
+   * Enable keepalive with default delay and timeout.
+   *
+   * @deprecated Please use {@link #keepAliveTime} and {@link #keepAliveTimeout} instead
+   */
+  @Deprecated
+  public final NettyChannelBuilder enableKeepAlive(boolean enable) {
+    if (enable) {
+      return keepAliveTime(DEFAULT_KEEPALIVE_DELAY_NANOS, TimeUnit.NANOSECONDS);
+    }
+    return keepAliveTime(KEEPALIVE_TIME_NANOS_DISABLED, TimeUnit.NANOSECONDS);
+  }
+
+  /**
+   * Enable keepalive with custom delay and timeout.
+   *
+   * @deprecated Please use {@link #keepAliveTime} and {@link #keepAliveTimeout} instead
+   */
+  @Deprecated
+  public final NettyChannelBuilder enableKeepAlive(boolean enable, long keepAliveDelay,
+      TimeUnit delayUnit, long keepAliveTimeout, TimeUnit timeoutUnit) {
+    if (enable) {
+      return keepAliveTime(keepAliveDelay, delayUnit)
+          .keepAliveTimeout(keepAliveTimeout, timeoutUnit);
+    }
+    return keepAliveTime(KEEPALIVE_TIME_NANOS_DISABLED, TimeUnit.NANOSECONDS);
   }
 
   /**
