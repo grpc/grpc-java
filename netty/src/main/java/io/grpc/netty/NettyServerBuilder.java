@@ -302,7 +302,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * connection.
    *
    * @see #denyKeepAliveWithoutCalls()
-   * @see #permitKeepAliveTime()
+   * @see #permitKeepAliveTime(long, TimeUnit)
    * @since 1.3.0
    */
   public NettyServerBuilder permitKeepAliveWithoutCalls() {
@@ -316,7 +316,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * permitting keep-alive. This is the default.
    *
    * @see #permitKeepAliveWithoutCalls()
-   * @see #permitKeepAliveTime()
+   * @see #permitKeepAliveTime(long, TimeUnit)
    * @since 1.3.0
    */
   public NettyServerBuilder denyKeepAliveWithoutCalls() {
