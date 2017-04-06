@@ -251,6 +251,8 @@ public abstract class AbstractManagedChannelImplBuilder
    *
    * <p>By default it returns {@code true}.  If the transport doesn't record stats, it may override
    * this method to return {@code false} so that the builder won't install the Census interceptor.
+   *
+   * <p>If it returns true when it shouldn't be, Census will receive incomplete stats.
    */
   protected boolean recordsStats() {
     return true;

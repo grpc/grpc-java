@@ -54,7 +54,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.timeout;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
@@ -258,10 +257,6 @@ public abstract class AbstractTransportTest {
 
     verify(mockClientStreamListener, timeout(250))
         .closed(eq(Status.CANCELLED), any(Metadata.class));
-    if (metricsExpected()) {
-      verify(clientStreamTracer, timeout(250)).streamClosed(same(Status.CANCELLED));
-      verify(serverStreamTracer, timeout(250)).streamClosed(same(Status.CANCELLED));
-    }
 
     ClientStreamListener mockClientStreamListener2 = mock(ClientStreamListener.class);
 
@@ -275,11 +270,6 @@ public abstract class AbstractTransportTest {
     serverStreamCreation.stream.flush();
 
     verify(mockClientStreamListener2, timeout(250)).headersRead(any(Metadata.class));
-    if (metricsExpected()) {
-      verify(clientStreamTracerFactory, times(2)).newClientStreamTracer(any(Metadata.class));
-      verify(serverStreamTracerFactory, times(2)).newServerStreamTracer(
-          anyString(), any(Metadata.class));
-    }
   }
 
   @Test
@@ -389,11 +379,6 @@ public abstract class AbstractTransportTest {
     assertFalse(serverTransportListener.isTerminated());
 
     clientStream.cancel(Status.CANCELLED);
-
-    if (metricsExpected()) {
-      verify(clientStreamTracer, timeout(TIMEOUT_MS)).streamClosed(Status.CANCELLED);
-      verify(serverStreamTracer, timeout(TIMEOUT_MS)).streamClosed(Status.CANCELLED);
-    }
 
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportTerminated();
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportInUse(false);
@@ -570,15 +555,9 @@ public abstract class AbstractTransportTest {
     StreamCreation serverStreamCreation
         = serverTransportListener.takeStreamOrFail(20 * TIMEOUT_MS, TimeUnit.MILLISECONDS);
     serverStreamCreation.stream.close(Status.OK, new Metadata());
-    if (metricsExpected()) {
-      inOrder.verify(serverStreamTracer).streamClosed(same(Status.OK));
-    }
     verify(mockClientStreamListener, timeout(TIMEOUT_MS))
         .closed(statusCaptor.capture(), any(Metadata.class));
     assertCodeEquals(Status.OK, statusCaptor.getValue());
-    if (metricsExpected()) {
-      inOrder.verify(clientStreamTracer).streamClosed(same(statusCaptor.getValue()));
-    }
   }
 
   @Test
@@ -651,10 +630,6 @@ public abstract class AbstractTransportTest {
     // Verify that the callback has been called only once for true and false respectively
     verify(mockClientTransportListener).transportInUse(true);
     verify(mockClientTransportListener).transportInUse(false);
-    if (metricsExpected()) {
-      verify(clientStreamTracerFactory, times(2)).newClientStreamTracer(any(Metadata.class));
-      verify(clientStreamTracer, timeout(TIMEOUT_MS).times(2)).streamClosed(any(Status.class));
-    }
   }
 
   @Test

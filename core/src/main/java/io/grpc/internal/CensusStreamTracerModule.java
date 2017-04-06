@@ -49,8 +49,8 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
-import io.grpc.ForwardingClientCall;
-import io.grpc.ForwardingClientCallListener;
+import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
+import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
@@ -361,23 +361,13 @@ final class CensusStreamTracerModule {
       }
       final ClientCallTracer tracerFactory =
           newClientCallTracer(parentCtx, method.getFullMethodName());
-      final ClientCall<ReqT, RespT> call =
+      ClientCall<ReqT, RespT> call =
           next.newCall(method, callOptions.withStreamTracerFactory(tracerFactory));
-      return new ForwardingClientCall<ReqT, RespT>() {
+      return new SimpleForwardingClientCall<ReqT, RespT>(call) {
         @Override
-        protected ClientCall<ReqT, RespT> delegate() {
-          return call;
-        }
-
-        @Override
-        public void start(final Listener<RespT> responseListener, Metadata headers) {
+        public void start(Listener<RespT> responseListener, Metadata headers) {
           delegate().start(
-              new ForwardingClientCallListener<RespT>() {
-                @Override
-                protected ClientCall.Listener<RespT> delegate() {
-                  return responseListener;
-                }
-
+              new SimpleForwardingClientCallListener<RespT>(responseListener) {
                 @Override
                 public void onClose(Status status, Metadata trailers) {
                   tracerFactory.callEnded(status);

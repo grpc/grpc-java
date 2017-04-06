@@ -54,7 +54,9 @@ public abstract class ServerStreamTracer extends StreamTracer {
      * <p>Called right before the stream is created
      *
      * @param fullMethodName the fully qualified method name
-     * @param headers the received request headers
+     * @param headers the received request headers.  It can be safely mutated within this method.
+     *        It should not be saved because it is not safe for read or write after the method
+     *        returns.
      */
     public abstract ServerStreamTracer newServerStreamTracer(
         String fullMethodName, Metadata headers);

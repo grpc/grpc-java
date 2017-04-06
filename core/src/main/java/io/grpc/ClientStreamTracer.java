@@ -52,7 +52,9 @@ public abstract class ClientStreamTracer extends StreamTracer {
     /**
      * Creates a {@link ClientStreamTracer} for a new client stream.
      *
-     * @param headers the mutable headers of the stream. It can be safely mutated within this method
+     * @param headers the mutable headers of the stream. It can be safely mutated within this
+     *        method.  It should not be saved because it is not safe for read or write after the
+     *        method returns.
      */
     public abstract ClientStreamTracer newClientStreamTracer(Metadata headers);
   }
