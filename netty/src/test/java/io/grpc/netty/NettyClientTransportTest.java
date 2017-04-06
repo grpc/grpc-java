@@ -297,7 +297,7 @@ public class NettyClientTransportTest {
     NettyClientTransport transport = new NettyClientTransport(
         address, CantConstructChannel.class, new HashMap<ChannelOption<?>, Object>(), group,
         newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
-        GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, authority, null);
+        GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1, authority, null);
     transports.add(transport);
 
     // Should not throw
