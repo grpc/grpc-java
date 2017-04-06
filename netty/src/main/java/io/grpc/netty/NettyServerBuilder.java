@@ -289,6 +289,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    *
    * @see #denyKeepAliveWithoutCalls()
    * @see #permitKeepAliveWithoutCalls()
+   * @since 1.3.0
    */
   public NettyServerBuilder permitKeepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
     checkArgument(keepAliveTime >= 0, "permit keepalive time must be non-negative");
@@ -302,6 +303,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    *
    * @see #denyKeepAliveWithoutCalls()
    * @see #permitKeepAliveTime()
+   * @since 1.3.0
    */
   public NettyServerBuilder permitKeepAliveWithoutCalls() {
     permitKeepAliveWithoutCalls = true;
@@ -315,6 +317,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    *
    * @see #permitKeepAliveWithoutCalls()
    * @see #permitKeepAliveTime()
+   * @since 1.3.0
    */
   public NettyServerBuilder denyKeepAliveWithoutCalls() {
     permitKeepAliveWithoutCalls = false;
