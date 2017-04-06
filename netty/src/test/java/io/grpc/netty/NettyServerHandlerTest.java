@@ -33,6 +33,8 @@ package io.grpc.netty;
 
 import static com.google.common.base.Charsets.UTF_8;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
+import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
+import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
 import static io.grpc.netty.Utils.CONTENT_TYPE_GRPC;
 import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
 import static io.grpc.netty.Utils.HTTP_METHOD;
@@ -560,7 +562,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     return NettyServerHandler.newHandler(frameReader(), frameWriter(), transportListener,
         Arrays.asList(streamTracerFactory), maxConcurrentStreams, flowControlWindow,
         maxHeaderListSize, DEFAULT_MAX_MESSAGE_SIZE,
-        2000L, 100L, permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos);
+        2000L, 100L, MAX_CONNECTION_AGE_NANOS_DISABLED, MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE,
+        permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos);
   }
 
   @Override
