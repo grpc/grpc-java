@@ -77,6 +77,10 @@ class NettyServer implements InternalServer {
   private final int flowControlWindow;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
+  private final long keepAliveTimeInNanos;
+  private final long keepAliveTimeoutInNanos;
+  private final boolean permitKeepAliveWithoutCalls;
+  private final long permitKeepAliveTimeInNanos;
   private final ReferenceCounted eventLoopReferenceCounter = new EventLoopReferenceCounter();
   private final List<ServerStreamTracer.Factory> streamTracerFactories;
 
@@ -84,8 +88,9 @@ class NettyServer implements InternalServer {
       SocketAddress address, Class<? extends ServerChannel> channelType,
       @Nullable EventLoopGroup bossGroup, @Nullable EventLoopGroup workerGroup,
       ProtocolNegotiator protocolNegotiator, List<ServerStreamTracer.Factory> streamTracerFactories,
-      int maxStreamsPerConnection, int flowControlWindow, int maxMessageSize,
-      int maxHeaderListSize) {
+      int maxStreamsPerConnection, int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
+      long keepAliveTimeInNanos, long keepAliveTimeoutInNanos,
+      boolean permitKeepAliveWithoutCalls, long permitKeepAliveTimeInNanos) {
     this.address = address;
     this.channelType = checkNotNull(channelType, "channelType");
     this.bossGroup = bossGroup;
@@ -98,6 +103,10 @@ class NettyServer implements InternalServer {
     this.flowControlWindow = flowControlWindow;
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
+    this.keepAliveTimeInNanos = keepAliveTimeInNanos;
+    this.keepAliveTimeoutInNanos = keepAliveTimeoutInNanos;
+    this.permitKeepAliveWithoutCalls = permitKeepAliveWithoutCalls;
+    this.permitKeepAliveTimeInNanos = permitKeepAliveTimeInNanos;
   }
 
   @Override
@@ -130,8 +139,10 @@ class NettyServer implements InternalServer {
       @Override
       public void initChannel(Channel ch) throws Exception {
         NettyServerTransport transport =
-            new NettyServerTransport(ch, protocolNegotiator, streamTracerFactories,
-                maxStreamsPerConnection, flowControlWindow, maxMessageSize, maxHeaderListSize);
+            new NettyServerTransport(
+                ch, protocolNegotiator, streamTracerFactories, maxStreamsPerConnection,
+                flowControlWindow, maxMessageSize, maxHeaderListSize, keepAliveTimeInNanos,
+                keepAliveTimeoutInNanos, permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos);
         ServerTransportListener transportListener;
         // This is to order callbacks on the listener, not to guard access to channel.
         synchronized (NettyServer.this) {
