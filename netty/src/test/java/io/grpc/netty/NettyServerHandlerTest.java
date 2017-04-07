@@ -535,12 +535,11 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   @Test
   public void maxConnectionAge() throws Exception {
-    maxConnectionAgeInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
+    maxConnectionAgeInNanos = TimeUnit.MILLISECONDS.toNanos(100L);
     setUp();
 
     assertTrue(channel().isOpen());
 
-    Thread.sleep(5L);
     channel().runPendingTasks();
 
     // GO_AWAY not sent yet
@@ -548,7 +547,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelHandlerContext.class), any(Integer.class), any(Long.class), any(ByteBuf.class),
         any(ChannelPromise.class));
 
-    Thread.sleep(5L);
+    Thread.sleep(100L);
     channel().runPendingTasks();
 
     // GO_AWAY sent
@@ -563,11 +562,11 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   @Test
   public void maxConnectionAgeGrace() throws Exception {
     maxConnectionAgeInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
-    maxConnectionAgeGraceInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
+    maxConnectionAgeGraceInNanos = TimeUnit.MILLISECONDS.toNanos(100L);
     setUp();
     createStream();
 
-    Thread.sleep(15L);
+    Thread.sleep(10L);
     channel().runPendingTasks();
 
     verifyWrite().writeGoAway(
@@ -576,7 +575,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     // channel not closed yet
     assertTrue(channel().isOpen());
 
-    Thread.sleep(15L);
+    Thread.sleep(100L);
     channel().runPendingTasks();
 
     // channel closed

@@ -304,9 +304,10 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   }
 
   /**
-   * Sets a custom grace time for the graceful connection termination when the connection age
-   * exceeds the max connection age. {@code Long.MAX_VALUE} nano seconds or an unreasonably large
-   * value are considered infinite.
+   * Sets a custom grace time for the graceful connection termination after the connection age
+   * exceeds the max connection age. If the connection is still open until the grace time being
+   * expired, it will be terminated with all the streams killed immediately. {@code Long.MAX_VALUE}
+   * nano seconds or an unreasonably large value are considered infinite.
    *
    * @see #maxConnectionAge(long, TimeUnit)
    * @since 1.3.0

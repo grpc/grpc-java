@@ -51,6 +51,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
+import io.grpc.internal.LogExceptionRunnable;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.netty.GrpcHttp2HeadersDecoder.GrpcHttp2ServerHeadersDecoder;
@@ -250,7 +251,7 @@ class NettyServerHandler extends AbstractNettyHandler {
     // init max connection age monitor
     if (maxConnectionAgeInNanos != MAX_CONNECTION_AGE_NANOS_DISABLED) {
       maxConnectionAgeMonitor = ctx.executor().schedule(
-          new Runnable() {
+          new LogExceptionRunnable(new Runnable() {
             @Override
             public void run() {
               // send GO_AWAY
@@ -274,7 +275,7 @@ class NettyServerHandler extends AbstractNettyHandler {
                 gracefulShutdownTimeoutMillis(savedGracefulShutdownTime);
               }
             }
-          },
+          }),
           maxConnectionAgeInNanos,
           TimeUnit.NANOSECONDS);
     }
