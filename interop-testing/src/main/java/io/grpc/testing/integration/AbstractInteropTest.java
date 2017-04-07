@@ -1517,11 +1517,7 @@ public abstract class AbstractInteropTest {
     passed = false;
     while (true) {
       ServerStreamTracerInfo tracerInfo;
-      try {
-        tracerInfo = serverStreamTracers.poll(1, TimeUnit.SECONDS);
-      } catch (InterruptedException e) {
-        throw new RuntimeException(e);
-      }
+      tracerInfo = serverStreamTracers.poll();
       if (tracerInfo == null) {
         break;
       }
@@ -1529,7 +1525,9 @@ public abstract class AbstractInteropTest {
         assertEquals(method, tracerInfo.fullMethodName);
         verify(tracerInfo.tracer).filterContext(any(Context.class));
         ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-        verify(tracerInfo.tracer).streamClosed(statusCaptor.capture());
+        // On the server, streamClosed() may be called after the client receives the final status.
+        // So we use a timeout.
+        verify(tracerInfo.tracer, timeout(1000)).streamClosed(statusCaptor.capture());
         assertEquals(status, statusCaptor.getValue().getCode());
         if (requests != null && responses != null) {
           checkTracerMetrics(tracerInfo.tracer, responses, requests);
