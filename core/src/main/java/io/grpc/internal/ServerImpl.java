@@ -567,10 +567,10 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
           try {
             getListener().messageRead(message);
           } catch (RuntimeException e) {
-            internalClose(Status.fromThrowable(e), new Metadata());
+            internalClose(Status.fromThrowable(e), Status.trailersFromThrowable(e));
             throw e;
           } catch (Error e) {
-            internalClose(Status.fromThrowable(e), new Metadata());
+            internalClose(Status.fromThrowable(e), Status.trailersFromThrowable(e));
             throw e;
           }
         }
@@ -585,10 +585,10 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
           try {
             getListener().halfClosed();
           } catch (RuntimeException e) {
-            internalClose(Status.fromThrowable(e), new Metadata());
+            internalClose(Status.fromThrowable(e), Status.trailersFromThrowable(e));
             throw e;
           } catch (Error e) {
-            internalClose(Status.fromThrowable(e), new Metadata());
+            internalClose(Status.fromThrowable(e), Status.trailersFromThrowable(e));
             throw e;
           }
         }
@@ -619,10 +619,10 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
           try {
             getListener().onReady();
           } catch (RuntimeException e) {
-            internalClose(Status.fromThrowable(e), new Metadata());
+            internalClose(Status.fromThrowable(e), Status.trailersFromThrowable(e));
             throw e;
           } catch (Error e) {
-            internalClose(Status.fromThrowable(e), new Metadata());
+            internalClose(Status.fromThrowable(e), Status.trailersFromThrowable(e));
             throw e;
           }
         }

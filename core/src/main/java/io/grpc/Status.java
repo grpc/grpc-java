@@ -417,20 +417,22 @@ public final class Status {
   /**
    * Extract an error trailers from the causal chain of a {@link Throwable}.
    *
-   * @return the trailers or {@code null} if not found.
+   * @return the trailers or an empty {@link Metadata} if not found.
    */
   @ExperimentalApi
   public static Metadata trailersFromThrowable(Throwable t) {
     Throwable cause = checkNotNull(t, "t");
     while (cause != null) {
       if (cause instanceof StatusException) {
-        return ((StatusException) cause).getTrailers();
+        Metadata trailers = ((StatusException) cause).getTrailers();
+        return (trailers == null) ? new Metadata() : trailers;
       } else if (cause instanceof StatusRuntimeException) {
-        return ((StatusRuntimeException) cause).getTrailers();
+        Metadata trailers = ((StatusRuntimeException) cause).getTrailers();
+        return (trailers == null) ? new Metadata() : trailers;
       }
       cause = cause.getCause();
     }
-    return null;
+    return new Metadata();
   }
 
   static String formatThrowableMessage(Status status) {
