@@ -124,6 +124,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   private int maxHeaderListSize = Integer.MAX_VALUE;
   private boolean permitKeepAliveWithoutCalls = true;
   private long permitKeepAliveTimeInNanos = 0;
+  private long maxConnectionAgeInNanos = MAX_CONNECTION_AGE_NANOS_DISABLED;
+  private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
 
   private class ServerTransportListenerImpl implements ServerTransportListener {
 
@@ -531,6 +533,56 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(Http2Error.ENHANCE_YOUR_CALM.code()), any(ByteBuf.class), any(ChannelPromise.class));
   }
 
+  @Test
+  public void maxConnectionAge() throws Exception {
+    maxConnectionAgeInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
+    setUp();
+
+    assertTrue(channel().isOpen());
+
+    Thread.sleep(5L);
+    channel().runPendingTasks();
+
+    // GO_AWAY not sent yet
+    verifyWrite(never()).writeGoAway(
+        any(ChannelHandlerContext.class), any(Integer.class), any(Long.class), any(ByteBuf.class),
+        any(ChannelPromise.class));
+
+    Thread.sleep(5L);
+    channel().runPendingTasks();
+
+    // GO_AWAY sent
+    verifyWrite().writeGoAway(
+        eq(ctx()), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+
+    // channel closed
+    assertTrue(!channel().isOpen());
+  }
+
+  @Test
+  public void maxConnectionAgeGrace() throws Exception {
+    maxConnectionAgeInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
+    maxConnectionAgeGraceInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
+    setUp();
+    createStream();
+
+    Thread.sleep(15L);
+    channel().runPendingTasks();
+
+    verifyWrite().writeGoAway(
+        eq(ctx()), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+    // channel not closed yet
+    assertTrue(channel().isOpen());
+
+    Thread.sleep(15L);
+    channel().runPendingTasks();
+
+    // channel closed
+    assertTrue(!channel().isOpen());
+  }
+
   private void createStream() throws Exception {
     Http2Headers headers = new DefaultHttp2Headers()
         .method(HTTP_METHOD)
@@ -562,7 +614,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     return NettyServerHandler.newHandler(frameReader(), frameWriter(), transportListener,
         Arrays.asList(streamTracerFactory), maxConcurrentStreams, flowControlWindow,
         maxHeaderListSize, DEFAULT_MAX_MESSAGE_SIZE,
-        2000L, 100L, MAX_CONNECTION_AGE_NANOS_DISABLED, MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE,
+        2000L, 100L, maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
         permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos);
   }
 
