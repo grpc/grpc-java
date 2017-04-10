@@ -534,20 +534,27 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void maxConnectionAge() throws Exception {
-    maxConnectionAgeInNanos = TimeUnit.MILLISECONDS.toNanos(100L);
+  public void noGoAwaySentBeforeMaxConnectionAgeReached() throws Exception {
+    maxConnectionAgeInNanos = TimeUnit.MINUTES.toNanos(30L);
     setUp();
 
-    assertTrue(channel().isOpen());
-
+    Thread.sleep(10L);
     channel().runPendingTasks();
 
     // GO_AWAY not sent yet
     verifyWrite(never()).writeGoAway(
         any(ChannelHandlerContext.class), any(Integer.class), any(Long.class), any(ByteBuf.class),
         any(ChannelPromise.class));
+    assertTrue(channel().isOpen());
+  }
 
-    Thread.sleep(100L);
+  @Test
+  public void maxConnectionAge_goAwaySent() throws Exception {
+    maxConnectionAgeInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
+    setUp();
+    assertTrue(channel().isOpen());
+
+    Thread.sleep(10L);
     channel().runPendingTasks();
 
     // GO_AWAY sent
@@ -560,9 +567,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void maxConnectionAgeGrace() throws Exception {
+  public void maxConnectionAgeGrace_channelStillOpenDuringGracePeriod() throws Exception {
     maxConnectionAgeInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
-    maxConnectionAgeGraceInNanos = TimeUnit.MILLISECONDS.toNanos(100L);
+    maxConnectionAgeGraceInNanos = TimeUnit.MINUTES.toNanos(30L);
     setUp();
     createStream();
 
@@ -572,10 +579,32 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     verifyWrite().writeGoAway(
         eq(ctx()), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
+
+    Thread.sleep(10L);
+    channel().runPendingTasks();
+
     // channel not closed yet
     assertTrue(channel().isOpen());
+  }
 
-    Thread.sleep(100L);
+  @Test
+  public void maxConnectionAgeGrace_channelClosedAfterGracePeriod() throws Exception {
+    maxConnectionAgeInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
+    maxConnectionAgeGraceInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
+    setUp();
+    createStream();
+
+    // runPendingTasks so that GO_AWAY is sent and the forceful shutdown is scheduled
+    Thread.sleep(10L);
+    channel().runPendingTasks();
+
+    verifyWrite().writeGoAway(
+        eq(ctx()), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+    assertTrue(channel().isOpen());
+
+    // need runPendingTasks again so that the forceful shutdown can be executed
+    Thread.sleep(10L);
     channel().runPendingTasks();
 
     // channel closed
