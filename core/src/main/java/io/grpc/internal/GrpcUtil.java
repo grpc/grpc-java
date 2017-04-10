@@ -595,28 +595,27 @@ public final class GrpcUtil {
     }
     if (transport != null) {
       final ClientStreamTracer.Factory streamTracerFactory = result.getStreamTracerFactory();
-      if (streamTracerFactory != null) {
-        return new ClientTransport() {
-          @Override
-          public ClientStream newStream(
-              MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
-            return transport.newStream(
-                method, headers, callOptions.withStreamTracerFactory(streamTracerFactory));
-          }
-
-          @Override
-          public ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers) {
-            return newStream(method, headers, CallOptions.DEFAULT);
-          }
-
-          @Override
-          public void ping(PingCallback callback, Executor executor) {
-            transport.ping(callback, executor);
-          }
-        };
-      } else {
+      if (streamTracerFactory == null) {
         return transport;
       }
+      return new ClientTransport() {
+        @Override
+        public ClientStream newStream(
+            MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
+          return transport.newStream(
+              method, headers, callOptions.withStreamTracerFactory(streamTracerFactory));
+        }
+
+        @Override
+        public ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers) {
+          return newStream(method, headers, CallOptions.DEFAULT);
+        }
+
+        @Override
+        public void ping(PingCallback callback, Executor executor) {
+          transport.ping(callback, executor);
+        }
+      };
     }
     if (!result.getStatus().isOk() && !isWaitForReady) {
       return new FailingClientTransport(result.getStatus());

@@ -340,8 +340,7 @@ public abstract class LoadBalancer {
     }
 
     /**
-     * Equivalent to {@link #withSubchannel(Subchannel, ClientStreamTracer.Factory)
-     * withSubchannel(subchannel, null)}.
+     * Equivalent to {@code withSubchannel(subchannel, null)}.
      */
     public static PickResult withSubchannel(Subchannel subchannel) {
       return withSubchannel(subchannel, null);
