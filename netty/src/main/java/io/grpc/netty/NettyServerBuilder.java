@@ -52,7 +52,6 @@ import java.io.File;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.List;
-import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
@@ -363,12 +362,6 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     if (negotiator == null) {
       negotiator = sslContext != null ? ProtocolNegotiators.serverTls(sslContext) :
               ProtocolNegotiators.serverPlaintext();
-    }
-
-    if (maxConnectionAgeInNanos != MAX_CONNECTION_AGE_NANOS_DISABLED) {
-      // apply a random jitter of +/-10% to max connection age
-      maxConnectionAgeInNanos =
-          (long) ((.9D + new Random().nextDouble() * .2D) * maxConnectionAgeInNanos);
     }
 
     return new NettyServer(address, channelType, bossEventLoopGroup, workerEventLoopGroup,
