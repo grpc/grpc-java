@@ -136,6 +136,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       int maxMessageSize,
       long keepAliveTimeInNanos,
       long keepAliveTimeoutInNanos,
+      long maxConnectionIdleInNanos,
       long maxConnectionAgeInNanos,
       long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls,
@@ -151,7 +152,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         frameReader, frameWriter, transportListener, streamTracerFactories,
         maxStreams, flowControlWindow, maxHeaderListSize, maxMessageSize,
         keepAliveTimeInNanos, keepAliveTimeoutInNanos,
-        MAX_CONNECTION_IDLE_NANOS_DISABLED,
+        maxConnectionIdleInNanos,
         maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
         permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos);
   }
