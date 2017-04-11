@@ -65,6 +65,7 @@ import javax.net.ssl.SSLException;
 public final class NettyServerBuilder extends AbstractServerImplBuilder<NettyServerBuilder> {
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1048576; // 1MiB
 
+  static final long MAX_CONNECTION_IDLE_NANOS_DISABLED = Long.MAX_VALUE;
   static final long MAX_CONNECTION_AGE_NANOS_DISABLED = Long.MAX_VALUE;
   static final long MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE = Long.MAX_VALUE;
 

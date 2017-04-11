@@ -35,6 +35,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
+import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
 import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
 import static io.grpc.netty.Utils.HTTP_METHOD;
 import static io.grpc.netty.Utils.TE_HEADER;
@@ -93,6 +94,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 
 /**
@@ -118,7 +120,11 @@ class NettyServerHandler extends AbstractNettyHandler {
   private boolean teWarningLogged;
   private WriteQueue serverWriteQueue;
   private AsciiString lastKnownAuthority;
+  @CheckForNull
   private KeepAliveManager keepAliveManager;
+  @CheckForNull
+  private MaxConnectionIdleManager maxConnectionIdleManager;
+  @CheckForNull
   private ScheduledFuture<?> maxConnectionAgeMonitor;
 
   static NettyServerHandler newHandler(
@@ -145,6 +151,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         frameReader, frameWriter, transportListener, streamTracerFactories,
         maxStreams, flowControlWindow, maxHeaderListSize, maxMessageSize,
         keepAliveTimeInNanos, keepAliveTimeoutInNanos,
+        MAX_CONNECTION_IDLE_NANOS_DISABLED,
         maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
         permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos);
   }
@@ -160,6 +167,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       int maxMessageSize,
       long keepAliveTimeInNanos,
       long keepAliveTimeoutInNanos,
+      long maxConnectionIdleInNanos,
       long maxConnectionAgeInNanos,
       long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls,
@@ -172,6 +180,9 @@ class NettyServerHandler extends AbstractNettyHandler {
     final Http2Connection connection = new DefaultHttp2Connection(true);
     final KeepAliveEnforcer keepAliveEnforcer = new KeepAliveEnforcer(
         permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos, TimeUnit.NANOSECONDS);
+    final MaxConnectionIdleManager maxConnectionIdleManager =
+        maxConnectionIdleInNanos == MAX_CONNECTION_IDLE_NANOS_DISABLED
+            ? null : new MaxConnectionIdleManager(maxConnectionIdleInNanos);
 
     // Create the local flow controller configured to auto-refill the connection window.
     connection.local().flowController(
@@ -195,6 +206,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         decoder, encoder, settings,
         maxMessageSize,
         keepAliveTimeInNanos, keepAliveTimeoutInNanos,
+        maxConnectionIdleManager,
         maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
         keepAliveEnforcer);
   }
@@ -208,6 +220,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       int maxMessageSize,
       long keepAliveTimeInNanos,
       long keepAliveTimeoutInNanos,
+      @Nullable final MaxConnectionIdleManager maxConnectionIdleManager,
       long maxConnectionAgeInNanos,
       long maxConnectionAgeGraceInNanos,
       final KeepAliveEnforcer keepAliveEnforcer) {
@@ -218,6 +231,9 @@ class NettyServerHandler extends AbstractNettyHandler {
       public void onStreamActive(Http2Stream stream) {
         if (connection.numActiveStreams() == 1) {
           keepAliveEnforcer.onTransportActive();
+          if (maxConnectionIdleManager != null) {
+            maxConnectionIdleManager.onTransportActive();
+          }
         }
       }
 
@@ -225,6 +241,9 @@ class NettyServerHandler extends AbstractNettyHandler {
       public void onStreamClosed(Http2Stream stream) {
         if (connection.numActiveStreams() == 0) {
           keepAliveEnforcer.onTransportIdle();
+          if (maxConnectionIdleManager != null) {
+            maxConnectionIdleManager.onTransportIdle();
+          }
         }
       }
     });
@@ -233,6 +252,7 @@ class NettyServerHandler extends AbstractNettyHandler {
     this.maxMessageSize = maxMessageSize;
     this.keepAliveTimeInNanos = keepAliveTimeInNanos;
     this.keepAliveTimeoutInNanos = keepAliveTimeoutInNanos;
+    this.maxConnectionIdleManager = maxConnectionIdleManager;
     this.maxConnectionAgeInNanos = maxConnectionAgeInNanos;
     this.maxConnectionAgeGraceInNanos = maxConnectionAgeGraceInNanos;
     this.keepAliveEnforcer = checkNotNull(keepAliveEnforcer, "keepAliveEnforcer");
@@ -284,6 +304,10 @@ class NettyServerHandler extends AbstractNettyHandler {
           }),
           maxConnectionAgeInNanos,
           TimeUnit.NANOSECONDS);
+    }
+
+    if (maxConnectionIdleManager != null) {
+      maxConnectionIdleManager.onHandlerAdded(this, ctx);
     }
 
     if (keepAliveTimeInNanos != SERVER_KEEPALIVE_TIME_NANOS_DISABLED) {
@@ -419,6 +443,9 @@ class NettyServerHandler extends AbstractNettyHandler {
     try {
       if (keepAliveManager != null) {
         keepAliveManager.onTransportTermination();
+      }
+      if (maxConnectionIdleManager != null) {
+        maxConnectionIdleManager.onTransportTermination();
       }
       if (maxConnectionAgeMonitor != null) {
         maxConnectionAgeMonitor.cancel(false);
