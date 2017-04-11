@@ -289,8 +289,10 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
 
   /**
    * Sets a custom max connection idle time, connection being idle for longer than which will be
-   * gracefully terminated. An unreasonably small value might be increased. {@code Long.MAX_VALUE}
-   * nano seconds or an unreasonably large value will disable max connection idle.
+   * gracefully terminated. Idleness duration is defined since the most recent time the number of
+   * outstanding RPCs became zero or the connection establishment. An unreasonably small value might
+   * be increased. {@code Long.MAX_VALUE} nano seconds or an unreasonably large value will disable
+   * max connection idle.
    *
    * @since 1.4.0
    */
