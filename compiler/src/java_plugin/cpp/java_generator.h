@@ -49,8 +49,12 @@ string ServiceJavaPackage(const google::protobuf::FileDescriptor* file, bool nan
 // the given service.
 string ServiceClassName(const google::protobuf::ServiceDescriptor* service);
 
+// Returns the name of the proto descriptor for a given service.
+string ServiceProtoDescriptorSupplierName(const google::protobuf::ServiceDescriptor* service);
+
 // Writes the generated service interface into the given ZeroCopyOutputStream
-void GenerateService(const google::protobuf::ServiceDescriptor* service,
+void GenerateService(int service_idx,
+                     const google::protobuf::ServiceDescriptor* service,
                      google::protobuf::io::ZeroCopyOutputStream* out,
                      ProtoFlavor flavor,
                      bool enable_deprecated);

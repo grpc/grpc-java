@@ -31,9 +31,15 @@
 
 syntax = "proto3";
 
+import "google/protobuf/descriptor.proto";
+
 package grpc.testing;
 
 option java_package = "io.grpc.testing.integration";
+
+extend google.protobuf.MethodOptions {
+  bool idempotent = 50001;
+}
 
 // The type of payload that should be returned.
 enum PayloadType {

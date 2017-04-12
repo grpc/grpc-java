@@ -26,7 +26,12 @@ public final class MonitoringGrpc {
 
   public static final String SERVICE_NAME = "grpc.instrumentation.v1alpha.Monitoring";
 
+  private static final io.grpc.protobuf.ProtoDescriptorSupplier SERVICE_PROTO_DESCRIPTOR =
+    new MonitoringDescriptorSupplier();
+
   // Static method descriptors that strictly reflect the proto.
+  private static final int METHODIDX_GET_CANONICAL_RPC_STATS = 0;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<com.google.protobuf.Empty,
       io.grpc.instrumentation.v1alpha.CanonicalRpcStats> METHOD_GET_CANONICAL_RPC_STATS =
@@ -38,7 +43,12 @@ public final class MonitoringGrpc {
               com.google.protobuf.Empty.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.instrumentation.v1alpha.CanonicalRpcStats.getDefaultInstance()))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_GET_CANONICAL_RPC_STATS).getOptions())
           .build();
+
+  private static final int METHODIDX_GET_STATS = 1;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.StatsRequest,
       io.grpc.instrumentation.v1alpha.StatsResponse> METHOD_GET_STATS =
@@ -50,7 +60,12 @@ public final class MonitoringGrpc {
               io.grpc.instrumentation.v1alpha.StatsRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.instrumentation.v1alpha.StatsResponse.getDefaultInstance()))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_GET_STATS).getOptions())
           .build();
+
+  private static final int METHODIDX_WATCH_STATS = 2;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.StatsRequest,
       io.grpc.instrumentation.v1alpha.StatsResponse> METHOD_WATCH_STATS =
@@ -62,7 +77,12 @@ public final class MonitoringGrpc {
               io.grpc.instrumentation.v1alpha.StatsRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.instrumentation.v1alpha.StatsResponse.getDefaultInstance()))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_WATCH_STATS).getOptions())
           .build();
+
+  private static final int METHODIDX_GET_REQUEST_TRACES = 3;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.TraceRequest,
       io.grpc.instrumentation.v1alpha.TraceResponse> METHOD_GET_REQUEST_TRACES =
@@ -74,7 +94,12 @@ public final class MonitoringGrpc {
               io.grpc.instrumentation.v1alpha.TraceRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.instrumentation.v1alpha.TraceResponse.getDefaultInstance()))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_GET_REQUEST_TRACES).getOptions())
           .build();
+
+  private static final int METHODIDX_GET_CUSTOM_MONITORING_DATA = 4;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.MonitoringDataGroup,
       io.grpc.instrumentation.v1alpha.CustomMonitoringData> METHOD_GET_CUSTOM_MONITORING_DATA =
@@ -86,6 +111,8 @@ public final class MonitoringGrpc {
               io.grpc.instrumentation.v1alpha.MonitoringDataGroup.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.instrumentation.v1alpha.CustomMonitoringData.getDefaultInstance()))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_GET_CUSTOM_MONITORING_DATA).getOptions())
           .build();
 
   /**
@@ -484,10 +511,20 @@ public final class MonitoringGrpc {
     }
   }
 
-  private static final class MonitoringDescriptorSupplier implements io.grpc.protobuf.ProtoFileDescriptorSupplier {
+  private static final class MonitoringDescriptorSupplier implements io.grpc.protobuf.ProtoDescriptorSupplier {
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.instrumentation.v1alpha.MonitoringProto.getDescriptor();
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.ServiceDescriptor getServiceDescriptor() {
+      return getFileDescriptor().getServices().get(0);
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.MethodDescriptor getMethodDescriptor(int index) {
+      return getServiceDescriptor().getMethods().get(index);
     }
   }
 
@@ -500,7 +537,7 @@ public final class MonitoringGrpc {
         result = serviceDescriptor;
         if (result == null) {
           serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
-              .setSchemaDescriptor(new MonitoringDescriptorSupplier())
+              .setSchemaDescriptor(SERVICE_PROTO_DESCRIPTOR)
               .addMethod(METHOD_GET_CANONICAL_RPC_STATS)
               .addMethod(METHOD_GET_STATS)
               .addMethod(METHOD_WATCH_STATS)

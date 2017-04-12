@@ -7,6 +7,7 @@ public final class Messages {
   private Messages() {}
   public static void registerAllExtensions(
       com.google.protobuf.ExtensionRegistryLite registry) {
+    registry.add(io.grpc.testing.integration.Messages.idempotent);
   }
 
   public static void registerAllExtensions(
@@ -9291,6 +9292,17 @@ public final class Messages {
 
   }
 
+  public static final int IDEMPOTENT_FIELD_NUMBER = 50001;
+  /**
+   * <code>extend .google.protobuf.MethodOptions { ... }</code>
+   */
+  public static final
+    com.google.protobuf.GeneratedMessage.GeneratedExtension<
+      com.google.protobuf.DescriptorProtos.MethodOptions,
+      java.lang.Boolean> idempotent = com.google.protobuf.GeneratedMessage
+          .newFileScopedGeneratedExtension(
+        java.lang.Boolean.class,
+        null);
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_grpc_testing_Payload_descriptor;
   private static final 
@@ -9361,41 +9373,43 @@ public final class Messages {
   static {
     java.lang.String[] descriptorData = {
       "\n*io/grpc/testing/integration/messages.p" +
-      "roto\022\014grpc.testing\"@\n\007Payload\022\'\n\004type\030\001 " +
-      "\001(\0162\031.grpc.testing.PayloadType\022\014\n\004body\030\002" +
-      " \001(\014\"+\n\nEchoStatus\022\014\n\004code\030\001 \001(\005\022\017\n\007mess" +
-      "age\030\002 \001(\t\"\241\002\n\rSimpleRequest\0220\n\rresponse_" +
-      "type\030\001 \001(\0162\031.grpc.testing.PayloadType\022\025\n" +
-      "\rresponse_size\030\002 \001(\005\022&\n\007payload\030\003 \001(\0132\025." +
-      "grpc.testing.Payload\022\025\n\rfill_username\030\004 " +
-      "\001(\010\022\030\n\020fill_oauth_scope\030\005 \001(\010\022;\n\024respons" +
-      "e_compression\030\006 \001(\0162\035.grpc.testing.Compr",
-      "essionType\0221\n\017response_status\030\007 \001(\0132\030.gr" +
-      "pc.testing.EchoStatus\"_\n\016SimpleResponse\022" +
-      "&\n\007payload\030\001 \001(\0132\025.grpc.testing.Payload\022" +
-      "\020\n\010username\030\002 \001(\t\022\023\n\013oauth_scope\030\003 \001(\t\"\036" +
-      "\n\rSimpleContext\022\r\n\005value\030\001 \001(\t\"C\n\031Stream" +
-      "ingInputCallRequest\022&\n\007payload\030\001 \001(\0132\025.g" +
-      "rpc.testing.Payload\"=\n\032StreamingInputCal" +
-      "lResponse\022\037\n\027aggregated_payload_size\030\001 \001" +
-      "(\005\"7\n\022ResponseParameters\022\014\n\004size\030\001 \001(\005\022\023" +
-      "\n\013interval_us\030\002 \001(\005\"\245\002\n\032StreamingOutputC",
-      "allRequest\0220\n\rresponse_type\030\001 \001(\0162\031.grpc" +
-      ".testing.PayloadType\022=\n\023response_paramet" +
-      "ers\030\002 \003(\0132 .grpc.testing.ResponseParamet" +
-      "ers\022&\n\007payload\030\003 \001(\0132\025.grpc.testing.Payl" +
-      "oad\022;\n\024response_compression\030\006 \001(\0162\035.grpc" +
-      ".testing.CompressionType\0221\n\017response_sta" +
-      "tus\030\007 \001(\0132\030.grpc.testing.EchoStatus\"E\n\033S" +
-      "treamingOutputCallResponse\022&\n\007payload\030\001 " +
-      "\001(\0132\025.grpc.testing.Payload\"3\n\017ReconnectP" +
-      "arams\022 \n\030max_reconnect_backoff_ms\030\001 \001(\005\"",
-      "3\n\rReconnectInfo\022\016\n\006passed\030\001 \001(\010\022\022\n\nback" +
-      "off_ms\030\002 \003(\005*?\n\013PayloadType\022\020\n\014COMPRESSA" +
-      "BLE\020\000\022\022\n\016UNCOMPRESSABLE\020\001\022\n\n\006RANDOM\020\002*2\n" +
-      "\017CompressionType\022\010\n\004NONE\020\000\022\010\n\004GZIP\020\001\022\013\n\007" +
-      "DEFLATE\020\002B\035\n\033io.grpc.testing.integration" +
-      "b\006proto3"
+      "roto\022\014grpc.testing\032 google/protobuf/desc" +
+      "riptor.proto\"@\n\007Payload\022\'\n\004type\030\001 \001(\0162\031." +
+      "grpc.testing.PayloadType\022\014\n\004body\030\002 \001(\014\"+" +
+      "\n\nEchoStatus\022\014\n\004code\030\001 \001(\005\022\017\n\007message\030\002 " +
+      "\001(\t\"\241\002\n\rSimpleRequest\0220\n\rresponse_type\030\001" +
+      " \001(\0162\031.grpc.testing.PayloadType\022\025\n\rrespo" +
+      "nse_size\030\002 \001(\005\022&\n\007payload\030\003 \001(\0132\025.grpc.t" +
+      "esting.Payload\022\025\n\rfill_username\030\004 \001(\010\022\030\n" +
+      "\020fill_oauth_scope\030\005 \001(\010\022;\n\024response_comp",
+      "ression\030\006 \001(\0162\035.grpc.testing.Compression" +
+      "Type\0221\n\017response_status\030\007 \001(\0132\030.grpc.tes" +
+      "ting.EchoStatus\"_\n\016SimpleResponse\022&\n\007pay" +
+      "load\030\001 \001(\0132\025.grpc.testing.Payload\022\020\n\010use" +
+      "rname\030\002 \001(\t\022\023\n\013oauth_scope\030\003 \001(\t\"\036\n\rSimp" +
+      "leContext\022\r\n\005value\030\001 \001(\t\"C\n\031StreamingInp" +
+      "utCallRequest\022&\n\007payload\030\001 \001(\0132\025.grpc.te" +
+      "sting.Payload\"=\n\032StreamingInputCallRespo" +
+      "nse\022\037\n\027aggregated_payload_size\030\001 \001(\005\"7\n\022" +
+      "ResponseParameters\022\014\n\004size\030\001 \001(\005\022\023\n\013inte",
+      "rval_us\030\002 \001(\005\"\245\002\n\032StreamingOutputCallReq" +
+      "uest\0220\n\rresponse_type\030\001 \001(\0162\031.grpc.testi" +
+      "ng.PayloadType\022=\n\023response_parameters\030\002 " +
+      "\003(\0132 .grpc.testing.ResponseParameters\022&\n" +
+      "\007payload\030\003 \001(\0132\025.grpc.testing.Payload\022;\n" +
+      "\024response_compression\030\006 \001(\0162\035.grpc.testi" +
+      "ng.CompressionType\0221\n\017response_status\030\007 " +
+      "\001(\0132\030.grpc.testing.EchoStatus\"E\n\033Streami" +
+      "ngOutputCallResponse\022&\n\007payload\030\001 \001(\0132\025." +
+      "grpc.testing.Payload\"3\n\017ReconnectParams\022",
+      " \n\030max_reconnect_backoff_ms\030\001 \001(\005\"3\n\rRec" +
+      "onnectInfo\022\016\n\006passed\030\001 \001(\010\022\022\n\nbackoff_ms" +
+      "\030\002 \003(\005*?\n\013PayloadType\022\020\n\014COMPRESSABLE\020\000\022" +
+      "\022\n\016UNCOMPRESSABLE\020\001\022\n\n\006RANDOM\020\002*2\n\017Compr" +
+      "essionType\022\010\n\004NONE\020\000\022\010\n\004GZIP\020\001\022\013\n\007DEFLAT" +
+      "E\020\002:4\n\nidempotent\022\036.google.protobuf.Meth" +
+      "odOptions\030\321\206\003 \001(\010B\035\n\033io.grpc.testing.int" +
+      "egrationb\006proto3"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
         new com.google.protobuf.Descriptors.FileDescriptor.    InternalDescriptorAssigner() {
@@ -9408,6 +9422,7 @@ public final class Messages {
     com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
         new com.google.protobuf.Descriptors.FileDescriptor[] {
+          com.google.protobuf.DescriptorProtos.getDescriptor(),
         }, assigner);
     internal_static_grpc_testing_Payload_descriptor =
       getDescriptor().getMessageTypes().get(0);
@@ -9481,6 +9496,8 @@ public final class Messages {
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_grpc_testing_ReconnectInfo_descriptor,
         new java.lang.String[] { "Passed", "BackoffMs", });
+    idempotent.internalInit(descriptor.getExtensions().get(0));
+    com.google.protobuf.DescriptorProtos.getDescriptor();
   }
 
   // @@protoc_insertion_point(outer_class_scope)

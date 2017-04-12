@@ -31,7 +31,12 @@ public final class TestServiceGrpc {
 
   public static final String SERVICE_NAME = "grpc.testing.TestService";
 
+  private static final io.grpc.protobuf.ProtoDescriptorSupplier SERVICE_PROTO_DESCRIPTOR =
+    new TestServiceDescriptorSupplier();
+
   // Static method descriptors that strictly reflect the proto.
+  private static final int METHODIDX_UNARY_CALL = 0;
+
   private static final int ARG_IN_METHOD_UNARY_CALL = 0;
   private static final int ARG_OUT_METHOD_UNARY_CALL = 1;
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
@@ -45,7 +50,12 @@ public final class TestServiceGrpc {
               new NanoFactory<io.grpc.testing.integration.nano.Test.SimpleRequest>(ARG_IN_METHOD_UNARY_CALL)))
           .setResponseMarshaller(io.grpc.protobuf.nano.NanoUtils.<io.grpc.testing.integration.nano.Test.SimpleResponse>marshaller(
               new NanoFactory<io.grpc.testing.integration.nano.Test.SimpleResponse>(ARG_OUT_METHOD_UNARY_CALL)))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_UNARY_CALL).getOptions())
           .build();
+
+  private static final int METHODIDX_STREAMING_OUTPUT_CALL = 1;
+
   private static final int ARG_IN_METHOD_STREAMING_OUTPUT_CALL = 2;
   private static final int ARG_OUT_METHOD_STREAMING_OUTPUT_CALL = 3;
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
@@ -59,7 +69,12 @@ public final class TestServiceGrpc {
               new NanoFactory<io.grpc.testing.integration.nano.Test.StreamingOutputCallRequest>(ARG_IN_METHOD_STREAMING_OUTPUT_CALL)))
           .setResponseMarshaller(io.grpc.protobuf.nano.NanoUtils.<io.grpc.testing.integration.nano.Test.StreamingOutputCallResponse>marshaller(
               new NanoFactory<io.grpc.testing.integration.nano.Test.StreamingOutputCallResponse>(ARG_OUT_METHOD_STREAMING_OUTPUT_CALL)))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_STREAMING_OUTPUT_CALL).getOptions())
           .build();
+
+  private static final int METHODIDX_STREAMING_INPUT_CALL = 2;
+
   private static final int ARG_IN_METHOD_STREAMING_INPUT_CALL = 4;
   private static final int ARG_OUT_METHOD_STREAMING_INPUT_CALL = 5;
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
@@ -73,7 +88,12 @@ public final class TestServiceGrpc {
               new NanoFactory<io.grpc.testing.integration.nano.Test.StreamingInputCallRequest>(ARG_IN_METHOD_STREAMING_INPUT_CALL)))
           .setResponseMarshaller(io.grpc.protobuf.nano.NanoUtils.<io.grpc.testing.integration.nano.Test.StreamingInputCallResponse>marshaller(
               new NanoFactory<io.grpc.testing.integration.nano.Test.StreamingInputCallResponse>(ARG_OUT_METHOD_STREAMING_INPUT_CALL)))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_STREAMING_INPUT_CALL).getOptions())
           .build();
+
+  private static final int METHODIDX_FULL_BIDI_CALL = 3;
+
   private static final int ARG_IN_METHOD_FULL_BIDI_CALL = 6;
   private static final int ARG_OUT_METHOD_FULL_BIDI_CALL = 7;
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
@@ -87,7 +107,12 @@ public final class TestServiceGrpc {
               new NanoFactory<io.grpc.testing.integration.nano.Test.StreamingOutputCallRequest>(ARG_IN_METHOD_FULL_BIDI_CALL)))
           .setResponseMarshaller(io.grpc.protobuf.nano.NanoUtils.<io.grpc.testing.integration.nano.Test.StreamingOutputCallResponse>marshaller(
               new NanoFactory<io.grpc.testing.integration.nano.Test.StreamingOutputCallResponse>(ARG_OUT_METHOD_FULL_BIDI_CALL)))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_FULL_BIDI_CALL).getOptions())
           .build();
+
+  private static final int METHODIDX_HALF_BIDI_CALL = 4;
+
   private static final int ARG_IN_METHOD_HALF_BIDI_CALL = 8;
   private static final int ARG_OUT_METHOD_HALF_BIDI_CALL = 9;
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
@@ -101,6 +126,8 @@ public final class TestServiceGrpc {
               new NanoFactory<io.grpc.testing.integration.nano.Test.StreamingOutputCallRequest>(ARG_IN_METHOD_HALF_BIDI_CALL)))
           .setResponseMarshaller(io.grpc.protobuf.nano.NanoUtils.<io.grpc.testing.integration.nano.Test.StreamingOutputCallResponse>marshaller(
               new NanoFactory<io.grpc.testing.integration.nano.Test.StreamingOutputCallResponse>(ARG_OUT_METHOD_HALF_BIDI_CALL)))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_HALF_BIDI_CALL).getOptions())
           .build();
 
   private static final class NanoFactory<T extends com.google.protobuf.nano.MessageNano>
