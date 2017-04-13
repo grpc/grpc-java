@@ -554,7 +554,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     setUp();
     assertTrue(channel().isOpen());
 
-    Thread.sleep(10L);
+    Thread.sleep(15L);
     channel().runPendingTasks();
 
     // GO_AWAY sent
@@ -573,7 +573,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     setUp();
     createStream();
 
-    Thread.sleep(10L);
+    Thread.sleep(15L);
     channel().runPendingTasks();
 
     verifyWrite().writeGoAway(
@@ -595,7 +595,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     createStream();
 
     // runPendingTasks so that GO_AWAY is sent and the forceful shutdown is scheduled
-    Thread.sleep(10L);
+    Thread.sleep(15L);
     channel().runPendingTasks();
 
     verifyWrite().writeGoAway(
@@ -604,7 +604,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     assertTrue(channel().isOpen());
 
     // need runPendingTasks again so that the forceful shutdown can be executed
-    Thread.sleep(10L);
+    Thread.sleep(15L);
     channel().runPendingTasks();
 
     // channel closed
