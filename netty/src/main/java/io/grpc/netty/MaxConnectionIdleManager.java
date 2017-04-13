@@ -33,9 +33,7 @@ package io.grpc.netty;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.internal.LogExceptionRunnable;
-import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.http2.Http2Error;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -44,7 +42,7 @@ import javax.annotation.CheckForNull;
 /**
  * Monitors connection idle time; shutdowns the connection if the max connection idle is reached.
  */
-class MaxConnectionIdleManager {
+abstract class MaxConnectionIdleManager {
   private static final Ticker systemTicker = new Ticker() {
     @Override
     public long nanoTime() {
@@ -74,14 +72,12 @@ class MaxConnectionIdleManager {
   }
 
   /** A {@link NettyServerHandler} was added to the transport. */
-  void onHandlerAdded(NettyServerHandler handler, ChannelHandlerContext ctx) {
-    onHandlerAdded(handler, ctx, ctx.executor());
+  void start(ChannelHandlerContext ctx) {
+    start(ctx, ctx.executor());
   }
 
   @VisibleForTesting
-  void onHandlerAdded(
-      final NettyServerHandler handler, final ChannelHandlerContext ctx,
-      final ScheduledExecutorService scheduler) {
+  void start(final ChannelHandlerContext ctx, final ScheduledExecutorService scheduler) {
     this.scheduler = scheduler;
     nextIdleMonitorTime = ticker.nanoTime() + maxConnectionIdleInNanos;
 
@@ -97,18 +93,7 @@ class MaxConnectionIdleManager {
           }
           // if isActive, exit. Will schedule a new shutdownFuture once onTransportIdle
         } else {
-          // send GO_AWAY and gracefully shutdown
-          handler.goAway(
-              ctx,
-              Integer.MAX_VALUE,
-              Http2Error.NO_ERROR.code(),
-              ByteBufUtil.writeAscii(ctx.alloc(), "max_idle"),
-              ctx.newPromise());
-          try {
-            handler.close(ctx, ctx.newPromise());
-          } catch (Exception e) {
-            handler.onError(ctx, e);
-          }
+          close(ctx);
           shutdownFuture = null;
         }
       }
@@ -117,6 +102,12 @@ class MaxConnectionIdleManager {
     shutdownFuture =
         scheduler.schedule(shutdownTask, maxConnectionIdleInNanos, TimeUnit.NANOSECONDS);
   }
+
+  /**
+   * Closes the connection by sending GO_AWAY with status code NO_ERROR and ASCII debug data
+   * max_idle and then doing the graceful connection termination.
+   */
+  abstract void close(ChannelHandlerContext ctx);
 
   /** There are outstanding RPCs on the transport. */
   void onTransportActive() {

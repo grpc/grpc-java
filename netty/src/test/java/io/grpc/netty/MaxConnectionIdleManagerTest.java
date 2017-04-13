@@ -33,18 +33,13 @@ package io.grpc.netty;
 
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isA;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import io.grpc.internal.FakeClock;
 import io.grpc.netty.MaxConnectionIdleManager.Ticker;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
-import io.netty.handler.codec.http2.Http2Error;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -64,35 +59,31 @@ public class MaxConnectionIdleManagerTest {
   };
 
   @Mock
-  private NettyServerHandler handler;
-  @Mock
   private ChannelHandlerContext ctx;
-
 
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    when(ctx.alloc()).thenReturn(UnpooledByteBufAllocator.DEFAULT);
   }
 
   @Test
   public void maxIdleReached() {
-    MaxConnectionIdleManager maxConnectionIdleManager = new MaxConnectionIdleManager(123L, ticker);
+    MaxConnectionIdleManager maxConnectionIdleManager =
+        spy(new TestMaxConnectionIdleManager(123L, ticker));
 
-    maxConnectionIdleManager.onHandlerAdded(handler, ctx, fakeClock.getScheduledExecutorService());
+    maxConnectionIdleManager.start(ctx, fakeClock.getScheduledExecutorService());
     maxConnectionIdleManager.onTransportIdle();
     fakeClock.forwardNanos(123L);
 
-    verify(handler).goAway(
-        eq(ctx), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()), isA(ByteBuf.class),
-        any(ChannelPromise.class));
+    verify(maxConnectionIdleManager).close(eq(ctx));
   }
 
   @Test
   public void maxIdleNotReachedAndReached() {
-    MaxConnectionIdleManager maxConnectionIdleManager = new MaxConnectionIdleManager(123L, ticker);
+    MaxConnectionIdleManager maxConnectionIdleManager =
+        spy(new TestMaxConnectionIdleManager(123L, ticker));
 
-    maxConnectionIdleManager.onHandlerAdded(handler, ctx, fakeClock.getScheduledExecutorService());
+    maxConnectionIdleManager.start(ctx, fakeClock.getScheduledExecutorService());
     maxConnectionIdleManager.onTransportIdle();
     fakeClock.forwardNanos(100L);
     // max idle not reached
@@ -103,30 +94,35 @@ public class MaxConnectionIdleManagerTest {
     maxConnectionIdleManager.onTransportActive();
     fakeClock.forwardNanos(100L);
 
-    verify(handler, never()).goAway(
-        any(ChannelHandlerContext.class), any(Integer.class), any(Long.class), any(ByteBuf.class),
-        any(ChannelPromise.class));
+    verify(maxConnectionIdleManager, never()).close(any(ChannelHandlerContext.class));
 
     // max idle reached
     maxConnectionIdleManager.onTransportIdle();
     fakeClock.forwardNanos(123L);
 
-    verify(handler).goAway(
-        eq(ctx), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()), isA(ByteBuf.class),
-        any(ChannelPromise.class));
+    verify(maxConnectionIdleManager).close(eq(ctx));
   }
 
   @Test
   public void shutdownThenMaxIdleReached() {
-    MaxConnectionIdleManager maxConnectionIdleManager = new MaxConnectionIdleManager(123L, ticker);
+    MaxConnectionIdleManager maxConnectionIdleManager =
+        spy(new TestMaxConnectionIdleManager(123L, ticker));
 
-    maxConnectionIdleManager.onHandlerAdded(handler, ctx, fakeClock.getScheduledExecutorService());
+    maxConnectionIdleManager.start(ctx, fakeClock.getScheduledExecutorService());
     maxConnectionIdleManager.onTransportIdle();
     maxConnectionIdleManager.onTransportTermination();
     fakeClock.forwardNanos(123L);
 
-    verify(handler, never()).goAway(
-        any(ChannelHandlerContext.class), any(Integer.class), any(Long.class), any(ByteBuf.class),
-        any(ChannelPromise.class));
+    verify(maxConnectionIdleManager, never()).close(any(ChannelHandlerContext.class));
+  }
+
+  private static class TestMaxConnectionIdleManager extends MaxConnectionIdleManager {
+    TestMaxConnectionIdleManager(long maxConnectionIdleInNanos, Ticker ticker) {
+      super(maxConnectionIdleInNanos, ticker);
+    }
+
+    @Override
+    void close(ChannelHandlerContext ctx) {
+    }
   }
 }

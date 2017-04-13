@@ -181,9 +181,6 @@ class NettyServerHandler extends AbstractNettyHandler {
     final Http2Connection connection = new DefaultHttp2Connection(true);
     final KeepAliveEnforcer keepAliveEnforcer = new KeepAliveEnforcer(
         permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos, TimeUnit.NANOSECONDS);
-    final MaxConnectionIdleManager maxConnectionIdleManager =
-        maxConnectionIdleInNanos == MAX_CONNECTION_IDLE_NANOS_DISABLED
-            ? null : new MaxConnectionIdleManager(maxConnectionIdleInNanos);
 
     // Create the local flow controller configured to auto-refill the connection window.
     connection.local().flowController(
@@ -207,7 +204,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         decoder, encoder, settings,
         maxMessageSize,
         keepAliveTimeInNanos, keepAliveTimeoutInNanos,
-        maxConnectionIdleManager,
+        maxConnectionIdleInNanos,
         maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
         keepAliveEnforcer);
   }
@@ -221,11 +218,34 @@ class NettyServerHandler extends AbstractNettyHandler {
       int maxMessageSize,
       long keepAliveTimeInNanos,
       long keepAliveTimeoutInNanos,
-      @Nullable final MaxConnectionIdleManager maxConnectionIdleManager,
+      long maxConnectionIdleInNanos,
       long maxConnectionAgeInNanos,
       long maxConnectionAgeGraceInNanos,
       final KeepAliveEnforcer keepAliveEnforcer) {
     super(decoder, encoder, settings);
+
+    final MaxConnectionIdleManager maxConnectionIdleManager;
+    if (maxConnectionIdleInNanos == MAX_CONNECTION_IDLE_NANOS_DISABLED) {
+      maxConnectionIdleManager = null;
+    } else {
+      maxConnectionIdleManager = new MaxConnectionIdleManager(maxConnectionIdleInNanos) {
+        @Override
+        void close(ChannelHandlerContext ctx) {
+          goAway(
+              ctx,
+              Integer.MAX_VALUE,
+              Http2Error.NO_ERROR.code(),
+              ByteBufUtil.writeAscii(ctx.alloc(), "max_idle"),
+              ctx.newPromise());
+          ctx.flush();
+          try {
+            NettyServerHandler.this.close(ctx, ctx.newPromise());
+          } catch (Exception e) {
+            onError(ctx, e);
+          }
+        }
+      };
+    }
 
     connection.addListener(new Http2ConnectionAdapter() {
       @Override
@@ -308,7 +328,7 @@ class NettyServerHandler extends AbstractNettyHandler {
     }
 
     if (maxConnectionIdleManager != null) {
-      maxConnectionIdleManager.onHandlerAdded(this, ctx);
+      maxConnectionIdleManager.start(ctx);
     }
 
     if (keepAliveTimeInNanos != SERVER_KEEPALIVE_TIME_NANOS_DISABLED) {
