@@ -27,7 +27,7 @@ project.sourceSets {
 }
 
 class LoadTest extends Test{
-  private numberOfClients = 10000
+  private numberOfClients = 300
 
   public LoadTest(){
     super()
