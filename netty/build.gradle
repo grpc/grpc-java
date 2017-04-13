@@ -26,3 +26,27 @@ project.sourceSets {
     }
 }
 
+class LoadTest extends Test{
+  private numberOfClients = 10000
+
+  public LoadTest(){
+    super()
+    setTestNameIncludePatterns(
+        ['io.grpc.netty.NettyServerHandlerTest.maxConnectionAge_goAwaySent',
+        'io.grpc.netty.NettyServerHandlerTest.maxConnectionAgeGrace_channelStillOpenDuringGracePeriod',
+        'io.grpc.netty.NettyServerHandlerTest.maxConnectionAgeGrace_channelClosedAfterGracePeriod'])
+  }
+  public FileTree getCandidateClassFiles() {
+    FileTree candidateTimes = super.getCandidateClassFiles()
+    for(int client  = 1; client<numberOfClients;client++){
+      candidateTimes = candidateTimes + super.getCandidateClassFiles()
+    }
+    return candidateTimes
+  }
+
+}
+
+task loadTest(type:LoadTest){
+}
+
+test.dependsOn loadTest
