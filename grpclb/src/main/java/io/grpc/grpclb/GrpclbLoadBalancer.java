@@ -100,8 +100,14 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       Metadata.Key.of("lb-token", Metadata.ASCII_STRING_MARSHALLER);
 
   @VisibleForTesting
-  static final RoundRobinEntry DROP_ENTRY =
-      new RoundRobinEntry(Status.UNAVAILABLE.withDescription("Drop requested by balancer"));
+  static final RoundRobinEntry DROP_ENTRY_FOR_RATE_LIMITING =
+      new RoundRobinEntry(
+          Status.UNAVAILABLE.withDescription("Drop requested by balancer for rate limiting"));
+
+  @VisibleForTesting
+  static final RoundRobinEntry DROP_ENTRY_FOR_LOAD_BALANCING =
+      new RoundRobinEntry(
+          Status.UNAVAILABLE.withDescription("Drop requested by balancer for load balancing"));
 
   // All mutable states in this class are mutated ONLY from Channel Executor
 
@@ -335,8 +341,10 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       // TODO(zhangkun83): honor expiration_interval
       // Construct the new collections. Create new Subchannels when necessary.
       for (Server server : serverList.getServersList()) {
-        if (server.getDropRequest()) {
-          newRoundRobinList.add(DROP_ENTRY);
+        if (server.getDropForRateLimiting()) {
+          newRoundRobinList.add(DROP_ENTRY_FOR_RATE_LIMITING);
+        } else if (server.getDropForLoadBalancing()) {
+          newRoundRobinList.add(DROP_ENTRY_FOR_LOAD_BALANCING);
         } else {
           InetSocketAddress address;
           try {

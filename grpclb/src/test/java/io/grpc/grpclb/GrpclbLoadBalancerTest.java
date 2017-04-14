@@ -629,9 +629,10 @@ public class GrpclbLoadBalancerTest {
     List<ServerEntry> backends2 =
         Arrays.asList(
             new ServerEntry("127.0.0.1", 2030, "token0003"),  // New address
-            null,  // drop
+            new ServerEntry(DropType.RATE_LIMITING),
             new ServerEntry("127.0.0.1", 2010, "token0004"),  // Existing address with token changed
-            new ServerEntry("127.0.0.1", 2030, "token0005"));  // New address appearing second time
+            new ServerEntry("127.0.0.1", 2030, "token0005"),  // New address appearing second time
+            new ServerEntry(DropType.LOAD_BALANCING));
     verify(subchannel1, never()).shutdown();
 
     lbResponseObserver.onNext(buildLbResponse(backends2));
@@ -648,7 +649,7 @@ public class GrpclbLoadBalancerTest {
     assertEquals(new EquivalentAddressGroup(backends2.get(0).addr), subchannel3.getAddresses());
     inOrder.verify(helper).updatePicker(pickerCaptor.capture());
     RoundRobinPicker picker7 = (RoundRobinPicker) pickerCaptor.getValue();
-    assertThat(picker7.list).containsExactly(GrpclbLoadBalancer.DROP_ENTRY);
+    assertThat(picker7.list).containsExactly(GrpclbLoadBalancer.DROP_ENTRY_);
 
     // State updates on obsolete subchannel1 will have no effect
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
@@ -663,17 +664,19 @@ public class GrpclbLoadBalancerTest {
     // subchannel2 is still IDLE, thus not in the active list
     assertThat(picker8.list).containsExactly(
         new RoundRobinEntry(subchannel3, "token0003"),
-        GrpclbLoadBalancer.DROP_ENTRY,
-        new RoundRobinEntry(subchannel3, "token0005")).inOrder();
+        GrpclbLoadBalancer.DROP_ENTRY_FOR_RATE_LIMITING,
+        new RoundRobinEntry(subchannel3, "token0005"),
+        GrpclbLoadBalancer.DROP_ENTRY_FOR_LOAD_BALANCING).inOrder();
     // subchannel2 becomes READY and makes it into the list
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updatePicker(pickerCaptor.capture());
     RoundRobinPicker picker9 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker9.list).containsExactly(
         new RoundRobinEntry(subchannel3, "token0003"),
-        GrpclbLoadBalancer.DROP_ENTRY,
+        GrpclbLoadBalancer.DROP_ENTRY_FOR_RATE_LIMITING,
         new RoundRobinEntry(subchannel2, "token0004"),
-        new RoundRobinEntry(subchannel3, "token0005")).inOrder();
+        new RoundRobinEntry(subchannel3, "token0005"),
+        GrpclbLoadBalancer.DROP_ENTRY_FOR_LOAD_BALANCING).inOrder();
     verify(subchannel3, never()).shutdown();
 
     // Update backends, with no entry
@@ -800,10 +803,18 @@ public class GrpclbLoadBalancerTest {
   private static class ServerEntry {
     final InetSocketAddress addr;
     final String token;
+    final DropType dropType;
 
     ServerEntry(String host, int port, String token) {
       this.addr = new InetSocketAddress(host, port);
       this.token = token;
+      this.dropType = null;
+    }
+
+    ServerEntry(DropType dropType) {
+      this.dropType = dropType;
+      this.addr = nul;
+      this.token = null;
     }
   }
 
