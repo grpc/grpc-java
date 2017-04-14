@@ -302,8 +302,7 @@ public class DnsNameResolverTest {
     DnsNameResolver.DelegateResolver resolver = new DnsNameResolver.JndiResolver();
 
     ResolutionResults results = resolver.resolve("localhost");
-    // Just check that *something* came back.
-    assertThat(results.addresses).isNotEmpty();
+    assertThat(results.addresses).isEmpty();
     assertThat(results.txtRecords).isNotNull();
   }
 
@@ -337,21 +336,6 @@ public class DnsNameResolverTest {
     ResolutionResults results = resolver.resolve("abc");
 
     assertThat(results.addresses).containsExactlyElementsIn(jdkAnswer).inOrder();
-    assertThat(results.txtRecords).isEmpty();
-  }
-
-  @Test
-  public void compositeResolverSkipsAbsentJdk() throws Exception {
-    MockResolver jdkDelegate = null;
-    MockResolver jndiDelegate = new MockResolver();
-    DelegateResolver resolver = new DnsNameResolver.CompositeResolver(jdkDelegate, jndiDelegate);
-
-    List<InetAddress> jndiAnswer = createAddressList(2);
-    jndiDelegate.addAnswer(jndiAnswer);
-
-    ResolutionResults results = resolver.resolve("abc");
-
-    assertThat(results.addresses).containsExactlyElementsIn(jndiAnswer).inOrder();
     assertThat(results.txtRecords).isEmpty();
   }
 

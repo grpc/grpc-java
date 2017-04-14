@@ -35,9 +35,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.google.common.net.InetAddresses;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
@@ -102,7 +100,6 @@ final class DnsNameResolver extends NameResolver {
       Resource<ExecutorService> executorResource) {
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
-
     this.timerServiceResource = timerServiceResource;
     this.executorResource = executorResource;
     // Must prepend a "//" to the name when constructing a URI, otherwise it will be treated as an
@@ -241,7 +238,7 @@ final class DnsNameResolver extends NameResolver {
   private DelegateResolver pickDelegateResolver() {
     JdkResolver jdkResolver = new JdkResolver();
     if (isJndiAvailable) {
-      new CompositeResolver(jdkResolver, new JndiResolver());
+      return new CompositeResolver(jdkResolver, new JndiResolver());
     }
     return jdkResolver;
   }
@@ -297,22 +294,18 @@ final class DnsNameResolver extends NameResolver {
 
   /**
    * A composite DNS resolver that uses both the JDK and JNDI resolvers as delegate.  It is
-   * expected that two DNS queries will be executed, with the second one being from JNDI.  This
-   * /should/ be cached, hopefully avoiding the second RTT to get the TXT records.  From manual
-   * testing, it seems that an ANY query is sent for both resolvers, which typically includes the
-   * TXT records.
+   * expected that two DNS queries will be executed, with the second one being from JNDI.
    */
   @VisibleForTesting
   static final class CompositeResolver extends DelegateResolver {
 
-    @Nullable private final DelegateResolver jdkResovler;
+    private final DelegateResolver jdkResovler;
     @Nullable private final DelegateResolver jndiResovler;
 
-    CompositeResolver(
-        @Nullable DelegateResolver jdkResovler, @Nullable DelegateResolver jndiResovler) {
+    CompositeResolver(DelegateResolver jdkResovler, @Nullable DelegateResolver jndiResovler) {
       this.jdkResovler = jdkResovler;
       this.jndiResovler = jndiResovler;
-      checkArgument(jdkResovler != null || jndiResovler != null, "missing resolver");
+      checkArgument(jdkResovler != null, "missing resolver");
     }
 
     @Override
@@ -320,17 +313,15 @@ final class DnsNameResolver extends NameResolver {
       List<InetAddress> addresses = null;
       List<String> txtRecords = null;
       // Try to use the Jdk Resolver for addresses, which honors RFC 3484 address ordering (by
-      // merit of calling libc).  However, if not present, still try to use the JNDI results.
+      // merit of calling libc).
       // However, JNDI can return TXT records, so it takes precedence for those.
-      if (jdkResovler != null) {
-        ResolutionResults results = jdkResovler.resolve(host);
-        addresses = results.addresses;
-        txtRecords = results.txtRecords;
-      }
+      ResolutionResults results = jdkResovler.resolve(host);
+      logger.info(results.addresses.toString());
+      addresses = results.addresses;
+      txtRecords = results.txtRecords;
       if (jndiResovler != null) {
-        ResolutionResults results = jndiResovler.resolve(host);
-        addresses = MoreObjects.firstNonNull(addresses, results.addresses);
-        txtRecords = results.txtRecords;
+        ResolutionResults jdniResults = jndiResovler.resolve(host);
+        txtRecords = jdniResults.txtRecords;
       }
       return new ResolutionResults(addresses, txtRecords);
     }
@@ -379,11 +370,7 @@ final class DnsNameResolver extends NameResolver {
           try {
             while (rrValues.hasMore()) {
               String rrValue = (String) rrValues.next();
-              if ("TXT".equals(rrEntry.getID())) {
-                txtRecords.add(rrValue);
-              } else {
-                addresses.add(InetAddresses.forString(rrValue));
-              }
+              txtRecords.add(rrValue);
             }
           } finally {
             rrValues.close();
