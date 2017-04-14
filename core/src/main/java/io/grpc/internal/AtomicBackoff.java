@@ -32,7 +32,7 @@
 package io.grpc.internal;
 
 import com.google.common.base.Preconditions;
-import java.util.concurrent.atomic.AtomicLongFieldUpdater;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.concurrent.ThreadSafe;
@@ -43,22 +43,20 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 public final class AtomicBackoff {
   private static final Logger log = Logger.getLogger(AtomicBackoff.class.getName());
-  private static final AtomicLongFieldUpdater<AtomicBackoff> valueUpdater =
-      AtomicLongFieldUpdater.newUpdater(AtomicBackoff.class, "value");
 
   private final String name;
-  private volatile long value;
+  private final AtomicLong value = new AtomicLong();
 
   /** Construct an atomic with initial value {@code value}. {@code name} is used for logging. */
   public AtomicBackoff(String name, long value) {
     Preconditions.checkArgument(value > 0, "value must be positive");
     this.name = name;
-    this.value = value;
+    this.value.set(value);
   }
 
   /** Returns the current state. The state instance's value does not change of time. */
   public State getState() {
-    return new State(value);
+    return new State(value.get());
   }
 
   @ThreadSafe
@@ -80,9 +78,9 @@ public final class AtomicBackoff {
     public void backoff() {
       // Use max to handle overflow
       long newValue = Math.max(savedValue * 2, savedValue);
-      boolean swapped = valueUpdater.compareAndSet(AtomicBackoff.this, savedValue, newValue);
+      boolean swapped = value.compareAndSet(savedValue, newValue);
       // Even if swapped is false, the current value should be at least as large as newValue
-      assert value >= newValue;
+      assert value.get() >= newValue;
       if (swapped) {
         log.log(Level.WARNING, "Increased {0} to {1}", new Object[] {name, newValue});
       }
