@@ -105,7 +105,7 @@ public final class StatsTraceContext {
   /**
    * See {@link ClientStreamTracer#headersSent}.  For client-side only.
    *
-   * <p>Transport-specific thus should be called by transport implementations.
+   * <p>Transport-specific, thus should be called by transport implementations.
    */
   public void clientHeadersSent() {
     for (StreamTracer tracer : tracers) {
