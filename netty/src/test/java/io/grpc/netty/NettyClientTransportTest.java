@@ -65,6 +65,7 @@ import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerStream;
@@ -471,8 +472,10 @@ public class NettyClientTransportTest {
     }
     NettyClientTransport transport = new NettyClientTransport(
         address, NioSocketChannel.class, new HashMap<ChannelOption<?>, Object>(), group, negotiator,
-        DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize, keepAliveTimeNano, 1L, false, authority,
-        userAgent, tooManyPingsRunnable);
+        DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize,
+        KeepAliveManager.clampKeepAliveTimeInNanos(keepAliveTimeNano),
+        KeepAliveManager.clampKeepAliveTimeoutInNanos(1L),
+        false, authority, userAgent, tooManyPingsRunnable);
     transports.add(transport);
     return transport;
   }
