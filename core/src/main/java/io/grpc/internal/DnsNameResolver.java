@@ -360,7 +360,7 @@ final class DnsNameResolver extends NameResolver {
   @VisibleForTesting
   static final class JndiResolver extends DelegateResolver {
 
-    private static final String[] rrTypes = new String[]{"A", "AAAA", "TXT"};
+    private static final String[] rrTypes = new String[]{"TXT"};
 
     @Override
     ResolutionResults resolve(String host) throws NamingException {
