@@ -44,9 +44,12 @@ import javax.annotation.concurrent.ThreadSafe;
  *
  * <p>The addresses and attributes of a target may be changed over time, thus the caller registers a
  * {@link Listener} to receive continuous updates.
+ *
+ * <p>Thread-safety: {@link #getServiceAuthority} may be called concurrently. Other methods on
+ * {@link NameResolver} don't need to be thread-safe.  {@link Factory} and {@link Listener} are
+ * thread-safe.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
-@ThreadSafe
 public abstract class NameResolver {
   /**
    * Returns the authority used to authenticate connections to servers.  It <strong>must</strong> be
@@ -83,6 +86,7 @@ public abstract class NameResolver {
    */
   public void refresh() {}
 
+  @ThreadSafe
   public abstract static class Factory {
     /**
      * The port number used in case the target or the underlying naming system doesn't provide a

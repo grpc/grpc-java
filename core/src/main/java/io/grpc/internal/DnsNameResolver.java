@@ -49,7 +49,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A DNS-based {@link NameResolver}.
@@ -65,17 +64,11 @@ class DnsNameResolver extends NameResolver {
   private final int port;
   private final Resource<ScheduledExecutorService> timerServiceResource;
   private final Resource<ExecutorService> executorResource;
-  @GuardedBy("this")
   private boolean shutdown;
-  @GuardedBy("this")
   private ScheduledExecutorService timerService;
-  @GuardedBy("this")
   private ExecutorService executor;
-  @GuardedBy("this")
   private ScheduledFuture<?> resolutionTask;
-  @GuardedBy("this")
   private boolean resolving;
-  @GuardedBy("this")
   private Listener listener;
 
   DnsNameResolver(@Nullable String nsAuthority, String name, Attributes params,
@@ -111,7 +104,7 @@ class DnsNameResolver extends NameResolver {
   }
 
   @Override
-  public final synchronized void start(Listener listener) {
+  public final void start(Listener listener) {
     Preconditions.checkState(this.listener == null, "already started");
     timerService = SharedResourceHolder.get(timerServiceResource);
     executor = SharedResourceHolder.get(executorResource);
@@ -120,7 +113,7 @@ class DnsNameResolver extends NameResolver {
   }
 
   @Override
-  public final synchronized void refresh() {
+  public final void refresh() {
     Preconditions.checkState(listener != null, "not started");
     resolve();
   }
@@ -130,18 +123,16 @@ class DnsNameResolver extends NameResolver {
       public void run() {
         InetAddress[] inetAddrs;
         Listener savedListener;
-        synchronized (DnsNameResolver.this) {
-          // If this task is started by refresh(), there might already be a scheduled task.
-          if (resolutionTask != null) {
-            resolutionTask.cancel(false);
-            resolutionTask = null;
-          }
-          if (shutdown) {
-            return;
-          }
-          savedListener = listener;
-          resolving = true;
+        // If this task is started by refresh(), there might already be a scheduled task.
+        if (resolutionTask != null) {
+          resolutionTask.cancel(false);
+          resolutionTask = null;
         }
+        if (shutdown) {
+          return;
+        }
+        savedListener = listener;
+        resolving = true;
         try {
           if (System.getenv("GRPC_PROXY_EXP") != null) {
             EquivalentAddressGroup server =
@@ -153,16 +144,14 @@ class DnsNameResolver extends NameResolver {
           try {
             inetAddrs = getAllByName(host);
           } catch (UnknownHostException e) {
-            synchronized (DnsNameResolver.this) {
-              if (shutdown) {
-                return;
-              }
-              // Because timerService is the single-threaded GrpcUtil.TIMER_SERVICE in production,
-              // we need to delegate the blocking work to the executor
-              resolutionTask =
-                  timerService.schedule(new LogExceptionRunnable(resolutionRunnableOnExecutor),
-                      1, TimeUnit.MINUTES);
+            if (shutdown) {
+              return;
             }
+            // Because timerService is the single-threaded GrpcUtil.TIMER_SERVICE in production,
+            // we need to delegate the blocking work to the executor
+            resolutionTask =
+                timerService.schedule(new LogExceptionRunnable(resolutionRunnableOnExecutor),
+                    1, TimeUnit.MINUTES);
             savedListener.onError(Status.UNAVAILABLE.withCause(e));
             return;
           }
@@ -174,9 +163,7 @@ class DnsNameResolver extends NameResolver {
           }
           savedListener.onAddresses(servers, Attributes.EMPTY);
         } finally {
-          synchronized (DnsNameResolver.this) {
-            resolving = false;
-          }
+          resolving = false;
         }
       }
     };
@@ -184,10 +171,8 @@ class DnsNameResolver extends NameResolver {
   private final Runnable resolutionRunnableOnExecutor = new Runnable() {
       @Override
       public void run() {
-        synchronized (DnsNameResolver.this) {
-          if (!shutdown) {
-            executor.execute(resolutionRunnable);
-          }
+        if (!shutdown) {
+          executor.execute(resolutionRunnable);
         }
       }
     };
@@ -198,7 +183,6 @@ class DnsNameResolver extends NameResolver {
     return InetAddress.getAllByName(host);
   }
 
-  @GuardedBy("this")
   private void resolve() {
     if (resolving || shutdown) {
       return;
@@ -207,7 +191,7 @@ class DnsNameResolver extends NameResolver {
   }
 
   @Override
-  public final synchronized void shutdown() {
+  public final void shutdown() {
     if (shutdown) {
       return;
     }
