@@ -46,6 +46,12 @@ public abstract class ClientStreamTracer extends StreamTracer {
   }
 
   /**
+   * Headers has been received from the server.
+   */
+  public void inboundHeaders() {
+  }
+
+  /**
    * Factory class for {@link ClientStreamTracer}.
    */
   public abstract static class Factory {

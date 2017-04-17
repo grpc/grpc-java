@@ -733,6 +733,7 @@ public abstract class AbstractTransportTest {
     if (metricsExpected()) {
       serverInOrder.verify(serverStreamTracer).outboundWireSize(anyLong());
       serverInOrder.verify(serverStreamTracer, atLeast(1)).outboundUncompressedSize(anyLong());
+      clientInOrder.verify(clientStreamTracer).inboundHeaders();
       clientInOrder.verify(clientStreamTracer).inboundMessage();
     }
     assertEquals("Hi. Who are you?", methodDescriptor.parseResponse(inputStreamCaptor.getValue()));
@@ -818,6 +819,7 @@ public abstract class AbstractTransportTest {
     assertEquals(status.getDescription(), statusCaptor.getValue().getDescription());
     if (metricsExpected()) {
       verify(clientStreamTracer).headersSent();
+      verify(clientStreamTracer).inboundHeaders();
       verify(clientStreamTracer).streamClosed(same(statusCaptor.getValue()));
       verify(serverStreamTracer).streamClosed(same(status));
       verifyNoMoreInteractions(clientStreamTracer);
@@ -855,6 +857,7 @@ public abstract class AbstractTransportTest {
     assertNull(statusCaptor.getValue().getCause());
     if (metricsExpected()) {
       verify(clientStreamTracer).headersSent();
+      verify(clientStreamTracer).inboundHeaders();
       verify(clientStreamTracer).streamClosed(same(statusCaptor.getValue()));
       verify(serverStreamTracer).streamClosed(same(status));
       verifyNoMoreInteractions(clientStreamTracer);
@@ -1035,6 +1038,7 @@ public abstract class AbstractTransportTest {
     serverStream.close(Status.OK, new Metadata());
     if (metricsExpected()) {
       verify(clientStreamTracer).headersSent();
+      verify(clientStreamTracer).inboundHeaders();
       verify(clientStreamTracer).inboundMessage();
       verify(clientStreamTracer).inboundWireSize(anyLong());
       verify(clientStreamTracer, atLeast(1)).inboundUncompressedSize(anyLong());
