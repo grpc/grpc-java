@@ -63,7 +63,7 @@ public final class AtomicBackoff {
   public final class State {
     private final long savedValue;
 
-    State(long value) {
+    private State(long value) {
       this.savedValue = value;
     }
 
