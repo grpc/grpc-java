@@ -262,6 +262,7 @@ final class DnsNameResolver extends NameResolver {
   @SuppressWarnings("LiteralClassName")
   static boolean jndiAvailable() {
     try {
+      Class.forName("javax.naming.directory.InitialDirContext");
       Class.forName("com.sun.jndi.dns.DnsContextFactory");
     } catch (ClassNotFoundException e) {
       logger.log(Level.FINE, "Unable to find JNDI DNS resolver, skipping", e);
