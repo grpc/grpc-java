@@ -103,11 +103,11 @@ public final class StatsTraceContext {
   }
 
   /**
-   * See {@link ClientStreamTracer#headersSent}.  For client-side only.
+   * See {@link ClientStreamTracer#outboundHeaders}.  For client-side only.
    */
-  public void clientHeadersSent() {
+  public void clientOutboundHeaders() {
     for (StreamTracer tracer : tracers) {
-      ((ClientStreamTracer) tracer).headersSent();
+      ((ClientStreamTracer) tracer).outboundHeaders();
     }
   }
 
