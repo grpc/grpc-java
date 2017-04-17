@@ -661,7 +661,7 @@ public abstract class AbstractTransportTest {
     StreamCreation serverStreamCreation
         = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     if (metricsExpected()) {
-      clientInOrder.verify(clientStreamTracer).headersSent();
+      clientInOrder.verify(clientStreamTracer).outboundHeaders();
     }
     assertEquals(methodDescriptor.getFullMethodName(), serverStreamCreation.method);
     assertEquals(Lists.newArrayList(clientHeadersCopy.getAll(asciiKey)),
@@ -818,7 +818,7 @@ public abstract class AbstractTransportTest {
     assertEquals(status.getCode(), statusCaptor.getValue().getCode());
     assertEquals(status.getDescription(), statusCaptor.getValue().getDescription());
     if (metricsExpected()) {
-      verify(clientStreamTracer).headersSent();
+      verify(clientStreamTracer).outboundHeaders();
       verify(clientStreamTracer).inboundHeaders();
       verify(clientStreamTracer).streamClosed(same(statusCaptor.getValue()));
       verify(serverStreamTracer).streamClosed(same(status));
@@ -856,7 +856,7 @@ public abstract class AbstractTransportTest {
     assertEquals("Hello. Goodbye.", statusCaptor.getValue().getDescription());
     assertNull(statusCaptor.getValue().getCause());
     if (metricsExpected()) {
-      verify(clientStreamTracer).headersSent();
+      verify(clientStreamTracer).outboundHeaders();
       verify(clientStreamTracer).inboundHeaders();
       verify(clientStreamTracer).streamClosed(same(statusCaptor.getValue()));
       verify(serverStreamTracer).streamClosed(same(status));
@@ -901,7 +901,7 @@ public abstract class AbstractTransportTest {
     assertEquals(Lists.newArrayList(trailers.getAll(binaryKey)),
         Lists.newArrayList(metadataCaptor.getValue().getAll(binaryKey)));
     if (metricsExpected()) {
-      verify(clientStreamTracer).headersSent();
+      verify(clientStreamTracer).outboundHeaders();
       verify(clientStreamTracer).streamClosed(same(statusCaptor.getValue()));
       verify(serverStreamTracer).streamClosed(same(status));
       verifyNoMoreInteractions(clientStreamTracer);
@@ -936,7 +936,7 @@ public abstract class AbstractTransportTest {
     assertEquals(status.getDescription(), statusCaptor.getValue().getDescription());
     assertNull(statusCaptor.getValue().getCause());
     if (metricsExpected()) {
-      verify(clientStreamTracer).headersSent();
+      verify(clientStreamTracer).outboundHeaders();
       verify(clientStreamTracer).streamClosed(same(statusCaptor.getValue()));
       verify(serverStreamTracer).streamClosed(same(status));
       verifyNoMoreInteractions(clientStreamTracer);
@@ -974,7 +974,7 @@ public abstract class AbstractTransportTest {
     verify(mockServerStreamListener, never()).closed(any(Status.class));
     verify(mockClientStreamListener, never()).closed(any(Status.class), any(Metadata.class));
     if (metricsExpected()) {
-      verify(clientStreamTracer).headersSent();
+      verify(clientStreamTracer).outboundHeaders();
       verify(clientStreamTracer).streamClosed(same(status));
       verify(serverStreamTracer).streamClosed(same(statusCaptor.getValue()));
       verifyNoMoreInteractions(clientStreamTracer);
@@ -1037,7 +1037,7 @@ public abstract class AbstractTransportTest {
 
     serverStream.close(Status.OK, new Metadata());
     if (metricsExpected()) {
-      verify(clientStreamTracer).headersSent();
+      verify(clientStreamTracer).outboundHeaders();
       verify(clientStreamTracer).inboundHeaders();
       verify(clientStreamTracer).inboundMessage();
       verify(clientStreamTracer).inboundWireSize(anyLong());
@@ -1084,7 +1084,7 @@ public abstract class AbstractTransportTest {
 
     if (metricsExpected()) {
       verify(clientStreamTracerFactory).newClientStreamTracer(any(Metadata.class));
-      verify(clientStreamTracer).headersSent();
+      verify(clientStreamTracer).outboundHeaders();
       verify(clientStreamTracer).streamClosed(same(statusCaptor.getValue()));
       verify(serverStreamTracerFactory).newServerStreamTracer(anyString(), any(Metadata.class));
       verify(serverStreamTracer).streamClosed(same(status));
