@@ -667,7 +667,10 @@ public final class Status {
    */
   @Override
   public boolean equals(Object obj) {
-    return super.equals(obj);
+    if (!(obj instanceof Status)) {
+      return false;
+    }
+    return ((Status) obj).getCode().equals(getCode());
   }
 
   /**
@@ -677,6 +680,6 @@ public final class Status {
    */
   @Override
   public int hashCode() {
-    return super.hashCode();
+    return getCode().hashCode();
   }
 }
