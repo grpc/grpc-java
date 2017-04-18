@@ -309,11 +309,15 @@ final class DnsNameResolver extends NameResolver {
 
     @Override
     ResolutionResults resolve(String host) throws Exception {
-      ResolutionResults results = jdkResovler.resolve(host);
-      logger.info(results.addresses.toString());
-      List<InetAddress> addresses = results.addresses;
-      ResolutionResults jdniResults = jndiResovler.resolve(host);
-      List<String> txtRecords = jdniResults.txtRecords;
+      ResolutionResults jdkResults = jdkResovler.resolve(host);
+      List<InetAddress> addresses = jdkResults.addresses;
+      List<String> txtRecords = Collections.emptyList();
+      try {
+        ResolutionResults jdniResults = jndiResovler.resolve(host);
+        txtRecords = jdniResults.txtRecords;
+      } catch (Exception e) {
+        logger.log(Level.SEVERE, "Failed to resolve TXT results", e);
+      }
 
       return new ResolutionResults(addresses, txtRecords);
     }
