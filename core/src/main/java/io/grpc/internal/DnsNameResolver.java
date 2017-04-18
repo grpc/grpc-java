@@ -31,7 +31,6 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -301,29 +300,21 @@ final class DnsNameResolver extends NameResolver {
   static final class CompositeResolver extends DelegateResolver {
 
     private final DelegateResolver jdkResovler;
-    @Nullable private final DelegateResolver jndiResovler;
+    private final DelegateResolver jndiResovler;
 
-    CompositeResolver(DelegateResolver jdkResovler, @Nullable DelegateResolver jndiResovler) {
+    CompositeResolver(DelegateResolver jdkResovler, DelegateResolver jndiResovler) {
       this.jdkResovler = jdkResovler;
       this.jndiResovler = jndiResovler;
-      checkArgument(jdkResovler != null, "missing resolver");
     }
 
     @Override
     ResolutionResults resolve(String host) throws Exception {
-      List<InetAddress> addresses = null;
-      List<String> txtRecords = null;
-      // Try to use the Jdk Resolver for addresses, which honors RFC 3484 address ordering (by
-      // merit of calling libc).
-      // However, JNDI can return TXT records, so it takes precedence for those.
       ResolutionResults results = jdkResovler.resolve(host);
       logger.info(results.addresses.toString());
-      addresses = results.addresses;
-      txtRecords = results.txtRecords;
-      if (jndiResovler != null) {
-        ResolutionResults jdniResults = jndiResovler.resolve(host);
-        txtRecords = jdniResults.txtRecords;
-      }
+      List<InetAddress> addresses = results.addresses;
+      ResolutionResults jdniResults = jndiResovler.resolve(host);
+      List<String> txtRecords = jdniResults.txtRecords;
+
       return new ResolutionResults(addresses, txtRecords);
     }
   }
