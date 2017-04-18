@@ -162,7 +162,7 @@ class OkHttpClientStream extends Http2ClientStream {
     if (pendingData != null) {
       // Only happens when the stream has neither been started nor cancelled.
       frameWriter.synStream(false, false, id, 0, requestHeaders);
-      statsTraceCtx.clientHeadersSent();
+      statsTraceCtx.clientOutboundHeaders();
       requestHeaders = null;
 
       boolean flush = false;
