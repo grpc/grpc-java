@@ -33,6 +33,8 @@ package io.grpc.netty;
 
 import static com.google.common.base.Charsets.UTF_8;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
+import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
+import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
@@ -45,6 +47,7 @@ import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
@@ -94,7 +97,9 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Ignore;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -108,6 +113,9 @@ import org.mockito.MockitoAnnotations;
 public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHandler> {
 
   private static final int STREAM_ID = 3;
+
+  @Rule
+  public final TestName testName = new TestName();
 
   @Mock
   private ServerStreamListener streamListener;
@@ -129,6 +137,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   private long maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
   private long maxConnectionAgeInNanos = MAX_CONNECTION_AGE_NANOS_DISABLED;
   private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
+  private long keepAliveTimeInNanos = DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
+  private long keepAliveTimeoutInNanos = DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
 
   private class ServerTransportListenerImpl implements ServerTransportListener {
 
@@ -147,8 +157,19 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     }
   }
 
+  /**
+   * Will not run {@code setUp()} automatically if the test name contains "customSetUp".
+   */
   @Before
-  public void setUp() throws Exception {
+  public void maybeRunSetup() throws Exception {
+    if (!testName.getMethodName().contains("customSetUp")) {
+      setUp();
+    }
+  }
+
+  private void setUp() throws Exception {
+    assertNull("setUp should not run more than once", handler());
+
     MockitoAnnotations.initMocks(this);
     when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
         .thenReturn(streamTracer);
@@ -299,7 +320,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void shouldAdvertiseMaxConcurrentStreams() throws Exception {
+  public void shouldAdvertiseMaxConcurrentStreams_customSetUp() throws Exception {
     maxConcurrentStreams = 314;
     setUp();
 
@@ -311,7 +332,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void shouldAdvertiseMaxHeaderListSize() throws Exception {
+  public void shouldAdvertiseMaxHeaderListSize_customSetUp() throws Exception {
     maxHeaderListSize = 123;
     setUp();
 
@@ -324,7 +345,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   @Test
   @Ignore("Re-enable once https://github.com/grpc/grpc-java/issues/1175 is fixed")
-  public void connectionWindowShouldBeOverridden() throws Exception {
+  public void connectionWindowShouldBeOverridden_customSetUp() throws Exception {
     flowControlWindow = 1048576; // 1MiB
     setUp();
 
@@ -445,7 +466,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void keepAliveEnforcer_enforcesPings() throws Exception {
+  public void keepAliveEnforcer_enforcesPings_customSetUp() throws Exception {
     permitKeepAliveWithoutCalls = false;
     permitKeepAliveTimeInNanos = TimeUnit.HOURS.toNanos(1);
     setUp();
@@ -461,7 +482,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test(timeout = 1000)
-  public void keepAliveEnforcer_sendingDataResetsCounters() throws Exception {
+  public void keepAliveEnforcer_sendingDataResetsCounters_customSetUp() throws Exception {
     permitKeepAliveWithoutCalls = false;
     permitKeepAliveTimeInNanos = TimeUnit.HOURS.toNanos(1);
     setUp();
@@ -486,7 +507,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void keepAliveEnforcer_initialIdle() throws Exception {
+  public void keepAliveEnforcer_initialIdle_customSetUp() throws Exception {
     permitKeepAliveWithoutCalls = false;
     permitKeepAliveTimeInNanos = 0;
     setUp();
@@ -502,7 +523,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void keepAliveEnforcer_noticesActive() throws Exception {
+  public void keepAliveEnforcer_noticesActive_customSetUp() throws Exception {
     permitKeepAliveWithoutCalls = false;
     permitKeepAliveTimeInNanos = 0;
     setUp();
@@ -519,7 +540,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void keepAliveEnforcer_noticesInactive() throws Exception {
+  public void keepAliveEnforcer_noticesInactive_customSetUp() throws Exception {
     permitKeepAliveWithoutCalls = false;
     permitKeepAliveTimeInNanos = 0;
     setUp();
@@ -537,7 +558,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void noGoAwaySentBeforeMaxConnectionIdleReached() throws Exception {
+  public void noGoAwaySentBeforeMaxConnectionIdleReached_customSetUp() throws Exception {
     maxConnectionIdleInNanos = TimeUnit.MINUTES.toNanos(30L);
     setUp();
 
@@ -552,7 +573,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void maxConnectionIdle_goAwaySent() throws Exception {
+  public void maxConnectionIdle_goAwaySent_customSetUp() throws Exception {
     maxConnectionIdleInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
     setUp();
     assertTrue(channel().isOpen());
@@ -570,7 +591,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void maxConnectionIdle_activeThenRst() throws Exception {
+  public void maxConnectionIdle_activeThenRst_customSetUp() throws Exception {
     maxConnectionIdleInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
     setUp();
     createStream();
@@ -599,7 +620,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void noGoAwaySentBeforeMaxConnectionAgeReached() throws Exception {
+  public void noGoAwaySentBeforeMaxConnectionAgeReached_customSetUp() throws Exception {
     maxConnectionAgeInNanos = TimeUnit.MINUTES.toNanos(30L);
     setUp();
 
@@ -614,7 +635,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void maxConnectionAge_goAwaySent() throws Exception {
+  public void maxConnectionAge_goAwaySent_customSetUp() throws Exception {
     maxConnectionAgeInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
     setUp();
     assertTrue(channel().isOpen());
@@ -632,7 +653,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void maxConnectionAgeGrace_channelStillOpenDuringGracePeriod() throws Exception {
+  public void maxConnectionAgeGrace_channelStillOpenDuringGracePeriod_customSetUp()
+      throws Exception {
     maxConnectionAgeInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
     maxConnectionAgeGraceInNanos = TimeUnit.MINUTES.toNanos(30L);
     setUp();
@@ -653,7 +675,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void maxConnectionAgeGrace_channelClosedAfterGracePeriod() throws Exception {
+  public void maxConnectionAgeGrace_channelClosedAfterGracePeriod_customSetUp() throws Exception {
     maxConnectionAgeInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
     maxConnectionAgeGraceInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
     setUp();
@@ -708,7 +730,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         frameReader(), frameWriter(), transportListener,
         Arrays.asList(streamTracerFactory), maxConcurrentStreams, flowControlWindow,
         maxHeaderListSize, DEFAULT_MAX_MESSAGE_SIZE,
-        2000L, 100L,
+        keepAliveTimeInNanos, keepAliveTimeoutInNanos,
         maxConnectionIdleInNanos,
         maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
         permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos);
