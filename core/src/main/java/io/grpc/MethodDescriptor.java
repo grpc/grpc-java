@@ -55,6 +55,7 @@ public final class MethodDescriptor<ReqT, RespT> {
 
   private final MethodType type;
   private final String fullMethodName;
+  private final Object methodOptions;
   private final Marshaller<ReqT> requestMarshaller;
   private final Marshaller<RespT> responseMarshaller;
   private final boolean idempotent;
@@ -220,13 +221,14 @@ public final class MethodDescriptor<ReqT, RespT> {
       MethodType type, String fullMethodName,
       Marshaller<RequestT> requestMarshaller,
       Marshaller<ResponseT> responseMarshaller) {
-    return new MethodDescriptor<RequestT, ResponseT>(
-        type, fullMethodName, requestMarshaller, responseMarshaller, false, false);
+    return new MethodDescriptor<RequestT, ResponseT>(type, fullMethodName, new Object(),
+        requestMarshaller, responseMarshaller, false, false);
   }
 
   private MethodDescriptor(
       MethodType type,
       String fullMethodName,
+      Object methodOptions,
       Marshaller<ReqT> requestMarshaller,
       Marshaller<RespT> responseMarshaller,
       boolean idempotent,
@@ -234,6 +236,7 @@ public final class MethodDescriptor<ReqT, RespT> {
 
     this.type = Preconditions.checkNotNull(type, "type");
     this.fullMethodName = Preconditions.checkNotNull(fullMethodName, "fullMethodName");
+    this.methodOptions = Preconditions.checkNotNull(methodOptions, "methodOptions");
     this.requestMarshaller = Preconditions.checkNotNull(requestMarshaller, "requestMarshaller");
     this.responseMarshaller = Preconditions.checkNotNull(responseMarshaller, "responseMarshaller");
     this.idempotent = idempotent;
@@ -258,6 +261,15 @@ public final class MethodDescriptor<ReqT, RespT> {
    */
   public String getFullMethodName() {
     return fullMethodName;
+  }
+
+  /**
+   * Options describing method.
+   *
+   * @since 1.4.0
+   */
+  public Object getMethodOptions() {
+    return methodOptions;
   }
 
   /**
@@ -436,6 +448,7 @@ public final class MethodDescriptor<ReqT, RespT> {
     private Marshaller<RespT> responseMarshaller;
     private MethodType type;
     private String fullMethodName;
+    private Object methodOptions = new Object();
     private boolean idempotent;
     private boolean safe;
 
@@ -487,6 +500,16 @@ public final class MethodDescriptor<ReqT, RespT> {
     }
 
     /**
+     * Sets the method options.
+     *
+     * @since 1.4.0
+     */
+    public Builder<ReqT, RespT> setMethodOptions(Object methodOptions) {
+      this.methodOptions = methodOptions;
+      return this;
+    }
+
+    /**
      * Sets whether the method is idempotent.  If true, calling this method more than once doesn't
      * have additional side effects.
      *
@@ -520,6 +543,7 @@ public final class MethodDescriptor<ReqT, RespT> {
       return new MethodDescriptor<ReqT, RespT>(
           type,
           fullMethodName,
+          methodOptions,
           requestMarshaller,
           responseMarshaller,
           idempotent,

@@ -45,7 +45,7 @@ import io.grpc.InternalNotifyOnServerBuild;
 import io.grpc.Server;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
-import io.grpc.protobuf.ProtoFileDescriptorSupplier;
+import io.grpc.protobuf.ProtoDescriptorSupplier;
 import io.grpc.reflection.v1alpha.ErrorResponse;
 import io.grpc.reflection.v1alpha.ExtensionNumberResponse;
 import io.grpc.reflection.v1alpha.ExtensionRequest;
@@ -118,10 +118,10 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
       List<ServerServiceDefinition> serverMutableServices = server.getMutableServices();
       for (ServerServiceDefinition mutableService : serverMutableServices) {
         io.grpc.ServiceDescriptor serviceDescriptor = mutableService.getServiceDescriptor();
-        if (serviceDescriptor.getSchemaDescriptor() instanceof ProtoFileDescriptorSupplier) {
+        if (serviceDescriptor.getSchemaDescriptor() instanceof ProtoDescriptorSupplier) {
           String serviceName = serviceDescriptor.getName();
           FileDescriptor fileDescriptor =
-              ((ProtoFileDescriptorSupplier) serviceDescriptor.getSchemaDescriptor())
+              ((ProtoDescriptorSupplier) serviceDescriptor.getSchemaDescriptor())
                   .getFileDescriptor();
           serverFileDescriptors.add(fileDescriptor);
           serverServiceNames.add(serviceName);
@@ -423,9 +423,9 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
       Set<String> seenFiles = new HashSet<String>();
       for (ServerServiceDefinition service : services) {
         io.grpc.ServiceDescriptor serviceDescriptor = service.getServiceDescriptor();
-        if (serviceDescriptor.getSchemaDescriptor() instanceof ProtoFileDescriptorSupplier) {
+        if (serviceDescriptor.getSchemaDescriptor() instanceof ProtoDescriptorSupplier) {
           FileDescriptor fileDescriptor =
-              ((ProtoFileDescriptorSupplier) serviceDescriptor.getSchemaDescriptor())
+              ((ProtoDescriptorSupplier) serviceDescriptor.getSchemaDescriptor())
                   .getFileDescriptor();
           String serviceName = serviceDescriptor.getName();
           checkState(

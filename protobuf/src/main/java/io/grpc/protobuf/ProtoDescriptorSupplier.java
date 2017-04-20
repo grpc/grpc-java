@@ -32,10 +32,16 @@
 package io.grpc.protobuf;
 
 import com.google.protobuf.Descriptors.FileDescriptor;
+import com.google.protobuf.Descriptors.MethodDescriptor;
+import com.google.protobuf.Descriptors.ServiceDescriptor;
 
 /**
  * Provides access to the underlying proto file descriptor.
  */
-public interface ProtoFileDescriptorSupplier {
+public interface ProtoDescriptorSupplier {
   FileDescriptor getFileDescriptor();
+
+  ServiceDescriptor getServiceDescriptor();
+
+  MethodDescriptor getMethodDescriptor(int index);
 }

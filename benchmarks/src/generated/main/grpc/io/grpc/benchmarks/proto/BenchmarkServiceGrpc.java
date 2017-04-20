@@ -26,7 +26,12 @@ public final class BenchmarkServiceGrpc {
 
   public static final String SERVICE_NAME = "grpc.testing.BenchmarkService";
 
+  private static final io.grpc.protobuf.ProtoDescriptorSupplier SERVICE_PROTO_DESCRIPTOR =
+    new BenchmarkServiceDescriptorSupplier();
+
   // Static method descriptors that strictly reflect the proto.
+  private static final int METHODIDX_UNARY_CALL = 0;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest,
       io.grpc.benchmarks.proto.Messages.SimpleResponse> METHOD_UNARY_CALL =
@@ -38,7 +43,12 @@ public final class BenchmarkServiceGrpc {
               io.grpc.benchmarks.proto.Messages.SimpleRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Messages.SimpleResponse.getDefaultInstance()))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_UNARY_CALL).getOptions())
           .build();
+
+  private static final int METHODIDX_STREAMING_CALL = 1;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest,
       io.grpc.benchmarks.proto.Messages.SimpleResponse> METHOD_STREAMING_CALL =
@@ -50,6 +60,8 @@ public final class BenchmarkServiceGrpc {
               io.grpc.benchmarks.proto.Messages.SimpleRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Messages.SimpleResponse.getDefaultInstance()))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_STREAMING_CALL).getOptions())
           .build();
 
   /**
@@ -268,10 +280,20 @@ public final class BenchmarkServiceGrpc {
     }
   }
 
-  private static final class BenchmarkServiceDescriptorSupplier implements io.grpc.protobuf.ProtoFileDescriptorSupplier {
+  private static final class BenchmarkServiceDescriptorSupplier implements io.grpc.protobuf.ProtoDescriptorSupplier {
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.benchmarks.proto.Services.getDescriptor();
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.ServiceDescriptor getServiceDescriptor() {
+      return getFileDescriptor().getServices().get(0);
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.MethodDescriptor getMethodDescriptor(int index) {
+      return getServiceDescriptor().getMethods().get(index);
     }
   }
 
@@ -284,7 +306,7 @@ public final class BenchmarkServiceGrpc {
         result = serviceDescriptor;
         if (result == null) {
           serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
-              .setSchemaDescriptor(new BenchmarkServiceDescriptorSupplier())
+              .setSchemaDescriptor(SERVICE_PROTO_DESCRIPTOR)
               .addMethod(METHOD_UNARY_CALL)
               .addMethod(METHOD_STREAMING_CALL)
               .build();

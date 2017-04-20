@@ -26,7 +26,12 @@ public final class HealthGrpc {
 
   public static final String SERVICE_NAME = "grpc.health.v1.Health";
 
+  private static final io.grpc.protobuf.ProtoDescriptorSupplier SERVICE_PROTO_DESCRIPTOR =
+    new HealthDescriptorSupplier();
+
   // Static method descriptors that strictly reflect the proto.
+  private static final int METHODIDX_CHECK = 0;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.health.v1.HealthCheckRequest,
       io.grpc.health.v1.HealthCheckResponse> METHOD_CHECK =
@@ -38,6 +43,8 @@ public final class HealthGrpc {
               io.grpc.health.v1.HealthCheckRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.health.v1.HealthCheckResponse.getDefaultInstance()))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_CHECK).getOptions())
           .build();
 
   /**
@@ -206,10 +213,20 @@ public final class HealthGrpc {
     }
   }
 
-  private static final class HealthDescriptorSupplier implements io.grpc.protobuf.ProtoFileDescriptorSupplier {
+  private static final class HealthDescriptorSupplier implements io.grpc.protobuf.ProtoDescriptorSupplier {
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.health.v1.HealthProto.getDescriptor();
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.ServiceDescriptor getServiceDescriptor() {
+      return getFileDescriptor().getServices().get(0);
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.MethodDescriptor getMethodDescriptor(int index) {
+      return getServiceDescriptor().getMethods().get(index);
     }
   }
 
@@ -222,7 +239,7 @@ public final class HealthGrpc {
         result = serviceDescriptor;
         if (result == null) {
           serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
-              .setSchemaDescriptor(new HealthDescriptorSupplier())
+              .setSchemaDescriptor(SERVICE_PROTO_DESCRIPTOR)
               .addMethod(METHOD_CHECK)
               .build();
         }

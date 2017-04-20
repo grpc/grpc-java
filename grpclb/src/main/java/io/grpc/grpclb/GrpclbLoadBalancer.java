@@ -465,6 +465,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     // stream thus no time is wasted in re-process.
     currentPicker = picker;
     helper.updatePicker(picker);
+
   }
 
   @VisibleForTesting

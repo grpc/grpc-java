@@ -26,7 +26,12 @@ public final class MetricsServiceGrpc {
 
   public static final String SERVICE_NAME = "grpc.testing.MetricsService";
 
+  private static final io.grpc.protobuf.ProtoDescriptorSupplier SERVICE_PROTO_DESCRIPTOR =
+    new MetricsServiceDescriptorSupplier();
+
   // Static method descriptors that strictly reflect the proto.
+  private static final int METHODIDX_GET_ALL_GAUGES = 0;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.testing.integration.Metrics.EmptyMessage,
       io.grpc.testing.integration.Metrics.GaugeResponse> METHOD_GET_ALL_GAUGES =
@@ -38,7 +43,12 @@ public final class MetricsServiceGrpc {
               io.grpc.testing.integration.Metrics.EmptyMessage.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.testing.integration.Metrics.GaugeResponse.getDefaultInstance()))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_GET_ALL_GAUGES).getOptions())
           .build();
+
+  private static final int METHODIDX_GET_GAUGE = 1;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.testing.integration.Metrics.GaugeRequest,
       io.grpc.testing.integration.Metrics.GaugeResponse> METHOD_GET_GAUGE =
@@ -50,6 +60,8 @@ public final class MetricsServiceGrpc {
               io.grpc.testing.integration.Metrics.GaugeRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.testing.integration.Metrics.GaugeResponse.getDefaultInstance()))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_GET_GAUGE).getOptions())
           .build();
 
   /**
@@ -277,10 +289,20 @@ public final class MetricsServiceGrpc {
     }
   }
 
-  private static final class MetricsServiceDescriptorSupplier implements io.grpc.protobuf.ProtoFileDescriptorSupplier {
+  private static final class MetricsServiceDescriptorSupplier implements io.grpc.protobuf.ProtoDescriptorSupplier {
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.testing.integration.Metrics.getDescriptor();
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.ServiceDescriptor getServiceDescriptor() {
+      return getFileDescriptor().getServices().get(0);
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.MethodDescriptor getMethodDescriptor(int index) {
+      return getServiceDescriptor().getMethods().get(index);
     }
   }
 
@@ -293,7 +315,7 @@ public final class MetricsServiceGrpc {
         result = serviceDescriptor;
         if (result == null) {
           serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
-              .setSchemaDescriptor(new MetricsServiceDescriptorSupplier())
+              .setSchemaDescriptor(SERVICE_PROTO_DESCRIPTOR)
               .addMethod(METHOD_GET_ALL_GAUGES)
               .addMethod(METHOD_GET_GAUGE)
               .build();

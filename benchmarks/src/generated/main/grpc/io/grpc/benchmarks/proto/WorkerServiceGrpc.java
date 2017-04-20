@@ -26,7 +26,12 @@ public final class WorkerServiceGrpc {
 
   public static final String SERVICE_NAME = "grpc.testing.WorkerService";
 
+  private static final io.grpc.protobuf.ProtoDescriptorSupplier SERVICE_PROTO_DESCRIPTOR =
+    new WorkerServiceDescriptorSupplier();
+
   // Static method descriptors that strictly reflect the proto.
+  private static final int METHODIDX_RUN_SERVER = 0;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Control.ServerArgs,
       io.grpc.benchmarks.proto.Control.ServerStatus> METHOD_RUN_SERVER =
@@ -38,7 +43,12 @@ public final class WorkerServiceGrpc {
               io.grpc.benchmarks.proto.Control.ServerArgs.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Control.ServerStatus.getDefaultInstance()))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_RUN_SERVER).getOptions())
           .build();
+
+  private static final int METHODIDX_RUN_CLIENT = 1;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Control.ClientArgs,
       io.grpc.benchmarks.proto.Control.ClientStatus> METHOD_RUN_CLIENT =
@@ -50,7 +60,12 @@ public final class WorkerServiceGrpc {
               io.grpc.benchmarks.proto.Control.ClientArgs.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Control.ClientStatus.getDefaultInstance()))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_RUN_CLIENT).getOptions())
           .build();
+
+  private static final int METHODIDX_CORE_COUNT = 2;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Control.CoreRequest,
       io.grpc.benchmarks.proto.Control.CoreResponse> METHOD_CORE_COUNT =
@@ -62,7 +77,12 @@ public final class WorkerServiceGrpc {
               io.grpc.benchmarks.proto.Control.CoreRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Control.CoreResponse.getDefaultInstance()))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_CORE_COUNT).getOptions())
           .build();
+
+  private static final int METHODIDX_QUIT_WORKER = 3;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Control.Void,
       io.grpc.benchmarks.proto.Control.Void> METHOD_QUIT_WORKER =
@@ -74,6 +94,8 @@ public final class WorkerServiceGrpc {
               io.grpc.benchmarks.proto.Control.Void.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Control.Void.getDefaultInstance()))
+          .setMethodOptions(SERVICE_PROTO_DESCRIPTOR
+              .getMethodDescriptor(METHODIDX_QUIT_WORKER).getOptions())
           .build();
 
   /**
@@ -392,10 +414,20 @@ public final class WorkerServiceGrpc {
     }
   }
 
-  private static final class WorkerServiceDescriptorSupplier implements io.grpc.protobuf.ProtoFileDescriptorSupplier {
+  private static final class WorkerServiceDescriptorSupplier implements io.grpc.protobuf.ProtoDescriptorSupplier {
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.benchmarks.proto.Services.getDescriptor();
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.ServiceDescriptor getServiceDescriptor() {
+      return getFileDescriptor().getServices().get(1);
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.MethodDescriptor getMethodDescriptor(int index) {
+      return getServiceDescriptor().getMethods().get(index);
     }
   }
 
@@ -408,7 +440,7 @@ public final class WorkerServiceGrpc {
         result = serviceDescriptor;
         if (result == null) {
           serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
-              .setSchemaDescriptor(new WorkerServiceDescriptorSupplier())
+              .setSchemaDescriptor(SERVICE_PROTO_DESCRIPTOR)
               .addMethod(METHOD_RUN_SERVER)
               .addMethod(METHOD_RUN_CLIENT)
               .addMethod(METHOD_CORE_COUNT)

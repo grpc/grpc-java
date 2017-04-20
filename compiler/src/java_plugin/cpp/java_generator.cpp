@@ -77,6 +77,10 @@ static inline string MethodIdFieldName(const MethodDescriptor* method) {
   return "METHODID_" + ToAllUpperCase(method->name());
 }
 
+static inline string MethodIdxFieldName(const MethodDescriptor* method) {
+  return "METHODIDX_" + ToAllUpperCase(method->name());
+}
+
 static inline string MessageFullJavaName(bool nano, const Descriptor* desc) {
   string name = google::protobuf::compiler::java::ClassName(desc);
   if (nano) {
@@ -307,6 +311,8 @@ static void PrintMethodFields(
     (*vars)["arg_in_id"] = to_string(2 * i);
     (*vars)["arg_out_id"] = to_string(2 * i + 1);
     (*vars)["method_name"] = method->name();
+    (*vars)["method_idx_field"] = MethodIdxFieldName(method);
+    (*vars)["method_idx"] = to_string(i);
     (*vars)["input_type"] = MessageFullJavaName(flavor == ProtoFlavor::NANO,
                                                 method->input_type());
     (*vars)["output_type"] = MessageFullJavaName(flavor == ProtoFlavor::NANO,
@@ -328,6 +334,8 @@ static void PrintMethodFields(
       }
     }
 
+    p->Print(*vars, "private static final int $method_idx_field$ = $method_idx$;\n\n");
+
     if (flavor == ProtoFlavor::NANO) {
       // TODO(zsurocking): we're creating two NanoFactories for each method right now.
       // We could instead create static NanoFactories and reuse them if some methods
@@ -347,6 +355,8 @@ static void PrintMethodFields(
           "            new NanoFactory<$input_type$>(ARG_IN_$method_field_name$)))\n"
           "        .setResponseMarshaller($NanoUtils$.<$output_type$>marshaller(\n"
           "            new NanoFactory<$output_type$>(ARG_OUT_$method_field_name$)))\n"
+          "        .setMethodOptions(SERVICE_PROTO_DESCRIPTOR\n"
+          "            .getMethodDescriptor($method_idx_field$).getOptions())\n"
           "        .build();\n");
     } else {
       if (flavor == ProtoFlavor::LITE) {
@@ -367,10 +377,12 @@ static void PrintMethodFields(
           "            $input_type$.getDefaultInstance()))\n"
           "        .setResponseMarshaller($ProtoUtils$.marshaller(\n"
           "            $output_type$.getDefaultInstance()))\n"
+          "        .setMethodOptions(SERVICE_PROTO_DESCRIPTOR\n"
+          "            .getMethodDescriptor($method_idx_field$).getOptions())\n"
           "        .build();\n");
     }
+    p->Print("\n");
   }
-  p->Print("\n");
 
   if (flavor == ProtoFlavor::NANO) {
     p->Print(
@@ -892,11 +904,11 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
 
 
   if (flavor == ProtoFlavor::NORMAL) {
-    (*vars)["proto_descriptor_supplier"] = service->name() + "DescriptorSupplier";
+    (*vars)["proto_descriptor_supplier"] = ServiceProtoDescriptorSupplierName(service);
     (*vars)["proto_class_name"] = google::protobuf::compiler::java::ClassName(service->file());
     p->Print(
         *vars,
-        "private static final class $proto_descriptor_supplier$ implements $ProtoFileDescriptorSupplier$ {\n");
+        "private static final class $proto_descriptor_supplier$ implements $ProtoDescriptorSupplier$ {\n");
     p->Indent();
     p->Print(*vars, "@$Override$\n");
     p->Print(
@@ -904,6 +916,22 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
         "public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {\n");
     p->Indent();
     p->Print(*vars, "return $proto_class_name$.getDescriptor();\n");
+    p->Outdent();
+    p->Print(*vars, "}\n\n");
+    p->Print(*vars, "@$Override$\n");
+    p->Print(
+        *vars,
+        "public com.google.protobuf.Descriptors.ServiceDescriptor getServiceDescriptor() {\n");
+    p->Indent();
+    p->Print(*vars, "return getFileDescriptor().getServices().get($service_idx$);\n");
+    p->Outdent();
+    p->Print(*vars, "}\n\n");
+    p->Print(*vars, "@$Override$\n");
+    p->Print(
+        *vars,
+        "public com.google.protobuf.Descriptors.MethodDescriptor getMethodDescriptor(int index) {\n");
+    p->Indent();
+    p->Print(*vars, "return getServiceDescriptor().getMethods().get(index);\n");
     p->Outdent();
     p->Print(*vars, "}\n");
     p->Outdent();
@@ -939,7 +967,7 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
   if (flavor == ProtoFlavor::NORMAL) {
     p->Print(
         *vars,
-        "\n.setSchemaDescriptor(new $proto_descriptor_supplier$())");
+        "\n.setSchemaDescriptor(SERVICE_PROTO_DESCRIPTOR)");
   }
   for (int i = 0; i < service->method_count(); ++i) {
     const MethodDescriptor* method = service->method(i);
@@ -1026,6 +1054,8 @@ static void PrintService(const ServiceDescriptor* service,
   (*vars)["service_name"] = service->name();
   (*vars)["file_name"] = service->file()->name();
   (*vars)["service_class_name"] = ServiceClassName(service);
+  (*vars)["proto_descriptor_supplier"] = ServiceProtoDescriptorSupplierName(service);
+
   #ifdef GRPC_VERSION
     (*vars)["grpc_version"] = " (version " XSTR(GRPC_VERSION) ")";
   #else
@@ -1048,6 +1078,11 @@ static void PrintService(const ServiceDescriptor* service,
       *vars,
       "public static final String SERVICE_NAME = "
       "\"$Package$$service_name$\";\n\n");
+
+  p->Print(
+      *vars,
+      "private static final $ProtoDescriptorSupplier$ SERVICE_PROTO_DESCRIPTOR =\n"
+      "  new $proto_descriptor_supplier$();\n\n");
 
   PrintMethodFields(service, vars, p, flavor);
 
@@ -1164,7 +1199,8 @@ void PrintImports(Printer* p, bool generate_nano) {
   }
 }
 
-void GenerateService(const ServiceDescriptor* service,
+void GenerateService(int service_idx,
+                     const ServiceDescriptor* service,
                      google::protobuf::io::ZeroCopyOutputStream* out,
                      ProtoFlavor flavor,
                      bool enable_deprecated) {
@@ -1184,8 +1220,7 @@ void GenerateService(const ServiceDescriptor* service,
       "io.grpc.ServerServiceDefinition";
   vars["ServiceDescriptor"] =
       "io.grpc.ServiceDescriptor";
-  vars["ProtoFileDescriptorSupplier"] =
-      "io.grpc.protobuf.ProtoFileDescriptorSupplier";
+  vars["ProtoDescriptorSupplier"] = "io.grpc.protobuf.ProtoDescriptorSupplier";
   vars["AbstractStub"] = "io.grpc.stub.AbstractStub";
   vars["MethodDescriptor"] = "io.grpc.MethodDescriptor";
   vars["NanoUtils"] = "io.grpc.protobuf.nano.NanoUtils";
@@ -1195,6 +1230,7 @@ void GenerateService(const ServiceDescriptor* service,
   vars["ListenableFuture"] =
       "com.google.common.util.concurrent.ListenableFuture";
   vars["ExperimentalApi"] = "io.grpc.ExperimentalApi";
+  vars["service_idx"] = to_string(service_idx);
 
   Printer printer(out, '$');
   string package_name = ServiceJavaPackage(service->file(),
@@ -1233,6 +1269,10 @@ string ServiceJavaPackage(const FileDescriptor* file, bool nano) {
 
 string ServiceClassName(const google::protobuf::ServiceDescriptor* service) {
   return service->name() + "Grpc";
+}
+
+string ServiceProtoDescriptorSupplierName(const google::protobuf::ServiceDescriptor* service) {
+  return service->name() + "DescriptorSupplier";
 }
 
 }  // namespace java_grpc_generator
