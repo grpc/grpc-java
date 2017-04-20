@@ -253,7 +253,7 @@ final class DnsNameResolver extends NameResolver {
   /**
    * Returns whether the JNDI DNS resolver is available.  This is accomplished by looking up a
    * particular class.  It is believed to be the default (only?) DNS resolver that will actually be
-   * used.  It is provided by the OpenJDK, and likely Android.  Actual resolution will be done by
+   * used.  It is provided by the OpenJDK, but unlikely Android.  Actual resolution will be done by
    * using a service provider when a hostname query is present, so the {@code DnsContextFactory}
    * may not actually be used to perform the query.  This is believed to be "okay."
    */
@@ -340,9 +340,9 @@ final class DnsNameResolver extends NameResolver {
   }
 
   /**
-   * A resolver that uses the JNDI interface.  This class is capable of looking up both addresses
-   * and text records, but does not provide ordering guarantees.  When the {@link JdkResolver} is
-   * not available, this can be used as a fallback.  Some results are better than no results.
+   * A resolver that uses JNDI.  This class is capable of looking up both addresses
+   * and text records, but does not provide ordering guarantees.  It is currently not used for
+   * address resolution.
    */
   @VisibleForTesting
   static final class JndiResolver extends DelegateResolver {

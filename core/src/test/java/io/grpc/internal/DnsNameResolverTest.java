@@ -300,8 +300,13 @@ public class DnsNameResolverTest {
   public void jndiResolverWorks() throws Exception {
     Assume.assumeTrue(DnsNameResolver.jndiAvailable());
     DnsNameResolver.DelegateResolver resolver = new DnsNameResolver.JndiResolver();
+    ResolutionResults results = null;
+    try {
+      results = resolver.resolve("localhost");
+    } catch (javax.naming.NameNotFoundException e) {
+      Assume.assumeNoException(e);
+    }
 
-    ResolutionResults results = resolver.resolve("localhost");
     assertThat(results.addresses).isEmpty();
     assertThat(results.txtRecords).isNotNull();
   }
