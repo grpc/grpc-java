@@ -74,6 +74,9 @@ final class DnsNameResolver extends NameResolver {
 
   private static final boolean isJndiAvailable = jndiAvailable();
 
+  @VisibleForTesting
+  static boolean enableJndi = false;
+
   private DelegateResolver delegateResolver = pickDelegateResolver();
 
   private final String authority;
@@ -236,7 +239,7 @@ final class DnsNameResolver extends NameResolver {
 
   private DelegateResolver pickDelegateResolver() {
     JdkResolver jdkResolver = new JdkResolver();
-    if (isJndiAvailable) {
+    if (isJndiAvailable && enableJndi) {
       return new CompositeResolver(jdkResolver, new JndiResolver());
     }
     return jdkResolver;

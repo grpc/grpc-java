@@ -132,6 +132,7 @@ public class DnsNameResolverTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
+    DnsNameResolver.enableJndi = true;
   }
 
   @After
