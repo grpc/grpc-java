@@ -38,6 +38,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.instrumentation.stats.Stats;
 import com.google.instrumentation.stats.StatsContextFactory;
+import com.google.instrumentation.trace.Tracing;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
@@ -176,7 +177,9 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
         this.statsFactory != null ? this.statsFactory : Stats.getStatsContextFactory();
     if (statsFactory != null) {
       CensusStreamTracerModule census =
-          new CensusStreamTracerModule(statsFactory, GrpcUtil.STOPWATCH_SUPPLIER);
+          new CensusStreamTracerModule(
+              statsFactory, Tracing.getTracer(), Tracing.getBinaryPropagationHandler(),
+              GrpcUtil.STOPWATCH_SUPPLIER);
       tracerFactories.add(census.getServerTracerFactory());
     }
     tracerFactories.addAll(streamTracerFactories);

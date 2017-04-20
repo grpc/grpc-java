@@ -44,6 +44,8 @@ import static org.mockito.Mockito.when;
 import com.google.instrumentation.stats.RpcConstants;
 import com.google.instrumentation.stats.StatsContext;
 import com.google.instrumentation.stats.TagValue;
+import com.google.instrumentation.trace.SpanFactory;
+import com.google.instrumentation.trace.Tracer;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -81,9 +83,9 @@ public class CensusStreamTracerModuleTest {
 
   private final FakeClock fakeClock = new FakeClock();
   private final FakeStatsContextFactory statsCtxFactory = new FakeStatsContextFactory();
-  private final CensusStreamTracerModule census =
-      new CensusStreamTracerModule(statsCtxFactory, fakeClock.getStopwatchSupplier());
 
+  @Mock
+  private SpanFactory mockSpanFactory;
   @Mock
   private Channel mockChannel;
   @Mock
@@ -95,12 +97,18 @@ public class CensusStreamTracerModuleTest {
   @Captor
   private ArgumentCaptor<ClientCall.Listener<Void>> clientCallListenerCaptor;
 
+  private Tracer tracer;
+  private CensusStreamTracerModule census;
+
   @Before
   @SuppressWarnings("unchecked")
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     when(mockChannel.newCall(any(MethodDescriptor.class), any(CallOptions.class)))
         .thenReturn(mockClientCall);
+    tracer = new Tracer(mockSpanFactory) {};
+    census =
+        new CensusStreamTracerModule(statsCtxFactory, tracer, fakeClock.getStopwatchSupplier());
   }
 
   @After

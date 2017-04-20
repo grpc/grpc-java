@@ -34,6 +34,7 @@ package io.grpc.internal;
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static com.google.instrumentation.trace.ContextUtils.CONTEXT_SPAN_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -43,6 +44,10 @@ import com.google.instrumentation.stats.RpcConstants;
 import com.google.instrumentation.stats.StatsContext;
 import com.google.instrumentation.stats.StatsContextFactory;
 import com.google.instrumentation.stats.TagValue;
+import com.google.instrumentation.trace.BinaryPropagationHandler;
+import com.google.instrumentation.trace.Span;
+import com.google.instrumentation.trace.SpanContext;
+import com.google.instrumentation.trace.Tracer;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -59,6 +64,7 @@ import io.grpc.StreamTracer;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.text.ParseException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -85,14 +91,22 @@ final class CensusStreamTracerModule {
       Context.key("io.grpc.internal.StatsContext"); 
 
   private final StatsContextFactory statsCtxFactory;
+  private final Tracer censusTracer;
+  private final BinaryPropagationHandler censusTracingPropagationHandler;
   private final Supplier<Stopwatch> stopwatchSupplier;
   private final Metadata.Key<StatsContext> statsHeader;
+  private final Metadata.Key<SpanContext> tracingHeader;
   private final CensusClientInterceptor clientInterceptor = new CensusClientInterceptor();
   private final ServerTracerFactory serverTracerFactory = new ServerTracerFactory();
 
   CensusStreamTracerModule(
-      final StatsContextFactory statsCtxFactory, Supplier<Stopwatch> stopwatchSupplier) {
+      final StatsContextFactory statsCtxFactory, Tracer censusTracer,
+      final BinaryPropagationHandler censusTracingPropagationHandler,
+      Supplier<Stopwatch> stopwatchSupplier) {
     this.statsCtxFactory = checkNotNull(statsCtxFactory, "statsCtxFactory");
+    this.censusTracer = checkNotNull(censusTracer, "censusTracer");
+    this.censusTracingPropagationHandler =
+        checkNotNull(censusTracingPropagationHandler, "censusTracingPropagationHandler");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.statsHeader =
         Metadata.Key.of("grpc-census-bin", new Metadata.BinaryMarshaller<StatsContext>() {
@@ -118,14 +132,31 @@ final class CensusStreamTracerModule {
               }
             }
           });
+    this.tracingHeader =
+        Metadata.Key.of("grpc-tracing-bin", new Metadata.BinaryMarshaller<SpanContext>() {
+            @Override
+            public byte[] toBytes(SpanContext context) {
+              return censusTracingPropagationHandler.toBinaryValue(context);
+            }
+
+            @Override
+            public SpanContext parseBytes(byte[] serialized) {
+              try {
+                return censusTracingPropagationHandler.fromBinaryValue(serialized);
+              } catch (ParseException e) {
+                throw new RuntimeException(e);
+              }
+            }
+          });
   }
 
   /**
    * Creates a {@link ClientCallTracer} for a new call.
    */
   @VisibleForTesting
-  ClientCallTracer newClientCallTracer(StatsContext parentCtx, String fullMethodName) {
-    return new ClientCallTracer(parentCtx, fullMethodName);
+  ClientCallTracer newClientCallTracer(
+      StatsContext parentCtx, @Nullable Span parentSpan, String fullMethodName) {
+    return new ClientCallTracer(parentCtx, parentSpan, fullMethodName);
   }
 
   /**
@@ -142,6 +173,7 @@ final class CensusStreamTracerModule {
     return clientInterceptor;
   }
 
+  // TODO(zhangkun83): record NetworkEvent to Span for each message
   private static final class ClientTracer extends ClientStreamTracer {
     final AtomicLong outboundWireSize = new AtomicLong();
     final AtomicLong inboundWireSize = new AtomicLong();
@@ -177,9 +209,11 @@ final class CensusStreamTracerModule {
     private final AtomicReference<ClientTracer> streamTracer = new AtomicReference<ClientTracer>();
     private final AtomicBoolean callEnded = new AtomicBoolean(false);
     private final StatsContext parentCtx;
+    private final Span span;
 
-    ClientCallTracer(StatsContext parentCtx, String fullMethodName) {
+    ClientCallTracer(StatsContext parentCtx, @Nullable Span parentSpan, String fullMethodName) {
       this.parentCtx = checkNotNull(parentCtx, "parentCtx");
+      this.span = censusTracer.spanBuilder(parentSpan, fullMethodName).startSpan();
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
       this.stopwatch = stopwatchSupplier.get().start();
     }
@@ -193,6 +227,8 @@ final class CensusStreamTracerModule {
           "Are you creating multiple streams per call? This class doesn't yet support this case.");
       headers.discardAll(statsHeader);
       headers.put(statsHeader, parentCtx);
+      headers.discardAll(tracingHeader);
+      headers.put(tracingHeader, span.getContext());
       return tracer;
     }
 
@@ -231,6 +267,7 @@ final class CensusStreamTracerModule {
               RpcConstants.RPC_CLIENT_METHOD, TagValue.create(fullMethodName),
               RpcConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
           .record(builder.build());
+      span.end();
     }
   }
 
@@ -238,6 +275,7 @@ final class CensusStreamTracerModule {
     private final String fullMethodName;
     @Nullable
     private final StatsContext parentCtx;
+    private final Span span;
     private final AtomicBoolean streamClosed = new AtomicBoolean(false);
     private final Stopwatch stopwatch;
     private final AtomicLong outboundWireSize = new AtomicLong();
@@ -245,10 +283,15 @@ final class CensusStreamTracerModule {
     private final AtomicLong outboundUncompressedSize = new AtomicLong();
     private final AtomicLong inboundUncompressedSize = new AtomicLong();
 
-    ServerTracer(String fullMethodName, @Nullable StatsContext parentCtx) {
+    ServerTracer(
+        String fullMethodName, @Nullable StatsContext parentCtx, @Nullable SpanContext remoteSpan) {
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
       this.stopwatch = stopwatchSupplier.get().start();
       this.parentCtx = parentCtx;
+      this.span =
+          censusTracer.spanBuilderWithRemoteParent(
+              remoteSpan, "Recv." + fullMethodName.replace('/', '.'))
+          .startSpan();
     }
 
     @Override
@@ -304,14 +347,15 @@ final class CensusStreamTracerModule {
               RpcConstants.RPC_SERVER_METHOD, TagValue.create(fullMethodName),
               RpcConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
           .record(builder.build());
+      span.end();
     }
 
     @Override
     public <ReqT, RespT> Context filterContext(Context context) {
       if (parentCtx != null) {
-        return context.withValue(STATS_CONTEXT_KEY, parentCtx);
+        return context.withValues(STATS_CONTEXT_KEY, parentCtx, CONTEXT_SPAN_KEY, span);
       } else {
-        return context;
+        return context.withValue(CONTEXT_SPAN_KEY, span);
       }
     }
   }
@@ -320,7 +364,8 @@ final class CensusStreamTracerModule {
     @Override
     public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
       StatsContext parentCtx = headers.get(statsHeader);
-      return new ServerTracer(fullMethodName, parentCtx);
+      SpanContext remoteSpan = headers.get(tracingHeader);
+      return new ServerTracer(fullMethodName, parentCtx, remoteSpan);
     }
   }
 
@@ -332,8 +377,9 @@ final class CensusStreamTracerModule {
       if (parentCtx == null) {
         parentCtx = statsCtxFactory.getDefault();
       }
+      Span parentSpan = CONTEXT_SPAN_KEY.get();
       final ClientCallTracer tracerFactory =
-          newClientCallTracer(parentCtx, method.getFullMethodName());
+          newClientCallTracer(parentCtx, parentSpan, method.getFullMethodName());
       ClientCall<ReqT, RespT> call =
           next.newCall(method, callOptions.withStreamTracerFactory(tracerFactory));
       return new SimpleForwardingClientCall<ReqT, RespT>(call) {
