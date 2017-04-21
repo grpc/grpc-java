@@ -557,6 +557,13 @@ public class CensusModulesTest {
     headers.put(censusTracing.tracingHeader, fakeClientSpanContext);
     assertSame(SpanContext.INVALID, headers.get(censusTracing.tracingHeader));
     assertNotSame(fakeServerParentSpanContext, SpanContext.INVALID);
+
+    // A null Span is used as the parent in this case
+    censusTracing.getServerTracerFactory().newServerStreamTracer(
+        method.getFullMethodName(), headers);
+    verify(mockSpanFactory).startSpanWithRemoteParent(
+        isNull(SpanContext.class), eq("Recv.package1.service2.method3"),
+        any(StartSpanOptions.class));
   }
 
   @Test

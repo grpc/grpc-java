@@ -197,9 +197,13 @@ final class CensusTracingModule {
   }
 
   private final class ServerTracerFactory extends ServerStreamTracer.Factory {
+    @SuppressWarnings("ReferenceEquality")
     @Override
     public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
       SpanContext remoteSpan = headers.get(tracingHeader);
+      if (remoteSpan == SpanContext.INVALID) {
+        remoteSpan = null;
+      }
       return new ServerTracer(fullMethodName, remoteSpan);
     }
   }
