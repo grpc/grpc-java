@@ -96,8 +96,10 @@ final class CensusStreamTracerModule {
   private final Tracer censusTracer;
   private final BinaryPropagationHandler censusTracingPropagationHandler;
   private final Supplier<Stopwatch> stopwatchSupplier;
-  private final Metadata.Key<StatsContext> statsHeader;
-  private final Metadata.Key<SpanContext> tracingHeader;
+  @VisibleForTesting
+  final Metadata.Key<StatsContext> statsHeader;
+  @VisibleForTesting
+  final Metadata.Key<SpanContext> tracingHeader;
   private final CensusClientInterceptor clientInterceptor = new CensusClientInterceptor();
   private final ServerTracerFactory serverTracerFactory = new ServerTracerFactory();
 
@@ -235,7 +237,9 @@ final class CensusStreamTracerModule {
       checkState(streamTracer.compareAndSet(null, tracer),
           "Are you creating multiple streams per call? This class doesn't yet support this case.");
       headers.discardAll(statsHeader);
-      headers.put(statsHeader, parentCtx);
+      if (parentCtx != statsCtxFactory.getDefault()) {
+        headers.put(statsHeader, parentCtx);
+      }
       headers.discardAll(tracingHeader);
       headers.put(tracingHeader, span.getContext());
       return tracer;
