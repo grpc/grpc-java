@@ -508,11 +508,15 @@ public class CensusStreamTracerModuleTest {
     verifyNoMoreInteractions(mockSpanFactory);
     assertTrue(headers.containsKey(census.tracingHeader));
 
-    census.getServerTracerFactory().newServerStreamTracer(method.getFullMethodName(), headers);
+    ServerStreamTracer serverTracer =
+        census.getServerTracerFactory().newServerStreamTracer(method.getFullMethodName(), headers);
     verify(mockTracingPropagationHandler).fromBinaryValue(same(binarySpanContext));
     verify(mockSpanFactory).startSpanWithRemoteParent(
         same(fakeServerParentSpanContext), eq("Recv.package1.service2.method3"),
         any(StartSpanOptions.class));
+
+    Context filteredContext = serverTracer.filterContext(Context.ROOT);
+    assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));
   }
 
   @Test
@@ -543,6 +547,9 @@ public class CensusStreamTracerModuleTest {
     verify(mockSpanFactory).startSpanWithRemoteParent(
         isNull(SpanContext.class), eq("Recv.package1.service2.method3"),
         any(StartSpanOptions.class));
+
+    Context filteredContext = tracer.filterContext(Context.ROOT);
+    assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));
 
     tracer.inboundWireSize(34);
     tracer.inboundUncompressedSize(67);
