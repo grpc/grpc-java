@@ -64,11 +64,12 @@ import io.grpc.StreamTracer;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.text.ParseException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -82,6 +83,7 @@ import javax.annotation.Nullable;
  * than the ServerCall.  Therefore, it's the tracer that reports the summary to Census.
  */
 final class CensusStreamTracerModule {
+  private static final Logger logger = Logger.getLogger(CensusStreamTracerModule.class.getName());
   private static final double NANOS_PER_MILLI = TimeUnit.MILLISECONDS.toNanos(1);
   private static final ClientTracer BLANK_CLIENT_TRACER = new ClientTracer();
 
@@ -109,7 +111,7 @@ final class CensusStreamTracerModule {
         checkNotNull(censusTracingPropagationHandler, "censusTracingPropagationHandler");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.statsHeader =
-        Metadata.Key.of("grpc-census-bin", new Metadata.BinaryMarshaller<StatsContext>() {
+        Metadata.Key.of("grpc-tags-bin", new Metadata.BinaryMarshaller<StatsContext>() {
             @Override
             public byte[] toBytes(StatsContext context) {
               // TODO(carl-mastrangelo): currently we only make sure the correctness. We may need to
@@ -127,13 +129,14 @@ final class CensusStreamTracerModule {
             public StatsContext parseBytes(byte[] serialized) {
               try {
                 return statsCtxFactory.deserialize(new ByteArrayInputStream(serialized));
-              } catch (IOException e) {
-                throw new RuntimeException(e);
+              } catch (Exception e) {
+                logger.log(Level.FINE, "Failed to parse stats header", e);
+                return statsCtxFactory.getDefault();
               }
             }
           });
     this.tracingHeader =
-        Metadata.Key.of("grpc-tracing-bin", new Metadata.BinaryMarshaller<SpanContext>() {
+        Metadata.Key.of("grpc-trace-bin", new Metadata.BinaryMarshaller<SpanContext>() {
             @Override
             public byte[] toBytes(SpanContext context) {
               return censusTracingPropagationHandler.toBinaryValue(context);
@@ -143,8 +146,9 @@ final class CensusStreamTracerModule {
             public SpanContext parseBytes(byte[] serialized) {
               try {
                 return censusTracingPropagationHandler.fromBinaryValue(serialized);
-              } catch (ParseException e) {
-                throw new RuntimeException(e);
+              } catch (Exception e) {
+                logger.log(Level.FINE, "Failed to parse tracing header", e);
+                return SpanContext.INVALID;
               }
             }
           });
@@ -171,6 +175,10 @@ final class CensusStreamTracerModule {
    */
   ClientInterceptor getClientInterceptor() {
     return clientInterceptor;
+  }
+
+  private static String makeSpanName(String prefix, String fullMethodName) {
+    return prefix + "." + fullMethodName.replace('/', '.');
   }
 
   // TODO(zhangkun83): record NetworkEvent to Span for each message
@@ -213,7 +221,8 @@ final class CensusStreamTracerModule {
 
     ClientCallTracer(StatsContext parentCtx, @Nullable Span parentSpan, String fullMethodName) {
       this.parentCtx = checkNotNull(parentCtx, "parentCtx");
-      this.span = censusTracer.spanBuilder(parentSpan, fullMethodName).startSpan();
+      this.span =
+          censusTracer.spanBuilder(parentSpan, makeSpanName("Sent", fullMethodName)).startSpan();
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
       this.stopwatch = stopwatchSupplier.get().start();
     }
@@ -290,7 +299,7 @@ final class CensusStreamTracerModule {
       this.parentCtx = parentCtx;
       this.span =
           censusTracer.spanBuilderWithRemoteParent(
-              remoteSpan, "Recv." + fullMethodName.replace('/', '.'))
+              remoteSpan, makeSpanName("Recv", fullMethodName))
           .startSpan();
     }
 

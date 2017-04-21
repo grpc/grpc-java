@@ -37,32 +37,58 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyString;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.same;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.instrumentation.stats.RpcConstants;
 import com.google.instrumentation.stats.StatsContext;
 import com.google.instrumentation.stats.TagValue;
+import com.google.instrumentation.trace.Annotation;
+import com.google.instrumentation.trace.AttributeValue;
+import com.google.instrumentation.trace.BinaryPropagationHandler;
+import com.google.instrumentation.trace.EndSpanOptions;
+import com.google.instrumentation.trace.Link;
+import com.google.instrumentation.trace.NetworkEvent;
+import com.google.instrumentation.trace.Span;
+import com.google.instrumentation.trace.SpanContext;
 import com.google.instrumentation.trace.SpanFactory;
+import com.google.instrumentation.trace.SpanId;
+import com.google.instrumentation.trace.StartSpanOptions;
+import com.google.instrumentation.trace.TraceId;
+import com.google.instrumentation.trace.TraceOptions;
 import com.google.instrumentation.trace.Tracer;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
+import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
 import io.grpc.Metadata;
-import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.MethodDescriptor;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.CensusStreamTracerModule.ClientCallTracer;
 import io.grpc.internal.testing.StatsTestUtils;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsContextFactory;
-import io.grpc.testing.TestMethodDescriptors;
+import io.grpc.testing.GrpcServerRule;
+import java.io.InputStream;
+import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.atomic.AtomicReference;
+import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -81,21 +107,69 @@ public class CensusStreamTracerModuleTest {
   private static final CallOptions CALL_OPTIONS =
       CallOptions.DEFAULT.withOption(CUSTOM_OPTION, "customvalue");
 
+  private static class StringInputStream extends InputStream {
+    final String string;
+
+    StringInputStream(String string) {
+      this.string = string;
+    }
+
+    @Override
+    public int read() {
+      // InProcessTransport doesn't actually read bytes from the InputStream.  The InputStream is
+      // passed to the InProcess server and consumed by MARSHALLER.parse().
+      throw new UnsupportedOperationException("Should not be called");
+    }
+  }
+
+  private static final MethodDescriptor.Marshaller<String> MARSHALLER =
+      new MethodDescriptor.Marshaller<String>() {
+        @Override
+        public InputStream stream(String value) {
+          return new StringInputStream(value);
+        }
+
+        @Override
+        public String parse(InputStream stream) {
+          return ((StringInputStream) stream).string;
+        }
+      };
+
+  private final MethodDescriptor<String, String> method = MethodDescriptor.create(
+      MethodDescriptor.MethodType.UNKNOWN, "package.service1/method1",
+      MARSHALLER, MARSHALLER);
   private final FakeClock fakeClock = new FakeClock();
   private final FakeStatsContextFactory statsCtxFactory = new FakeStatsContextFactory();
+  private final Random random = new Random(0);
+  private final SpanContext fakeSpanContext =
+      SpanContext.create(
+          TraceId.generateRandomId(random), SpanId.generateRandomId(random),
+          TraceOptions.builder().build());
+  private final SpanContext fakeParentSpanContext =
+      SpanContext.create(
+          TraceId.generateRandomId(random), SpanId.generateRandomId(random),
+          TraceOptions.builder().build());
+  private final Span fakeSpan = new FakeSpan(fakeSpanContext);
+  private final Span spySpan = spy(fakeSpan);
+  private final Span fakeParentSpan = new FakeSpan(fakeParentSpanContext);
+
+  @Rule
+  public final GrpcServerRule grpcServerRule = new GrpcServerRule().directExecutor();
 
   @Mock
-  private SpanFactory mockSpanFactory;
+  private AccessibleSpanFactory mockSpanFactory;
   @Mock
-  private Channel mockChannel;
+  private BinaryPropagationHandler mockTracingPropagationHandler;
   @Mock
-  private ClientCall<Void, Void> mockClientCall;
+  private ClientCall.Listener<String> mockClientCallListener;
   @Mock
-  private ClientCall.Listener<Void> mockClientCallListener;
+  private ServerCall.Listener<String> mockServerCallListener;
   @Captor
   private ArgumentCaptor<CallOptions> callOptionsCaptor;
   @Captor
-  private ArgumentCaptor<ClientCall.Listener<Void>> clientCallListenerCaptor;
+  private ArgumentCaptor<ClientCall.Listener<String>> clientCallListenerCaptor;
+  @Captor
+  private ArgumentCaptor<Status> statusCaptor;
 
   private Tracer tracer;
   private CensusStreamTracerModule census;
@@ -104,11 +178,17 @@ public class CensusStreamTracerModuleTest {
   @SuppressWarnings("unchecked")
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    when(mockChannel.newCall(any(MethodDescriptor.class), any(CallOptions.class)))
-        .thenReturn(mockClientCall);
+    when(mockSpanFactory.startSpan(any(Span.class), anyString(), any(StartSpanOptions.class)))
+        .thenReturn(spySpan);
+    when(
+        mockSpanFactory.startSpanWithRemoteParent(
+            any(SpanContext.class), anyString(), any(StartSpanOptions.class)))
+        .thenReturn(spySpan);
     tracer = new Tracer(mockSpanFactory) {};
     census =
-        new CensusStreamTracerModule(statsCtxFactory, tracer, fakeClock.getStopwatchSupplier());
+        new CensusStreamTracerModule(
+            statsCtxFactory, tracer, mockTracingPropagationHandler,
+            fakeClock.getStopwatchSupplier());
   }
 
   @After
@@ -127,16 +207,35 @@ public class CensusStreamTracerModuleTest {
   }
 
   private void testClientInterceptor(boolean customTag) {
-    String methodName = MethodDescriptor.generateFullMethodName("Service1", "method1");
-    ClientInterceptor interceptor = census.getClientInterceptor();
-    MethodDescriptor<Void, Void> method = MethodDescriptor.<Void, Void>newBuilder()
-        .setType(MethodType.UNARY)
-        .setFullMethodName(methodName)
-        .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
-        .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
-        .build();
+    String methodName = method.getFullMethodName();
+    grpcServerRule.getServiceRegistry().addService(
+        ServerServiceDefinition.builder("package.service1").addMethod(
+            method, new ServerCallHandler<String, String>() {
+                @Override
+                public ServerCall.Listener<String> startCall(
+                    ServerCall<String, String> call, Metadata headers) {
+                  call.sendHeaders(new Metadata());
+                  call.sendMessage("Hello");
+                  call.close(
+                      Status.PERMISSION_DENIED.withDescription("No you don't"), new Metadata());
+                  return mockServerCallListener;
+                }
+              }).build());
 
-    ClientCall<Void, Void> call;
+    final AtomicReference<CallOptions> capturedCallOptions = new AtomicReference<CallOptions>();
+    ClientInterceptor callOptionsCaptureInterceptor = new ClientInterceptor() {
+        @Override
+        public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+            MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+          capturedCallOptions.set(callOptions);
+          return next.newCall(method, callOptions);
+        }
+      };
+    Channel interceptedChannel =
+        ClientInterceptors.intercept(
+            grpcServerRule.getChannel(), callOptionsCaptureInterceptor,
+            census.getClientInterceptor());
+    ClientCall<String, String> call;
     if (customTag) {
       Context ctx =
           Context.ROOT.withValue(
@@ -145,43 +244,40 @@ public class CensusStreamTracerModuleTest {
                   StatsTestUtils.EXTRA_TAG, TagValue.create("extra value")));
       Context origCtx = ctx.attach();
       try {
-        call = interceptor.interceptCall(method, CALL_OPTIONS, mockChannel);
+        call = interceptedChannel.newCall(method, CALL_OPTIONS);
       } finally {
         ctx.detach(origCtx);
       }
     } else {
       assertNull(CensusStreamTracerModule.STATS_CONTEXT_KEY.get());
-      call = interceptor.interceptCall(method, CALL_OPTIONS, mockChannel);
+      call = interceptedChannel.newCall(method, CALL_OPTIONS);
     }
 
     // The interceptor adds tracer factory to CallOptions
-    verify(mockChannel).newCall(same(method), callOptionsCaptor.capture());
-    CallOptions capturedCallOptions = callOptionsCaptor.getValue();
-    assertEquals("customvalue", capturedCallOptions.getOption(CUSTOM_OPTION));
-    assertEquals(1, capturedCallOptions.getStreamTracerFactories().size());
-    assertTrue(capturedCallOptions.getStreamTracerFactories().get(0) instanceof ClientCallTracer);
+    assertEquals("customvalue", capturedCallOptions.get().getOption(CUSTOM_OPTION));
+    assertEquals(1, capturedCallOptions.get().getStreamTracerFactories().size());
+    assertTrue(
+        capturedCallOptions.get().getStreamTracerFactories().get(0) instanceof ClientCallTracer);
 
     // Start the call
     Metadata headers = new Metadata();
     call.start(mockClientCallListener, headers);
-
-    verify(mockClientCall).start(clientCallListenerCaptor.capture(), same(headers));
     assertNull(statsCtxFactory.pollRecord());
 
-    // Then listener receives onClose()
-    Status status = Status.CANCELLED.withDescription("I am just doing it");
-    Metadata trailers = new Metadata();
-    clientCallListenerCaptor.getValue().onClose(status, trailers);
+    call.halfClose();
+    call.request(1);
 
-    // The intercepting listener will call callEnded() on ClientTracerFactory, which records to
-    // Census.
-    verify(mockClientCallListener).onClose(same(status), same(trailers));
+    verify(mockClientCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
+    Status status = statusCaptor.getValue();
+    assertEquals(Status.Code.PERMISSION_DENIED, status.getCode());
+    assertEquals("No you don't", status.getDescription());
+    // The intercepting listener calls callEnded() on ClientTracerFactory, which records to Census.
     StatsTestUtils.MetricsRecord record = statsCtxFactory.pollRecord();
     assertNotNull(record);
     TagValue methodTag = record.tags.get(RpcConstants.RPC_CLIENT_METHOD);
     assertEquals(methodName, methodTag.toString());
     TagValue statusTag = record.tags.get(RpcConstants.RPC_STATUS);
-    assertEquals(Status.Code.CANCELLED.toString(), statusTag.toString());
+    assertEquals(Status.Code.PERMISSION_DENIED.toString(), statusTag.toString());
     if (customTag) {
       TagValue extraTag = record.tags.get(StatsTestUtils.EXTRA_TAG);
       assertEquals("extra value", extraTag.toString());
@@ -194,7 +290,7 @@ public class CensusStreamTracerModuleTest {
   public void clientBasicStats() {
     String methodName = MethodDescriptor.generateFullMethodName("Service1", "method1");
     ClientCallTracer callTracer =
-        census.newClientCallTracer(statsCtxFactory.getDefault(), methodName);
+        census.newClientCallTracer(statsCtxFactory.getDefault(), null, methodName);
     Metadata headers = new Metadata();
     ClientStreamTracer tracer = callTracer.newClientStreamTracer(headers);
 
@@ -237,9 +333,9 @@ public class CensusStreamTracerModuleTest {
 
   @Test
   public void clientStreamNeverCreated() {
-    String methodName = MethodDescriptor.generateFullMethodName("Service1", "method2");
+    String methodName = MethodDescriptor.generateFullMethodName("package1.Service2", "method3");
     ClientCallTracer callTracer =
-        census.newClientCallTracer(statsCtxFactory.getDefault(), methodName);
+        census.newClientCallTracer(statsCtxFactory.getDefault(), fakeParentSpan, methodName);
 
     fakeClock.forwardTime(3000, MILLISECONDS);
     callTracer.callEnded(Status.DEADLINE_EXCEEDED.withDescription("3 seconds"));
@@ -260,6 +356,11 @@ public class CensusStreamTracerModuleTest {
         record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
     assertEquals(3000, record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_ROUNDTRIP_LATENCY));
     assertNull(record.getMetric(RpcConstants.RPC_CLIENT_SERVER_ELAPSED_TIME));
+
+    verify(mockSpanFactory).startSpan(
+        same(fakeParentSpan), eq("Sent.package1.Service2.method3"),
+        any(StartSpanOptions.class));
+    verify(spySpan).end();
   }
 
   @Test
@@ -271,7 +372,7 @@ public class CensusStreamTracerModuleTest {
     // the propagation by putting them in the headers.
     StatsContext clientCtx = statsCtxFactory.getDefault().with(
         StatsTestUtils.EXTRA_TAG, TagValue.create("extra-tag-value-897"));
-    ClientCallTracer callTracer = census.newClientCallTracer(clientCtx, methodName);
+    ClientCallTracer callTracer = census.newClientCallTracer(clientCtx, null, methodName);
     Metadata headers = new Metadata();
     // This propagates clientCtx to headers
     callTracer.newClientStreamTracer(headers);
@@ -374,5 +475,45 @@ public class CensusStreamTracerModuleTest {
     assertNull(record.getMetric(RpcConstants.RPC_CLIENT_SERVER_ELAPSED_TIME));
     assertNull(record.getMetric(RpcConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES));
     assertNull(record.getMetric(RpcConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
+  }
+
+  // Promote the visibility of SpanFactory's methods to allow mocking
+  private abstract static class AccessibleSpanFactory extends SpanFactory {
+    @Override
+    public abstract Span startSpan(@Nullable Span parent, String name, StartSpanOptions options);
+
+    @Override
+    public abstract Span startSpanWithRemoteParent(
+        @Nullable SpanContext remoteParent, String name, StartSpanOptions options);
+  }
+
+  private class FakeSpan extends Span {
+    FakeSpan(SpanContext ctx) {
+      super(fakeSpanContext, null);
+    }
+
+    @Override
+    public void addAttributes(Map<String, AttributeValue> attributes) {
+    }
+
+    @Override
+    public void addAnnotation(String description, Map<String, AttributeValue> attributes) {
+    }
+
+    @Override
+    public void addAnnotation(Annotation annotation) {
+    }
+
+    @Override
+    public void addNetworkEvent(NetworkEvent networkEvent) {
+    }
+
+    @Override
+    public void addLink(Link link) {
+    }
+
+    @Override
+    public void end(EndSpanOptions options) {
+    }
   }
 }
