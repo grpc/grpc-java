@@ -84,7 +84,6 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
-import io.grpc.internal.CensusStreamTracerModule.ClientCallTracer;
 import io.grpc.internal.testing.StatsTestUtils;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsContextFactory;
 import io.grpc.testing.GrpcServerRule;
@@ -107,10 +106,10 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 /**
- * Test for {@link StatsTraceContext}.
+ * Test for {@link CensusStatsModule} and {@link CensusTracingModule}.
  */
 @RunWith(JUnit4.class)
-public class CensusStreamTracerModuleTest {
+public class CensusModulesTest {
   private static final CallOptions.Key<String> CUSTOM_OPTION =
       CallOptions.Key.of("option1", "default");
   private static final CallOptions CALL_OPTIONS =
@@ -193,7 +192,8 @@ public class CensusStreamTracerModuleTest {
   private ArgumentCaptor<Status> statusCaptor;
 
   private Tracer tracer;
-  private CensusStreamTracerModule census;
+  private CensusStatsModule censusStats;
+  private CensusTracingModule censusTracing;
 
   @Before
   @SuppressWarnings("unchecked")
@@ -210,10 +210,8 @@ public class CensusStreamTracerModuleTest {
     when(mockTracingPropagationHandler.fromBinaryValue(any(byte[].class)))
         .thenReturn(fakeServerParentSpanContext);
     tracer = new Tracer(mockSpanFactory) {};
-    census =
-        new CensusStreamTracerModule(
-            statsCtxFactory, tracer, mockTracingPropagationHandler,
-            fakeClock.getStopwatchSupplier());
+    censusStats = new CensusStatsModule(statsCtxFactory, fakeClock.getStopwatchSupplier());
+    censusTracing = new CensusTracingModule(tracer, mockTracingPropagationHandler);
   }
 
   @After
@@ -223,18 +221,18 @@ public class CensusStreamTracerModuleTest {
 
   @Test
   public void clientInterceptorNoCustomTag() {
-    testClientInterceptor(false);
+    testClientInterceptors(false);
   }
 
   @Test
   public void clientInterceptorCustomTag() {
-    testClientInterceptor(true);
+    testClientInterceptors(true);
   }
 
-  // Test that CensusClientInterceptor uses the StatsContext and Span out of the current Context
+  // Test that Census ClientInterceptors uses the StatsContext and Span out of the current Context
   // to create the ClientCallTracer, and that it intercepts ClientCall.Listener.onClose() to call
   // ClientCallTracer.callEnded().
-  private void testClientInterceptor(boolean nonDefaultContext) {
+  private void testClientInterceptors(boolean nonDefaultContext) {
     grpcServerRule.getServiceRegistry().addService(
         ServerServiceDefinition.builder("package1.service2").addMethod(
             method, new ServerCallHandler<String, String>() {
@@ -261,12 +259,12 @@ public class CensusStreamTracerModuleTest {
     Channel interceptedChannel =
         ClientInterceptors.intercept(
             grpcServerRule.getChannel(), callOptionsCaptureInterceptor,
-            census.getClientInterceptor());
+            censusStats.getClientInterceptor(), censusTracing.getClientInterceptor());
     ClientCall<String, String> call;
     if (nonDefaultContext) {
       Context ctx =
           Context.ROOT.withValues(
-              CensusStreamTracerModule.STATS_CONTEXT_KEY,
+              CensusStatsModule.STATS_CONTEXT_KEY,
               statsCtxFactory.getDefault().with(
                   StatsTestUtils.EXTRA_TAG, TagValue.create("extra value")),
               ContextUtils.CONTEXT_SPAN_KEY,
@@ -278,16 +276,20 @@ public class CensusStreamTracerModuleTest {
         ctx.detach(origCtx);
       }
     } else {
-      assertNull(CensusStreamTracerModule.STATS_CONTEXT_KEY.get());
+      assertNull(CensusStatsModule.STATS_CONTEXT_KEY.get());
       assertNull(ContextUtils.CONTEXT_SPAN_KEY.get());
       call = interceptedChannel.newCall(method, CALL_OPTIONS);
     }
 
     // The interceptor adds tracer factory to CallOptions
     assertEquals("customvalue", capturedCallOptions.get().getOption(CUSTOM_OPTION));
-    assertEquals(1, capturedCallOptions.get().getStreamTracerFactories().size());
+    assertEquals(2, capturedCallOptions.get().getStreamTracerFactories().size());
     assertTrue(
-        capturedCallOptions.get().getStreamTracerFactories().get(0) instanceof ClientCallTracer);
+        capturedCallOptions.get().getStreamTracerFactories().get(0)
+        instanceof CensusTracingModule.ClientCallTracer);
+    assertTrue(
+        capturedCallOptions.get().getStreamTracerFactories().get(1)
+        instanceof CensusStatsModule.ClientCallTracer);
 
     // Make the call
     Metadata headers = new Metadata();
@@ -329,14 +331,11 @@ public class CensusStreamTracerModuleTest {
   }
 
   @Test
-  public void clientBasicRecordingDefaultContexts() {
-    ClientCallTracer callTracer =
-        census.newClientCallTracer(statsCtxFactory.getDefault(), null, method.getFullMethodName());
+  public void clientBasicStatsDefaultContext() {
+    CensusStatsModule.ClientCallTracer callTracer =
+        censusStats.newClientCallTracer(statsCtxFactory.getDefault(), method.getFullMethodName());
     Metadata headers = new Metadata();
     ClientStreamTracer tracer = callTracer.newClientStreamTracer(headers);
-    verify(mockSpanFactory).startSpan(
-        isNull(Span.class), eq("Sent.package1.service2.method3"), any(StartSpanOptions.class));
-    verify(spyClientSpan, never()).end();
 
     fakeClock.forwardTime(30, MILLISECONDS);
     tracer.outboundHeaders();
@@ -357,9 +356,6 @@ public class CensusStreamTracerModuleTest {
     tracer.streamClosed(Status.OK);
     callTracer.callEnded(Status.OK);
 
-    verify(spyClientSpan).end();
-    verifyNoMoreInteractions(mockSpanFactory);
-
     StatsTestUtils.MetricsRecord record = statsCtxFactory.pollRecord();
     assertNotNull(record);
     assertNoServerContent(record);
@@ -379,10 +375,27 @@ public class CensusStreamTracerModuleTest {
   }
 
   @Test
-  public void clientStreamNeverCreated() {
-    ClientCallTracer callTracer =
-        census.newClientCallTracer(
-            statsCtxFactory.getDefault(), fakeClientParentSpan, method.getFullMethodName());
+  public void clientBasicTracingDefaultSpan() {
+    CensusTracingModule.ClientCallTracer callTracer =
+        censusTracing.newClientCallTracer(null, method.getFullMethodName());
+    Metadata headers = new Metadata();
+    ClientStreamTracer tracer = callTracer.newClientStreamTracer(headers);
+    verify(mockSpanFactory).startSpan(
+        isNull(Span.class), eq("Sent.package1.service2.method3"), any(StartSpanOptions.class));
+    verify(spyClientSpan, never()).end();
+
+    tracer.streamClosed(Status.OK);
+    callTracer.callEnded(Status.OK);
+
+    verify(spyClientSpan).end();
+    verifyNoMoreInteractions(mockSpanFactory);
+  }
+
+  @Test
+  public void clientStreamNeverCreatedStillRecordStats() {
+    CensusStatsModule.ClientCallTracer callTracer =
+        censusStats.newClientCallTracer(
+            statsCtxFactory.getDefault(), method.getFullMethodName());
 
     fakeClock.forwardTime(3000, MILLISECONDS);
     callTracer.callEnded(Status.DEADLINE_EXCEEDED.withDescription("3 seconds"));
@@ -403,10 +416,17 @@ public class CensusStreamTracerModuleTest {
         record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
     assertEquals(3000, record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_ROUNDTRIP_LATENCY));
     assertNull(record.getMetric(RpcConstants.RPC_CLIENT_SERVER_ELAPSED_TIME));
+  }
 
+  @Test
+  public void clientStreamNeverCreatedStillRecordTracing() {
+    CensusTracingModule.ClientCallTracer callTracer =
+        censusTracing.newClientCallTracer(fakeClientParentSpan, method.getFullMethodName());
     verify(mockSpanFactory).startSpan(
         same(fakeClientParentSpan), eq("Sent.package1.service2.method3"),
         any(StartSpanOptions.class));
+
+    callTracer.callEnded(Status.DEADLINE_EXCEEDED.withDescription("3 seconds"));
     verify(spyClientSpan).end();
   }
 
@@ -417,20 +437,21 @@ public class CensusStreamTracerModuleTest {
     // the propagation by putting them in the headers.
     StatsContext clientCtx = statsCtxFactory.getDefault().with(
         StatsTestUtils.EXTRA_TAG, TagValue.create("extra-tag-value-897"));
-    ClientCallTracer callTracer =
-        census.newClientCallTracer(clientCtx, null, method.getFullMethodName());
+    CensusStatsModule.ClientCallTracer callTracer =
+        censusStats.newClientCallTracer(clientCtx, method.getFullMethodName());
     Metadata headers = new Metadata();
     // This propagates clientCtx to headers
     callTracer.newClientStreamTracer(headers);
-    assertTrue(headers.containsKey(census.statsHeader));
+    assertTrue(headers.containsKey(censusStats.statsHeader));
 
     ServerStreamTracer serverTracer =
-        census.getServerTracerFactory().newServerStreamTracer(method.getFullMethodName(), headers);
+        censusStats.getServerTracerFactory().newServerStreamTracer(
+            method.getFullMethodName(), headers);
     // Server tracer deserializes clientCtx from the headers, so that it records stats with the
     // propagated tags.
     Context serverContext = serverTracer.filterContext(Context.ROOT);
     // It also put clientCtx in the Context seen by the call handler
-    assertEquals(clientCtx, CensusStreamTracerModule.STATS_CONTEXT_KEY.get(serverContext));
+    assertEquals(clientCtx, CensusStatsModule.STATS_CONTEXT_KEY.get(serverContext));
 
 
     // Verifies that the server tracer records the status with the propagated tag
@@ -465,11 +486,11 @@ public class CensusStreamTracerModuleTest {
 
   @Test
   public void statsHeadersNotPropagateDefaultContext() {
-    ClientCallTracer callTracer =
-        census.newClientCallTracer(statsCtxFactory.getDefault(), null, method.getFullMethodName());
+    CensusStatsModule.ClientCallTracer callTracer =
+        censusStats.newClientCallTracer(statsCtxFactory.getDefault(), method.getFullMethodName());
     Metadata headers = new Metadata();
     callTracer.newClientStreamTracer(headers);
-    assertFalse(headers.containsKey(census.statsHeader));
+    assertFalse(headers.containsKey(censusStats.statsHeader));
   }
 
   @Test
@@ -487,16 +508,15 @@ public class CensusStreamTracerModuleTest {
 
     // But the header key will return a default context for it
     Metadata headers = new Metadata();
-    assertNull(headers.get(census.statsHeader));
+    assertNull(headers.get(censusStats.statsHeader));
     headers.put(arbitraryStatsHeader, statsHeaderValue);
-    assertSame(statsCtxFactory.getDefault(), headers.get(census.statsHeader));
+    assertSame(statsCtxFactory.getDefault(), headers.get(censusStats.statsHeader));
   }
 
   @Test
   public void traceHeadersPropagateSpanContext() throws Exception {
-    ClientCallTracer callTracer =
-        census.newClientCallTracer(
-            statsCtxFactory.getDefault(), fakeClientParentSpan, method.getFullMethodName());
+    CensusTracingModule.ClientCallTracer callTracer =
+        censusTracing.newClientCallTracer(fakeClientParentSpan, method.getFullMethodName());
     Metadata headers = new Metadata();
     callTracer.newClientStreamTracer(headers);
 
@@ -506,10 +526,11 @@ public class CensusStreamTracerModuleTest {
         same(fakeClientParentSpan), eq("Sent.package1.service2.method3"),
         any(StartSpanOptions.class));
     verifyNoMoreInteractions(mockSpanFactory);
-    assertTrue(headers.containsKey(census.tracingHeader));
+    assertTrue(headers.containsKey(censusTracing.tracingHeader));
 
     ServerStreamTracer serverTracer =
-        census.getServerTracerFactory().newServerStreamTracer(method.getFullMethodName(), headers);
+        censusTracing.getServerTracerFactory().newServerStreamTracer(
+            method.getFullMethodName(), headers);
     verify(mockTracingPropagationHandler).fromBinaryValue(same(binarySpanContext));
     verify(mockSpanFactory).startSpanWithRemoteParent(
         same(fakeServerParentSpanContext), eq("Recv.package1.service2.method3"),
@@ -523,33 +544,29 @@ public class CensusStreamTracerModuleTest {
   public void traceHeaderMalformed() throws Exception {
     // As comparison, normal header parsing
     Metadata headers = new Metadata();
-    headers.put(census.tracingHeader, fakeClientSpanContext);
+    headers.put(censusTracing.tracingHeader, fakeClientSpanContext);
     // mockTracingPropagationHandler was stubbed to always return fakeServerParentSpanContext
-    assertSame(fakeServerParentSpanContext, headers.get(census.tracingHeader));
+    assertSame(fakeServerParentSpanContext, headers.get(censusTracing.tracingHeader));
 
     // Make BinaryPropagationHandler always throw when parsing the header
     when(mockTracingPropagationHandler.fromBinaryValue(any(byte[].class)))
         .thenThrow(new ParseException("Malformed header", 0));
 
     headers = new Metadata();
-    assertNull(headers.get(census.tracingHeader));
-    headers.put(census.tracingHeader, fakeClientSpanContext);
-    assertSame(SpanContext.INVALID, headers.get(census.tracingHeader));
+    assertNull(headers.get(censusTracing.tracingHeader));
+    headers.put(censusTracing.tracingHeader, fakeClientSpanContext);
+    assertSame(SpanContext.INVALID, headers.get(censusTracing.tracingHeader));
     assertNotSame(fakeServerParentSpanContext, SpanContext.INVALID);
   }
 
   @Test
-  public void serverBasicRecordingNoHeaders() {
-    ServerStreamTracer.Factory tracerFactory = census.getServerTracerFactory();
+  public void serverBasicStatsNoHeaders() {
+    ServerStreamTracer.Factory tracerFactory = censusStats.getServerTracerFactory();
     ServerStreamTracer tracer =
         tracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
-    verifyZeroInteractions(mockTracingPropagationHandler);
-    verify(mockSpanFactory).startSpanWithRemoteParent(
-        isNull(SpanContext.class), eq("Recv.package1.service2.method3"),
-        any(StartSpanOptions.class));
 
     Context filteredContext = tracer.filterContext(Context.ROOT);
-    assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));
+    assertNull(CensusStatsModule.STATS_CONTEXT_KEY.get(filteredContext));
 
     tracer.inboundWireSize(34);
     tracer.inboundUncompressedSize(67);
@@ -569,7 +586,6 @@ public class CensusStreamTracerModuleTest {
     verify(spyServerSpan, never()).end();
     tracer.streamClosed(Status.CANCELLED);
 
-    verify(spyServerSpan).end();
     StatsTestUtils.MetricsRecord record = statsCtxFactory.pollRecord();
     assertNotNull(record);
     assertNoClientContent(record);
@@ -586,6 +602,25 @@ public class CensusStreamTracerModuleTest {
         record.getMetricAsLongOrFail(RpcConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES));
     assertEquals(100 + 16 + 24,
         record.getMetricAsLongOrFail(RpcConstants.RPC_SERVER_SERVER_LATENCY));
+  }
+
+  @Test
+  public void serverBasicTracingNoHeaders() {
+    ServerStreamTracer.Factory tracerFactory = censusTracing.getServerTracerFactory();
+    ServerStreamTracer tracer =
+        tracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
+    verifyZeroInteractions(mockTracingPropagationHandler);
+    verify(mockSpanFactory).startSpanWithRemoteParent(
+        isNull(SpanContext.class), eq("Recv.package1.service2.method3"),
+        any(StartSpanOptions.class));
+
+    Context filteredContext = tracer.filterContext(Context.ROOT);
+    assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));
+
+    verify(spyServerSpan, never()).end();
+    tracer.streamClosed(Status.CANCELLED);
+
+    verify(spyServerSpan).end();
   }
 
   private static void assertNoServerContent(StatsTestUtils.MetricsRecord record) {

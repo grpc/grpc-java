@@ -288,21 +288,23 @@ public abstract class AbstractManagedChannelImplBuilder
       nameResolverFactory = NameResolverProvider.asFactory();
     }
 
-    List<ClientInterceptor> interceptors = this.interceptors;
+    List<ClientInterceptor> effectiveInterceptors =
+        new ArrayList<ClientInterceptor>(this.interceptors);
     if (recordsStats()) {
       StatsContextFactory statsCtxFactory =
           this.statsFactory != null ? this.statsFactory : Stats.getStatsContextFactory();
       if (statsCtxFactory != null) {
-        interceptors = new ArrayList<ClientInterceptor>(this.interceptors);
-        CensusStreamTracerModule census =
-            new CensusStreamTracerModule(
-                statsCtxFactory, Tracing.getTracer(), Tracing.getBinaryPropagationHandler(),
-                GrpcUtil.STOPWATCH_SUPPLIER);
+        CensusStatsModule censusStats =
+            new CensusStatsModule(statsCtxFactory, GrpcUtil.STOPWATCH_SUPPLIER);
         // First interceptor runs last (see ClientInterceptors.intercept()), so that no
         // other interceptor can override the tracer factory we set in CallOptions.
-        interceptors.add(0, census.getClientInterceptor());
+        effectiveInterceptors.add(0, censusStats.getClientInterceptor());
       }
     }
+    CensusTracingModule censusTracing =
+        new CensusTracingModule(Tracing.getTracer(), Tracing.getBinaryPropagationHandler());
+    effectiveInterceptors.add(0, censusTracing.getClientInterceptor());
+
     return new ManagedChannelImpl(
         target,
         // TODO(carl-mastrangelo): Allow clients to pass this in
@@ -319,7 +321,7 @@ public abstract class AbstractManagedChannelImplBuilder
         GrpcUtil.STOPWATCH_SUPPLIER,
         idleTimeoutMillis,
         userAgent,
-        interceptors);
+        effectiveInterceptors);
   }
 
   /**
