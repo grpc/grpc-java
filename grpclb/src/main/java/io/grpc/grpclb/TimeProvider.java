@@ -31,43 +31,9 @@
 
 package io.grpc.grpclb;
 
-import io.grpc.ExperimentalApi;
-import io.grpc.LoadBalancer;
-import io.grpc.PickFirstBalancerFactory;
-import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.SharedResourcePool;
-import io.grpc.util.RoundRobinLoadBalancerFactory;
-
 /**
- * A factory for {@link LoadBalancer}s that uses the GRPCLB protocol.
- *
- * <p><b>Experimental:</b>This only works with the GRPCLB load-balancer service, which is not
- * available yet. Right now it's only good for internal testing.
+ * Allow time manipulation in tests.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/1782")
-public class GrpclbLoadBalancerFactory extends LoadBalancer.Factory {
-
-  private static final GrpclbLoadBalancerFactory instance = new GrpclbLoadBalancerFactory();
-  private static final TimeProvider realTimeProvider = new TimeProvider() {
-      @Override
-      public long currentTimeMillis() {
-        return System.currentTimeMillis();
-      }
-    };
-
-  private GrpclbLoadBalancerFactory() {
-  }
-
-  public static GrpclbLoadBalancerFactory getInstance() {
-    return instance;
-  }
-
-  @Override
-  public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
-    return new GrpclbLoadBalancer(
-        helper, PickFirstBalancerFactory.getInstance(),
-        RoundRobinLoadBalancerFactory.getInstance(),
-        SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE),
-        realTimeProvider);
-  }
+interface TimeProvider {
+  long currentTimeMillis();
 }

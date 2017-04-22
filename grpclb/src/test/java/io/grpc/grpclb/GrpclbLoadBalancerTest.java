@@ -80,6 +80,8 @@ import io.grpc.grpclb.GrpclbLoadBalancer.RoundRobinEntry;
 import io.grpc.grpclb.GrpclbLoadBalancer.RoundRobinPicker;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.internal.FakeClock;
+import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.StreamObserver;
@@ -93,6 +95,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.ScheduledExecutorService;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -144,6 +147,7 @@ public class GrpclbLoadBalancerTest {
   private LoadBalancerGrpc.LoadBalancerImplBase mockLbService;
   @Captor
   private ArgumentCaptor<StreamObserver<LoadBalanceResponse>> lbResponseObserverCaptor;
+  private final FakeClock fakeClock = new FakeClock();
   private final LinkedList<StreamObserver<LoadBalanceRequest>> lbRequestObservers =
       new LinkedList<StreamObserver<LoadBalanceRequest>>();
   private final LinkedList<Subchannel> mockSubchannels = new LinkedList<Subchannel>();
@@ -151,6 +155,13 @@ public class GrpclbLoadBalancerTest {
   private final ArrayList<Subchannel> subchannelTracker = new ArrayList<Subchannel>();
   private final ArrayList<ManagedChannel> oobChannelTracker = new ArrayList<ManagedChannel>();
   private final ArrayList<String> failingLbAuthorities = new ArrayList<String>();
+  private final TimeProvider timeProvider = new TimeProvider() {
+      @Override
+      public long currentTimeMillis() {
+        return fakeClock.currentTimeMillis();
+      }
+    };
+
   private io.grpc.Server fakeLbServer;
   @Captor
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
@@ -164,6 +175,8 @@ public class GrpclbLoadBalancerTest {
   private LoadBalancer.Factory roundRobinBalancerFactory;
   @Mock
   private LoadBalancer roundRobinBalancer;
+  @Mock
+  private ObjectPool<ScheduledExecutorService> timerServicePool;
   private GrpclbLoadBalancer balancer;
 
   @SuppressWarnings("unchecked")
@@ -238,7 +251,11 @@ public class GrpclbLoadBalancerTest {
         }
       }).when(helper).runSerialized(any(Runnable.class));
     when(helper.getAuthority()).thenReturn(SERVICE_AUTHORITY);
-    balancer = new GrpclbLoadBalancer(helper, pickFirstBalancerFactory, roundRobinBalancerFactory);
+    when(timerServicePool.getObject()).thenReturn(fakeClock.getScheduledExecutorService());
+    balancer = new GrpclbLoadBalancer(
+        helper, pickFirstBalancerFactory, roundRobinBalancerFactory,
+        timerServicePool,
+        timeProvider);
   }
 
   @After
@@ -278,10 +295,11 @@ public class GrpclbLoadBalancerTest {
 
   @Test
   public void roundRobinPicker() {
+    GrpclbClientLoadRecorder loadRecorder = new GrpclbClientLoadRecorder(timeProvider);
     Subchannel subchannel = mock(Subchannel.class);
     RoundRobinEntry r1 = new RoundRobinEntry(Status.UNAVAILABLE.withDescription("Just error"));
-    RoundRobinEntry r2 = new RoundRobinEntry(subchannel, "LBTOKEN0001");
-    RoundRobinEntry r3 = new RoundRobinEntry(subchannel, "LBTOKEN0002");
+    RoundRobinEntry r2 = new RoundRobinEntry(subchannel, loadRecorder, "LBTOKEN0001");
+    RoundRobinEntry r3 = new RoundRobinEntry(subchannel, loadRecorder, "LBTOKEN0002");
 
     List<RoundRobinEntry> list = Arrays.asList(r1, r2, r3);
     RoundRobinPicker picker = new RoundRobinPicker(list);
@@ -590,14 +608,16 @@ public class GrpclbLoadBalancerTest {
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updatePicker(pickerCaptor.capture());
     RoundRobinPicker picker1 = (RoundRobinPicker) pickerCaptor.getValue();
-    assertThat(picker1.list).containsExactly(new RoundRobinEntry(subchannel2, "token0002"));
+    assertThat(picker1.list).containsExactly(
+        new RoundRobinEntry(subchannel2, balancer.getLoadRecorder(), "token0002"));
 
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updatePicker(pickerCaptor.capture());
     RoundRobinPicker picker2 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker2.list).containsExactly(
-        new RoundRobinEntry(subchannel1, "token0001"),
-        new RoundRobinEntry(subchannel2, "token0002")).inOrder();
+        new RoundRobinEntry(subchannel1, balancer.getLoadRecorder(), "token0001"),
+        new RoundRobinEntry(subchannel2, balancer.getLoadRecorder(), "token0002"))
+        .inOrder();
 
     // Disconnected subchannels
     verify(subchannel1).requestConnection();
@@ -605,7 +625,8 @@ public class GrpclbLoadBalancerTest {
     verify(subchannel1, times(2)).requestConnection();
     inOrder.verify(helper).updatePicker(pickerCaptor.capture());
     RoundRobinPicker picker3 = (RoundRobinPicker) pickerCaptor.getValue();
-    assertThat(picker3.list).containsExactly(new RoundRobinEntry(subchannel2, "token0002"));
+    assertThat(picker3.list).containsExactly(
+        new RoundRobinEntry(subchannel2, balancer.getLoadRecorder(), "token0002"));
 
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(CONNECTING));
     inOrder.verifyNoMoreInteractions();
@@ -649,7 +670,9 @@ public class GrpclbLoadBalancerTest {
     assertEquals(new EquivalentAddressGroup(backends2.get(0).addr), subchannel3.getAddresses());
     inOrder.verify(helper).updatePicker(pickerCaptor.capture());
     RoundRobinPicker picker7 = (RoundRobinPicker) pickerCaptor.getValue();
-    assertThat(picker7.list).containsExactly(GrpclbLoadBalancer.DROP_ENTRY_);
+    assertThat(picker7.list).containsExactly(
+        GrpclbLoadBalancer.DROP_ENTRY_FOR_RATE_LIMITING,
+        GrpclbLoadBalancer.DROP_ENTRY_FOR_LOAD_BALANCING).inOrder();
 
     // State updates on obsolete subchannel1 will have no effect
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
@@ -663,19 +686,19 @@ public class GrpclbLoadBalancerTest {
     RoundRobinPicker picker8 = (RoundRobinPicker) pickerCaptor.getValue();
     // subchannel2 is still IDLE, thus not in the active list
     assertThat(picker8.list).containsExactly(
-        new RoundRobinEntry(subchannel3, "token0003"),
+        new RoundRobinEntry(subchannel3, balancer.getLoadRecorder(), "token0003"),
         GrpclbLoadBalancer.DROP_ENTRY_FOR_RATE_LIMITING,
-        new RoundRobinEntry(subchannel3, "token0005"),
+        new RoundRobinEntry(subchannel3, balancer.getLoadRecorder(), "token0005"),
         GrpclbLoadBalancer.DROP_ENTRY_FOR_LOAD_BALANCING).inOrder();
     // subchannel2 becomes READY and makes it into the list
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updatePicker(pickerCaptor.capture());
     RoundRobinPicker picker9 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker9.list).containsExactly(
-        new RoundRobinEntry(subchannel3, "token0003"),
+        new RoundRobinEntry(subchannel3, balancer.getLoadRecorder(), "token0003"),
         GrpclbLoadBalancer.DROP_ENTRY_FOR_RATE_LIMITING,
-        new RoundRobinEntry(subchannel2, "token0004"),
-        new RoundRobinEntry(subchannel3, "token0005"),
+        new RoundRobinEntry(subchannel2, balancer.getLoadRecorder(), "token0004"),
+        new RoundRobinEntry(subchannel3, balancer.getLoadRecorder(), "token0005"),
         GrpclbLoadBalancer.DROP_ENTRY_FOR_LOAD_BALANCING).inOrder();
     verify(subchannel3, never()).shutdown();
 
@@ -785,14 +808,21 @@ public class GrpclbLoadBalancerTest {
   private static LoadBalanceResponse buildLbResponse(List<ServerEntry> servers) {
     ServerList.Builder serverListBuilder = ServerList.newBuilder();
     for (ServerEntry server : servers) {
-      if (server != null) {
+      if (server.dropType == null) {
         serverListBuilder.addServers(Server.newBuilder()
             .setIpAddress(ByteString.copyFrom(server.addr.getAddress().getAddress()))
             .setPort(server.addr.getPort())
             .setLoadBalanceToken(server.token)
             .build());
       } else {
-        serverListBuilder.addServers(Server.newBuilder().setDropRequest(true).build());
+        switch (server.dropType) {
+          case RATE_LIMITING:
+            serverListBuilder.addServers(Server.newBuilder().setDropForRateLimiting(true).build());
+            break;
+          case LOAD_BALANCING:
+            serverListBuilder.addServers(Server.newBuilder().setDropForLoadBalancing(true).build());
+            break;
+        }
       }
     }
     return LoadBalanceResponse.newBuilder()
@@ -813,7 +843,7 @@ public class GrpclbLoadBalancerTest {
 
     ServerEntry(DropType dropType) {
       this.dropType = dropType;
-      this.addr = nul;
+      this.addr = null;
       this.token = null;
     }
   }

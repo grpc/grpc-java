@@ -31,41 +31,102 @@
 
 package io.grpc.grpclb;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
+import com.google.protobuf.Timestamp;
+import com.google.protobuf.util.Timestamps;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ExperimentalApi;
+import io.grpc.Metadata;
+import io.grpc.Status;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Record and aggregate client-side load data for GRPCLB.  This records load occurred during the
  * span of a certain connection with the load-balancing.
  */
-final class GrpclbClientLoadRecorder {
-  /**
-   * Returns a tracer factory that records the per-stream load data.
-   *
-   * @param connectionId a process-wide unique identifier for the current connection to the remote
-   *        load-balancer.
-   */
-  ClientStreamTracer.Factory getStreamTracerFactory() {
-    return null;
+@ThreadSafe
+final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
+  private final TimeProvider time;
+  private final AtomicLong callsStarted = new AtomicLong();
+  private final AtomicLong callsFinished = new AtomicLong();
+
+  // Specific finish types
+  private final AtomicLong callsDroppedForRateLimiting = new AtomicLong();
+  private final AtomicLong callsDroppedForLoadBalancing = new AtomicLong();
+  private final AtomicLong callsFailedToSend = new AtomicLong();
+  private final AtomicLong callsFinishedKnownReceived = new AtomicLong();
+
+  GrpclbClientLoadRecorder(TimeProvider time) {
+    this.time = checkNotNull(time, "time provider");
+  }
+
+  @Override
+  public ClientStreamTracer newClientStreamTracer(Metadata headers) {
+    callsStarted.incrementAndGet();
+    return new StreamTracer();
   }
 
   /**
    * Records that a request has been dropped as instructed by the remote balancer.
    */
   void recordDroppedRequest(DropType type) {
-  }
-
-  /**
-   * Close this recorder.  All existing and further data will be discarded.  This is called
-   * whenever connection to balancer has been closed.
-   */
-  void close() {
+    callsStarted.incrementAndGet();
+    switch (type) {
+      case RATE_LIMITING:
+        callsDroppedForRateLimiting.incrementAndGet();
+        break;
+      case LOAD_BALANCING:
+        callsDroppedForLoadBalancing.incrementAndGet();
+        break;
+    }
   }
 
   /**
    * Generate the report with the data recorded this connection since the last report.
    */
   ClientStats generateLoadReport() {
-    return null;
+    return ClientStats.newBuilder()
+        .setTimestamp(Timestamps.fromMillis(time.currentTimeMillis()))
+        .setNumCallsStarted(callsStarted.getAndSet(0))
+        .setNumCallsFinished(callsFinished.getAndSet(0))
+        .setNumCallsFinishedWithDropForRateLimiting(callsDroppedForRateLimiting.getAndSet(0))
+        .setNumCallsFinishedWithDropForLoadBalancing(callsDroppedForLoadBalancing.getAndSet(0))
+        .setNumCallsFinishedWithClientFailedToSend(callsFailedToSend.getAndSet(0))
+        .setNumCallsFinishedKnownReceived(callsFinishedKnownReceived.getAndSet(0))
+        .build();
+  }
+
+  private class StreamTracer extends ClientStreamTracer {
+    final AtomicBoolean headersSent = new AtomicBoolean();
+    final AtomicBoolean anythingReceived = new AtomicBoolean();
+
+    @Override
+    public void outboundHeaders() {
+      headersSent.set(true);
+    }
+
+    @Override
+    public void inboundHeaders() {
+      anythingReceived.set(true);
+    }
+
+    @Override
+    public void inboundMessage() {
+      anythingReceived.set(true);
+    }
+
+    @Override
+    public void streamClosed(Status status) {
+      callsFinished.incrementAndGet();
+      if (!headersSent.get()) {
+        callsFailedToSend.incrementAndGet();
+      }
+      if (anythingReceived.get()) {
+        callsFinishedKnownReceived.incrementAndGet();
+      }
+    }
   }
 }

@@ -51,6 +51,7 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.grpclb.GrpclbConstants.LbPolicy;
 import io.grpc.internal.LogId;
+import io.grpc.internal.ObjectPool;
 import io.grpc.internal.WithLogId;
 import io.grpc.stub.StreamObserver;
 import java.net.InetAddress;
@@ -63,6 +64,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -91,6 +93,8 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   private final Helper helper;
   private final Factory pickFirstBalancerFactory;
   private final Factory roundRobinBalancerFactory;
+  private final ObjectPool<ScheduledExecutorService> timerServicePool;
+  private final TimeProvider time;
 
   private static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.of("io.grpc.grpclb.GrpclbLoadBalancer.stateInfo");
@@ -114,6 +118,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   ///////////////////////////////////////////////////////////////////////////////
   // General states.
   ///////////////////////////////////////////////////////////////////////////////
+  private ScheduledExecutorService timerService;
 
   // If not null, all work is delegated to it.
   @Nullable
@@ -130,6 +135,8 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   @Nullable
   private ManagedChannel lbCommChannel;
   @Nullable
+  private GrpclbClientLoadRecorder loadRecorder;
+  @Nullable
   private LbResponseObserver lbResponseObserver;
   @Nullable
   private StreamObserver<LoadBalanceRequest> lbRequestWriter;
@@ -139,13 +146,17 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   private SubchannelPicker currentPicker = BUFFER_PICKER;
 
   GrpclbLoadBalancer(Helper helper, Factory pickFirstBalancerFactory,
-      Factory roundRobinBalancerFactory) {
+      Factory roundRobinBalancerFactory, ObjectPool<ScheduledExecutorService> timerServicePool,
+      TimeProvider time) {
     this.helper = checkNotNull(helper, "helper");
     this.serviceName = checkNotNull(helper.getAuthority(), "helper returns null authority");
     this.pickFirstBalancerFactory =
         checkNotNull(pickFirstBalancerFactory, "pickFirstBalancerFactory");
     this.roundRobinBalancerFactory =
         checkNotNull(roundRobinBalancerFactory, "roundRobinBalancerFactory");
+    this.timerServicePool = checkNotNull(timerServicePool, "timerServicePool");
+    this.timerService = checkNotNull(timerServicePool.getObject(), "timerService");
+    this.time = checkNotNull(time, "time provider");
   }
 
   @Override
@@ -264,6 +275,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     checkState(lbCommChannel == null, "previous lbCommChannel has not been closed yet");
     lbCommChannel = helper.createOobChannel(
         lbAddressGroup.getAddresses(), lbAddressGroup.getAuthority());
+    loadRecorder = new GrpclbClientLoadRecorder(time);
     startLbRpc();
   }
 
@@ -296,6 +308,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       subchannel.shutdown();
     }
     subchannels = Collections.emptyMap();
+    timerService = timerServicePool.returnObject(timerService);
   }
 
   private void handleGrpclbError(Status status) {
@@ -313,6 +326,12 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     } else {
       handleGrpclbError(error);
     }
+  }
+
+  @VisibleForTesting
+  @Nullable
+  GrpclbClientLoadRecorder getLoadRecorder() {
+    return loadRecorder;
   }
 
   private class LbResponseObserver implements StreamObserver<LoadBalanceResponse> {
@@ -370,7 +389,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
             }
             newSubchannelMap.put(eag, subchannel);
           }
-          newRoundRobinList.add(new RoundRobinEntry(subchannel, token));
+          newRoundRobinList.add(new RoundRobinEntry(subchannel, loadRecorder, token));
         }
       }
       // Close Subchannels whose addresses have been delisted
@@ -424,6 +443,8 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   private void maybeUpdatePicker() {
     List<RoundRobinEntry> resultList = new ArrayList<RoundRobinEntry>();
     Status error = null;
+    // TODO(zhangkun83): if roundRobinList contains at least one address, but none of them are ready
+    // always return BUFFER_PICKER, no matter if there are drop entries or not.
     for (RoundRobinEntry entry : roundRobinList) {
       Subchannel subchannel = entry.result.getSubchannel();
       if (subchannel != null) {
@@ -541,8 +562,8 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     /**
      * A non-drop result.
      */
-    RoundRobinEntry(Subchannel subchannel, String token) {
-      this.result = PickResult.withSubchannel(subchannel);
+    RoundRobinEntry(Subchannel subchannel, GrpclbClientLoadRecorder loadRecorder, String token) {
+      this.result = PickResult.withSubchannel(subchannel, loadRecorder);
       this.token = token;
     }
 
@@ -607,4 +628,5 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       }
     }
   }
+
 }
