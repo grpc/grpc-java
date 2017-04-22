@@ -488,6 +488,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     void close() {
       stopLoadReporting();
       dismissed = true;
+      lbRequestWriter.onCompleted();
     }
   }
 
