@@ -42,6 +42,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
+import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -65,6 +66,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -134,12 +137,9 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   private LbAddressGroup lbAddressGroup;
   @Nullable
   private ManagedChannel lbCommChannel;
+
   @Nullable
-  private GrpclbClientLoadRecorder loadRecorder;
-  @Nullable
-  private LbResponseObserver lbResponseObserver;
-  @Nullable
-  private StreamObserver<LoadBalanceRequest> lbRequestWriter;
+  private LbStream lbStream;
   private Map<EquivalentAddressGroup, Subchannel> subchannels = Collections.emptyMap();
 
   private List<RoundRobinEntry> roundRobinList = Collections.emptyList();
@@ -261,13 +261,9 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       lbCommChannel.shutdown();
       lbCommChannel = null;
     }
-    if (lbRequestWriter != null) {
-      lbRequestWriter.onCompleted();
-      lbRequestWriter = null;
-    }
-    if (lbResponseObserver != null) {
-      lbResponseObserver.dismissed = true;
-      lbResponseObserver = null;
+    if (lbStream != null) {
+      lbStream.close();
+      lbStream = null;
     }
   }
 
@@ -275,22 +271,19 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     checkState(lbCommChannel == null, "previous lbCommChannel has not been closed yet");
     lbCommChannel = helper.createOobChannel(
         lbAddressGroup.getAddresses(), lbAddressGroup.getAuthority());
-    loadRecorder = new GrpclbClientLoadRecorder(time);
     startLbRpc();
   }
 
   private void startLbRpc() {
-    checkState(lbRequestWriter == null, "previous lbRequestWriter has not been cleared yet");
-    checkState(lbResponseObserver == null, "previous lbResponseObserver has not been cleared yet");
+    checkState(lbStream == null, "previous lbStream has not been cleared yet");
     LoadBalancerGrpc.LoadBalancerStub stub = LoadBalancerGrpc.newStub(lbCommChannel);
-    lbResponseObserver = new LbResponseObserver();
-    lbRequestWriter = stub.withWaitForReady().balanceLoad(lbResponseObserver);
+    lbStream = new LbStream(stub);
 
     LoadBalanceRequest initRequest = LoadBalanceRequest.newBuilder()
         .setInitialRequest(InitialLoadBalanceRequest.newBuilder()
             .setName(serviceName).build())
         .build();
-    lbRequestWriter.onNext(initRequest);
+    lbStream.lbRequestWriter.onNext(initRequest);
   }
 
   private void shutdownDelegate() {
@@ -331,19 +324,87 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   @VisibleForTesting
   @Nullable
   GrpclbClientLoadRecorder getLoadRecorder() {
-    return loadRecorder;
+    if (lbStream == null) {
+      return null;
+    }
+    return lbStream.loadRecorder;
   }
 
-  private class LbResponseObserver implements StreamObserver<LoadBalanceResponse> {
+  private class LbStream implements StreamObserver<LoadBalanceResponse> {
+    final StreamObserver<LoadBalanceRequest> lbRequestWriter;
+    final GrpclbClientLoadRecorder loadRecorder;
+
+    final Runnable loadReportRunnable = new Runnable() {
+        @Override
+        public void run() {
+          helper.runSerialized(new Runnable() {
+              @Override
+              public void run() {
+                sendLoadReport();
+              }
+            });
+        }
+      };
+
     boolean dismissed;
+    long loadReportIntervalMillis = -1;
+    ScheduledFuture<?> loadReportTask;
+
+    LbStream(LoadBalancerGrpc.LoadBalancerStub stub) {
+      loadRecorder = new GrpclbClientLoadRecorder(time);
+      lbRequestWriter = stub.withWaitForReady().balanceLoad(this);
+    }
 
     @Override public void onNext(final LoadBalanceResponse response) {
       helper.runSerialized(new Runnable() {
           @Override
           public void run() {
+            loadReportTask = null;
             handleResponse(response);
           }
         });
+    }
+
+    @Override public void onError(final Throwable error) {
+      helper.runSerialized(new Runnable() {
+          @Override
+          public void run() {
+            handleStreamClosed(Status.fromThrowable(error)
+                .augmentDescription("Stream to GRPCLB LoadBalancer had an error"));
+          }
+        });
+    }
+
+    @Override public void onCompleted() {
+      helper.runSerialized(new Runnable() {
+          @Override
+          public void run() {
+            handleStreamClosed(Status.UNAVAILABLE.augmentDescription(
+                    "Stream to GRPCLB LoadBalancer was closed"));
+          }
+        });
+    }
+
+    // Following methods must be run in helper.runSerialized()
+
+    private void sendLoadReport() {
+      ClientStats stats = loadRecorder.generateLoadReport();
+      // TODO(zhangkun83): flow control?
+      lbRequestWriter.onNext(LoadBalanceRequest.newBuilder().setClientStats(stats).build());
+      scheduleNextLoadReport();
+    }
+
+    private void scheduleNextLoadReport() {
+      stopLoadReporting();
+      loadReportTask = timerService.schedule(
+          loadReportRunnable, loadReportIntervalMillis, TimeUnit.MILLISECONDS);
+    }
+
+    private void stopLoadReporting() {
+      if (loadReportTask != null) {
+        loadReportTask.cancel(false);
+        loadReportTask = null;
+      }
     }
 
     private void handleResponse(LoadBalanceResponse response) {
@@ -351,8 +412,18 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
         return;
       }
       logger.log(Level.FINE, "[{0}] Got an LB response: {1}", new Object[] {logId, response});
-      // TODO(zhangkun83): make use of initialResponse
-      // InitialLoadBalanceResponse initialResponse = response.getInitialResponse();
+
+      InitialLoadBalanceResponse initialResponse = response.getInitialResponse();
+      long newLoadReportIntervalMillis =
+          Durations.toMillis(initialResponse.getClientStatsReportInterval());
+      if (loadReportIntervalMillis != newLoadReportIntervalMillis) {
+        if (newLoadReportIntervalMillis > 0) {
+          loadReportIntervalMillis = newLoadReportIntervalMillis;
+        }
+        scheduleNextLoadReport();
+      } 
+
+      // TODO(zhangkun83): handle delegate from initialResponse
       ServerList serverList = response.getServerList();
       HashMap<EquivalentAddressGroup, Subchannel> newSubchannelMap =
           new HashMap<EquivalentAddressGroup, Subchannel>();
@@ -405,34 +476,18 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       maybeUpdatePicker();
     }
 
-    @Override public void onError(final Throwable error) {
-      helper.runSerialized(new Runnable() {
-          @Override
-          public void run() {
-            handleStreamClosed(Status.fromThrowable(error)
-                .augmentDescription("Stream to GRPCLB LoadBalancer had an error"));
-          }
-        });
-    }
-
-    @Override public void onCompleted() {
-      helper.runSerialized(new Runnable() {
-          @Override
-          public void run() {
-            handleStreamClosed(Status.UNAVAILABLE.augmentDescription(
-                    "Stream to GRPCLB LoadBalancer was closed"));
-          }
-        });
-    }
-
     private void handleStreamClosed(Status status) {
       if (dismissed) {
         return;
       }
-      lbRequestWriter = null;
-      lbResponseObserver = null;
+      close();
       handleGrpclbError(status);
       startLbRpc();
+    }
+
+    void close() {
+      stopLoadReporting();
+      dismissed = true;
     }
   }
 
