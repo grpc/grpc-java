@@ -58,6 +58,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ConnectivityStateInfo;
@@ -297,7 +298,7 @@ public class GrpclbLoadBalancerTest {
   public void roundRobinPicker() {
     GrpclbClientLoadRecorder loadRecorder = new GrpclbClientLoadRecorder(timeProvider);
     Subchannel subchannel = mock(Subchannel.class);
-    RoundRobinEntry r1 = new RoundRobinEntry(Status.UNAVAILABLE.withDescription("Just error"));
+    RoundRobinEntry r1 = new RoundRobinEntry(DropType.RATE_LIMITING, loadRecorder);
     RoundRobinEntry r2 = new RoundRobinEntry(subchannel, loadRecorder, "LBTOKEN0001");
     RoundRobinEntry r3 = new RoundRobinEntry(subchannel, loadRecorder, "LBTOKEN0002");
 
@@ -343,6 +344,37 @@ public class GrpclbLoadBalancerTest {
     assertEquals(PickResult.withNoResult(),
         GrpclbLoadBalancer.BUFFER_PICKER.pickSubchannel(args));
     verifyNoMoreInteractions(args);
+  }
+
+  @Test
+  public void loadReporting() {
+    InOrder inOrder = inOrder(helper);
+    long loadReportIntervalMillis = 1983;
+    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    Attributes grpclbResolutionAttrs = Attributes.newBuilder()
+        .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.GRPCLB).build();
+    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    assertEquals(1, fakeOobChannels.size());
+    ManagedChannel oobChannel = fakeOobChannels.poll();
+    verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+
+    // Simulate receiving LB response
+    List<ServerEntry> backends1 = Arrays.asList(
+        new ServerEntry("127.0.0.1", 2000, "token0001"),
+        new ServerEntry(DropType.RATE_LIMITING),
+        new ServerEntry("127.0.0.1", 2010, "token0002"),
+        new ServerEntry(DropType.LOAD_BALANCING));
+    inOrder.verify(helper, never()).updatePicker(any(SubchannelPicker.class));
+    lbResponseObserver.onNext(buildInitialResponse(loadReportIntervalMillis));
+    lbResponseObserver.onNext(buildLbResponse(backends1));
+
+    assertEquals(2, mockSubchannels.size());
+    Subchannel subchannel1 = mockSubchannels.poll();
+    Subchannel subchannel2 = mockSubchannels.poll();
+    deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(CONNECTING));
+    deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(CONNECTING));
+
   }
 
   @Test
@@ -608,6 +640,7 @@ public class GrpclbLoadBalancerTest {
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updatePicker(pickerCaptor.capture());
     RoundRobinPicker picker1 = (RoundRobinPicker) pickerCaptor.getValue();
+
     assertThat(picker1.list).containsExactly(
         new RoundRobinEntry(subchannel2, balancer.getLoadRecorder(), "token0002"));
 
@@ -671,8 +704,8 @@ public class GrpclbLoadBalancerTest {
     inOrder.verify(helper).updatePicker(pickerCaptor.capture());
     RoundRobinPicker picker7 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker7.list).containsExactly(
-        GrpclbLoadBalancer.DROP_ENTRY_FOR_RATE_LIMITING,
-        GrpclbLoadBalancer.DROP_ENTRY_FOR_LOAD_BALANCING).inOrder();
+        new RoundRobinEntry(DropType.RATE_LIMITING, balancer.getLoadRecorder()),
+        new RoundRobinEntry(DropType.LOAD_BALANCING, balancer.getLoadRecorder())).inOrder();
 
     // State updates on obsolete subchannel1 will have no effect
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
@@ -687,19 +720,19 @@ public class GrpclbLoadBalancerTest {
     // subchannel2 is still IDLE, thus not in the active list
     assertThat(picker8.list).containsExactly(
         new RoundRobinEntry(subchannel3, balancer.getLoadRecorder(), "token0003"),
-        GrpclbLoadBalancer.DROP_ENTRY_FOR_RATE_LIMITING,
+        new RoundRobinEntry(DropType.RATE_LIMITING, balancer.getLoadRecorder()),
         new RoundRobinEntry(subchannel3, balancer.getLoadRecorder(), "token0005"),
-        GrpclbLoadBalancer.DROP_ENTRY_FOR_LOAD_BALANCING).inOrder();
+        new RoundRobinEntry(DropType.LOAD_BALANCING, balancer.getLoadRecorder())).inOrder();
     // subchannel2 becomes READY and makes it into the list
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updatePicker(pickerCaptor.capture());
     RoundRobinPicker picker9 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker9.list).containsExactly(
         new RoundRobinEntry(subchannel3, balancer.getLoadRecorder(), "token0003"),
-        GrpclbLoadBalancer.DROP_ENTRY_FOR_RATE_LIMITING,
+        new RoundRobinEntry(DropType.RATE_LIMITING, balancer.getLoadRecorder()),
         new RoundRobinEntry(subchannel2, balancer.getLoadRecorder(), "token0004"),
         new RoundRobinEntry(subchannel3, balancer.getLoadRecorder(), "token0005"),
-        GrpclbLoadBalancer.DROP_ENTRY_FOR_LOAD_BALANCING).inOrder();
+        new RoundRobinEntry(DropType.LOAD_BALANCING, balancer.getLoadRecorder())).inOrder();
     verify(subchannel3, never()).shutdown();
 
     // Update backends, with no entry
@@ -796,8 +829,14 @@ public class GrpclbLoadBalancerTest {
   }
 
   private static LoadBalanceResponse buildInitialResponse() {
-    return LoadBalanceResponse.newBuilder().setInitialResponse(
-        InitialLoadBalanceResponse.getDefaultInstance())
+    return buildInitialResponse(0);
+  }
+
+  private static LoadBalanceResponse buildInitialResponse(long loadReportIntervalMillis) {
+    return LoadBalanceResponse.newBuilder()
+        .setInitialResponse(
+            InitialLoadBalanceResponse.newBuilder()
+            .setClientStatsReportInterval(Durations.fromMillis(loadReportIntervalMillis)))
         .build();
   }
 

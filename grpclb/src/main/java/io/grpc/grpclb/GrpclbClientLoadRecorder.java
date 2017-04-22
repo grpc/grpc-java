@@ -81,6 +81,8 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
       case LOAD_BALANCING:
         callsDroppedForLoadBalancing.incrementAndGet();
         break;
+      default:
+        throw new AssertionError("Unsupported DropType: " + type);
     }
   }
 
