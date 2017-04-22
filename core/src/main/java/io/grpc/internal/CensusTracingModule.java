@@ -212,6 +212,7 @@ final class CensusTracingModule {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+      // New RPCs on client-side inherit the tracing context from the current Context.
       Span parentSpan = CONTEXT_SPAN_KEY.get();
       final ClientCallTracer tracerFactory =
           newClientCallTracer(parentSpan, method.getFullMethodName());

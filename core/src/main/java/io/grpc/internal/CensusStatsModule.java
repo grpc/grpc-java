@@ -338,6 +338,7 @@ final class CensusStatsModule {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+      // New RPCs on client-side inherit the stats context from the current Context.
       StatsContext parentCtx = STATS_CONTEXT_KEY.get();
       if (parentCtx == null) {
         parentCtx = statsCtxFactory.getDefault();
