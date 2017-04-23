@@ -42,9 +42,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.same;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -59,8 +61,10 @@ import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.util.Durations;
+import com.google.protobuf.util.Timestamps;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
@@ -97,6 +101,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -348,7 +353,10 @@ public class GrpclbLoadBalancerTest {
 
   @Test
   public void loadReporting() {
-    InOrder inOrder = inOrder(helper);
+    Metadata headers = new Metadata();
+    PickSubchannelArgs args = mock(PickSubchannelArgs.class);
+    when(args.getHeaders()).thenReturn(headers);
+
     long loadReportIntervalMillis = 1983;
     List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
     Attributes grpclbResolutionAttrs = Attributes.newBuilder()
@@ -358,23 +366,172 @@ public class GrpclbLoadBalancerTest {
     ManagedChannel oobChannel = fakeOobChannels.poll();
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
     StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
+    InOrder inOrder = inOrder(lbRequestObserver);
+    InOrder helperInOrder = inOrder(helper);
+
+    inOrder.verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
+                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            .build()));
 
     // Simulate receiving LB response
-    List<ServerEntry> backends1 = Arrays.asList(
+    assertEquals(0, fakeClock.numPendingTasks());
+    lbResponseObserver.onNext(buildInitialResponse(loadReportIntervalMillis));
+
+    // Load reporting task is scheduled
+    assertEquals(1, fakeClock.numPendingTasks());
+    assertEquals(0, fakeClock.runDueTasks());
+
+    List<ServerEntry> backends = Arrays.asList(
         new ServerEntry("127.0.0.1", 2000, "token0001"),
         new ServerEntry(DropType.RATE_LIMITING),
         new ServerEntry("127.0.0.1", 2010, "token0002"),
         new ServerEntry(DropType.LOAD_BALANCING));
-    inOrder.verify(helper, never()).updatePicker(any(SubchannelPicker.class));
-    lbResponseObserver.onNext(buildInitialResponse(loadReportIntervalMillis));
-    lbResponseObserver.onNext(buildLbResponse(backends1));
+
+    lbResponseObserver.onNext(buildLbResponse(backends));
 
     assertEquals(2, mockSubchannels.size());
     Subchannel subchannel1 = mockSubchannels.poll();
     Subchannel subchannel2 = mockSubchannels.poll();
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(CONNECTING));
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(CONNECTING));
+    deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
 
+    helperInOrder.verify(helper, atLeast(1)).updatePicker(pickerCaptor.capture());
+    RoundRobinPicker picker = (RoundRobinPicker) pickerCaptor.getValue();
+    assertThat(picker.list).containsExactly(
+        new RoundRobinEntry(subchannel1, balancer.getLoadRecorder(), "token0001"),
+        new RoundRobinEntry(DropType.RATE_LIMITING, balancer.getLoadRecorder()),
+        new RoundRobinEntry(subchannel2, balancer.getLoadRecorder(), "token0002"),
+        new RoundRobinEntry(DropType.LOAD_BALANCING, balancer.getLoadRecorder())).inOrder();
+
+    // 1st report, no data
+    assertNextReport(
+        inOrder, lbRequestObserver, loadReportIntervalMillis,
+        ClientStats.newBuilder().build());
+
+    PickResult pick1 = picker.pickSubchannel(args);
+    assertSame(subchannel1, pick1.getSubchannel());
+    assertSame(balancer.getLoadRecorder(), pick1.getStreamTracerFactory());
+    ClientStreamTracer tracer1 =
+        pick1.getStreamTracerFactory().newClientStreamTracer(new Metadata());
+
+    PickResult pick2 = picker.pickSubchannel(args);
+    assertNull(pick2.getSubchannel());
+    assertSame(
+        GrpclbLoadBalancer.DROP_STATUSES.get(DropType.RATE_LIMITING), pick2.getStatus());
+
+    // 2nd report includes upstart of pick1 and the drop of pick2
+    assertNextReport(
+        inOrder, lbRequestObserver, loadReportIntervalMillis,
+        ClientStats.newBuilder()
+            .setNumCallsStarted(2)
+            .setNumCallsFinished(1)  // pick2
+            .setNumCallsFinishedWithDropForRateLimiting(1)  // pick2
+            .build());
+
+    PickResult pick3 = picker.pickSubchannel(args);
+    assertSame(subchannel2, pick3.getSubchannel());
+    assertSame(balancer.getLoadRecorder(), pick3.getStreamTracerFactory());
+    ClientStreamTracer tracer3 =
+        pick3.getStreamTracerFactory().newClientStreamTracer(new Metadata());
+
+    // pick3 has sent out headers
+    tracer3.outboundHeaders();
+
+    // 3rd report includes pick3's upstart
+    assertNextReport(
+        inOrder, lbRequestObserver, loadReportIntervalMillis,
+        ClientStats.newBuilder()
+            .setNumCallsStarted(1)
+            .build());
+
+    PickResult pick4 = picker.pickSubchannel(args);
+    assertNull(pick4.getSubchannel());
+    assertSame(
+        GrpclbLoadBalancer.DROP_STATUSES.get(DropType.LOAD_BALANCING), pick4.getStatus());
+
+    // pick1 ended without sending anything
+    tracer1.streamClosed(Status.CANCELLED);
+
+    // 4th report includes end of pick1 and drop of pick4
+    assertNextReport(
+        inOrder, lbRequestObserver, loadReportIntervalMillis,
+        ClientStats.newBuilder()
+            .setNumCallsStarted(1)  // pick4
+            .setNumCallsFinished(2)
+            .setNumCallsFinishedWithClientFailedToSend(1)   // pick1
+            .setNumCallsFinishedWithDropForLoadBalancing(1)   // pick4
+            .build());
+
+    PickResult pick5 = picker.pickSubchannel(args);
+    assertSame(subchannel1, pick1.getSubchannel());
+    assertSame(balancer.getLoadRecorder(), pick5.getStreamTracerFactory());
+    ClientStreamTracer tracer5 =
+        pick5.getStreamTracerFactory().newClientStreamTracer(new Metadata());
+
+    // pick3 ended without receiving response headers
+    tracer3.streamClosed(Status.DEADLINE_EXCEEDED);
+
+    // pick5 sent and received headers
+    tracer5.outboundHeaders();
+    tracer5.inboundHeaders();
+
+    // 5th report includes pick3's end and pick5's upstart
+    assertNextReport(
+        inOrder, lbRequestObserver, loadReportIntervalMillis,
+        ClientStats.newBuilder()
+            .setNumCallsStarted(1)  // pick5
+            .setNumCallsFinished(1)  // pick3
+            .build());
+
+    // pick5 ends
+    tracer5.streamClosed(Status.OK);
+
+    // 6th report includes pick5's end
+    assertNextReport(
+        inOrder, lbRequestObserver, loadReportIntervalMillis,
+        ClientStats.newBuilder()
+            .setNumCallsFinished(1)
+            .setNumCallsFinishedKnownReceived(1)
+            .build());
+
+    assertEquals(1, fakeClock.numPendingTasks());
+    // Balancer closes the stream, scheduled reporting task cancelled
+    lbResponseObserver.onCompleted();
+    assertEquals(0, fakeClock.numPendingTasks());
+
+    verify(args, atLeast(0)).getHeaders();
+    verifyNoMoreInteractions(args);
+  }
+
+  private void assertNextReport(
+      InOrder inOrder, StreamObserver<LoadBalanceRequest> lbRequestObserver,
+      long loadReportIntervalMillis, ClientStats expectedReport) {
+    assertEquals(0, fakeClock.forwardTime(loadReportIntervalMillis - 1, TimeUnit.MILLISECONDS));
+    inOrder.verifyNoMoreInteractions();
+    assertEquals(1, fakeClock.forwardTime(1, TimeUnit.MILLISECONDS));
+    assertEquals(1, fakeClock.numPendingTasks());
+    inOrder.verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder()
+            .setClientStats(
+                ClientStats.newBuilder(expectedReport)
+                .setTimestamp(Timestamps.fromMillis(fakeClock.currentTimeMillis()))
+                .build())
+            .build()));
+  }
+
+  @Test
+  public void acquireAndReleaseScheduledExecutor() {
+    verify(timerServicePool).getObject();
+    verifyNoMoreInteractions(timerServicePool);
+
+    balancer.shutdown();
+    verify(timerServicePool).returnObject(same(fakeClock.getScheduledExecutorService()));
+    verifyNoMoreInteractions(timerServicePool);
   }
 
   @Test
@@ -611,6 +768,12 @@ public class GrpclbLoadBalancerTest {
     ManagedChannel oobChannel = fakeOobChannels.poll();
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
     StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
+    verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
+                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            .build()));
 
     // Simulate receiving LB response
     List<ServerEntry> backends1 = Arrays.asList(
@@ -742,9 +905,9 @@ public class GrpclbLoadBalancerTest {
     inOrder.verify(helper).updatePicker((GrpclbLoadBalancer.BUFFER_PICKER));
 
     assertFalse(oobChannel.isShutdown());
-    assertEquals(1, lbRequestObservers.size());
-    verify(lbRequestObservers.peek(), never()).onCompleted();
-    verify(lbRequestObservers.peek(), never()).onError(any(Throwable.class));
+    assertEquals(0, lbRequestObservers.size());
+    verify(lbRequestObserver, never()).onCompleted();
+    verify(lbRequestObserver, never()).onError(any(Throwable.class));
   }
 
   @Test
@@ -861,6 +1024,8 @@ public class GrpclbLoadBalancerTest {
           case LOAD_BALANCING:
             serverListBuilder.addServers(Server.newBuilder().setDropForLoadBalancing(true).build());
             break;
+          default:
+            fail("Unhandled " + server.dropType);
         }
       }
     }

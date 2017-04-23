@@ -82,7 +82,8 @@ import javax.annotation.Nullable;
 class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   private static final Logger logger = Logger.getLogger(GrpclbLoadBalancer.class.getName());
 
-  private static final Map<DropType, Status> DROP_STATUSES;
+  @VisibleForTesting
+  static final Map<DropType, Status> DROP_STATUSES;
 
   static {
     HashMap<DropType, Status> map = new HashMap<DropType, Status>();
@@ -140,6 +141,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   private LbAddressGroup lbAddressGroup;
   @Nullable
   private ManagedChannel lbCommChannel;
+  private GrpclbClientLoadRecorder loadRecorder;
 
   @Nullable
   private LbStream lbStream;
@@ -274,13 +276,15 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     checkState(lbCommChannel == null, "previous lbCommChannel has not been closed yet");
     lbCommChannel = helper.createOobChannel(
         lbAddressGroup.getAddresses(), lbAddressGroup.getAuthority());
+    // Stats from the last connection are not carried over to the new connection
+    loadRecorder = new GrpclbClientLoadRecorder(time);
     startLbRpc();
   }
 
   private void startLbRpc() {
     checkState(lbStream == null, "previous lbStream has not been cleared yet");
     LoadBalancerGrpc.LoadBalancerStub stub = LoadBalancerGrpc.newStub(lbCommChannel);
-    lbStream = new LbStream(stub);
+    lbStream = new LbStream(stub, loadRecorder);
 
     LoadBalanceRequest initRequest = LoadBalanceRequest.newBuilder()
         .setInitialRequest(InitialLoadBalanceRequest.newBuilder()
@@ -343,6 +347,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
           helper.runSerialized(new Runnable() {
               @Override
               public void run() {
+                loadReportTask = null;
                 sendLoadReport();
               }
             });
@@ -353,8 +358,8 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     long loadReportIntervalMillis = -1;
     ScheduledFuture<?> loadReportTask;
 
-    LbStream(LoadBalancerGrpc.LoadBalancerStub stub) {
-      loadRecorder = new GrpclbClientLoadRecorder(time);
+    LbStream(LoadBalancerGrpc.LoadBalancerStub stub, GrpclbClientLoadRecorder recorder) {
+      loadRecorder = checkNotNull(recorder, "recorder");
       lbRequestWriter = stub.withWaitForReady().balanceLoad(this);
     }
 
@@ -362,7 +367,6 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       helper.runSerialized(new Runnable() {
           @Override
           public void run() {
-            loadReportTask = null;
             handleResponse(response);
           }
         });
@@ -399,8 +403,10 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
 
     private void scheduleNextLoadReport() {
       stopLoadReporting();
-      loadReportTask = timerService.schedule(
-          loadReportRunnable, loadReportIntervalMillis, TimeUnit.MILLISECONDS);
+      if (loadReportIntervalMillis > 0) {
+        loadReportTask = timerService.schedule(
+            loadReportRunnable, loadReportIntervalMillis, TimeUnit.MILLISECONDS);
+      }
     }
 
     private void stopLoadReporting() {
@@ -417,8 +423,12 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       logger.log(Level.FINE, "[{0}] Got an LB response: {1}", new Object[] {logId, response});
 
       InitialLoadBalanceResponse initialResponse = response.getInitialResponse();
-      loadReportIntervalMillis = Durations.toMillis(initialResponse.getClientStatsReportInterval());
-      scheduleNextLoadReport();
+      if (initialResponse != InitialLoadBalanceResponse.getDefaultInstance()) {
+        loadReportIntervalMillis =
+            Durations.toMillis(initialResponse.getClientStatsReportInterval());
+        scheduleNextLoadReport();
+        return;
+      }
 
       // TODO(zhangkun83): handle delegate from initialResponse
       ServerList serverList = response.getServerList();
@@ -483,6 +493,9 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     }
 
     void close() {
+      if (dismissed) {
+        return;
+      }
       stopLoadReporting();
       dismissed = true;
       lbRequestWriter.onCompleted();

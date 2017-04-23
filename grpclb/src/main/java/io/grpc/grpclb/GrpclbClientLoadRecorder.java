@@ -33,10 +33,8 @@ package io.grpc.grpclb;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.protobuf.Timestamp;
 import com.google.protobuf.util.Timestamps;
 import io.grpc.ClientStreamTracer;
-import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -84,6 +82,7 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
       default:
         throw new AssertionError("Unsupported DropType: " + type);
     }
+    callsFinished.incrementAndGet();
   }
 
   /**
