@@ -70,15 +70,11 @@ public final class GrpcUtil {
 
   public static final Charset US_ASCII = Charset.forName("US-ASCII");
 
-  private static boolean isAppengineEnvironment() {
-    String appengineEnvironment = System.getProperty("com.google.appengine.runtime.environment");
-    return "Production".equals(appengineEnvironment) || "Development".equals(appengineEnvironment);
-  }
-
-  // Certain production AppEngine runtimes have constraints on threading and socket handling
+  // AppEngine runtimes have constraints on threading and socket handling
   // that need to be accommodated.
   public static final boolean IS_RESTRICTED_APPENGINE =
-      isAppengineEnvironment() && "1.7".equals(System.getProperty("java.specification.version"));
+      System.getProperty("com.google.appengine.runtime.environment") != null
+          && "1.7".equals(System.getProperty("java.specification.version"));
 
   /**
    * {@link io.grpc.Metadata.Key} for the timeout header.
