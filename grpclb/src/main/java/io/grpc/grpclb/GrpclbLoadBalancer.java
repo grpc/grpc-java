@@ -266,8 +266,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       lbCommChannel = null;
     }
     if (lbStream != null) {
-      lbStream.close();
-      lbStream = null;
+      lbStream.close(null);
     }
   }
 
@@ -287,7 +286,11 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
         .setInitialRequest(InitialLoadBalanceRequest.newBuilder()
             .setName(serviceName).build())
         .build();
-    lbStream.lbRequestWriter.onNext(initRequest);
+    try {
+      lbStream.lbRequestWriter.onNext(initRequest);
+    } catch (Exception e) {
+      lbStream.close(e);
+    }
   }
 
   private void shutdownDelegate() {
@@ -387,8 +390,8 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       helper.runSerialized(new Runnable() {
           @Override
           public void run() {
-            handleStreamClosed(Status.UNAVAILABLE.augmentDescription(
-                    "Stream to GRPCLB LoadBalancer was closed"));
+            handleStreamClosed(
+                Status.UNAVAILABLE.withDescription("Stream to GRPCLB LoadBalancer was closed"));
           }
         });
     }
@@ -398,8 +401,12 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     private void sendLoadReport() {
       ClientStats stats = loadRecorder.generateLoadReport();
       // TODO(zhangkun83): flow control?
-      lbRequestWriter.onNext(LoadBalanceRequest.newBuilder().setClientStats(stats).build());
-      scheduleNextLoadReport();
+      try {
+        lbRequestWriter.onNext(LoadBalanceRequest.newBuilder().setClientStats(stats).build());
+        scheduleNextLoadReport();
+      } catch (Exception e) {
+        close(e);
+      }
     }
 
     private void scheduleNextLoadReport() {
@@ -494,13 +501,21 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       startLbRpc();
     }
 
-    void close() {
+    void close(@Nullable Exception error) {
       if (closed) {
         return;
       }
       closed = true;
       cleanUp();
-      lbRequestWriter.onCompleted();
+      try {
+        if (error == null) {
+          lbRequestWriter.onCompleted();
+        } else {
+          lbRequestWriter.onError(error);
+        }
+      } catch (Exception e) {
+        // Don't care
+      }
     }
 
     private void cleanUp() {
@@ -718,5 +733,4 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       }
     }
   }
-
 }
