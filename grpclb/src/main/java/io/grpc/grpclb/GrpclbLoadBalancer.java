@@ -141,7 +141,6 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   private LbAddressGroup lbAddressGroup;
   @Nullable
   private ManagedChannel lbCommChannel;
-  private GrpclbClientLoadRecorder loadRecorder;
 
   @Nullable
   private LbStream lbStream;
@@ -276,15 +275,13 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     checkState(lbCommChannel == null, "previous lbCommChannel has not been closed yet");
     lbCommChannel = helper.createOobChannel(
         lbAddressGroup.getAddresses(), lbAddressGroup.getAuthority());
-    // Stats from the last connection are not carried over to the new connection
-    loadRecorder = new GrpclbClientLoadRecorder(time);
     startLbRpc();
   }
 
   private void startLbRpc() {
     checkState(lbStream == null, "previous lbStream has not been cleared yet");
     LoadBalancerGrpc.LoadBalancerStub stub = LoadBalancerGrpc.newStub(lbCommChannel);
-    lbStream = new LbStream(stub, loadRecorder);
+    lbStream = new LbStream(stub);
 
     LoadBalanceRequest initRequest = LoadBalanceRequest.newBuilder()
         .setInitialRequest(InitialLoadBalanceRequest.newBuilder()
@@ -354,12 +351,16 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
         }
       };
 
-    boolean dismissed;
+    boolean closed;
     long loadReportIntervalMillis = -1;
     ScheduledFuture<?> loadReportTask;
 
-    LbStream(LoadBalancerGrpc.LoadBalancerStub stub, GrpclbClientLoadRecorder recorder) {
-      loadRecorder = checkNotNull(recorder, "recorder");
+    LbStream(LoadBalancerGrpc.LoadBalancerStub stub) {
+      // Although spec requires stats data to be cleared on new connection, not new stream, it's
+      // very hard to know whether this new stream is on a new connection or not.  Since normally
+      // the stream won't be closed until the connection closes, and a stream lives much longer than
+      // the report interval, it should be fine to clear data per stream.
+      loadRecorder = new GrpclbClientLoadRecorder(time);
       lbRequestWriter = stub.withWaitForReady().balanceLoad(this);
     }
 
@@ -417,7 +418,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     }
 
     private void handleResponse(LoadBalanceResponse response) {
-      if (dismissed) {
+      if (closed) {
         return;
       }
       logger.log(Level.FINE, "[{0}] Got an LB response: {1}", new Object[] {logId, response});
@@ -484,21 +485,29 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     }
 
     private void handleStreamClosed(Status status) {
-      if (dismissed) {
+      if (closed) {
         return;
       }
-      close();
+      closed = true;
+      cleanUp();
       handleGrpclbError(status);
       startLbRpc();
     }
 
     void close() {
-      if (dismissed) {
+      if (closed) {
         return;
       }
-      stopLoadReporting();
-      dismissed = true;
+      closed = true;
+      cleanUp();
       lbRequestWriter.onCompleted();
+    }
+
+    private void cleanUp() {
+      stopLoadReporting();
+      if (lbStream == this) {
+        lbStream = null;
+      }
     }
   }
 

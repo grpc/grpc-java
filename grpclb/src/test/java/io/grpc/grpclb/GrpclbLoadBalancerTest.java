@@ -408,7 +408,7 @@ public class GrpclbLoadBalancerTest {
         new RoundRobinEntry(subchannel2, balancer.getLoadRecorder(), "token0002"),
         new RoundRobinEntry(DropType.LOAD_BALANCING, balancer.getLoadRecorder())).inOrder();
 
-    // 1st report, no data
+    // Report, no data
     assertNextReport(
         inOrder, lbRequestObserver, loadReportIntervalMillis,
         ClientStats.newBuilder().build());
@@ -416,6 +416,12 @@ public class GrpclbLoadBalancerTest {
     PickResult pick1 = picker.pickSubchannel(args);
     assertSame(subchannel1, pick1.getSubchannel());
     assertSame(balancer.getLoadRecorder(), pick1.getStreamTracerFactory());
+
+    // Merely the pick will not be recorded as upstart.
+    assertNextReport(
+        inOrder, lbRequestObserver, loadReportIntervalMillis,
+        ClientStats.newBuilder().build());
+
     ClientStreamTracer tracer1 =
         pick1.getStreamTracerFactory().newClientStreamTracer(new Metadata());
 
@@ -424,7 +430,7 @@ public class GrpclbLoadBalancerTest {
     assertSame(
         GrpclbLoadBalancer.DROP_STATUSES.get(DropType.RATE_LIMITING), pick2.getStatus());
 
-    // 2nd report includes upstart of pick1 and the drop of pick2
+    // Report includes upstart of pick1 and the drop of pick2
     assertNextReport(
         inOrder, lbRequestObserver, loadReportIntervalMillis,
         ClientStats.newBuilder()
@@ -501,8 +507,59 @@ public class GrpclbLoadBalancerTest {
 
     assertEquals(1, fakeClock.numPendingTasks());
     // Balancer closes the stream, scheduled reporting task cancelled
-    lbResponseObserver.onCompleted();
+    lbResponseObserver.onError(Status.UNAVAILABLE.asException());
     assertEquals(0, fakeClock.numPendingTasks());
+
+    // New stream created
+    verify(mockLbService, times(2)).balanceLoad(lbResponseObserverCaptor.capture());
+    lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    lbRequestObserver = lbRequestObservers.poll();
+    inOrder = inOrder(lbRequestObserver);
+
+    inOrder.verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
+                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            .build()));
+
+    // Load reporting is also requested
+    lbResponseObserver.onNext(buildInitialResponse(loadReportIntervalMillis));
+
+    // No picker created because balancer is still using the results from the last stream
+    helperInOrder.verify(helper, never()).updatePicker(any(SubchannelPicker.class));
+
+    // Make a new pick on that picker.  It will not show up on the report of the new stream, because
+    // that picker is associated with the previous stream.
+    PickResult pick6 = picker.pickSubchannel(args);
+    assertNull(pick6.getSubchannel());
+    assertSame(
+        GrpclbLoadBalancer.DROP_STATUSES.get(DropType.RATE_LIMITING), pick6.getStatus());
+    assertNextReport(
+        inOrder, lbRequestObserver, loadReportIntervalMillis,
+        ClientStats.newBuilder().build());
+
+    // New stream got the list update
+    lbResponseObserver.onNext(buildLbResponse(backends));
+
+    // Same backends, thus no new subchannels
+    helperInOrder.verify(helper, never()).createSubchannel(
+        any(EquivalentAddressGroup.class), any(Attributes.class));
+    // But the new RoundRobinEntries have a new loadRecorder, thus considered different from
+    // the previous list, thus a new picker is created
+    helperInOrder.verify(helper).updatePicker(pickerCaptor.capture());
+    picker = (RoundRobinPicker) pickerCaptor.getValue();
+
+    PickResult pick1p = picker.pickSubchannel(args);
+    assertSame(subchannel1, pick1p.getSubchannel());
+    assertSame(balancer.getLoadRecorder(), pick1p.getStreamTracerFactory());
+    pick1p.getStreamTracerFactory().newClientStreamTracer(new Metadata());
+
+    // The pick from the new stream will be included in the report
+    assertNextReport(
+        inOrder, lbRequestObserver, loadReportIntervalMillis,
+        ClientStats.newBuilder()
+            .setNumCallsStarted(1)
+            .build());
 
     verify(args, atLeast(0)).getHeaders();
     verifyNoMoreInteractions(args);
@@ -908,6 +965,9 @@ public class GrpclbLoadBalancerTest {
     assertEquals(0, lbRequestObservers.size());
     verify(lbRequestObserver, never()).onCompleted();
     verify(lbRequestObserver, never()).onError(any(Throwable.class));
+
+    // Load reporting was not requested, thus never scheduled
+    assertEquals(0, fakeClock.numPendingTasks());
   }
 
   @Test
