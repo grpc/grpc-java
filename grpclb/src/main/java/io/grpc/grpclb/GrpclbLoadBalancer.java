@@ -359,10 +359,8 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     ScheduledFuture<?> loadReportTask;
 
     LbStream(LoadBalancerGrpc.LoadBalancerStub stub) {
-      // Although spec requires stats data to be cleared on new connection, not new stream, it's
-      // very hard to know whether this new stream is on a new connection or not.  Since normally
-      // the stream won't be closed until the connection closes, and a stream lives much longer than
-      // the report interval, it should be fine to clear data per stream.
+      // Stats data only valid for current LbStream.  We do not carry over data from previous
+      // stream.
       loadRecorder = new GrpclbClientLoadRecorder(time);
       lbRequestWriter = stub.withWaitForReady().balanceLoad(this);
     }

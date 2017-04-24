@@ -43,7 +43,7 @@ import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Record and aggregate client-side load data for GRPCLB.  This records load occurred during the
- * span of a certain connection with the load-balancing.
+ * span of an LB stream with the remote load-balancer.
  */
 @ThreadSafe
 final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
@@ -72,6 +72,7 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
    */
   void recordDroppedRequest(DropType type) {
     callsStarted.incrementAndGet();
+    callsFinished.incrementAndGet();
     switch (type) {
       case RATE_LIMITING:
         callsDroppedForRateLimiting.incrementAndGet();
@@ -82,11 +83,10 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
       default:
         throw new AssertionError("Unsupported DropType: " + type);
     }
-    callsFinished.incrementAndGet();
   }
 
   /**
-   * Generate the report with the data recorded this connection since the last report.
+   * Generate the report with the data recorded this LB stream since the last report.
    */
   ClientStats generateLoadReport() {
     return ClientStats.newBuilder()
