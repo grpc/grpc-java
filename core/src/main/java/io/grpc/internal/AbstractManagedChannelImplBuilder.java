@@ -290,7 +290,7 @@ public abstract class AbstractManagedChannelImplBuilder
 
     List<ClientInterceptor> effectiveInterceptors =
         new ArrayList<ClientInterceptor>(this.interceptors);
-    if (recordsStats()) {
+    if (GrpcUtil.enableCensusStats && recordsStats()) {
       StatsContextFactory statsCtxFactory =
           this.statsFactory != null ? this.statsFactory : Stats.getStatsContextFactory();
       if (statsCtxFactory != null) {
@@ -301,9 +301,11 @@ public abstract class AbstractManagedChannelImplBuilder
         effectiveInterceptors.add(0, censusStats.getClientInterceptor());
       }
     }
-    CensusTracingModule censusTracing =
-        new CensusTracingModule(Tracing.getTracer(), Tracing.getBinaryPropagationHandler());
-    effectiveInterceptors.add(0, censusTracing.getClientInterceptor());
+    if (GrpcUtil.enableCensusTracing) {
+      CensusTracingModule censusTracing =
+          new CensusTracingModule(Tracing.getTracer(), Tracing.getBinaryPropagationHandler());
+      effectiveInterceptors.add(0, censusTracing.getClientInterceptor());
+    }
 
     return new ManagedChannelImpl(
         target,

@@ -173,16 +173,20 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   public ServerImpl build() {
     ArrayList<ServerStreamTracer.Factory> tracerFactories =
         new ArrayList<ServerStreamTracer.Factory>();
-    StatsContextFactory statsFactory =
-        this.statsFactory != null ? this.statsFactory : Stats.getStatsContextFactory();
-    if (statsFactory != null) {
-      CensusStatsModule censusStats =
-          new CensusStatsModule(statsFactory, GrpcUtil.STOPWATCH_SUPPLIER);
-      tracerFactories.add(censusStats.getServerTracerFactory());
+    if (GrpcUtil.enableCensusStats) {
+      StatsContextFactory statsFactory =
+          this.statsFactory != null ? this.statsFactory : Stats.getStatsContextFactory();
+      if (statsFactory != null) {
+        CensusStatsModule censusStats =
+            new CensusStatsModule(statsFactory, GrpcUtil.STOPWATCH_SUPPLIER);
+        tracerFactories.add(censusStats.getServerTracerFactory());
+      }
     }
-    CensusTracingModule censusTracing =
-        new CensusTracingModule(Tracing.getTracer(), Tracing.getBinaryPropagationHandler());
-    tracerFactories.add(censusTracing.getServerTracerFactory());
+    if (GrpcUtil.enableCensusTracing) {
+      CensusTracingModule censusTracing =
+          new CensusTracingModule(Tracing.getTracer(), Tracing.getBinaryPropagationHandler());
+      tracerFactories.add(censusTracing.getServerTracerFactory());
+    }
     tracerFactories.addAll(streamTracerFactories);
 
     io.grpc.internal.InternalServer transportServer =
