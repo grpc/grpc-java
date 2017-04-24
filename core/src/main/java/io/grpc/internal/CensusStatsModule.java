@@ -34,7 +34,6 @@ package io.grpc.internal;
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static com.google.instrumentation.trace.ContextUtils.CONTEXT_SPAN_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -75,8 +74,9 @@ import javax.annotation.Nullable;
  * the ClientStream, and in some cases may even not create a ClientStream at all.  Therefore, it's
  * the factory that reports the summary to Census.
  *
- * <p>On the server-side, a tracer is created for each call, because ServerStream starts earlier
- * than the ServerCall.  Therefore, it's the tracer that reports the summary to Census.
+ * <p>On the server-side, there is only one ServerStream per each ServerCall, and ServerStream
+ * starts earlier than the ServerCall.  Therefore, only one tracer is created per stream/call and
+ * it's the tracer that reports the summary to Census.
  */
 final class CensusStatsModule {
   private static final Logger logger = Logger.getLogger(CensusStatsModule.class.getName());

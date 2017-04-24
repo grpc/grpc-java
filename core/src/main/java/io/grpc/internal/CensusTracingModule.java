@@ -36,8 +36,10 @@ import static com.google.instrumentation.trace.ContextUtils.CONTEXT_SPAN_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.instrumentation.trace.BinaryPropagationHandler;
+import com.google.instrumentation.trace.EndSpanOptions;
 import com.google.instrumentation.trace.Span;
 import com.google.instrumentation.trace.SpanContext;
+import com.google.instrumentation.trace.Status;
 import com.google.instrumentation.trace.Tracer;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -50,7 +52,6 @@ import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
-import io.grpc.Status;
 import io.grpc.StreamTracer;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
@@ -64,8 +65,9 @@ import javax.annotation.Nullable;
  * the ClientStream, and in some cases may even not create a ClientStream at all.  Therefore, it's
  * the factory that reports the summary to Census.
  *
- * <p>On the server-side, a tracer is created for each call, because ServerStream starts earlier
- * than the ServerCall.  Therefore, it's the tracer that reports the summary to Census.
+ * <p>On the server-side, there is only one ServerStream per each ServerCall, and ServerStream
+ * starts earlier than the ServerCall.  Therefore, only one tracer is created per stream/call and
+ * it's the tracer that reports the summary to Census.
  */
 final class CensusTracingModule {
   private static final Logger logger = Logger.getLogger(CensusTracingModule.class.getName());
@@ -130,6 +132,74 @@ final class CensusTracingModule {
   }
 
   @VisibleForTesting
+  static Status convertStatus(io.grpc.Status grpcStatus) {
+    Status status;
+    switch (grpcStatus.getCode()) {
+      case OK:
+        status = Status.OK;
+        break;
+      case CANCELLED:
+        status = Status.CANCELLED;
+        break;
+      case UNKNOWN:
+        status = Status.UNKNOWN;
+        break;
+      case INVALID_ARGUMENT:
+        status = Status.INVALID_ARGUMENT;
+        break;
+      case DEADLINE_EXCEEDED:
+        status = Status.DEADLINE_EXCEEDED;
+        break;
+      case NOT_FOUND:
+        status = Status.NOT_FOUND;
+        break;
+      case ALREADY_EXISTS:
+        status = Status.ALREADY_EXISTS;
+        break;
+      case PERMISSION_DENIED:
+        status = Status.PERMISSION_DENIED;
+        break;
+      case RESOURCE_EXHAUSTED:
+        status = Status.RESOURCE_EXHAUSTED;
+        break;
+      case FAILED_PRECONDITION:
+        status = Status.FAILED_PRECONDITION;
+        break;
+      case ABORTED:
+        status = Status.ABORTED;
+        break;
+      case OUT_OF_RANGE:
+        status = Status.OUT_OF_RANGE;
+        break;
+      case UNIMPLEMENTED:
+        status = Status.UNIMPLEMENTED;
+        break;
+      case INTERNAL:
+        status = Status.INTERNAL;
+        break;
+      case UNAVAILABLE:
+        status = Status.UNAVAILABLE;
+        break;
+      case DATA_LOSS:
+        status = Status.DATA_LOSS;
+        break;
+      case UNAUTHENTICATED:
+        status = Status.UNAUTHENTICATED;
+        break;
+      default:
+        throw new AssertionError("Unhandled status code " + grpcStatus.getCode());
+    }
+    if (grpcStatus.getDescription() != null) {
+      status = status.withDescription(grpcStatus.getDescription());
+    }
+    return status;
+  }
+
+  private static EndSpanOptions createEndSpanOptions(io.grpc.Status status) {
+    return EndSpanOptions.builder().setStatus(convertStatus(status)).build();
+  }
+
+  @VisibleForTesting
   final class ClientCallTracer extends ClientStreamTracer.Factory {
 
     private final String fullMethodName;
@@ -137,9 +207,9 @@ final class CensusTracingModule {
     private final Span span;
 
     ClientCallTracer(@Nullable Span parentSpan, String fullMethodName) {
+      this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
       this.span =
           censusTracer.spanBuilder(parentSpan, makeSpanName("Sent", fullMethodName)).startSpan();
-      this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
     }
 
     @Override
@@ -155,11 +225,11 @@ final class CensusTracingModule {
      * <p>Can be called from any thread without synchronization.  Calling it the second time or more
      * is a no-op.
      */
-    void callEnded(Status status) {
+    void callEnded(io.grpc.Status status) {
       if (!callEnded.compareAndSet(false, true)) {
         return;
       }
-      span.end();
+      span.end(createEndSpanOptions(status));
     }
   }
 
@@ -183,11 +253,11 @@ final class CensusTracingModule {
      * is a no-op.
      */
     @Override
-    public void streamClosed(Status status) {
+    public void streamClosed(io.grpc.Status status) {
       if (!streamClosed.compareAndSet(false, true)) {
         return;
       }
-      span.end();
+      span.end(createEndSpanOptions(status));
     }
 
     @Override
@@ -224,7 +294,7 @@ final class CensusTracingModule {
           delegate().start(
               new SimpleForwardingClientCallListener<RespT>(responseListener) {
                 @Override
-                public void onClose(Status status, Metadata trailers) {
+                public void onClose(io.grpc.Status status, Metadata trailers) {
                   tracerFactory.callEnded(status);
                   super.onClose(status, trailers);
                 }

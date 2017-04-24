@@ -303,7 +303,7 @@ public class CensusModulesTest {
       verify(mockSpanFactory).startSpan(
           isNull(Span.class), eq("Sent.package1.service2.method3"), any(StartSpanOptions.class));
     }
-    verify(spyClientSpan, never()).end();
+    verify(spyClientSpan, never()).end(any(EndSpanOptions.class));
 
     // End the call
     call.halfClose();
@@ -327,7 +327,13 @@ public class CensusModulesTest {
     } else {
       assertNull(record.tags.get(StatsTestUtils.EXTRA_TAG));
     }
-    verify(spyClientSpan).end();
+    verify(spyClientSpan).end(
+        EndSpanOptions.builder()
+            .setStatus(
+                com.google.instrumentation.trace.Status.PERMISSION_DENIED
+                    .withDescription("No you don't"))
+            .build());
+    verify(spyClientSpan, never()).end();
   }
 
   @Test
@@ -382,12 +388,13 @@ public class CensusModulesTest {
     ClientStreamTracer tracer = callTracer.newClientStreamTracer(headers);
     verify(mockSpanFactory).startSpan(
         isNull(Span.class), eq("Sent.package1.service2.method3"), any(StartSpanOptions.class));
-    verify(spyClientSpan, never()).end();
+    verify(spyClientSpan, never()).end(any(EndSpanOptions.class));
 
     tracer.streamClosed(Status.OK);
     callTracer.callEnded(Status.OK);
 
-    verify(spyClientSpan).end();
+    verify(spyClientSpan).end(
+        EndSpanOptions.builder().setStatus(com.google.instrumentation.trace.Status.OK).build());
     verifyNoMoreInteractions(mockSpanFactory);
   }
 
@@ -427,7 +434,13 @@ public class CensusModulesTest {
         any(StartSpanOptions.class));
 
     callTracer.callEnded(Status.DEADLINE_EXCEEDED.withDescription("3 seconds"));
-    verify(spyClientSpan).end();
+    verify(spyClientSpan).end(
+        EndSpanOptions.builder()
+            .setStatus(
+                com.google.instrumentation.trace.Status.DEADLINE_EXCEEDED
+                    .withDescription("3 seconds"))
+            .build());
+    verify(spyClientSpan, never()).end();
   }
 
   @Test
@@ -590,7 +603,6 @@ public class CensusModulesTest {
 
     fakeClock.forwardTime(24, MILLISECONDS);
 
-    verify(spyServerSpan, never()).end();
     tracer.streamClosed(Status.CANCELLED);
 
     StatsTestUtils.MetricsRecord record = statsCtxFactory.pollRecord();
@@ -624,10 +636,34 @@ public class CensusModulesTest {
     Context filteredContext = tracer.filterContext(Context.ROOT);
     assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));
 
-    verify(spyServerSpan, never()).end();
+    verify(spyServerSpan, never()).end(any(EndSpanOptions.class));
     tracer.streamClosed(Status.CANCELLED);
 
-    verify(spyServerSpan).end();
+    verify(spyServerSpan).end(
+        EndSpanOptions.builder()
+            .setStatus(com.google.instrumentation.trace.Status.CANCELLED).build());
+    verify(spyServerSpan, never()).end();
+  }
+
+  @Test
+  public void convertToTracingStatus() {
+    // Without description
+    for (Status.Code grpcCode : Status.Code.values()) {
+      Status grpcStatus = Status.fromCode(grpcCode);
+      com.google.instrumentation.trace.Status tracingStatus =
+          CensusTracingModule.convertStatus(grpcStatus);
+      assertEquals(grpcCode.toString(), tracingStatus.getCanonicalCode().toString());
+      assertNull(tracingStatus.getDescription());
+    }
+
+    // With description
+    for (Status.Code grpcCode : Status.Code.values()) {
+      Status grpcStatus = Status.fromCode(grpcCode).withDescription("This is my description");
+      com.google.instrumentation.trace.Status tracingStatus =
+          CensusTracingModule.convertStatus(grpcStatus);
+      assertEquals(grpcCode.toString(), tracingStatus.getCanonicalCode().toString());
+      assertEquals(grpcStatus.getDescription(), tracingStatus.getDescription());
+    }
   }
 
   private static void assertNoServerContent(StatsTestUtils.MetricsRecord record) {
