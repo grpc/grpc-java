@@ -61,6 +61,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 
 /**
@@ -207,14 +208,14 @@ public final class GrpcUtil {
    * Delete this and assume always on once Census stats has been fully tested and its wire-format is
    * stabilized.
    */
-  public static boolean enableCensusStats;
+  public static volatile boolean enableCensusStats;
 
   /**
    * Whether the channel builder and server builder will try to load and use Census tracing library.
    * Delete this and assume always on once Census stats has been fully tested and its wire-format is
    * stabilized.
    */
-  public static boolean enableCensusTracing;
+  public static volatile boolean enableCensusTracing;
 
   /**
    * Maps HTTP error response status codes to transport codes, as defined in <a
