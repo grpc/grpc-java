@@ -45,7 +45,6 @@ import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -281,7 +280,7 @@ public abstract class AbstractManagedChannelImplBuilder
    * Set it to true to propagate the stats tags on the wire.  This will be deleted assuming always
    * enabled once the instrumentation-java wire format is stabilized.
    */
-  @Internal
+  @Deprecated
   public void setEnableStatsTagPropagation(boolean enabled) {
     this.enableStatsTagPropagation = enabled;
   }
@@ -290,7 +289,7 @@ public abstract class AbstractManagedChannelImplBuilder
    * Set it to true to record traces and propagate tracing information on the wire.  This will be
    * deleted assuming always enabled once the instrumentation-java wire format is stabilized.
    */
-  @Internal
+  @Deprecated
   public void setEnableTracing(boolean enabled) {
     this.enableTracing = enabled;
   }
