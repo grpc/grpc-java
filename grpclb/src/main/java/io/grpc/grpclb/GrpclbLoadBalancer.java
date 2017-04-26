@@ -84,17 +84,18 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   private static final Logger logger = Logger.getLogger(GrpclbLoadBalancer.class.getName());
 
   @VisibleForTesting
-  static final Map<DropType, Status> DROP_STATUSES;
+  static final Map<DropType, PickResult> DROP_PICK_RESULTS;
 
   static {
-    HashMap<DropType, Status> map = new HashMap<DropType, Status>();
+    EnumMap<DropType, PickResult> map = new EnumMap<DropType, PickResult>(DropType.class);
     for (DropType dropType : DropType.values()) {
       map.put(
-          dropType, 
-          Status.UNAVAILABLE.withDescription(
-              "Dropped as requested by balancer. Type: " + dropType));
+          dropType,
+          PickResult.withError(
+              Status.UNAVAILABLE.withDescription(
+                  "Dropped as requested by balancer. Type: " + dropType)));
     }
-    DROP_STATUSES = Collections.unmodifiableMap(new EnumMap<DropType, Status>(map));
+    DROP_PICK_RESULTS = Collections.unmodifiableMap(map);
   }
 
   @VisibleForTesting
@@ -431,15 +432,15 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
         if (initialResponseReceived) {
           logger.log(
               Level.WARNING,
-              "[{0}] : Skipping abundant initial response: {1}",
+              "[{0}] : Ignored abundant initial response: {1}",
               new Object[] {logId, initialResponse});
         } else {
           initialResponseReceived = true;
           loadReportIntervalMillis =
               Durations.toMillis(initialResponse.getClientStatsReportInterval());
           scheduleNextLoadReport();
-          return;
         }
+        return;
       }
 
       // TODO(zhangkun83): handle delegate from initialResponse
@@ -677,7 +678,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       this.loadRecorder = checkNotNull(loadRecorder, "loadRecorder");
       // We re-use the status for each DropType to make it easy to test, because Status class
       // intentionally doesn't implement equals().
-      this.result = PickResult.withError(DROP_STATUSES.get(dropType));
+      this.result = DROP_PICK_RESULTS.get(dropType);
       this.token = null;
       this.dropType = dropType;
     }

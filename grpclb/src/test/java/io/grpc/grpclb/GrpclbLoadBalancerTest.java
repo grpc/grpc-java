@@ -427,8 +427,7 @@ public class GrpclbLoadBalancerTest {
 
     PickResult pick2 = picker.pickSubchannel(args);
     assertNull(pick2.getSubchannel());
-    assertSame(
-        GrpclbLoadBalancer.DROP_STATUSES.get(DropType.RATE_LIMITING), pick2.getStatus());
+    assertSame(GrpclbLoadBalancer.DROP_PICK_RESULTS.get(DropType.RATE_LIMITING), pick2);
 
     // Report includes upstart of pick1 and the drop of pick2
     assertNextReport(
@@ -457,8 +456,7 @@ public class GrpclbLoadBalancerTest {
 
     PickResult pick4 = picker.pickSubchannel(args);
     assertNull(pick4.getSubchannel());
-    assertSame(
-        GrpclbLoadBalancer.DROP_STATUSES.get(DropType.LOAD_BALANCING), pick4.getStatus());
+    assertSame(GrpclbLoadBalancer.DROP_PICK_RESULTS.get(DropType.LOAD_BALANCING), pick4);
 
     // pick1 ended without sending anything
     tracer1.streamClosed(Status.CANCELLED);
@@ -532,8 +530,7 @@ public class GrpclbLoadBalancerTest {
     // that picker is associated with the previous stream.
     PickResult pick6 = picker.pickSubchannel(args);
     assertNull(pick6.getSubchannel());
-    assertSame(
-        GrpclbLoadBalancer.DROP_STATUSES.get(DropType.RATE_LIMITING), pick6.getStatus());
+    assertSame(GrpclbLoadBalancer.DROP_PICK_RESULTS.get(DropType.RATE_LIMITING), pick6);
     assertNextReport(
         inOrder, lbRequestObserver, loadReportIntervalMillis,
         ClientStats.newBuilder().build());
