@@ -61,6 +61,7 @@ import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -93,7 +94,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
           Status.UNAVAILABLE.withDescription(
               "Dropped as requested by balancer. Type: " + dropType));
     }
-    DROP_STATUSES = Collections.unmodifiableMap(map);
+    DROP_STATUSES = Collections.unmodifiableMap(new EnumMap<DropType, Status>(map));
   }
 
   @VisibleForTesting
