@@ -36,6 +36,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
 import com.squareup.okhttp.ConnectionSpec;
+import io.grpc.ManagedChannel;
 import io.grpc.NameResolver;
 import io.grpc.internal.GrpcUtil;
 import java.net.InetSocketAddress;
@@ -52,6 +53,15 @@ import org.junit.runners.JUnit4;
 public class OkHttpChannelBuilderTest {
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
+
+  @Test
+  public void overrideAuthorityIsReadable() {
+    OkHttpChannelBuilder builder = new OkHttpChannelBuilder("original", 1234);
+    String override = "override:5678";
+    builder.overrideAuthority(override);
+    ManagedChannel channel = builder.build();
+    assertEquals(override, channel.authority());
+  }
 
   @Test
   public void overrideAllowsInvalidAuthority() {

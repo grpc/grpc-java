@@ -35,6 +35,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
+import io.grpc.ManagedChannel;
 import io.grpc.netty.InternalNettyChannelBuilder.OverrideAuthorityChecker;
 import io.grpc.netty.ProtocolNegotiators.TlsNegotiator;
 import io.netty.handler.ssl.SslContext;
@@ -53,6 +54,15 @@ public class NettyChannelBuilderTest {
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
   private final SslContext noSslContext = null;
+
+  @Test
+  public void overrideAuthorityIsReadable() {
+    NettyChannelBuilder builder =  new NettyChannelBuilder("original", 1234);
+    String override = "override:5678";
+    builder.overrideAuthority(override);
+    ManagedChannel channel = builder.build();
+    assertEquals(override, channel.authority());
+  }
 
   @Test
   public void overrideAllowsInvalidAuthority() {

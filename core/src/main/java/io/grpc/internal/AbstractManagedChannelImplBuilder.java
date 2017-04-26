@@ -35,6 +35,7 @@ import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.instrumentation.stats.Stats;
@@ -330,7 +331,7 @@ public abstract class AbstractManagedChannelImplBuilder
     }
 
     return new ManagedChannelImpl(
-        target,
+        MoreObjects.firstNonNull(authorityOverride, target),
         // TODO(carl-mastrangelo): Allow clients to pass this in
         new ExponentialBackoffPolicy.Provider(),
         nameResolverFactory,
