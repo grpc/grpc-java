@@ -33,6 +33,7 @@ package io.grpc.stub;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -42,6 +43,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
+import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -578,5 +580,45 @@ public class ClientCallsTest {
       Metadata metadata = Status.trailersFromThrowable(e);
       assertSame(trailers, metadata);
     }
+  }
+
+  @Test
+  public void clientStreamingWhileServerShutdown() throws Exception {
+    ServerServiceDefinition service = ServerServiceDefinition.builder(
+        new ServiceDescriptor("some", STREAMING_METHOD))
+        .addMethod(STREAMING_METHOD, ServerCalls.asyncBidiStreamingCall(
+            new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
+              @Override
+              public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
+                return new ServerCalls.NoopStreamObserver<Integer>() {};
+              }
+            }))
+        .build();
+    server = InProcessServerBuilder.forName("clientStreamingWhileServerShutdown").directExecutor()
+        .addService(service).build().start();
+    channel = InProcessChannelBuilder.forName("clientStreamingWhileServerShutdown").directExecutor()
+        .build();
+    ClientCall<Integer, Integer> clientCall =
+        channel.newCall(STREAMING_METHOD, CallOptions.DEFAULT);
+    final AtomicReference<Integer> message = new AtomicReference<Integer>();
+    ClientCall<Integer, Integer> call =
+        new SimpleForwardingClientCall<Integer, Integer>(clientCall) {
+      @Override
+      public void sendMessage(Integer msg) {
+        message.set(msg);
+      }
+    };
+    StreamObserver<Integer> responseOb = new NoopStreamObserver<Integer>();
+    StreamObserver<Integer> requestOb = ClientCalls.asyncClientStreamingCall(call, responseOb);
+
+    requestOb.onNext(345);
+    assertEquals(Integer.valueOf(345), message.get());
+    requestOb.onNext(456);
+    assertEquals(Integer.valueOf(456), message.get());
+
+    server.shutdownNow();
+
+    requestOb.onNext(789);
+    assertNotEquals(Integer.valueOf(789), message.get());
   }
 }

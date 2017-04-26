@@ -279,6 +279,7 @@ public final class ClientCalls {
 
   private static class CallToStreamObserverAdapter<T> extends ClientCallStreamObserver<T> {
     private boolean frozen;
+    private boolean listenerClosed;
     private final ClientCall<T, ?> call;
     private Runnable onReadyHandler;
     private boolean autoFlowControlEnabled = true;
@@ -291,9 +292,17 @@ public final class ClientCalls {
       this.frozen = true;
     }
 
+    private void listenerClosed() {
+      this.listenerClosed = true;
+    }
+
     @Override
     public void onNext(T value) {
-      call.sendMessage(value);
+      if (listenerClosed) {
+        log.info("trying to send a message but the call is already closed");
+      } else {
+        call.sendMessage(value);
+      }
     }
 
     @Override
@@ -391,6 +400,7 @@ public final class ClientCalls {
       } else {
         observer.onError(status.asRuntimeException(trailers));
       }
+      adapter.listenerClosed();
     }
 
     @Override
