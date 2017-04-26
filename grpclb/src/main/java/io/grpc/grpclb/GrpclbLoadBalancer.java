@@ -355,6 +355,8 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
         }
       };
 
+    // These fields are only accessed from helper.runSerialized()
+    boolean initialResponseReceived;
     boolean closed;
     long loadReportIntervalMillis = -1;
     ScheduledFuture<?> loadReportTask;
@@ -398,6 +400,9 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     // Following methods must be run in helper.runSerialized()
 
     private void sendLoadReport() {
+      if (closed) {
+        return;
+      }
       ClientStats stats = loadRecorder.generateLoadReport();
       // TODO(zhangkun83): flow control?
       try {
@@ -409,17 +414,9 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     }
 
     private void scheduleNextLoadReport() {
-      stopLoadReporting();
       if (loadReportIntervalMillis > 0) {
         loadReportTask = timerService.schedule(
             loadReportRunnable, loadReportIntervalMillis, TimeUnit.MILLISECONDS);
-      }
-    }
-
-    private void stopLoadReporting() {
-      if (loadReportTask != null) {
-        loadReportTask.cancel(false);
-        loadReportTask = null;
       }
     }
 
@@ -431,10 +428,18 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
 
       InitialLoadBalanceResponse initialResponse = response.getInitialResponse();
       if (initialResponse != InitialLoadBalanceResponse.getDefaultInstance()) {
-        loadReportIntervalMillis =
-            Durations.toMillis(initialResponse.getClientStatsReportInterval());
-        scheduleNextLoadReport();
-        return;
+        if (initialResponseReceived) {
+          logger.log(
+              Level.WARNING,
+              "[{0}] : Skipping abundant initial response: {1}",
+              new Object[] {logId, initialResponse});
+        } else {
+          initialResponseReceived = true;
+          loadReportIntervalMillis =
+              Durations.toMillis(initialResponse.getClientStatsReportInterval());
+          scheduleNextLoadReport();
+          return;
+        }
       }
 
       // TODO(zhangkun83): handle delegate from initialResponse
@@ -518,7 +523,10 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     }
 
     private void cleanUp() {
-      stopLoadReporting();
+      if (loadReportTask != null) {
+        loadReportTask.cancel(false);
+        loadReportTask = null;
+      }
       if (lbStream == this) {
         lbStream = null;
       }

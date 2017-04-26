@@ -565,6 +565,83 @@ public class GrpclbLoadBalancerTest {
     verifyNoMoreInteractions(args);
   }
 
+  @Test
+  public void abundantInitialResponse() {
+    Metadata headers = new Metadata();
+    PickSubchannelArgs args = mock(PickSubchannelArgs.class);
+    when(args.getHeaders()).thenReturn(headers);
+
+    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    Attributes grpclbResolutionAttrs = Attributes.newBuilder()
+        .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.GRPCLB).build();
+    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    assertEquals(1, fakeOobChannels.size());
+    ManagedChannel oobChannel = fakeOobChannels.poll();
+    verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+
+    // Simulate LB initial response
+    assertEquals(0, fakeClock.numPendingTasks());
+    lbResponseObserver.onNext(buildInitialResponse(1983));
+
+    // Load reporting task is scheduled
+    assertEquals(1, fakeClock.numPendingTasks());
+    FakeClock.ScheduledTask scheduledTask = fakeClock.getPendingTasks().iterator().next();
+    assertEquals(1983, scheduledTask.getDelay(TimeUnit.MILLISECONDS));
+
+    // Simulate an abundant LB initial response, with a different report interval
+    lbResponseObserver.onNext(buildInitialResponse(9097));
+    // It doesn't affect load-reporting at all
+    assertThat(fakeClock.getPendingTasks()).containsExactly(scheduledTask);
+    assertEquals(1983, scheduledTask.getDelay(TimeUnit.MILLISECONDS));
+  }
+
+  @Test
+  public void raceBetweenLoadReportingAndLbStreamClosure() {
+    Metadata headers = new Metadata();
+    PickSubchannelArgs args = mock(PickSubchannelArgs.class);
+    when(args.getHeaders()).thenReturn(headers);
+
+    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    Attributes grpclbResolutionAttrs = Attributes.newBuilder()
+        .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.GRPCLB).build();
+    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    assertEquals(1, fakeOobChannels.size());
+    ManagedChannel oobChannel = fakeOobChannels.poll();
+    verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
+    InOrder inOrder = inOrder(lbRequestObserver);
+
+    inOrder.verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
+                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            .build()));
+
+    // Simulate receiving LB response
+    assertEquals(0, fakeClock.numPendingTasks());
+    lbResponseObserver.onNext(buildInitialResponse(1983));
+
+    // Load reporting task is scheduled
+    assertEquals(1, fakeClock.numPendingTasks());
+    FakeClock.ScheduledTask scheduledTask = fakeClock.getPendingTasks().iterator().next();
+    assertEquals(1983, scheduledTask.getDelay(TimeUnit.MILLISECONDS));
+
+    // Close lbStream
+    lbResponseObserver.onCompleted();
+
+    // Reporting task cancelled
+    assertEquals(0, fakeClock.numPendingTasks());
+
+    // Simulate a race condition where the task has just started when its cancelled
+    scheduledTask.command.run();
+
+    // No report sent. No new task scheduled
+    inOrder.verify(lbRequestObserver, never()).onNext(any(LoadBalanceRequest.class));
+    assertEquals(0, fakeClock.numPendingTasks());
+  }
+
   private void assertNextReport(
       InOrder inOrder, StreamObserver<LoadBalanceRequest> lbRequestObserver,
       long loadReportIntervalMillis, ClientStats expectedReport) {
