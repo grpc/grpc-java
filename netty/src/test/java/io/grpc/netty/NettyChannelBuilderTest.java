@@ -56,8 +56,24 @@ public class NettyChannelBuilderTest {
   private final SslContext noSslContext = null;
 
   @Test
-  public void overrideAuthorityIsReadable() {
-    NettyChannelBuilder builder =  new NettyChannelBuilder("original", 1234);
+  public void overrideAuthorityIsReadableForAddress() {
+    NettyChannelBuilder builder =  NettyChannelBuilder.forAddress("original", 1234);
+    overrideAuthorityIsReadableHelper(builder);
+  }
+
+  @Test
+  public void overrideAuthorityIsReadableForTarget() {
+    NettyChannelBuilder builder =  NettyChannelBuilder.forTarget("original:1234");
+    overrideAuthorityIsReadableHelper(builder);
+  }
+
+  @Test
+  public void overrideAuthorityIsReadableForSocketAddress() {
+    NettyChannelBuilder builder =  NettyChannelBuilder.forAddress(new SocketAddress(){});
+    overrideAuthorityIsReadableHelper(builder);
+  }
+
+  public void overrideAuthorityIsReadableHelper(NettyChannelBuilder builder) {
     String override = "override:5678";
     builder.overrideAuthority(override);
     ManagedChannel channel = builder.build();

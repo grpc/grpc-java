@@ -309,6 +309,10 @@ public abstract class AbstractManagedChannelImplBuilder
       // getResource(), then this shouldn't be a problem unless called on the UI thread.
       nameResolverFactory = NameResolverProvider.asFactory();
     }
+    if (authorityOverride != null) {
+      nameResolverFactory =
+          new OverridableAuthorityNameResolverFactory(nameResolverFactory, authorityOverride);
+    }
 
     List<ClientInterceptor> effectiveInterceptors =
         new ArrayList<ClientInterceptor>(this.interceptors);
@@ -438,6 +442,48 @@ public abstract class AbstractManagedChannelImplBuilder
     @Override
     public String getDefaultScheme() {
       return DIRECT_ADDRESS_SCHEME;
+    }
+  }
+
+  /**
+   * A wrapper class that allows override the authority of a NameResolver, while preserving all
+   * other functionality.
+   */
+  private static class OverridableAuthorityNameResolverFactory extends NameResolver.Factory {
+    final NameResolver.Factory delegate;
+    final String authorityOverride;
+
+    OverridableAuthorityNameResolverFactory(NameResolver.Factory delegate,
+        String authorityOverride) {
+      this.delegate = delegate;
+      this.authorityOverride = authorityOverride;
+    }
+
+    @Nullable
+    @Override
+    public NameResolver newNameResolver(URI targetUri, Attributes params) {
+      final NameResolver resolver = delegate.newNameResolver(targetUri, params);
+      return new NameResolver() {
+        @Override
+        public String getServiceAuthority() {
+          return authorityOverride;
+        }
+
+        @Override
+        public void start(Listener listener) {
+          resolver.start(listener);
+        }
+
+        @Override
+        public void shutdown() {
+          resolver.shutdown();
+        }
+      };
+    }
+
+    @Override
+    public String getDefaultScheme() {
+      return delegate.getDefaultScheme();
     }
   }
 
