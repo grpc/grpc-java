@@ -310,7 +310,7 @@ public abstract class AbstractManagedChannelImplBuilder
     }
     if (authorityOverride != null) {
       nameResolverFactory =
-          new OverridableAuthorityNameResolverFactory(nameResolverFactory, authorityOverride);
+          new OverrideAuthorityNameResolverFactory(nameResolverFactory, authorityOverride);
     }
 
     List<ClientInterceptor> effectiveInterceptors =
@@ -445,14 +445,20 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   /**
-   * A wrapper class that allows override the authority of a NameResolver, while preserving all
-   * other functionality.
+   * A wrapper class that overrides the authority of a NameResolver, while preserving all other
+   * functionality.
    */
-  private static class OverridableAuthorityNameResolverFactory extends NameResolver.Factory {
+  private static class OverrideAuthorityNameResolverFactory extends NameResolver.Factory {
     final NameResolver.Factory delegate;
     final String authorityOverride;
 
-    OverridableAuthorityNameResolverFactory(NameResolver.Factory delegate,
+    /**
+     * Constructor for the {@link NameResolver.Factory}
+     * @param delegate The actual underlying factory that will produce the a {@link NameResolver}
+     * @param authorityOverride The authority that will be returned by {@link
+     *   NameResolver#getServiceAuthority()}
+     */
+    OverrideAuthorityNameResolverFactory(NameResolver.Factory delegate,
         String authorityOverride) {
       this.delegate = delegate;
       this.authorityOverride = authorityOverride;
