@@ -40,11 +40,9 @@ import static org.mockito.Mockito.when;
 
 import io.grpc.Attributes;
 import io.grpc.NameResolver;
-
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.concurrent.TimeUnit;
-
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;

@@ -297,10 +297,6 @@ public abstract class AbstractManagedChannelImplBuilder
   @Override
   public ManagedChannel build() {
     ClientTransportFactory transportFactory = buildTransportFactory();
-    if (authorityOverride != null) {
-      transportFactory = new AuthorityOverridingTransportFactory(
-        transportFactory, authorityOverride);
-    }
     NameResolver.Factory nameResolverFactory = this.nameResolverFactory;
     if (nameResolverFactory == null) {
       // Avoid loading the provider unless necessary, as a way to workaround a possibly-costly
@@ -386,29 +382,6 @@ public abstract class AbstractManagedChannelImplBuilder
     }
   }
 
-  private static class AuthorityOverridingTransportFactory implements ClientTransportFactory {
-    final ClientTransportFactory factory;
-    final String authorityOverride;
-
-    AuthorityOverridingTransportFactory(
-        ClientTransportFactory factory, String authorityOverride) {
-      this.factory = Preconditions.checkNotNull(factory, "factory should not be null");
-      this.authorityOverride = Preconditions.checkNotNull(
-        authorityOverride, "authorityOverride should not be null");
-    }
-
-    @Override
-    public ConnectionClientTransport newClientTransport(SocketAddress serverAddress,
-        String authority, @Nullable String userAgent) {
-      return factory.newClientTransport(serverAddress, authorityOverride, userAgent);
-    }
-
-    @Override
-    public void close() {
-      factory.close();
-    }
-  }
-
   private static class DirectAddressNameResolverFactory extends NameResolver.Factory {
     final SocketAddress address;
     final String authority;
@@ -449,12 +422,13 @@ public abstract class AbstractManagedChannelImplBuilder
    * functionality.
    */
   @VisibleForTesting
-  protected static class OverrideAuthorityNameResolverFactory extends NameResolver.Factory {
-    final NameResolver.Factory delegate;
-    final String authorityOverride;
+  static class OverrideAuthorityNameResolverFactory extends NameResolver.Factory {
+    private final NameResolver.Factory delegate;
+    private final String authorityOverride;
 
     /**
      * Constructor for the {@link NameResolver.Factory}
+     *
      * @param delegate The actual underlying factory that will produce the a {@link NameResolver}
      * @param authorityOverride The authority that will be returned by {@link
      *   NameResolver#getServiceAuthority()}
