@@ -448,7 +448,8 @@ public abstract class AbstractManagedChannelImplBuilder
    * A wrapper class that overrides the authority of a NameResolver, while preserving all other
    * functionality.
    */
-  private static class OverrideAuthorityNameResolverFactory extends NameResolver.Factory {
+  @VisibleForTesting
+  protected static class OverrideAuthorityNameResolverFactory extends NameResolver.Factory {
     final NameResolver.Factory delegate;
     final String authorityOverride;
 
@@ -468,6 +469,10 @@ public abstract class AbstractManagedChannelImplBuilder
     @Override
     public NameResolver newNameResolver(URI targetUri, Attributes params) {
       final NameResolver resolver = delegate.newNameResolver(targetUri, params);
+      // Do not wrap null values. We do not want to impede error signaling.
+      if (resolver == null) {
+        return null;
+      }
       return new NameResolver() {
         @Override
         public String getServiceAuthority() {
