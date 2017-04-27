@@ -47,6 +47,7 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.CompressorRegistry;
+import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
@@ -63,7 +64,9 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
@@ -179,6 +182,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   // Must be mutated from channelExecutor
   private volatile boolean terminated;
   private final CountDownLatch terminatedLatch = new CountDownLatch(1);
+
+  @GuardedBy("this")
+  private ConnectivityState state;
+  @GuardedBy("this")
+  private final Queue<Runnable> stateChangeCallbacks = new LinkedList<Runnable>();
 
   // Called from channelExecutor
   private final ManagedClientTransport.Listener delayedTransportListener =
@@ -524,7 +532,40 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     return terminated;
   }
 
-  /*
+  @Override
+  public ConnectivityState getState(boolean requestConnection) {
+    synchronized (this) {
+      // TODO: handle requestConnection. At this point, not really sure how.
+      return state;
+    }
+  }
+
+  @Override
+  public void notifyWhenStateChanged(ConnectivityState source, Runnable callback) {
+    synchronized (this) {
+      if (source != state) {
+        executor.execute(callback);
+        return;
+      }
+      stateChangeCallbacks.add(callback);
+    }
+  }
+
+  private void maybeUpdateState(SubchannelPicker subchannelPicker) {
+    ConnectivityState subchannelState = subchannelPicker.getState();
+    synchronized (this) {
+      if (state == subchannelState) {
+        return;
+      }
+      state = subchannelState;
+      for (Runnable callback : stateChangeCallbacks) {
+        executor.execute(callback);
+      }
+      stateChangeCallbacks.clear();
+    }
+  }
+
+  /**
    * Creates a new outgoing call on the channel.
    */
   @Override
@@ -715,6 +756,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
           @Override
           public void run() {
             subchannelPicker = picker;
+            maybeUpdateState(subchannelPicker);
             delayedTransport.reprocess(picker);
           }
         });

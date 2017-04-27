@@ -36,6 +36,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
+import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
@@ -153,7 +154,12 @@ final class OobChannel extends ManagedChannel implements WithLogId {
         public PickResult pickSubchannel(PickSubchannelArgs args) {
           return result;
         }
-      };
+
+        @Override
+        public ConnectivityState getState() {
+          return ConnectivityState.READY;
+        }
+    };
     delayedTransport.reprocess(subchannelPicker);
   }
 
@@ -219,7 +225,12 @@ final class OobChannel extends ManagedChannel implements WithLogId {
             public PickResult pickSubchannel(PickSubchannelArgs args) {
               return errorResult;
             }
-          });
+
+            @Override
+            public ConnectivityState getState() {
+              return ConnectivityState.TRANSIENT_FAILURE;
+            }
+        });
         break;
       default:
         // Do nothing

@@ -32,12 +32,14 @@
 package io.grpc.util;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
+import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
@@ -131,12 +133,12 @@ public class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
         subchannel.shutdown();
       }
 
-      updatePicker(getAggregatedError());
+      updatePicker(getAggregatedState());
     }
 
     @Override
     public void handleNameResolutionError(Status error) {
-      updatePicker(error);
+      updatePicker(ConnectivityStateInfo.forTransientFailure(error));
     }
 
     @Override
@@ -148,7 +150,7 @@ public class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
         subchannel.requestConnection();
       }
       getSubchannelStateInfoRef(subchannel).set(stateInfo);
-      updatePicker(getAggregatedError());
+      updatePicker(getAggregatedState());
     }
 
     @Override
@@ -161,9 +163,9 @@ public class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     /**
      * Updates picker with the list of active subchannels (state == READY).
      */
-    private void updatePicker(@Nullable Status error) {
+    private void updatePicker(ConnectivityStateInfo state) {
       List<Subchannel> activeList = filterNonFailingSubchannels(getSubchannels());
-      helper.updatePicker(new Picker(activeList, error));
+      helper.updatePicker(new Picker(state, activeList));
     }
 
     /**
@@ -193,20 +195,38 @@ public class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     }
 
     /**
-     * If all subchannels are TRANSIENT_FAILURE, return the Status associated with an arbitrary
-     * subchannel otherwise, return null.
+     * Returns aggregated state.
+     *
+     * <p>If there is at least one {@code READY}, the aggregated state should be {@code READY}.
+     * Otherwise, if there is at least one {@code CONNECTING}, the aggregated state should be {@code
+     * CONNECTING}. Otherwise, if there is at least one {@code IDLE}, the aggregated state should be
+     * {@code IDLE}.
      */
     @Nullable
-    private Status getAggregatedError() {
-      Status status = null;
-      for (Subchannel subchannel : getSubchannels()) {
-        ConnectivityStateInfo stateInfo = getSubchannelStateInfoRef(subchannel).get();
-        if (stateInfo.getState() != TRANSIENT_FAILURE) {
-          return null;
+    private ConnectivityStateInfo getAggregatedState() {
+      // TODO(lukaszx0): this could be extracted to a helper class
+      Map<ConnectivityState, Integer> stateIndex = new HashMap<ConnectivityState, Integer>() {
+        {
+          put(READY, 0);
+          put(CONNECTING, 0);
+          put(IDLE, 0);
         }
-        status = stateInfo.getStatus();
+      };
+      for (Subchannel subchannel : getSubchannels()) {
+        ConnectivityState state = getSubchannelStateInfoRef(subchannel).get().getState();
+        Integer numChann = stateIndex.get(state);
+        if (numChann != null) {
+          stateIndex.put(state, ++numChann);
+        }
       }
-      return status;
+      if (stateIndex.get(READY) > 0) {
+        return ConnectivityStateInfo.forNonError(READY);
+      } else if (stateIndex.get(CONNECTING) > 0) {
+        return ConnectivityStateInfo.forNonError(CONNECTING);
+      } else if (stateIndex.get(IDLE) > 0) {
+        return ConnectivityStateInfo.forNonError(IDLE);
+      }
+      return ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE);
     }
 
     @VisibleForTesting
@@ -228,17 +248,17 @@ public class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
 
   @VisibleForTesting
   static final class Picker extends SubchannelPicker {
-    @Nullable
-    private final Status status;
+
+    private final ConnectivityStateInfo state;
     private final List<Subchannel> list;
     private final int size;
     @GuardedBy("this")
     private int index = 0;
 
-    Picker(List<Subchannel> list, @Nullable Status status) {
+    Picker(ConnectivityStateInfo state, List<Subchannel> list) {
+      this.state = state;
       this.list = Collections.unmodifiableList(list);
       this.size = list.size();
-      this.status = status;
     }
 
     @Override
@@ -247,11 +267,16 @@ public class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
         return PickResult.withSubchannel(nextSubchannel());
       }
 
-      if (status != null) {
-        return PickResult.withError(status);
+      if (state.getState() == TRANSIENT_FAILURE) {
+        return PickResult.withError(state.getStatus());
       }
 
       return PickResult.withNoResult();
+    }
+
+    @Override
+    public ConnectivityState getState() {
+      return state.getState();
     }
 
     private Subchannel nextSubchannel() {
@@ -275,7 +300,7 @@ public class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
 
     @VisibleForTesting
     Status getStatus() {
-      return status;
+      return state.getStatus();
     }
   }
 }

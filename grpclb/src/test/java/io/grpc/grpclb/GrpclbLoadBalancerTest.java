@@ -274,7 +274,7 @@ public class GrpclbLoadBalancerTest {
     RoundRobinEntry r3 = new RoundRobinEntry(subchannel, "LBTOKEN0002");
 
     List<RoundRobinEntry> list = Arrays.asList(r1, r2, r3);
-    RoundRobinPicker picker = new RoundRobinPicker(list);
+    RoundRobinPicker picker = new RoundRobinPicker(list, READY);
 
     PickSubchannelArgs args1 = mock(PickSubchannelArgs.class);
     Metadata headers1 = new Metadata();
