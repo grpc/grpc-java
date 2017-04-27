@@ -63,7 +63,6 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
 import io.grpc.Attributes;
-import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -78,7 +77,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
 import io.grpc.grpclb.GrpclbConstants.LbPolicy;
 import io.grpc.grpclb.GrpclbLoadBalancer.ErrorPicker;
 import io.grpc.grpclb.GrpclbLoadBalancer.RoundRobinEntry;
@@ -88,7 +86,6 @@ import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SerializingExecutor;
-import io.grpc.stub.ClientCalls;
 import io.grpc.stub.StreamObserver;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -223,13 +220,6 @@ public class GrpclbLoadBalancerTest {
           } else {
             channel = InProcessChannelBuilder.forName("fakeLb").directExecutor().build();
           }
-          // TODO(zhangkun83): #2444: non-determinism of Channel due to starting NameResolver on the
-          // timer "Prime" it before use.  Remove it after #2444 is resolved.
-          try {
-            ClientCalls.blockingUnaryCall(channel, TRASH_METHOD, CallOptions.DEFAULT, "trash");
-          } catch (StatusRuntimeException ignored) {
-            // Ignored
-          }
           fakeOobChannels.add(channel);
           oobChannelTracker.add(channel);
           return channel;
@@ -315,30 +305,30 @@ public class GrpclbLoadBalancerTest {
     when(args1.getHeaders()).thenReturn(headers1);
     assertSame(r1.result, picker.pickSubchannel(args1));
     verify(args1).getHeaders();
-    assertFalse(headers1.containsKey(GrpclbLoadBalancer.TOKEN_KEY));
+    assertFalse(headers1.containsKey(GrpclbConstants.TOKEN_METADATA_KEY));
 
     PickSubchannelArgs args2 = mock(PickSubchannelArgs.class);
     Metadata headers2 = new Metadata();
     // The existing token on the headers will be replaced
-    headers2.put(GrpclbLoadBalancer.TOKEN_KEY, "LBTOKEN__OLD");
+    headers2.put(GrpclbConstants.TOKEN_METADATA_KEY, "LBTOKEN__OLD");
     when(args2.getHeaders()).thenReturn(headers2);
     assertSame(r2.result, picker.pickSubchannel(args2));
     verify(args2).getHeaders();
-    assertThat(headers2.getAll(GrpclbLoadBalancer.TOKEN_KEY)).containsExactly("LBTOKEN0001");
+    assertThat(headers2.getAll(GrpclbConstants.TOKEN_METADATA_KEY)).containsExactly("LBTOKEN0001");
 
     PickSubchannelArgs args3 = mock(PickSubchannelArgs.class);
     Metadata headers3 = new Metadata();
     when(args3.getHeaders()).thenReturn(headers3);
     assertSame(r3.result, picker.pickSubchannel(args3));
     verify(args3).getHeaders();
-    assertThat(headers3.getAll(GrpclbLoadBalancer.TOKEN_KEY)).containsExactly("LBTOKEN0002");
+    assertThat(headers3.getAll(GrpclbConstants.TOKEN_METADATA_KEY)).containsExactly("LBTOKEN0002");
 
     PickSubchannelArgs args4 = mock(PickSubchannelArgs.class);
     Metadata headers4 = new Metadata();
     when(args4.getHeaders()).thenReturn(headers4);
     assertSame(r1.result, picker.pickSubchannel(args4));
     verify(args4).getHeaders();
-    assertFalse(headers4.containsKey(GrpclbLoadBalancer.TOKEN_KEY));
+    assertFalse(headers4.containsKey(GrpclbConstants.TOKEN_METADATA_KEY));
 
     verify(subchannel, never()).getAttributes();
   }
