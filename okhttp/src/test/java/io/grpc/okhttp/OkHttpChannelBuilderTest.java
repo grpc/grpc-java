@@ -55,6 +55,12 @@ public class OkHttpChannelBuilderTest {
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   @Test
+  public void authorityIsReadable() {
+    OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("original", 1234);
+    assertEquals("original:1234", builder.build().authority());
+  }
+
+  @Test
   public void overrideAuthorityIsReadableForAddress() {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("original", 1234);
     overrideAuthorityIsReadableHelper(builder, "override:5678");
@@ -69,8 +75,7 @@ public class OkHttpChannelBuilderTest {
   private void overrideAuthorityIsReadableHelper(OkHttpChannelBuilder builder,
       String overrideAuthority) {
     builder.overrideAuthority(overrideAuthority);
-    ManagedChannel channel = builder.build();
-    assertEquals(overrideAuthority, channel.authority());
+    assertEquals(overrideAuthority, builder.build().authority());
   }
 
   @Test

@@ -56,6 +56,12 @@ public class NettyChannelBuilderTest {
   private final SslContext noSslContext = null;
 
   @Test
+  public void authorityIsReadable() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forAddress("original", 1234);
+    assertEquals("original:1234", builder.build().authority());
+  }
+
+  @Test
   public void overrideAuthorityIsReadableForAddress() {
     NettyChannelBuilder builder = NettyChannelBuilder.forAddress("original", 1234);
     overrideAuthorityIsReadableHelper(builder, "override:5678");
