@@ -36,7 +36,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
 import com.squareup.okhttp.ConnectionSpec;
-import io.grpc.ManagedChannel;
 import io.grpc.NameResolver;
 import io.grpc.internal.GrpcUtil;
 import java.net.InetSocketAddress;
