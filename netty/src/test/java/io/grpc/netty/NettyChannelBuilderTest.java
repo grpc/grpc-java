@@ -79,12 +79,7 @@ public class NettyChannelBuilderTest {
     overrideAuthorityIsReadableHelper(builder, "override:5678");
   }
 
-  /**
-   * A helper method for setting an authority override on a factory and testing the result.
-   * @param builder The builder object whose authority we will override
-   * @param overrideAuthority The override value
-   */
-  public void overrideAuthorityIsReadableHelper(NettyChannelBuilder builder,
+  private void overrideAuthorityIsReadableHelper(NettyChannelBuilder builder,
       String overrideAuthority) {
     builder.overrideAuthority(overrideAuthority);
     ManagedChannel channel = builder.build();
