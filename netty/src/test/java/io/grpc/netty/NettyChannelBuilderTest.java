@@ -58,26 +58,26 @@ public class NettyChannelBuilderTest {
   @Test
   public void overrideAuthorityIsReadableForAddress() {
     NettyChannelBuilder builder = NettyChannelBuilder.forAddress("original", 1234);
-    overrideAuthorityIsReadableHelper(builder);
+    overrideAuthorityIsReadableHelper(builder, "override:5678");
   }
 
   @Test
   public void overrideAuthorityIsReadableForTarget() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("original:1234");
-    overrideAuthorityIsReadableHelper(builder);
+    overrideAuthorityIsReadableHelper(builder, "override:5678");
   }
 
   @Test
   public void overrideAuthorityIsReadableForSocketAddress() {
     NettyChannelBuilder builder = NettyChannelBuilder.forAddress(new SocketAddress(){});
-    overrideAuthorityIsReadableHelper(builder);
+    overrideAuthorityIsReadableHelper(builder, "override:5678");
   }
 
-  public void overrideAuthorityIsReadableHelper(NettyChannelBuilder builder) {
-    String override = "override:5678";
-    builder.overrideAuthority(override);
+  public void overrideAuthorityIsReadableHelper(NettyChannelBuilder builder,
+      String overrideAuthority) {
+    builder.overrideAuthority(overrideAuthority);
     ManagedChannel channel = builder.build();
-    assertEquals(override, channel.authority());
+    assertEquals(overrideAuthority, channel.authority());
   }
 
   @Test

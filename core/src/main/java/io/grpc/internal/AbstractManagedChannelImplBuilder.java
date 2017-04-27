@@ -335,7 +335,7 @@ public abstract class AbstractManagedChannelImplBuilder
     }
 
     return new ManagedChannelImpl(
-        MoreObjects.firstNonNull(authorityOverride, target),
+        target,
         // TODO(carl-mastrangelo): Allow clients to pass this in
         new ExponentialBackoffPolicy.Provider(),
         nameResolverFactory,
