@@ -57,19 +57,19 @@ public class NettyChannelBuilderTest {
 
   @Test
   public void overrideAuthorityIsReadableForAddress() {
-    NettyChannelBuilder builder =  NettyChannelBuilder.forAddress("original", 1234);
+    NettyChannelBuilder builder = NettyChannelBuilder.forAddress("original", 1234);
     overrideAuthorityIsReadableHelper(builder);
   }
 
   @Test
   public void overrideAuthorityIsReadableForTarget() {
-    NettyChannelBuilder builder =  NettyChannelBuilder.forTarget("original:1234");
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("original:1234");
     overrideAuthorityIsReadableHelper(builder);
   }
 
   @Test
   public void overrideAuthorityIsReadableForSocketAddress() {
-    NettyChannelBuilder builder =  NettyChannelBuilder.forAddress(new SocketAddress(){});
+    NettyChannelBuilder builder = NettyChannelBuilder.forAddress(new SocketAddress(){});
     overrideAuthorityIsReadableHelper(builder);
   }
 
