@@ -584,16 +584,17 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
 
     @Override
     public void closed(final Status status) {
+      // Immediately inform any users of the context that their work should be aborted.
+      if (!status.isOk()) {
+        context.cancel(status.getCause());
+      }
+      // The contract of this.listener is that it's always accessed from inside callExecutor.
+      // Some places rely on the ordering of Runnables, so we must enqueue the work here, rather
+      // than invoking closed() directly.
       callExecutor.execute(new ContextRunnable(context) {
         @Override
         public void runInContext() {
-          try {
             getListener().closed(status);
-          } finally {
-            // Regardless of the status code we cancel the context so that listeners
-            // are aware that the call is done.
-            context.cancel(status.getCause());
-          }
         }
       });
     }

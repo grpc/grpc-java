@@ -777,9 +777,11 @@ public class ServerImplTest {
   public void testClientCancelTriggersContextCancellation() throws Exception {
     createAndStartServer(NO_FILTERS);
     final AtomicBoolean contextCancelled = new AtomicBoolean(false);
+    final AtomicReference<Context> context = new AtomicReference<Context>();
     callListener = new ServerCall.Listener<String>() {
       @Override
       public void onReady() {
+        context.set(Context.current());
         Context.current().addListener(new Context.CancellationListener() {
           @Override
           public void cancelled(Context context) {
@@ -822,7 +824,13 @@ public class ServerImplTest {
     assertNotNull(streamListener);
 
     streamListener.onReady();
+    assertEquals(1, executor.runDueTasks());
+
+    // isCancelled is expected to be true immediately after calling closed(), without needing
+    // to wait for the executor to run any tasks.
+    assertFalse(context.get().isCancelled());
     streamListener.closed(Status.CANCELLED);
+    assertTrue(context.get().isCancelled());
 
     assertEquals(1, executor.runDueTasks());
     assertTrue(contextCancelled.get());
