@@ -594,7 +594,10 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       callExecutor.execute(new ContextRunnable(context) {
         @Override
         public void runInContext() {
-            getListener().closed(status);
+          if (status.isOk()) {
+            context.cancel(status.getCause());
+          }
+          getListener().closed(status);
         }
       });
     }

@@ -773,11 +773,12 @@ public class ServerImplTest {
     verify(stream, times(0)).close(isA(Status.class), isNotNull(Metadata.class));
   }
 
-  @Test
-  public void testClientCancelTriggersContextCancellation() throws Exception {
+  public ServerStreamListener testClientClose_setup(
+      final AtomicReference<ServerCall<String, Integer>> callReference,
+      final AtomicReference<Context> context,
+      final AtomicBoolean contextCancelled
+  ) throws Exception {
     createAndStartServer(NO_FILTERS);
-    final AtomicBoolean contextCancelled = new AtomicBoolean(false);
-    final AtomicReference<Context> context = new AtomicReference<Context>();
     callListener = new ServerCall.Listener<String>() {
       @Override
       public void onReady() {
@@ -791,8 +792,6 @@ public class ServerImplTest {
       }
     };
 
-    final AtomicReference<ServerCall<String, Integer>> callReference
-        = new AtomicReference<ServerCall<String, Integer>>();
     MethodDescriptor<String, Integer> method = MethodDescriptor.<String, Integer>newBuilder()
         .setType(MethodDescriptor.MethodType.UNKNOWN)
         .setFullMethodName("Waiter/serve")
@@ -825,7 +824,20 @@ public class ServerImplTest {
 
     streamListener.onReady();
     assertEquals(1, executor.runDueTasks());
+    return streamListener;
+  }
 
+  @Test
+  public void testClientClose_cancelTriggersImmediateCancellation() throws Exception {
+    final AtomicBoolean contextCancelled = new AtomicBoolean(false);
+    final AtomicReference<Context> context = new AtomicReference<Context>();
+    final AtomicReference<ServerCall<String, Integer>> callReference
+        = new AtomicReference<ServerCall<String, Integer>>();
+
+    ServerStreamListener streamListener = testClientClose_setup(callReference,
+        context, contextCancelled);
+
+    // For close status being non OK:
     // isCancelled is expected to be true immediately after calling closed(), without needing
     // to wait for the executor to run any tasks.
     assertFalse(callReference.get().isCancelled());
@@ -835,6 +847,30 @@ public class ServerImplTest {
     assertTrue(context.get().isCancelled());
 
     assertEquals(1, executor.runDueTasks());
+    assertTrue(contextCancelled.get());
+  }
+
+  @Test
+  public void testClientClose_OKTriggersDelayedCancellation() throws Exception {
+    final AtomicBoolean contextCancelled = new AtomicBoolean(false);
+    final AtomicReference<Context> context = new AtomicReference<Context>();
+    final AtomicReference<ServerCall<String, Integer>> callReference
+        = new AtomicReference<ServerCall<String, Integer>>();
+
+    ServerStreamListener streamListener = testClientClose_setup(callReference,
+        context, contextCancelled);
+
+    // For close status OK:
+    // isCancelled is expected to be true after all pending work is done
+    assertFalse(callReference.get().isCancelled());
+    assertFalse(context.get().isCancelled());
+    streamListener.closed(Status.OK);
+    assertFalse(callReference.get().isCancelled());
+    assertFalse(context.get().isCancelled());
+
+    assertEquals(1, executor.runDueTasks());
+    assertTrue(callReference.get().isCancelled());
+    assertTrue(context.get().isCancelled());
     assertTrue(contextCancelled.get());
   }
 
