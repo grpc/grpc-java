@@ -828,8 +828,10 @@ public class ServerImplTest {
 
     // isCancelled is expected to be true immediately after calling closed(), without needing
     // to wait for the executor to run any tasks.
+    assertFalse(callReference.get().isCancelled());
     assertFalse(context.get().isCancelled());
     streamListener.closed(Status.CANCELLED);
+    assertTrue(callReference.get().isCancelled());
     assertTrue(context.get().isCancelled());
 
     assertEquals(1, executor.runDueTasks());
