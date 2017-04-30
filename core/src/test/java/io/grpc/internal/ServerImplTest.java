@@ -773,7 +773,7 @@ public class ServerImplTest {
     verify(stream, times(0)).close(isA(Status.class), isNotNull(Metadata.class));
   }
 
-  public ServerStreamListener testClientClose_setup(
+  private ServerStreamListener testClientClose_setup(
       final AtomicReference<ServerCall<String, Integer>> callReference,
       final AtomicReference<Context> context,
       final AtomicBoolean contextCancelled
@@ -851,7 +851,7 @@ public class ServerImplTest {
   }
 
   @Test
-  public void testClientClose_OKTriggersDelayedCancellation() throws Exception {
+  public void testClientClose_OkTriggersDelayedCancellation() throws Exception {
     final AtomicBoolean contextCancelled = new AtomicBoolean(false);
     final AtomicReference<Context> context = new AtomicReference<Context>();
     final AtomicReference<ServerCall<String, Integer>> callReference

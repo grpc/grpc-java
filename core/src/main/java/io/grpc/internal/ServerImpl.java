@@ -584,7 +584,8 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
 
     @Override
     public void closed(final Status status) {
-      // Immediately inform any users of the context that their work should be aborted.
+      // For cancellations, promptly inform any users of the context that their work should be
+      // aborted. Otherwise, we can wait until pending work is done.
       if (!status.isOk()) {
         context.cancel(status.getCause());
       }
