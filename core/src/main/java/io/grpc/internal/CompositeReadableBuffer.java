@@ -34,8 +34,9 @@ package io.grpc.internal;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.util.ArrayDeque;
 import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * A {@link ReadableBuffer} that is composed of 0 or more {@link ReadableBuffer}s. This provides a
@@ -44,11 +45,16 @@ import java.util.Queue;
  * <p>When a buffer is added to a composite, its life cycle is controlled by the composite. Once
  * the composite has read past the end of a given buffer, that buffer is automatically closed and
  * removed from the composite.
+ *
+ * <p>This class is safe for one thread to add data and one thread to consume data simultaneously.
  */
+// TODO(ericgribkoff): AtomicInteger and ConcurrentLinkedQueue add unnecessary overhead when
+// deframing in the transport thread. If server deframing stays in transport thread, add alternate
+// non-concurrent implementation.
 public class CompositeReadableBuffer extends AbstractReadableBuffer {
 
-  private int readableBytes;
-  private final Queue<ReadableBuffer> buffers = new ArrayDeque<ReadableBuffer>();
+  private AtomicInteger readableBytes = new AtomicInteger();
+  private final Queue<ReadableBuffer> buffers = new ConcurrentLinkedQueue<ReadableBuffer>();
 
   /**
    * Adds a new {@link ReadableBuffer} at the end of the buffer list. After a buffer is added, it is
@@ -59,7 +65,7 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
   public void addBuffer(ReadableBuffer buffer) {
     if (!(buffer instanceof CompositeReadableBuffer)) {
       buffers.add(buffer);
-      readableBytes += buffer.readableBytes();
+      readableBytes.getAndAdd(buffer.readableBytes());
       return;
     }
 
@@ -68,14 +74,14 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
       ReadableBuffer subBuffer = compositeBuffer.buffers.remove();
       buffers.add(subBuffer);
     }
-    readableBytes += compositeBuffer.readableBytes;
-    compositeBuffer.readableBytes = 0;
+    readableBytes.getAndAdd(compositeBuffer.readableBytes.get());
+    compositeBuffer.readableBytes.set(0);
     compositeBuffer.close();
   }
 
   @Override
   public int readableBytes() {
-    return readableBytes;
+    return readableBytes.get();
   }
 
   @Override
@@ -151,7 +157,7 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
   @Override
   public CompositeReadableBuffer readBytes(int length) {
     checkReadable(length);
-    readableBytes -= length;
+    readableBytes.getAndAdd(-length);
 
     CompositeReadableBuffer newBuffer = new CompositeReadableBuffer();
     while (length > 0) {
@@ -192,7 +198,7 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
       }
 
       length -= lengthToCopy;
-      readableBytes -= lengthToCopy;
+      readableBytes.getAndAdd(-lengthToCopy);
     }
 
     if (length > 0) {

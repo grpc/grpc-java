@@ -183,10 +183,15 @@ public abstract class AbstractServerStream extends AbstractStream2
     return statsTraceCtx;
   }
 
-  /** This should only called from the transport thread. */
+  /**
+   * {@code MessageDeframer.Source.Listener} methods will be called from the deframing thread.
+   * Other methods should only be called from the transport thread.
+   */
   protected abstract static class TransportState extends AbstractStream2.TransportState {
     /** Whether listener.closed() has been called. */
     private boolean listenerClosed;
+    /** Whether the deframer was closed immediately. */
+    private boolean deframerImmediatelyClosed;
     private ServerStreamListener listener;
     private final StatsTraceContext statsTraceCtx;
 
@@ -210,12 +215,22 @@ public abstract class AbstractServerStream extends AbstractStream2
     }
 
     @Override
-    public void deliveryStalled() {}
-
-    @Override
-    public void endOfStream() {
-      closeDeframer();
-      listener().halfClosed();
+    public void deframerClosed(boolean hasPartialMessage) {
+      // If deframerImmediatelyClosed=true, this callback is in response to closing the deframer
+      // immediately via closeListener().
+      if (!deframerImmediatelyClosed) {
+        if (hasPartialMessage) {
+          // We've received the entire stream and have data available but we don't have
+          // enough to read the next frame ... this is bad.
+          RuntimeException t = Status.INTERNAL.withDescription(
+                  ": Encountered end-of-stream mid-frame").asRuntimeException();
+          // TODO(ericgribkoff) This is broken. Will trigger an invalid call to
+          // scheduleDeframerClose().
+          deframeFailed(t);
+        } else {
+          listener().halfClosed();
+        }
+      }
     }
 
     @Override
@@ -233,7 +248,10 @@ public abstract class AbstractServerStream extends AbstractStream2
      */
     public void inboundDataReceived(ReadableBuffer frame, boolean endOfStream) {
       // Deframe the message. If a failure occurs, deframeFailed will be called.
-      deframe(frame, endOfStream);
+      deframe(frame);
+      if (endOfStream && !isDeframerScheduledToClose()) {
+        scheduleDeframerClose(false);
+      }
     }
 
     /**
@@ -271,7 +289,10 @@ public abstract class AbstractServerStream extends AbstractStream2
         }
         listenerClosed = true;
         onStreamDeallocated();
-        closeDeframer();
+        if (!isDeframerScheduledToCloseImmediately()) {
+          deframerImmediatelyClosed = true;
+          scheduleDeframerClose(true);
+        }
         listener().closed(newStatus);
       }
     }

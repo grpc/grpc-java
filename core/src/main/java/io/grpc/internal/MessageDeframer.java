@@ -38,356 +38,529 @@ import com.google.common.base.Preconditions;
 import io.grpc.Codec;
 import io.grpc.Decompressor;
 import io.grpc.Status;
-import java.io.Closeable;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.concurrent.atomic.AtomicInteger;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * Deframer for GRPC frames.
  *
- * <p>This class is not thread-safe. All calls to public methods should be made in the transport
- * thread.
+ * <p>The operation of the deframer is divided between a {@link Sink} that is called from the
+ * transport thread and a {@link Source} that produces gRPC messages.
+ *
+ * <p>This class is not thread-safe. All calls to {@link Sink} methods should be made in the
+ * transport thread. It is thread-safe for a single thread to concurrently invoke {@link Source}
+ * methods. Typically this will be the transport thread itself or the application thread.
  */
 @NotThreadSafe
-public class MessageDeframer implements Closeable {
+public class MessageDeframer {
   private static final int HEADER_LENGTH = 5;
   private static final int COMPRESSED_FLAG_MASK = 1;
   private static final int RESERVED_MASK = 0xFE;
 
+  public enum CloseRequested {
+    NONE,
+    WHEN_COMPLETE,
+    IMMEDIATELY
+  }
+
   /**
-   * A listener of deframing events.
+   * A sink for use by the transport thread.
+   *
+   * <p>Calls to {@link Sink#request(int)} and {@link Sink#deframe(ReadableBuffer)} result in
+   * callbacks to {@link Sink.Listener#scheduleDeframerSource(Source)}.
    */
-  public interface Listener {
+  public interface Sink {
+    void setMaxInboundMessageSize(int messageSize);
 
     /**
-     * Called when the given number of bytes has been read from the input source of the deframer.
-     * This is typically used to indicate to the underlying transport that more data can be
-     * accepted.
+     * Sets the decompressor available to use. The message encoding for the stream comes later in
+     * time, and thus will not be available at the time of construction. This should only be set
+     * once, since the compression codec cannot change after the headers have been sent.
      *
-     * @param numBytes the number of bytes read from the deframer's input source.
+     * @param decompressor the decompressing wrapper.
      */
-    void bytesRead(int numBytes);
+    void setDecompressor(Decompressor decompressor);
 
     /**
-     * Called to deliver the next complete message.
+     * Requests up to the given number of messages from the call to be delivered via calls to
+     * {@link Source#next()}. No additional messages will be delivered.
      *
-     * @param is stream containing the message.
+     * <p>Calls to this method will trigger the {@link Sink.Listener#scheduleDeframerSource(Source)}
+     * callback.
+     *
+     * @param numMessages the requested number of messages to be delivered to the listener.
+     * @throws IllegalStateException if {@link #scheduleClose(boolean stopDelivery)} has been
+     *     called previously with {@code stopDelivery=true}.
      */
-    void messageRead(InputStream is);
+    void request(int numMessages);
 
     /**
-     * Called when end-of-stream has not yet been reached but there are no complete messages
-     * remaining to be delivered.
+     * Adds the given data to this deframer.
+     *
+     * <p>Calls to this method will trigger the {@link Sink.Listener#scheduleDeframerSource(Source)}
+     * callback.
+     *
+     * @param data the raw data read from the remote endpoint. Must be non-null.
+     * @throws IllegalStateException if {@link #scheduleClose(boolean)} has been called previously.
      */
-    void deliveryStalled();
+    void deframe(ReadableBuffer data);
 
     /**
-     * Called when the stream is complete and all messages have been successfully delivered.
+     * Schedule closing of the deframer. Since {@link Source} may be running in a separate thread,
+     * the transport cannot assume the deframer closes immediately. When the close does occur,
+     * {@link Source} will invoke {@link Source.Listener#deframerClosed(boolean)}.
+     *
+     * <p>If {@code stopDelivery} is false, {@link Source#next} will continue to return messages
+     * until all complete queued messages have been delivered. Typically this is used when the
+     * transport receives trailers or end-of-stream.
+     *
+     * <p>If {@code stopDelivery} is true, the next call to {@link Source#next} will trigger a
+     * close of the deframer, regardless of any queued messages. Typically this is used upon a
+     * client cancellation, as any pending messages will be discarded. There is an inherent race
+     * condition when deframing is done outside of the transport thread, so it is possible for the
+     * client to receive a message before close takes place even with {@code stopDelivery=true}.
+     *
+     * <p>Calls to this method will trigger the {@link Sink.Listener#scheduleDeframerSource(Source)}
+     * callback.
+     *
+     * @param stopDelivery whether to close the deframer even if messages remain undelivered
      */
-    void endOfStream();
+    void scheduleClose(boolean stopDelivery);
+
+    /** Indicates {@link #scheduleClose(boolean)} has been called. */
+    boolean isScheduledToClose();
+
+    /**
+     * Indicates whether {@link #scheduleClose(boolean stopDelivery)} has been called with
+     * @{code stopDelivery=true}.
+     */
+    boolean isScheduledToCloseImmediately();
+
+    /** A listener of deframing sink events. */
+    public interface Listener {
+      /**
+       * Called to schedule {@link Source} to run in the deframing thread. Invoked from transport
+       * thread.
+       */
+      void scheduleDeframerSource(Source source);
+    }
   }
 
+  /** A source for deframed gRPC messages. */
+  public interface Source {
+    /**
+     * Returns the next gRPC message, if the data has been received by {@link Source} and the
+     * application has requested another message.
+     *
+     * <p>Calls to this method will also check if the deframer should be closed due to a previous
+     * call to {@link Sink#scheduleClose(boolean)}.
+     */
+    @Nullable
+    InputStream next();
+
+    /**
+     * A listener of deframing source events. If deframing occurs outside of the transport
+     * thread, it is up to the implementation to ensure that these methods are thread-safe:
+     * typically this means either scheduling a response on the transport thread itself or
+     * obtaining the necessary lock.
+     */
+    interface Listener {
+      /**
+       * Called when the given number of bytes has been read from the input source of the deframer.
+       * This is typically used to indicate to the underlying transport that more data can be
+       * accepted.
+       *
+       * @param numBytes the number of bytes read from the deframer's input source.
+       */
+      void bytesRead(int numBytes);
+
+      /**
+       * Called when deframer closes in response to a close scheduled via
+       * {@link Sink#scheduleClose(boolean)}. If invoked, no further callbacks will be sent and no
+       * further calls may be made to the deframer.
+       *
+       * @param hasPartialMessage whether there is an incomplete message queued.
+       */
+      void deframerClosed(boolean hasPartialMessage);
+
+      /**
+       * Called when deframe fails. If invoked, it will be followed by
+       * {@link #deframerClosed(boolean)}, as the deframer is in an unrecoverable state.
+       */
+      void deframeFailed(Throwable t);
+    }
+  }
+
+  /** Used to track whether {@link Source} is processing a gRPC message header or body. */
   private enum State {
-    HEADER, BODY
+    HEADER,
+    BODY
   }
 
-  private final Listener listener;
-  private int maxInboundMessageSize;
   private final StatsTraceContext statsTraceCtx;
   private final String debugString;
+  private final DeframerSource source;
+  private final DeframerSink sink;
+
+  private int maxInboundMessageSize;
   private Decompressor decompressor;
-  private State state = State.HEADER;
-  private int requiredLength = HEADER_LENGTH;
-  private boolean compressedFlag;
-  private boolean endOfStream;
-  private CompositeReadableBuffer nextFrame;
+
   private CompositeReadableBuffer unprocessed = new CompositeReadableBuffer();
-  private long pendingDeliveries;
-  private boolean deliveryStalled = true;
-  private boolean inDelivery = false;
+  private final AtomicInteger pendingDeliveries = new AtomicInteger();
+
+  /**
+   * This enum allows the transport thread to schedule a close on the source thread.
+   *
+   * <p>CloseRequested.WHEN_COMPLETE indicates that any messages already queued by the deframer
+   * should still be delivered before closing. This means, for example, that the deframer will not
+   * close when there are queued messages that the client has not yet requested.
+   * CloseRequested.WHEN_COMPLETE is appropriate when the stream has closed due to a network event,
+   * such as trailers received or a RST_STREAM, and the client should first receive any earlier
+   * messages before receiving notice of the closure.
+   *
+   * <p>CloseRequested.IMMEDIATELY will close the deframer without delivering all queued messages.
+   * This is appropriate when the stream is closing due to an event such as a local cancellation,
+   * where the client is purposefully discarding any messages that may have already been received
+   * over the wire but not deframed.
+   *
+   * <p>{@code closeRequested} can only change from CloseRequested.NONE to
+   * CloseRequested.WHEN_COMPLETE, from CloseRequested.NONE to CloseRequested.IMMEDIATELY, and from
+   * CloseRequested.WHEN_COMPLETE to CloseRequested.IMMEDIATELY.
+   *
+   * <p>When set to CloseRequested.WHEN_COMPLETE, the transport thread is allowed to call {@link
+   * Sink#request(int)} but further calls to {@link Sink#deframe(ReadableBuffer)} will throw an
+   * exception.
+   *
+   * <p>When set to CloseRequested.IMMEDIATELY, the transport thread must not invoke either {@link
+   * Sink#request(int)} or {@link Sink#deframe(ReadableBuffer)}.
+   */
+  private volatile CloseRequested closeRequested = CloseRequested.NONE;
 
   /**
    * Create a deframer.
    *
-   * @param listener listener for deframer events.
-   * @param decompressor the compression used if a compressed frame is encountered, with
-   *  {@code NONE} meaning unsupported
+   * @param sinkListener listener for deframer sink events.
+   * @param sourceListener listener for deframer source events
+   * @param decompressor the compression used if a compressed frame is encountered, with {@code
+   *     NONE} meaning unsupported
    * @param maxMessageSize the maximum allowed size for received messages.
    * @param debugString a string that will appear on errors statuses
    */
-  public MessageDeframer(Listener listener, Decompressor decompressor, int maxMessageSize,
-      StatsTraceContext statsTraceCtx, String debugString) {
-    this.listener = Preconditions.checkNotNull(listener, "sink");
+  public MessageDeframer(
+      Sink.Listener sinkListener,
+      Source.Listener sourceListener,
+      Decompressor decompressor,
+      int maxMessageSize,
+      StatsTraceContext statsTraceCtx,
+      String debugString) {
     this.decompressor = Preconditions.checkNotNull(decompressor, "decompressor");
     this.maxInboundMessageSize = maxMessageSize;
     this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
     this.debugString = debugString;
+    this.sink = new DeframerSink(Preconditions.checkNotNull(sinkListener, "sink listener"));
+    this.source = new DeframerSource(checkNotNull(sourceListener, "source listener"));
   }
 
-  void setMaxInboundMessageSize(int messageSize) {
-    maxInboundMessageSize = messageSize;
+  public Sink sink() {
+    return sink;
   }
 
-  /**
-   * Sets the decompressor available to use.  The message encoding for the stream comes later in
-   * time, and thus will not be available at the time of construction.  This should only be set
-   * once, since the compression codec cannot change after the headers have been sent.
-   *
-   * @param decompressor the decompressing wrapper.
-   */
-  public void setDecompressor(Decompressor decompressor) {
-    this.decompressor = checkNotNull(decompressor, "Can't pass an empty decompressor");
-  }
+  private class DeframerSink implements Sink {
+    private final Sink.Listener sinkListener;
 
-  /**
-   * Requests up to the given number of messages from the call to be delivered to
-   * {@link Listener#messageRead(InputStream)}. No additional messages will be delivered.
-   *
-   * <p>If {@link #close()} has been called, this method will have no effect.
-   *
-   * @param numMessages the requested number of messages to be delivered to the listener.
-   */
-  public void request(int numMessages) {
-    Preconditions.checkArgument(numMessages > 0, "numMessages must be > 0");
-    if (isClosed()) {
-      return;
+    /** Set to true when {@link #request(int)} is called. */
+    private boolean requestCalled;
+    /** Set to true when {@link #deframe(ReadableBuffer)} is called. */
+    private boolean deframeCalled;
+
+    private DeframerSink(Sink.Listener sinkListener) {
+      this.sinkListener = sinkListener;
     }
-    pendingDeliveries += numMessages;
-    deliver();
-  }
 
-  /**
-   * Adds the given data to this deframer and attempts delivery to the listener.
-   *
-   * @param data the raw data read from the remote endpoint. Must be non-null.
-   * @param endOfStream if {@code true}, indicates that {@code data} is the end of the stream from
-   *        the remote endpoint.  End of stream should not be used in the event of a transport
-   *        error, such as a stream reset.
-   * @throws IllegalStateException if {@link #close()} has been called previously or if
-   *         this method has previously been called with {@code endOfStream=true}.
-   */
-  public void deframe(ReadableBuffer data, boolean endOfStream) {
-    Preconditions.checkNotNull(data, "data");
-    boolean needToCloseData = true;
-    try {
-      checkNotClosed();
-      Preconditions.checkState(!this.endOfStream, "Past end of stream");
+    @Override
+    public void setMaxInboundMessageSize(int messageSize) {
+      Preconditions.checkState(
+          !requestCalled, "already requested messages, too late to set max inbound message size");
+      maxInboundMessageSize = messageSize;
+    }
 
-      unprocessed.addBuffer(data);
-      needToCloseData = false;
+    @Override
+    public void setDecompressor(Decompressor decompressor) {
+      Preconditions.checkState(
+          !deframeCalled, "already started to deframe, too late to set decompressor");
+      MessageDeframer.this.decompressor =
+          checkNotNull(decompressor, "Can't pass an empty decompressor");
+    }
 
-      // Indicate that all of the data for this stream has been received.
-      this.endOfStream = endOfStream;
-      deliver();
-    } finally {
-      if (needToCloseData) {
-        data.close();
+    @Override
+    public void request(int numMessages) {
+      Preconditions.checkState(
+          closeRequested != CloseRequested.IMMEDIATELY, "immediate close requested");
+      Preconditions.checkArgument(numMessages > 0, "numMessages must be > 0");
+      requestCalled = true;
+      pendingDeliveries.getAndAdd(numMessages);
+      sinkListener.scheduleDeframerSource(source);
+    }
+
+    @Override
+    public void deframe(ReadableBuffer data) {
+      Preconditions.checkNotNull(data, "data");
+      deframeCalled = true;
+      boolean needToCloseData = true;
+      try {
+        Preconditions.checkState(!isScheduledToClose(), "close already scheduled");
+        unprocessed.addBuffer(data);
+        needToCloseData = false;
+        sinkListener.scheduleDeframerSource(source);
+      } finally {
+        if (needToCloseData) {
+          data.close();
+        }
       }
     }
-  }
 
-  /**
-   * Indicates whether delivery is currently stalled, pending receipt of more data.  This means
-   * that no additional data can be delivered to the application.
-   */
-  public boolean isStalled() {
-    return deliveryStalled;
-  }
+    @Override
+    public void scheduleClose(boolean stopDelivery) {
+      Preconditions.checkState(
+          !isScheduledToClose() || (stopDelivery && !isScheduledToCloseImmediately()),
+          "close already scheduled");
+      if (stopDelivery) {
+        closeRequested = CloseRequested.IMMEDIATELY;
+      } else {
+        closeRequested = CloseRequested.WHEN_COMPLETE;
+      }
+      // Ensure that the source will see the scheduled close.
+      sinkListener.scheduleDeframerSource(source);
+    }
 
-  /**
-   * Closes this deframer and frees any resources. After this method is called, additional
-   * calls will have no effect.
-   */
-  @Override
-  public void close() {
-    try {
-      if (unprocessed != null) {
-        unprocessed.close();
-      }
-      if (nextFrame != null) {
-        nextFrame.close();
-      }
-    } finally {
-      unprocessed = null;
-      nextFrame = null;
+    @Override
+    public boolean isScheduledToClose() {
+      return closeRequested != CloseRequested.NONE;
+    }
+
+    @Override
+    public boolean isScheduledToCloseImmediately() {
+      return closeRequested == CloseRequested.IMMEDIATELY;
     }
   }
 
-  /**
-   * Indicates whether or not this deframer has been closed.
-   */
-  public boolean isClosed() {
-    return unprocessed == null;
-  }
+  private class DeframerSource implements Source {
+    private final Source.Listener sourceListener;
+    private State state = State.HEADER;
+    private int requiredLength = HEADER_LENGTH;
+    private boolean compressedFlag;
+    private boolean closed;
+    private CompositeReadableBuffer nextFrame;
 
-  /**
-   * Throws if this deframer has already been closed.
-   */
-  private void checkNotClosed() {
-    Preconditions.checkState(!isClosed(), "MessageDeframer is already closed");
-  }
+    /**
+     * Indicates a deframing error occurred. When this is set to true, deframeFailed() must be
+     * called on the listener and no further callbacks may be issued.
+     */
+    private boolean deframeFailed;
 
-  /**
-   * Reads and delivers as many messages to the listener as possible.
-   */
-  private void deliver() {
-    // We can have reentrancy here when using a direct executor, triggered by calls to
-    // request more messages. This is safe as we simply loop until pendingDelivers = 0
-    if (inDelivery) {
-      return;
+    private DeframerSource(Source.Listener sourceListener) {
+      this.sourceListener = sourceListener;
     }
-    inDelivery = true;
-    try {
-      // Process the uncompressed bytes.
-      while (pendingDeliveries > 0 && readRequiredBytes()) {
+
+    private void closeAndNotify() {
+      Preconditions.checkState(!closed, "source already closed");
+      boolean hasPartialMessage = nextFrame != null && nextFrame.readableBytes() > 0;
+      closed = true;
+      try {
+        if (unprocessed != null) {
+          unprocessed.close();
+        }
+        if (nextFrame != null) {
+          nextFrame.close();
+        }
+      } finally {
+        unprocessed = null;
+        nextFrame = null;
+      }
+      sourceListener.deframerClosed(hasPartialMessage);
+    }
+
+    /** Reads and delivers a messages to the listener, if possible. */
+    @Override
+    public InputStream next() {
+      if (deframeFailed) {
+        return null;
+      }
+      if (closed) {
+        // May be invoked after close by previous calls to scheduleDeframerSource.
+        return null;
+      }
+
+      while (closeRequested != CloseRequested.IMMEDIATELY
+          && (pendingDeliveries.get() > 0 && readRequiredBytes())) {
         switch (state) {
           case HEADER:
             processHeader();
+            if (deframeFailed) {
+              // Error occurred
+              return null;
+            }
             break;
           case BODY:
             // Read the body and deliver the message.
-            processBody();
-
-            // Since we've delivered a message, decrement the number of pending
+            InputStream toReturn = processBody();
+            if (deframeFailed) {
+              // Error occurred
+              return null;
+            }
+            // Since we are about to deliver a message, decrement the number of pending
             // deliveries remaining.
-            pendingDeliveries--;
-            break;
+            pendingDeliveries.getAndDecrement();
+            return toReturn;
           default:
-            throw new AssertionError("Invalid state: " + state);
+            deframeFailed = true;
+            AssertionError t = new AssertionError("Invalid state: " + state);
+            sourceListener.deframeFailed(t);
+            closeAndNotify();
+            return null;
         }
       }
 
+      CloseRequested closeRequestedSaved = closeRequested;
       /*
-       * We are stalled when there are no more bytes to process. This allows delivering errors as
-       * soon as the buffered input has been consumed, independent of whether the application
-       * has requested another message.  At this point in the function, either all frames have been
-       * delivered, or unprocessed is empty.  If there is a partial message, it will be inside next
-       * frame and not in unprocessed.  If there is extra data but no pending deliveries, it will
-       * be in unprocessed.
+       * We are stalled when there are no more bytes to process. At this point in the function,
+       * either all frames have been delivered, or unprocessed is empty.  If there is a partial
+       * message, it will be inside nextFrame and not in unprocessed.  If there is extra data but
+       * no pending deliveries, it will be in unprocessed.
        */
       boolean stalled = unprocessed.readableBytes() == 0;
 
-      if (endOfStream && stalled) {
-        boolean havePartialMessage = nextFrame != null && nextFrame.readableBytes() > 0;
-        if (!havePartialMessage) {
-          listener.endOfStream();
-          deliveryStalled = false;
-          return;
-        } else {
-          // We've received the entire stream and have data available but we don't have
-          // enough to read the next frame ... this is bad.
-          throw Status.INTERNAL.withDescription(
-              debugString + ": Encountered end-of-stream mid-frame").asRuntimeException();
-        }
+      if (closeRequestedSaved == CloseRequested.IMMEDIATELY
+          || (stalled && closeRequestedSaved == CloseRequested.WHEN_COMPLETE)) {
+        closeAndNotify();
       }
-
-      // If we're transitioning to the stalled state, notify the listener.
-      boolean previouslyStalled = deliveryStalled;
-      deliveryStalled = stalled;
-      if (stalled && !previouslyStalled) {
-        listener.deliveryStalled();
-      }
-    } finally {
-      inDelivery = false;
+      return null;
     }
-  }
 
-  /**
-   * Attempts to read the required bytes into nextFrame.
-   *
-   * @return {@code true} if all of the required bytes have been read.
-   */
-  private boolean readRequiredBytes() {
-    int totalBytesRead = 0;
-    try {
-      if (nextFrame == null) {
-        nextFrame = new CompositeReadableBuffer();
-      }
-
-      // Read until the buffer contains all the required bytes.
-      int missingBytes;
-      while ((missingBytes = requiredLength - nextFrame.readableBytes()) > 0) {
-        if (unprocessed.readableBytes() == 0) {
-          // No more data is available.
-          return false;
+    /**
+     * Attempts to read the required bytes into nextFrame.
+     *
+     * @return {@code true} if all of the required bytes have been read.
+     */
+    private boolean readRequiredBytes() {
+      int totalBytesRead = 0;
+      try {
+        if (nextFrame == null) {
+          nextFrame = new CompositeReadableBuffer();
         }
-        int toRead = Math.min(missingBytes, unprocessed.readableBytes());
-        totalBytesRead += toRead;
-        nextFrame.addBuffer(unprocessed.readBytes(toRead));
-      }
-      return true;
-    } finally {
-      if (totalBytesRead > 0) {
-        listener.bytesRead(totalBytesRead);
-        if (state == State.BODY) {
-          statsTraceCtx.inboundWireSize(totalBytesRead);
+
+        // Read until the buffer contains all the required bytes.
+        int missingBytes;
+        while ((missingBytes = requiredLength - nextFrame.readableBytes()) > 0) {
+          if (unprocessed.readableBytes() == 0) {
+            // No more data is available.
+            return false;
+          }
+          int toRead = Math.min(missingBytes, unprocessed.readableBytes());
+          totalBytesRead += toRead;
+          nextFrame.addBuffer(unprocessed.readBytes(toRead));
+        }
+        return true;
+      } finally {
+        if (totalBytesRead > 0) {
+          sourceListener.bytesRead(totalBytesRead);
+          if (state == State.BODY) {
+            statsTraceCtx.inboundWireSize(totalBytesRead);
+          }
         }
       }
     }
-  }
 
-  /**
-   * Processes the GRPC compression header which is composed of the compression flag and the outer
-   * frame length.
-   */
-  private void processHeader() {
-    int type = nextFrame.readUnsignedByte();
-    if ((type & RESERVED_MASK) != 0) {
-      throw Status.INTERNAL.withDescription(
-          debugString + ": Frame header malformed: reserved bits not zero")
-          .asRuntimeException();
-    }
-    compressedFlag = (type & COMPRESSED_FLAG_MASK) != 0;
+    /**
+     * Processes the GRPC compression header which is composed of the compression flag and the outer
+     * frame length.
+     */
+    private void processHeader() {
+      int type = nextFrame.readUnsignedByte();
+      if ((type & RESERVED_MASK) != 0) {
+        deframeFailed = true;
+        sourceListener.deframeFailed(
+            Status.INTERNAL
+                .withDescription(debugString + ": Frame header malformed: reserved bits not zero")
+                .asRuntimeException());
+        closeAndNotify();
+        return;
+      }
+      compressedFlag = (type & COMPRESSED_FLAG_MASK) != 0;
 
-    // Update the required length to include the length of the frame.
-    requiredLength = nextFrame.readInt();
-    if (requiredLength < 0 || requiredLength > maxInboundMessageSize) {
-      throw Status.RESOURCE_EXHAUSTED.withDescription(
-          String.format("%s: Frame size %d exceeds maximum: %d. ",
-              debugString, requiredLength, maxInboundMessageSize))
-          .asRuntimeException();
-    }
-
-    statsTraceCtx.inboundMessage();
-    // Continue reading the frame body.
-    state = State.BODY;
-  }
-
-  /**
-   * Processes the GRPC message body, which depending on frame header flags may be compressed.
-   */
-  private void processBody() {
-    InputStream stream = compressedFlag ? getCompressedBody() : getUncompressedBody();
-    nextFrame = null;
-    listener.messageRead(stream);
-
-    // Done with this frame, begin processing the next header.
-    state = State.HEADER;
-    requiredLength = HEADER_LENGTH;
-  }
-
-  private InputStream getUncompressedBody() {
-    statsTraceCtx.inboundUncompressedSize(nextFrame.readableBytes());
-    return ReadableBuffers.openStream(nextFrame, true);
-  }
-
-  private InputStream getCompressedBody() {
-    if (decompressor == Codec.Identity.NONE) {
-      throw Status.INTERNAL.withDescription(
-          debugString + ": Can't decode compressed frame as compression not configured.")
-          .asRuntimeException();
+      // Update the required length to include the length of the frame.
+      requiredLength = nextFrame.readInt();
+      if (requiredLength < 0 || requiredLength > maxInboundMessageSize) {
+        deframeFailed = true;
+        sourceListener.deframeFailed(
+            Status.RESOURCE_EXHAUSTED
+                .withDescription(
+                    String.format(
+                        "%s: Frame size %d exceeds maximum: %d. ",
+                        debugString, requiredLength, maxInboundMessageSize))
+                .asRuntimeException());
+        closeAndNotify();
+        return;
+      }
+      statsTraceCtx.inboundMessage();
+      // Continue reading the frame body.
+      state = State.BODY;
     }
 
-    try {
-      // Enforce the maxMessageSize limit on the returned stream.
-      InputStream unlimitedStream =
-          decompressor.decompress(ReadableBuffers.openStream(nextFrame, true));
-      return new SizeEnforcingInputStream(
-          unlimitedStream, maxInboundMessageSize, statsTraceCtx, debugString);
-    } catch (IOException e) {
-      throw new RuntimeException(e);
+    /**
+     * Processes the GRPC message body, which depending on frame header flags may be compressed.
+     */
+    @Nullable
+    private InputStream processBody() {
+      InputStream stream = compressedFlag ? getCompressedBody() : getUncompressedBody();
+      nextFrame = null;
+
+      // Done with this frame, begin processing the next header.
+      state = State.HEADER;
+      requiredLength = HEADER_LENGTH;
+
+      return stream;
+    }
+
+    private InputStream getUncompressedBody() {
+      statsTraceCtx.inboundUncompressedSize(nextFrame.readableBytes());
+      return ReadableBuffers.openStream(nextFrame, true);
+    }
+
+    /**
+     * Deframes the compressed body.
+     *
+     * @return null if error occurred
+     */
+    @Nullable
+    private InputStream getCompressedBody() {
+      if (decompressor == Codec.Identity.NONE) {
+        deframeFailed = true;
+        sourceListener.deframeFailed(
+            Status.INTERNAL
+                .withDescription(
+                    debugString + ": Can't decode compressed frame as compression not configured.")
+                .asRuntimeException());
+        closeAndNotify();
+        return null;
+      }
+
+      try {
+        // Enforce the maxMessageSize limit on the returned stream.
+        InputStream unlimitedStream =
+            decompressor.decompress(ReadableBuffers.openStream(nextFrame, true));
+        return new SizeEnforcingInputStream(
+            unlimitedStream, maxInboundMessageSize, statsTraceCtx, debugString);
+      } catch (IOException e) {
+        deframeFailed = true;
+        sourceListener.deframeFailed(new RuntimeException(e));
+        closeAndNotify();
+        return null;
+      }
     }
   }
 

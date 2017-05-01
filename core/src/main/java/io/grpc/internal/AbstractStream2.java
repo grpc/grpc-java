@@ -112,10 +112,12 @@ public abstract class AbstractStream2 implements Stream {
   }
 
   /**
-   * Stream state as used by the transport. This should only called from the transport thread
-   * (except for private interactions with {@code AbstractStream2}).
+   * Stream state as used by the transport. {@link MessageDeframer.Source.Listener} methods will
+   * be called from the deframing thread. Other methods should only be called from the transport
+   * thread (except for private interactions with {@code AbstractStream2}).
    */
-  public abstract static class TransportState implements MessageDeframer.Listener {
+  public abstract static class TransportState
+      implements MessageDeframer.Sink.Listener, MessageDeframer.Source.Listener {
     /**
      * The default number of queued bytes for a given stream, below which
      * {@link StreamListener#onReady()} will be called.
@@ -148,74 +150,75 @@ public abstract class AbstractStream2 implements Stream {
     protected TransportState(int maxMessageSize, StatsTraceContext statsTraceCtx) {
       this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
       deframer = new MessageDeframer(
-          this, Codec.Identity.NONE, maxMessageSize, statsTraceCtx, getClass().getName());
+          this, this, Codec.Identity.NONE, maxMessageSize, statsTraceCtx, getClass().getName());
     }
 
     final void setMaxInboundMessageSize(int maxSize) {
-      deframer.setMaxInboundMessageSize(maxSize);
+      deframer.sink().setMaxInboundMessageSize(maxSize);
     }
 
-    /**
-     * Override this method to provide a stream listener.
-     */
+    /** Override this method to provide a stream listener. */
     protected abstract StreamListener listener();
 
     @Override
-    public void messageRead(InputStream is) {
-      listener().messageRead(is);
+    public void scheduleDeframerSource(MessageDeframer.Source source) {
+      // At least some tests, such as those using
+      // NettyClientTransportTest.EchoServerStreamListener, will throw a NPE here since its
+      // constructor calls request() and invokes this method before setting the listener on the
+      // stream.
+      if (listener() != null) {
+        listener().scheduleDeframerSource(source);
+      }
     }
 
     /**
-     * Called when a {@link #deframe(ReadableBuffer, boolean)} operation failed.
-     *
-     * @param cause the actual failure
+     * Schedule the deframer to close. {@link
+     * MessageDeframer.Source.Listener#deframerClosed(boolean)} will be invoked when the deframer
+     * closes.
      */
-    protected abstract void deframeFailed(Throwable cause);
-
-    /**
-     * Closes this deframer and frees any resources. After this method is called, additional calls
-     * will have no effect.
-     */
-    protected final void closeDeframer() {
-      deframer.close();
+    protected final void scheduleDeframerClose(boolean stopDelivery) {
+      deframer.sink().scheduleClose(stopDelivery);
     }
 
     /**
-     * Indicates whether delivery is currently stalled, pending receipt of more data.
+     * Indicates whether the deframer is scheduled to close and will not accept calls
+     * to {@link MessageDeframer.Sink#deframe(ReadableBuffer)} .
      */
-    protected final boolean isDeframerStalled() {
-      return deframer.isStalled();
+    protected final boolean isDeframerScheduledToClose() {
+      return deframer.sink().isScheduledToClose();
     }
 
     /**
-     * Called to parse a received frame and attempt delivery of any completed
-     * messages. Must be called from the transport thread.
+     * Indicates whether the deframer is scheduled to close immediately and will not accept calls
+     * to {@link MessageDeframer.Sink#deframe(ReadableBuffer)} or to
+     * {@link MessageDeframer.Sink#request(int)}.
      */
-    protected final void deframe(ReadableBuffer frame, boolean endOfStream) {
-      if (deframer.isClosed()) {
+    protected final boolean isDeframerScheduledToCloseImmediately() {
+      return deframer.sink().isScheduledToCloseImmediately();
+    }
+
+
+    /**
+     * Called to parse a received frame and attempt delivery of any completed messages. Must be
+     * called from the transport thread.
+     */
+    protected final void deframe(ReadableBuffer frame) {
+      if (isDeframerScheduledToClose()) {
         frame.close();
         return;
       }
-      try {
-        deframer.deframe(frame, endOfStream);
-      } catch (Throwable t) {
-        deframeFailed(t);
-      }
+      deframer.sink().deframe(frame);
     }
 
     /**
-     * Called to request the given number of messages from the deframer. Must be called
-     * from the transport thread.
+     * Called to request the given number of messages from the deframer. Must be called from the
+     * transport thread.
      */
     public final void requestMessagesFromDeframer(int numMessages) {
-      if (deframer.isClosed()) {
+      if (isDeframerScheduledToCloseImmediately()) {
         return;
       }
-      try {
-        deframer.request(numMessages);
-      } catch (Throwable t) {
-        deframeFailed(t);
-      }
+      deframer.sink().request(numMessages);
     }
 
     public final StatsTraceContext getStatsTraceContext() {
@@ -223,10 +226,10 @@ public abstract class AbstractStream2 implements Stream {
     }
 
     private void setDecompressor(Decompressor decompressor) {
-      if (deframer.isClosed()) {
+      if (isDeframerScheduledToClose()) {
         return;
       }
-      deframer.setDecompressor(decompressor);
+      deframer.sink().setDecompressor(decompressor);
     }
 
     private boolean isReady() {
@@ -278,7 +281,7 @@ public abstract class AbstractStream2 implements Stream {
     /**
      * Event handler to be called by the subclass when a number of bytes has been sent to the remote
      * endpoint. May call back the listener's {@link StreamListener#onReady()} handler if
-     * appropriate.  This must be called from the transport thread, since the listener may be called
+     * appropriate. This must be called from the transport thread, since the listener may be called
      * back directly.
      *
      * @param numBytes the number of bytes that were sent.

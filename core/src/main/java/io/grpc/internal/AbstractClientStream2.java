@@ -56,7 +56,7 @@ public abstract class AbstractClientStream2 extends AbstractStream2
    * collisions/confusion. Only called from application thread.
    */
   protected interface Sink {
-    /** 
+    /**
      * Sends the request headers to the remote end point.
      *
      * @param metadata the metadata to be sent
@@ -181,14 +181,17 @@ public abstract class AbstractClientStream2 extends AbstractStream2
     return super.isReady() && !cancelled;
   }
 
-  /** This should only called from the transport thread. */
+  /**
+   * {@link MessageDeframer.Source.Listener} methods will be called from the deframing thread.
+   * Other methods should only be called from the transport thread.
+   */
   protected abstract static class TransportState extends AbstractStream2.TransportState {
     /** Whether listener.closed() has been called. */
     private final StatsTraceContext statsTraceCtx;
     private boolean listenerClosed;
     private ClientStreamListener listener;
 
-    private Runnable deliveryStalledTask;
+    private Runnable deframerClosedTask;
 
     /**
      * Whether the stream is closed from the transport's perspective. This can differ from {@link
@@ -205,19 +208,6 @@ public abstract class AbstractClientStream2 extends AbstractStream2
     public final void setListener(ClientStreamListener listener) {
       Preconditions.checkState(this.listener == null, "Already called setListener");
       this.listener = Preconditions.checkNotNull(listener, "listener");
-    }
-
-    @Override
-    public final void deliveryStalled() {
-      if (deliveryStalledTask != null) {
-        deliveryStalledTask.run();
-        deliveryStalledTask = null;
-      }
-    }
-
-    @Override
-    public final void endOfStream() {
-      deliveryStalled();
     }
 
     @Override
@@ -251,7 +241,7 @@ public abstract class AbstractClientStream2 extends AbstractStream2
         }
 
         needToCloseFrame = false;
-        deframe(frame, false);
+        deframe(frame);
       } finally {
         if (needToCloseFrame) {
           frame.close();
@@ -280,37 +270,50 @@ public abstract class AbstractClientStream2 extends AbstractStream2
      * Report stream closure with status to the application layer if not already reported. This
      * method must be called from the transport thread.
      *
+     * <p>No further data may be sent to the deframer after this method is called. However, if
+     * {@link MessageDeframer.Source} is running in another thread, the client will receive any
+     * already queued messages before the deframer closes, unless {@code stopDelivery} is true.
+     * Even with {@code stopDelivery=true}, there is an inherent race condition so the client may
+     * still receive a pending message before the close takes effect.
+     *
      * @param status the new status to set
-     * @param stopDelivery if {@code true}, interrupts any further delivery of inbound messages that
-     *        may already be queued up in the deframer. If {@code false}, the listener will be
-     *        notified immediately after all currently completed messages in the deframer have been
-     *        delivered to the application.
+     * @param stopDelivery if {@code true}, interrupt {@link MessageDeframer.Source} even if it has
+     *     additional queued messages
      * @param trailers new instance of {@code Trailers}, either empty or those returned by the
-     *        server
+     *     server
      */
     public final void transportReportStatus(final Status status, boolean stopDelivery,
         final Metadata trailers) {
       Preconditions.checkNotNull(status, "status");
       Preconditions.checkNotNull(trailers, "trailers");
-      // If stopDelivery, we continue in case previous invocation is waiting for stall
       if (statusReported && !stopDelivery) {
         return;
       }
       statusReported = true;
       onStreamDeallocated();
 
-      // If not stopping delivery, then we must wait until the deframer is stalled (i.e., it has no
-      // complete messages to deliver).
-      if (stopDelivery || isDeframerStalled()) {
-        deliveryStalledTask = null;
-        closeListener(status, trailers);
-      } else {
-        deliveryStalledTask = new Runnable() {
-          @Override
-          public void run() {
-            closeListener(status, trailers);
-          }
-        };
+      deframerClosedTask =
+          new Runnable() {
+            @Override
+            public void run() {
+              closeListener(status, trailers);
+            }
+          };
+      if (!isDeframerScheduledToClose()) {
+        scheduleDeframerClose(stopDelivery);
+      }
+    }
+
+    /**
+     * This is the logic for listening for
+     * {@link MessageDeframer.Source.Listener#deframerClosed(boolean)}, which is invoked from the
+     * deframing thread. Subclasses must invoke this message from the transport thread.
+     */
+    protected void deframerClosedNotThreadSafe() {
+      Preconditions.checkState(deframerClosedTask != null, "deframerClosedTask is null");
+      if (deframerClosedTask != null) {
+        deframerClosedTask.run();
+        deframerClosedTask = null;
       }
     }
 
@@ -320,9 +323,9 @@ public abstract class AbstractClientStream2 extends AbstractStream2
      * @throws IllegalStateException if the call has not yet been started.
      */
     private void closeListener(Status status, Metadata trailers) {
+      Preconditions.checkState(isDeframerScheduledToClose(), "deframe not scheduled to close");
       if (!listenerClosed) {
         listenerClosed = true;
-        closeDeframer();
         statsTraceCtx.streamClosed(status);
         listener().closed(status, trailers);
       }
