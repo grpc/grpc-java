@@ -81,7 +81,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
 
   private ByteBuf content;
 
-  private EmbeddedChannel channel;
+  protected EmbeddedChannel channel;
 
   private ChannelHandlerContext ctx;
 

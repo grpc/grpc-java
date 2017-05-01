@@ -57,6 +57,7 @@ import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -75,6 +76,7 @@ import io.grpc.Status.Code;
 import io.grpc.StreamTracer;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
+import io.grpc.internal.MessageDeframer;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransportListener;
@@ -105,6 +107,8 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 /**
  * Unit tests for {@link NettyServerHandler}.
@@ -161,6 +165,21 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     MockitoAnnotations.initMocks(this);
     when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
         .thenReturn(streamTracer);
+
+    doAnswer(
+        new Answer<Void>() {
+          @Override
+          public Void answer(InvocationOnMock invocation) {
+            MessageDeframer.Source mp = (MessageDeframer.Source) invocation.getArguments()[0];
+            InputStream message;
+            while ((message = mp.next()) != null) {
+              streamListener.messageRead(message);
+            }
+            return null;
+          }
+        })
+      .when(streamListener)
+      .scheduleDeframerSource(any(MessageDeframer.Source.class));
 
     initChannel(new GrpcHttp2ServerHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
 
@@ -230,6 +249,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
       verify(streamListener).halfClosed();
     }
     verify(streamListener, atLeastOnce()).onReady();
+    verify(streamListener, atLeastOnce()).scheduleDeframerSource(any(MessageDeframer.Source.class));
     verifyNoMoreInteractions(streamListener);
   }
 
@@ -245,6 +265,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     assertArrayEquals(new byte[0], ByteStreams.toByteArray(captor.getValue()));
     verify(streamListener).halfClosed();
     verify(streamListener, atLeastOnce()).onReady();
+    verify(streamListener, atLeastOnce()).scheduleDeframerSource(any(MessageDeframer.Source.class));
     verifyNoMoreInteractions(streamListener);
   }
 
@@ -255,9 +276,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     channelRead(rstStreamFrame(STREAM_ID, (int) Http2Error.CANCEL.code()));
     verify(streamListener, never()).messageRead(any(InputStream.class));
+    verify(streamListener).scheduleDeframerSource(any(MessageDeframer.Source.class));
     verify(streamListener).closed(Status.CANCELLED);
     verify(streamListener, atLeastOnce()).onReady();
-    verifyNoMoreInteractions(streamListener);
   }
 
   @Test
@@ -280,8 +301,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     // Verify the stream was closed.
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     verify(streamListener).closed(captor.capture());
-    assertEquals(e, captor.getValue().asException().getCause());
-    assertEquals(Code.UNKNOWN, captor.getValue().getCode());
+    assertEquals(e, captor.getValue().asException().getCause().getCause());
+    assertEquals(Code.INTERNAL, captor.getValue().getCode());
   }
 
   @Test

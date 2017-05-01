@@ -32,14 +32,15 @@
 package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
 import static org.mockito.Matchers.same;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.Metadata;
@@ -72,8 +73,10 @@ public class AbstractServerStreamTest {
   };
 
   private AbstractServerStream.Sink sink = mock(AbstractServerStream.Sink.class);
+  private AbstractServerStreamBase.TransportState transportState =
+      new AbstractServerStreamBase.TransportState(MAX_MESSAGE_SIZE);
   private AbstractServerStreamBase stream = new AbstractServerStreamBase(
-      allocator, sink, new AbstractServerStreamBase.TransportState(MAX_MESSAGE_SIZE));
+      allocator, sink, transportState);
   private final ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
 
   /**
@@ -90,8 +93,22 @@ public class AbstractServerStreamTest {
     // Frame received after deframer closed, should be ignored and not trigger an exception
     stream.transportState().inboundDataReceived(buffer, true);
 
+    ArgumentCaptor<MessageDeframer.Source> sourceCaptor =
+            ArgumentCaptor.forClass(MessageDeframer.Source.class);
+    verify(streamListener, atLeastOnce()).scheduleDeframerSource(sourceCaptor.capture());
+    assertNull(sourceCaptor.getValue().next());
     verify(buffer).close();
-    verify(streamListener, times(0)).messageRead(any(InputStream.class));
+    verify(streamListener).closed(eq(Status.OK));
+  }
+
+  @Test
+  public void endOfStreamWithPartialMessage_callsDeframeFailed() {
+    ReadableBuffer buffer = mock(ReadableBuffer.class);
+    stream.transportState().inboundDataReceived(buffer, true);
+    stream.transportState().deframerClosed(true);
+    Status status = Status.fromThrowable(transportState.getDeframeFailedCause());
+    assertEquals(Status.INTERNAL.getCode(), status.getCode());
+    assertEquals(": Encountered end-of-stream mid-frame", status.getDescription());
   }
 
   /**
@@ -148,9 +165,9 @@ public class AbstractServerStreamTest {
     stream.transportState().setListener(streamListener);
 
     // Normally called by a deframe event.
-    stream.transportState().messageRead(new ByteArrayInputStream(new byte[]{}));
+    stream.transportState().scheduleDeframerSource(mock(MessageDeframer.Source.class));
 
-    verify(streamListener).messageRead(isA(InputStream.class));
+    verify(streamListener).scheduleDeframerSource(isA(MessageDeframer.Source.class));
   }
 
   @Test
@@ -238,6 +255,9 @@ public class AbstractServerStreamTest {
     public void messageRead(InputStream message) {}
 
     @Override
+    public void scheduleDeframerSource(MessageDeframer.Source source) {}
+
+    @Override
     public void onReady() {}
 
     @Override
@@ -269,15 +289,23 @@ public class AbstractServerStreamTest {
     }
 
     static class TransportState extends AbstractServerStream.TransportState {
+      private Throwable deframeFailedCause;
+
       protected TransportState(int maxMessageSize) {
         super(maxMessageSize, StatsTraceContext.NOOP);
       }
 
       @Override
-      protected void deframeFailed(Throwable cause) {}
+      public void deframeFailed(Throwable cause) {
+        deframeFailedCause = cause;
+      }
 
       @Override
       public void bytesRead(int processedBytes) {}
+
+      private Throwable getDeframeFailedCause() {
+        return deframeFailedCause;
+      }
     }
   }
 }

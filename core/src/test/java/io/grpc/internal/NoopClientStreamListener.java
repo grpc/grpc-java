@@ -43,6 +43,9 @@ class NoopClientStreamListener implements ClientStreamListener {
   public void messageRead(InputStream message) {}
 
   @Override
+  public void scheduleDeframerSource(MessageDeframer.Source source) {}
+
+  @Override
   public void onReady() {}
 
   @Override

@@ -66,6 +66,7 @@ import io.grpc.internal.ClientTransport;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ManagedClientTransport;
+import io.grpc.internal.MessageDeframer;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
@@ -572,6 +573,14 @@ public class NettyClientTransportTest {
     }
 
     @Override
+    public void scheduleDeframerSource(MessageDeframer.Source source) {
+      InputStream message;
+      while ((message = source.next()) != null) {
+        messageRead(message);
+      }
+    }
+
+    @Override
     public void onReady() {
     }
   }
@@ -594,6 +603,14 @@ public class NettyClientTransportTest {
       // Just echo back the message.
       stream.writeMessage(message);
       stream.flush();
+    }
+
+    @Override
+    public void scheduleDeframerSource(MessageDeframer.Source source) {
+      InputStream message;
+      while ((message = source.next()) != null) {
+        messageRead(message);
+      }
     }
 
     @Override
