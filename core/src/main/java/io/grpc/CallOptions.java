@@ -270,7 +270,7 @@ public final class CallOptions {
   }
 
   /**
-   * Key for a key-value pair.
+   * Key for a key-value pair. Uses reference equality.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1869")
   public static final class Key<T> {

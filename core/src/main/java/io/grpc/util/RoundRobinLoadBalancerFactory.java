@@ -76,7 +76,7 @@ public class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
   }
 
   /**
-   * Get an instance of this factory.
+   * Get a unique instance of this factory.
    */
   public static RoundRobinLoadBalancerFactory getInstance() {
     return INSTANCE;

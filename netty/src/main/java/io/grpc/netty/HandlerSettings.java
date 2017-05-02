@@ -36,9 +36,9 @@ import com.google.common.base.Preconditions;
 
 /**
  * Allows autoFlowControl to be turned on and off from interop testing and flow control windows to
- * be accessed. For internal testing only.
+ * be accessed.
  */
-@VisibleForTesting
+@VisibleForTesting // Visible for tests in other packages.
 public final class HandlerSettings {
 
   private static volatile boolean enabled;
