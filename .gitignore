@@ -7,6 +7,10 @@ local.properties
 # Maven (examples)
 target
 
+# Gradle
+build
+.gradle
+
 # IntelliJ IDEA
 .idea
 *.iml
