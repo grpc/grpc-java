@@ -86,15 +86,15 @@ public class MessageDeframer {
     void setDecompressor(Decompressor decompressor);
 
     /**
-     * Requests up to the given number of messages from the call to be delivered via calls to
-     * {@link Source#next()}. No additional messages will be delivered.
+     * Requests up to the given number of messages from the call to be delivered via calls to {@link
+     * Source#next()}. No additional messages will be delivered.
      *
      * <p>Calls to this method will trigger the {@link Sink.Listener#scheduleDeframerSource(Source)}
      * callback.
      *
      * @param numMessages the requested number of messages to be delivered to the listener.
-     * @throws IllegalStateException if {@link #scheduleClose(boolean stopDelivery)} has been
-     *     called previously with {@code stopDelivery=true}.
+     * @throws IllegalStateException if {@link #scheduleImmediateClose()} has been called
+     *     previously.
      */
     void request(int numMessages);
 
@@ -105,38 +105,45 @@ public class MessageDeframer {
      * callback.
      *
      * @param data the raw data read from the remote endpoint. Must be non-null.
-     * @throws IllegalStateException if {@link #scheduleClose(boolean)} has been called previously.
+     * @throws IllegalStateException if {@link #scheduleCloseWhenComplete()} or {@link
+     *     #scheduleImmediateClose()} has been called previously.
      */
     void deframe(ReadableBuffer data);
 
     /**
-     * Schedule closing of the deframer. Since {@link Source} may be running in a separate thread,
-     * the transport cannot assume the deframer closes immediately. When the close does occur,
+     * Schedule closing of the deframer once all messages have been deliver. When the close occurs,
      * {@link Source} will invoke {@link Source.Listener#deframerClosed(boolean)}.
      *
-     * <p>If {@code stopDelivery} is false, {@link Source#next} will continue to return messages
-     * until all complete queued messages have been delivered. Typically this is used when the
-     * transport receives trailers or end-of-stream.
-     *
-     * <p>If {@code stopDelivery} is true, the next call to {@link Source#next} will trigger a
-     * close of the deframer, regardless of any queued messages. Typically this is used upon a
-     * client cancellation, as any pending messages will be discarded. There is an inherent race
-     * condition when deframing is done outside of the transport thread, so it is possible for the
-     * client to receive a message before close takes place even with {@code stopDelivery=true}.
+     * <p>After this method is called, {@link Source#next} will continue to return requested
+     * messages until all complete queued messages have been delivered. Typically, this method is
+     * used when the transport receives trailers or end-of-stream.
      *
      * <p>Calls to this method will trigger the {@link Sink.Listener#scheduleDeframerSource(Source)}
      * callback.
-     *
-     * @param stopDelivery whether to close the deframer even if messages remain undelivered
      */
-    void scheduleClose(boolean stopDelivery);
+    void scheduleCloseWhenComplete();
 
-    /** Indicates {@link #scheduleClose(boolean)} has been called. */
+    /**
+     * Schedule an (almost) immediate closing of the deframer. If {@link Source} is running in a
+     * separate thread, there is an inherent race condition between the transport scheduling an
+     * immediate close and {@link Source} seeing that this method has been called. Therefore it is
+     * possible for the client to receive a previously queued message before the close actually
+     * takes place. When the close does occur, {@link Source} will invoke {@link
+     * Source.Listener#deframerClosed(boolean)}.
+     *
+     * <p>Calls to this method will trigger the {@link Sink.Listener#scheduleDeframerSource(Source)}
+     * callback.
+     */
+    void scheduleImmediateClose();
+
+    /**
+     * Indicates {@link #scheduleCloseWhenComplete()} or {@link #scheduleImmediateClose()} has been
+     * called.
+     */
     boolean isScheduledToClose();
 
     /**
-     * Indicates whether {@link #scheduleClose(boolean stopDelivery)} has been called with
-     * @{code stopDelivery=true}.
+     * Indicates {@link #scheduleImmediateClose()} has been called.
      */
     boolean isScheduledToCloseImmediately();
 
@@ -157,7 +164,7 @@ public class MessageDeframer {
      * application has requested another message.
      *
      * <p>Calls to this method will also check if the deframer should be closed due to a previous
-     * call to {@link Sink#scheduleClose(boolean)}.
+     * call to {@link Sink#scheduleCloseWhenComplete()} or {@link Sink#scheduleImmediateClose()}.
      */
     @Nullable
     InputStream next();
@@ -179,9 +186,9 @@ public class MessageDeframer {
       void bytesRead(int numBytes);
 
       /**
-       * Called when deframer closes in response to a close scheduled via
-       * {@link Sink#scheduleClose(boolean)}. If invoked, no further callbacks will be sent and no
-       * further calls may be made to the deframer.
+       * Called when deframer closes in response to a close scheduled via {@link
+       * Sink#scheduleCloseWhenComplete()} or {@link Sink#scheduleImmediateClose()}. If invoked, no
+       * further callbacks will be sent and no further calls should be made to {@link Sink}.
        *
        * @param hasPartialMessage whether there is an incomplete message queued.
        */
@@ -291,7 +298,7 @@ public class MessageDeframer {
       // TODO(ericgribkoff) This assertion can fail with DelayedStream. It's valid for the transport
       // to call deframe() before the DelayedStream actually reads the headers and sets the
       // decompressor. What should really be checked here is whether Source.next() has been called,
-      // but that seems to require another volatile and probably not worth the complexity.
+      // but that seems to require another volatile and is probably not worth the complexity.
       //Preconditions.checkState(
       //    !deframeCalled, "already started to deframe, too late to set decompressor");
       MessageDeframer.this.decompressor =
@@ -325,15 +332,18 @@ public class MessageDeframer {
     }
 
     @Override
-    public void scheduleClose(boolean stopDelivery) {
+    public void scheduleCloseWhenComplete() {
+      Preconditions.checkState(!isScheduledToClose(),"close already scheduled");
+      closeRequested = CloseRequested.WHEN_COMPLETE;
+      // Ensure that the source will see the scheduled close.
+      sinkListener.scheduleDeframerSource(source);
+    }
+
+    @Override
+    public void scheduleImmediateClose() {
       Preconditions.checkState(
-          !isScheduledToClose() || (stopDelivery && !isScheduledToCloseImmediately()),
-          "close already scheduled");
-      if (stopDelivery) {
-        closeRequested = CloseRequested.IMMEDIATELY;
-      } else {
-        closeRequested = CloseRequested.WHEN_COMPLETE;
-      }
+          !isScheduledToCloseImmediately(), "immediate close already scheduled");
+      closeRequested = CloseRequested.IMMEDIATELY;
       // Ensure that the source will see the scheduled close.
       sinkListener.scheduleDeframerSource(source);
     }

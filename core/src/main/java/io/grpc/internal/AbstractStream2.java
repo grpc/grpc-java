@@ -177,7 +177,11 @@ public abstract class AbstractStream2 implements Stream {
      * closes.
      */
     protected final void scheduleDeframerClose(boolean stopDelivery) {
-      deframer.sink().scheduleClose(stopDelivery);
+      if (stopDelivery) {
+        deframer.sink().scheduleImmediateClose();
+      } else {
+        deframer.sink().scheduleCloseWhenComplete();
+      }
     }
 
     /**
