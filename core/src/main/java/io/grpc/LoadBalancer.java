@@ -510,7 +510,7 @@ public abstract class LoadBalancer {
   }
 
   /**
-   * Factory class to create {@link LoadBalancer} instance.
+   * Factory to create {@link LoadBalancer} instance.
    */
   @ThreadSafe
   public abstract static class Factory {

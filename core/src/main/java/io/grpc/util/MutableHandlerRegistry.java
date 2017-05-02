@@ -82,7 +82,7 @@ public final class MutableHandlerRegistry extends HandlerRegistry {
   /**
    * Remove a registered service
    *
-   * @return true if the service was found and is removed.
+   * @return true if the service was found to be removed.
    */
   public boolean removeService(ServerServiceDefinition service) {
     return services.remove(service.getServiceDescriptor().getName(), service);
