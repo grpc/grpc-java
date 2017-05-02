@@ -274,8 +274,6 @@ public class MessageDeframer {
 
     /** Set to true when {@link #request(int)} is called. */
     private boolean requestCalled;
-    /** Set to true when {@link #deframe(ReadableBuffer)} is called. */
-    private boolean deframeCalled;
 
     private DeframerSink(Sink.Listener sinkListener) {
       this.sinkListener = sinkListener;
@@ -290,8 +288,12 @@ public class MessageDeframer {
 
     @Override
     public void setDecompressor(Decompressor decompressor) {
-      Preconditions.checkState(
-          !deframeCalled, "already started to deframe, too late to set decompressor");
+      // TODO(ericgribkoff) This assertion can fail with DelayedStream. It's valid for the transport
+      // to call deframe() before the DelayedStream actually reads the headers and sets the
+      // decompressor. What should really be checked here is whether Source.next() has been called,
+      // but that seems to require another volatile and probably not worth the complexity.
+      //Preconditions.checkState(
+      //    !deframeCalled, "already started to deframe, too late to set decompressor");
       MessageDeframer.this.decompressor =
           checkNotNull(decompressor, "Can't pass an empty decompressor");
     }
@@ -309,7 +311,6 @@ public class MessageDeframer {
     @Override
     public void deframe(ReadableBuffer data) {
       Preconditions.checkNotNull(data, "data");
-      deframeCalled = true;
       boolean needToCloseData = true;
       try {
         Preconditions.checkState(!isScheduledToClose(), "close already scheduled");
