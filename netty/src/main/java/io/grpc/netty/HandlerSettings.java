@@ -36,7 +36,7 @@ import com.google.common.base.Preconditions;
 
 /**
  * Allows autoFlowControl to be turned on and off from interop testing and flow control windows to
- * be accessed.
+ * be accessed. For internal testing only.
  */
 @VisibleForTesting
 public final class HandlerSettings {

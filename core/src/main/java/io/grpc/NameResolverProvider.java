@@ -126,6 +126,9 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
     return providers;
   }
 
+  /**
+   * Returns current provider as a {@link NameResolver#Factory} instance.
+   */
   public static NameResolver.Factory asFactory() {
     return factory;
   }

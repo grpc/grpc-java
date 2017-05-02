@@ -70,6 +70,9 @@ public final class ServerServiceDefinition {
     return serviceDescriptor;
   }
 
+  /**
+   * Get all the methods of service.
+   */
   public Collection<ServerMethodDefinition<?, ?>> getMethods() {
     return methods.values();
   }
