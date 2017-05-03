@@ -229,4 +229,26 @@ public final class StatsTraceContext {
       tracer.inboundWireSize(bytes);
     }
   }
+
+  /**
+   * See {@link StreamTracer#outboundMessageSerialized}
+   *
+   * <p>Called from {@link io.grpc.internal.MessageFramer}.
+   */
+  public void outboundMessageSerialized(long wireSize) {
+    for (StreamTracer tracer : tracers) {
+      tracer.outboundMessageSerialized(wireSize);
+    }
+  }
+
+  /**
+   * See {@link StreamTracer#inboundMessage}.
+   *
+   * <p>Called from {@link io.grpc.internal.MessageDeframer}.
+   */
+  public void inboundMessageReceived(long wireSize) {
+    for (StreamTracer tracer : tracers) {
+      tracer.inboundMessageReceived(wireSize);
+    }
+  }
 }

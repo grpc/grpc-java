@@ -164,6 +164,7 @@ public class MessageFramer implements Framer {
   private int writeUncompressed(InputStream message, int messageLength) throws IOException {
     if (messageLength != -1) {
       statsTraceCtx.outboundWireSize(messageLength);
+      statsTraceCtx.outboundMessageSerialized(messageLength);
       return writeKnownLengthUncompressed(message, messageLength);
     }
     BufferChainOutputStream bufferChain = new BufferChainOutputStream();
@@ -236,6 +237,10 @@ public class MessageFramer implements Framer {
     ByteBuffer header = ByteBuffer.wrap(headerScratch);
     header.put(compressed ? COMPRESSED : UNCOMPRESSED);
     int messageLength = bufferChain.readableBytes();
+    if (messageLength > 0) {
+      statsTraceCtx.outboundWireSize(messageLength);
+    }
+    statsTraceCtx.outboundMessageSerialized(messageLength);
     header.putInt(messageLength);
     WritableBuffer writeableHeader = bufferAllocator.allocate(HEADER_LENGTH);
     writeableHeader.write(headerScratch, 0, header.position());
@@ -256,7 +261,6 @@ public class MessageFramer implements Framer {
     // Assign the current buffer to the last in the chain so it can be used
     // for future writes or written with end-of-stream=true on close.
     buffer = bufferList.get(bufferList.size() - 1);
-    statsTraceCtx.outboundWireSize(messageLength);
   }
 
   private static int writeToOutputStream(InputStream message, OutputStream outputStream)
