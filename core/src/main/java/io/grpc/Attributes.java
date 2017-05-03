@@ -156,7 +156,7 @@ public final class Attributes {
   }
 
   /**
-   * The helper class to build an Attributes instance
+   * The helper class to build an Attributes instance.
    */
   public static final class Builder {
     private Attributes product;

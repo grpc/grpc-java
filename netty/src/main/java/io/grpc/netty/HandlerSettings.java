@@ -33,6 +33,7 @@ package io.grpc.netty;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import io.grpc.Internal;
 
 /**
  * Allows autoFlowControl to be turned on and off from interop testing and flow control windows to
