@@ -520,9 +520,9 @@ public final class Metadata {
    * following characters:
    *
    * <ul>
-   *   <li>Space: {@code 0x20}, but must not be at the beginning or at the end of the value. Leading
-   *       or trailing whitespace may not be preserved.
-   *   <li>ASCII visible characters ({@code 0x21-0x7E}).
+   * <li>Space: {@code 0x20}, but must not be at the beginning or at the end of the value. Leading
+   *     or trailing whitespace may not be preserved.
+   * <li>ASCII visible characters ({@code 0x21-0x7E}).
    * </ul>
    *
    * <p>Note this has to be the subset of valid characters in {@code field-content} from RFC 7230

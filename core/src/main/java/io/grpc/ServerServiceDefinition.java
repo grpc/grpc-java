@@ -71,7 +71,7 @@ public final class ServerServiceDefinition {
   }
 
   /**
-   * Get all the methods of service.
+   * Gets all the methods of service.
    */
   public Collection<ServerMethodDefinition<?, ?>> getMethods() {
     return methods.values();
