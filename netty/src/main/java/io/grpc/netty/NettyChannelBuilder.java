@@ -408,13 +408,13 @@ public final class NettyChannelBuilder
   }
 
   @CheckReturnValue
-  @Internal
   interface OverrideAuthorityChecker {
     String checkAuthority(String authority);
   }
 
   @Override
   @CheckReturnValue
+  @Internal
   protected String checkAuthority(String authority) {
     if (authorityChecker != null) {
       return authorityChecker.checkAuthority(authority);

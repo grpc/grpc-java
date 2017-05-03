@@ -56,7 +56,7 @@ public final class PickFirstBalancerFactory extends LoadBalancer.Factory {
   }
 
   /**
-   * Get an instance of this factory.
+   * Gets an instance of this factory.
    */
   public static PickFirstBalancerFactory getInstance() {
     return INSTANCE;
