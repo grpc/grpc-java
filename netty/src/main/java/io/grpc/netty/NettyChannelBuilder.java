@@ -331,6 +331,7 @@ public final class NettyChannelBuilder
 
   @Override
   @CheckReturnValue
+  @Internal
   protected ClientTransportFactory buildTransportFactory() {
     return new NettyTransportFactory(dynamicParamsFactory, channelType, channelOptions,
         negotiationType, sslContext, eventLoopGroup, flowControlWindow, maxInboundMessageSize(),
@@ -406,6 +407,7 @@ public final class NettyChannelBuilder
   }
 
   @CheckReturnValue
+  @Internal
   interface OverrideAuthorityChecker {
     String checkAuthority(String authority);
   }
