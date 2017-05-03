@@ -692,6 +692,7 @@ public abstract class AbstractTransportTest {
     verify(mockServerStreamListener, timeout(TIMEOUT_MS)).messageRead(inputStreamCaptor.capture());
     if (metricsExpected()) {
       clientInOrder.verify(clientStreamTracer).outboundWireSize(anyLong());
+      clientInOrder.verify(clientStreamTracer).outboundMessageSerialized(anyLong());
       clientInOrder.verify(clientStreamTracer).outboundUncompressedSize(anyLong());
       serverInOrder.verify(serverStreamTracer).inboundMessage();
     }
@@ -703,7 +704,8 @@ public abstract class AbstractTransportTest {
 
     if (metricsExpected()) {
       serverInOrder.verify(serverStreamTracer).inboundWireSize(anyLong());
-      serverInOrder.verify(serverStreamTracer, atLeast(1)).inboundUncompressedSize(anyLong());
+      serverInOrder.verify(serverStreamTracer).inboundMessageReceived(anyLong());
+      verify(serverStreamTracer, atLeast(1)).inboundUncompressedSize(anyLong());
     }
 
     Metadata serverHeaders = new Metadata();
@@ -732,6 +734,7 @@ public abstract class AbstractTransportTest {
     verify(mockClientStreamListener, timeout(TIMEOUT_MS)).messageRead(inputStreamCaptor.capture());
     if (metricsExpected()) {
       serverInOrder.verify(serverStreamTracer).outboundWireSize(anyLong());
+      serverInOrder.verify(serverStreamTracer).outboundMessageSerialized(anyLong());
       serverInOrder.verify(serverStreamTracer, atLeast(1)).outboundUncompressedSize(anyLong());
       clientInOrder.verify(clientStreamTracer).inboundHeaders();
       clientInOrder.verify(clientStreamTracer).inboundMessage();
@@ -739,7 +742,8 @@ public abstract class AbstractTransportTest {
     assertEquals("Hi. Who are you?", methodDescriptor.parseResponse(inputStreamCaptor.getValue()));
     if (metricsExpected()) {
       clientInOrder.verify(clientStreamTracer).inboundWireSize(anyLong());
-      clientInOrder.verify(clientStreamTracer, atLeast(1)).inboundUncompressedSize(anyLong());
+      clientInOrder.verify(clientStreamTracer).inboundMessageReceived(anyLong());
+      verify(clientStreamTracer, atLeast(1)).inboundUncompressedSize(anyLong());
     }
     inputStreamCaptor.getValue().close();
 
@@ -1041,10 +1045,12 @@ public abstract class AbstractTransportTest {
       verify(clientStreamTracer).inboundHeaders();
       verify(clientStreamTracer).inboundMessage();
       verify(clientStreamTracer).inboundWireSize(anyLong());
+      verify(clientStreamTracer).inboundMessageReceived(anyLong());
       verify(clientStreamTracer, atLeast(1)).inboundUncompressedSize(anyLong());
       verify(clientStreamTracer).streamClosed(same(status));
       verify(serverStreamTracer).outboundMessage();
       verify(serverStreamTracer).outboundWireSize(anyLong());
+      verify(serverStreamTracer).outboundMessageSerialized(anyLong());
       verify(serverStreamTracer, atLeast(1)).outboundUncompressedSize(anyLong());
       // There is a race between client cancelling and server closing.  The final status seen by the
       // server is non-deterministic.
