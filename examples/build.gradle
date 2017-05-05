@@ -29,7 +29,7 @@ dependencies {
   compile "io.grpc:grpc-protobuf:${grpcVersion}"
   compile "io.grpc:grpc-stub:${grpcVersion}"
 
-  testCompile "junit:junit:4.11"
+  testCompile "junit:junit:4.12"
   testCompile "org.mockito:mockito-core:1.9.5"
 }
 

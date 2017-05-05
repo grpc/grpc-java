@@ -127,7 +127,7 @@ public class OkHttpClientTransportTest {
   private static final int HEADER_LENGTH = 5;
 
   @Rule
-  public Timeout globalTimeout = new Timeout(10 * 1000);
+  public Timeout globalTimeout = new Timeout(10, TimeUnit.SECONDS);
 
   @Mock
   private FrameWriter frameWriter;
