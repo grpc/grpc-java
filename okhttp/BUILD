@@ -12,9 +12,9 @@ java_library(
     deps = [
         "//core",
         "//core:internal",
-        "@com_google_code_findbugs_jsr305",
-        "@com_google_guava",
-        "@com_squareup_okhttp",
-        "@com_squareup_okio",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava//jar",
+        "@com_squareup_okhttp//jar",
+        "@com_squareup_okio//jar",
     ],
 )

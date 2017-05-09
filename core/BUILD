@@ -10,10 +10,10 @@ java_library(
     ]),
     deps = [
         "//context",
-        "@com_google_code_findbugs_jsr305",
-        "@com_google_errorprone_error_prone_annotations",
-        "@com_google_guava",
-        "@com_google_instrumentation_api",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_errorprone_error_prone_annotations//jar",
+        "@com_google_guava//jar",
+        "@com_google_instrumentation_api//jar",
     ],
 )
 
@@ -25,10 +25,10 @@ java_library(
     deps = [
         ":core",
         "//context",
-        "@com_google_code_findbugs_jsr305",
-        "@com_google_errorprone_error_prone_annotations",
-        "@com_google_guava",
-        "@com_google_instrumentation_api",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_errorprone_error_prone_annotations//jar",
+        "@com_google_guava//jar",
+        "@com_google_instrumentation_api//jar",
     ],
 )
 
@@ -39,7 +39,7 @@ java_library(
     ]),
     deps = [
         ":core",
-        "@com_google_code_findbugs_jsr305",
-        "@com_google_guava",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava//jar",
     ],
 )

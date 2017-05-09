@@ -7,8 +7,8 @@ java_library(
     ]),
     deps = [
         "//core",
-        "@com_google_code_findbugs_jsr305",
-        "@com_google_guava",
-        "@com_google_protobuf_nano_protobuf_javanano",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava//jar",
+        "@com_google_protobuf_nano_protobuf_javanano//jar",
     ],
 )
