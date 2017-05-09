@@ -1,11 +1,15 @@
 package(default_visibility = ["//visibility:public"])
 
 java_library(
-    name = "grpc_java",
-    exports = [
+    name = "protobuf-nano",
+    srcs = glob([
+        "src/main/java/**/*.java",
+    ]),
+    deps = [
         "//core",
-        "//stub",
         "@com_google_code_findbugs_jsr305",
         "@com_google_guava",
+        "@com_google_protobuf_nano_protobuf_javanano",
     ],
 )
+
