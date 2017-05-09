@@ -15,4 +15,3 @@ java_library(
         "@com_google_protobuf//:protobuf_java_util",
     ],
 )
-

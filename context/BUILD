@@ -12,4 +12,3 @@ java_library(
         "@com_google_instrumentation_api",
     ],
 )
-

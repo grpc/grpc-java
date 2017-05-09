@@ -7,6 +7,7 @@ java_library(
     ]),
     deps = [
         "//core",
+        "//core:internal",
         "@com_google_api_grpc_google_common_protos",
         "@com_google_code_findbugs_jsr305",
         "@com_google_guava",
@@ -14,4 +15,3 @@ java_library(
         "@com_google_protobuf//:protobuf_java_util",
     ],
 )
-

@@ -12,4 +12,3 @@ java_library(
         "@com_google_protobuf_nano_protobuf_javanano",
     ],
 )
-

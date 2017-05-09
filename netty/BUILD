@@ -11,6 +11,7 @@ java_library(
     ]),
     deps = [
         "//core",
+        "//core:internal",
         "@com_google_code_findbugs_jsr305",
         "@com_google_errorprone_error_prone_annotations",
         "@com_google_guava",
@@ -26,4 +27,3 @@ java_library(
         "@io_netty_transport",
     ],
 )
-

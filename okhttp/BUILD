@@ -11,10 +11,10 @@ java_library(
     ]),
     deps = [
         "//core",
+        "//core:internal",
         "@com_google_code_findbugs_jsr305",
         "@com_google_guava",
         "@com_squareup_okhttp",
         "@com_squareup_okio",
     ],
 )
-
