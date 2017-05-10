@@ -6,4 +6,4 @@ Gradle is no longer run automatically. Make sure to run
 './gradlew :grpc-interop-testing:installDist -PskipCodegen=true' after any
 changes. -PskipCodegen=true is optional, but requires less setup.
 EOF
-exec ./interop-testing/build/install/grpc-interop-testing/bin/test-client "$@"
+exec ./interop-testing/build_gradle/install/grpc-interop-testing/bin/test-client "$@"

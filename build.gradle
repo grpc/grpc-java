@@ -46,6 +46,11 @@ subprojects {
     group = "io.grpc"
     version = "1.5.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
+    // The default build directories that gradle uses clash with Bazels BUILD
+    // files on case-insensitive filesystems, so output to build_gradle
+    // instead.
+    buildDir = 'build_gradle'
+
     sourceCompatibility = 1.6
     targetCompatibility = 1.6
 
@@ -85,7 +90,7 @@ subprojects {
     ext {
         def exeSuffix = osdetector.os == 'windows' ? ".exe" : ""
         protocPluginBaseName = 'protoc-gen-grpc-java'
-        javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
+        javaPluginPath = "$rootDir/compiler/build_gradle/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
         nettyVersion = '4.1.11.Final'
         guavaVersion = '19.0'
