@@ -704,7 +704,7 @@ class NettyServerHandler extends AbstractNettyHandler {
           logger.log(Level.FINE, String.format("Window: %d",
               decoder().flowController().initialWindowSize(connection().connectionStream())));
         }
-      } else if (data.getLong(data.readerIndex()) != KEEPALIVE_PING_BUF.getLong(0)) {
+      } else if (!KEEPALIVE_PING_BUF.equals(data)) {
         logger.warning("Received unexpected ping ack. No ping outstanding");
       }
     }
