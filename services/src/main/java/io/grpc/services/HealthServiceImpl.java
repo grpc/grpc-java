@@ -76,8 +76,4 @@ final class HealthServiceImpl extends HealthGrpc.HealthImplBase {
   void clearStatus(String service) {
     statusMap.remove(service);
   }
-
-  void clearAll() {
-    statusMap.clear();
-  }
 }
