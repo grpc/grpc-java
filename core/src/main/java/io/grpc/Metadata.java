@@ -660,7 +660,7 @@ public final class Metadata {
     private Key(String name) {
       this.originalName = checkNotNull(name, "name");
       // Intern the result for faster string identity checking.
-      this.name = validateName(this.originalName.toLowerCase(Locale.ROOT)).interxn();
+      this.name = validateName(this.originalName.toLowerCase(Locale.ROOT)).intern();
       this.nameBytes = this.name.getBytes(US_ASCII);
     }
 
@@ -692,7 +692,7 @@ public final class Metadata {
     }
 
     /**
-     * @return True if the two objects are both Keys, and their names match.
+     * Returns true if the two objects are both Keys, and their names match.
      * Note: Upper case letters in the name are normalized to lower case when the Key is
      * constructed.
      */

@@ -283,7 +283,7 @@ public final class CallOptions {
     }
 
     /**
-     * @return the user supplied default value for this key.
+     * Returns the user supplied default value for this key.
      */
     public T getDefault() {
       return defaultValue;
