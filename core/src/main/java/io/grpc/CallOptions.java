@@ -171,7 +171,7 @@ public final class CallOptions {
 
   /**
    * Enables 'wait for ready' feature for the call.
-   * <a href="https://github.com/grpc/grpc/blob/master/doc/fail_fast.md">'Fail fast'</a>
+   * <a href="https://github.com/grpc/grpc/blob/master/doc/wait-for-ready.md">'wait for ready'</a>
    * is the default option for gRPC calls and 'wait for ready' is the opposite to it.
    */
   public CallOptions withWaitForReady() {
@@ -282,6 +282,9 @@ public final class CallOptions {
       this.defaultValue = defaultValue;
     }
 
+    /**
+     * @return the user supplied default value for this key.
+     */
     public T getDefault() {
       return defaultValue;
     }
@@ -365,7 +368,7 @@ public final class CallOptions {
 
   /**
    * Returns whether 'wait for ready' option is enabled for the call.
-   * <a href="https://github.com/grpc/grpc/blob/master/doc/fail_fast.md">'Fail fast'</a>
+   * <a href="https://github.com/grpc/grpc/blob/master/doc/wait-for-ready.md">'Wait for ready'</a>
    * is the default option for gRPC calls and 'wait for ready' is the opposite to it.
    */
   public boolean isWaitForReady() {

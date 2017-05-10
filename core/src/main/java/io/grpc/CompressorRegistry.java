@@ -49,10 +49,16 @@ public final class CompressorRegistry {
       new Codec.Gzip(),
       Codec.Identity.NONE);
 
+  /**
+   * Returns the default instance which supports gzip compression.
+   */
   public static CompressorRegistry getDefaultInstance() {
     return DEFAULT_INSTANCE;
   }
 
+  /**
+   * Returns a new instance with no registered compressors.
+   */
   public static CompressorRegistry newEmptyInstance() {
     return new CompressorRegistry();
   }

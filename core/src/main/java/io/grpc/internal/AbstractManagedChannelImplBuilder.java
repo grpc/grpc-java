@@ -132,6 +132,10 @@ public abstract class AbstractManagedChannelImplBuilder
     return thisT();
   }
 
+  /**
+   * Sets the maximum message size allowed for a single GRPC frame. Any messages larger than this
+   * limit will result in a {@link io.grpc.StatusRuntimeException} of type RESOURCE_EXHAUSTED.
+   */
   protected final int maxInboundMessageSize() {
     return maxInboundMessageSize;
   }

@@ -58,6 +58,8 @@ import javax.annotation.concurrent.NotThreadSafe;
 /**
  * Provides access to read and write metadata values to be exchanged during a call.
  *
+ * Keys are allowed to be associated with more than one value.
+ *
  * <p>This class is not thread safe, implementations should ensure that header reads and writes do
  * not occur in multiple threads concurrently.
  */
@@ -441,7 +443,12 @@ public final class Metadata {
     return serialized;
   }
 
-  /** Perform a simple merge of two sets of metadata. */
+  /**
+   * Perform a simple merge of two sets of metadata.
+   *
+   * This is a purely additive operation, because a single key can be associated with multiple
+   * values.
+   */
   public void merge(Metadata other) {
     if (other.isEmpty()) {
       return;
@@ -454,7 +461,12 @@ public final class Metadata {
     size += other.size;
   }
 
-  /** Merge values for the given set of keys into this set of metadata. */
+  /**
+   * Merge values from the given set of keys into this set of metadata. If a key is present in keys,
+   * then all of the associated values will be copied over.
+   * @param other The source of the new key values.
+   * @param keys The subset of matching key we want to copy, if they exist in the source.
+   */
   public void merge(Metadata other, Set<Key<?>> keys) {
     Preconditions.checkNotNull(other, "other");
     // Use ByteBuffer for equals and hashCode.
@@ -648,7 +660,7 @@ public final class Metadata {
     private Key(String name) {
       this.originalName = checkNotNull(name, "name");
       // Intern the result for faster string identity checking.
-      this.name = validateName(this.originalName.toLowerCase(Locale.ROOT)).intern();
+      this.name = validateName(this.originalName.toLowerCase(Locale.ROOT)).interxn();
       this.nameBytes = this.name.getBytes(US_ASCII);
     }
 
@@ -679,6 +691,11 @@ public final class Metadata {
       return nameBytes;
     }
 
+    /**
+     * @return True if the two objects are both Keys, and their names match.
+     * Note: Upper case letters in the name are normalized to lower case when the Key is
+     * constructed.
+     */
     @Override
     public boolean equals(Object o) {
       if (this == o) {

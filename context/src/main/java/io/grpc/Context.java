@@ -742,8 +742,9 @@ public class Context {
       uncancellableSurrogate.detach(toAttach);
     }
 
+    // Visible for testing
     @Override
-    public boolean isCurrent() {
+    boolean isCurrent() {
       return uncancellableSurrogate.isCurrent();
     }
 
