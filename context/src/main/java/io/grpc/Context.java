@@ -742,9 +742,16 @@ public class Context {
       uncancellableSurrogate.detach(toAttach);
     }
 
-    // Visible for testing
+    /**
+     * Returns true if the Context is the current context.
+     *
+     * @deprecated This method violates some GRPC class encapsulation and should not be used.
+     * If you must check whether a Context is the current context, check whether it is the same
+     * object returned by {@link Context#current()}.
+     */
     @Override
-    boolean isCurrent() {
+    @Deprecated
+    public boolean isCurrent() {
       return uncancellableSurrogate.isCurrent();
     }
 

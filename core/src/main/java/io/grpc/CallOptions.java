@@ -368,7 +368,7 @@ public final class CallOptions {
 
   /**
    * Returns whether 'wait for ready' option is enabled for the call.
-   * <a href="https://github.com/grpc/grpc/blob/master/doc/wait-for-ready.md">'Wait for ready'</a>
+   * <a href="https://github.com/grpc/grpc/blob/master/doc/fail_fast.md">'Fail fast'</a>
    * is the default option for gRPC calls and 'wait for ready' is the opposite to it.
    */
   public boolean isWaitForReady() {
