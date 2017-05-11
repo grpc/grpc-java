@@ -58,7 +58,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 /**
  * Provides access to read and write metadata values to be exchanged during a call.
  *
- * Keys are allowed to be associated with more than one value.
+ * <p>Keys are allowed to be associated with more than one value.
  *
  * <p>This class is not thread safe, implementations should ensure that header reads and writes do
  * not occur in multiple threads concurrently.
@@ -446,7 +446,7 @@ public final class Metadata {
   /**
    * Perform a simple merge of two sets of metadata.
    *
-   * This is a purely additive operation, because a single key can be associated with multiple
+   * <p>This is a purely additive operation, because a single key can be associated with multiple
    * values.
    */
   public void merge(Metadata other) {

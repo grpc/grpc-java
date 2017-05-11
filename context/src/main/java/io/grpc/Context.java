@@ -746,8 +746,8 @@ public class Context {
      * Returns true if the Context is the current context.
      *
      * @deprecated This method violates some GRPC class encapsulation and should not be used.
-     * If you must check whether a Context is the current context, check whether it is the same
-     * object returned by {@link Context#current()}.
+     *     If you must check whether a Context is the current context, check whether it is the same
+     *     object returned by {@link Context#current()}.
      */
     @Override
     @Deprecated
