@@ -464,6 +464,7 @@ public final class Metadata {
   /**
    * Merge values from the given set of keys into this set of metadata. If a key is present in keys,
    * then all of the associated values will be copied over.
+   *
    * @param other The source of the new key values.
    * @param keys The subset of matching key we want to copy, if they exist in the source.
    */
