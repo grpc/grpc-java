@@ -1,7 +1,7 @@
 package(default_visibility = ["//visibility:public"])
 
 java_library(
-    name = "protobuf-lite",
+    name = "protobuf_lite",
     srcs = glob([
         "src/main/java/**/*.java",
     ]),

@@ -1,7 +1,7 @@
 package(default_visibility = ["//visibility:public"])
 
 java_library(
-    name = "protobuf-nano",
+    name = "protobuf_nano",
     srcs = glob([
         "src/main/java/**/*.java",
     ]),
