@@ -373,13 +373,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void keepAliveManagerStarted() {
-    verify(spyKeepAliveManager).onTransportStarted();
-    verify(spyKeepAliveManager, never()).onDataReceived();
-    verify(spyKeepAliveManager, never()).onTransportTermination();
-  }
-
-  @Test
   public void keepAlivemanagerOnDataReceived_headersRead() throws Exception {
     ByteBuf headersFrame = headersFrame(STREAM_ID, new DefaultHttp2Headers());
     channelRead(headersFrame);
