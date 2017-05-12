@@ -53,11 +53,15 @@ public final class FixedHttpProxyHandler extends ProxyHandler {
     private HttpHeaders headers;
 
     public FixedHttpProxyHandler(SocketAddress proxyAddress) {
+        this(proxyAddress, null);
+    }
+
+    public FixedHttpProxyHandler(SocketAddress proxyAddress, HttpHeaders headers) {
         super(proxyAddress);
         username = null;
         password = null;
         authorization = null;
-        headers = null;
+        this.headers = headers;
     }
 
     public FixedHttpProxyHandler(SocketAddress proxyAddress, String username, String password) {
