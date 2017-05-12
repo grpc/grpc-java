@@ -130,6 +130,7 @@ public class MessageDeframerTest {
   @Test
   public void endOfStreamShouldNotifyEndOfStream() {
     deframer.sink().deframe(buffer(new byte[0]));
+    verify(sourceListener, atLeastOnce()).bytesRead(0);
     deframer.sink().scheduleCloseWhenComplete();
     verify(sinkListener, times(2)).scheduleDeframerSource(sourceCaptor.capture());
     assertNull(sourceCaptor.getValue().next());
@@ -218,6 +219,7 @@ public class MessageDeframerTest {
   @Test
   public void endOfStreamCallbackShouldWaitForMessageDelivery() {
     deframer.sink().deframe(buffer(new byte[] {0, 0, 0, 0, 1, 3}));
+    verify(sourceListener, atLeastOnce()).bytesRead(anyInt());
     deframer.sink().scheduleCloseWhenComplete();
     verify(sinkListener, times(2)).scheduleDeframerSource(sourceCaptor.capture());
     assertNull(sourceCaptor.getValue().next());
@@ -227,7 +229,6 @@ public class MessageDeframerTest {
     deframer.sink().request(1);
     verify(sinkListener, times(3)).scheduleDeframerSource(sourceCaptor.capture());
     assertEquals(Bytes.asList(new byte[] {3}), bytes(sourceCaptor.getValue().next()));
-    verify(sourceListener, atLeastOnce()).bytesRead(anyInt());
     assertNull(sourceCaptor.getValue().next());
     verify(sourceListener).deframerClosed(false);
     verifyNoMoreInteractions(sinkListener);

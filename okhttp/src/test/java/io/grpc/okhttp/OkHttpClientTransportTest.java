@@ -582,15 +582,16 @@ public class OkHttpClientTransportTest {
     long messageFrameLength = buffer.size();
     frameHandler().data(false, 3, buffer, (int) messageFrameLength);
     ArgumentCaptor<Integer> idCaptor = ArgumentCaptor.forClass(Integer.class);
-    verify(frameWriter, timeout(TIME_OUT_MS)).windowUpdate(
+    verify(frameWriter, timeout(TIME_OUT_MS).times(2)).windowUpdate(
         idCaptor.capture(), eq(messageFrameLength));
+    // TODO(ericgribkoff) "Eagerly" reporting bytes queued in the deframer changes the behavior
     // Should only send window update for the connection.
-    assertEquals(1, idCaptor.getAllValues().size());
-    assertEquals(0, (int)idCaptor.getValue());
+    assertEquals(2, idCaptor.getAllValues().size());
+    assertEquals(3, (int)idCaptor.getAllValues().get(0));
+    assertEquals(0, (int)idCaptor.getAllValues().get(1));
 
     stream.request(1);
     // We return the bytes for the stream window as we read the message.
-    verify(frameWriter, timeout(TIME_OUT_MS)).windowUpdate(eq(3), eq(messageFrameLength));
 
     getStream(3).cancel(Status.CANCELLED);
     verify(frameWriter, timeout(TIME_OUT_MS)).rstStream(eq(3), eq(ErrorCode.CANCEL));

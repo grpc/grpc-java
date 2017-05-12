@@ -321,9 +321,12 @@ public class MessageDeframer {
       boolean needToCloseData = true;
       try {
         Preconditions.checkState(!isScheduledToClose(), "close already scheduled");
+        int dataSize = data.readableBytes();
         unprocessed.addBuffer(data);
         needToCloseData = false;
         sinkListener.scheduleDeframerSource(source);
+        // TODO(ericgribkoff) Clean up interfaces (move this to Sink.Listener)
+        source.sourceListener.bytesRead(dataSize);
       } finally {
         if (needToCloseData) {
           data.close();
@@ -478,7 +481,8 @@ public class MessageDeframer {
         return true;
       } finally {
         if (totalBytesRead > 0) {
-          sourceListener.bytesRead(totalBytesRead);
+          // TODO(ericgribkoff) Performance improves by notifying directly from transport thread.
+          //sourceListener.bytesRead(totalBytesRead);
           if (state == State.BODY) {
             statsTraceCtx.inboundWireSize(totalBytesRead);
           }
