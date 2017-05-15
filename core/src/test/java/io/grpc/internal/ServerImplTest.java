@@ -129,6 +129,7 @@ public class ServerImplTest {
     SERVER_CONTEXT.cancel(null);
   }
 
+  private final FakeClock cancelExecutor = new FakeClock();
   private final FakeClock executor = new FakeClock();
   private final FakeClock timer = new FakeClock();
   @Mock
@@ -766,6 +767,7 @@ public class ServerImplTest {
     assertTrue(onHalfCloseCalled.get());
 
     streamListener.closed(Status.CANCELLED);
+    assertEquals(1, cancelExecutor.runDueTasks());
     assertEquals(1, executor.runDueTasks());
     assertTrue(onCancelCalled.get());
 
@@ -839,10 +841,11 @@ public class ServerImplTest {
 
     // For close status being non OK:
     // isCancelled is expected to be true immediately after calling closed(), without needing
-    // to wait for the executor to run any tasks.
+    // to wait for the main executor to run any tasks.
     assertFalse(callReference.get().isCancelled());
     assertFalse(context.get().isCancelled());
     streamListener.closed(Status.CANCELLED);
+    assertEquals(1, cancelExecutor.runDueTasks());
     assertTrue(callReference.get().isCancelled());
     assertTrue(context.get().isCancelled());
 
@@ -949,7 +952,11 @@ public class ServerImplTest {
   public void messageRead_errorCancelsCall() throws Exception {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
-            executor.getScheduledExecutorService(), stream, Context.ROOT.withCancellation());
+            executor.getScheduledExecutorService(),
+            cancelExecutor.getScheduledExecutorService(),
+            stream,
+            Context.ROOT.withCancellation()
+    );
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -971,7 +978,11 @@ public class ServerImplTest {
   public void messageRead_runtimeExceptionCancelsCall() throws Exception {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
-            executor.getScheduledExecutorService(), stream, Context.ROOT.withCancellation());
+            executor.getScheduledExecutorService(),
+            cancelExecutor.getScheduledExecutorService(),
+            stream,
+            Context.ROOT.withCancellation()
+    );
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -993,7 +1004,11 @@ public class ServerImplTest {
   public void halfClosed_errorCancelsCall() {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
-            executor.getScheduledExecutorService(), stream, Context.ROOT.withCancellation());
+            executor.getScheduledExecutorService(),
+            cancelExecutor.getScheduledExecutorService(),
+            stream,
+            Context.ROOT.withCancellation()
+    );
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1014,7 +1029,11 @@ public class ServerImplTest {
   public void halfClosed_runtimeExceptionCancelsCall() {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
-            executor.getScheduledExecutorService(), stream, Context.ROOT.withCancellation());
+            executor.getScheduledExecutorService(),
+            cancelExecutor.getScheduledExecutorService(),
+            stream,
+            Context.ROOT.withCancellation()
+    );
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1035,7 +1054,11 @@ public class ServerImplTest {
   public void onReady_errorCancelsCall() {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
-            executor.getScheduledExecutorService(), stream, Context.ROOT.withCancellation());
+            executor.getScheduledExecutorService(),
+            cancelExecutor.getScheduledExecutorService(),
+            stream,
+            Context.ROOT.withCancellation()
+    );
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1056,7 +1079,11 @@ public class ServerImplTest {
   public void onReady_runtimeExceptionCancelsCall() {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
-            executor.getScheduledExecutorService(), stream, Context.ROOT.withCancellation());
+            executor.getScheduledExecutorService(),
+            cancelExecutor.getScheduledExecutorService(),
+            stream,
+            Context.ROOT.withCancellation()
+    );
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1081,7 +1108,8 @@ public class ServerImplTest {
   private void createServer(List<ServerTransportFilter> filters) {
     assertNull(server);
     server = new ServerImpl(executorPool, timerPool, registry, fallbackRegistry,
-        transportServer, SERVER_CONTEXT, decompressorRegistry, compressorRegistry, filters);
+        transportServer, SERVER_CONTEXT, decompressorRegistry, compressorRegistry, filters,
+        cancelExecutor.getScheduledExecutorService());
   }
 
   private void verifyExecutorsAcquired() {

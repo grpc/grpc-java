@@ -39,6 +39,7 @@ import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.CompressorRegistry;
@@ -82,6 +83,8 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
 
   private final LogId logId = LogId.allocate(getClass().getName());
   private final ObjectPool<? extends Executor> executorPool;
+  /** Executor for running cancellation related tasks. Non-null only in unit tests. */
+  private final Executor cancelExecutor;
   /** Executor for application processing. Safe to read after {@link #start()}. */
   private Executor executor;
   private final InternalHandlerRegistry registry;
@@ -123,7 +126,19 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       InternalServer transportServer, Context rootContext,
       DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
       List<ServerTransportFilter> transportFilters) {
+    this(executorPool, timeoutServicePool, registry, fallbackRegistry, transportServer,
+        rootContext, decompressorRegistry, compressorRegistry, transportFilters, null);
+  }
+
+  @VisibleForTesting
+  ServerImpl(ObjectPool<? extends Executor> executorPool,
+      ObjectPool<ScheduledExecutorService> timeoutServicePool,
+      InternalHandlerRegistry registry, HandlerRegistry fallbackRegistry,
+      InternalServer transportServer, Context rootContext,
+      DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
+      List<ServerTransportFilter> transportFilters, Executor cancelExecutor) {
     this.executorPool = Preconditions.checkNotNull(executorPool, "executorPool");
+    this.cancelExecutor = cancelExecutor;
     this.timeoutServicePool = Preconditions.checkNotNull(timeoutServicePool, "timeoutServicePool");
     this.registry = Preconditions.checkNotNull(registry, "registry");
     this.fallbackRegistry = Preconditions.checkNotNull(fallbackRegistry, "fallbackRegistry");
@@ -392,7 +407,8 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       }
 
       final JumpToApplicationThreadServerStreamListener jumpListener
-          = new JumpToApplicationThreadServerStreamListener(wrappedExecutor, stream, context);
+          = new JumpToApplicationThreadServerStreamListener(
+              wrappedExecutor, MoreObjects.firstNonNull(cancelExecutor, executor), stream, context);
       stream.setListener(jumpListener);
       // Run in wrappedExecutor so jumpListener.setListener() is called before any callbacks
       // are delivered, including any errors. Callbacks can still be triggered, but they will be
