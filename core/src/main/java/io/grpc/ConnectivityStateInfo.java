@@ -94,10 +94,6 @@ public final class ConnectivityStateInfo {
     return state.hashCode() ^ status.hashCode();
   }
 
-  /**
-   * If the {@link Status} is OK, then return the {@link ConnectivityState}. If there is an error,
-   * then return both.
-   */
   @Override
   public String toString() {
     if (status.isOk()) {
