@@ -512,18 +512,23 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
   @VisibleForTesting
   static class JumpToApplicationThreadServerStreamListener implements ServerStreamListener {
     private final Executor callExecutor;
+    private final Executor cancelExecutor;
     private final Context.CancellableContext context;
     private final ServerStream stream;
     // Only accessed from callExecutor.
     private ServerStreamListener listener;
 
     public JumpToApplicationThreadServerStreamListener(Executor executor,
-        ServerStream stream, Context.CancellableContext context) {
+        Executor cancelExecutor, ServerStream stream, Context.CancellableContext context) {
       this.callExecutor = executor;
+      this.cancelExecutor = cancelExecutor;
       this.stream = stream;
       this.context = context;
     }
 
+    /**
+     * This call MUST be serialized on callExecutor to avoid races.
+     */
     private ServerStreamListener getListener() {
       if (listener == null) {
         throw new IllegalStateException("listener unset");
@@ -587,11 +592,17 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       // For cancellations, promptly inform any users of the context that their work should be
       // aborted. Otherwise, we can wait until pending work is done.
       if (!status.isOk()) {
-        context.cancel(status.getCause());
+        // The callExecutor might be busy doing user work. To avoid waiting, use the alternate
+        // cancelExecutor.
+        cancelExecutor.execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                context.cancel(status.getCause());
+              }
+            }
+        );
       }
-      // The contract of this.listener is that it's always accessed from inside callExecutor.
-      // Some places rely on the ordering of Runnables, so we must enqueue the work here, rather
-      // than invoking closed() directly.
       callExecutor.execute(new ContextRunnable(context) {
         @Override
         public void runInContext() {
