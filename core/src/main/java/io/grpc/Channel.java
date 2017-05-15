@@ -34,9 +34,11 @@ package io.grpc;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * A virtual connection to an endpoint, to perform RPCs. A channel is free to have zero or many
- * actual connections to the endpoint based on configuration, load, etc. Applications are generally
- * expected to use stubs instead of calling this class directly.
+ * A virtual connection to a conceptual endpoint, to perform RPCs. A channel is free to have zero or
+ * many actual connections to the endpoint based on configuration, load, etc. A channel is also free
+ * to determine which actual endpoints to use and may change it every RPC, permitting client-side
+ * load balancing. Applications are generally expected to use stubs instead of calling this class
+ * directly.
  *
  * <p>Applications can add common cross-cutting behaviors to stubs by decorating Channel
  * implementations using {@link ClientInterceptor}. It is expected that most application
