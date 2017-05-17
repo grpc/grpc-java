@@ -145,9 +145,10 @@ final class DnsNameResolver extends NameResolver {
           resolving = true;
         }
         try {
-          if (System.getenv("GRPC_PROXY_EXP") != null) {
-            EquivalentAddressGroup server =
-                new EquivalentAddressGroup(InetSocketAddress.createUnresolved(host, port));
+          InetSocketAddress destination = InetSocketAddress.createUnresolved(host, port);
+          InetSocketAddress proxy = Proxies.proxyFor(destination);
+          if (proxy != null) {
+            EquivalentAddressGroup server = new EquivalentAddressGroup(destination);
             savedListener.onAddresses(Collections.singletonList(server), Attributes.EMPTY);
             return;
           }

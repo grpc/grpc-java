@@ -36,6 +36,7 @@ import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
+import io.grpc.internal.Proxies;
 import io.grpc.internal.SharedResourceHolder;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
@@ -352,20 +353,16 @@ public final class NettyChannelBuilder
   @VisibleForTesting
   @CheckReturnValue
   static ProtocolNegotiator createProtocolNegotiator(
+      SocketAddress targetServerAddress,
       String authority,
       NegotiationType negotiationType,
-      SslContext sslContext) {
+      SslContext sslContext
+  ) {
     ProtocolNegotiator negotiator =
         createProtocolNegotiatorByType(authority, negotiationType, sslContext);
-    String proxy = System.getenv("GRPC_PROXY_EXP");
+    SocketAddress proxy = Proxies.proxyFor(targetServerAddress);
     if (proxy != null) {
-      String[] parts = proxy.split(":", 2);
-      int port = 80;
-      if (parts.length > 1) {
-        port = Integer.parseInt(parts[1]);
-      }
-      InetSocketAddress proxyAddress = new InetSocketAddress(parts[0], port);
-      negotiator = ProtocolNegotiators.httpProxy(proxyAddress, null, null, negotiator);
+      negotiator = ProtocolNegotiators.httpProxy(proxy, null, null, negotiator);
     }
     return negotiator;
   }
@@ -554,7 +551,12 @@ public final class NettyChannelBuilder
 
       @Override
       public ProtocolNegotiator getProtocolNegotiator() {
-        return createProtocolNegotiator(authority, negotiationType, sslContext);
+        return createProtocolNegotiator(
+            targetServerAddress,
+            authority,
+            negotiationType,
+            sslContext
+        );
       }
     }
   }

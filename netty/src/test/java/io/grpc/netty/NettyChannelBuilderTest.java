@@ -124,9 +124,11 @@ public class NettyChannelBuilderTest {
   @Test
   public void createProtocolNegotiator_plaintext() {
     ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiator(
+        InetSocketAddress.createUnresolved("authority", 80),
         "authority",
         NegotiationType.PLAINTEXT,
-        noSslContext);
+        noSslContext
+    );
     // just check that the classes are the same, and that negotiator is not null.
     assertTrue(negotiator instanceof ProtocolNegotiators.PlaintextNegotiator);
   }
@@ -134,9 +136,11 @@ public class NettyChannelBuilderTest {
   @Test
   public void createProtocolNegotiator_plaintextUpgrade() {
     ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiator(
+        InetSocketAddress.createUnresolved("authority", 80),
         "authority",
         NegotiationType.PLAINTEXT_UPGRADE,
-        noSslContext);
+        noSslContext
+    );
     // just check that the classes are the same, and that negotiator is not null.
     assertTrue(negotiator instanceof ProtocolNegotiators.PlaintextUpgradeNegotiator);
   }
@@ -153,9 +157,11 @@ public class NettyChannelBuilderTest {
   @Test
   public void createProtocolNegotiator_tlsWithClientContext() throws SSLException {
     ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiator(
+        InetSocketAddress.createUnresolved("authority", 80),
         "authority:1234",
         NegotiationType.TLS,
-        GrpcSslContexts.forClient().build());
+        GrpcSslContexts.forClient().build()
+    );
 
     assertTrue(negotiator instanceof ProtocolNegotiators.TlsNegotiator);
     ProtocolNegotiators.TlsNegotiator n = (TlsNegotiator) negotiator;
@@ -167,6 +173,7 @@ public class NettyChannelBuilderTest {
   @Test
   public void createProtocolNegotiator_tlsWithAuthorityFallback() throws SSLException {
     ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiator(
+        InetSocketAddress.createUnresolved("authority", 80),
         "bad_authority",
         NegotiationType.TLS,
         GrpcSslContexts.forClient().build());
