@@ -35,7 +35,6 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.InternalDecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import java.io.IOException;
@@ -228,8 +227,8 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         if (call.cancelled) {
           return;
         }
-        // Special case for unary calls.
-        if (messageReceived && call.method.getType() == MethodType.UNARY) {
+        // Special case for unary calls and server streaming calls
+        if (messageReceived && call.method.getType().clientSendsOneMessage()) {
           call.stream.close(Status.INTERNAL.withDescription(
                   "More than one request messages for unary call or server streaming call"),
               new Metadata());

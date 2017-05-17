@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2017, Google Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Charsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -27,57 +26,31 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.google.common.io.CharStreams;
-import io.grpc.CompressorRegistry;
-import io.grpc.Context;
-import io.grpc.DecompressorRegistry;
+import com.google.common.collect.Collections2;
 import io.grpc.Metadata;
-import io.grpc.MethodDescriptor;
-import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
-import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
-import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import org.junit.Before;
-import org.junit.Rule;
+import java.util.Collection;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
-import org.mockito.Mock;
-import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
-@RunWith(JUnit4.class)
-public class ServerCallImplTest {
-  @Rule public final ExpectedException thrown = ExpectedException.none();
-  @Mock private ServerStream stream;
-  @Mock private ServerCall.Listener<Long> callListener;
-  @Captor private ArgumentCaptor<Status> statusCaptor;
+@RunWith(Parameterized.class)
+public class ServerCallImplCommonTest extends ServerCallImplAbstractTest {
 
-  private ServerCallImpl<Long, Long> call;
-  private Context.CancellableContext context;
+  /**
+   * Unit tests that apply to all method types.
+   */
+  @Parameters
+  public static Collection<Object[]> params() {
+    return Collections2.transform(TestUtils.Methods.ALL, TestUtils.Methods.TO_PARAM_FN);
+  }
 
-  private final MethodDescriptor<Long, Long> method = MethodDescriptor.<Long, Long>newBuilder()
-      .setType(MethodType.UNARY)
-      .setFullMethodName("/service/method")
-      .setRequestMarshaller(new LongMarshaller())
-      .setResponseMarshaller(new LongMarshaller())
-      .build();
-
-  private final Metadata requestHeaders = new Metadata();
-
-  @Before
-  public void setUp() {
-    MockitoAnnotations.initMocks(this);
-    context = Context.ROOT.withCancellation();
-    call = new ServerCallImpl<Long, Long>(stream, method, requestHeaders, context,
-        DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance());
+  public ServerCallImplCommonTest(MethodType type) {
+    super(type);
   }
 
   @Test
@@ -266,20 +239,6 @@ public class ServerCallImplTest {
   }
 
   @Test
-  public void streamListener_messageRead_unaryFailsOnMultiple() {
-    ServerStreamListenerImpl<Long> streamListener =
-        new ServerCallImpl.ServerStreamListenerImpl<Long>(call, callListener, context);
-    streamListener.messageRead(method.streamRequest(1234L));
-    streamListener.messageRead(method.streamRequest(1234L));
-
-    // Makes sure this was only called once.
-    verify(callListener).onMessage(1234L);
-
-    verify(stream).close(statusCaptor.capture(), Mockito.isA(Metadata.class));
-    assertEquals(Status.Code.INTERNAL, statusCaptor.getValue().getCode());
-  }
-
-  @Test
   public void streamListener_messageRead_onlyOnce() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<Long>(call, callListener, context);
@@ -305,21 +264,5 @@ public class ServerCallImplTest {
     thrown.expect(RuntimeException.class);
     thrown.expectMessage("unexpected exception");
     streamListener.messageRead(inputStream);
-  }
-
-  private static class LongMarshaller implements Marshaller<Long> {
-    @Override
-    public InputStream stream(Long value) {
-      return new ByteArrayInputStream(value.toString().getBytes(UTF_8));
-    }
-
-    @Override
-    public Long parse(InputStream stream) {
-      try {
-        return Long.parseLong(CharStreams.toString(new InputStreamReader(stream, UTF_8)));
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-    }
   }
 }
