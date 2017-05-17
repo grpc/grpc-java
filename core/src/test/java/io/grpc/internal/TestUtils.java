@@ -36,10 +36,17 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.google.common.base.Function;
+import com.google.common.base.Predicate;
+import com.google.common.collect.Collections2;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MethodDescriptor.MethodType;
 import java.net.SocketAddress;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import javax.annotation.Nullable;
@@ -107,6 +114,46 @@ final class TestUtils {
         .newClientTransport(any(SocketAddress.class), any(String.class), any(String.class));
 
     return captor;
+  }
+
+  public static class Methods {
+    public static final ImmutableSet<MethodType> ALL =
+        ImmutableSet.copyOf(MethodType.values());
+
+    // UNARY and SERVER_STREAMING
+    public static final ImmutableSet<MethodType> CLIENT_SENDS_ONE =
+        ImmutableSet.copyOf(Collections2.filter(ALL, new Predicate<MethodType>() {
+          @Override
+          public boolean apply(MethodType input) {
+            return input.clientSendsOneMessage();
+          }
+        }));
+
+    // UNARY and CLIENT_STREAMING
+    public static final ImmutableSet<MethodType> SERVER_SENDS_ONE =
+        ImmutableSet.copyOf(Collections2.filter(ALL, new Predicate<MethodType>() {
+          @Override
+          public boolean apply(MethodType input) {
+            return input.serverSendsOneMessage();
+          }
+        }));
+
+    public static final Set<MethodType> CLIENT_SENDS_MULTI = Sets.difference(
+        ALL, CLIENT_SENDS_ONE
+    );
+
+    public static final Set<MethodType> SERVER_SENDS_MULTI = Sets.difference(
+        ALL, SERVER_SENDS_ONE
+    );
+
+    public static final Function<MethodType, Object[]> TO_PARAM_FN =
+        new Function<MethodType, Object[]>() {
+          @Nullable
+          @Override
+          public Object[] apply(@Nullable MethodType input) {
+            return new Object[] {input};
+          }
+        };
   }
 
   private TestUtils() {
