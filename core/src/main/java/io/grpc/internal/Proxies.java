@@ -1,3 +1,34 @@
+/*
+ * Copyright 2017, Google Inc. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ *    * Redistributions of source code must retain the above copyright
+ * notice, this list of conditions and the following disclaimer.
+ *    * Redistributions in binary form must reproduce the above
+ * copyright notice, this list of conditions and the following disclaimer
+ * in the documentation and/or other materials provided with the
+ * distribution.
+ *
+ *    * Neither the name of Google Inc. nor the names of its
+ * contributors may be used to endorse or promote products derived from
+ * this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -17,10 +48,11 @@ import javax.annotation.Nullable;
  */
 public class Proxies {
   private static final Logger log = Logger.getLogger(Proxies.class.getName());
+
+  @Deprecated
   private static final String GRPC_PROXY_ENV_VAR = "GRPC_PROXY_EXP";
 
-  // HTTP proxies operate on a per HTTP request basis.
-  // We instead want a HTTPS proxy which operates on the entire data stream (See IETF rfc2817).
+  // We want an HTTPS proxy, which operates on the entire data stream (See IETF rfc2817).
   private static final String URI_FORMAT = "https://%s";
 
   /**
@@ -53,8 +85,7 @@ public class Proxies {
   }
 
   /**
-   * We are moving away from the GRPC_PROXY_EXP env variable, but let's maintain compatibility for
-   * now.
+   * GRPC_PROXY_EXP is deprecated, but let's maintain compatibility for now.
    */
   private static InetSocketAddress overrideProxy(String proxyHostPort) {
     if (proxyHostPort == null) {
@@ -67,8 +98,8 @@ public class Proxies {
       port = Integer.parseInt(parts[1]);
     }
     log.warning(
-        "Detected GRPC_PROXY_EXP and will honor it, but this feature will " +
-            "be removed in a future release. Use java.net.ProxySelector instead."
+        "Detected GRPC_PROXY_EXP and will honor it, but this feature will "
+            + "be removed in a future release. Use java.net.ProxySelector instead."
     );
     return new InetSocketAddress(parts[0], port);
   }
