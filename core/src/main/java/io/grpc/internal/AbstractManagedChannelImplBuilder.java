@@ -125,8 +125,9 @@ public abstract class AbstractManagedChannelImplBuilder
   private boolean enableTracing;
 
   /**
-   * Sets the maximum message size allowed for a single gRPC frame. Any messages larger than this
-   * limit will result in a {@link io.grpc.StatusRuntimeException} of type RESOURCE_EXHAUSTED.
+   * Sets the maximum message size allowed for a single gRPC frame. If an inbound messages
+   * larger than this limit is received it will not be processed and the RPC will fail with
+   * RESOURCE_EXHAUSTED.
    */
   // Can be overriden by subclasses.
   @Override

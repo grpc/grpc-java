@@ -693,9 +693,7 @@ public final class Metadata {
     }
 
     /**
-     * Returns true if the two objects are both Keys, and their names match.
-     * Note: Upper case letters in the name are normalized to lower case when the Key is
-     * constructed.
+     * Returns true if the two objects are both Keys, and their names match (case insensitive).
      */
     @Override
     public boolean equals(Object o) {
