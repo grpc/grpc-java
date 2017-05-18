@@ -32,6 +32,7 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.CompressorRegistry;
+import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
@@ -108,6 +109,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
    */
   // Must be assigned from channelExecutor
   private volatile ScheduledExecutorService scheduledExecutor;
+
+  private final ConnectivityStateManager channelStateManager = new ConnectivityStateManager();
 
   private final BackoffPolicy.Provider backoffPolicyProvider;
 
@@ -573,6 +576,35 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     }
   }
 
+  @Override
+  public ConnectivityState getState(boolean requestConnection) {
+    ConnectivityState savedChannelState = channelStateManager.getState();
+    if (requestConnection && savedChannelState == IDLE) {
+      channelExecutor.executeLater(new LogExceptionRunnable(
+          new Runnable() {
+            @Override
+            public void run() {
+              exitIdleMode();
+            }
+          })).drain();
+    }
+    return savedChannelState;
+  }
+
+  @Override
+  public void notifyWhenStateChanged(final ConnectivityState source, final Runnable callback) {
+    if (channelStateManager.getState() == null) {
+      throw new UnsupportedOperationException();
+    }
+    channelExecutor.executeLater(new LogExceptionRunnable(
+        new Runnable() {
+          @Override
+          public void run() {
+            channelStateManager.addListener(callback, executor, source);
+          }
+        })).drain();
+  }
+
   private class LbHelperImpl extends LoadBalancer.Helper {
     LoadBalancer lb;
     final NameResolver nr;
@@ -641,6 +673,23 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
           }
         });
       return subchannel;
+    }
+
+    @Override
+    public void updateBalancingState(
+        final ConnectivityState newState, final SubchannelPicker newPicker) {
+      checkNotNull(newState, "newState");
+      checkNotNull(newPicker, "newPicker");
+
+      runSerialized(new LogExceptionRunnable(
+          new Runnable() {
+            @Override
+            public void run() {
+              subchannelPicker = newPicker;
+              delayedTransport.reprocess(newPicker);
+              channelStateManager.updateState(newState);
+            }
+          }));
     }
 
     @Override
@@ -715,6 +764,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       channelExecutor.executeLater(task).drain();
     }
 
+    @Deprecated
     @Override
     public void updatePicker(final SubchannelPicker picker) {
       runSerialized(new Runnable() {
@@ -722,6 +772,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
           public void run() {
             subchannelPicker = picker;
             delayedTransport.reprocess(picker);
+            channelStateManager.disable();
           }
         });
     }
