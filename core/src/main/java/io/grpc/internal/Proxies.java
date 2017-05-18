@@ -85,7 +85,7 @@ public class Proxies {
   }
 
   /**
-   * GRPC_PROXY_EXP is deprecated, but let's maintain compatibility for now.
+   * GRPC_PROXY_EXP is deprecated but let's maintain compatibility for now.
    */
   private static InetSocketAddress overrideProxy(String proxyHostPort) {
     if (proxyHostPort == null) {
