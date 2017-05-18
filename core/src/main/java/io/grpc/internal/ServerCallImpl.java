@@ -232,7 +232,8 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
               ServerStreamListenerImpl.this.call.cancelled = true;
             }
           },
-          MoreExecutors.directExecutor());
+          MoreExecutors.directExecutor()
+      );
     }
 
     @SuppressWarnings("Finally") // The code avoids suppressing the exception thrown from try
