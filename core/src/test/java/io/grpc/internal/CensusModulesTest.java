@@ -174,6 +174,13 @@ public class CensusModulesTest {
   private final Span spyClientSpan = spy(fakeClientSpan);
   private final Span spyServerSpan = spy(fakeServerSpan);
   private final byte[] binarySpanContext = new byte[]{3, 1, 5};
+  private final ArgumentMatcher<StartSpanOptions> startSpanOptionsMatcher =
+      new ArgumentMatcher<StartSpanOptions>() {
+        @Override
+        public boolean matches(Object argument) {
+          return Boolean.TRUE.equals(((StartSpanOptions) argument).getRecordEvents());
+        }
+      };
 
   @Rule
   public final GrpcServerRule grpcServerRule = new GrpcServerRule().directExecutor();
@@ -300,10 +307,11 @@ public class CensusModulesTest {
     if (nonDefaultContext) {
       verify(mockSpanFactory).startSpan(
           same(fakeClientParentSpan), eq("Sent.package1.service2.method3"),
-          any(StartSpanOptions.class));
+          argThat(startSpanOptionsMatcher));
     } else {
       verify(mockSpanFactory).startSpan(
-          isNull(Span.class), eq("Sent.package1.service2.method3"), any(StartSpanOptions.class));
+          isNull(Span.class), eq("Sent.package1.service2.method3"),
+          argThat(startSpanOptionsMatcher));
     }
     verify(spyClientSpan, never()).end(any(EndSpanOptions.class));
 
@@ -389,7 +397,7 @@ public class CensusModulesTest {
     Metadata headers = new Metadata();
     ClientStreamTracer tracer = callTracer.newClientStreamTracer(headers);
     verify(mockSpanFactory).startSpan(
-        isNull(Span.class), eq("Sent.package1.service2.method3"), any(StartSpanOptions.class));
+        isNull(Span.class), eq("Sent.package1.service2.method3"), argThat(startSpanOptionsMatcher));
     verify(spyClientSpan, never()).end(any(EndSpanOptions.class));
 
     tracer.streamClosed(Status.OK);
@@ -433,7 +441,7 @@ public class CensusModulesTest {
         censusTracing.newClientCallTracer(fakeClientParentSpan, method.getFullMethodName());
     verify(mockSpanFactory).startSpan(
         same(fakeClientParentSpan), eq("Sent.package1.service2.method3"),
-        any(StartSpanOptions.class));
+        argThat(startSpanOptionsMatcher));
 
     callTracer.callEnded(Status.DEADLINE_EXCEEDED.withDescription("3 seconds"));
     verify(spyClientSpan).end(
@@ -550,14 +558,6 @@ public class CensusModulesTest {
     Metadata headers = new Metadata();
     callTracer.newClientStreamTracer(headers);
 
-    ArgumentMatcher<StartSpanOptions> startSpanOptionsMatcher =
-        new ArgumentMatcher<StartSpanOptions>() {
-          @Override
-          public boolean matches(Object argument) {
-            return Boolean.TRUE.equals(((StartSpanOptions) argument).getRecordEvents());
-          }
-        };
-
     verify(mockTracingPropagationHandler).toBinaryValue(same(fakeClientSpanContext));
     verifyNoMoreInteractions(mockTracingPropagationHandler);
     verify(mockSpanFactory).startSpan(
@@ -601,7 +601,7 @@ public class CensusModulesTest {
         method.getFullMethodName(), headers);
     verify(mockSpanFactory).startSpanWithRemoteParent(
         isNull(SpanContext.class), eq("Recv.package1.service2.method3"),
-        any(StartSpanOptions.class));
+        argThat(startSpanOptionsMatcher));
   }
 
   @Test
@@ -656,7 +656,7 @@ public class CensusModulesTest {
     verifyZeroInteractions(mockTracingPropagationHandler);
     verify(mockSpanFactory).startSpanWithRemoteParent(
         isNull(SpanContext.class), eq("Recv.package1.service2.method3"),
-        any(StartSpanOptions.class));
+        argThat(startSpanOptionsMatcher));
 
     Context filteredContext = tracer.filterContext(Context.ROOT);
     assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));
