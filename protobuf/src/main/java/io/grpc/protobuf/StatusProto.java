@@ -158,7 +158,7 @@ public final class StatusProto {
 
   @Nullable
   private static com.google.rpc.Status toStatusProto(Status status, Metadata trailers) {
-    if (trailers != null) {
+    if (trailers != null && trailers.containsKey(STATUS_DETAILS_KEY)) {
       com.google.rpc.Status statusProto = trailers.get(STATUS_DETAILS_KEY);
       checkArgument(
           status.getCode().value() == statusProto.getCode(),
