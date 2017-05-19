@@ -45,6 +45,7 @@ import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isNull;
 import static org.mockito.Matchers.same;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
@@ -102,6 +103,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -388,13 +390,29 @@ public class CensusModulesTest {
     ClientStreamTracer tracer = callTracer.newClientStreamTracer(headers);
     verify(mockSpanFactory).startSpan(
         isNull(Span.class), eq("Sent.package1.service2.method3"), any(StartSpanOptions.class));
-    verify(spyClientSpan, never()).end(any(EndSpanOptions.class));
+
+    InOrder inOrder = inOrder(spyClientSpan);
+
+    tracer.outboundMessageSerialized(31);
+    verifyNetworkEvent(inOrder, spyClientSpan, NetworkEvent.Type.SENT, 0, 31);
+
+    tracer.inboundMessageReceived(2773);
+    verifyNetworkEvent(inOrder, spyClientSpan, NetworkEvent.Type.RECV, 0, 2773);
+
+    tracer.outboundMessageSerialized(0);
+    verifyNetworkEvent(inOrder, spyClientSpan, NetworkEvent.Type.SENT, 1, 0);
+
+    tracer.inboundMessageReceived(95);
+    verifyNetworkEvent(inOrder, spyClientSpan, NetworkEvent.Type.RECV, 1, 95);
+
+    inOrder.verifyNoMoreInteractions();
 
     tracer.streamClosed(Status.OK);
     callTracer.callEnded(Status.OK);
 
-    verify(spyClientSpan).end(
+    inOrder.verify(spyClientSpan).end(
         EndSpanOptions.builder().setStatus(com.google.instrumentation.trace.Status.OK).build());
+    verifyNoMoreInteractions(spyClientSpan);
     verifyNoMoreInteractions(mockSpanFactory);
   }
 
@@ -651,13 +669,27 @@ public class CensusModulesTest {
     Context filteredContext = tracer.filterContext(Context.ROOT);
     assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));
 
-    verify(spyServerSpan, never()).end(any(EndSpanOptions.class));
+    InOrder inOrder = inOrder(spyServerSpan);
+
+    tracer.inboundMessageReceived(2773);
+    verifyNetworkEvent(inOrder, spyServerSpan, NetworkEvent.Type.RECV, 0, 2773);
+
+    tracer.outboundMessageSerialized(31);
+    verifyNetworkEvent(inOrder, spyServerSpan, NetworkEvent.Type.SENT, 0, 31);
+
+    tracer.inboundMessageReceived(95);
+    verifyNetworkEvent(inOrder, spyServerSpan, NetworkEvent.Type.RECV, 1, 95);
+
+    tracer.outboundMessageSerialized(0);
+    verifyNetworkEvent(inOrder, spyServerSpan, NetworkEvent.Type.SENT, 1, 0);
+
+    inOrder.verifyNoMoreInteractions();
     tracer.streamClosed(Status.CANCELLED);
 
-    verify(spyServerSpan).end(
+    inOrder.verify(spyServerSpan).end(
         EndSpanOptions.builder()
             .setStatus(com.google.instrumentation.trace.Status.CANCELLED).build());
-    verify(spyServerSpan, never()).end();
+    verifyNoMoreInteractions(spyServerSpan);
   }
 
   @Test
@@ -679,6 +711,17 @@ public class CensusModulesTest {
       assertEquals(grpcCode.toString(), tracingStatus.getCanonicalCode().toString());
       assertEquals(grpcStatus.getDescription(), tracingStatus.getDescription());
     }
+  }
+
+  private static void verifyNetworkEvent(
+      InOrder inOrder, Span spySpan, NetworkEvent.Type type, long messageId, long wireSize) {
+    ArgumentCaptor<NetworkEvent> captor = ArgumentCaptor.forClass(null);
+    // Bummer: NetworkEvent.equals() doesn't work
+    inOrder.verify(spySpan).addNetworkEvent(captor.capture());
+    NetworkEvent event = captor.getValue();
+    assertEquals(type, event.getType());
+    assertEquals(messageId, event.getMessageId());
+    assertEquals(wireSize, event.getMessageSize());
   }
 
   private static void assertNoServerContent(StatsTestUtils.MetricsRecord record) {

@@ -62,32 +62,45 @@ public abstract class StreamTracer {
   }
 
   /**
+   * An outbound message has been completely serialized, revealing its wire size.
+   */
+  public void outboundMessageSerialized(long wireSize) {
+  }
+
+  /**
+   * An inbound message has been completely read from the wire, revealing its wire size.
+   */
+  public void inboundMessageReceived(long wireSize) {
+  }
+
+  /**
    * The wire size of some outbound data is revealed. This can only used to record the accumulative
-   * outbound wire size. There is no guarantee wrt timing or granularity of this method.
+   * outbound wire size.  gRPC makes the best effort to call it as soon the information is
+   * available, although there is not guarantee wrt timing or granularity.
    */
   public void outboundWireSize(long bytes) {
   }
 
   /**
    * The uncompressed size of some outbound data is revealed. This can only used to record the
-   * accumulative outbound uncompressed size. There is no guarantee wrt timing or granularity of
-   * this method.
+   * accumulative outbound uncompressed size. gRPC makes the best effort to call it as soon as the
+   * information is available, although there is not guarantee wrt timing or granularity.
    */
   public void outboundUncompressedSize(long bytes) {
   }
 
   /**
    * The wire size of some inbound data is revealed. This can only be used to record the
-   * accumulative received wire size. There is no guarantee wrt timing or granularity of this
-   * method.
+   * accumulative received wire size. gRPC makes the best effort to call it as soon as the
+   * information is available, although there is not guarantee wrt timing or granularity.
    */
   public void inboundWireSize(long bytes) {
   }
 
   /**
    * The uncompressed size of some inbound data is revealed. This can only used to record the
-   * accumulative received uncompressed size. There is no guarantee wrt timing or granularity of
-   * this method.
+   * accumulative received uncompressed size. gRPC makes the best effort to call it as soon as the
+   * information is available, although there is not guarantee wrt timing or granularity.
    */
   public void inboundUncompressedSize(long bytes) {
   }

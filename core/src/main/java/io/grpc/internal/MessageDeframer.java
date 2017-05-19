@@ -362,6 +362,7 @@ public class MessageDeframer implements Closeable {
     InputStream stream = compressedFlag ? getCompressedBody() : getUncompressedBody();
     nextFrame = null;
     listener.messageRead(stream);
+    statsTraceCtx.inboundMessageReceived(requiredLength);
 
     // Done with this frame, begin processing the next header.
     state = State.HEADER;

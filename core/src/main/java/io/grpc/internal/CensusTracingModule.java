@@ -32,11 +32,13 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static com.google.instrumentation.trace.ContextUtils.CONTEXT_SPAN_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.instrumentation.trace.BinaryPropagationHandler;
 import com.google.instrumentation.trace.EndSpanOptions;
+import com.google.instrumentation.trace.NetworkEvent;
 import com.google.instrumentation.trace.Span;
 import com.google.instrumentation.trace.SpanContext;
 import com.google.instrumentation.trace.Status;
@@ -54,6 +56,8 @@ import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
 import io.grpc.StreamTracer;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -71,8 +75,6 @@ import javax.annotation.Nullable;
  */
 final class CensusTracingModule {
   private static final Logger logger = Logger.getLogger(CensusTracingModule.class.getName());
-  // TODO(zhangkun83): record NetworkEvent to Span for each message
-  private static final ClientStreamTracer noopClientTracer = new ClientStreamTracer() {};
 
   private final Tracer censusTracer;
   private final BinaryPropagationHandler censusTracingPropagationHandler;
@@ -205,18 +207,26 @@ final class CensusTracingModule {
     private final String fullMethodName;
     private final AtomicBoolean callEnded = new AtomicBoolean(false);
     private final Span span;
+    private final AtomicReference<ClientTracer> streamTracer = new AtomicReference<ClientTracer>();
 
     ClientCallTracer(@Nullable Span parentSpan, String fullMethodName) {
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
-      this.span =
-          censusTracer.spanBuilder(parentSpan, makeSpanName("Sent", fullMethodName)).startSpan();
+      this.span = checkNotNull(
+          censusTracer.spanBuilder(parentSpan, makeSpanName("Sent", fullMethodName)).startSpan(),
+          "span");
     }
 
     @Override
     public ClientStreamTracer newClientStreamTracer(Metadata headers) {
+      ClientTracer tracer = new ClientTracer(span);
+      // TODO(zhangkun83): Once retry or hedging is implemented, a ClientCall may start more than
+      // one streams.  We will need to update this file to support them.  Especially the message ID
+      // generation needs to be revisited.
+      checkState(streamTracer.compareAndSet(null, tracer),
+          "Are you creating multiple streams per call? This class doesn't yet support this case.");
       headers.discardAll(tracingHeader);
       headers.put(tracingHeader, span.getContext());
-      return noopClientTracer;
+      return tracer;
     }
 
     /**
@@ -233,17 +243,45 @@ final class CensusTracingModule {
     }
   }
 
+  private static final class ClientTracer extends ClientStreamTracer {
+    final Span span;
+    final AtomicLong nextOutboundMessageId = new AtomicLong();
+    final AtomicLong nextInboundMessageId = new AtomicLong();
+
+    ClientTracer(Span span) {
+      this.span = checkNotNull(span, "span");
+    }
+
+    @Override
+    public void outboundMessageSerialized(long wireSize) {
+      span.addNetworkEvent(
+          NetworkEvent.builder(NetworkEvent.Type.SENT, nextOutboundMessageId.getAndIncrement())
+              .setMessageSize(wireSize)
+              .build());
+    }
+
+    @Override
+    public void inboundMessageReceived(long wireSize) {
+      span.addNetworkEvent(
+          NetworkEvent.builder(NetworkEvent.Type.RECV, nextInboundMessageId.getAndIncrement())
+              .setMessageSize(wireSize)
+              .build());
+    }
+  }
+
   private final class ServerTracer extends ServerStreamTracer {
-    private final String fullMethodName;
-    private final Span span;
-    private final AtomicBoolean streamClosed = new AtomicBoolean(false);
+    final String fullMethodName;
+    final Span span;
+    final AtomicBoolean streamClosed = new AtomicBoolean(false);
+    final AtomicLong nextOutboundMessageId = new AtomicLong();
+    final AtomicLong nextInboundMessageId = new AtomicLong();
 
     ServerTracer(String fullMethodName, @Nullable SpanContext remoteSpan) {
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
-      this.span =
-          censusTracer.spanBuilderWithRemoteParent(
-              remoteSpan, makeSpanName("Recv", fullMethodName))
-          .startSpan();
+      this.span = checkNotNull(
+          censusTracer.spanBuilderWithRemoteParent(remoteSpan, makeSpanName("Recv", fullMethodName))
+              .startSpan(),
+          "span");
     }
 
     /**
@@ -263,6 +301,22 @@ final class CensusTracingModule {
     @Override
     public <ReqT, RespT> Context filterContext(Context context) {
       return context.withValue(CONTEXT_SPAN_KEY, span);
+    }
+
+    @Override
+    public void outboundMessageSerialized(long wireSize) {
+      span.addNetworkEvent(
+          NetworkEvent.builder(NetworkEvent.Type.SENT, nextOutboundMessageId.getAndIncrement())
+              .setMessageSize(wireSize)
+              .build());
+    }
+
+    @Override
+    public void inboundMessageReceived(long wireSize) {
+      span.addNetworkEvent(
+          NetworkEvent.builder(NetworkEvent.Type.RECV, nextInboundMessageId.getAndIncrement())
+              .setMessageSize(wireSize)
+              .build());
     }
   }
 
