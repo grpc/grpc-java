@@ -127,7 +127,7 @@ public class Proxies {
     if (proxies.size() > 1) {
       log.warning("More than 1 proxy detected, gRPC will select the first one");
     }
-    final Proxy proxy = proxies.get(0);
+    Proxy proxy = proxies.get(0);
 
     if (proxy.type() == Proxy.Type.DIRECT) {
       return null;
