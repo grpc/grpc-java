@@ -179,8 +179,9 @@ public class ProxyDetectorImpl implements ProxyDetector {
     }
     log.warning(
         "Detected GRPC_PROXY_EXP and will honor it, but this feature will "
-            + "be removed in a future release. Use java.net.ProxySelector instead."
-    );
+            + "be removed in a future release. Use the JVM flags "
+            + "\"-Dhttps.proxyHost=HOST -Dhttps.proxyPort=PORT\" to set the https proxy for "
+            + "this JVM. ");
     return new InetSocketAddress(parts[0], port);
   }
 
