@@ -21,7 +21,6 @@ import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.squareup.okhttp.CipherSuite;
 import com.squareup.okhttp.ConnectionSpec;
@@ -408,9 +407,8 @@ public class OkHttpChannelBuilder extends
       String proxyUsername = null;
       String proxyPassword = null;
 
-      Optional<ProxyParameters> maybeProxy = proxyDetector.proxyFor(addr);
-      if (maybeProxy.isPresent()) {
-        ProxyParameters proxy = maybeProxy.get();
+      ProxyParameters proxy = proxyDetector.proxyFor(addr);
+      if (proxy != null) {
         proxyAddress = proxy.address;
         proxyUsername = proxy.username;
         proxyPassword = proxy.password;

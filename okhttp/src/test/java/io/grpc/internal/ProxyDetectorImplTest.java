@@ -31,14 +31,13 @@
 
 package io.grpc.internal;
 
-import static junit.framework.TestCase.assertFalse;
-import static junit.framework.TestCase.assertTrue;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.google.common.base.Optional;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.net.HostAndPort;
@@ -90,12 +89,12 @@ public class ProxyDetectorImplTest {
         proxySelectorSupplier,
         authenticator,
         hostPort.toString());
-    Optional<ProxyParameters> detected = proxyDetector.proxyFor(destination);
-    assertTrue(detected.isPresent());
+    ProxyParameters detected = proxyDetector.proxyFor(destination);
+    assertNotNull(detected);
     assertEquals(
         new ProxyParameters(
             InetSocketAddress.createUnresolved(overrideHost, overridePort), null, null),
-        detected.get());
+        detected);
   }
 
   @Test
@@ -106,18 +105,18 @@ public class ProxyDetectorImplTest {
         proxySelectorSupplier,
         authenticator,
         overrideHostWithoutPort);
-    Optional<ProxyParameters> detected = proxyDetector.proxyFor(destination);
-    assertTrue(detected.isPresent());
+    ProxyParameters detected = proxyDetector.proxyFor(destination);
+    assertNotNull(detected);
     assertEquals(
         new ProxyParameters(
             InetSocketAddress.createUnresolved(overrideHostWithoutPort, defaultPort), null, null),
-        detected.get());
+        detected);
   }
 
   @Test
   public void returnAbsentWhenNoProxy() throws Exception {
     when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(Proxy.NO_PROXY));
-    assertFalse(proxyDetector.proxyFor(destination).isPresent());
+    assertNull(proxyDetector.proxyFor(destination));
   }
 
   @Test
@@ -126,9 +125,9 @@ public class ProxyDetectorImplTest {
     Proxy proxy = new Proxy(Proxy.Type.HTTP, proxyAddress);
     when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(proxy));
 
-    Optional<ProxyParameters> detected = proxyDetector.proxyFor(destination);
-    assertTrue(detected.isPresent());
-    assertEquals(new ProxyParameters(proxyAddress, null, null), detected.get());
+    ProxyParameters detected = proxyDetector.proxyFor(destination);
+    assertNotNull(detected);
+    assertEquals(new ProxyParameters(proxyAddress, null, null), detected);
   }
 
   @Test
@@ -139,15 +138,15 @@ public class ProxyDetectorImplTest {
     Proxy proxy2 = new Proxy(Proxy.Type.HTTP, otherProxy);
     when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(proxy1, proxy2));
 
-    Optional<ProxyParameters> detected = proxyDetector.proxyFor(destination);
-    assertTrue(detected.isPresent());
-    assertEquals(new ProxyParameters(proxyAddress, null, null), detected.get());
+    ProxyParameters detected = proxyDetector.proxyFor(destination);
+    assertNotNull(detected);
+    assertEquals(new ProxyParameters(proxyAddress, null, null), detected);
   }
 
   // Mainly for InProcessSocketAddress
   @Test
   public void noProxyForNonInetSocket() throws Exception {
-    assertFalse(proxyDetector.proxyFor(mock(SocketAddress.class)).isPresent());
+    assertNull(proxyDetector.proxyFor(mock(SocketAddress.class)));
   }
 
   @Test
@@ -170,8 +169,8 @@ public class ProxyDetectorImplTest {
         any(String.class))).thenReturn(auth);
     when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(proxy));
 
-    Optional<ProxyParameters> detected = proxyDetector.proxyFor(destination);
-    assertTrue(detected.isPresent());
-    assertEquals(new ProxyParameters(proxyAddress, proxyUser, proxyPassword), detected.get());
+    ProxyParameters detected = proxyDetector.proxyFor(destination);
+    assertNotNull(detected);
+    assertEquals(new ProxyParameters(proxyAddress, proxyUser, proxyPassword), detected);
   }
 }

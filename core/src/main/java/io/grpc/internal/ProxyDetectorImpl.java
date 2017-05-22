@@ -32,7 +32,6 @@
 package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Optional;
 import com.google.common.base.Supplier;
 import java.net.Authenticator;
 import java.net.InetAddress;
@@ -101,12 +100,12 @@ public class ProxyDetectorImpl implements ProxyDetector {
   }
 
   @Override
-  public Optional<ProxyParameters> proxyFor(SocketAddress targetServerAddress) {
+  public ProxyParameters proxyFor(SocketAddress targetServerAddress) {
     if (override != null) {
-      return Optional.of(override);
+      return override;
     }
     if (!(targetServerAddress instanceof InetSocketAddress)) {
-      return Optional.absent();
+      return null;
     }
     InetSocketAddress targetInetAddr = (InetSocketAddress) targetServerAddress;
     if (!targetInetAddr.isUnresolved()) {
@@ -114,12 +113,12 @@ public class ProxyDetectorImpl implements ProxyDetector {
        * If the address is already resolved, we can conclude that DnsNameResolver already called
        * us earlier and we determined no proxy is needed.
        */
-      return Optional.absent();
+      return null;
     }
     return detectProxy(targetInetAddr);
   }
 
-  private Optional<ProxyParameters> detectProxy(InetSocketAddress targetAddr) {
+  private ProxyParameters detectProxy(InetSocketAddress targetAddr) {
     String hostPort =
         GrpcUtil.authorityFromHostAndPort(targetAddr.getHostName(), targetAddr.getPort());
     URI uri;
@@ -130,7 +129,7 @@ public class ProxyDetectorImpl implements ProxyDetector {
           Level.WARNING,
           "Failed to construct URI for proxy lookup, proceeding without proxy: {0}",
           hostPort);
-      return Optional.absent();
+      return null;
     }
 
     List<Proxy> proxies = proxySelector.get().select(uri);
@@ -140,7 +139,7 @@ public class ProxyDetectorImpl implements ProxyDetector {
     Proxy proxy = proxies.get(0);
 
     if (proxy.type() == Proxy.Type.DIRECT) {
-      return Optional.absent();
+      return null;
     }
     InetSocketAddress proxyAddr = (InetSocketAddress) proxy.address();
     PasswordAuthentication auth = authenticationProvider.requestPasswordAuthentication(
@@ -152,13 +151,12 @@ public class ProxyDetectorImpl implements ProxyDetector {
         null);
 
     if (auth == null) {
-      return Optional.of(new ProxyParameters(proxyAddr, null, null));
+      return new ProxyParameters(proxyAddr, null, null);
     }
 
     try {
       //todo(spencerfang): users of ProxyParameters should clear the password when done
-      return Optional.of(
-          new ProxyParameters(proxyAddr, auth.getUserName(), new String(auth.getPassword())));
+      return new ProxyParameters(proxyAddr, auth.getUserName(), new String(auth.getPassword()));
     } finally {
       Arrays.fill(auth.getPassword(), '0');
     }

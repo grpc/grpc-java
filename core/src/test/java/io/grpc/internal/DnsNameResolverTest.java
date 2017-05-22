@@ -31,7 +31,6 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Optional;
 import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -352,7 +351,7 @@ public class DnsNameResolverTest {
     String name = "foo.googleapis.com";
     ProxyDetector alwaysDetectProxy = mock(ProxyDetector.class);
     when(alwaysDetectProxy.proxyFor(any(SocketAddress.class)))
-        .thenReturn(Optional.of(mock(ProxyDetector.ProxyParameters.class)));
+        .thenReturn(mock(ProxyDetector.ProxyParameters.class));
     DelegateResolver unusedResolver = mock(DelegateResolver.class);
     DnsNameResolver resolver = newResolver(name, 81, unusedResolver, alwaysDetectProxy);
 

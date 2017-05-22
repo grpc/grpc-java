@@ -32,7 +32,6 @@
 package io.grpc.internal;
 
 import com.google.common.base.Objects;
-import com.google.common.base.Optional;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import javax.annotation.Nullable;
@@ -47,8 +46,8 @@ public interface ProxyDetector {
   /** A proxy detector that always claims no proxy is needed, for unit test convenience. */
   ProxyDetector NOOP_INSTANCE = new ProxyDetector() {
     @Override
-    public Optional<ProxyParameters> proxyFor(SocketAddress targetServerAddress) {
-      return Optional.absent();
+    public ProxyParameters proxyFor(SocketAddress targetServerAddress) {
+      return null;
     }
   };
 
@@ -56,7 +55,7 @@ public interface ProxyDetector {
    * Given a target address, returns which proxy address should be used. If no proxy should be
    * used, then return value will be an absent value.
    */
-  Optional<ProxyDetectorImpl.ProxyParameters> proxyFor(SocketAddress targetServerAddress);
+  ProxyDetectorImpl.ProxyParameters proxyFor(SocketAddress targetServerAddress);
 
   class ProxyParameters {
     public final InetSocketAddress address;

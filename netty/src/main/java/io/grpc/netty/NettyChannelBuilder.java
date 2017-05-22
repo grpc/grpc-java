@@ -24,7 +24,6 @@ import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Attributes;
@@ -373,9 +372,8 @@ public final class NettyChannelBuilder
       ProxyDetector proxyDetector) {
     ProtocolNegotiator negotiator =
         createProtocolNegotiatorByType(authority, negotiationType, sslContext);
-    Optional<ProxyParameters> maybeProxy = proxyDetector.proxyFor(targetServerAddress);
-    if (maybeProxy.isPresent()) {
-      ProxyParameters proxy = maybeProxy.get();
+    ProxyParameters proxy = proxyDetector.proxyFor(targetServerAddress);
+    if (proxy != null) {
       negotiator = ProtocolNegotiators.httpProxy(
           proxy.address,
           proxy.username,

@@ -19,7 +19,6 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -151,8 +150,8 @@ final class DnsNameResolver extends NameResolver {
         }
         try {
           InetSocketAddress destination = InetSocketAddress.createUnresolved(host, port);
-          Optional<ProxyParameters> maybeProxy = proxyDetector.proxyFor(destination);
-          if (maybeProxy.isPresent()) {
+          ProxyParameters proxyParams = proxyDetector.proxyFor(destination);
+          if (proxyParams != null) {
             EquivalentAddressGroup server = new EquivalentAddressGroup(destination);
             savedListener.onAddresses(Collections.singletonList(server), Attributes.EMPTY);
             return;
