@@ -31,14 +31,21 @@
 
 package io.grpc.internal;
 
+import static junit.framework.TestCase.assertFalse;
+import static junit.framework.TestCase.assertTrue;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.google.common.base.Optional;
+import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.net.HostAndPort;
+import io.grpc.internal.ProxyDetector.ProxyParameters;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.PasswordAuthentication;
 import java.net.Proxy;
 import java.net.ProxySelector;
 import java.net.SocketAddress;
@@ -51,42 +58,66 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 @RunWith(JUnit4.class)
-public class ProxiesTest {
+public class ProxyDetectorImplTest {
   private static final InetSocketAddress destination = InetSocketAddress.createUnresolved(
       "destination",
       5678
   );
 
   @Mock private ProxySelector proxySelector;
+  @Mock private ProxyDetectorImpl.AuthenticationProvider authenticator;
+  private Supplier<ProxySelector> proxySelectorSupplier;
+  private ProxyDetector proxyDetector;
 
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
+    proxySelectorSupplier = new Supplier<ProxySelector>() {
+      @Override
+      public ProxySelector get() {
+        return proxySelector;
+      }
+    };
+    proxyDetector = new ProxyDetectorImpl(proxySelectorSupplier, authenticator, null);
   }
 
   @Test
-  public void proxyOverride() throws Exception {
+  public void override_hostPort() throws Exception {
     final String overrideHost = "override";
     final int overridePort = 1234;
-    String hostPort = HostAndPort.fromParts(overrideHost, overridePort).toString();
-    InetSocketAddress proxySocket = Proxies.proxyFor(destination, proxySelector, hostPort);
-    assertEquals(overrideHost, proxySocket.getHostName());
-    assertEquals(overridePort, proxySocket.getPort());
+    HostAndPort hostPort = HostAndPort.fromParts(overrideHost, overridePort);
+    ProxyDetectorImpl proxyDetector = new ProxyDetectorImpl(
+        proxySelectorSupplier,
+        authenticator,
+        hostPort.toString());
+    Optional<ProxyParameters> detected = proxyDetector.proxyFor(destination);
+    assertTrue(detected.isPresent());
+    assertEquals(
+        new ProxyParameters(
+            InetSocketAddress.createUnresolved(overrideHost, overridePort), null, null),
+        detected.get());
   }
 
   @Test
-  public void proxyOverrideOmittedPort() throws Exception {
-    final String overrideHost = "override";
+  public void override_hostOnly() throws Exception {
+    final String overrideHostWithoutPort = "override";
     final int defaultPort = 80;
-    InetSocketAddress proxySocket = Proxies.proxyFor(destination, proxySelector, overrideHost);
-    assertEquals(overrideHost, proxySocket.getHostName());
-    assertEquals(defaultPort, proxySocket.getPort());
+    ProxyDetectorImpl proxyDetector = new ProxyDetectorImpl(
+        proxySelectorSupplier,
+        authenticator,
+        overrideHostWithoutPort);
+    Optional<ProxyParameters> detected = proxyDetector.proxyFor(destination);
+    assertTrue(detected.isPresent());
+    assertEquals(
+        new ProxyParameters(
+            InetSocketAddress.createUnresolved(overrideHostWithoutPort, defaultPort), null, null),
+        detected.get());
   }
 
   @Test
-  public void returnNullWhenNoProxy() throws Exception {
+  public void returnAbsentWhenNoProxy() throws Exception {
     when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(Proxy.NO_PROXY));
-    assertEquals(null, Proxies.proxyFor(destination, proxySelector, null));
+    assertFalse(proxyDetector.proxyFor(destination).isPresent());
   }
 
   @Test
@@ -95,9 +126,9 @@ public class ProxiesTest {
     Proxy proxy = new Proxy(Proxy.Type.HTTP, proxyAddress);
     when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(proxy));
 
-    InetSocketAddress detected = Proxies.proxyFor(destination, proxySelector, null);
-    assertEquals(proxyAddress.getHostName(), detected.getHostName());
-    assertEquals(proxyAddress.getPort(), detected.getPort());
+    Optional<ProxyParameters> detected = proxyDetector.proxyFor(destination);
+    assertTrue(detected.isPresent());
+    assertEquals(new ProxyParameters(proxyAddress, null, null), detected.get());
   }
 
   @Test
@@ -110,14 +141,41 @@ public class ProxiesTest {
         proxy1, proxy2
     ));
 
-    InetSocketAddress detected = Proxies.proxyFor(destination, proxySelector, null);
-    assertEquals(proxyAddress.getHostName(), detected.getHostName());
-    assertEquals(proxyAddress.getPort(), detected.getPort());
+    Optional<ProxyParameters> detected = proxyDetector.proxyFor(destination);
+    assertTrue(detected.isPresent());
+    assertEquals(new ProxyParameters(proxyAddress, null, null), detected.get());
   }
 
   // Mainly for InProcessSocketAddress
   @Test
   public void noProxyForNonInetSocket() throws Exception {
-    assertEquals(null, Proxies.proxyFor(mock(SocketAddress.class), proxySelector, null));
+    assertFalse(proxyDetector.proxyFor(mock(SocketAddress.class)).isPresent());
+  }
+
+  @Test
+  public void authRequired() throws Exception {
+    final String proxyHost = "proxyhost";
+    final int proxyPort = 1234;
+    final InetSocketAddress proxyAddress = InetSocketAddress.createUnresolved(proxyHost, proxyPort);
+    Proxy proxy = new Proxy(Proxy.Type.HTTP, proxyAddress);
+    final String proxyUser = "testuser";
+    final String proxyPassword = "testpassword";
+    PasswordAuthentication auth = new PasswordAuthentication(
+        proxyUser,
+        proxyPassword.toCharArray());
+    when(authenticator.requestPasswordAuthentication(
+        any(String.class),
+        any(InetAddress.class),
+        any(Integer.class),
+        any(String.class),
+        any(String.class),
+        any(String.class))).thenReturn(auth);
+    when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(proxy));
+
+    Optional<ProxyParameters> detected = proxyDetector.proxyFor(destination);
+    assertTrue(detected.isPresent());
+    assertEquals(
+        new ProxyParameters(proxyAddress, proxyUser, proxyPassword),
+        detected.get());
   }
 }

@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
@@ -345,6 +346,30 @@ public class DnsNameResolverTest {
     assertThat(results.addresses).containsExactlyElementsIn(jdkAnswer).inOrder();
     assertThat(results.txtRecords).isEmpty();
   }
+
+  @Test
+  public void doNotResolveIfProxyDetected() throws Exception {
+    String name = "foo.googleapis.com";
+    ProxyDetector alwaysDetectProxy = mock(ProxyDetector.class);
+    when(alwaysDetectProxy.proxyFor(any(SocketAddress.class)))
+        .thenReturn(Optional.of(mock(ProxyDetector.ProxyParameters.class)));
+    DelegateResolver unusedResolver = mock(DelegateResolver.class);
+    DnsNameResolver resolver = newResolver(name, 81, unusedResolver, alwaysDetectProxy);
+
+    resolver.start(mockListener);
+
+    assertEquals(1, fakeExecutor.runDueTasks());
+    verify(unusedResolver, never()).resolve(any(String.class));
+
+    verify(mockListener).onAddresses(resultCaptor.capture(), any(Attributes.class));
+    List<EquivalentAddressGroup> result = resultCaptor.getValue();
+    assertThat(result).hasSize(1);
+    assertThat(result.get(0).getAddresses()).hasSize(1);
+    SocketAddress socketAddress = result.get(0).getAddresses().get(0);
+    assertTrue(socketAddress instanceof InetSocketAddress);
+    assertTrue(((InetSocketAddress) socketAddress).isUnresolved());
+  }
+
   private void testInvalidUri(URI uri) {
     try {
       provider.newNameResolver(uri, NAME_RESOLVER_PARAMS);
