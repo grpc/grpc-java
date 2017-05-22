@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.NameResolverProvider;
@@ -39,6 +40,16 @@ import java.net.URI;
 public final class DnsNameResolverProvider extends NameResolverProvider {
 
   private static final String SCHEME = "dns";
+  private final ProxyDetector proxyDetector;
+
+  public DnsNameResolverProvider() {
+    proxyDetector = ProxyDetector.DEFAULT_INSTANCE;
+  }
+
+  @VisibleForTesting
+  public DnsNameResolverProvider(ProxyDetectorImpl proxyDetector) {
+    this.proxyDetector = proxyDetector;
+  }
 
   @Override
   public DnsNameResolver newNameResolver(URI targetUri, Attributes params) {
@@ -48,7 +59,7 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
           "the path component (%s) of the target (%s) must start with '/'", targetPath, targetUri);
       String name = targetPath.substring(1);
       return new DnsNameResolver(targetUri.getAuthority(), name, params, GrpcUtil.TIMER_SERVICE,
-          GrpcUtil.SHARED_CHANNEL_EXECUTOR);
+          GrpcUtil.SHARED_CHANNEL_EXECUTOR, proxyDetector);
     } else {
       return null;
     }

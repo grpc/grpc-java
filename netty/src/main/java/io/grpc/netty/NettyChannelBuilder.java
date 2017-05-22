@@ -24,6 +24,7 @@ import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Attributes;
@@ -36,7 +37,8 @@ import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
-import io.grpc.internal.Proxies;
+import io.grpc.internal.ProxyDetector;
+import io.grpc.internal.ProxyDetector.ProxyParameters;
 import io.grpc.internal.SharedResourceHolder;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
@@ -79,6 +81,7 @@ public final class NettyChannelBuilder
   private long keepAliveTimeoutNanos = DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
   private boolean keepAliveWithoutCalls;
   private TransportCreationParamsFilterFactory dynamicParamsFactory;
+  private ProxyDetector proxyDetector = ProxyDetector.DEFAULT_INSTANCE;
 
   /**
    * Creates a new builder with the given server address. This factory method is primarily intended
@@ -318,13 +321,23 @@ public final class NettyChannelBuilder
     return this;
   }
 
+  /**
+   * Allows unit tests to be decoupled from the global proxy settings.
+   */
+  @VisibleForTesting
+  NettyChannelBuilder withProxyDetector(ProxyDetector proxyDetector) {
+    this.proxyDetector = proxyDetector;
+    return this;
+  }
+
   @Override
   @CheckReturnValue
   @Internal
   protected ClientTransportFactory buildTransportFactory() {
     return new NettyTransportFactory(dynamicParamsFactory, channelType, channelOptions,
         negotiationType, sslContext, eventLoopGroup, flowControlWindow, maxInboundMessageSize(),
-        maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls);
+        maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
+        proxyDetector);
   }
 
   @Override
@@ -356,13 +369,18 @@ public final class NettyChannelBuilder
       SocketAddress targetServerAddress,
       String authority,
       NegotiationType negotiationType,
-      SslContext sslContext
-  ) {
+      SslContext sslContext,
+      ProxyDetector proxyDetector) {
     ProtocolNegotiator negotiator =
         createProtocolNegotiatorByType(authority, negotiationType, sslContext);
-    SocketAddress proxy = Proxies.proxyFor(targetServerAddress);
-    if (proxy != null) {
-      negotiator = ProtocolNegotiators.httpProxy(proxy, null, null, negotiator);
+    Optional<ProxyParameters> maybeProxy = proxyDetector.proxyFor(targetServerAddress);
+    if (maybeProxy.isPresent()) {
+      ProxyParameters proxy = maybeProxy.get();
+      negotiator = ProtocolNegotiators.httpProxy(
+          proxy.address,
+          proxy.username,
+          proxy.password,
+          negotiator);
     }
     return negotiator;
   }
@@ -445,7 +463,8 @@ public final class NettyChannelBuilder
         Class<? extends Channel> channelType, Map<ChannelOption<?>, ?> channelOptions,
         NegotiationType negotiationType, SslContext sslContext, EventLoopGroup group,
         int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
-        long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls) {
+        long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
+        final ProxyDetector proxyDetector) {
       this.channelType = channelType;
       this.negotiationType = negotiationType;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
@@ -463,7 +482,12 @@ public final class NettyChannelBuilder
           @Override
           public TransportCreationParamsFilter create(
               SocketAddress targetServerAddress, String authority, String userAgent) {
-            return new DynamicNettyTransportParams(targetServerAddress, authority, userAgent);
+            return new DynamicNettyTransportParams(
+                targetServerAddress,
+                authority,
+                userAgent,
+                proxyDetector
+            );
           }
         };
       }
@@ -526,12 +550,17 @@ public final class NettyChannelBuilder
       private final SocketAddress targetServerAddress;
       private final String authority;
       @Nullable private final String userAgent;
+      private ProxyDetector proxyDetector;
 
       private DynamicNettyTransportParams(
-          SocketAddress targetServerAddress, String authority, String userAgent) {
+          SocketAddress targetServerAddress,
+          String authority,
+          String userAgent,
+          ProxyDetector proxyDetector) {
         this.targetServerAddress = targetServerAddress;
         this.authority = authority;
         this.userAgent = userAgent;
+        this.proxyDetector = proxyDetector;
       }
 
       @Override
@@ -555,8 +584,8 @@ public final class NettyChannelBuilder
             targetServerAddress,
             authority,
             negotiationType,
-            sslContext
-        );
+            sslContext,
+            proxyDetector);
       }
     }
   }

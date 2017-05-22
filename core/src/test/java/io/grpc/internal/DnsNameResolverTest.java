@@ -22,11 +22,15 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Optional;
 import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -37,6 +41,7 @@ import io.grpc.internal.DnsNameResolver.ResolutionResults;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -104,13 +109,22 @@ public class DnsNameResolverTest {
   private ArgumentCaptor<Status> statusCaptor;
 
   private DnsNameResolver newResolver(String name, int port) {
+    return newResolver(name, port, mockResolver, ProxyDetector.NOOP_INSTANCE);
+  }
+
+  private DnsNameResolver newResolver(
+      String name,
+      int port,
+      DelegateResolver delegateResolver,
+      ProxyDetector proxyDetector) {
     DnsNameResolver dnsResolver = new DnsNameResolver(
         null,
         name,
         Attributes.newBuilder().set(NameResolver.Factory.PARAMS_DEFAULT_PORT, port).build(),
         fakeTimerServiceResource,
-        fakeExecutorResource);
-    dnsResolver.setDelegateResolver(mockResolver);
+        fakeExecutorResource,
+        proxyDetector);
+    dnsResolver.setDelegateResolver(delegateResolver);
     return dnsResolver;
   }
 
@@ -331,7 +345,6 @@ public class DnsNameResolverTest {
     assertThat(results.addresses).containsExactlyElementsIn(jdkAnswer).inOrder();
     assertThat(results.txtRecords).isEmpty();
   }
-
   private void testInvalidUri(URI uri) {
     try {
       provider.newNameResolver(uri, NAME_RESOLVER_PARAMS);

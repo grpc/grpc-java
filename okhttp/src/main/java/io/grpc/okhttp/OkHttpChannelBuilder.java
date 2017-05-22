@@ -21,6 +21,7 @@ import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.squareup.okhttp.CipherSuite;
 import com.squareup.okhttp.ConnectionSpec;
@@ -35,7 +36,8 @@ import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
-import io.grpc.internal.Proxies;
+import io.grpc.internal.ProxyDetector;
+import io.grpc.internal.ProxyDetector.ProxyParameters;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.okhttp.internal.Platform;
@@ -109,6 +111,7 @@ public class OkHttpChannelBuilder extends
   private long keepAliveTimeNanos = KEEPALIVE_TIME_NANOS_DISABLED;
   private long keepAliveTimeoutNanos = DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
   private boolean keepAliveWithoutCalls;
+  private ProxyDetector proxyDetector = ProxyDetector.DEFAULT_INSTANCE;
 
   protected OkHttpChannelBuilder(String host, int port) {
     this(GrpcUtil.authorityFromHostAndPort(host, port));
@@ -274,13 +277,23 @@ public class OkHttpChannelBuilder extends
     return this;
   }
 
+  /**
+   * Allows unit tests to be decoupled from the global proxy settings.
+   */
+  @VisibleForTesting
+  OkHttpChannelBuilder withProxyDetector(ProxyDetector proxyDetector) {
+    this.proxyDetector = proxyDetector;
+    return this;
+  }
+
+
   @Override
   @Internal
   protected final ClientTransportFactory buildTransportFactory() {
     boolean enableKeepAlive = keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED;
     return new OkHttpTransportFactory(transportExecutor,
         createSocketFactory(), connectionSpec, maxInboundMessageSize(), enableKeepAlive,
-        keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls);
+        keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls, proxyDetector);
   }
 
   @Override
@@ -355,6 +368,7 @@ public class OkHttpChannelBuilder extends
     private final long keepAliveTimeoutNanos;
     private final boolean keepAliveWithoutCalls;
     private boolean closed;
+    private final ProxyDetector proxyDetector;
 
     private OkHttpTransportFactory(Executor executor,
         @Nullable SSLSocketFactory socketFactory,
@@ -363,7 +377,8 @@ public class OkHttpChannelBuilder extends
         boolean enableKeepAlive,
         long keepAliveTimeNanos,
         long keepAliveTimeoutNanos,
-        boolean keepAliveWithoutCalls) {
+        boolean keepAliveWithoutCalls,
+        ProxyDetector proxyDetector) {
       this.socketFactory = socketFactory;
       this.connectionSpec = connectionSpec;
       this.maxMessageSize = maxMessageSize;
@@ -379,6 +394,7 @@ public class OkHttpChannelBuilder extends
       } else {
         this.executor = executor;
       }
+      this.proxyDetector = proxyDetector;
     }
 
     @Override
@@ -387,7 +403,19 @@ public class OkHttpChannelBuilder extends
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
       }
-      InetSocketAddress proxy = Proxies.proxyFor(addr);
+
+      InetSocketAddress proxyAddress = null;
+      String proxyUsername = null;
+      String proxyPassword = null;
+
+      Optional<ProxyParameters> maybeProxy = proxyDetector.proxyFor(addr);
+      if (maybeProxy.isPresent()) {
+        ProxyParameters proxy = maybeProxy.get();
+        proxyAddress = proxy.address;
+        proxyUsername = proxy.username;
+        proxyPassword = proxy.password;
+      }
+
       final AtomicBackoff.State keepAliveTimeNanosState = keepAliveTimeNanos.getState();
       Runnable tooManyPingsRunnable = new Runnable() {
         @Override
@@ -398,7 +426,7 @@ public class OkHttpChannelBuilder extends
       InetSocketAddress inetSocketAddr = (InetSocketAddress) addr;
       OkHttpClientTransport transport = new OkHttpClientTransport(inetSocketAddr, authority,
           userAgent, executor, socketFactory, Utils.convertSpec(connectionSpec), maxMessageSize,
-          proxy, null, null, tooManyPingsRunnable);
+          proxyAddress, proxyUsername, proxyPassword, tooManyPingsRunnable);
       if (enableKeepAlive) {
         transport.enableKeepAlive(
             true, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos, keepAliveWithoutCalls);

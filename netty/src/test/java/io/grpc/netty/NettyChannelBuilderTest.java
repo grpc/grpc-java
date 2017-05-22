@@ -21,6 +21,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.ManagedChannel;
+import io.grpc.internal.ProxyDetector;
 import io.grpc.netty.InternalNettyChannelBuilder.OverrideAuthorityChecker;
 import io.grpc.netty.ProtocolNegotiators.TlsNegotiator;
 import io.netty.handler.ssl.SslContext;
@@ -127,8 +128,8 @@ public class NettyChannelBuilderTest {
         InetSocketAddress.createUnresolved("authority", 80),
         "authority",
         NegotiationType.PLAINTEXT,
-        noSslContext
-    );
+        noSslContext,
+        ProxyDetector.NOOP_INSTANCE);
     // just check that the classes are the same, and that negotiator is not null.
     assertTrue(negotiator instanceof ProtocolNegotiators.PlaintextNegotiator);
   }
@@ -139,8 +140,8 @@ public class NettyChannelBuilderTest {
         InetSocketAddress.createUnresolved("authority", 80),
         "authority",
         NegotiationType.PLAINTEXT_UPGRADE,
-        noSslContext
-    );
+        noSslContext,
+        ProxyDetector.NOOP_INSTANCE);
     // just check that the classes are the same, and that negotiator is not null.
     assertTrue(negotiator instanceof ProtocolNegotiators.PlaintextUpgradeNegotiator);
   }
@@ -151,7 +152,8 @@ public class NettyChannelBuilderTest {
     NettyChannelBuilder.createProtocolNegotiator(
         "authority:1234",
         NegotiationType.TLS,
-        noSslContext);
+        noSslContext,
+        ProxyDetector.NOOP_INSTANCE);
   }
 
   @Test
@@ -160,8 +162,8 @@ public class NettyChannelBuilderTest {
         InetSocketAddress.createUnresolved("authority", 80),
         "authority:1234",
         NegotiationType.TLS,
-        GrpcSslContexts.forClient().build()
-    );
+        GrpcSslContexts.forClient().build(),
+        ProxyDetector.NOOP_INSTANCE);
 
     assertTrue(negotiator instanceof ProtocolNegotiators.TlsNegotiator);
     ProtocolNegotiators.TlsNegotiator n = (TlsNegotiator) negotiator;
@@ -176,7 +178,8 @@ public class NettyChannelBuilderTest {
         InetSocketAddress.createUnresolved("authority", 80),
         "bad_authority",
         NegotiationType.TLS,
-        GrpcSslContexts.forClient().build());
+        noSslContext,
+        ProxyDetector.NOOP_INSTANCE);
 
     assertTrue(negotiator instanceof ProtocolNegotiators.TlsNegotiator);
     ProtocolNegotiators.TlsNegotiator n = (TlsNegotiator) negotiator;
