@@ -486,8 +486,7 @@ public final class NettyChannelBuilder
                 targetServerAddress,
                 authority,
                 userAgent,
-                proxyDetector
-            );
+                proxyDetector);
           }
         };
       }

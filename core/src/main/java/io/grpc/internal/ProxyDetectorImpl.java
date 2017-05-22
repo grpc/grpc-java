@@ -53,7 +53,6 @@ import javax.annotation.Nullable;
  * A utility class that detects proxies using {@link ProxySelector} and detects authentication
  * credentials using {@link Authenticator}.
  *
- * //todo(spencerfang): consider using java.security.AccessController here
  */
 public class ProxyDetectorImpl implements ProxyDetector {
   private static final Logger log = Logger.getLogger(ProxyDetectorImpl.class.getName());
@@ -63,6 +62,7 @@ public class ProxyDetectorImpl implements ProxyDetector {
       new Supplier<ProxySelector>() {
         @Override
         public ProxySelector get() {
+          //TODO(spencerfang): consider using java.security.AccessController here
           return ProxySelector.getDefault();
         }
       };
@@ -156,7 +156,7 @@ public class ProxyDetectorImpl implements ProxyDetector {
     }
 
     try {
-      //todo(spencerfang): users ProxyParameters should clear the password when done
+      //todo(spencerfang): users of ProxyParameters should clear the password when done
       return Optional.of(
           new ProxyParameters(proxyAddr, auth.getUserName(), new String(auth.getPassword())));
     } finally {
@@ -181,7 +181,7 @@ public class ProxyDetectorImpl implements ProxyDetector {
         "Detected GRPC_PROXY_EXP and will honor it, but this feature will "
             + "be removed in a future release. Use the JVM flags "
             + "\"-Dhttps.proxyHost=HOST -Dhttps.proxyPort=PORT\" to set the https proxy for "
-            + "this JVM. ");
+            + "this JVM.");
     return new InetSocketAddress(parts[0], port);
   }
 
@@ -207,6 +207,7 @@ public class ProxyDetectorImpl implements ProxyDetector {
         String protocol,
         String prompt,
         String scheme) {
+      //TODO(spencerfang): consider using java.security.AccessController here
       return Authenticator.requestPasswordAuthentication(
           host, addr, port, protocol, prompt, scheme);
     }

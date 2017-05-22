@@ -137,9 +137,7 @@ public class ProxyDetectorImplTest {
     InetSocketAddress otherProxy = InetSocketAddress.createUnresolved("proxy2", 2222);
     Proxy proxy1 = new Proxy(Proxy.Type.HTTP, proxyAddress);
     Proxy proxy2 = new Proxy(Proxy.Type.HTTP, otherProxy);
-    when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(
-        proxy1, proxy2
-    ));
+    when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(proxy1, proxy2));
 
     Optional<ProxyParameters> detected = proxyDetector.proxyFor(destination);
     assertTrue(detected.isPresent());
@@ -174,8 +172,6 @@ public class ProxyDetectorImplTest {
 
     Optional<ProxyParameters> detected = proxyDetector.proxyFor(destination);
     assertTrue(detected.isPresent());
-    assertEquals(
-        new ProxyParameters(proxyAddress, proxyUser, proxyPassword),
-        detected.get());
+    assertEquals(new ProxyParameters(proxyAddress, proxyUser, proxyPassword), detected.get());
   }
 }
