@@ -39,7 +39,6 @@ import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.CompressorRegistry;
@@ -83,8 +82,6 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
 
   private final LogId logId = LogId.allocate(getClass().getName());
   private final ObjectPool<? extends Executor> executorPool;
-  /** Executor for running cancellation related tasks. Non-null only in unit tests. */
-  private final Executor cancelExecutor;
   /** Executor for application processing. Safe to read after {@link #start()}. */
   private Executor executor;
   private final InternalHandlerRegistry registry;
@@ -138,7 +135,6 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
       List<ServerTransportFilter> transportFilters, Executor cancelExecutor) {
     this.executorPool = Preconditions.checkNotNull(executorPool, "executorPool");
-    this.cancelExecutor = cancelExecutor;
     this.timeoutServicePool = Preconditions.checkNotNull(timeoutServicePool, "timeoutServicePool");
     this.registry = Preconditions.checkNotNull(registry, "registry");
     this.fallbackRegistry = Preconditions.checkNotNull(fallbackRegistry, "fallbackRegistry");
@@ -408,7 +404,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
 
       final JumpToApplicationThreadServerStreamListener jumpListener
           = new JumpToApplicationThreadServerStreamListener(
-              wrappedExecutor, MoreObjects.firstNonNull(cancelExecutor, executor), stream, context);
+              wrappedExecutor, executor, stream, context);
       stream.setListener(jumpListener);
       // Run in wrappedExecutor so jumpListener.setListener() is called before any callbacks
       // are delivered, including any errors. Callbacks can still be triggered, but they will be
@@ -608,16 +604,9 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       // For cancellations, promptly inform any users of the context that their work should be
       // aborted. Otherwise, we can wait until pending work is done.
       if (!status.isOk()) {
-        // The callExecutor might be busy doing user work. To avoid waiting, use the alternate
-        // cancelExecutor.
-        cancelExecutor.execute(
-            new Runnable() {
-              @Override
-              public void run() {
-                context.cancel(status.getCause());
-              }
-            }
-        );
+        // The callExecutor might be busy doing user work. To avoid waiting, use an executor that
+        // is not serializing.
+        cancelExecutor.execute(new ContextCloser(context, status.getCause()));
       }
       callExecutor.execute(new ContextRunnable(context) {
         @Override
@@ -646,6 +635,21 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
           }
         }
       });
+    }
+  }
+
+  static class ContextCloser implements Runnable {
+    private final Context.CancellableContext context;
+    private final Throwable cause;
+
+    ContextCloser(Context.CancellableContext context, Throwable cause) {
+      this.context = context;
+      this.cause = cause;
+    }
+
+    @Override
+    public void run() {
+      context.cancel(cause);
     }
   }
 }
