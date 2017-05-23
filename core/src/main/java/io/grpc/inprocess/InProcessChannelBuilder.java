@@ -32,6 +32,7 @@
 package io.grpc.inprocess;
 
 import com.google.common.base.Preconditions;
+import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
@@ -109,7 +110,7 @@ public class InProcessChannelBuilder extends
 
     @Override
     public ConnectionClientTransport newClientTransport(
-        SocketAddress addr, String authority, String userAgent) {
+        SocketAddress addr, String authority, String userAgent, Attributes attrs) {
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
       }

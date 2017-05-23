@@ -114,16 +114,17 @@ public class CallCredentialsApplyingTest {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     origHeaders.put(ORIG_HEADER_KEY, ORIG_HEADER_VALUE);
-    when(mockTransportFactory.newClientTransport(address, AUTHORITY, USER_AGENT))
+    when(mockTransportFactory.newClientTransport(address, AUTHORITY, USER_AGENT, Attributes.EMPTY))
         .thenReturn(mockTransport);
     when(mockTransport.newStream(same(method), any(Metadata.class), any(CallOptions.class)))
         .thenReturn(mockStream);
     ClientTransportFactory transportFactory = new CallCredentialsApplyingTransportFactory(
         mockTransportFactory, mockExecutor);
     transport = (ForwardingConnectionClientTransport) transportFactory.newClientTransport(
-        address, AUTHORITY, USER_AGENT);
+        address, AUTHORITY, USER_AGENT, Attributes.EMPTY);
     callOptions = CallOptions.DEFAULT.withCallCredentials(mockCreds);
-    verify(mockTransportFactory).newClientTransport(address, AUTHORITY, USER_AGENT);
+    verify(mockTransportFactory).newClientTransport(
+        address, AUTHORITY, USER_AGENT, Attributes.EMPTY);
     assertSame(mockTransport, transport.delegate());
   }
 

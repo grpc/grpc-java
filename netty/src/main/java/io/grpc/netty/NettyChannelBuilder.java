@@ -365,9 +365,8 @@ public final class NettyChannelBuilder
   @VisibleForTesting
   @CheckReturnValue
   static ProtocolNegotiator createProtocolNegotiator(
-      String authority,
-      NegotiationType negotiationType,
-      SslContext sslContext) {
+      String authority, NegotiationType negotiationType, SslContext sslContext, Attributes attrs) {
+    //TODO(spencerfang): set up proxy based on attributes
     ProtocolNegotiator negotiator =
         createProtocolNegotiatorByType(authority, negotiationType, sslContext);
     String proxy = System.getenv("GRPC_PROXY_EXP");
@@ -440,7 +439,7 @@ public final class NettyChannelBuilder
 
     @Nullable String getUserAgent();
 
-    ProtocolNegotiator getProtocolNegotiator();
+    ProtocolNegotiator getProtocolNegotiator(Attributes attrs);
   }
 
   /**
@@ -502,7 +501,10 @@ public final class NettyChannelBuilder
 
     @Override
     public ConnectionClientTransport newClientTransport(
-        SocketAddress serverAddress, String authority, @Nullable String userAgent) {
+        SocketAddress serverAddress,
+        String authority,
+        @Nullable String userAgent,
+        Attributes attrs) {
       checkState(!closed, "The transport factory is closed.");
 
       TransportCreationParamsFilter dparams =
@@ -517,7 +519,7 @@ public final class NettyChannelBuilder
       };
       NettyClientTransport transport = new NettyClientTransport(
           dparams.getTargetServerAddress(), channelType, channelOptions, group,
-          dparams.getProtocolNegotiator(), flowControlWindow,
+          dparams.getProtocolNegotiator(attrs), flowControlWindow,
           maxMessageSize, maxHeaderListSize, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos,
           keepAliveWithoutCalls, dparams.getAuthority(), dparams.getUserAgent(),
           tooManyPingsRunnable);
@@ -566,8 +568,8 @@ public final class NettyChannelBuilder
       }
 
       @Override
-      public ProtocolNegotiator getProtocolNegotiator() {
-        return createProtocolNegotiator(authority, negotiationType, sslContext);
+      public ProtocolNegotiator getProtocolNegotiator(Attributes attrs) {
+        return createProtocolNegotiator(authority, negotiationType, sslContext, attrs);
       }
     }
   }
