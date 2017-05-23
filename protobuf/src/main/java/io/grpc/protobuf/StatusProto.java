@@ -162,8 +162,8 @@ public final class StatusProto {
       com.google.rpc.Status statusProto = trailers.get(STATUS_DETAILS_KEY);
       if (statusProto != null) {
         checkArgument(
-                status.getCode().value() == statusProto.getCode(),
-                "com.google.rpc.Status code must match gRPC status code");
+            status.getCode().value() == statusProto.getCode(),
+            "com.google.rpc.Status code must match gRPC status code");
         return statusProto;
       }
     }
