@@ -90,13 +90,13 @@ public abstract class ServerCallImplAbstractTest {
   protected final Metadata requestHeaders = new Metadata();
 
   ServerCallImplAbstractTest(MethodType type) {
+    assumeTrue(shouldRunTest(type));
     method = MethodDescriptor.<Long, Long>newBuilder()
         .setType(type)
         .setFullMethodName("/service/method")
         .setRequestMarshaller(new LongMarshaller())
         .setResponseMarshaller(new LongMarshaller())
         .build();
-    assumeTrue(shouldRunTest(type));
   }
 
   @Parameters
