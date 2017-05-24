@@ -32,7 +32,10 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Charsets.UTF_8;
+import static org.junit.Assume.assumeTrue;
 
+import com.google.common.base.Function;
+import com.google.common.collect.Lists;
 import com.google.common.io.CharStreams;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
@@ -46,15 +49,33 @@ import io.grpc.Status;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.rules.ExpectedException;
+import org.junit.runners.Parameterized.Parameters;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+/**
+ * An abstract test class to help run subclass test suites against all applicable
+ * {@link MethodType} classes. Subclasses must implement {{@link #shouldRunTest(MethodType)}}.
+ */
 public abstract class ServerCallImplAbstractTest {
+  private static final List<Object[]> ALL = Lists.transform(
+      Arrays.asList(MethodType.values()),
+      new Function<MethodType, Object[]>() {
+        @Nullable
+        @Override
+        public Object[] apply(@Nullable MethodType input) {
+          return new Object[] {input};
+        }
+      });
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
   @Mock protected ServerStream stream;
@@ -75,6 +96,12 @@ public abstract class ServerCallImplAbstractTest {
         .setRequestMarshaller(new LongMarshaller())
         .setResponseMarshaller(new LongMarshaller())
         .build();
+    assumeTrue(shouldRunTest(type));
+  }
+
+  @Parameters
+  public static Collection<Object[]> params() {
+    return ALL;
   }
 
   @Before
@@ -84,6 +111,11 @@ public abstract class ServerCallImplAbstractTest {
     call = new ServerCallImpl<Long, Long>(stream, method, requestHeaders, context,
         DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance());
   }
+
+  /**
+   * The subclass test class should return true if its test suite applies for the method type.
+   */
+  protected abstract boolean shouldRunTest(MethodType type);
 
   private static class LongMarshaller implements Marshaller<Long> {
     @Override

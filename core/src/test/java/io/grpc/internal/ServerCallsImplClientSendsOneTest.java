@@ -34,34 +34,25 @@ package io.grpc.internal;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.verify;
 
-import com.google.common.collect.Collections2;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
-import java.util.Collection;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
 import org.mockito.Mockito;
 
 @RunWith(Parameterized.class)
 public class ServerCallsImplClientSendsOneTest extends ServerCallImplAbstractTest {
 
-  /**
-   * Unit tests for UNARY and SERVER_STREAMING methods.
-   */
-  @Parameters
-  public static Collection<Object[]> params() {
-    return Collections2.transform(
-        TestUtils.Methods.CLIENT_SENDS_ONE,
-        TestUtils.Methods.TO_PARAM_FN
-    );
-  }
-
   public ServerCallsImplClientSendsOneTest(MethodType type) {
     super(type);
+  }
+
+  @Override
+  protected boolean shouldRunTest(MethodType type) {
+    return type.clientSendsOneMessage();
   }
 
   @Test
