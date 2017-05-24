@@ -63,7 +63,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 /**
- * An abstract test class to help run subclass test suites against all applicable
+ * An abstract class to help run subclass test suites against all applicable
  * {@link MethodType} classes. Subclasses must implement {{@link #shouldRunTest(MethodType)}}.
  */
 public abstract class ServerCallImplAbstractTest {
@@ -113,7 +113,7 @@ public abstract class ServerCallImplAbstractTest {
   }
 
   /**
-   * The subclass test class should return true if its test suite applies for the method type.
+   * The subclass should return true if its test suite applies for the method type.
    */
   protected abstract boolean shouldRunTest(MethodType type);
 
