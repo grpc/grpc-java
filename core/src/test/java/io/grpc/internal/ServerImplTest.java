@@ -836,9 +836,9 @@ public class ServerImplTest {
 
   @Test
   public void testClientClose_cancelTriggersImmediateCancellation() throws Exception {
-    final AtomicBoolean contextCancelled = new AtomicBoolean(false);
-    final AtomicReference<Context> context = new AtomicReference<Context>();
-    final AtomicReference<ServerCall<String, Integer>> callReference
+    AtomicBoolean contextCancelled = new AtomicBoolean(false);
+    AtomicReference<Context> context = new AtomicReference<Context>();
+    AtomicReference<ServerCall<String, Integer>> callReference
         = new AtomicReference<ServerCall<String, Integer>>();
 
     ServerStreamListener streamListener = testClientClose_setup(callReference,
@@ -860,9 +860,9 @@ public class ServerImplTest {
 
   @Test
   public void testClientClose_OkTriggersDelayedCancellation() throws Exception {
-    final AtomicBoolean contextCancelled = new AtomicBoolean(false);
-    final AtomicReference<Context> context = new AtomicReference<Context>();
-    final AtomicReference<ServerCall<String, Integer>> callReference
+    AtomicBoolean contextCancelled = new AtomicBoolean(false);
+    AtomicReference<Context> context = new AtomicReference<Context>();
+    AtomicReference<ServerCall<String, Integer>> callReference
         = new AtomicReference<ServerCall<String, Integer>>();
 
     ServerStreamListener streamListener = testClientClose_setup(callReference,
