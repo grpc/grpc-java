@@ -34,8 +34,6 @@ package io.grpc.internal;
 import static com.google.common.base.Charsets.UTF_8;
 import static org.junit.Assume.assumeTrue;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Lists;
 import com.google.common.io.CharStreams;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
@@ -49,10 +47,9 @@ import io.grpc.Status;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.rules.ExpectedException;
@@ -67,15 +64,7 @@ import org.mockito.MockitoAnnotations;
  * {@link MethodType} classes. Subclasses must implement {@link #shouldRunTest(MethodType)}.
  */
 public abstract class ServerCallImplAbstractTest {
-  private static final List<Object[]> ALL = Lists.transform(
-      Arrays.asList(MethodType.values()),
-      new Function<MethodType, Object[]>() {
-        @Nullable
-        @Override
-        public Object[] apply(@Nullable MethodType input) {
-          return new Object[] {input};
-        }
-      });
+  private static final List<Object[]> ALL_METHOD_TYPES = new ArrayList<Object[]>();
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
   @Mock protected ServerStream stream;
@@ -89,6 +78,13 @@ public abstract class ServerCallImplAbstractTest {
 
   protected final Metadata requestHeaders = new Metadata();
 
+  static {
+    for (MethodType type : MethodType.values()) {
+      ALL_METHOD_TYPES.add(new Object[] {type});
+    }
+  }
+
+
   ServerCallImplAbstractTest(MethodType type) {
     assumeTrue(shouldRunTest(type));
     method = MethodDescriptor.<Long, Long>newBuilder()
@@ -101,7 +97,7 @@ public abstract class ServerCallImplAbstractTest {
 
   @Parameters
   public static Collection<Object[]> params() {
-    return ALL;
+    return ALL_METHOD_TYPES;
   }
 
   @Before
@@ -113,7 +109,7 @@ public abstract class ServerCallImplAbstractTest {
   }
 
   /**
-   * The subclass should return true if its test suite applies for the method type.
+   * The subclass should return true if its test suite is applicable for the method type.
    */
   protected abstract boolean shouldRunTest(MethodType type);
 
