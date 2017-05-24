@@ -38,13 +38,14 @@ import javax.annotation.Nullable;
 
 /**
  * A utility class to detect which proxy, if any, should be used for a given
- * {@link java.net.InetSocketAddress}.
+ * {@link java.net.SocketAddress}.
  */
 public interface ProxyDetector {
   ProxyDetector DEFAULT_INSTANCE = new ProxyDetectorImpl();
 
   /** A proxy detector that always claims no proxy is needed, for unit test convenience. */
   ProxyDetector NOOP_INSTANCE = new ProxyDetector() {
+    @Nullable
     @Override
     public ProxyParameters proxyFor(SocketAddress targetServerAddress) {
       return null;
@@ -53,9 +54,9 @@ public interface ProxyDetector {
 
   /**
    * Given a target address, returns which proxy address should be used. If no proxy should be
-   * used, then return value will be an absent value.
+   * used, then return value will be null.
    */
-  ProxyDetectorImpl.ProxyParameters proxyFor(SocketAddress targetServerAddress);
+  @Nullable ProxyParameters proxyFor(SocketAddress targetServerAddress);
 
   class ProxyParameters {
     public final InetSocketAddress address;

@@ -53,10 +53,17 @@ import javax.annotation.Nullable;
  * credentials using {@link Authenticator}.
  *
  */
-public class ProxyDetectorImpl implements ProxyDetector {
+class ProxyDetectorImpl implements ProxyDetector {
   private static final Logger log = Logger.getLogger(ProxyDetectorImpl.class.getName());
-  private static final AuthenticationProvider DEFAULT_AUTHENTICATOR
-      = new AuthenticationProviderImpl();
+  private static final AuthenticationProvider DEFAULT_AUTHENTICATOR = new AuthenticationProvider() {
+    @Override
+    public PasswordAuthentication requestPasswordAuthentication(
+        String host, InetAddress addr, int port, String protocol, String prompt, String scheme) {
+      //TODO(spencerfang): consider using java.security.AccessController here
+      return Authenticator.requestPasswordAuthentication(
+          host, addr, port, protocol, prompt, scheme);
+    }
+  };
   private static final Supplier<ProxySelector> DEFAULT_PROXY_SELECTOR =
       new Supplier<ProxySelector>() {
         @Override
@@ -99,6 +106,7 @@ public class ProxyDetectorImpl implements ProxyDetector {
     }
   }
 
+  @Nullable
   @Override
   public ProxyParameters proxyFor(SocketAddress targetServerAddress) {
     if (override != null) {
@@ -126,9 +134,9 @@ public class ProxyDetectorImpl implements ProxyDetector {
       uri = new URI(String.format(URI_FORMAT, hostPort));
     } catch (final URISyntaxException e) {
       log.log(
-          Level.WARNING,
-          "Failed to construct URI for proxy lookup, proceeding without proxy: {0}",
-          hostPort);
+          Level.SEVERE,
+          "Failed to construct URI for proxy lookup, proceeding without proxy",
+          e);
       return null;
     }
 
@@ -155,7 +163,7 @@ public class ProxyDetectorImpl implements ProxyDetector {
     }
 
     try {
-      //todo(spencerfang): users of ProxyParameters should clear the password when done
+      //TODO(spencerfang): users of ProxyParameters should clear the password when done
       return new ProxyParameters(proxyAddr, auth.getUserName(), new String(auth.getPassword()));
     } finally {
       Arrays.fill(auth.getPassword(), '0');
@@ -194,20 +202,5 @@ public class ProxyDetectorImpl implements ProxyDetector {
         String protocol,
         String prompt,
         String scheme);
-  }
-
-  static class AuthenticationProviderImpl implements AuthenticationProvider {
-    @Override
-    public PasswordAuthentication requestPasswordAuthentication(
-        String host,
-        InetAddress addr,
-        int port,
-        String protocol,
-        String prompt,
-        String scheme) {
-      //TODO(spencerfang): consider using java.security.AccessController here
-      return Authenticator.requestPasswordAuthentication(
-          host, addr, port, protocol, prompt, scheme);
-    }
   }
 }
