@@ -41,31 +41,25 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.google.common.collect.Collections2;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
 import java.io.InputStream;
-import java.util.Collection;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
 
 @RunWith(Parameterized.class)
 public class ServerCallImplCommonTest extends ServerCallImplAbstractTest {
 
-  /**
-   * Unit tests that apply to all method types.
-   */
-  @Parameters
-  public static Collection<Object[]> params() {
-    return Collections2.transform(TestUtils.Methods.ALL, TestUtils.Methods.TO_PARAM_FN);
-  }
-
   public ServerCallImplCommonTest(MethodType type) {
     super(type);
+  }
+
+  @Override
+  protected boolean shouldRunTest(MethodType type) {
+    return true;
   }
 
   @Test
