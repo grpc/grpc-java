@@ -64,7 +64,7 @@ import org.mockito.MockitoAnnotations;
 
 /**
  * An abstract class to help run subclass test suites against all applicable
- * {@link MethodType} classes. Subclasses must implement {{@link #shouldRunTest(MethodType)}}.
+ * {@link MethodType} classes. Subclasses must implement {@link #shouldRunTest(MethodType)}.
  */
 public abstract class ServerCallImplAbstractTest {
   private static final List<Object[]> ALL = Lists.transform(
