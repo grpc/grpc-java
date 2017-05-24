@@ -123,17 +123,6 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       InternalServer transportServer, Context rootContext,
       DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
       List<ServerTransportFilter> transportFilters) {
-    this(executorPool, timeoutServicePool, registry, fallbackRegistry, transportServer,
-        rootContext, decompressorRegistry, compressorRegistry, transportFilters, null);
-  }
-
-  @VisibleForTesting
-  ServerImpl(ObjectPool<? extends Executor> executorPool,
-      ObjectPool<ScheduledExecutorService> timeoutServicePool,
-      InternalHandlerRegistry registry, HandlerRegistry fallbackRegistry,
-      InternalServer transportServer, Context rootContext,
-      DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
-      List<ServerTransportFilter> transportFilters, Executor cancelExecutor) {
     this.executorPool = Preconditions.checkNotNull(executorPool, "executorPool");
     this.timeoutServicePool = Preconditions.checkNotNull(timeoutServicePool, "timeoutServicePool");
     this.registry = Preconditions.checkNotNull(registry, "registry");

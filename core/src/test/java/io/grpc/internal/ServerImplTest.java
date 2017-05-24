@@ -1107,8 +1107,7 @@ public class ServerImplTest {
   private void createServer(List<ServerTransportFilter> filters) {
     assertNull(server);
     server = new ServerImpl(executorPool, timerPool, registry, fallbackRegistry,
-        transportServer, SERVER_CONTEXT, decompressorRegistry, compressorRegistry, filters,
-        executor.getScheduledExecutorService());
+        transportServer, SERVER_CONTEXT, decompressorRegistry, compressorRegistry, filters);
   }
 
   private void verifyExecutorsAcquired() {
