@@ -29,6 +29,7 @@ test {
 task test_client(type: CreateStartScripts) {
     mainClassName = "io.grpc.testing.integration.TestServiceClient"
     applicationName = "test-client"
+    defaultJvmOpts = ["-javaagent:" + configurations.alpnagent.asPath]
     outputDir = new File(project.buildDir, 'tmp')
     classpath = jar.outputs.files + configurations.runtime
 }
