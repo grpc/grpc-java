@@ -304,6 +304,8 @@ public class DnsNameResolverTest {
     ResolutionResults results = null;
     try {
       results = resolver.resolve("localhost");
+    } catch (javax.naming.CommunicationException e) {
+      Assume.assumeNoException(e);
     } catch (javax.naming.NameNotFoundException e) {
       Assume.assumeNoException(e);
     }
