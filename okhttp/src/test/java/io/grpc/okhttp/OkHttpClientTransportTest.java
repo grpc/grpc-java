@@ -74,6 +74,7 @@ import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ManagedClientTransport;
+import io.grpc.internal.MessageDeframer;
 import io.grpc.okhttp.OkHttpClientTransport.ClientFrameHandler;
 import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.framed.ErrorCode;
@@ -1722,6 +1723,14 @@ public class OkHttpClientTransportTest {
       String msg = getContent(message);
       if (msg != null) {
         messages.add(msg);
+      }
+    }
+
+    @Override
+    public void scheduleDeframerSource(MessageDeframer.Source source) {
+      InputStream message;
+      while ((message = source.next()) != null) {
+        messageRead(message);
       }
     }
 

@@ -150,7 +150,7 @@ class NettyServerStream extends AbstractServerStream {
     }
   }
 
-  /** This should only called from the transport thread. */
+  /** This should only be called from the transport thread. */
   public static class TransportState extends AbstractServerStream.TransportState
       implements StreamIdHolder {
     private final Http2Stream http2Stream;
@@ -170,7 +170,7 @@ class NettyServerStream extends AbstractServerStream {
     }
 
     @Override
-    protected void deframeFailed(Throwable cause) {
+    public void deframeFailed(Throwable cause) {
       log.log(Level.WARNING, "Exception processing message", cause);
       Status status = Status.fromThrowable(cause);
       transportReportStatus(status);

@@ -33,11 +33,11 @@ package io.grpc.internal;
 
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -49,7 +49,6 @@ import com.google.common.primitives.Bytes;
 import io.grpc.Codec;
 import io.grpc.StatusRuntimeException;
 import io.grpc.StreamTracer;
-import io.grpc.internal.MessageDeframer.Listener;
 import io.grpc.internal.MessageDeframer.SizeEnforcingInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -63,9 +62,6 @@ import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Matchers;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 /**
  * Tests for {@link MessageDeframer}.
@@ -74,165 +70,187 @@ import org.mockito.stubbing.Answer;
 public class MessageDeframerTest {
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
-  private Listener listener = mock(Listener.class);
+  private MessageDeframer.Sink.Listener sinkListener = mock(MessageDeframer.Sink.Listener.class);
+  private MessageDeframer.Source.Listener sourceListener =
+      mock(MessageDeframer.Source.Listener.class);
   private StreamTracer tracer = mock(StreamTracer.class);
   private StatsTraceContext statsTraceCtx = new StatsTraceContext(new StreamTracer[]{tracer});
   private ArgumentCaptor<Long> wireSizeCaptor = ArgumentCaptor.forClass(Long.class);
   private ArgumentCaptor<Long> uncompressedSizeCaptor = ArgumentCaptor.forClass(Long.class);
 
-  private MessageDeframer deframer = new MessageDeframer(listener, Codec.Identity.NONE,
-      DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx, "test");
+  private MessageDeframer deframer = new MessageDeframer(sinkListener, sourceListener,
+      Codec.Identity.NONE, DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx, "test");
 
-  private ArgumentCaptor<InputStream> messages = ArgumentCaptor.forClass(InputStream.class);
+  private ArgumentCaptor<MessageDeframer.Source> sourceCaptor =
+          ArgumentCaptor.forClass(MessageDeframer.Source.class);
 
   @Test
   public void simplePayload() {
-    deframer.request(1);
-    deframer.deframe(buffer(new byte[] {0, 0, 0, 0, 2, 3, 14}), false);
-    verify(listener).messageRead(messages.capture());
-    assertEquals(Bytes.asList(new byte[]{3, 14}), bytes(messages));
-    verify(listener, atLeastOnce()).bytesRead(anyInt());
-    verifyNoMoreInteractions(listener);
+    deframer.sink().request(1);
+    deframer.sink().deframe(buffer(new byte[] {0, 0, 0, 0, 2, 3, 14}));
+    verify(sinkListener, times(2)).scheduleDeframerSource(sourceCaptor.capture());
+    assertEquals(Bytes.asList(new byte[]{3, 14}), bytes(sourceCaptor.getValue().next()));
+    assertNull(sourceCaptor.getValue().next());
+    verify(sourceListener, atLeastOnce()).bytesRead(anyInt());
+    verifyNoMoreInteractions(sinkListener);
+    verifyNoMoreInteractions(sourceListener);
     checkStats(1, 2, 2);
   }
 
   @Test
   public void smallCombinedPayloads() {
-    deframer.request(2);
-    deframer.deframe(buffer(new byte[] {0, 0, 0, 0, 1, 3, 0, 0, 0, 0, 2, 14, 15}), false);
-    verify(listener, times(2)).messageRead(messages.capture());
-    List<InputStream> streams = messages.getAllValues();
-    assertEquals(2, streams.size());
-    assertEquals(Bytes.asList(new byte[] {3}), bytes(streams.get(0)));
-    verify(listener, atLeastOnce()).bytesRead(anyInt());
-    assertEquals(Bytes.asList(new byte[] {14, 15}), bytes(streams.get(1)));
-    verifyNoMoreInteractions(listener);
+    deframer.sink().request(2);
+    deframer.sink().deframe(buffer(new byte[] {0, 0, 0, 0, 1, 3, 0, 0, 0, 0, 2, 14, 15}));
+    verify(sinkListener, times(2)).scheduleDeframerSource(sourceCaptor.capture());
+    assertEquals(Bytes.asList(new byte[] {3}), bytes(sourceCaptor.getValue().next()));
+    verify(sourceListener, atLeastOnce()).bytesRead(anyInt());
+    assertEquals(Bytes.asList(new byte[] {14, 15}), bytes(sourceCaptor.getValue().next()));
+    verify(sourceListener, atLeastOnce()).bytesRead(anyInt());
+    assertNull(sourceCaptor.getValue().next());
+    verifyNoMoreInteractions(sinkListener);
+    verifyNoMoreInteractions(sourceListener);
     checkStats(2, 3, 3);
   }
 
   @Test
   public void endOfStreamWithPayloadShouldNotifyEndOfStream() {
-    deframer.request(1);
-    deframer.deframe(buffer(new byte[] {0, 0, 0, 0, 1, 3}), true);
-    verify(listener).messageRead(messages.capture());
-    assertEquals(Bytes.asList(new byte[] {3}), bytes(messages));
-    verify(listener).endOfStream();
-    verify(listener, atLeastOnce()).bytesRead(anyInt());
-    verifyNoMoreInteractions(listener);
+    deframer.sink().request(1);
+    deframer.sink().deframe(buffer(new byte[] {0, 0, 0, 0, 1, 3}));
+    deframer.sink().scheduleCloseWhenComplete();
+    verify(sinkListener, times(3)).scheduleDeframerSource(sourceCaptor.capture());
+    assertEquals(Bytes.asList(new byte[] {3}), bytes(sourceCaptor.getValue().next()));
+    verify(sourceListener, atLeastOnce()).bytesRead(anyInt());
+    assertNull(sourceCaptor.getValue().next());
+    verify(sourceListener).deframerClosed(false);
+    verifyNoMoreInteractions(sinkListener);
+    verifyNoMoreInteractions(sourceListener);
     checkStats(1, 1, 1);
   }
 
   @Test
   public void endOfStreamShouldNotifyEndOfStream() {
-    deframer.deframe(buffer(new byte[0]), true);
-    verify(listener).endOfStream();
-    verifyNoMoreInteractions(listener);
+    deframer.sink().deframe(buffer(new byte[0]));
+    deframer.sink().scheduleCloseWhenComplete();
+    verify(sinkListener, times(2)).scheduleDeframerSource(sourceCaptor.capture());
+    assertNull(sourceCaptor.getValue().next());
+    verify(sourceListener).deframerClosed(false);
+    verifyNoMoreInteractions(sinkListener);
+    verifyNoMoreInteractions(sourceListener);
+    checkStats(0, 0, 0);
+  }
+
+  @Test
+  public void endOfStreamWithPartialMessageInNextFrame() {
+    deframer.sink().deframe(buffer(new byte[1]));
+    deframer.sink().request(1);
+    deframer.sink().scheduleCloseWhenComplete();
+    verify(sinkListener, times(3)).scheduleDeframerSource(sourceCaptor.capture());
+    assertNull(sourceCaptor.getValue().next());
+    verify(sourceListener, atLeastOnce()).bytesRead(anyInt());
+    verify(sourceListener).deframerClosed(true);
+    verifyNoMoreInteractions(sinkListener);
+    verifyNoMoreInteractions(sourceListener);
     checkStats(0, 0, 0);
   }
 
   @Test
   public void payloadSplitBetweenBuffers() {
-    deframer.request(1);
-    deframer.deframe(buffer(new byte[] {0, 0, 0, 0, 7, 3, 14, 1, 5, 9}), false);
-    verify(listener, atLeastOnce()).bytesRead(anyInt());
-    verifyNoMoreInteractions(listener);
-    deframer.deframe(buffer(new byte[] {2, 6}), false);
-    verify(listener).messageRead(messages.capture());
-    assertEquals(Bytes.asList(new byte[] {3, 14, 1, 5, 9, 2, 6}), bytes(messages));
-    verify(listener, atLeastOnce()).bytesRead(anyInt());
-    assertTrue(deframer.isStalled());
-    verifyNoMoreInteractions(listener);
+    deframer.sink().request(1);
+    deframer.sink().deframe(buffer(new byte[] {0, 0, 0, 0, 7, 3, 14, 1, 5, 9}));
+    verify(sinkListener, times(2)).scheduleDeframerSource(sourceCaptor.capture());
+    assertNull(sourceCaptor.getValue().next());
+    verify(sourceListener, atLeastOnce()).bytesRead(anyInt());
+    verifyNoMoreInteractions(sinkListener);
+    verifyNoMoreInteractions(sourceListener);
+    deframer.sink().deframe(buffer(new byte[] {2, 6}));
+    verify(sinkListener, times(3)).scheduleDeframerSource(sourceCaptor.capture());
+    assertEquals(
+        Bytes.asList(new byte[] {3, 14, 1, 5, 9, 2, 6}), bytes(sourceCaptor.getValue().next()));
+    verify(sourceListener, atLeastOnce()).bytesRead(anyInt());
+    verifyNoMoreInteractions(sinkListener);
+    verifyNoMoreInteractions(sourceListener);
     checkStats(1, 7, 7);
   }
 
   @Test
   public void frameHeaderSplitBetweenBuffers() {
-    deframer.request(1);
-
-    deframer.deframe(buffer(new byte[] {0, 0}), false);
-    verify(listener, atLeastOnce()).bytesRead(anyInt());
-    verifyNoMoreInteractions(listener);
-    deframer.deframe(buffer(new byte[] {0, 0, 1, 3}), false);
-    verify(listener).messageRead(messages.capture());
-    assertEquals(Bytes.asList(new byte[] {3}), bytes(messages));
-    verify(listener, atLeastOnce()).bytesRead(anyInt());
-    assertTrue(deframer.isStalled());
-    verifyNoMoreInteractions(listener);
+    deframer.sink().request(1);
+    deframer.sink().deframe(buffer(new byte[] {0, 0}));
+    verify(sinkListener, times(2)).scheduleDeframerSource(sourceCaptor.capture());
+    assertNull(sourceCaptor.getValue().next());
+    verify(sourceListener, atLeastOnce()).bytesRead(anyInt());
+    verifyNoMoreInteractions(sinkListener);
+    verifyNoMoreInteractions(sourceListener);
+    deframer.sink().deframe(buffer(new byte[] {0, 0, 1, 3}));
+    verify(sinkListener, times(3)).scheduleDeframerSource(sourceCaptor.capture());
+    assertEquals(Bytes.asList(new byte[] {3}), bytes(sourceCaptor.getValue().next()));
+    verify(sourceListener, atLeastOnce()).bytesRead(anyInt());
+    verifyNoMoreInteractions(sinkListener);
+    verifyNoMoreInteractions(sourceListener);
     checkStats(1, 1, 1);
   }
 
   @Test
   public void emptyPayload() {
-    deframer.request(1);
-    deframer.deframe(buffer(new byte[] {0, 0, 0, 0, 0}), false);
-    verify(listener).messageRead(messages.capture());
-    assertEquals(Bytes.asList(), bytes(messages));
-    verify(listener, atLeastOnce()).bytesRead(anyInt());
-    verifyNoMoreInteractions(listener);
+    deframer.sink().request(1);
+    deframer.sink().deframe(buffer(new byte[] {0, 0, 0, 0, 0}));
+    verify(sinkListener, times(2)).scheduleDeframerSource(sourceCaptor.capture());
+    assertEquals(Bytes.asList(), bytes(sourceCaptor.getValue().next()));
+    verify(sourceListener, atLeastOnce()).bytesRead(anyInt());
+    verifyNoMoreInteractions(sinkListener);
+    verifyNoMoreInteractions(sourceListener);
     checkStats(1, 0, 0);
   }
 
   @Test
   public void largerFrameSize() {
-    deframer.request(1);
-    deframer.deframe(ReadableBuffers.wrap(
-        Bytes.concat(new byte[] {0, 0, 0, 3, (byte) 232}, new byte[1000])), false);
-    verify(listener).messageRead(messages.capture());
-    assertEquals(Bytes.asList(new byte[1000]), bytes(messages));
-    verify(listener, atLeastOnce()).bytesRead(anyInt());
-    verifyNoMoreInteractions(listener);
+    deframer.sink().request(1);
+    deframer.sink().deframe(ReadableBuffers.wrap(
+        Bytes.concat(new byte[] {0, 0, 0, 3, (byte) 232}, new byte[1000])));
+    verify(sinkListener, times(2)).scheduleDeframerSource(sourceCaptor.capture());
+    assertEquals(Bytes.asList(new byte[1000]), bytes(sourceCaptor.getValue().next()));
+    verify(sourceListener, atLeastOnce()).bytesRead(anyInt());
+    verifyNoMoreInteractions(sinkListener);
+    verifyNoMoreInteractions(sourceListener);
     checkStats(1, 1000, 1000);
   }
 
   @Test
   public void endOfStreamCallbackShouldWaitForMessageDelivery() {
-    deframer.deframe(buffer(new byte[] {0, 0, 0, 0, 1, 3}), true);
-    verifyNoMoreInteractions(listener);
+    deframer.sink().deframe(buffer(new byte[] {0, 0, 0, 0, 1, 3}));
+    deframer.sink().scheduleCloseWhenComplete();
+    verify(sinkListener, times(2)).scheduleDeframerSource(sourceCaptor.capture());
+    assertNull(sourceCaptor.getValue().next());
+    verifyNoMoreInteractions(sinkListener);
+    verifyNoMoreInteractions(sourceListener);
 
-    deframer.request(1);
-    verify(listener).messageRead(messages.capture());
-    assertEquals(Bytes.asList(new byte[] {3}), bytes(messages));
-    verify(listener).endOfStream();
-    verify(listener, atLeastOnce()).bytesRead(anyInt());
-    verifyNoMoreInteractions(listener);
+    deframer.sink().request(1);
+    verify(sinkListener, times(3)).scheduleDeframerSource(sourceCaptor.capture());
+    assertEquals(Bytes.asList(new byte[] {3}), bytes(sourceCaptor.getValue().next()));
+    verify(sourceListener, atLeastOnce()).bytesRead(anyInt());
+    assertNull(sourceCaptor.getValue().next());
+    verify(sourceListener).deframerClosed(false);
+    verifyNoMoreInteractions(sinkListener);
+    verifyNoMoreInteractions(sourceListener);
     checkStats(1, 1, 1);
   }
 
   @Test
   public void compressed() {
-    deframer = new MessageDeframer(listener, new Codec.Gzip(), DEFAULT_MAX_MESSAGE_SIZE,
-        statsTraceCtx, "test");
-    deframer.request(1);
+    deframer = new MessageDeframer(sinkListener, sourceListener, new Codec.Gzip(),
+        DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx, "test");
+    deframer.sink().request(1);
 
     byte[] payload = compress(new byte[1000]);
     assertTrue(payload.length < 100);
     byte[] header = new byte[] {1, 0, 0, 0, (byte) payload.length};
-    deframer.deframe(buffer(Bytes.concat(header, payload)), false);
-    verify(listener).messageRead(messages.capture());
-    assertEquals(Bytes.asList(new byte[1000]), bytes(messages));
-    verify(listener, atLeastOnce()).bytesRead(anyInt());
-    verifyNoMoreInteractions(listener);
+    deframer.sink().deframe(buffer(Bytes.concat(header, payload)));
+    verify(sinkListener, times(2)).scheduleDeframerSource(sourceCaptor.capture());
+    assertEquals(Bytes.asList(new byte[1000]), bytes(sourceCaptor.getValue().next()));
+    verify(sourceListener, atLeastOnce()).bytesRead(anyInt());
+    verifyNoMoreInteractions(sinkListener);
+    verifyNoMoreInteractions(sourceListener);
     checkStats(1, payload.length, 1000);
-  }
-
-  @Test
-  public void deliverIsReentrantSafe() {
-    doAnswer(new Answer<Void>() {
-      @Override
-      public Void answer(InvocationOnMock invocation) throws Throwable {
-        deframer.request(1);
-        return null;
-      }
-    }).when(listener).messageRead(Matchers.<InputStream>any());
-    deframer.deframe(buffer(new byte[] {0, 0, 0, 0, 1, 3}), true);
-    verifyNoMoreInteractions(listener);
-
-    deframer.request(1);
-    verify(listener).messageRead(messages.capture());
-    assertEquals(Bytes.asList(new byte[] {3}), bytes(messages));
-    verify(listener).endOfStream();
-    verify(listener, atLeastOnce()).bytesRead(anyInt());
-    verifyNoMoreInteractions(listener);
   }
 
   @Test

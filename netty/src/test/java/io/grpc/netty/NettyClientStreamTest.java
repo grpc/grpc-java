@@ -40,12 +40,14 @@ import static io.grpc.netty.Utils.STATUS_OK;
 import static io.netty.util.CharsetUtil.UTF_8;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
 import static org.mockito.Matchers.same;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -61,6 +63,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.MessageDeframer;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.netty.WriteQueue.QueuedCommand;
 import io.netty.buffer.ByteBuf;
@@ -73,6 +76,7 @@ import io.netty.util.AsciiString;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -103,6 +107,27 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
       .setRequestMarshaller(marshaller)
       .setResponseMarshaller(marshaller)
       .build();
+
+  @Before
+  @Override
+  public void setUp() {
+    super.setUp();
+
+    doAnswer(
+        new Answer<Void>() {
+          @Override
+          public Void answer(InvocationOnMock invocation) {
+            MessageDeframer.Source mp = (MessageDeframer.Source) invocation.getArguments()[0];
+            InputStream message;
+            while ((message = mp.next()) != null) {
+              listener.messageRead(message);
+            }
+            return null;
+          }
+        })
+      .when(listener)
+      .scheduleDeframerSource(any(MessageDeframer.Source.class));
+  }
 
 
   @Override
@@ -335,7 +360,10 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     stream().request(1);
 
     // Verify that the listener was only notified of the first message, not the second.
-    verify(listener).messageRead(any(InputStream.class));
+    ArgumentCaptor<MessageDeframer.Source> sourceCaptor =
+            ArgumentCaptor.forClass(MessageDeframer.Source.class);
+    verify(listener, atLeastOnce()).scheduleDeframerSource(sourceCaptor.capture());
+    assertNull(sourceCaptor.getValue().next());
     verify(listener).closed(eq(Status.CANCELLED), eq(trailers));
   }
 
@@ -477,9 +505,9 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     return Utils.convertTrailers(trailers, true);
   }
 
-  private static class TransportStateImpl extends NettyClientStream.TransportState {
+  private class TransportStateImpl extends NettyClientStream.TransportState {
     public TransportStateImpl(NettyClientHandler handler, int maxMessageSize) {
-      super(handler, maxMessageSize, StatsTraceContext.NOOP);
+      super(handler, channel.eventLoop(), maxMessageSize, StatsTraceContext.NOOP);
     }
 
     @Override

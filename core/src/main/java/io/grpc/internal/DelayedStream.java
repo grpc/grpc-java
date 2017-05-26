@@ -393,6 +393,20 @@ class DelayedStream implements ClientStream {
     }
 
     @Override
+    public void scheduleDeframerSource(final MessageDeframer.Source source) {
+      if (passThrough) {
+        realListener.scheduleDeframerSource(source);
+      } else {
+        delayOrExecute(new Runnable() {
+          @Override
+          public void run() {
+            realListener.scheduleDeframerSource(source);
+          }
+        });
+      }
+    }
+
+    @Override
     public void onReady() {
       if (passThrough) {
         realListener.onReady();

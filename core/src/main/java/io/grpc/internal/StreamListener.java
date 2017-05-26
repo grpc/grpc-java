@@ -48,7 +48,15 @@ public interface StreamListener {
    *
    * @param message the bytes of the message.
    */
+  // TODO(ericgribkoff) Remove this method.
   void messageRead(InputStream message);
+
+  /**
+   * Called to schedule deframing in the application thread.
+   *
+   * @param source the message deframer source
+   */
+  void scheduleDeframerSource(MessageDeframer.Source source);
 
   /**
    * This indicates that the transport is now capable of sending additional messages

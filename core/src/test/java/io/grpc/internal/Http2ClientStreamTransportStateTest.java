@@ -37,12 +37,15 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.same;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+
+import java.io.InputStream;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -51,6 +54,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+
 
 /** Unit tests for {@link Http2ClientStreamTransportState}. */
 @RunWith(JUnit4.class)
@@ -61,6 +67,22 @@ public class Http2ClientStreamTransportStateTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
+
+    doAnswer(
+          new Answer<Void>() {
+            @Override
+            public Void answer(InvocationOnMock invocation) {
+              MessageDeframer.Source source =
+                  (MessageDeframer.Source) invocation.getArguments()[0];
+              InputStream message;
+              while ((message = source.next()) != null) {
+                mockListener.messageRead(message);
+              }
+              return null;
+            }
+          })
+      .when(mockListener)
+      .scheduleDeframerSource(any(MessageDeframer.Source.class));
   }
 
   @Test
@@ -342,14 +364,19 @@ public class Http2ClientStreamTransportStateTest {
     }
 
     @Override
-    protected void http2ProcessingFailed(Status status, Metadata trailers) {
-      transportReportStatus(status, false, trailers);
+    protected void http2ProcessingFailed(Status status, boolean stopDelivery, Metadata trailers) {
+      transportReportStatus(status, stopDelivery, trailers);
     }
 
     @Override
-    protected void deframeFailed(Throwable cause) {}
+    public void deframeFailed(Throwable cause) {}
 
     @Override
     public void bytesRead(int processedBytes) {}
+
+    @Override
+    public void deframerClosed(boolean hasPartialMessageIgnored) {
+      deframerClosedNotThreadSafe();
+    }
   }
 }

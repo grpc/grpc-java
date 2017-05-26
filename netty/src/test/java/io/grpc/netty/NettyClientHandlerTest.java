@@ -51,6 +51,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.notNull;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -69,6 +70,7 @@ import io.grpc.internal.ClientTransport;
 import io.grpc.internal.ClientTransport.PingCallback;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
+import io.grpc.internal.MessageDeframer;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ClientHeadersDecoder;
 import io.netty.buffer.ByteBuf;
@@ -77,6 +79,7 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
+import io.netty.channel.EventLoop;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2Connection;
@@ -100,6 +103,8 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 /**
  * Tests for {@link NettyClientHandler}.
@@ -141,8 +146,24 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
       mockKeepAliveManager = mock(KeepAliveManager.class);
     }
 
+    doAnswer(
+          new Answer<Void>() {
+            @Override
+            public Void answer(InvocationOnMock invocation) {
+              MessageDeframer.Source mp = (MessageDeframer.Source) invocation.getArguments()[0];
+              InputStream message;
+              while ((message = mp.next()) != null) {
+                streamListener.messageRead(message);
+              }
+              return null;
+            }
+          })
+      .when(streamListener)
+      .scheduleDeframerSource(any(MessageDeframer.Source.class));
+
     initChannel(new GrpcHttp2ClientHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
-    streamTransportState = new TransportStateImpl(handler(), DEFAULT_MAX_MESSAGE_SIZE);
+    streamTransportState = new TransportStateImpl(handler(), channel.eventLoop(),
+        DEFAULT_MAX_MESSAGE_SIZE);
     streamTransportState.setListener(streamListener);
 
     grpcHeaders = new DefaultHttp2Headers()
@@ -447,12 +468,14 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
     assertEquals(3, streamTransportState.id());
 
-    streamTransportState = new TransportStateImpl(handler(), DEFAULT_MAX_MESSAGE_SIZE);
+    streamTransportState = new TransportStateImpl(handler(), channel.eventLoop(),
+        DEFAULT_MAX_MESSAGE_SIZE);
     streamTransportState.setListener(streamListener);
     enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
     assertEquals(5, streamTransportState.id());
 
-    streamTransportState = new TransportStateImpl(handler(), DEFAULT_MAX_MESSAGE_SIZE);
+    streamTransportState = new TransportStateImpl(handler(), channel.eventLoop(),
+        DEFAULT_MAX_MESSAGE_SIZE);
     streamTransportState.setListener(streamListener);
     enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
     assertEquals(7, streamTransportState.id());
@@ -654,8 +677,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   private static class TransportStateImpl extends NettyClientStream.TransportState {
-    public TransportStateImpl(NettyClientHandler handler, int maxMessageSize) {
-      super(handler, maxMessageSize, StatsTraceContext.NOOP);
+    public TransportStateImpl(NettyClientHandler handler, EventLoop eventLoop, int maxMessageSize) {
+      super(handler, eventLoop, maxMessageSize, StatsTraceContext.NOOP);
     }
 
     @Override
