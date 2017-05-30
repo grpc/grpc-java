@@ -405,6 +405,7 @@ public class ManagedChannelImplTest {
 
   @Test
   public void shutdownNowWithMultipleOobChannels() {
+    // TODO(zhangkun83): write it
   }
 
   @Test
@@ -468,6 +469,35 @@ public class ManagedChannelImplTest {
     verify(mockCallListener, never()).onClose(same(Status.CANCELLED), same(trailers));
     assertEquals(1, callExecutor.runDueTasks());
     verify(mockCallListener).onClose(same(Status.CANCELLED), same(trailers));
+  }
+
+  @Test
+  public void skipEquivalentPicker() {
+    createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, new Metadata());
+
+    SubchannelPicker picker1 = mock(SubchannelPicker.class);
+    SubchannelPicker picker2 = mock(SubchannelPicker.class);
+    SubchannelPicker picker3 = mock(SubchannelPicker.class);
+    when(picker1.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withNoResult());
+    // picker1 and picker2 are equivalent
+    when(picker1.isEquivalentTo(same(picker2))).thenReturn(true);
+    when(picker2.isEquivalentTo(same(picker1))).thenReturn(true);
+    when(picker3.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withNoResult());
+
+    helper.updatePicker(picker1);
+    verify(picker1).pickSubchannel(any(PickSubchannelArgs.class));
+
+    helper.updatePicker(picker2);
+
+    helper.updatePicker(picker3);
+    verify(picker3).pickSubchannel(any(PickSubchannelArgs.class));
+
+    verify(picker1).pickSubchannel(any(PickSubchannelArgs.class));
+    verify(picker2, never()).pickSubchannel(any(PickSubchannelArgs.class));
   }
 
   @Test

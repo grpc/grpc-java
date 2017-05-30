@@ -256,6 +256,14 @@ public class GrpclbLoadBalancerTest {
     ErrorPicker picker = new ErrorPicker(error);
     assertSame(error, picker.pickSubchannel(mockArgs).getStatus());
     verifyNoMoreInteractions(mockArgs);
+
+    // Test equality check
+    ErrorPicker picker2 = new ErrorPicker(error);
+    ErrorPicker picker3 = new ErrorPicker(Status.CANCELLED);
+    assertTrue(picker.isEquivalentTo(picker2));
+    assertFalse(picker.isEquivalentTo(picker3));
+    assertFalse(picker2.isEquivalentTo(picker3));
+    assertFalse(picker.isEquivalentTo(GrpclbLoadBalancer.BUFFER_PICKER));
   }
 
   @Test
@@ -266,8 +274,7 @@ public class GrpclbLoadBalancerTest {
     RoundRobinEntry r2 = new RoundRobinEntry(subchannel, loadRecorder, "LBTOKEN0001");
     RoundRobinEntry r3 = new RoundRobinEntry(subchannel, loadRecorder, "LBTOKEN0002");
 
-    List<RoundRobinEntry> list = Arrays.asList(r1, r2, r3);
-    RoundRobinPicker picker = new RoundRobinPicker(list);
+    RoundRobinPicker picker = new RoundRobinPicker(Arrays.asList(r1, r2, r3));
 
     PickSubchannelArgs args1 = mock(PickSubchannelArgs.class);
     Metadata headers1 = new Metadata();
@@ -298,6 +305,14 @@ public class GrpclbLoadBalancerTest {
     assertSame(r1.result, picker.pickSubchannel(args4));
     verify(args4).getHeaders();
     assertFalse(headers4.containsKey(GrpclbConstants.TOKEN_METADATA_KEY));
+
+    // Test isEquivalentTo()
+    RoundRobinPicker picker2 = new RoundRobinPicker(Arrays.asList(r2, r3, r1));
+    RoundRobinPicker picker3 = new RoundRobinPicker(Arrays.asList(r1, r2, r3));
+    assertTrue(picker.isEquivalentTo(picker3));
+    assertFalse(picker.isEquivalentTo(picker2));
+    assertFalse(picker2.isEquivalentTo(picker3));
+    assertFalse(picker.isEquivalentTo(GrpclbLoadBalancer.BUFFER_PICKER));
 
     verify(subchannel, never()).getAttributes();
   }

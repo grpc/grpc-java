@@ -207,6 +207,16 @@ public abstract class LoadBalancer {
      * @param args the pick arguments
      */
     public abstract PickResult pickSubchannel(PickSubchannelArgs args);
+
+    /**
+     * Returns {@code true} if the two pickers should be considered equivalent.
+     *
+     * <p>As an optimization, if {@link Helper#updatePicker} receives a picker that is equivalent to
+     * the current one, the new one will be ignored.  Default implemetation uses identity equality.
+     */
+    public boolean isEquivalentTo(SubchannelPicker other) {
+      return this == other;
+    }
   }
 
   /**
@@ -476,6 +486,9 @@ public abstract class LoadBalancer {
      * <p>The channel will hold the picker and use it for all RPCs, until {@code updatePicker()} is
      * called again and a new picker replaces the old one.  If {@code updatePicker()} has never been
      * called, the channel will buffer all RPCs until a picker is provided.
+     *
+     * <p>If the new picker {@link SubchannelPicker#isEquivalentTo is equivalent to} the current
+     * one, this update will be ignored.
      */
     public abstract void updatePicker(SubchannelPicker picker);
 
