@@ -627,6 +627,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
     }
   }
 
+  @VisibleForTesting
   static class ContextCloser implements Runnable {
     private final Context.CancellableContext context;
     private final Throwable cause;
