@@ -428,7 +428,10 @@ public final class NettyChannelBuilder
   interface TransportCreationParamsFilterFactory {
     @CheckReturnValue
     TransportCreationParamsFilter create(
-        SocketAddress targetServerAddress, String authority, @Nullable String userAgent);
+        SocketAddress targetServerAddress,
+        String authority,
+        @Nullable String userAgent,
+        Attributes attrs);
   }
 
   @CheckReturnValue
@@ -439,7 +442,7 @@ public final class NettyChannelBuilder
 
     @Nullable String getUserAgent();
 
-    ProtocolNegotiator getProtocolNegotiator(Attributes attrs);
+    ProtocolNegotiator getProtocolNegotiator();
   }
 
   /**
@@ -477,8 +480,12 @@ public final class NettyChannelBuilder
         transportCreationParamsFilterFactory = new TransportCreationParamsFilterFactory() {
           @Override
           public TransportCreationParamsFilter create(
-              SocketAddress targetServerAddress, String authority, String userAgent) {
-            return new DynamicNettyTransportParams(targetServerAddress, authority, userAgent);
+              SocketAddress targetServerAddress,
+              String authority,
+              String userAgent,
+              Attributes attrs) {
+            return new DynamicNettyTransportParams(
+                targetServerAddress, authority, userAgent, attrs);
           }
         };
       }
@@ -508,7 +515,7 @@ public final class NettyChannelBuilder
       checkState(!closed, "The transport factory is closed.");
 
       TransportCreationParamsFilter dparams =
-          transportCreationParamsFilterFactory.create(serverAddress, authority, userAgent);
+          transportCreationParamsFilterFactory.create(serverAddress, authority, userAgent, attrs);
 
       final AtomicBackoff.State keepAliveTimeNanosState = keepAliveTimeNanos.getState();
       Runnable tooManyPingsRunnable = new Runnable() {
@@ -519,7 +526,7 @@ public final class NettyChannelBuilder
       };
       NettyClientTransport transport = new NettyClientTransport(
           dparams.getTargetServerAddress(), channelType, channelOptions, group,
-          dparams.getProtocolNegotiator(attrs), flowControlWindow,
+          dparams.getProtocolNegotiator(), flowControlWindow,
           maxMessageSize, maxHeaderListSize, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos,
           keepAliveWithoutCalls, dparams.getAuthority(), dparams.getUserAgent(),
           tooManyPingsRunnable);
@@ -544,12 +551,14 @@ public final class NettyChannelBuilder
       private final SocketAddress targetServerAddress;
       private final String authority;
       @Nullable private final String userAgent;
+      private Attributes attrs;
 
       private DynamicNettyTransportParams(
-          SocketAddress targetServerAddress, String authority, String userAgent) {
+          SocketAddress targetServerAddress, String authority, String userAgent, Attributes attrs) {
         this.targetServerAddress = targetServerAddress;
         this.authority = authority;
         this.userAgent = userAgent;
+        this.attrs = attrs;
       }
 
       @Override
@@ -568,7 +577,7 @@ public final class NettyChannelBuilder
       }
 
       @Override
-      public ProtocolNegotiator getProtocolNegotiator(Attributes attrs) {
+      public ProtocolNegotiator getProtocolNegotiator() {
         return createProtocolNegotiator(authority, negotiationType, sslContext, attrs);
       }
     }
