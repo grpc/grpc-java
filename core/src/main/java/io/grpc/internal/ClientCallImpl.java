@@ -319,7 +319,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       // stream is created.
       stream.cancel(DEADLINE_EXCEEDED.augmentDescription(
           String.format("deadline exceeded after %dns", remainingNanos)));
-
     }
   }
 
