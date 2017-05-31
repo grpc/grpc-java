@@ -40,7 +40,7 @@ for reviewers:
   address it as a separate one or multiple commits with a descriptive commit
   message (try avoid using vauge `addressed pr feedback` type of messages).
 
-  Project maintainers are obligated to squash those commits into one
+  Project maintainers are obligated to squash those commits into one when
   merging.
 
 ## Running tests
