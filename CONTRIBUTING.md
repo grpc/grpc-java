@@ -69,7 +69,7 @@ How to get your contributions merged smoothly and quickly.
  
 - Unless your PR is trivial, you should expect there will be reviewer comments that you'll need to address before merging. We expect you to be reasonably responsive to those comments, otherwise the PR will be closed after 2-3 weeks of inactivity.
  
-- Maintain **clean commit history** and use **meaningful commit messages**. See above for grpc-java specific guidelines for maintaining commit history.
+- Maintain **clean commit history** and use **meaningful commit messages**. See [maintaining clean commit history](#maintaining-clean-commit-history) for details.
  
 - Keep your PR up to date with upstream/master (if there are merge conflicts, we can't really merge your change).
 
