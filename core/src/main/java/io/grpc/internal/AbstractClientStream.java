@@ -1,32 +1,17 @@
 /*
- * Copyright 2014, Google Inc. All rights reserved.
+ * Copyright 2014, gRPC Authors All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *    * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *    * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *
- *    * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package io.grpc.internal;
@@ -46,10 +31,10 @@ import javax.annotation.Nullable;
  * implement {@link #transportState()} and {@link #abstractClientStreamSink()}. Must only be called
  * from the sending application thread.
  */
-public abstract class AbstractClientStream2 extends AbstractStream2
+public abstract class AbstractClientStream extends AbstractStream
     implements ClientStream, MessageFramer.Sink {
 
-  private static final Logger log = Logger.getLogger(AbstractClientStream2.class.getName());
+  private static final Logger log = Logger.getLogger(AbstractClientStream.class.getName());
 
   /**
    * A sink for outbound operations, separated from the stream simply to avoid name
@@ -88,7 +73,7 @@ public abstract class AbstractClientStream2 extends AbstractStream2
      * multiple times and from any thread.
      *
      * <p>This is a clone of {@link ClientStream#cancel(Status)};
-     * {@link AbstractClientStream2#cancel} delegates to this method.
+     * {@link AbstractClientStream#cancel} delegates to this method.
      */
     void cancel(Status status);
   }
@@ -104,7 +89,7 @@ public abstract class AbstractClientStream2 extends AbstractStream2
    */
   private volatile boolean cancelled;
 
-  protected AbstractClientStream2(WritableBufferAllocator bufferAllocator,
+  protected AbstractClientStream(WritableBufferAllocator bufferAllocator,
       StatsTraceContext statsTraceCtx, Metadata headers, boolean useGet) {
     Preconditions.checkNotNull(headers, "headers");
     this.useGet = useGet;
@@ -182,7 +167,7 @@ public abstract class AbstractClientStream2 extends AbstractStream2
   }
 
   /** This should only called from the transport thread. */
-  protected abstract static class TransportState extends AbstractStream2.TransportState {
+  protected abstract static class TransportState extends AbstractStream.TransportState {
     /** Whether listener.closed() has been called. */
     private final StatsTraceContext statsTraceCtx;
     private boolean listenerClosed;

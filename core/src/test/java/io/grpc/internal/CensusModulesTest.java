@@ -1,32 +1,17 @@
 /*
- * Copyright 2017, Google Inc. All rights reserved.
+ * Copyright 2017, gRPC Authors All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *    * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *    * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *
- *    * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package io.grpc.internal;
@@ -42,6 +27,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyString;
+import static org.mockito.Matchers.argThat;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isNull;
 import static org.mockito.Matchers.same;
@@ -101,6 +87,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatcher;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -172,6 +159,13 @@ public class CensusModulesTest {
   private final Span spyClientSpan = spy(fakeClientSpan);
   private final Span spyServerSpan = spy(fakeServerSpan);
   private final byte[] binarySpanContext = new byte[]{3, 1, 5};
+  private final ArgumentMatcher<StartSpanOptions> startSpanOptionsMatcher =
+      new ArgumentMatcher<StartSpanOptions>() {
+        @Override
+        public boolean matches(Object argument) {
+          return Boolean.TRUE.equals(((StartSpanOptions) argument).getRecordEvents());
+        }
+      };
 
   @Rule
   public final GrpcServerRule grpcServerRule = new GrpcServerRule().directExecutor();
@@ -298,10 +292,11 @@ public class CensusModulesTest {
     if (nonDefaultContext) {
       verify(mockSpanFactory).startSpan(
           same(fakeClientParentSpan), eq("Sent.package1.service2.method3"),
-          any(StartSpanOptions.class));
+          argThat(startSpanOptionsMatcher));
     } else {
       verify(mockSpanFactory).startSpan(
-          isNull(Span.class), eq("Sent.package1.service2.method3"), any(StartSpanOptions.class));
+          isNull(Span.class), eq("Sent.package1.service2.method3"),
+          argThat(startSpanOptionsMatcher));
     }
     verify(spyClientSpan, never()).end(any(EndSpanOptions.class));
 
@@ -387,7 +382,7 @@ public class CensusModulesTest {
     Metadata headers = new Metadata();
     ClientStreamTracer tracer = callTracer.newClientStreamTracer(headers);
     verify(mockSpanFactory).startSpan(
-        isNull(Span.class), eq("Sent.package1.service2.method3"), any(StartSpanOptions.class));
+        isNull(Span.class), eq("Sent.package1.service2.method3"), argThat(startSpanOptionsMatcher));
     verify(spyClientSpan, never()).end(any(EndSpanOptions.class));
 
     tracer.streamClosed(Status.OK);
@@ -431,7 +426,7 @@ public class CensusModulesTest {
         censusTracing.newClientCallTracer(fakeClientParentSpan, method.getFullMethodName());
     verify(mockSpanFactory).startSpan(
         same(fakeClientParentSpan), eq("Sent.package1.service2.method3"),
-        any(StartSpanOptions.class));
+        argThat(startSpanOptionsMatcher));
 
     callTracer.callEnded(Status.DEADLINE_EXCEEDED.withDescription("3 seconds"));
     verify(spyClientSpan).end(
@@ -552,7 +547,7 @@ public class CensusModulesTest {
     verifyNoMoreInteractions(mockTracingPropagationHandler);
     verify(mockSpanFactory).startSpan(
         same(fakeClientParentSpan), eq("Sent.package1.service2.method3"),
-        any(StartSpanOptions.class));
+        argThat(startSpanOptionsMatcher));
     verifyNoMoreInteractions(mockSpanFactory);
     assertTrue(headers.containsKey(censusTracing.tracingHeader));
 
@@ -562,7 +557,7 @@ public class CensusModulesTest {
     verify(mockTracingPropagationHandler).fromBinaryValue(same(binarySpanContext));
     verify(mockSpanFactory).startSpanWithRemoteParent(
         same(fakeServerParentSpanContext), eq("Recv.package1.service2.method3"),
-        any(StartSpanOptions.class));
+        argThat(startSpanOptionsMatcher));
 
     Context filteredContext = serverTracer.filterContext(Context.ROOT);
     assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));
@@ -591,7 +586,7 @@ public class CensusModulesTest {
         method.getFullMethodName(), headers);
     verify(mockSpanFactory).startSpanWithRemoteParent(
         isNull(SpanContext.class), eq("Recv.package1.service2.method3"),
-        any(StartSpanOptions.class));
+        argThat(startSpanOptionsMatcher));
   }
 
   @Test
@@ -646,7 +641,7 @@ public class CensusModulesTest {
     verifyZeroInteractions(mockTracingPropagationHandler);
     verify(mockSpanFactory).startSpanWithRemoteParent(
         isNull(SpanContext.class), eq("Recv.package1.service2.method3"),
-        any(StartSpanOptions.class));
+        argThat(startSpanOptionsMatcher));
 
     Context filteredContext = tracer.filterContext(Context.ROOT);
     assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));

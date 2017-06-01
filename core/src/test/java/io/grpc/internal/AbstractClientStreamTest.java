@@ -1,32 +1,17 @@
 /*
- * Copyright 2015, Google Inc. All rights reserved.
+ * Copyright 2015, gRPC Authors All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *    * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *    * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *
- *    * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package io.grpc.internal;
@@ -48,7 +33,7 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StreamTracer;
-import io.grpc.internal.AbstractClientStream2.TransportState;
+import io.grpc.internal.AbstractClientStream.TransportState;
 import io.grpc.internal.MessageFramerTest.ByteWritableBuffer;
 import java.io.ByteArrayInputStream;
 import org.junit.Before;
@@ -63,11 +48,11 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 /**
- * Test for {@link AbstractClientStream2}.  This class tries to test functionality in
+ * Test for {@link AbstractClientStream}.  This class tries to test functionality in
  * AbstractClientStream2, but not in any super classes.
  */
 @RunWith(JUnit4.class)
-public class AbstractClientStream2Test {
+public class AbstractClientStreamTest {
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
@@ -91,7 +76,7 @@ public class AbstractClientStream2Test {
   public void cancel_doNotAcceptOk() {
     for (Code code : Code.values()) {
       ClientStreamListener listener = new NoopClientStreamListener();
-      AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
+      AbstractClientStream stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
       stream.start(listener);
       if (code != Code.OK) {
         stream.cancel(Status.fromCodeValue(code.value()));
@@ -109,7 +94,7 @@ public class AbstractClientStream2Test {
   @Test
   public void cancel_failsOnNull() {
     ClientStreamListener listener = new NoopClientStreamListener();
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(listener);
     thrown.expect(NullPointerException.class);
 
@@ -119,7 +104,7 @@ public class AbstractClientStream2Test {
   @Test
   public void cancel_notifiesOnlyOnce() {
     final BaseTransportState state = new BaseTransportState(statsTraceCtx);
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, state, new BaseSink() {
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, state, new BaseSink() {
       @Override
       public void cancel(Status errorStatus) {
         // Cancel should eventually result in a transportReportStatus on the transport thread
@@ -136,7 +121,7 @@ public class AbstractClientStream2Test {
 
   @Test
   public void startFailsOnNullListener() {
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
 
     thrown.expect(NullPointerException.class);
 
@@ -145,7 +130,7 @@ public class AbstractClientStream2Test {
 
   @Test
   public void cantCallStartTwice() {
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(mockListener);
     thrown.expect(IllegalStateException.class);
 
@@ -155,7 +140,7 @@ public class AbstractClientStream2Test {
   @Test
   public void inboundDataReceived_failsOnNullFrame() {
     ClientStreamListener listener = new NoopClientStreamListener();
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(listener);
 
     TransportState state = stream.transportState();
@@ -166,7 +151,7 @@ public class AbstractClientStream2Test {
 
   @Test
   public void inboundHeadersReceived_notifiesListener() {
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(mockListener);
     Metadata headers = new Metadata();
 
@@ -176,7 +161,7 @@ public class AbstractClientStream2Test {
 
   @Test
   public void inboundHeadersReceived_failsIfStatusReported() {
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(mockListener);
     stream.transportState().transportReportStatus(Status.CANCELLED, false, new Metadata());
 
@@ -188,7 +173,7 @@ public class AbstractClientStream2Test {
 
   @Test
   public void inboundHeadersReceived_acceptsGzipEncoding() {
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(mockListener);
     Metadata headers = new Metadata();
     headers.put(GrpcUtil.MESSAGE_ENCODING_KEY, new Codec.Gzip().getMessageEncoding());
@@ -199,7 +184,7 @@ public class AbstractClientStream2Test {
 
   @Test
   public void inboundHeadersReceived_acceptsIdentityEncoding() {
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(mockListener);
     Metadata headers = new Metadata();
     headers.put(GrpcUtil.MESSAGE_ENCODING_KEY, Codec.Identity.NONE.getMessageEncoding());
@@ -210,7 +195,7 @@ public class AbstractClientStream2Test {
 
   @Test
   public void rstStreamClosesStream() {
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(mockListener);
     // The application will call request when waiting for a message, which will in turn call this
     // on the transport thread.
@@ -226,7 +211,7 @@ public class AbstractClientStream2Test {
   
   @Test
   public void getRequest() {
-    AbstractClientStream2.Sink sink = mock(AbstractClientStream2.Sink.class);
+    AbstractClientStream.Sink sink = mock(AbstractClientStream.Sink.class);
     final ClientStreamTracer tracer = spy(new ClientStreamTracer() {});
     ClientStreamTracer.Factory tracerFactory =
         new ClientStreamTracer.Factory() {
@@ -236,7 +221,7 @@ public class AbstractClientStream2Test {
           }
         };
     StatsTraceContext statsTraceCtx = new StatsTraceContext(new StreamTracer[] {tracer});
-    AbstractClientStream2 stream = new BaseAbstractClientStream(allocator,
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator,
         new BaseTransportState(statsTraceCtx), sink, statsTraceCtx, true);
     stream.start(mockListener);
     stream.writeMessage(new ByteArrayInputStream(new byte[1]));
@@ -259,7 +244,7 @@ public class AbstractClientStream2Test {
   /**
    * No-op base class for testing.
    */
-  private static class BaseAbstractClientStream extends AbstractClientStream2 {
+  private static class BaseAbstractClientStream extends AbstractClientStream {
     private final TransportState state;
     private final Sink sink;
 
@@ -305,7 +290,7 @@ public class AbstractClientStream2Test {
     }
   }
 
-  private static class BaseSink implements AbstractClientStream2.Sink {
+  private static class BaseSink implements AbstractClientStream.Sink {
     @Override
     public void writeHeaders(Metadata headers, byte[] payload) {}
 
@@ -319,7 +304,7 @@ public class AbstractClientStream2Test {
     public void cancel(Status reason) {}
   }
 
-  private static class BaseTransportState extends AbstractClientStream2.TransportState {
+  private static class BaseTransportState extends AbstractClientStream.TransportState {
     public BaseTransportState(StatsTraceContext statsTraceCtx) {
       super(DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx);
     }

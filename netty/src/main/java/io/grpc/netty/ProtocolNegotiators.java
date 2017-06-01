@@ -1,32 +1,17 @@
 /*
- * Copyright 2015, Google Inc. All rights reserved.
+ * Copyright 2015, gRPC Authors All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *    * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *    * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *
- *    * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package io.grpc.netty;
@@ -431,6 +416,10 @@ public final class ProtocolNegotiators {
       this.handlers = handlers;
     }
 
+    /**
+     * When this channel is registered, we will add all the ChannelHandlers passed into our
+     * constructor to the pipeline.
+     */
     @Override
     public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
       /**
@@ -456,17 +445,28 @@ public final class ProtocolNegotiators {
       }
     }
 
+    /**
+     * If we encounter an exception, then notify all buffered writes that we failed.
+     */
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
       fail(ctx, cause);
     }
 
+    /**
+     * If this channel becomes inactive, then notify all buffered writes that we failed.
+     */
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
       fail(ctx, unavailableException("Connection broken while performing protocol negotiation"));
       super.channelInactive(ctx);
     }
 
+    /**
+     * Buffers the write until either {@link #writeBufferedAndRemove(ChannelHandlerContext)} is
+     * called, or we have somehow failed. If we have already failed in the past, then the write
+     * will fail immediately.
+     */
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
         throws Exception {
@@ -490,6 +490,10 @@ public final class ProtocolNegotiators {
       }
     }
 
+    /**
+     * Calls to this method will not trigger an immediate flush. The flush will be deferred until
+     * {@link #writeBufferedAndRemove(ChannelHandlerContext)}.
+     */
     @Override
     public void flush(ChannelHandlerContext ctx) {
       /**
@@ -506,6 +510,10 @@ public final class ProtocolNegotiators {
       }
     }
 
+    /**
+     * If we are still performing protocol negotiation, then this will propagate failures to all
+     * buffered writes.
+     */
     @Override
     public void close(ChannelHandlerContext ctx, ChannelPromise future) throws Exception {
       if (ctx.channel().isActive()) { // This may be a notification that the socket was closed
@@ -514,6 +522,9 @@ public final class ProtocolNegotiators {
       super.close(ctx, future);
     }
 
+    /**
+     * Propagate failures to all buffered writes.
+     */
     protected final void fail(ChannelHandlerContext ctx, Throwable cause) {
       if (failCause == null) {
         failCause = cause;

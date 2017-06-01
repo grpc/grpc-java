@@ -1,32 +1,17 @@
 /*
- * Copyright 2014, Google Inc. All rights reserved.
+ * Copyright 2014, gRPC Authors All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *    * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *    * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *
- *    * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package io.grpc.internal;
@@ -115,6 +100,13 @@ public class ServerImplTest {
   private static final Context.CancellableContext SERVER_CONTEXT =
       Context.ROOT.withValue(SERVER_ONLY, "yes").withCancellation();
   private static final ImmutableList<ServerTransportFilter> NO_FILTERS = ImmutableList.of();
+  private static final FakeClock.TaskFilter CONTEXT_CLOSER_TASK_FITLER =
+      new FakeClock.TaskFilter() {
+        @Override
+        public boolean shouldRun(Runnable runnable) {
+          return runnable instanceof ServerImpl.ContextCloser;
+        }
+      };
 
   private final CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
   private final DecompressorRegistry decompressorRegistry =
@@ -766,6 +758,7 @@ public class ServerImplTest {
     assertTrue(onHalfCloseCalled.get());
 
     streamListener.closed(Status.CANCELLED);
+    assertEquals(1, executor.runDueTasks(CONTEXT_CLOSER_TASK_FITLER));
     assertEquals(1, executor.runDueTasks());
     assertTrue(onCancelCalled.get());
 
@@ -773,13 +766,15 @@ public class ServerImplTest {
     verify(stream, times(0)).close(isA(Status.class), isNotNull(Metadata.class));
   }
 
-  @Test
-  public void testClientCancelTriggersContextCancellation() throws Exception {
+  private ServerStreamListener testClientClose_setup(
+      final AtomicReference<ServerCall<String, Integer>> callReference,
+      final AtomicReference<Context> context,
+      final AtomicBoolean contextCancelled) throws Exception {
     createAndStartServer(NO_FILTERS);
-    final AtomicBoolean contextCancelled = new AtomicBoolean(false);
     callListener = new ServerCall.Listener<String>() {
       @Override
       public void onReady() {
+        context.set(Context.current());
         Context.current().addListener(new Context.CancellationListener() {
           @Override
           public void cancelled(Context context) {
@@ -789,8 +784,6 @@ public class ServerImplTest {
       }
     };
 
-    final AtomicReference<ServerCall<String, Integer>> callReference
-        = new AtomicReference<ServerCall<String, Integer>>();
     MethodDescriptor<String, Integer> method = MethodDescriptor.<String, Integer>newBuilder()
         .setType(MethodDescriptor.MethodType.UNKNOWN)
         .setFullMethodName("Waiter/serve")
@@ -822,9 +815,55 @@ public class ServerImplTest {
     assertNotNull(streamListener);
 
     streamListener.onReady();
+    assertEquals(1, executor.runDueTasks());
+    return streamListener;
+  }
+
+  @Test
+  public void testClientClose_cancelTriggersImmediateCancellation() throws Exception {
+    AtomicBoolean contextCancelled = new AtomicBoolean(false);
+    AtomicReference<Context> context = new AtomicReference<Context>();
+    AtomicReference<ServerCall<String, Integer>> callReference
+        = new AtomicReference<ServerCall<String, Integer>>();
+
+    ServerStreamListener streamListener = testClientClose_setup(callReference,
+        context, contextCancelled);
+
+    // For close status being non OK:
+    // isCancelled is expected to be true immediately after calling closed(), without needing
+    // to wait for the main executor to run any tasks.
+    assertFalse(callReference.get().isCancelled());
+    assertFalse(context.get().isCancelled());
     streamListener.closed(Status.CANCELLED);
+    assertEquals(1, executor.runDueTasks(CONTEXT_CLOSER_TASK_FITLER));
+    assertTrue(callReference.get().isCancelled());
+    assertTrue(context.get().isCancelled());
 
     assertEquals(1, executor.runDueTasks());
+    assertTrue(contextCancelled.get());
+  }
+
+  @Test
+  public void testClientClose_OkTriggersDelayedCancellation() throws Exception {
+    AtomicBoolean contextCancelled = new AtomicBoolean(false);
+    AtomicReference<Context> context = new AtomicReference<Context>();
+    AtomicReference<ServerCall<String, Integer>> callReference
+        = new AtomicReference<ServerCall<String, Integer>>();
+
+    ServerStreamListener streamListener = testClientClose_setup(callReference,
+        context, contextCancelled);
+
+    // For close status OK:
+    // isCancelled is expected to be true after all pending work is done
+    assertFalse(callReference.get().isCancelled());
+    assertFalse(context.get().isCancelled());
+    streamListener.closed(Status.OK);
+    assertFalse(callReference.get().isCancelled());
+    assertFalse(context.get().isCancelled());
+
+    assertEquals(1, executor.runDueTasks());
+    assertTrue(callReference.get().isCancelled());
+    assertTrue(context.get().isCancelled());
     assertTrue(contextCancelled.get());
   }
 
@@ -903,7 +942,10 @@ public class ServerImplTest {
   public void messageRead_errorCancelsCall() throws Exception {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
-            executor.getScheduledExecutorService(), stream, Context.ROOT.withCancellation());
+            executor.getScheduledExecutorService(),
+            executor.getScheduledExecutorService(),
+            stream,
+            Context.ROOT.withCancellation());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -925,7 +967,10 @@ public class ServerImplTest {
   public void messageRead_runtimeExceptionCancelsCall() throws Exception {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
-            executor.getScheduledExecutorService(), stream, Context.ROOT.withCancellation());
+            executor.getScheduledExecutorService(),
+            executor.getScheduledExecutorService(),
+            stream,
+            Context.ROOT.withCancellation());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -947,7 +992,10 @@ public class ServerImplTest {
   public void halfClosed_errorCancelsCall() {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
-            executor.getScheduledExecutorService(), stream, Context.ROOT.withCancellation());
+            executor.getScheduledExecutorService(),
+            executor.getScheduledExecutorService(),
+            stream,
+            Context.ROOT.withCancellation());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -968,7 +1016,10 @@ public class ServerImplTest {
   public void halfClosed_runtimeExceptionCancelsCall() {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
-            executor.getScheduledExecutorService(), stream, Context.ROOT.withCancellation());
+            executor.getScheduledExecutorService(),
+            executor.getScheduledExecutorService(),
+            stream,
+            Context.ROOT.withCancellation());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -989,7 +1040,10 @@ public class ServerImplTest {
   public void onReady_errorCancelsCall() {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
-            executor.getScheduledExecutorService(), stream, Context.ROOT.withCancellation());
+            executor.getScheduledExecutorService(),
+            executor.getScheduledExecutorService(),
+            stream,
+            Context.ROOT.withCancellation());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1010,7 +1064,10 @@ public class ServerImplTest {
   public void onReady_runtimeExceptionCancelsCall() {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
-            executor.getScheduledExecutorService(), stream, Context.ROOT.withCancellation());
+            executor.getScheduledExecutorService(),
+            executor.getScheduledExecutorService(),
+            stream,
+            Context.ROOT.withCancellation());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 

@@ -1,32 +1,17 @@
 /*
- * Copyright 2014, Google Inc. All rights reserved.
+ * Copyright 2014, gRPC Authors All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *    * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *    * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *
- *    * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package io.grpc;
@@ -57,6 +42,8 @@ import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * Provides access to read and write metadata values to be exchanged during a call.
+ *
+ * <p>Keys are allowed to be associated with more than one value.
  *
  * <p>This class is not thread safe, implementations should ensure that header reads and writes do
  * not occur in multiple threads concurrently.
@@ -440,7 +427,12 @@ public final class Metadata {
     return serialized;
   }
 
-  /** Perform a simple merge of two sets of metadata. */
+  /**
+   * Perform a simple merge of two sets of metadata.
+   *
+   * <p>This is a purely additive operation, because a single key can be associated with multiple
+   * values.
+   */
   public void merge(Metadata other) {
     if (other.isEmpty()) {
       return;
@@ -453,7 +445,13 @@ public final class Metadata {
     size += other.size;
   }
 
-  /** Merge values for the given set of keys into this set of metadata. */
+  /**
+   * Merge values from the given set of keys into this set of metadata. If a key is present in keys,
+   * then all of the associated values will be copied over.
+   *
+   * @param other The source of the new key values.
+   * @param keys The subset of matching key we want to copy, if they exist in the source.
+   */
   public void merge(Metadata other, Set<Key<?>> keys) {
     Preconditions.checkNotNull(other, "other");
     // Use ByteBuffer for equals and hashCode.
@@ -678,6 +676,9 @@ public final class Metadata {
       return nameBytes;
     }
 
+    /**
+     * Returns true if the two objects are both Keys, and their names match (case insensitive).
+     */
     @Override
     public boolean equals(Object o) {
       if (this == o) {
