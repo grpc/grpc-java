@@ -37,18 +37,18 @@ public class ConnectivityStateManagerTest {
 
   @Test
   public void noCallback() {
-    state.updateState(ConnectivityState.CONNECTING);
+    state.gotoState(ConnectivityState.CONNECTING);
     assertEquals(ConnectivityState.CONNECTING, state.getState());
-    state.updateState(ConnectivityState.TRANSIENT_FAILURE);
+    state.gotoState(ConnectivityState.TRANSIENT_FAILURE);
     assertEquals(ConnectivityState.TRANSIENT_FAILURE, state.getState());
   }
 
   @Test
   public void registerCallbackBeforeStateChanged() {
-    state.updateState(ConnectivityState.CONNECTING);
+    state.gotoState(ConnectivityState.CONNECTING);
     assertEquals(ConnectivityState.CONNECTING, state.getState());
 
-    state.addListener(new Runnable() {
+    state.notifyWhenStateChanged(new Runnable() {
         @Override
         public void run() {
           sink.add(state.getState());
@@ -56,7 +56,7 @@ public class ConnectivityStateManagerTest {
       }, executor.getScheduledExecutorService(), ConnectivityState.CONNECTING);
 
     assertEquals(0, executor.numPendingTasks());
-    state.updateState(ConnectivityState.TRANSIENT_FAILURE);
+    state.gotoState(ConnectivityState.TRANSIENT_FAILURE);
     // Make sure the callback is run in the executor
     assertEquals(0, sink.size());
     assertEquals(1, executor.runDueTasks());
@@ -67,10 +67,10 @@ public class ConnectivityStateManagerTest {
   
   @Test
   public void registerCallbackAfterStateChanged() {
-    state.updateState(ConnectivityState.CONNECTING);
+    state.gotoState(ConnectivityState.CONNECTING);
     assertEquals(ConnectivityState.CONNECTING, state.getState());
 
-    state.addListener(new Runnable() {
+    state.notifyWhenStateChanged(new Runnable() {
         @Override
         public void run() {
           sink.add(state.getState());
@@ -87,14 +87,14 @@ public class ConnectivityStateManagerTest {
 
   @Test
   public void callbackOnlyCalledOnTransition() {
-    state.addListener(new Runnable() {
+    state.notifyWhenStateChanged(new Runnable() {
         @Override
         public void run() {
           sink.add(state.getState());
         }
       }, executor.getScheduledExecutorService(), ConnectivityState.IDLE);
 
-    state.updateState(ConnectivityState.IDLE);
+    state.gotoState(ConnectivityState.IDLE);
     assertEquals(0, executor.numPendingTasks());
     assertEquals(0, sink.size());
   }
@@ -108,26 +108,26 @@ public class ConnectivityStateManagerTest {
         }
       };
 
-    state.addListener(callback, executor.getScheduledExecutorService(),
+    state.notifyWhenStateChanged(callback, executor.getScheduledExecutorService(),
         ConnectivityState.IDLE);
     // First transition triggers the callback
-    state.updateState(ConnectivityState.CONNECTING);
+    state.gotoState(ConnectivityState.CONNECTING);
     assertEquals(1, executor.runDueTasks());
     assertEquals(1, sink.size());
     assertEquals(ConnectivityState.CONNECTING, sink.poll());
     assertEquals(0, executor.numPendingTasks());
 
     // Second transition doesn't trigger the callback
-    state.updateState(ConnectivityState.TRANSIENT_FAILURE);
+    state.gotoState(ConnectivityState.TRANSIENT_FAILURE);
     assertEquals(0, sink.size());
     assertEquals(0, executor.numPendingTasks());
 
     // Register another callback
-    state.addListener(callback, executor.getScheduledExecutorService(),
+    state.notifyWhenStateChanged(callback, executor.getScheduledExecutorService(),
         ConnectivityState.TRANSIENT_FAILURE);
 
-    state.updateState(ConnectivityState.READY);
-    state.updateState(ConnectivityState.IDLE);
+    state.gotoState(ConnectivityState.READY);
+    state.gotoState(ConnectivityState.IDLE);
     // Callback loses the race with the second stage change
     assertEquals(1, executor.runDueTasks());
     assertEquals(1, sink.size());
@@ -139,21 +139,21 @@ public class ConnectivityStateManagerTest {
   @Test
   public void multipleCallbacks() {
     final LinkedList<String> callbackRuns = new LinkedList<String>();
-    state.addListener(new Runnable() {
+    state.notifyWhenStateChanged(new Runnable() {
         @Override
         public void run() {
           sink.add(state.getState());
           callbackRuns.add("callback1");
         }
       }, executor.getScheduledExecutorService(), ConnectivityState.IDLE);
-    state.addListener(new Runnable() {
+    state.notifyWhenStateChanged(new Runnable() {
         @Override
         public void run() {
           sink.add(state.getState());
           callbackRuns.add("callback2");
         }
       }, executor.getScheduledExecutorService(), ConnectivityState.IDLE);
-    state.addListener(new Runnable() {
+    state.notifyWhenStateChanged(new Runnable() {
         @Override
         public void run() {
           sink.add(state.getState());
@@ -170,7 +170,7 @@ public class ConnectivityStateManagerTest {
     assertEquals(ConnectivityState.IDLE, sink.poll());
 
     // Now change the state.
-    state.updateState(ConnectivityState.CONNECTING);
+    state.gotoState(ConnectivityState.CONNECTING);
     assertEquals(2, executor.runDueTasks());
     assertEquals(2, callbackRuns.size());
     assertEquals("callback1", callbackRuns.poll());
@@ -187,23 +187,23 @@ public class ConnectivityStateManagerTest {
       @Override
       public void run() {
         sink.add(state.getState());
-        state.addListener(newRecursiveCallback(executor), executor, state.getState());
+        state.notifyWhenStateChanged(newRecursiveCallback(executor), executor, state.getState());
       }
     };
   }
 
   @Test
   public void registerCallbackFromCallback() {
-    state.addListener(newRecursiveCallback(executor.getScheduledExecutorService()),
+    state.notifyWhenStateChanged(newRecursiveCallback(executor.getScheduledExecutorService()),
         executor.getScheduledExecutorService(), state.getState());
 
-    state.updateState(ConnectivityState.CONNECTING);
+    state.gotoState(ConnectivityState.CONNECTING);
     assertEquals(1, executor.runDueTasks());
     assertEquals(0, executor.numPendingTasks());
     assertEquals(1, sink.size());
     assertEquals(ConnectivityState.CONNECTING, sink.poll());
 
-    state.updateState(ConnectivityState.READY);
+    state.gotoState(ConnectivityState.READY);
     assertEquals(1, executor.runDueTasks());
     assertEquals(0, executor.numPendingTasks());
     assertEquals(1, sink.size());
@@ -212,14 +212,14 @@ public class ConnectivityStateManagerTest {
 
   @Test
   public void registerCallbackFromCallbackDirectExecutor() {
-    state.addListener(newRecursiveCallback(MoreExecutors.directExecutor()),
+    state.notifyWhenStateChanged(newRecursiveCallback(MoreExecutors.directExecutor()),
         MoreExecutors.directExecutor(), state.getState());
 
-    state.updateState(ConnectivityState.CONNECTING);
+    state.gotoState(ConnectivityState.CONNECTING);
     assertEquals(1, sink.size());
     assertEquals(ConnectivityState.CONNECTING, sink.poll());
 
-    state.updateState(ConnectivityState.READY);
+    state.gotoState(ConnectivityState.READY);
     assertEquals(1, sink.size());
     assertEquals(ConnectivityState.READY, sink.poll());
   }

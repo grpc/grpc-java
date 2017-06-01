@@ -97,7 +97,6 @@ public abstract class ManagedChannel extends Channel {
    *
    * @param source the assumed current state, typically just returned by {@link #getState}
    * @param callback the one-off callback
-   * @throws UnsupportedOperationException if not supported by implementation
    * @since 1.1.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/28")

@@ -30,10 +30,10 @@ import javax.annotation.concurrent.NotThreadSafe;
  * Manages connectivity states of the channel. Used for {@link ManagedChannel#getState} to read the
  * current state of the channel, for {@link ManagedChannel#notifyWhenStateChanged} to add
  * listeners to state change events, and for {@link io.grpc.LoadBalancer.Helper#updateBalancingState
- * LoadBalancer.Helper#updateBalancingState} to update the state and run the {@link #updateState}s.
+ * LoadBalancer.Helper#updateBalancingState} to update the state and run the {@link #gotoState}s.
  */
 @NotThreadSafe
-public final class ConnectivityStateManager {
+final class ConnectivityStateManager {
   private ArrayList<Listener> listeners = new ArrayList<Listener>();
 
   private volatile ConnectivityState state = ConnectivityState.IDLE;
@@ -41,11 +41,15 @@ public final class ConnectivityStateManager {
   /**
    * Adds a listener for state change event.
    *
-   * <p>Must be synchronized with {@link #updateState}.
+   * <p>Must be synchronized with {@link #gotoState}.
    *
    * <p>The {@code executor} must be one that can run RPC call listeners.
    */
-  public void addListener(Runnable callback, Executor executor, ConnectivityState source) {
+  void notifyWhenStateChanged(Runnable callback, Executor executor, ConnectivityState source) {
+    checkNotNull(callback, "callback");
+    checkNotNull(executor, "executor");
+    checkNotNull(source, "source");
+
     Listener stateChangeListener = new Listener(callback, executor);
     if (state != source) {
       stateChangeListener.runInExecutor();
@@ -55,9 +59,9 @@ public final class ConnectivityStateManager {
   }
 
   /**
-   * Must be synchronized with {@link #addListener}.
+   * Must be synchronized with {@link #notifyWhenStateChanged}.
    */
-  public void updateState(@Nonnull ConnectivityState newState) {
+  void gotoState(@Nonnull ConnectivityState newState) {
     checkNotNull(newState, "newState");
     checkState(state != null, "ConnectivityStateManager is disabled");
 
@@ -90,6 +94,10 @@ public final class ConnectivityStateManager {
     return state;
   }
 
+  /**
+   * Call this method when the channel learns from the load balancer that channel state API is not
+   * supported.
+   */
   void disable() {
     state = null;
   }

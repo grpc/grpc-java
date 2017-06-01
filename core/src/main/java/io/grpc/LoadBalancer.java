@@ -462,6 +462,9 @@ public abstract class LoadBalancer {
      * <p>The channel will hold the picker and use it for all RPCs, until {@code updatePicker()} is
      * called again and a new picker replaces the old one.  If {@code updatePicker()} has never been
      * called, the channel will buffer all RPCs until a picker is provided.
+     *
+     * <p>Using this method implies that this load balancer doesn't support channel state, and the
+     * application will get exception when trying to get the channel state.
      */
     // TODO(zdapeng): add '@deprecated Please migrate ALL usages to {@link #updateBalancingState}'
     // TODO(zdapeng): and add '@Deprecated'
@@ -483,12 +486,7 @@ public abstract class LoadBalancer {
      */
     public void updateBalancingState(
         @Nonnull ConnectivityState newState, @Nonnull SubchannelPicker newPicker) {
-      deprecatedUpdatePicker(newPicker);
-    }
-
-    @SuppressWarnings("deprecation") // internal fallback method
-    private void deprecatedUpdatePicker(SubchannelPicker picker) {
-      updatePicker(picker);
+      updatePicker(newPicker);
     }
 
     /**

@@ -593,14 +593,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
   @Override
   public void notifyWhenStateChanged(final ConnectivityState source, final Runnable callback) {
-    if (channelStateManager.getState() == null) {
-      throw new UnsupportedOperationException();
-    }
     channelExecutor.executeLater(new LogExceptionRunnable(
         new Runnable() {
           @Override
           public void run() {
-            channelStateManager.addListener(callback, executor, source);
+            channelStateManager.notifyWhenStateChanged(callback, executor, source);
           }
         })).drain();
   }
@@ -687,7 +684,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
             public void run() {
               subchannelPicker = newPicker;
               delayedTransport.reprocess(newPicker);
-              channelStateManager.updateState(newState);
+              channelStateManager.gotoState(newState);
             }
           }));
     }
