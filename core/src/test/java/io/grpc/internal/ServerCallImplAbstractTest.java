@@ -45,7 +45,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 /**
- * An abstract class to help run subclass test suites against all applicable
+ * An abstract class to help run subclass test suites against all applicable method types.
  */
 public abstract class ServerCallImplAbstractTest {
   private static final List<Object[]> ALL_METHOD_TYPES = new ArrayList<Object[]>();
