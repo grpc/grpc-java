@@ -12,7 +12,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
->>>>>>> origin/zpencer/ServerCallImplTestRefactor
  */
 
 package io.grpc.internal;
@@ -47,6 +46,8 @@ import org.mockito.MockitoAnnotations;
 
 /**
  * An abstract class to help run subclass test suites against all applicable
+ */
+public abstract class ServerCallImplAbstractTest {
   private static final List<Object[]> ALL_METHOD_TYPES = new ArrayList<Object[]>();
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
