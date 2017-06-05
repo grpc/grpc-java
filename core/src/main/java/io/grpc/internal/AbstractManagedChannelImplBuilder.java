@@ -453,20 +453,10 @@ public abstract class AbstractManagedChannelImplBuilder
       if (resolver == null) {
         return null;
       }
-      return new NameResolver() {
+      return new ForwardingNameResolver(resolver) {
         @Override
         public String getServiceAuthority() {
           return authorityOverride;
-        }
-
-        @Override
-        public void start(Listener listener) {
-          resolver.start(listener);
-        }
-
-        @Override
-        public void shutdown() {
-          resolver.shutdown();
         }
       };
     }
