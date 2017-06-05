@@ -17,12 +17,14 @@
 package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.MoreExecutors;
@@ -250,7 +252,7 @@ public class AbstractManagedChannelImplBuilderTest {
   }
 
   @Test
-  public void overrideAuthorityNameResolverWrapsDelegateTest() {
+  public void overrideAuthorityNameResolver_overridesAuthority() {
     NameResolver nameResolverMock = mock(NameResolver.class);
     NameResolver.Factory wrappedFactory = mock(NameResolver.Factory.class);
     when(wrappedFactory.newNameResolver(any(URI.class), any(Attributes.class)))
@@ -265,7 +267,7 @@ public class AbstractManagedChannelImplBuilderTest {
   }
 
   @Test
-  public void overrideAuthorityNameResolverWontWrapNullTest() {
+  public void overrideAuthorityNameResolver_wontWrapNull() {
     NameResolver.Factory wrappedFactory = mock(NameResolver.Factory.class);
     when(wrappedFactory.newNameResolver(any(URI.class), any(Attributes.class))).thenReturn(null);
     NameResolver.Factory factory =
@@ -274,23 +276,25 @@ public class AbstractManagedChannelImplBuilderTest {
         factory.newNameResolver(URI.create("dns:///localhost:443"), Attributes.EMPTY));
   }
 
-  static class Builder extends AbstractManagedChannelImplBuilder<Builder> {
-    Builder(String target) {
-      super(target);
-    }
+  @Test
+  public void overrideAuthorityNameResolver_forwardsNonOverridenCalls() {
+    NameResolver.Factory wrappedFactory = mock(NameResolver.Factory.class);
+    NameResolver mockResolver = mock(NameResolver.class);
+    when(wrappedFactory.newNameResolver(any(URI.class), any(Attributes.class)))
+        .thenReturn(mockResolver);
+    NameResolver.Factory factory =
+        new OverrideAuthorityNameResolverFactory(wrappedFactory, "override:5678");
+    NameResolver overrideResolver =
+        factory.newNameResolver(URI.create("dns:///localhost:443"), Attributes.EMPTY);
 
-    Builder(SocketAddress directServerAddress, String authority) {
-      super(directServerAddress, authority);
-    }
+    NameResolver.Listener listener = mock(NameResolver.Listener.class);
+    overrideResolver.start(listener);
+    verify(mockResolver).start(eq(listener));
 
-    @Override
-    protected ClientTransportFactory buildTransportFactory() {
-      throw new UnsupportedOperationException();
-    }
+    overrideResolver.shutdown();
+    verify(mockResolver, times(1)).shutdown();
 
-    @Override
-    public Builder usePlaintext(boolean value) {
-      throw new UnsupportedOperationException();
-    }
+    overrideResolver.refresh();
+    verify(mockResolver, times(1)).refresh();
   }
 }
