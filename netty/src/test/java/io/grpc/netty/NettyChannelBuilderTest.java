@@ -158,16 +158,11 @@ public class NettyChannelBuilderTest {
 
   @Test
   public void createProtocolNegotiator_tlsWithNoContext() {
-    ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiator(
+    thrown.expect(NullPointerException.class);
+    NettyChannelBuilder.createProtocolNegotiator(
         "authority:1234",
         NegotiationType.TLS,
         noSslContext);
-
-    assertTrue(negotiator instanceof ProtocolNegotiators.TlsNegotiator);
-    ProtocolNegotiators.TlsNegotiator n = (TlsNegotiator) negotiator;
-
-    assertEquals("authority", n.getHost());
-    assertEquals(1234, n.getPort());
   }
 
   @Test
@@ -185,11 +180,11 @@ public class NettyChannelBuilderTest {
   }
 
   @Test
-  public void createProtocolNegotiator_tlsWithAuthorityFallback() {
+  public void createProtocolNegotiator_tlsWithAuthorityFallback() throws SSLException {
     ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiator(
         "bad_authority",
         NegotiationType.TLS,
-        noSslContext);
+        GrpcSslContexts.forClient().build());
 
     assertTrue(negotiator instanceof ProtocolNegotiators.TlsNegotiator);
     ProtocolNegotiators.TlsNegotiator n = (TlsNegotiator) negotiator;
