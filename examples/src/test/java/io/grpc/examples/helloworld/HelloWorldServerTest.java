@@ -20,7 +20,6 @@ import static org.junit.Assert.assertEquals;
 
 import io.grpc.examples.helloworld.HelloWorldServer.GreeterImpl;
 import io.grpc.testing.GrpcServerRule;
-import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -43,19 +42,15 @@ public class HelloWorldServerTest {
   @Rule
   public final GrpcServerRule grpcServerRule = new GrpcServerRule().directExecutor();
 
-  @Before
-  public void setUp() throws Exception {
-    // Add the service to the in-process server.
-    grpcServerRule.getServiceRegistry().addService(new GreeterImpl());
-  }
-
   /**
    * To test the server, make calls with a real stub using the in-process channel, and verify
    * behaviors or state changes from the client side.
    */
   @Test
   public void greeterImpl_replyMessage() throws Exception {
+    // Add the service to the in-process server.
     grpcServerRule.getServiceRegistry().addService(new GreeterImpl());
+
     GreeterGrpc.GreeterBlockingStub blockingStub =
         GreeterGrpc.newBlockingStub(grpcServerRule.getChannel());
     String testName = "test name";
