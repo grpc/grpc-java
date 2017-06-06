@@ -16,6 +16,7 @@
 
 package io.grpc.netty;
 
+import io.grpc.Attributes;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.InternalServer;
@@ -76,7 +77,8 @@ public class NettyTransportTest extends AbstractTransportTest {
     return clientFactory.newClientTransport(
         new InetSocketAddress("localhost", port),
         testAuthority(server),
-        null /* agent */);
+        null /* agent */,
+        Attributes.EMPTY);
   }
 
   @Override

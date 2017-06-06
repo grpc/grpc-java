@@ -21,6 +21,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -89,7 +90,8 @@ final class TestUtils {
         return mockTransport;
       }
     }).when(mockTransportFactory)
-        .newClientTransport(any(SocketAddress.class), any(String.class), any(String.class));
+        .newClientTransport(
+            any(SocketAddress.class), any(String.class), any(String.class), any(Attributes.class));
 
     return captor;
   }

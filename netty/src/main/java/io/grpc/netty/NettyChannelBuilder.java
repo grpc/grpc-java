@@ -352,9 +352,8 @@ public final class NettyChannelBuilder
   @VisibleForTesting
   @CheckReturnValue
   static ProtocolNegotiator createProtocolNegotiator(
-      String authority,
-      NegotiationType negotiationType,
-      SslContext sslContext) {
+      String authority, NegotiationType negotiationType, SslContext sslContext, Attributes attrs) {
+    //TODO(spencerfang): set up proxy based on attributes
     ProtocolNegotiator negotiator =
         createProtocolNegotiatorByType(authority, negotiationType, sslContext);
     String proxy = System.getenv("GRPC_PROXY_EXP");
@@ -416,7 +415,10 @@ public final class NettyChannelBuilder
   interface TransportCreationParamsFilterFactory {
     @CheckReturnValue
     TransportCreationParamsFilter create(
-        SocketAddress targetServerAddress, String authority, @Nullable String userAgent);
+        SocketAddress targetServerAddress,
+        String authority,
+        @Nullable String userAgent,
+        Attributes attrs);
   }
 
   @CheckReturnValue
@@ -465,8 +467,12 @@ public final class NettyChannelBuilder
         transportCreationParamsFilterFactory = new TransportCreationParamsFilterFactory() {
           @Override
           public TransportCreationParamsFilter create(
-              SocketAddress targetServerAddress, String authority, String userAgent) {
-            return new DynamicNettyTransportParams(targetServerAddress, authority, userAgent);
+              SocketAddress targetServerAddress,
+              String authority,
+              String userAgent,
+              Attributes attrs) {
+            return new DynamicNettyTransportParams(
+                targetServerAddress, authority, userAgent, attrs);
           }
         };
       }
@@ -489,11 +495,14 @@ public final class NettyChannelBuilder
 
     @Override
     public ConnectionClientTransport newClientTransport(
-        SocketAddress serverAddress, String authority, @Nullable String userAgent) {
+        SocketAddress serverAddress,
+        String authority,
+        @Nullable String userAgent,
+        Attributes attrs) {
       checkState(!closed, "The transport factory is closed.");
 
       TransportCreationParamsFilter dparams =
-          transportCreationParamsFilterFactory.create(serverAddress, authority, userAgent);
+          transportCreationParamsFilterFactory.create(serverAddress, authority, userAgent, attrs);
 
       final AtomicBackoff.State keepAliveTimeNanosState = keepAliveTimeNanos.getState();
       Runnable tooManyPingsRunnable = new Runnable() {
@@ -529,12 +538,14 @@ public final class NettyChannelBuilder
       private final SocketAddress targetServerAddress;
       private final String authority;
       @Nullable private final String userAgent;
+      private Attributes attrs;
 
       private DynamicNettyTransportParams(
-          SocketAddress targetServerAddress, String authority, String userAgent) {
+          SocketAddress targetServerAddress, String authority, String userAgent, Attributes attrs) {
         this.targetServerAddress = targetServerAddress;
         this.authority = authority;
         this.userAgent = userAgent;
+        this.attrs = attrs;
       }
 
       @Override
@@ -554,7 +565,7 @@ public final class NettyChannelBuilder
 
       @Override
       public ProtocolNegotiator getProtocolNegotiator() {
-        return createProtocolNegotiator(authority, negotiationType, sslContext);
+        return createProtocolNegotiator(authority, negotiationType, sslContext, attrs);
       }
     }
   }

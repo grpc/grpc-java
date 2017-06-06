@@ -382,7 +382,8 @@ public class OkHttpChannelBuilder extends
 
     @Override
     public ConnectionClientTransport newClientTransport(
-        SocketAddress addr, String authority, @Nullable String userAgent) {
+        SocketAddress addr, String authority, @Nullable String userAgent, Attributes attr) {
+      //TODO(spencerfang): set up proxy based on attributes
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
       }

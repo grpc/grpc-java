@@ -16,6 +16,7 @@
 
 package io.grpc.internal.testing;
 
+import io.grpc.Attributes;
 import io.grpc.internal.ClientTransportFactory;
 import java.net.InetSocketAddress;
 import org.junit.Test;
@@ -40,6 +41,6 @@ public abstract class AbstractClientTransportFactoryTest {
     ClientTransportFactory transportFactory = newClientTransportFactory();
     transportFactory.close();
     transportFactory.newClientTransport(
-        new InetSocketAddress("localhost", 12345), "localhost:" + 12345, "agent");
+        new InetSocketAddress("localhost", 12345), "localhost:" + 12345, "agent", Attributes.EMPTY);
   }
 }

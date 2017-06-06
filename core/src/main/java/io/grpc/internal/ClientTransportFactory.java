@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import io.grpc.Attributes;
 import java.io.Closeable;
 import java.net.SocketAddress;
 import javax.annotation.Nullable;
@@ -27,9 +28,11 @@ public interface ClientTransportFactory extends Closeable {
    *
    * @param serverAddress the address that the transport is connected to
    * @param authority the HTTP/2 authority of the server
+   * @param userAgent the user agent
+   * @param attrs the attributes for the new transport
    */
   ConnectionClientTransport newClientTransport(SocketAddress serverAddress, String authority,
-      @Nullable String userAgent);
+      @Nullable String userAgent, Attributes attrs);
 
   /**
    * Releases any resources.

@@ -192,7 +192,8 @@ final class InternalSubchannel implements WithLogId {
     final SocketAddress address = addrs.get(addressIndex);
 
     ConnectionClientTransport transport =
-        transportFactory.newClientTransport(address, authority, userAgent);
+        transportFactory.newClientTransport(
+            address, authority, userAgent, addressGroup.getAttributes());
     if (log.isLoggable(Level.FINE)) {
       log.log(Level.FINE, "[{0}] Created {1} for {2}",
           new Object[] {logId, transport.getLogId(), address});

@@ -16,6 +16,7 @@
 
 package io.grpc.okhttp;
 
+import io.grpc.Attributes;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AccessProtectedHack;
 import io.grpc.internal.ClientTransportFactory;
@@ -76,7 +77,8 @@ public class OkHttpTransportTest extends AbstractTransportTest {
     return clientFactory.newClientTransport(
         new InetSocketAddress("::1", port),
         testAuthority(server),
-        null /* agent */);
+        null /* agent */,
+        Attributes.EMPTY);
   }
 
   @Override

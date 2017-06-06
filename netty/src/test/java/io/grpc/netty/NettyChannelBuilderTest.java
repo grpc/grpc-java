@@ -20,6 +20,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
+import io.grpc.Attributes;
 import io.grpc.ManagedChannel;
 import io.grpc.netty.InternalNettyChannelBuilder.OverrideAuthorityChecker;
 import io.grpc.netty.ProtocolNegotiators.TlsNegotiator;
@@ -126,7 +127,8 @@ public class NettyChannelBuilderTest {
     ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiator(
         "authority",
         NegotiationType.PLAINTEXT,
-        noSslContext);
+        noSslContext,
+        Attributes.EMPTY);
     // just check that the classes are the same, and that negotiator is not null.
     assertTrue(negotiator instanceof ProtocolNegotiators.PlaintextNegotiator);
   }
@@ -136,7 +138,8 @@ public class NettyChannelBuilderTest {
     ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiator(
         "authority",
         NegotiationType.PLAINTEXT_UPGRADE,
-        noSslContext);
+        noSslContext,
+        Attributes.EMPTY);
     // just check that the classes are the same, and that negotiator is not null.
     assertTrue(negotiator instanceof ProtocolNegotiators.PlaintextUpgradeNegotiator);
   }
@@ -146,7 +149,8 @@ public class NettyChannelBuilderTest {
     ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiator(
         "authority:1234",
         NegotiationType.TLS,
-        noSslContext);
+        noSslContext,
+        Attributes.EMPTY);
 
     assertTrue(negotiator instanceof ProtocolNegotiators.TlsNegotiator);
     ProtocolNegotiators.TlsNegotiator n = (TlsNegotiator) negotiator;
@@ -160,7 +164,8 @@ public class NettyChannelBuilderTest {
     ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiator(
         "authority:1234",
         NegotiationType.TLS,
-        GrpcSslContexts.forClient().build());
+        GrpcSslContexts.forClient().build(),
+        Attributes.EMPTY);
 
     assertTrue(negotiator instanceof ProtocolNegotiators.TlsNegotiator);
     ProtocolNegotiators.TlsNegotiator n = (TlsNegotiator) negotiator;
@@ -174,7 +179,8 @@ public class NettyChannelBuilderTest {
     ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiator(
         "bad_authority",
         NegotiationType.TLS,
-        noSslContext);
+        noSslContext,
+        Attributes.EMPTY);
 
     assertTrue(negotiator instanceof ProtocolNegotiators.TlsNegotiator);
     ProtocolNegotiators.TlsNegotiator n = (TlsNegotiator) negotiator;

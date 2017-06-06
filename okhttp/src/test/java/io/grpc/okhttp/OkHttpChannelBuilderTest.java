@@ -21,6 +21,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
 import com.squareup.okhttp.ConnectionSpec;
+import io.grpc.Attributes;
 import io.grpc.NameResolver;
 import io.grpc.internal.GrpcUtil;
 import java.net.InetSocketAddress;
@@ -110,7 +111,7 @@ public class OkHttpChannelBuilderTest {
   public void usePlaintext_newClientTransportAllowed() {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("host", 1234).usePlaintext(true);
     builder.buildTransportFactory().newClientTransport(new InetSocketAddress(5678),
-        "dummy_authority", "dummy_userAgent");
+        "dummy_authority", "dummy_userAgent", Attributes.EMPTY);
   }
 
   @Test
