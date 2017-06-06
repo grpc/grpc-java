@@ -35,6 +35,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.TrustManagerFactory;
+
 /**
  * Utility for configuring SslContext for gRPC.
  */
@@ -113,6 +116,18 @@ public class GrpcSslContexts {
   public static SslContextBuilder forServer(
       File keyCertChainFile, File keyFile, String keyPassword) {
     return configure(SslContextBuilder.forServer(keyCertChainFile, keyFile, keyPassword));
+  }
+
+  /**
+   * Creates a SslContextBuilder with custom factories for trust manager and key manager.
+   *
+   * @see NettyServerBuilder#useTransportSecurity(TrustManagerFactory, KeyManagerFactory)
+   * @see #configure(SslContextBuilder)
+   */
+  public static SslContextBuilder forServer(TrustManagerFactory trustManagerFactory,
+                                            KeyManagerFactory keyManagerFactory) {
+    return configure(SslContextBuilder.forServer(keyManagerFactory)
+            .trustManager(trustManagerFactory));
   }
 
   /**
