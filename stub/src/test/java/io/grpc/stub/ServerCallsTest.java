@@ -62,14 +62,24 @@ public class ServerCallsTest {
   static final MethodDescriptor<Integer, Integer> STREAMING_METHOD =
       MethodDescriptor.<Integer, Integer>newBuilder()
           .setType(MethodDescriptor.MethodType.BIDI_STREAMING)
-          .setFullMethodName("some/method")
+          .setFullMethodName("some/bidi_streaming")
           .setRequestMarshaller(new IntegerMarshaller())
           .setResponseMarshaller(new IntegerMarshaller())
           .build();
 
+  static final MethodDescriptor<Integer, Integer> CLIENT_STREAMING = STREAMING_METHOD.toBuilder()
+      .setType(MethodDescriptor.MethodType.CLIENT_STREAMING)
+      .setFullMethodName("some/server_streaming")
+      .build();
+
+  static final MethodDescriptor<Integer, Integer> SERVER_STREAMING = STREAMING_METHOD.toBuilder()
+      .setType(MethodDescriptor.MethodType.SERVER_STREAMING)
+      .setFullMethodName("some/client_streaming")
+      .build();
+
   static final MethodDescriptor<Integer, Integer> UNARY_METHOD = STREAMING_METHOD.toBuilder()
       .setType(MethodDescriptor.MethodType.UNARY)
-      .setFullMethodName("some/unarymethod")
+      .setFullMethodName("some/unary")
       .build();
 
   private final ServerCallRecorder serverCall = new ServerCallRecorder();
@@ -250,6 +260,7 @@ public class ServerCallsTest {
 
   @Test
   public void onReadyHandlerCalledForUnaryRequest() throws Exception {
+    serverCall.methodDescriptor = UNARY_METHOD;
     final AtomicInteger onReadyCalled = new AtomicInteger();
     ServerCallHandler<Integer, Integer> callHandler =
         ServerCalls.asyncServerStreamingCall(
@@ -282,6 +293,127 @@ public class ServerCallsTest {
     // Next on ready event from the transport triggers listener
     callListener.onReady();
     assertEquals(2, onReadyCalled.get());
+  }
+
+  @Test
+  public void serverSendsOne_errorMissingResponse_unary() throws Exception {
+    serverSendsOne_errorMissingResponse(UNARY_METHOD);
+  }
+
+  @Test
+  public void serverSendsOne_errorMissingResponse_clientStreaming() throws Exception {
+    serverSendsOne_errorMissingResponse(CLIENT_STREAMING);
+  }
+
+  private void serverSendsOne_errorMissingResponse(MethodDescriptor<Integer, Integer> method) {
+    serverCall.methodDescriptor = method;
+    ServerCallHandler<Integer, Integer> callHandler =
+        ServerCalls.asyncUnaryCall(
+            new ServerCalls.UnaryMethod<Integer, Integer>() {
+              @Override
+              public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
+                // when application is invoked, immediately call onCompleted without sending a
+                // response
+                responseObserver.onCompleted();
+              }
+            });
+    ServerCall.Listener<Integer> listener = callHandler.startCall(serverCall, new Metadata());
+    listener.onMessage(1);
+    listener.onHalfClose();
+    assertThat(serverCall.responses).isEmpty();
+    assertEquals(Status.Code.INTERNAL, serverCall.status.getCode());
+    assertEquals(ServerCalls.ErrorMessages.ServerSendsOne.MISSING_RESPONSE,
+        serverCall.status.getDescription());
+  }
+
+  @Test
+  public void serverSendsOne_errorTooManyResponses_unary() throws Exception {
+    severSendsOne_errorWhenSentTwo(UNARY_METHOD);
+  }
+
+  @Test
+  public void serverSendsOne_errorTwooManyResponses_clientStreaming() throws Exception {
+    severSendsOne_errorWhenSentTwo(CLIENT_STREAMING);
+  }
+
+  private void severSendsOne_errorWhenSentTwo(MethodDescriptor<Integer, Integer> method) {
+    serverCall.methodDescriptor = method;
+    ServerCallHandler<Integer, Integer> callHandler =
+        ServerCalls.asyncUnaryCall(
+            new ServerCalls.UnaryMethod<Integer, Integer>() {
+              @Override
+              public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
+                // when application is invoked, send more responses than allowed
+                responseObserver.onNext(1);
+                responseObserver.onNext(2);
+              }
+            });
+    ServerCall.Listener<Integer> listener = callHandler.startCall(serverCall, new Metadata());
+    listener.onMessage(1);
+    listener.onHalfClose();
+    // second response should have triggered error handling instead of being sent out
+    assertThat(serverCall.responses).containsExactly(1);
+    assertEquals(Status.Code.INTERNAL, serverCall.status.getCode());
+    assertEquals(
+        ServerCalls.ErrorMessages.ServerSendsOne.TOO_MANY_RESPONSES,
+        serverCall.status.getDescription());
+  }
+
+  @Test
+  public void clientSendsOne_errorMissingRequest_unary() {
+    clientSendsOne_errorMissingRequest(UNARY_METHOD);
+  }
+
+  @Test
+  public void clientSendsOne_errorMissingRequest_serverStreaming() {
+    clientSendsOne_errorMissingRequest(SERVER_STREAMING);
+  }
+
+  private void clientSendsOne_errorMissingRequest(MethodDescriptor<Integer, Integer> method) {
+    serverCall.methodDescriptor = method;
+    ServerCallHandler<Integer, Integer> callHandler =
+        ServerCalls.asyncUnaryCall(
+            new ServerCalls.UnaryMethod<Integer, Integer>() {
+              @Override
+              public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
+                fail("should not be reached");
+              }
+            });
+    ServerCall.Listener<Integer> listener = callHandler.startCall(serverCall, new Metadata());
+    listener.onHalfClose();
+    assertThat(serverCall.responses).isEmpty();
+    assertEquals(Status.Code.INTERNAL, serverCall.status.getCode());
+    assertEquals(ServerCalls.ErrorMessages.ClientSendsOne.MISSING_REQUEST,
+        serverCall.status.getDescription());
+  }
+
+  @Test
+  public void clientSendsOne_errorTooManyRequests_unary() {
+    clientSendsOne_errorTooManyRequests(UNARY_METHOD);
+  }
+
+  @Test
+  public void clientSendsOne_errorTooManyRequests_serverStreaming() {
+    clientSendsOne_errorTooManyRequests(SERVER_STREAMING);
+  }
+
+  private void clientSendsOne_errorTooManyRequests(MethodDescriptor<Integer, Integer> method) {
+    serverCall.methodDescriptor = method;
+    ServerCallHandler<Integer, Integer> callHandler =
+        ServerCalls.asyncUnaryCall(
+            new ServerCalls.UnaryMethod<Integer, Integer>() {
+              @Override
+              public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
+                fail("should not be reached");
+              }
+            });
+    ServerCall.Listener<Integer> listener = callHandler.startCall(serverCall, new Metadata());
+    listener.onMessage(1);
+    listener.onMessage(1);
+    assertThat(serverCall.responses).isEmpty();
+    assertEquals(Status.Code.INTERNAL, serverCall.status.getCode());
+    assertEquals(ServerCalls.ErrorMessages.ClientSendsOne.TOO_MANY_REQUESTS,
+        serverCall.status.getDescription());
   }
 
   @Test
@@ -376,7 +508,7 @@ public class ServerCallsTest {
   private static class ServerCallRecorder extends ServerCall<Integer, Integer> {
     private List<Integer> requestCalls = new ArrayList<Integer>();
     private Metadata headers;
-    private Integer message;
+    private List<Integer> responses = new ArrayList<Integer>();
     private Metadata trailers;
     private Status status;
     private boolean isCancelled;
@@ -395,7 +527,7 @@ public class ServerCallsTest {
 
     @Override
     public void sendMessage(Integer message) {
-      this.message = message;
+      this.responses.add(message);
     }
 
     @Override

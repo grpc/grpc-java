@@ -34,7 +34,6 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.InternalDecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import java.io.IOException;
@@ -187,7 +186,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     private final ServerCallImpl<ReqT, ?> call;
     private final ServerCall.Listener<ReqT> listener;
     private final Context.CancellableContext context;
-    private boolean messageReceived;
 
     public ServerStreamListenerImpl(
         ServerCallImpl<ReqT, ?> call, ServerCall.Listener<ReqT> listener,
@@ -216,15 +214,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         if (call.cancelled) {
           return;
         }
-        // Special case for unary calls.
-        if (messageReceived && call.method.getType() == MethodType.UNARY) {
-          call.stream.close(Status.INTERNAL.withDescription(
-                  "More than one request messages for unary call or server streaming call"),
-              new Metadata());
-          return;
-        }
-        messageReceived = true;
-
         listener.onMessage(call.method.parseRequest(message));
       } catch (Throwable e) {
         t = e;

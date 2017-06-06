@@ -47,10 +47,7 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 @RunWith(JUnit4.class)
@@ -58,7 +55,6 @@ public class ServerCallImplTest {
   @Rule public final ExpectedException thrown = ExpectedException.none();
   @Mock private ServerStream stream;
   @Mock private ServerCall.Listener<Long> callListener;
-  @Captor private ArgumentCaptor<Status> statusCaptor;
 
   private ServerCallImpl<Long, Long> call;
   private Context.CancellableContext context;
@@ -263,20 +259,6 @@ public class ServerCallImplTest {
     streamListener.messageRead(method.streamRequest(1234L));
 
     verify(callListener).onMessage(1234L);
-  }
-
-  @Test
-  public void streamListener_messageRead_unaryFailsOnMultiple() {
-    ServerStreamListenerImpl<Long> streamListener =
-        new ServerCallImpl.ServerStreamListenerImpl<Long>(call, callListener, context);
-    streamListener.messageRead(method.streamRequest(1234L));
-    streamListener.messageRead(method.streamRequest(1234L));
-
-    // Makes sure this was only called once.
-    verify(callListener).onMessage(1234L);
-
-    verify(stream).close(statusCaptor.capture(), Mockito.isA(Metadata.class));
-    assertEquals(Status.Code.INTERNAL, statusCaptor.getValue().getCode());
   }
 
   @Test

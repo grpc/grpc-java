@@ -18,17 +18,36 @@ package io.grpc.stub;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.Status;
+import io.grpc.StatusException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Utility functions for adapting {@link ServerCallHandler}s to application service implementation,
  * meant to be used by the generated code.
  */
 public final class ServerCalls {
+  private static final Logger log = Logger.getLogger(ServerCalls.class.getName());
+
+  @VisibleForTesting
+  static class ErrorMessages {
+    static class ServerSendsOne {
+      static String TOO_MANY_RESPONSES = "Too many responses";
+      static String MISSING_RESPONSE = "Completed without a response";
+
+    }
+
+    static class ClientSendsOne {
+      static String TOO_MANY_REQUESTS = "Too many requests";
+      static String MISSING_REQUEST = "Half-closed without a request";
+    }
+  }
 
   private ServerCalls() {
   }
@@ -124,7 +143,18 @@ public final class ServerCalls {
           public void onMessage(ReqT request) {
             // We delay calling method.invoke() until onHalfClose() to make sure the client
             // half-closes.
-            this.request = request;
+            if (call.getMethodDescriptor().getType().clientSendsOneMessage()
+                && this.request != null) {
+              StatusException exception = Status.INTERNAL
+                  .withDescription(ErrorMessages.ClientSendsOne.TOO_MANY_REQUESTS)
+                  .asException();
+              log.log(Level.FINE, ErrorMessages.ClientSendsOne.TOO_MANY_REQUESTS, exception);
+              // Safe to close the call here from the callback thread,
+              // because the application has not yet been invoked
+              responseObserver.onError(exception);
+            } else {
+              this.request = request;
+            }
           }
 
           @Override
@@ -138,7 +168,8 @@ public final class ServerCalls {
                 onReady();
               }
             } else {
-              call.close(Status.INTERNAL.withDescription("Half-closed without a request"),
+              call.close(
+                  Status.INTERNAL.withDescription(ErrorMessages.ClientSendsOne.MISSING_REQUEST),
                   new Metadata());
             }
           }
@@ -239,6 +270,7 @@ public final class ServerCalls {
     private boolean sentHeaders;
     private Runnable onReadyHandler;
     private Runnable onCancelHandler;
+    private boolean sentResponse = false;
 
     ServerCallStreamObserverImpl(ServerCall<ReqT, RespT> call) {
       this.call = call;
@@ -263,11 +295,20 @@ public final class ServerCalls {
       if (cancelled) {
         throw Status.CANCELLED.asRuntimeException();
       }
-      if (!sentHeaders) {
-        call.sendHeaders(new Metadata());
-        sentHeaders = true;
+      if (call.getMethodDescriptor().getType().serverSendsOneMessage() && sentResponse) {
+        StatusException exception = Status.INTERNAL
+            .withDescription(ErrorMessages.ServerSendsOne.TOO_MANY_RESPONSES)
+            .asException();
+        log.log(Level.FINE, ErrorMessages.ServerSendsOne.TOO_MANY_RESPONSES, exception);
+        onError(exception);
+      } else {
+        if (!sentHeaders) {
+          call.sendHeaders(new Metadata());
+          sentHeaders = true;
+        }
+        call.sendMessage(response);
+        sentResponse = true;
       }
-      call.sendMessage(response);
     }
 
     @Override
@@ -283,6 +324,13 @@ public final class ServerCalls {
     public void onCompleted() {
       if (cancelled) {
         throw Status.CANCELLED.asRuntimeException();
+      }
+      if (call.getMethodDescriptor().getType().serverSendsOneMessage() && !sentResponse) {
+        StatusException exception = Status.INTERNAL
+            .withDescription(ErrorMessages.ServerSendsOne.MISSING_RESPONSE)
+            .asException();
+        log.log(Level.FINE, ErrorMessages.ServerSendsOne.MISSING_RESPONSE, exception);
+        onError(exception);
       } else {
         call.close(Status.OK, new Metadata());
       }
