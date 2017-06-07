@@ -310,8 +310,8 @@ public final class ServerInterceptors {
             ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
           final ServerCall<ReqT, RespT> syncServerCall =
               new SynchronizedServerCall<ReqT, RespT>(call);
-          ServerCall.Listener<ReqT> syncListener = next.startCall(syncServerCall, headers);
-          return new SimpleForwardingServerCallListener<ReqT>(syncListener) {
+          ServerCall.Listener<ReqT> listener = next.startCall(syncServerCall, headers);
+          return new SimpleForwardingServerCallListener<ReqT>(listener) {
             @Override
             public void onMessage(ReqT message) {
               try {
