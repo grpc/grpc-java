@@ -261,7 +261,6 @@ public final class ServerCalls {
     private boolean sentHeaders;
     private Runnable onReadyHandler;
     private Runnable onCancelHandler;
-    private boolean sentResponse = false;
 
     ServerCallStreamObserverImpl(ServerCall<ReqT, RespT> call) {
       this.call = call;
@@ -291,7 +290,6 @@ public final class ServerCalls {
         sentHeaders = true;
       }
       call.sendMessage(response);
-      sentResponse = true;
     }
 
     @Override
