@@ -67,17 +67,19 @@ public class ServerCallsTest {
           .setResponseMarshaller(new IntegerMarshaller())
           .build();
 
-  static final MethodDescriptor<Integer, Integer> SERVER_STREAMING = STREAMING_METHOD.toBuilder()
-      .setType(MethodDescriptor.MethodType.SERVER_STREAMING)
-      .setFullMethodName("some/client_streaming")
-      .build();
+  static final MethodDescriptor<Integer, Integer> SERVER_STREAMING_METHOD =
+      STREAMING_METHOD.toBuilder()
+          .setType(MethodDescriptor.MethodType.SERVER_STREAMING)
+          .setFullMethodName("some/client_streaming")
+          .build();
 
-  static final MethodDescriptor<Integer, Integer> UNARY_METHOD = STREAMING_METHOD.toBuilder()
-      .setType(MethodDescriptor.MethodType.UNARY)
-      .setFullMethodName("some/unary")
-      .build();
+  static final MethodDescriptor<Integer, Integer> UNARY_METHOD =
+      STREAMING_METHOD.toBuilder()
+          .setType(MethodDescriptor.MethodType.UNARY)
+          .setFullMethodName("some/unary")
+          .build();
 
-  private final ServerCallRecorder serverCall = new ServerCallRecorder();
+  private final ServerCallRecorder serverCall = new ServerCallRecorder(UNARY_METHOD);
 
   @Test
   public void runtimeStreamObserverIsServerCallStreamObserver() throws Exception {
@@ -255,7 +257,6 @@ public class ServerCallsTest {
 
   @Test
   public void onReadyHandlerCalledForUnaryRequest() throws Exception {
-    serverCall.methodDescriptor = UNARY_METHOD;
     final AtomicInteger onReadyCalled = new AtomicInteger();
     ServerCallHandler<Integer, Integer> callHandler =
         ServerCalls.asyncServerStreamingCall(
@@ -297,11 +298,12 @@ public class ServerCallsTest {
 
   @Test
   public void clientSendsOne_errorMissingRequest_serverStreaming() {
-    clientSendsOne_errorMissingRequest(SERVER_STREAMING);
+    clientSendsOne_errorMissingRequest(SERVER_STREAMING_METHOD);
   }
 
-  private void clientSendsOne_errorMissingRequest(MethodDescriptor<Integer, Integer> method) {
-    serverCall.methodDescriptor = method;
+  private static void clientSendsOne_errorMissingRequest(
+      MethodDescriptor<Integer, Integer> method) {
+    ServerCallRecorder serverCall = new ServerCallRecorder(method);
     ServerCallHandler<Integer, Integer> callHandler =
         ServerCalls.asyncUnaryCall(
             new ServerCalls.UnaryMethod<Integer, Integer>() {
@@ -324,11 +326,12 @@ public class ServerCallsTest {
 
   @Test
   public void clientSendsOne_errorTooManyRequests_serverStreaming() {
-    clientSendsOne_errorTooManyRequests(SERVER_STREAMING);
+    clientSendsOne_errorTooManyRequests(SERVER_STREAMING_METHOD);
   }
 
-  private void clientSendsOne_errorTooManyRequests(MethodDescriptor<Integer, Integer> method) {
-    serverCall.methodDescriptor = method;
+  private static void clientSendsOne_errorTooManyRequests(
+      MethodDescriptor<Integer, Integer> method) {
+    ServerCallRecorder serverCall = new ServerCallRecorder(method);
     ServerCallHandler<Integer, Integer> callHandler =
         ServerCalls.asyncUnaryCall(
             new ServerCalls.UnaryMethod<Integer, Integer>() {
@@ -435,14 +438,18 @@ public class ServerCallsTest {
   }
 
   private static class ServerCallRecorder extends ServerCall<Integer, Integer> {
-    private List<Integer> requestCalls = new ArrayList<Integer>();
+    private final MethodDescriptor<Integer, Integer> methodDescriptor;
+    private final List<Integer> requestCalls = new ArrayList<Integer>();
+    private final List<Integer> responses = new ArrayList<Integer>();
     private Metadata headers;
-    private List<Integer> responses = new ArrayList<Integer>();
     private Metadata trailers;
     private Status status;
     private boolean isCancelled;
-    private MethodDescriptor<Integer, Integer> methodDescriptor;
     private boolean isReady;
+
+    public ServerCallRecorder(MethodDescriptor<Integer, Integer> methodDescriptor) {
+      this.methodDescriptor = methodDescriptor;
+    }
 
     @Override
     public void request(int numMessages) {

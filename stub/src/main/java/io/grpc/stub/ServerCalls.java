@@ -18,6 +18,7 @@ package io.grpc.stub;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.base.Preconditions;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
@@ -119,6 +120,9 @@ public final class ServerCalls {
       public ServerCall.Listener<ReqT> startCall(
           final ServerCall<ReqT, RespT> call,
           Metadata headers) {
+        Preconditions.checkArgument(
+            call.getMethodDescriptor().getType().clientSendsOneMessage(),
+            "asyncUnaryRequestCall is only for clientSendsOneMessage methods");
         final ServerCallStreamObserverImpl<ReqT, RespT> responseObserver =
             new ServerCallStreamObserverImpl<ReqT, RespT>(call);
         // We expect only 1 request, but we ask for 2 requests here so that if a misbehaving client
@@ -131,16 +135,14 @@ public final class ServerCalls {
           public void onMessage(ReqT request) {
             // We delay calling method.invoke() until onHalfClose() to make sure the client
             // half-closes.
-            if (call.getMethodDescriptor().getType().clientSendsOneMessage()
-                && this.request != null) {
+            if (this.request == null) {
+              this.request = request;
+            } else {
               Status internalError = Status.INTERNAL.withDescription(TOO_MANY_REQUESTS);
               StatusException exception = internalError.asException();
               log.log(Level.FINE, internalError.getDescription(), exception);
-              // Safe to close the call here from the callback thread,
-              // because the application has not yet been invoked
+              // Safe to close the call, because the application has not yet been invoked
               call.close(internalError, new Metadata());
-            } else {
-              this.request = request;
             }
           }
 
@@ -155,7 +157,11 @@ public final class ServerCalls {
                 onReady();
               }
             } else {
-              call.close(Status.INTERNAL.withDescription(MISSING_REQUEST), new Metadata());
+              Status internalError = Status.INTERNAL.withDescription(MISSING_REQUEST);
+              StatusException exception = internalError.asException();
+              log.log(Level.FINE, internalError.getDescription(), exception);
+              // Safe to close the call, because the application has not yet been invoked
+              call.close(internalError, new Metadata());
             }
           }
 

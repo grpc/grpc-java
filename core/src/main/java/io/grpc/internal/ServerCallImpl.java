@@ -24,6 +24,7 @@ import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.Codec;
 import io.grpc.Compressor;
@@ -44,8 +45,10 @@ import java.util.logging.Logger;
 final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private static final Logger log = Logger.getLogger(ServerCallImpl.class.getName());
 
-  private static String TOO_MANY_RESPONSES = "Too many responses";
-  private static String MISSING_RESPONSE = "Completed without a response";
+  @VisibleForTesting
+  static String TOO_MANY_RESPONSES = "Too many responses";
+  @VisibleForTesting
+  static String MISSING_RESPONSE = "Completed without a response";
 
   private final ServerStream stream;
   private final MethodDescriptor<ReqT, RespT> method;
@@ -60,6 +63,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private boolean closeCalled;
   private Compressor compressor;
   private boolean messageSent;
+  private boolean internalClosed;
 
   ServerCallImpl(ServerStream stream, MethodDescriptor<ReqT, RespT> method,
       Metadata inboundHeaders, Context.CancellableContext context,
@@ -74,6 +78,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public void request(int numMessages) {
+    if (internalClosed) {
+      return;
+    }
     stream.request(numMessages);
   }
 
@@ -81,6 +88,11 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   public void sendHeaders(Metadata headers) {
     checkState(!sendHeadersCalled, "sendHeaders has already been called");
     checkState(!closeCalled, "call is closed");
+    // Check internalClosed for completeness, though today there's no way to trigger an internal
+    // close without already having sent headers.
+    if (internalClosed) {
+      return;
+    }
 
     headers.discardAll(MESSAGE_ENCODING_KEY);
     if (compressor == null) {
@@ -121,11 +133,13 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   public void sendMessage(RespT message) {
     checkState(sendHeadersCalled, "sendHeaders has not been called");
     checkState(!closeCalled, "call is closed");
+    if (internalClosed) {
+      return;
+    }
 
     if (method.getType().serverSendsOneMessage() && messageSent) {
-      Status error = Status.INTERNAL.withDescription(TOO_MANY_RESPONSES);
-      log.log(Level.FINE, error.getDescription(), error.asException());
-      stream.close(error, new Metadata());
+      internalClose(Status.INTERNAL.withDescription(TOO_MANY_RESPONSES));
+      return;
     }
 
     messageSent = true;
@@ -144,6 +158,10 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public void setMessageCompression(boolean enable) {
+    if (internalClosed) {
+      return;
+    }
+
     stream.setMessageCompression(enable);
   }
 
@@ -158,6 +176,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public boolean isReady() {
+    if (internalClosed) {
+      return false;
+    }
     return stream.isReady();
   }
 
@@ -165,10 +186,12 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   public void close(Status status, Metadata trailers) {
     checkState(!closeCalled, "call already closed");
     closeCalled = true;
+    if (internalClosed) {
+      return;
+    }
+
     if (status.isOk() && method.getType().serverSendsOneMessage() && !messageSent) {
-      Status internalError = Status.INTERNAL.withDescription(MISSING_RESPONSE);
-      log.log(Level.FINE, internalError.getDescription(), internalError.asException());
-      stream.close(internalError, new Metadata());
+      internalClose(Status.INTERNAL.withDescription(MISSING_RESPONSE));
     } else {
       stream.close(status, trailers);
     }
@@ -199,6 +222,17 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   }
 
   /**
+   * Close the {@link ServerStream} because an internal error occurred. Allow the application to
+   * run until completion, but silently ignore interactions with the {@link ServerStream} from now
+   * on.
+   */
+  private void internalClose(Status internalError) {
+    internalClosed = true;
+    log.log(Level.FINE, internalError.getDescription(), internalError.asException());
+    stream.close(internalError, new Metadata());
+  }
+
+  /**
    * All of these callbacks are assumed to called on an application thread, and the caller is
    * responsible for handling thrown exceptions.
    */
@@ -214,6 +248,17 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       this.call = checkNotNull(call, "call");
       this.listener = checkNotNull(listener, "listener must not be null");
       this.context = checkNotNull(context, "context");
+      // Wire ourselves up so that if the context is cancelled, our flag call.cancelled also
+      // reflects the new state. Use a DirectExecutor so that it happens in the same thread
+      // as the caller of {@link Context#cancel}.
+      this.context.addListener(
+          new Context.CancellationListener() {
+            @Override
+            public void cancelled(Context context) {
+              ServerStreamListenerImpl.this.call.cancelled = true;
+            }
+          },
+          MoreExecutors.directExecutor());
     }
 
     @SuppressWarnings("Finally") // The code avoids suppressing the exception thrown from try
@@ -224,7 +269,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         if (call.cancelled) {
           return;
         }
-
         listener.onMessage(call.method.parseRequest(message));
       } catch (Throwable e) {
         t = e;
