@@ -882,11 +882,11 @@ public class Context {
      * Adds a value.
      *
      * <p>Like {@code withValues()} on the {@link Context}, the builder doesn't check duplicate
-     * keys. The outcome of duplicate keys given the same builder is unspecified.
+     * keys. The outcome of duplicate keys being added to the same builder is unspecified.
      *
      * @return this builder
      */
-    public <K,V> Builder withValue(Key<V> k, V v) {
+    public <K,V> Builder addValue(Key<V> k, V v) {
       values.add(new Object[]{k, v});
       return this;
     }

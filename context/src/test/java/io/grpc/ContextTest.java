@@ -252,10 +252,10 @@ public class ContextTest {
     Object fav = new Object();
     Context base = Context.current().withValues(PET, "dog", COLOR, "blue");
     Context child = base.newBuilder()
-        .withValue(PET, "cat")
-        .withValue(FOOD, "cheese")
-        .withValue(FAVORITE, fav)
-        .withValue(LUCKY, 7)
+        .addValue(PET, "cat")
+        .addValue(FOOD, "cheese")
+        .addValue(FAVORITE, fav)
+        .addValue(LUCKY, 7)
         .build();
 
     child.attach();
