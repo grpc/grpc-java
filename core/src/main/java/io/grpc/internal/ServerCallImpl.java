@@ -24,7 +24,6 @@ import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.Codec;
 import io.grpc.Compressor;
@@ -39,8 +38,15 @@ import io.grpc.Status;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
+  private static final Logger log = Logger.getLogger(ServerCallImpl.class.getName());
+
+  private static String TOO_MANY_RESPONSES = "Too many responses";
+  private static String MISSING_RESPONSE = "Completed without a response";
+
   private final ServerStream stream;
   private final MethodDescriptor<ReqT, RespT> method;
   private final Context.CancellableContext context;
@@ -53,6 +59,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private boolean sendHeadersCalled;
   private boolean closeCalled;
   private Compressor compressor;
+  private boolean messageSent;
 
   ServerCallImpl(ServerStream stream, MethodDescriptor<ReqT, RespT> method,
       Metadata inboundHeaders, Context.CancellableContext context,
@@ -114,6 +121,14 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   public void sendMessage(RespT message) {
     checkState(sendHeadersCalled, "sendHeaders has not been called");
     checkState(!closeCalled, "call is closed");
+
+    if (method.getType().serverSendsOneMessage() && messageSent) {
+      Status error = Status.INTERNAL.withDescription(TOO_MANY_RESPONSES);
+      log.log(Level.FINE, error.getDescription(), error.asException());
+      stream.close(error, new Metadata());
+    }
+
+    messageSent = true;
     try {
       InputStream resp = method.streamResponse(message);
       stream.writeMessage(resp);
@@ -150,7 +165,13 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   public void close(Status status, Metadata trailers) {
     checkState(!closeCalled, "call already closed");
     closeCalled = true;
-    stream.close(status, trailers);
+    if (status.isOk() && method.getType().serverSendsOneMessage() && !messageSent) {
+      Status internalError = Status.INTERNAL.withDescription(MISSING_RESPONSE);
+      log.log(Level.FINE, internalError.getDescription(), internalError.asException());
+      stream.close(internalError, new Metadata());
+    } else {
+      stream.close(status, trailers);
+    }
   }
 
   @Override
@@ -193,17 +214,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       this.call = checkNotNull(call, "call");
       this.listener = checkNotNull(listener, "listener must not be null");
       this.context = checkNotNull(context, "context");
-      // Wire ourselves up so that if the context is cancelled, our flag call.cancelled also
-      // reflects the new state. Use a DirectExecutor so that it happens in the same thread
-      // as the caller of {@link Context#cancel}.
-      this.context.addListener(
-          new Context.CancellationListener() {
-            @Override
-            public void cancelled(Context context) {
-              ServerStreamListenerImpl.this.call.cancelled = true;
-            }
-          },
-          MoreExecutors.directExecutor());
     }
 
     @SuppressWarnings("Finally") // The code avoids suppressing the exception thrown from try
@@ -214,6 +224,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         if (call.cancelled) {
           return;
         }
+
         listener.onMessage(call.method.parseRequest(message));
       } catch (Throwable e) {
         t = e;

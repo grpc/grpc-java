@@ -67,11 +67,6 @@ public class ServerCallsTest {
           .setResponseMarshaller(new IntegerMarshaller())
           .build();
 
-  static final MethodDescriptor<Integer, Integer> CLIENT_STREAMING = STREAMING_METHOD.toBuilder()
-      .setType(MethodDescriptor.MethodType.CLIENT_STREAMING)
-      .setFullMethodName("some/server_streaming")
-      .build();
-
   static final MethodDescriptor<Integer, Integer> SERVER_STREAMING = STREAMING_METHOD.toBuilder()
       .setType(MethodDescriptor.MethodType.SERVER_STREAMING)
       .setFullMethodName("some/client_streaming")
@@ -296,70 +291,6 @@ public class ServerCallsTest {
   }
 
   @Test
-  public void serverSendsOne_errorMissingResponse_unary() throws Exception {
-    serverSendsOne_errorMissingResponse(UNARY_METHOD);
-  }
-
-  @Test
-  public void serverSendsOne_errorMissingResponse_clientStreaming() throws Exception {
-    serverSendsOne_errorMissingResponse(CLIENT_STREAMING);
-  }
-
-  private void serverSendsOne_errorMissingResponse(MethodDescriptor<Integer, Integer> method) {
-    serverCall.methodDescriptor = method;
-    ServerCallHandler<Integer, Integer> callHandler =
-        ServerCalls.asyncUnaryCall(
-            new ServerCalls.UnaryMethod<Integer, Integer>() {
-              @Override
-              public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
-                // when application is invoked, immediately call onCompleted without sending a
-                // response
-                responseObserver.onCompleted();
-              }
-            });
-    ServerCall.Listener<Integer> listener = callHandler.startCall(serverCall, new Metadata());
-    listener.onMessage(1);
-    listener.onHalfClose();
-    assertThat(serverCall.responses).isEmpty();
-    assertEquals(Status.Code.INTERNAL, serverCall.status.getCode());
-    assertEquals(ServerCalls.ErrorMessages.ServerSendsOne.MISSING_RESPONSE,
-        serverCall.status.getDescription());
-  }
-
-  @Test
-  public void serverSendsOne_errorTooManyResponses_unary() throws Exception {
-    severSendsOne_errorWhenSentTwo(UNARY_METHOD);
-  }
-
-  @Test
-  public void serverSendsOne_errorTwooManyResponses_clientStreaming() throws Exception {
-    severSendsOne_errorWhenSentTwo(CLIENT_STREAMING);
-  }
-
-  private void severSendsOne_errorWhenSentTwo(MethodDescriptor<Integer, Integer> method) {
-    serverCall.methodDescriptor = method;
-    ServerCallHandler<Integer, Integer> callHandler =
-        ServerCalls.asyncUnaryCall(
-            new ServerCalls.UnaryMethod<Integer, Integer>() {
-              @Override
-              public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
-                // when application is invoked, send more responses than allowed
-                responseObserver.onNext(1);
-                responseObserver.onNext(2);
-              }
-            });
-    ServerCall.Listener<Integer> listener = callHandler.startCall(serverCall, new Metadata());
-    listener.onMessage(1);
-    listener.onHalfClose();
-    // second response should have triggered error handling instead of being sent out
-    assertThat(serverCall.responses).containsExactly(1);
-    assertEquals(Status.Code.INTERNAL, serverCall.status.getCode());
-    assertEquals(
-        ServerCalls.ErrorMessages.ServerSendsOne.TOO_MANY_RESPONSES,
-        serverCall.status.getDescription());
-  }
-
-  @Test
   public void clientSendsOne_errorMissingRequest_unary() {
     clientSendsOne_errorMissingRequest(UNARY_METHOD);
   }
@@ -383,8 +314,7 @@ public class ServerCallsTest {
     listener.onHalfClose();
     assertThat(serverCall.responses).isEmpty();
     assertEquals(Status.Code.INTERNAL, serverCall.status.getCode());
-    assertEquals(ServerCalls.ErrorMessages.ClientSendsOne.MISSING_REQUEST,
-        serverCall.status.getDescription());
+    assertEquals(ServerCalls.MISSING_REQUEST, serverCall.status.getDescription());
   }
 
   @Test
@@ -412,8 +342,7 @@ public class ServerCallsTest {
     listener.onMessage(1);
     assertThat(serverCall.responses).isEmpty();
     assertEquals(Status.Code.INTERNAL, serverCall.status.getCode());
-    assertEquals(ServerCalls.ErrorMessages.ClientSendsOne.TOO_MANY_REQUESTS,
-        serverCall.status.getDescription());
+    assertEquals(ServerCalls.TOO_MANY_REQUESTS, serverCall.status.getDescription());
   }
 
   @Test
