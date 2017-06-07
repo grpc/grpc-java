@@ -109,7 +109,8 @@ public class DnsNameResolverTest {
         name,
         Attributes.newBuilder().set(NameResolver.Factory.PARAMS_DEFAULT_PORT, port).build(),
         fakeTimerServiceResource,
-        fakeExecutorResource);
+        fakeExecutorResource,
+        false /* lookup balancers */);
     dnsResolver.setDelegateResolver(mockResolver);
     return dnsResolver;
   }

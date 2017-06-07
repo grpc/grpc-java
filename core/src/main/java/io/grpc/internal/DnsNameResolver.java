@@ -69,6 +69,8 @@ final class DnsNameResolver extends NameResolver {
   private final int port;
   private final Resource<ScheduledExecutorService> timerServiceResource;
   private final Resource<ExecutorService> executorResource;
+  private final boolean balancerLookup;
+
   @GuardedBy("this")
   private boolean shutdown;
   @GuardedBy("this")
@@ -82,9 +84,13 @@ final class DnsNameResolver extends NameResolver {
   @GuardedBy("this")
   private Listener listener;
 
-  DnsNameResolver(@Nullable String nsAuthority, String name, Attributes params,
+  DnsNameResolver(
+      @Nullable String nsAuthority,
+      String name,
+      Attributes params,
       Resource<ScheduledExecutorService> timerServiceResource,
-      Resource<ExecutorService> executorResource) {
+      Resource<ExecutorService> executorResource,
+      boolean balancerLookup) {
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
     this.timerServiceResource = timerServiceResource;
@@ -106,6 +112,7 @@ final class DnsNameResolver extends NameResolver {
     } else {
       port = nameUri.getPort();
     }
+    this.balancerLookup = balancerLookup;
   }
 
   @Override

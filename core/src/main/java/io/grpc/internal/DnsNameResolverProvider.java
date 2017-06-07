@@ -38,6 +38,19 @@ import java.net.URI;
  */
 public final class DnsNameResolverProvider extends NameResolverProvider {
 
+  private final boolean balancerLookup;
+
+  /**
+   * Called reflectively by the service provider.
+   */
+  public DnsNameResolverProvider() {
+    this(false);
+  }
+
+  public DnsNameResolverProvider(boolean balancerLookup) {
+    this.balancerLookup = balancerLookup;
+  }
+
   private static final String SCHEME = "dns";
 
   @Override
@@ -47,8 +60,13 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
       Preconditions.checkArgument(targetPath.startsWith("/"),
           "the path component (%s) of the target (%s) must start with '/'", targetPath, targetUri);
       String name = targetPath.substring(1);
-      return new DnsNameResolver(targetUri.getAuthority(), name, params, GrpcUtil.TIMER_SERVICE,
-          GrpcUtil.SHARED_CHANNEL_EXECUTOR);
+      return new DnsNameResolver(
+          targetUri.getAuthority(),
+          name,
+          params,
+          GrpcUtil.TIMER_SERVICE,
+          GrpcUtil.SHARED_CHANNEL_EXECUTOR,
+          balancerLookup);
     } else {
       return null;
     }
