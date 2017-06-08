@@ -24,16 +24,12 @@ import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.Status;
-import io.grpc.StatusException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * Utility functions for adapting {@link ServerCallHandler}s to application service implementation,
  * meant to be used by the generated code.
  */
 public final class ServerCalls {
-  private static final Logger log = Logger.getLogger(ServerCalls.class.getName());
 
   static String TOO_MANY_REQUESTS = "Too many requests";
   static String MISSING_REQUEST = "Half-closed without a request";
@@ -133,35 +129,35 @@ public final class ServerCalls {
           ReqT request;
           @Override
           public void onMessage(ReqT request) {
+            if (this.request != null) {
+              // Safe to close the call, because the application has not yet been invoked
+              call.close(
+                  Status.INTERNAL.withDescription(TOO_MANY_REQUESTS),
+                  new Metadata());
+              return;
+            }
+
             // We delay calling method.invoke() until onHalfClose() to make sure the client
             // half-closes.
-            if (this.request == null) {
-              this.request = request;
-            } else {
-              Status internalError = Status.INTERNAL.withDescription(TOO_MANY_REQUESTS);
-              StatusException exception = internalError.asException();
-              log.log(Level.FINE, internalError.getDescription(), exception);
-              // Safe to close the call, because the application has not yet been invoked
-              call.close(internalError, new Metadata());
-            }
+            this.request = request;
           }
 
           @Override
           public void onHalfClose() {
-            if (request != null) {
-              method.invoke(request, responseObserver);
-              responseObserver.freeze();
-              if (call.isReady()) {
-                // Since we are calling invoke in halfClose we have missed the onReady
-                // event from the transport so recover it here.
-                onReady();
-              }
-            } else {
-              Status internalError = Status.INTERNAL.withDescription(MISSING_REQUEST);
-              StatusException exception = internalError.asException();
-              log.log(Level.FINE, internalError.getDescription(), exception);
+            if (request == null) {
               // Safe to close the call, because the application has not yet been invoked
-              call.close(internalError, new Metadata());
+              call.close(
+                  Status.INTERNAL.withDescription(MISSING_REQUEST),
+                  new Metadata());
+              return;
+            }
+
+            method.invoke(request, responseObserver);
+            responseObserver.freeze();
+            if (call.isReady()) {
+              // Since we are calling invoke in halfClose we have missed the onReady
+              // event from the transport so recover it here.
+              onReady();
             }
           }
 

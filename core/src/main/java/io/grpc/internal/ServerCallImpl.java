@@ -39,11 +39,8 @@ import io.grpc.Status;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
-  private static final Logger log = Logger.getLogger(ServerCallImpl.class.getName());
 
   @VisibleForTesting
   static String TOO_MANY_RESPONSES = "Too many responses";
@@ -192,9 +189,10 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
     if (status.isOk() && method.getType().serverSendsOneMessage() && !messageSent) {
       internalClose(Status.INTERNAL.withDescription(MISSING_RESPONSE));
-    } else {
-      stream.close(status, trailers);
+      return;
     }
+
+    stream.close(status, trailers);
   }
 
   @Override
@@ -228,7 +226,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
    */
   private void internalClose(Status internalError) {
     internalClosed = true;
-    log.log(Level.FINE, internalError.getDescription(), internalError.asException());
     stream.close(internalError, new Metadata());
   }
 
