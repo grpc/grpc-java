@@ -78,12 +78,12 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
   }
 
   @Override
-  protected boolean isAvailable() {
+  public boolean isAvailable() {
     return true;
   }
 
   @Override
-  protected int priority() {
+  public int priority() {
     return 5;
   }
 }

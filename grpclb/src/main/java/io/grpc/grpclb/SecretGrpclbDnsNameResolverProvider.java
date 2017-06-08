@@ -21,7 +21,7 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
 import io.grpc.NameResolver;
 import io.grpc.internal.DnsNameResolverProvider;
-import io.grpc.internal.NameResolverProvider;
+import io.grpc.NameResolverProvider;
 import java.net.URI;
 import javax.annotation.Nullable;
 
