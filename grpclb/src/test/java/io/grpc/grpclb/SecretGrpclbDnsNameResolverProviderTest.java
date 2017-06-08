@@ -20,8 +20,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import io.grpc.NameResolverProvider;
 import io.grpc.grpclb.SecretGrpclbDnsNameResolverProvider.GrpclbDnsNameResolverProvider;
-import io.grpc.internal.NameResolverProvider;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;

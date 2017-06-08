@@ -17,11 +17,10 @@
 package io.grpc.grpclb;
 
 import com.google.common.annotations.VisibleForTesting;
-
 import io.grpc.Attributes;
 import io.grpc.NameResolver;
-import io.grpc.internal.DnsNameResolverProvider;
 import io.grpc.NameResolverProvider;
+import io.grpc.internal.DnsNameResolverProvider;
 import java.net.URI;
 import javax.annotation.Nullable;
 
