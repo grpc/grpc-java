@@ -241,16 +241,16 @@ public class ServerCallImplTest {
   }
 
   @Test
-  public void sendMessage_serverSendsOne_okFailsOnMissingResponse_unary() {
-    sendMessage_serverSendsOne_okFailsOnMissingResponse(UNARY_METHOD);
+  public void serverSendsOne_okFailsOnMissingResponse_unary() {
+    serverSendsOne_okFailsOnMissingResponse(UNARY_METHOD);
   }
 
   @Test
-  public void sendMessage_serverSendsOne_okFailsOnMissingResponse_clientStreaming() {
-    sendMessage_serverSendsOne_okFailsOnMissingResponse(CLIENT_STREAMING_METHOD);
+  public void serverSendsOne_okFailsOnMissingResponse_clientStreaming() {
+    serverSendsOne_okFailsOnMissingResponse(CLIENT_STREAMING_METHOD);
   }
 
-  private void sendMessage_serverSendsOne_okFailsOnMissingResponse(
+  private void serverSendsOne_okFailsOnMissingResponse(
       MethodDescriptor<Long, Long> method) {
     ServerCallImpl<Long, Long> serverCall = new ServerCallImpl<Long, Long>(
         stream,
@@ -269,7 +269,7 @@ public class ServerCallImplTest {
   }
 
   @Test
-  public void sendMessage_serverSendsOne_canErrorWithoutResponse() {
+  public void serverSendsOne_canErrorWithoutResponse() {
     final String description = "test description";
     final Status status = Status.RESOURCE_EXHAUSTED.withDescription(description);
     final Metadata metadata = new Metadata();
