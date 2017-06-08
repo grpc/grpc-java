@@ -248,6 +248,28 @@ public class ContextTest {
   }
 
   @Test
+  public void builder() {
+    Object fav = new Object();
+    Context base = Context.current().withValues(PET, "dog", COLOR, "blue");
+    Context child = base.newBuilder()
+        .addValue(PET, "cat")
+        .addValue(FOOD, "cheese")
+        .addValue(FAVORITE, fav)
+        .addValue(LUCKY, 7)
+        .build();
+
+    child.attach();
+
+    assertEquals("cat", PET.get());
+    assertEquals("cheese", FOOD.get());
+    assertEquals("blue", COLOR.get());
+    assertEquals(fav, FAVORITE.get());
+    assertEquals(7, (int) LUCKY.get());
+
+    base.attach();
+  }
+
+  @Test
   public void cancelReturnsFalseIfAlreadyCancelled() {
     Context.CancellableContext base = Context.current().withCancellation();
     assertTrue(base.cancel(null));

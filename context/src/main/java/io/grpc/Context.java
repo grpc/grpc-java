@@ -348,6 +348,14 @@ public class Context {
   }
 
   /**
+   * Create a builder which builds contexts that cascade cancellation from their parent, which is
+   * this context.
+   */
+  public Builder newBuilder() {
+    return new Builder(this);
+  }
+
+  /**
    * Create a new context which propagates the values of this context but does not cascade its
    * cancellation.
    */
@@ -856,6 +864,38 @@ public class Context {
     @Override
     public String toString() {
       return name;
+    }
+  }
+
+  /**
+   * Builds a context with arbitrary number of values.
+   */
+  public static final class Builder {
+    private final Context parent;
+    private final ArrayList<Object[]> values = new ArrayList<Object[]>();
+
+    private Builder(Context parent) {
+      this.parent = checkNotNull(parent, "parent");
+    }
+
+    /**
+     * Adds a value.
+     *
+     * <p>Like {@code withValues()} on the {@link Context}, the builder doesn't check duplicate
+     * keys. The outcome of duplicate keys being added to the same builder is unspecified.
+     *
+     * @return this builder
+     */
+    public <K,V> Builder addValue(Key<V> k, V v) {
+      values.add(new Object[]{k, v});
+      return this;
+    }
+
+    /**
+     * Builds a new context.
+     */
+    public Context build() {
+      return new Context(parent, values.toArray(new Object[values.size()][]));
     }
   }
 
