@@ -16,7 +16,6 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Charsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -27,57 +26,25 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.google.common.io.CharStreams;
-import io.grpc.CompressorRegistry;
-import io.grpc.Context;
-import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
-import io.grpc.MethodDescriptor;
-import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
-import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
-import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
-import org.mockito.Mock;
-import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.junit.runners.Parameterized;
 
-@RunWith(JUnit4.class)
-public class ServerCallImplTest {
-  @Rule public final ExpectedException thrown = ExpectedException.none();
-  @Mock private ServerStream stream;
-  @Mock private ServerCall.Listener<Long> callListener;
-  @Captor private ArgumentCaptor<Status> statusCaptor;
+@RunWith(Parameterized.class)
+public class ServerCallImplCommonTest extends ServerCallImplAbstractTest {
 
-  private ServerCallImpl<Long, Long> call;
-  private Context.CancellableContext context;
+  public ServerCallImplCommonTest(MethodType type) {
+    super(type);
+  }
 
-  private final MethodDescriptor<Long, Long> method = MethodDescriptor.<Long, Long>newBuilder()
-      .setType(MethodType.UNARY)
-      .setFullMethodName("/service/method")
-      .setRequestMarshaller(new LongMarshaller())
-      .setResponseMarshaller(new LongMarshaller())
-      .build();
-
-  private final Metadata requestHeaders = new Metadata();
-
-  @Before
-  public void setUp() {
-    MockitoAnnotations.initMocks(this);
-    context = Context.ROOT.withCancellation();
-    call = new ServerCallImpl<Long, Long>(stream, method, requestHeaders, context,
-        DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance());
+  @Override
+  protected boolean shouldRunTest(MethodType type) {
+    return true;
   }
 
   @Test
@@ -266,20 +233,6 @@ public class ServerCallImplTest {
   }
 
   @Test
-  public void streamListener_messageRead_unaryFailsOnMultiple() {
-    ServerStreamListenerImpl<Long> streamListener =
-        new ServerCallImpl.ServerStreamListenerImpl<Long>(call, callListener, context);
-    streamListener.messageRead(method.streamRequest(1234L));
-    streamListener.messageRead(method.streamRequest(1234L));
-
-    // Makes sure this was only called once.
-    verify(callListener).onMessage(1234L);
-
-    verify(stream).close(statusCaptor.capture(), Mockito.isA(Metadata.class));
-    assertEquals(Status.Code.INTERNAL, statusCaptor.getValue().getCode());
-  }
-
-  @Test
   public void streamListener_messageRead_onlyOnce() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<Long>(call, callListener, context);
@@ -305,21 +258,5 @@ public class ServerCallImplTest {
     thrown.expect(RuntimeException.class);
     thrown.expectMessage("unexpected exception");
     streamListener.messageRead(inputStream);
-  }
-
-  private static class LongMarshaller implements Marshaller<Long> {
-    @Override
-    public InputStream stream(Long value) {
-      return new ByteArrayInputStream(value.toString().getBytes(UTF_8));
-    }
-
-    @Override
-    public Long parse(InputStream stream) {
-      try {
-        return Long.parseLong(CharStreams.toString(new InputStreamReader(stream, UTF_8)));
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-    }
   }
 }
