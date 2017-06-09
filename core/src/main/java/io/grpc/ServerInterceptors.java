@@ -17,8 +17,6 @@
 package io.grpc;
 
 import com.google.common.base.Preconditions;
-import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener;
-import io.grpc.internal.SynchronizedServerCall;
 import java.io.BufferedInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -290,81 +288,4 @@ public final class ServerInterceptors {
       }
     };
   }
-
-  /**
-   * A class that intercepts uncaught exceptions of type {@link StatusRuntimeException} and handles
-   * them by closing the {@link ServerCall}, and transmitting the exception's details to the client.
-   *
-   * <p>Without this interceptor, gRPC will strip all details and close the {@link ServerCall} with
-   * a generic {@link Status#UNKNOWN} code.
-   *
-   * <p>Security warning: the {@link Status} and {@link Metadata} may contain sensitive server-side
-   * state information, and generally should not be sent to clients. Only install this interceptor
-   * if all clients are trusted.
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2189")
-  public static final ServerInterceptor STATUSRUNTIMEXCEPTION_TRANSMITTING_INTERCEPTOR =
-      new ServerInterceptor() {
-        @Override
-        public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-            ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-          final ServerCall<ReqT, RespT> syncServerCall =
-              new SynchronizedServerCall<ReqT, RespT>(call);
-          ServerCall.Listener<ReqT> listener = next.startCall(syncServerCall, headers);
-          return new SimpleForwardingServerCallListener<ReqT>(listener) {
-            @Override
-            public void onMessage(ReqT message) {
-              try {
-                super.onMessage(message);
-              } catch (StatusRuntimeException t) {
-                closeWithException(t);
-              }
-            }
-
-            @Override
-            public void onHalfClose() {
-              try {
-                super.onHalfClose();
-              } catch (StatusRuntimeException t) {
-                closeWithException(t);
-              }
-            }
-
-            @Override
-            public void onCancel() {
-              try {
-                super.onCancel();
-              } catch (StatusRuntimeException t) {
-                closeWithException(t);
-              }
-            }
-
-            @Override
-            public void onComplete() {
-              try {
-                super.onComplete();
-              } catch (StatusRuntimeException t) {
-                closeWithException(t);
-              }
-            }
-
-            @Override
-            public void onReady() {
-              try {
-                super.onReady();
-              } catch (StatusRuntimeException t) {
-                closeWithException(t);
-              }
-            }
-
-            private void closeWithException(StatusRuntimeException t) {
-              Metadata metadata = Status.trailersFromThrowable(t);
-              if (metadata == null) {
-                metadata = new Metadata();
-              }
-              syncServerCall.close(Status.fromThrowable(t), metadata);
-            }
-          };
-        }
-      };
 }
