@@ -20,10 +20,7 @@ import static com.google.common.collect.Iterables.getOnlyElement;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.same;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -71,8 +68,6 @@ public class ServerInterceptorsTest {
 
   private final Metadata headers = new Metadata();
 
-  private boolean allowListenerInteraction;
-
   /** Set up for test. */
   @Before
   public void setUp() {
@@ -90,7 +85,6 @@ public class ServerInterceptorsTest {
 
     serviceDefinition = ServerServiceDefinition.builder(new ServiceDescriptor("basic", flowMethod))
         .addMethod(flowMethod, handler).build();
-    allowListenerInteraction = false;
   }
 
   /** Final checks for all tests. */
@@ -98,9 +92,7 @@ public class ServerInterceptorsTest {
   public void makeSureExpectedMocksUnused() {
     verifyZeroInteractions(requestMarshaller);
     verifyZeroInteractions(responseMarshaller);
-    if (!allowListenerInteraction) {
-      verifyZeroInteractions(listener);
-    }
+    verifyZeroInteractions(listener);
   }
 
   @Test(expected = NullPointerException.class)
@@ -413,36 +405,6 @@ public class ServerInterceptorsTest {
     assertEquals(
         Arrays.asList("i2onMessage", "i1onMessage", "handler", "i1sendMessage", "i2sendMessage"),
         order);
-  }
-
-  @Test
-  public void statusRuntimeExceptionTransmittingInterceptor() {
-    allowListenerInteraction = true;
-    final Status expectedStatus = Status.UNAVAILABLE;
-    final Metadata expectedMetadata = new Metadata();
-    call = Mockito.spy(call);
-    final StatusRuntimeException exception =
-        new StatusRuntimeException(expectedStatus, expectedMetadata);
-    doThrow(exception).when(listener).onMessage(any(String.class));
-    doThrow(exception).when(listener).onCancel();
-    doThrow(exception).when(listener).onComplete();
-    doThrow(exception).when(listener).onHalfClose();
-    doThrow(exception).when(listener).onReady();
-
-    ServerServiceDefinition intercepted = ServerInterceptors.intercept(
-        serviceDefinition,
-        Arrays.asList(ServerInterceptors.STATUSRUNTIMEXCEPTION_TRANSMITTING_INTERCEPTOR));
-    try {
-      getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onMessage("hello");
-      getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onCancel();
-      getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onComplete();
-      getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onHalfClose();
-      getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onReady();
-    } catch (Throwable t) {
-      fail("The interceptor should have handled the error by directly closing the ServerCall, "
-          + "and should not propagate it to the method's caller.");
-    }
-    verify(call, times(5)).close(same(expectedStatus), same(expectedMetadata));
   }
 
   @SuppressWarnings("unchecked")
