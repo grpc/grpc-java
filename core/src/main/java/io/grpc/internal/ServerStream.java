@@ -49,7 +49,6 @@ public interface ServerStream extends Stream {
    * @param status details of the closure
    * @param trailers an additional block of metadata to pass to the client on stream closure.
    */
-  //TODO(spencerfang): add unit tests to verify the close behavior
   void close(Status status, Metadata trailers);
 
 
