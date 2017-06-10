@@ -17,7 +17,6 @@
 package io.grpc.util.interceptor.server;
 
 import static com.google.common.collect.Iterables.getOnlyElement;
-import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.doThrow;
@@ -48,8 +47,7 @@ import org.mockito.MockitoAnnotations;
 
 /**
  * Unit test for {@link io.grpc.ServerInterceptor} implementations that come with gRPC. Not to be
- * confused with the unit tests that validate the core functionality of the server interceptor
- * framework.
+ * confused with the unit tests that validate gRPC's usage of interceptors.
  */
 @RunWith(JUnit4.class)
 public class UtilServerInterceptorsTest {
@@ -116,17 +114,14 @@ public class UtilServerInterceptorsTest {
 
     ServerServiceDefinition intercepted = ServerInterceptors.intercept(
         serviceDefinition,
-        Arrays.asList(StatusRuntimeExceptionTransmitter.INSTANCE));
-    try {
-      getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onMessage("hello");
-      getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onCancel();
-      getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onComplete();
-      getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onHalfClose();
-      getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onReady();
-    } catch (Throwable t) {
-      fail("The interceptor should have handled the error by directly closing the ServerCall, "
-          + "and should not propagate it to the method's caller.");
-    }
+        Arrays.asList(StatusRuntimeExceptionTransmitter.instance()));
+    // The interceptor should have handled the error by directly closing the ServerCall
+    // and the exception should not propagate to the method's caller
+    getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onMessage("hello");
+    getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onCancel();
+    getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onComplete();
+    getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onHalfClose();
+    getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onReady();
     verify(call, times(5)).close(same(expectedStatus), same(expectedMetadata));
   }
 }

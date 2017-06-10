@@ -16,6 +16,8 @@
 
 package io.grpc.util.interceptor.server;
 
+import com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerCall;
@@ -26,6 +28,8 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
+import io.grpc.internal.SerializingExecutor;
+import java.util.concurrent.ExecutionException;
 import javax.annotation.Nullable;
 
 /**
@@ -40,136 +44,221 @@ import javax.annotation.Nullable;
  * if all clients are trusted.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2189")
-public final class StatusRuntimeExceptionTransmitter {
+public final class StatusRuntimeExceptionTransmitter implements ServerInterceptor {
   private StatusRuntimeExceptionTransmitter() {
     // do not instantiate
   }
 
-  public static final ServerInterceptor INSTANCE = new ServerInterceptor() {
-    @Override
-    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-        ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-      final ServerCall<ReqT, RespT> syncServerCall =
-          new SynchronizedServerCall<ReqT, RespT>(call);
-      ServerCall.Listener<ReqT> listener = next.startCall(syncServerCall, headers);
-      return new ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT>(listener) {
-        @Override
-        public void onMessage(ReqT message) {
-          try {
-            super.onMessage(message);
-          } catch (StatusRuntimeException e) {
-            closeWithException(e);
-          }
-        }
+  public static ServerInterceptor instance() {
+    return new StatusRuntimeExceptionTransmitter();
+  }
 
-        @Override
-        public void onHalfClose() {
-          try {
-            super.onHalfClose();
-          } catch (StatusRuntimeException e) {
-            closeWithException(e);
-          }
+  @Override
+  public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+      ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+    final ServerCall<ReqT, RespT> serverCall = new SerializingServerCall<ReqT, RespT>(call);
+    ServerCall.Listener<ReqT> listener = next.startCall(serverCall, headers);
+    return new ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT>(listener) {
+      @Override
+      public void onMessage(ReqT message) {
+        try {
+          super.onMessage(message);
+        } catch (StatusRuntimeException e) {
+          closeWithException(e);
         }
+      }
 
-        @Override
-        public void onCancel() {
-          try {
-            super.onCancel();
-          } catch (StatusRuntimeException e) {
-            closeWithException(e);
-          }
+      @Override
+      public void onHalfClose() {
+        try {
+          super.onHalfClose();
+        } catch (StatusRuntimeException e) {
+          closeWithException(e);
         }
+      }
 
-        @Override
-        public void onComplete() {
-          try {
-            super.onComplete();
-          } catch (StatusRuntimeException e) {
-            closeWithException(e);
-          }
+      @Override
+      public void onCancel() {
+        try {
+          super.onCancel();
+        } catch (StatusRuntimeException e) {
+          closeWithException(e);
         }
+      }
 
-        @Override
-        public void onReady() {
-          try {
-            super.onReady();
-          } catch (StatusRuntimeException e) {
-            closeWithException(e);
-          }
+      @Override
+      public void onComplete() {
+        try {
+          super.onComplete();
+        } catch (StatusRuntimeException e) {
+          closeWithException(e);
         }
+      }
 
-        private void closeWithException(StatusRuntimeException t) {
-          Metadata metadata = Status.trailersFromThrowable(t);
-          if (metadata == null) {
-            metadata = new Metadata();
-          }
-          syncServerCall.close(Status.fromThrowable(t), metadata);
+      @Override
+      public void onReady() {
+        try {
+          super.onReady();
+        } catch (StatusRuntimeException e) {
+          closeWithException(e);
         }
-      };
-    }
-  };
+      }
+
+      private void closeWithException(StatusRuntimeException t) {
+        Metadata metadata = Status.trailersFromThrowable(t);
+        if (metadata == null) {
+          metadata = new Metadata();
+        }
+        serverCall.close(t.getStatus(), metadata);
+      }
+    };
+  }
 
   /**
    * A {@link ServerCall} that wraps around a non thread safe delegate and provides thread safe
-   * access.
+   * access by serializing everything on an executor.
    */
-  private static class SynchronizedServerCall<ReqT, RespT> extends
+  private static class SerializingServerCall<ReqT, RespT> extends
       ForwardingServerCall.SimpleForwardingServerCall<ReqT, RespT> {
+    private static final String ERROR_MSG = "Encountered error during serialized access";
+    private final SerializingExecutor serializingExecutor =
+        new SerializingExecutor(MoreExecutors.directExecutor());
 
-    public SynchronizedServerCall(ServerCall<ReqT, RespT> delegate) {
+    SerializingServerCall(ServerCall<ReqT, RespT> delegate) {
       super(delegate);
     }
 
     @Override
-    public synchronized void sendMessage(RespT message) {
-      super.sendMessage(message);
+    public void sendMessage(final RespT message) {
+      serializingExecutor.execute(new Runnable() {
+        @Override
+        public void run() {
+          SerializingServerCall.super.sendMessage(message);
+        }
+      });
     }
 
     @Override
-    public synchronized void request(int numMessages) {
-      super.request(numMessages);
+    public void request(final int numMessages) {
+      serializingExecutor.execute(new Runnable() {
+        @Override
+        public void run() {
+          SerializingServerCall.super.request(numMessages);
+        }
+      });
     }
 
     @Override
-    public synchronized void sendHeaders(Metadata headers) {
-      super.sendHeaders(headers);
+    public void sendHeaders(final Metadata headers) {
+      serializingExecutor.execute(new Runnable() {
+        @Override
+        public void run() {
+          SerializingServerCall.super.sendHeaders(headers);
+        }
+      });
     }
 
     @Override
-    public synchronized boolean isReady() {
-      return super.isReady();
+    public void close(final Status status, final Metadata trailers) {
+      serializingExecutor.execute(new Runnable() {
+        @Override
+        public void run() {
+          SerializingServerCall.super.close(status, trailers);
+        }
+      });
     }
 
     @Override
-    public synchronized void close(Status status, Metadata trailers) {
-      super.close(status, trailers);
+    public boolean isReady() {
+      final SettableFuture<Boolean> retVal = SettableFuture.create();
+      serializingExecutor.execute(new Runnable() {
+        @Override
+        public void run() {
+          retVal.set(SerializingServerCall.super.isReady());
+        }
+      });
+      try {
+        return retVal.get();
+      } catch (InterruptedException e) {
+        throw new RuntimeException(ERROR_MSG, e);
+      } catch (ExecutionException e) {
+        throw new RuntimeException(ERROR_MSG, e);
+      }
     }
 
     @Override
-    public synchronized boolean isCancelled() {
-      return super.isCancelled();
+    public boolean isCancelled() {
+      final SettableFuture<Boolean> retVal = SettableFuture.create();
+      serializingExecutor.execute(new Runnable() {
+        @Override
+        public void run() {
+          retVal.set(SerializingServerCall.super.isCancelled());
+        }
+      });
+      try {
+        return retVal.get();
+      } catch (InterruptedException e) {
+        throw new RuntimeException(ERROR_MSG, e);
+      } catch (ExecutionException e) {
+        throw new RuntimeException(ERROR_MSG, e);
+      }
     }
 
     @Override
-    public synchronized void setMessageCompression(boolean enabled) {
-      super.setMessageCompression(enabled);
+    public void setMessageCompression(final boolean enabled) {
+      serializingExecutor.execute(new Runnable() {
+        @Override
+        public void run() {
+          SerializingServerCall.super.setMessageCompression(enabled);
+        }
+      });
     }
 
     @Override
-    public synchronized void setCompression(String compressor) {
-      super.setCompression(compressor);
+    public void setCompression(final String compressor) {
+      serializingExecutor.execute(new Runnable() {
+        @Override
+        public void run() {
+          SerializingServerCall.super.setCompression(compressor);
+        }
+      });
     }
 
     @Override
-    public synchronized Attributes getAttributes() {
-      return super.getAttributes();
+    public Attributes getAttributes() {
+      final SettableFuture<Attributes> retVal = SettableFuture.create();
+      serializingExecutor.execute(new Runnable() {
+        @Override
+        public void run() {
+          retVal.set(SerializingServerCall.super.getAttributes());
+        }
+      });
+      try {
+        return retVal.get();
+      } catch (InterruptedException e) {
+        throw new RuntimeException(ERROR_MSG, e);
+      } catch (ExecutionException e) {
+        throw new RuntimeException(ERROR_MSG, e);
+      }
     }
 
     @Nullable
     @Override
-    public synchronized String getAuthority() {
-      return super.getAuthority();
+    public String getAuthority() {
+      final SettableFuture<String> retVal = SettableFuture.create();
+      serializingExecutor.execute(new Runnable() {
+        @Override
+        public void run() {
+          retVal.set(SerializingServerCall.super.getAuthority());
+        }
+      });
+      try {
+        return retVal.get();
+      } catch (InterruptedException e) {
+        throw new RuntimeException(ERROR_MSG, e);
+      } catch (ExecutionException e) {
+        throw new RuntimeException(ERROR_MSG, e);
+      }
     }
   }
-
 }
