@@ -229,9 +229,7 @@ public class ServerCallImplTest {
 
     // App runs to completion but everything is ignored
     serverCall.sendMessage(1L);
-    verify(stream, times(1)).writeMessage(any(InputStream.class));
     serverCall.close(Status.OK, new Metadata());
-    verify(stream, times(1)).close(any(Status.class), any(Metadata.class));
     try {
       serverCall.close(Status.OK, new Metadata());
       fail("calling a second time should still cause an error");

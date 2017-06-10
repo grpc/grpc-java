@@ -60,7 +60,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private boolean closeCalled;
   private Compressor compressor;
   private boolean messageSent;
-  private boolean internalClosed;
 
   ServerCallImpl(ServerStream stream, MethodDescriptor<ReqT, RespT> method,
       Metadata inboundHeaders, Context.CancellableContext context,
@@ -75,9 +74,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public void request(int numMessages) {
-    if (internalClosed) {
-      return;
-    }
     stream.request(numMessages);
   }
 
@@ -85,11 +81,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   public void sendHeaders(Metadata headers) {
     checkState(!sendHeadersCalled, "sendHeaders has already been called");
     checkState(!closeCalled, "call is closed");
-    // Check internalClosed for completeness, though today there's no way to trigger an internal
-    // close without already having sent headers.
-    if (internalClosed) {
-      return;
-    }
 
     headers.discardAll(MESSAGE_ENCODING_KEY);
     if (compressor == null) {
@@ -130,9 +121,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   public void sendMessage(RespT message) {
     checkState(sendHeadersCalled, "sendHeaders has not been called");
     checkState(!closeCalled, "call is closed");
-    if (internalClosed) {
-      return;
-    }
 
     if (method.getType().serverSendsOneMessage() && messageSent) {
       internalClose(Status.INTERNAL.withDescription(TOO_MANY_RESPONSES));
@@ -155,10 +143,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public void setMessageCompression(boolean enable) {
-    if (internalClosed) {
-      return;
-    }
-
     stream.setMessageCompression(enable);
   }
 
@@ -173,9 +157,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public boolean isReady() {
-    if (internalClosed) {
-      return false;
-    }
     return stream.isReady();
   }
 
@@ -183,9 +164,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   public void close(Status status, Metadata trailers) {
     checkState(!closeCalled, "call already closed");
     closeCalled = true;
-    if (internalClosed) {
-      return;
-    }
 
     if (status.isOk() && method.getType().serverSendsOneMessage() && !messageSent) {
       internalClose(Status.INTERNAL.withDescription(MISSING_RESPONSE));
@@ -225,7 +203,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
    * on.
    */
   private void internalClose(Status internalError) {
-    internalClosed = true;
     stream.close(internalError, new Metadata());
   }
 
