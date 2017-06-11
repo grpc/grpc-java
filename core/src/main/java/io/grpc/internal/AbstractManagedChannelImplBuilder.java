@@ -94,6 +94,8 @@ public abstract class AbstractManagedChannelImplBuilder
   @Nullable
   private NameResolver.Factory nameResolverFactory;
 
+  private ProxyDetector proxyDetector = ProxyDetector.DEFAULT_INSTANCE;
+
   private LoadBalancer.Factory loadBalancerFactory;
 
   @Nullable
@@ -285,6 +287,11 @@ public abstract class AbstractManagedChannelImplBuilder
     this.enableTracing = enabled;
   }
 
+  @VisibleForTesting
+  public void setProxyDetector(ProxyDetector proxyDetector) {
+    this.proxyDetector = proxyDetector;
+  }
+
   @Override
   public ManagedChannel build() {
     ClientTransportFactory transportFactory = buildTransportFactory();
@@ -336,7 +343,8 @@ public abstract class AbstractManagedChannelImplBuilder
         GrpcUtil.STOPWATCH_SUPPLIER,
         idleTimeoutMillis,
         userAgent,
-        effectiveInterceptors);
+        effectiveInterceptors,
+        proxyDetector);
   }
 
   /**

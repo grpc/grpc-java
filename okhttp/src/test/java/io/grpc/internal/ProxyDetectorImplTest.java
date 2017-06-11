@@ -1,36 +1,22 @@
 /*
- * Copyright 2017, Google Inc. All rights reserved.
+ * Copyright 2017, gRPC Authors All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *    * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *    * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *    * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package io.grpc.internal;
 
+import static junit.framework.TestCase.assertFalse;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -41,7 +27,6 @@ import static org.mockito.Mockito.when;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.net.HostAndPort;
-import io.grpc.internal.ProxyDetector.ProxyParameters;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.PasswordAuthentication;
@@ -58,7 +43,7 @@ import org.mockito.MockitoAnnotations;
 
 @RunWith(JUnit4.class)
 public class ProxyDetectorImplTest {
-  private static final InetSocketAddress destination = InetSocketAddress.createUnresolved(
+  private InetSocketAddress destination = InetSocketAddress.createUnresolved(
       "destination",
       5678
   );
@@ -114,13 +99,30 @@ public class ProxyDetectorImplTest {
   }
 
   @Test
-  public void returnAbsentWhenNoProxy() throws Exception {
-    when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(Proxy.NO_PROXY));
+  public void returnNullWhenNoProxy() throws Exception {
+    when(proxySelector.select(any(URI.class)))
+        .thenReturn(ImmutableList.of(java.net.Proxy.NO_PROXY));
     assertNull(proxyDetector.proxyFor(destination));
   }
 
   @Test
-  public void httpProxyTest() throws Exception {
+  public void detectProxyForUnresolved() throws Exception {
+    final InetSocketAddress proxyAddress = InetSocketAddress.createUnresolved("proxy", 1234);
+    Proxy proxy = new Proxy(Proxy.Type.HTTP, proxyAddress);
+    when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(proxy));
+
+    ProxyParameters detected = proxyDetector.proxyFor(destination);
+    assertNotNull(detected);
+    assertEquals(new ProxyParameters(proxyAddress, null, null), detected);
+  }
+
+  @Test
+  public void detectProxyForResolved() throws Exception {
+    InetSocketAddress resolved =
+        new InetSocketAddress(InetAddress.getByAddress(new byte[]{10, 0, 0, 1}), 10);
+    assertFalse(resolved.isUnresolved());
+    destination = resolved;
+
     final InetSocketAddress proxyAddress = InetSocketAddress.createUnresolved("proxy", 1234);
     Proxy proxy = new Proxy(Proxy.Type.HTTP, proxyAddress);
     when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(proxy));
@@ -134,8 +136,8 @@ public class ProxyDetectorImplTest {
   public void pickFirstHttpProxy() throws Exception {
     final InetSocketAddress proxyAddress = InetSocketAddress.createUnresolved("proxy1", 1111);
     InetSocketAddress otherProxy = InetSocketAddress.createUnresolved("proxy2", 2222);
-    Proxy proxy1 = new Proxy(Proxy.Type.HTTP, proxyAddress);
-    Proxy proxy2 = new Proxy(Proxy.Type.HTTP, otherProxy);
+    Proxy proxy1 = new java.net.Proxy(java.net.Proxy.Type.HTTP, proxyAddress);
+    Proxy proxy2 = new java.net.Proxy(java.net.Proxy.Type.HTTP, otherProxy);
     when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(proxy1, proxy2));
 
     ProxyParameters detected = proxyDetector.proxyFor(destination);
@@ -154,7 +156,7 @@ public class ProxyDetectorImplTest {
     final String proxyHost = "proxyhost";
     final int proxyPort = 1234;
     final InetSocketAddress proxyAddress = InetSocketAddress.createUnresolved(proxyHost, proxyPort);
-    Proxy proxy = new Proxy(Proxy.Type.HTTP, proxyAddress);
+    Proxy proxy = new java.net.Proxy(java.net.Proxy.Type.HTTP, proxyAddress);
     final String proxyUser = "testuser";
     final String proxyPassword = "testpassword";
     PasswordAuthentication auth = new PasswordAuthentication(

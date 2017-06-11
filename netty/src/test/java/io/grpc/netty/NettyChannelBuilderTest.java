@@ -21,7 +21,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.ManagedChannel;
-import io.grpc.internal.ProxyDetector;
+import io.grpc.internal.ProxyParameters;
 import io.grpc.netty.InternalNettyChannelBuilder.OverrideAuthorityChecker;
 import io.grpc.netty.ProtocolNegotiators.TlsNegotiator;
 import io.netty.handler.ssl.SslContext;
@@ -40,6 +40,7 @@ public class NettyChannelBuilderTest {
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
   private final SslContext noSslContext = null;
+  private final ProxyParameters noProxy = null;
 
   @Test
   public void authorityIsReadable() {
@@ -125,11 +126,10 @@ public class NettyChannelBuilderTest {
   @Test
   public void createProtocolNegotiator_plaintext() {
     ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiator(
-        InetSocketAddress.createUnresolved("authority", 80),
         "authority",
         NegotiationType.PLAINTEXT,
         noSslContext,
-        ProxyDetector.NOOP_INSTANCE);
+        noProxy);
     // just check that the classes are the same, and that negotiator is not null.
     assertTrue(negotiator instanceof ProtocolNegotiators.PlaintextNegotiator);
   }
@@ -137,11 +137,10 @@ public class NettyChannelBuilderTest {
   @Test
   public void createProtocolNegotiator_plaintextUpgrade() {
     ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiator(
-        InetSocketAddress.createUnresolved("authority", 80),
         "authority",
         NegotiationType.PLAINTEXT_UPGRADE,
         noSslContext,
-        ProxyDetector.NOOP_INSTANCE);
+        noProxy);
     // just check that the classes are the same, and that negotiator is not null.
     assertTrue(negotiator instanceof ProtocolNegotiators.PlaintextUpgradeNegotiator);
   }
@@ -153,17 +152,16 @@ public class NettyChannelBuilderTest {
         "authority:1234",
         NegotiationType.TLS,
         noSslContext,
-        ProxyDetector.NOOP_INSTANCE);
+        noProxy);
   }
 
   @Test
   public void createProtocolNegotiator_tlsWithClientContext() throws SSLException {
     ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiator(
-        InetSocketAddress.createUnresolved("authority", 80),
         "authority:1234",
         NegotiationType.TLS,
         GrpcSslContexts.forClient().build(),
-        ProxyDetector.NOOP_INSTANCE);
+        noProxy);
 
     assertTrue(negotiator instanceof ProtocolNegotiators.TlsNegotiator);
     ProtocolNegotiators.TlsNegotiator n = (TlsNegotiator) negotiator;
@@ -175,11 +173,10 @@ public class NettyChannelBuilderTest {
   @Test
   public void createProtocolNegotiator_tlsWithAuthorityFallback() throws SSLException {
     ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiator(
-        InetSocketAddress.createUnresolved("authority", 80),
         "bad_authority",
         NegotiationType.TLS,
-        noSslContext,
-        ProxyDetector.NOOP_INSTANCE);
+        GrpcSslContexts.forClient().build(),
+        noProxy);
 
     assertTrue(negotiator instanceof ProtocolNegotiators.TlsNegotiator);
     ProtocolNegotiators.TlsNegotiator n = (TlsNegotiator) negotiator;

@@ -121,6 +121,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   // Only null after channel is terminated. Must be assigned from the channelExecutor.
   private NameResolver nameResolver;
 
+  private final ProxyDetector proxyDetector;
+
   // null when channel is in idle mode.  Must be assigned from channelExecutor.
   @Nullable
   private LoadBalancer loadBalancer;
@@ -372,11 +374,13 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       ObjectPool<? extends Executor> executorPool, ObjectPool<? extends Executor> oobExecutorPool,
       Supplier<Stopwatch> stopwatchSupplier, long idleTimeoutMillis,
       @Nullable String userAgent,
-      List<ClientInterceptor> interceptors) {
+      List<ClientInterceptor> interceptors,
+      ProxyDetector proxyDetector) {
     this.target = checkNotNull(target, "target");
     this.nameResolverFactory = checkNotNull(nameResolverFactory, "nameResolverFactory");
     this.nameResolverParams = checkNotNull(nameResolverParams, "nameResolverParams");
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
+    this.proxyDetector = proxyDetector;
     this.loadBalancerFactory = checkNotNull(loadBalancerFactory, "loadBalancerFactory");
     this.executorPool = checkNotNull(executorPool, "executorPool");
     this.oobExecutorPool = checkNotNull(oobExecutorPool, "oobExecutorPool");
@@ -612,7 +616,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
               void onNotInUse(InternalSubchannel is) {
                 inUseStateAggregator.updateObjectInUse(is, false);
               }
-            });
+            },
+            proxyDetector);
       subchannel.subchannel = internalSubchannel;
       log.log(Level.FINE, "[{0}] {1} created for {2}",
           new Object[] {getLogId(), internalSubchannel.getLogId(), addressGroup});
@@ -669,7 +674,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
             void onStateChange(InternalSubchannel is, ConnectivityStateInfo newState) {
               oobChannel.handleSubchannelStateChange(newState);
             }
-          });
+          },
+          proxyDetector);
       oobChannel.setSubchannel(internalSubchannel);
       runSerialized(new Runnable() {
           @Override

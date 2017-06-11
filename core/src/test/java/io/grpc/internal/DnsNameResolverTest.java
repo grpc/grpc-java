@@ -347,25 +347,28 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void doNotResolveIfProxyDetected() throws Exception {
-    String name = "foo.googleapis.com";
+  public void doNotResolveWhenProxyDetected() throws Exception {
+    final String name = "foo.googleapis.com";
+    final int port = 81;
     ProxyDetector alwaysDetectProxy = mock(ProxyDetector.class);
+    ProxyParameters proxyParameters = new ProxyParameters(
+        InetSocketAddress.createUnresolved("proxy.example.com", 1000),
+        "username",
+        "password");
     when(alwaysDetectProxy.proxyFor(any(SocketAddress.class)))
-        .thenReturn(mock(ProxyDetector.ProxyParameters.class));
+        .thenReturn(proxyParameters);
     DelegateResolver unusedResolver = mock(DelegateResolver.class);
-    DnsNameResolver resolver = newResolver(name, 81, unusedResolver, alwaysDetectProxy);
-
+    DnsNameResolver resolver = newResolver(name, port, unusedResolver, alwaysDetectProxy);
     resolver.start(mockListener);
-
     assertEquals(1, fakeExecutor.runDueTasks());
     verify(unusedResolver, never()).resolve(any(String.class));
 
     verify(mockListener).onAddresses(resultCaptor.capture(), any(Attributes.class));
     List<EquivalentAddressGroup> result = resultCaptor.getValue();
     assertThat(result).hasSize(1);
-    assertThat(result.get(0).getAddresses()).hasSize(1);
-    SocketAddress socketAddress = result.get(0).getAddresses().get(0);
-    assertTrue(socketAddress instanceof InetSocketAddress);
+    EquivalentAddressGroup eag = result.get(0);
+    assertThat(eag.getAddresses()).hasSize(1);
+    SocketAddress socketAddress = eag.getAddresses().get(0);
     assertTrue(((InetSocketAddress) socketAddress).isUnresolved());
   }
 

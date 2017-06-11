@@ -27,9 +27,10 @@ public interface ClientTransportFactory extends Closeable {
    *
    * @param serverAddress the address that the transport is connected to
    * @param authority the HTTP/2 authority of the server
+   * @param proxy the proxy that should be used to connect to serverAddress
    */
   ConnectionClientTransport newClientTransport(SocketAddress serverAddress, String authority,
-      @Nullable String userAgent);
+      @Nullable String userAgent, @Nullable ProxyParameters proxy);
 
   /**
    * Releases any resources.
