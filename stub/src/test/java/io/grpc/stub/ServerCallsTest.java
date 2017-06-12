@@ -293,17 +293,7 @@ public class ServerCallsTest {
 
   @Test
   public void clientSendsOne_errorMissingRequest_unary() {
-    clientSendsOne_errorMissingRequest(UNARY_METHOD);
-  }
-
-  @Test
-  public void clientSendsOne_errorMissingRequest_serverStreaming() {
-    clientSendsOne_errorMissingRequest(SERVER_STREAMING_METHOD);
-  }
-
-  private static void clientSendsOne_errorMissingRequest(
-      MethodDescriptor<Integer, Integer> method) {
-    ServerCallRecorder serverCall = new ServerCallRecorder(method);
+    ServerCallRecorder serverCall = new ServerCallRecorder(UNARY_METHOD);
     ServerCallHandler<Integer, Integer> callHandler =
         ServerCalls.asyncUnaryCall(
             new ServerCalls.UnaryMethod<Integer, Integer>() {
@@ -320,18 +310,27 @@ public class ServerCallsTest {
   }
 
   @Test
-  public void clientSendsOne_errorTooManyRequests_unary() {
-    clientSendsOne_errorTooManyRequests(UNARY_METHOD);
+  public void clientSendsOne_errorMissingRequest_serverStreaming() {
+    ServerCallRecorder serverCall = new ServerCallRecorder(SERVER_STREAMING_METHOD);
+    ServerCallHandler<Integer, Integer> callHandler =
+        ServerCalls.asyncServerStreamingCall(
+            new ServerCalls.ServerStreamingMethod<Integer, Integer>() {
+              @Override
+              public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
+                fail("should not be reached");
+              }
+            });
+    ServerCall.Listener<Integer> listener = callHandler.startCall(serverCall, new Metadata());
+    listener.onHalfClose();
+    assertThat(serverCall.responses).isEmpty();
+    assertEquals(Status.Code.INTERNAL, serverCall.status.getCode());
+    assertEquals(ServerCalls.MISSING_REQUEST, serverCall.status.getDescription());
+
   }
 
   @Test
-  public void clientSendsOne_errorTooManyRequests_serverStreaming() {
-    clientSendsOne_errorTooManyRequests(SERVER_STREAMING_METHOD);
-  }
-
-  private static void clientSendsOne_errorTooManyRequests(
-      MethodDescriptor<Integer, Integer> method) {
-    ServerCallRecorder serverCall = new ServerCallRecorder(method);
+  public void clientSendsOne_errorTooManyRequests_unary() {
+    ServerCallRecorder serverCall = new ServerCallRecorder(UNARY_METHOD);
     ServerCallHandler<Integer, Integer> callHandler =
         ServerCalls.asyncUnaryCall(
             new ServerCalls.UnaryMethod<Integer, Integer>() {
@@ -346,6 +345,29 @@ public class ServerCallsTest {
     assertThat(serverCall.responses).isEmpty();
     assertEquals(Status.Code.INTERNAL, serverCall.status.getCode());
     assertEquals(ServerCalls.TOO_MANY_REQUESTS, serverCall.status.getDescription());
+    // ensure onHalfClose does not invoke
+    listener.onHalfClose();
+  }
+
+  @Test
+  public void clientSendsOne_errorTooManyRequests_serverStreaming() {
+    ServerCallRecorder serverCall = new ServerCallRecorder(SERVER_STREAMING_METHOD);
+    ServerCallHandler<Integer, Integer> callHandler =
+        ServerCalls.asyncServerStreamingCall(
+            new ServerCalls.ServerStreamingMethod<Integer, Integer>() {
+              @Override
+              public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
+                fail("should not be reached");
+              }
+            });
+    ServerCall.Listener<Integer> listener = callHandler.startCall(serverCall, new Metadata());
+    listener.onMessage(1);
+    listener.onMessage(1);
+    assertThat(serverCall.responses).isEmpty();
+    assertEquals(Status.Code.INTERNAL, serverCall.status.getCode());
+    assertEquals(ServerCalls.TOO_MANY_REQUESTS, serverCall.status.getDescription());
+    // ensure onHalfClose does not invoke
+    listener.onHalfClose();
   }
 
   @Test

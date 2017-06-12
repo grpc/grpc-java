@@ -126,6 +126,7 @@ public final class ServerCalls {
         // inbound flow control has no effect on unary calls.
         call.request(2);
         return new EmptyServerCallListener<ReqT>() {
+          boolean canInvoke = true;
           ReqT request;
           @Override
           public void onMessage(ReqT request) {
@@ -134,6 +135,7 @@ public final class ServerCalls {
               call.close(
                   Status.INTERNAL.withDescription(TOO_MANY_REQUESTS),
                   new Metadata());
+              canInvoke = false;
               return;
             }
 
@@ -144,6 +146,9 @@ public final class ServerCalls {
 
           @Override
           public void onHalfClose() {
+            if (!canInvoke) {
+              return;
+            }
             if (request == null) {
               // Safe to close the call, because the application has not yet been invoked
               call.close(
