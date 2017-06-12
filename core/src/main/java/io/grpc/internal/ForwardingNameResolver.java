@@ -16,15 +16,18 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import io.grpc.NameResolver;
 
 /**
 * A forwarding class to ensure non overridden methods are forwarded to the delegate.
  */
-public class ForwardingNameResolver extends NameResolver {
+abstract class ForwardingNameResolver extends NameResolver {
   private final NameResolver delegate;
 
-  public ForwardingNameResolver(NameResolver delegate) {
+  ForwardingNameResolver(NameResolver delegate) {
+    checkNotNull(delegate, "delegate can not be null");
     this.delegate = delegate;
   }
 
