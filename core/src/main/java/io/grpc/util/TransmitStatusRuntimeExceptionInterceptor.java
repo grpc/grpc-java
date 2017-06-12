@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.util.interceptor.server;
+package io.grpc.util;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
@@ -34,7 +34,8 @@ import javax.annotation.Nullable;
 
 /**
  * A class that intercepts uncaught exceptions of type {@link StatusRuntimeException} and handles
- * them by closing the {@link ServerCall}, and transmitting the exception's details to the client.
+ * them by closing the {@link ServerCall}, and transmitting the exception's status and metadata
+ * to the client.
  *
  * <p>Without this interceptor, gRPC will strip all details and close the {@link ServerCall} with
  * a generic {@link Status#UNKNOWN} code.
@@ -44,13 +45,12 @@ import javax.annotation.Nullable;
  * if all clients are trusted.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2189")
-public final class StatusRuntimeExceptionTransmitter implements ServerInterceptor {
-  private StatusRuntimeExceptionTransmitter() {
-    // do not instantiate
+public final class TransmitStatusRuntimeExceptionInterceptor implements ServerInterceptor {
+  private TransmitStatusRuntimeExceptionInterceptor() {
   }
 
   public static ServerInterceptor instance() {
-    return new StatusRuntimeExceptionTransmitter();
+    return new TransmitStatusRuntimeExceptionInterceptor();
   }
 
   @Override
@@ -105,11 +105,7 @@ public final class StatusRuntimeExceptionTransmitter implements ServerIntercepto
       }
 
       private void closeWithException(StatusRuntimeException t) {
-        Metadata metadata = Status.trailersFromThrowable(t);
-        if (metadata == null) {
-          metadata = new Metadata();
-        }
-        serverCall.close(t.getStatus(), metadata);
+        serverCall.close(t.getStatus(), t.getTrailers());
       }
     };
   }

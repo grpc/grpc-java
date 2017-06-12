@@ -17,16 +17,12 @@
 package io.grpc.util.interceptor.server;
 
 import static com.google.common.collect.Iterables.getOnlyElement;
-import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.same;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.MethodDescriptor.Marshaller;
-import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptors;
@@ -36,12 +32,13 @@ import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.testing.NoopServerCall;
+import io.grpc.testing.TestMethodDescriptors;
+import io.grpc.util.TransmitStatusRuntimeExceptionInterceptor;
 import java.util.Arrays;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
@@ -51,42 +48,27 @@ import org.mockito.MockitoAnnotations;
  */
 @RunWith(JUnit4.class)
 public class UtilServerInterceptorsTest {
-  @Mock
-  private Marshaller<String> requestMarshaller;
-
-  @Mock
-  private Marshaller<Integer> responseMarshaller;
-
-  @Mock
-  private ServerCallHandler<String, Integer> handler;
-
-  @Mock
-  private ServerCall.Listener<String> listener;
-
-  private MethodDescriptor<String, Integer> flowMethod;
-
-  private ServerCall<String, Integer> call = new NoopServerCall<String, Integer>();
+  private MethodDescriptor<String, Integer> flowMethod = TestMethodDescriptors.noopMethod();
+  private ServerCall<String, Integer> call = Mockito.spy(new NoopServerCall<String, Integer>());
+  private final Metadata headers = new Metadata();
 
   private ServerServiceDefinition serviceDefinition;
-
-  private final Metadata headers = new Metadata();
+  private ServerCallHandler<String, Integer> handler;
+  private ServerCall.Listener<String> listener;
 
   /** Set up for test. */
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    flowMethod = MethodDescriptor.<String, Integer>newBuilder()
-        .setType(MethodType.UNKNOWN)
-        .setFullMethodName("basic/flow")
-        .setRequestMarshaller(requestMarshaller)
-        .setResponseMarshaller(responseMarshaller)
-        .build();
-
-    Mockito.when(handler.startCall(
-        Mockito.<ServerCall<String, Integer>>any(), Mockito.<Metadata>any()))
-        .thenReturn(listener);
-
-    serviceDefinition = ServerServiceDefinition.builder(new ServiceDescriptor("basic", flowMethod))
+    handler = new ServerCallHandler<String, Integer>() {
+      @Override
+      public ServerCall.Listener<String> startCall(
+          ServerCall<String, Integer> call, Metadata headers) {
+        return listener;
+      }
+    };
+    serviceDefinition = ServerServiceDefinition.builder(
+        new ServiceDescriptor("service_foo", flowMethod))
         .addMethod(flowMethod, handler).build();
   }
 
@@ -103,18 +85,38 @@ public class UtilServerInterceptorsTest {
   public void statusRuntimeExceptionTransmitter() {
     final Status expectedStatus = Status.UNAVAILABLE;
     final Metadata expectedMetadata = new Metadata();
-    call = Mockito.spy(call);
     final StatusRuntimeException exception =
         new StatusRuntimeException(expectedStatus, expectedMetadata);
-    doThrow(exception).when(listener).onMessage(any(String.class));
-    doThrow(exception).when(listener).onCancel();
-    doThrow(exception).when(listener).onComplete();
-    doThrow(exception).when(listener).onHalfClose();
-    doThrow(exception).when(listener).onReady();
+    listener = new ServerCall.Listener<String>() {
+      @Override
+      public void onMessage(String message) {
+        throw exception;
+      }
+
+      @Override
+      public void onHalfClose() {
+        throw exception;
+      }
+
+      @Override
+      public void onCancel() {
+        throw exception;
+      }
+
+      @Override
+      public void onComplete() {
+        throw exception;
+      }
+
+      @Override
+      public void onReady() {
+        throw exception;
+      }
+    };
 
     ServerServiceDefinition intercepted = ServerInterceptors.intercept(
         serviceDefinition,
-        Arrays.asList(StatusRuntimeExceptionTransmitter.instance()));
+        Arrays.asList(TransmitStatusRuntimeExceptionInterceptor.instance()));
     // The interceptor should have handled the error by directly closing the ServerCall
     // and the exception should not propagate to the method's caller
     getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onMessage("hello");
