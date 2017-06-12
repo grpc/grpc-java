@@ -21,9 +21,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -286,15 +284,16 @@ public class AbstractManagedChannelImplBuilderTest {
         new OverrideAuthorityNameResolverFactory(wrappedFactory, "override:5678");
     NameResolver overrideResolver =
         factory.newNameResolver(URI.create("dns:///localhost:443"), Attributes.EMPTY);
-
+    assertNotNull(overrideResolver);
     NameResolver.Listener listener = mock(NameResolver.Listener.class);
+
     overrideResolver.start(listener);
-    verify(mockResolver).start(eq(listener));
+    verify(mockResolver).start(listener);
 
     overrideResolver.shutdown();
-    verify(mockResolver, times(1)).shutdown();
+    verify(mockResolver).shutdown();
 
     overrideResolver.refresh();
-    verify(mockResolver, times(1)).refresh();
+    verify(mockResolver).refresh();
   }
 }
