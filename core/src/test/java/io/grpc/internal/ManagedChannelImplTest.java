@@ -52,6 +52,7 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
@@ -82,6 +83,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.After;
 import org.junit.Before;
@@ -1146,6 +1148,86 @@ public class ManagedChannelImplTest {
     // The factories are safely not stubbed because we do not expect any usage of them.
     verifyZeroInteractions(factory1);
     verifyZeroInteractions(factory2);
+  }
+
+  @Test
+  public void getState_loadBalancerSupportsChannelState() {
+    createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
+    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+
+    helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, mockPicker);
+    assertEquals(ConnectivityState.TRANSIENT_FAILURE, channel.getState(false));
+  }
+
+  @Test
+  public void getState_withRequestConnect() {
+    Runnable runnable = new Runnable() {
+      // do nothing, just adding a mark in the queue of channelExecutor
+      @Override public void run() {}
+    };
+
+    createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
+    channel.channelExecutor.drain();
+    channel.channelExecutor.executeLater(runnable);
+
+    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+    assertEquals(1, channel.channelExecutor.numPendingTasks());
+
+    assertEquals(ConnectivityState.IDLE, channel.getState(true));
+    assertEquals(0, channel.channelExecutor.numPendingTasks());
+
+    helper.updateBalancingState(ConnectivityState.CONNECTING, mockPicker);
+    channel.channelExecutor.executeLater(runnable);
+
+    assertEquals(ConnectivityState.CONNECTING, channel.getState(false));
+    assertEquals(1, channel.channelExecutor.numPendingTasks());
+
+    assertEquals(ConnectivityState.CONNECTING, channel.getState(true));
+    assertEquals(1, channel.channelExecutor.numPendingTasks());
+  }
+
+  @Test
+  public void getState_loadBalancerDoesNotSupportChannelState() {
+    createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
+    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+    helper.updatePicker(mockPicker);
+
+    thrown.expect(UnsupportedOperationException.class);
+    channel.getState(false);
+  }
+
+  @Test
+  public void notifyWhenStateChanged() {
+    final AtomicBoolean stateChanged = new AtomicBoolean();
+    Runnable onStateChanged = new Runnable() {
+      @Override
+      public void run() {
+        stateChanged.set(true);
+      }
+    };
+
+    createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
+    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+
+    channel.notifyWhenStateChanged(ConnectivityState.IDLE, onStateChanged);
+    channel.channelExecutor.drain();
+    executor.runDueTasks();
+    assertFalse(stateChanged.get());
+
+    // state change from IDLE to CONNECTING
+    helper.updateBalancingState(ConnectivityState.CONNECTING, mockPicker);
+    // onStateChanged callback should run
+    channel.channelExecutor.drain();
+    executor.runDueTasks();
+    assertTrue(stateChanged.get());
+
+    // clear and test form CONNECTING
+    stateChanged.set(false);
+    channel.notifyWhenStateChanged(ConnectivityState.IDLE, onStateChanged);
+    // onStateChanged callback should run immediately
+    channel.channelExecutor.drain();
+    executor.runDueTasks();
+    assertTrue(stateChanged.get());
   }
 
   private static class FakeBackoffPolicyProvider implements BackoffPolicy.Provider {

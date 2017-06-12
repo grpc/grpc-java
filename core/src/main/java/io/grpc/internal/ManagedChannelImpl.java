@@ -94,7 +94,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   private final ObjectPool<? extends Executor> oobExecutorPool;
   private final LogId logId = LogId.allocate(getClass().getName());
 
-  private final ChannelExecutor channelExecutor = new ChannelExecutor();
+  @VisibleForTesting
+  final ChannelExecutor channelExecutor = new ChannelExecutor();
 
   private final DecompressorRegistry decompressorRegistry;
   private final CompressorRegistry compressorRegistry;
