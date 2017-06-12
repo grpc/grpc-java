@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2017, gRPC Authors All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,11 @@
 
 package io.grpc.android.integrationtest;
 
-import static junit.framework.Assert.assertTrue;
+import static junit.framework.Assert.assertEquals;
 
 import android.support.test.runner.AndroidJUnit4;
-import java.util.concurrent.CountDownLatch;
+import com.google.common.util.concurrent.SettableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -31,8 +30,7 @@ public class InteropTesterTest {
 
   @Test
   public void interopTests() throws Exception {
-    final CountDownLatch latch = new CountDownLatch(1);
-    final AtomicBoolean passed = new AtomicBoolean(false);
+    final SettableFuture<String> resultFuture = SettableFuture.create();
     new InteropTester(
             "all",
             TesterOkHttpChannelBuilder.build(
@@ -43,15 +41,12 @@ public class InteropTesterTest {
 
               @Override
               public void onPostTest(String result) {
-                if (result.equals(InteropTester.SUCCESS_MESSAGE)) {
-                  passed.set(true);
-                }
-                latch.countDown();
+                resultFuture.set(result);
               }
             },
             false)
         .execute();
-    assertTrue(latch.await(TIMEOUT_SECONDS, TimeUnit.SECONDS));
-    assertTrue(passed.get());
+    String result = resultFuture.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    assertEquals(result, InteropTester.SUCCESS_MESSAGE);
   }
 }
