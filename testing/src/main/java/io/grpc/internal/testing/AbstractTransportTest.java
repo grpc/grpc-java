@@ -1283,7 +1283,7 @@ public abstract class AbstractTransportTest {
   }
 
   @Test
-  public void interactionsAfterClientCancelAreNoops() throws Exception {
+  public void interactionsAfterClientStreamCancelAreNoops() throws Exception {
     server.start(serverListener);
     client = newClientTransport(server);
     runIfNotNull(client.start(mockClientTransportListener));
