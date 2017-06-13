@@ -35,12 +35,10 @@ import io.grpc.testing.NoopServerCall;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.util.TransmitStatusRuntimeExceptionInterceptor;
 import java.util.Arrays;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
 
 /**
  * Unit test for {@link io.grpc.ServerInterceptor} implementations that come with gRPC. Not to be
@@ -51,26 +49,18 @@ public class UtilServerInterceptorsTest {
   private MethodDescriptor<String, Integer> flowMethod = TestMethodDescriptors.noopMethod();
   private ServerCall<String, Integer> call = Mockito.spy(new NoopServerCall<String, Integer>());
   private final Metadata headers = new Metadata();
-
-  private ServerServiceDefinition serviceDefinition;
-  private ServerCallHandler<String, Integer> handler;
-  private ServerCall.Listener<String> listener;
-
-  /** Set up for test. */
-  @Before
-  public void setUp() {
-    MockitoAnnotations.initMocks(this);
-    handler = new ServerCallHandler<String, Integer>() {
+  private ServerCallHandler<String, Integer> handler = new ServerCallHandler<String, Integer>() {
       @Override
       public ServerCall.Listener<String> startCall(
           ServerCall<String, Integer> call, Metadata headers) {
         return listener;
       }
-    };
-    serviceDefinition = ServerServiceDefinition.builder(
-        new ServiceDescriptor("service_foo", flowMethod))
-        .addMethod(flowMethod, handler).build();
-  }
+  };
+  private ServerServiceDefinition serviceDefinition =
+      ServerServiceDefinition.builder(new ServiceDescriptor("service_foo", flowMethod))
+          .addMethod(flowMethod, handler)
+          .build();
+  private ServerCall.Listener<String> listener;
 
   @SuppressWarnings("unchecked")
   private static ServerMethodDefinition<String, Integer> getSoleMethod(

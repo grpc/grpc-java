@@ -105,7 +105,11 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
       }
 
       private void closeWithException(StatusRuntimeException t) {
-        serverCall.close(t.getStatus(), t.getTrailers());
+        Metadata metadata = t.getTrailers();
+        if (metadata == null) {
+          metadata = new Metadata();
+        }
+        serverCall.close(t.getStatus(), metadata);
       }
     };
   }
