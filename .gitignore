@@ -1,6 +1,5 @@
 # Gradle
 build
-build_gradle
 gradle.properties
 .gradle
 local.properties
