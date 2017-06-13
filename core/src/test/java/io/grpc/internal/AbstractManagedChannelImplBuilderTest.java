@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
@@ -295,5 +296,25 @@ public class AbstractManagedChannelImplBuilderTest {
 
     overrideResolver.refresh();
     verify(mockResolver).refresh();
+  }
+
+  static class Builder extends AbstractManagedChannelImplBuilder<Builder> {
+    Builder(String target) {
+      super(target);
+    }
+
+    Builder(SocketAddress directServerAddress, String authority) {
+      super(directServerAddress, authority);
+    }
+
+    @Override
+    protected ClientTransportFactory buildTransportFactory() {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Builder usePlaintext(boolean value) {
+      throw new UnsupportedOperationException();
+    }
   }
 }
