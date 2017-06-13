@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.util.interceptor.server;
+package io.grpc.util;
 
 import static com.google.common.collect.Iterables.getOnlyElement;
 import static org.mockito.Matchers.same;
@@ -33,7 +33,6 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.testing.NoopServerCall;
 import io.grpc.testing.TestMethodDescriptors;
-import io.grpc.util.TransmitStatusRuntimeExceptionInterceptor;
 import java.util.Arrays;
 import org.junit.Test;
 import org.junit.runner.RunWith;
