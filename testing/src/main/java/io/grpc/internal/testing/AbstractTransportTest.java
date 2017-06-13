@@ -1338,28 +1338,6 @@ public abstract class AbstractTransportTest {
     ServerStream serverStream = serverStreamCreation.stream;
     ServerStreamListener mockServerStreamListener = serverStreamCreation.listener;
 
-    verify(mockServerStreamListener, never()).messageRead(any(InputStream.class));
-    clientStream.writeMessage(methodDescriptor.streamRequest("request"));
-    clientStream.flush();
-    serverStream.request(1);
-    verify(mockServerStreamListener, timeout(TIMEOUT_MS).times(1))
-        .messageRead(any(InputStream.class));
-
-    verify(mockServerStreamListener, never()).halfClosed();
-    clientStream.halfClose();
-    verify(mockServerStreamListener, timeout(TIMEOUT_MS).times(1)).halfClosed();
-
-    verify(mockClientStreamListener, never()).headersRead(any(Metadata.class));
-    serverStream.writeHeaders(new Metadata());
-    verify(mockClientStreamListener, timeout(TIMEOUT_MS).times(1)).headersRead(any(Metadata.class));
-
-    verify(mockClientStreamListener, never()).messageRead(any(InputStream.class));
-    serverStream.writeMessage(methodDescriptor.streamResponse("response"));
-    serverStream.flush();
-    clientStream.request(1);
-    verify(mockClientStreamListener, timeout(TIMEOUT_MS).times(1))
-        .messageRead(any(InputStream.class));
-
     serverStream.close(Status.OK, new Metadata());
     verify(mockClientStreamListener, timeout(TIMEOUT_MS))
         .closed(any(Status.class), any(Metadata.class));
