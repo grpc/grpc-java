@@ -229,6 +229,6 @@ def io_netty_resolver():
 def io_netty_tcnative_boringssl_static():
   native.maven_jar(
       name = "io_netty_tcnative_boringssl_static",
-      sha1 = "3b78a7e40707be313c4d5449ba514c9747e1c731",
+      sha1 = "28d278ac2ae302ae9bdf19958c75b16fefbfae00",
       artifact = "io.netty:netty-tcnative-boringssl-static:2.0.3.Final",
   )
