@@ -214,7 +214,7 @@ public class AbstractManagedChannelImplBuilderTest {
     Builder builder = new Builder("target");
     assertNull(builder.authorityOverride);
     assertFalse(builder.getNameResolverFactory() instanceof OverrideAuthorityNameResolverFactory);
-    builder.overrideAuthority("different_authority");
+    builder.overrideAuthority("google.com");
     assertTrue(builder.getNameResolverFactory() instanceof OverrideAuthorityNameResolverFactory);
   }
 
