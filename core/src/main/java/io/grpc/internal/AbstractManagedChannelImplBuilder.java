@@ -93,6 +93,9 @@ public abstract class AbstractManagedChannelImplBuilder
 
   private final List<ClientInterceptor> interceptors = new ArrayList<ClientInterceptor>();
 
+  // Access via getter, which may perform authority override as needed
+  private NameResolver.Factory nameResolverFactory = DEFAULT_NAME_RESOLVER_FACTORY;
+
   final String target;
 
   @Nullable
@@ -104,7 +107,6 @@ public abstract class AbstractManagedChannelImplBuilder
   @Nullable
   String authorityOverride;
 
-  NameResolver.Factory nameResolverFactory = DEFAULT_NAME_RESOLVER_FACTORY;
 
   LoadBalancer.Factory loadBalancerFactory = DEFAULT_LOAD_BALANCER_FACTORY;
 
@@ -365,6 +367,17 @@ public abstract class AbstractManagedChannelImplBuilder
    */
   protected Attributes getNameResolverParams() {
     return Attributes.EMPTY;
+  }
+
+  /**
+   * Returns a {@link NameResolver.Factory} for the channel.
+   */
+  public NameResolver.Factory getNameResolverFactory() {
+    if (authorityOverride == null) {
+      return nameResolverFactory;
+    } else {
+      return new OverrideAuthorityNameResolverFactory(nameResolverFactory, authorityOverride);
+    }
   }
 
   private static class DirectAddressNameResolverFactory extends NameResolver.Factory {

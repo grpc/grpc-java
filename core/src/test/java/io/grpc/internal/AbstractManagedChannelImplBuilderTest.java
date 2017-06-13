@@ -16,18 +16,16 @@
 
 package io.grpc.internal;
 
+import static junit.framework.TestCase.assertFalse;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.MoreExecutors;
-import io.grpc.Attributes;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.LoadBalancer;
@@ -75,22 +73,22 @@ public class AbstractManagedChannelImplBuilderTest {
 
   @Test
   public void nameResolverFactory_default() {
-    assertNotNull(builder.nameResolverFactory);
+    assertNotNull(builder.getNameResolverFactory());
   }
 
   @Test
   public void nameResolverFactory_normal() {
     NameResolver.Factory nameResolverFactory = mock(NameResolver.Factory.class);
     assertEquals(builder, builder.nameResolverFactory(nameResolverFactory));
-    assertEquals(nameResolverFactory, builder.nameResolverFactory);
+    assertEquals(nameResolverFactory, builder.getNameResolverFactory());
   }
 
   @Test
   public void nameResolverFactory_null() {
-    NameResolver.Factory defaultValue = builder.nameResolverFactory;
+    NameResolver.Factory defaultValue = builder.getNameResolverFactory();
     builder.nameResolverFactory(mock(NameResolver.Factory.class));
     assertEquals(builder, builder.nameResolverFactory(null));
-    assertEquals(defaultValue, builder.nameResolverFactory);
+    assertEquals(defaultValue, builder.getNameResolverFactory());
   }
 
   @Test(expected = IllegalStateException.class)
@@ -212,6 +210,15 @@ public class AbstractManagedChannelImplBuilderTest {
   }
 
   @Test
+  public void overrideAuthority_getNameResolverFactory() {
+    Builder builder = new Builder("target");
+    assertNull(builder.authorityOverride);
+    assertFalse(builder.getNameResolverFactory() instanceof OverrideAuthorityNameResolverFactory);
+    builder.overrideAuthority("different_authority");
+    assertTrue(builder.getNameResolverFactory() instanceof OverrideAuthorityNameResolverFactory);
+  }
+
+  @Test
   public void makeTargetStringForDirectAddress_scopedIpv6() throws Exception {
     InetSocketAddress address = new InetSocketAddress("0:0:0:0:0:0:0:0%0", 10005);
     assertEquals("/0:0:0:0:0:0:0:0%0:10005", address.toString());
@@ -248,54 +255,6 @@ public class AbstractManagedChannelImplBuilderTest {
 
     builder.idleTimeout(30, TimeUnit.SECONDS);
     assertEquals(TimeUnit.SECONDS.toMillis(30), builder.getIdleTimeoutMillis());
-  }
-
-  @Test
-  public void overrideAuthorityNameResolver_overridesAuthority() {
-    NameResolver nameResolverMock = mock(NameResolver.class);
-    NameResolver.Factory wrappedFactory = mock(NameResolver.Factory.class);
-    when(wrappedFactory.newNameResolver(any(URI.class), any(Attributes.class)))
-      .thenReturn(nameResolverMock);
-    String override = "override:5678";
-    NameResolver.Factory factory =
-        new OverrideAuthorityNameResolverFactory(wrappedFactory, override);
-    NameResolver nameResolver = factory.newNameResolver(URI.create("dns:///localhost:443"),
-        Attributes.EMPTY);
-    assertNotNull(nameResolver);
-    assertEquals(override, nameResolver.getServiceAuthority());
-  }
-
-  @Test
-  public void overrideAuthorityNameResolver_wontWrapNull() {
-    NameResolver.Factory wrappedFactory = mock(NameResolver.Factory.class);
-    when(wrappedFactory.newNameResolver(any(URI.class), any(Attributes.class))).thenReturn(null);
-    NameResolver.Factory factory =
-        new OverrideAuthorityNameResolverFactory(wrappedFactory, "override:5678");
-    assertEquals(null,
-        factory.newNameResolver(URI.create("dns:///localhost:443"), Attributes.EMPTY));
-  }
-
-  @Test
-  public void overrideAuthorityNameResolver_forwardsNonOverridenCalls() {
-    NameResolver.Factory wrappedFactory = mock(NameResolver.Factory.class);
-    NameResolver mockResolver = mock(NameResolver.class);
-    when(wrappedFactory.newNameResolver(any(URI.class), any(Attributes.class)))
-        .thenReturn(mockResolver);
-    NameResolver.Factory factory =
-        new OverrideAuthorityNameResolverFactory(wrappedFactory, "override:5678");
-    NameResolver overrideResolver =
-        factory.newNameResolver(URI.create("dns:///localhost:443"), Attributes.EMPTY);
-    assertNotNull(overrideResolver);
-    NameResolver.Listener listener = mock(NameResolver.Listener.class);
-
-    overrideResolver.start(listener);
-    verify(mockResolver).start(listener);
-
-    overrideResolver.shutdown();
-    verify(mockResolver).shutdown();
-
-    overrideResolver.refresh();
-    verify(mockResolver).refresh();
   }
 
   static class Builder extends AbstractManagedChannelImplBuilder<Builder> {
