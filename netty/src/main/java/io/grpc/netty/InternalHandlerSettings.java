@@ -23,13 +23,10 @@ import io.grpc.Internal;
 /**
  * Allows autoFlowControl to be turned on and off from interop testing and flow control windows to
  * be accessed. For internal use only.
- *
- * @deprecated renamed to {@link InternalHandlerSettings} and should not be used externally
  */
 @VisibleForTesting // Visible for tests in other packages.
 @Internal
-@Deprecated
-public final class HandlerSettings {
+public final class InternalHandlerSettings {
 
   private static volatile boolean enabled;
 
@@ -43,7 +40,7 @@ public final class HandlerSettings {
     if (!enabled) {
       return;
     }
-    synchronized (HandlerSettings.class) {
+    synchronized (InternalHandlerSettings.class) {
       handler.setAutoTuneFlowControl(autoFlowControlOn);
       if (handler instanceof NettyClientHandler) {
         clientHandler = handler;
