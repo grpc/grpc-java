@@ -19,10 +19,14 @@ package io.grpc.netty;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 
+import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.internal.GrpcUtil;
 import io.netty.channel.ConnectTimeoutException;
 import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
+import io.netty.handler.codec.http2.Http2Headers;
+import io.netty.util.AsciiString;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -30,6 +34,10 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link Utils}. */
 @RunWith(JUnit4.class)
 public class UtilsTest {
+  private final Metadata.Key<String> userKey =
+      Metadata.Key.of("user-key", Metadata.ASCII_STRING_MARSHALLER);
+  private final String userValue =  "user-value";
+
   @Test
   public void testStatusFromThrowable() {
     Status s = Status.CANCELLED.withDescription("msg");
@@ -41,6 +49,66 @@ public class UtilsTest {
     assertStatusEquals(Status.INTERNAL.withCause(t), Utils.statusFromThrowable(t));
     t = new Exception("msg");
     assertStatusEquals(Status.UNKNOWN.withCause(t), Utils.statusFromThrowable(t));
+  }
+
+  @Test
+  public void convertClientHeaders_sanitizes() {
+    Metadata metaData = new Metadata();
+
+    // Intentionally being explicit here rather than relying on any pre-defined lists of headers,
+    // since the goal of this test is to validate the correctness of such lists in the first place.
+    metaData.put(GrpcUtil.SCHEME_KEY, "to-be-removed");
+    metaData.put(GrpcUtil.METHOD_KEY, "to-be-removed");
+    metaData.put(GrpcUtil.CONTENT_TYPE_KEY, "to-be-removed");
+    metaData.put(GrpcUtil.USER_AGENT_KEY, "to-be-removed");
+    metaData.put(GrpcUtil.AUTHORITY_KEY, "to-be-removed");
+    metaData.put(GrpcUtil.PATH_KEY, "to-be-removed");
+    metaData.put(GrpcUtil.TE_HEADER, "to-be-removed");
+    metaData.put(userKey, userValue);
+
+    final String scheme = "https";
+    final String userAgent = "user-agent";
+    final String method = "POST";
+    final String authority = "authority";
+    final String path = "//testService/test";
+
+    Http2Headers output =
+        Utils.convertClientHeaders(
+            metaData,
+            new AsciiString(scheme),
+            new AsciiString(path),
+            new AsciiString(authority),
+            new AsciiString(method),
+            new AsciiString(userAgent));
+    // 7 reserved headers, 1 user header
+    assertEquals(7 + 1, output.size());
+    assertEquals(scheme, output.get(GrpcUtil.SCHEME_KEY.name()).toString());
+    assertEquals(method, output.get(GrpcUtil.METHOD_KEY.name()).toString());
+    assertEquals(GrpcUtil.CONTENT_TYPE_GRPC,
+        output.get(GrpcUtil.CONTENT_TYPE_KEY.name()).toString());
+    assertEquals(userAgent, output.get(GrpcUtil.USER_AGENT_KEY.name()).toString());
+    assertEquals(authority, output.get(GrpcUtil.AUTHORITY_KEY.name()).toString());
+    assertEquals(path, output.get(GrpcUtil.PATH_KEY.name()).toString());
+    assertEquals(GrpcUtil.TE_TRAILERS, output.get(GrpcUtil.TE_HEADER.name()).toString());
+    assertEquals(userValue, output.get(userKey.name()).toString());
+  }
+
+  @Test
+  public void convertServerHeaders_sanitizes() {
+    Metadata metaData = new Metadata();
+
+    // Intentionally being explicit here rather than relying on any pre-defined lists of headers,
+    // since the goal of this test is to validate the correctness of such lists in the first place.
+    metaData.put(GrpcUtil.STATUS_KEY, "to-be-removed");
+    metaData.put(GrpcUtil.CONTENT_TYPE_KEY, "to-be-removed");
+    metaData.put(userKey, userValue);
+
+    Http2Headers output = Utils.convertServerHeaders(metaData);
+    // 2 reserved headers, 1 user header
+    assertEquals(2 + 1, output.size());
+    assertEquals(Utils.STATUS_OK.toString(), output.get(GrpcUtil.STATUS_KEY.name()).toString());
+    assertEquals(Utils.CONTENT_TYPE_GRPC.toString(),
+        output.get(GrpcUtil.CONTENT_TYPE_KEY.name()).toString());
   }
 
   private static void assertStatusEquals(Status expected, Status actual) {

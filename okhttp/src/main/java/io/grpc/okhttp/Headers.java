@@ -18,6 +18,7 @@ package io.grpc.okhttp;
 
 import static io.grpc.internal.GrpcUtil.CONTENT_TYPE_KEY;
 import static io.grpc.internal.GrpcUtil.USER_AGENT_KEY;
+import static io.grpc.internal.GrpcUtil.discardHttp2RequestHeaders;
 
 import com.google.common.base.Preconditions;
 import io.grpc.InternalMetadata;
@@ -50,6 +51,9 @@ public class Headers {
     Preconditions.checkNotNull(headers, "headers");
     Preconditions.checkNotNull(defaultPath, "defaultPath");
     Preconditions.checkNotNull(authority, "authority");
+
+    // Discard any application supplied duplicates of the reserved headers
+    discardHttp2RequestHeaders(headers);
 
     // 7 is the number of explicit add calls below.
     List<Header> okhttpHeaders = new ArrayList<Header>(7 + InternalMetadata.headerCount(headers));

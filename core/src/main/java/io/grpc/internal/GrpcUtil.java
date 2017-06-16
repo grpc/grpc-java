@@ -23,6 +23,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.CallOptions;
@@ -40,6 +41,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
+import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -92,6 +94,52 @@ public final class GrpcUtil {
   }
 
   /**
+   * The default port for plain-text connections.
+   */
+  public static final int DEFAULT_PORT_PLAINTEXT = 80;
+
+  /**
+   * The default port for SSL connections.
+   */
+  public static final int DEFAULT_PORT_SSL = 443;
+
+  /**
+   * {@link io.grpc.Metadata.Key} for the HTTP/2 pseudo header :status
+   */
+  public static final Metadata.Key<String> STATUS_KEY =
+      Metadata.Key.of(":status", Metadata.ASCII_STRING_MARSHALLER);
+
+  /**
+   * {@link io.grpc.Metadata.Key} for the HTTP/2 pseudo header :authority
+   */
+  public static final Metadata.Key<String> AUTHORITY_KEY =
+      Metadata.Key.of(":authority", Metadata.ASCII_STRING_MARSHALLER);
+
+  /**
+   * {@link io.grpc.Metadata.Key} for the HTTP/2 pseudo header :path
+   */
+  public static final Metadata.Key<String> PATH_KEY =
+      Metadata.Key.of(":path", Metadata.ASCII_STRING_MARSHALLER);
+
+  /**
+   * {@link io.grpc.Metadata.Key} for the HTTP/2 pseudo header :method
+   */
+  public static final Metadata.Key<String> METHOD_KEY =
+      Metadata.Key.of(":method", Metadata.ASCII_STRING_MARSHALLER);
+
+  /**
+   * {@link io.grpc.Metadata.Key} for the HTTP/2 pseudo header :scheme
+   */
+  public static final Metadata.Key<String> SCHEME_KEY =
+      Metadata.Key.of(":scheme", Metadata.ASCII_STRING_MARSHALLER);
+
+  /**
+   * {@link io.grpc.Metadata.Key} for the Transfer encoding.
+   */
+  public static final Metadata.Key<String> TE_HEADER =
+      Metadata.Key.of("te", Metadata.ASCII_STRING_MARSHALLER);
+
+  /**
    * {@link io.grpc.Metadata.Key} for the Content-Type request/response header.
    */
   public static final Metadata.Key<String> CONTENT_TYPE_KEY =
@@ -102,16 +150,6 @@ public final class GrpcUtil {
    */
   public static final Metadata.Key<String> USER_AGENT_KEY =
           Metadata.Key.of("user-agent", Metadata.ASCII_STRING_MARSHALLER);
-
-  /**
-   * The default port for plain-text connections.
-   */
-  public static final int DEFAULT_PORT_PLAINTEXT = 80;
-
-  /**
-   * The default port for SSL connections.
-   */
-  public static final int DEFAULT_PORT_SSL = 443;
 
   /**
    * Content-Type used for GRPC-over-HTTP/2.
@@ -127,6 +165,26 @@ public final class GrpcUtil {
    * The TE (transport encoding) header for requests over HTTP/2.
    */
   public static final String TE_TRAILERS = "trailers";
+
+  /**
+   * The reserved headers for client requests. Application supplied values will be stripped.
+   */
+  public static final List<Metadata.Key<String>> HTTP2_REQUEST_HEADERS =
+      ImmutableList.of(
+          AUTHORITY_KEY,
+          PATH_KEY,
+          METHOD_KEY,
+          SCHEME_KEY,
+          CONTENT_TYPE_KEY,
+          TE_HEADER,
+          USER_AGENT_KEY
+      );
+
+  /**
+   * The reserved headers for server responses. Application supplied values will be stripped.
+   */
+  public static final List<Metadata.Key<String>> HTTP2_RESPONSE_HEADERS =
+      ImmutableList.of(STATUS_KEY, CONTENT_TYPE_KEY);
 
   /**
    * The Timeout header name.
@@ -612,5 +670,23 @@ public final class GrpcUtil {
       return "/" + version;
     }
     return "";
+  }
+
+  /**
+   * Strips away any reserved headers for client requests.
+   */
+  public static void discardHttp2RequestHeaders(Metadata headers) {
+    for (Metadata.Key<String> reserved : HTTP2_REQUEST_HEADERS) {
+      headers.discardAll(reserved);
+    }
+  }
+
+  /**
+   * Strips away any reserved headers for server responses.
+   */
+  public static void discardHttp2ResponseHeaders(Metadata headers) {
+    for (Metadata.Key<String> reserved : HTTP2_RESPONSE_HEADERS) {
+      headers.discardAll(reserved);
+    }
   }
 }

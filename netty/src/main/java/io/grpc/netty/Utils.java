@@ -16,8 +16,8 @@
 
 package io.grpc.netty;
 
-import static io.grpc.internal.GrpcUtil.CONTENT_TYPE_KEY;
-import static io.grpc.internal.GrpcUtil.USER_AGENT_KEY;
+import static io.grpc.internal.GrpcUtil.discardHttp2RequestHeaders;
+import static io.grpc.internal.GrpcUtil.discardHttp2ResponseHeaders;
 import static io.grpc.internal.TransportFrameUtil.toHttp2Headers;
 import static io.grpc.internal.TransportFrameUtil.toRawSerializedHeaders;
 import static io.netty.util.CharsetUtil.UTF_8;
@@ -53,11 +53,12 @@ class Utils {
   public static final AsciiString HTTP_GET_METHOD = AsciiString.of("GET");
   public static final AsciiString HTTPS = AsciiString.of("https");
   public static final AsciiString HTTP = AsciiString.of("http");
-  public static final AsciiString CONTENT_TYPE_HEADER = AsciiString.of(CONTENT_TYPE_KEY.name());
+  public static final AsciiString CONTENT_TYPE_HEADER =
+      AsciiString.of(GrpcUtil.CONTENT_TYPE_KEY.name());
   public static final AsciiString CONTENT_TYPE_GRPC = AsciiString.of(GrpcUtil.CONTENT_TYPE_GRPC);
-  public static final AsciiString TE_HEADER = AsciiString.of("te");
+  public static final AsciiString TE_HEADER = AsciiString.of(GrpcUtil.TE_HEADER.name());
   public static final AsciiString TE_TRAILERS = AsciiString.of(GrpcUtil.TE_TRAILERS);
-  public static final AsciiString USER_AGENT = AsciiString.of(USER_AGENT_KEY.name());
+  public static final AsciiString USER_AGENT = AsciiString.of(GrpcUtil.USER_AGENT_KEY.name());
 
   public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP =
       new DefaultEventLoopGroupResource(1, "grpc-default-boss-ELG");
@@ -108,6 +109,9 @@ class Utils {
     Preconditions.checkNotNull(authority, "authority");
     Preconditions.checkNotNull(method, "method");
 
+    // Discard any application supplied duplicates of the reserved headers
+    discardHttp2RequestHeaders(headers);
+
     return GrpcHttp2OutboundHeaders.clientRequestHeaders(
         toHttp2Headers(headers),
         authority,
@@ -118,6 +122,8 @@ class Utils {
   }
 
   public static Http2Headers convertServerHeaders(Metadata headers) {
+    // Discard any application supplied duplicates of the reserved headers
+    discardHttp2ResponseHeaders(headers);
     return GrpcHttp2OutboundHeaders.serverResponseHeaders(toHttp2Headers(headers));
   }
 
