@@ -104,6 +104,7 @@ public abstract class AbstractManagedChannelImplBuilder
   @Nullable
   String userAgent;
 
+  @VisibleForTesting
   @Nullable
   String authorityOverride;
 
