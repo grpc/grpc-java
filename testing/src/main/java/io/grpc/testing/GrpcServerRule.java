@@ -27,7 +27,6 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.stub.AbstractStub;
 import io.grpc.stub.util.GenericMethodHandlerRegistry;
-import io.grpc.util.MutableHandlerRegistry;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import org.junit.rules.ExternalResource;
@@ -35,8 +34,8 @@ import org.junit.rules.TestRule;
 
 /**
  * {@code GrpcServerRule} is a JUnit {@link TestRule} that starts an in-process gRPC service with
- * a {@link MutableHandlerRegistry} for adding services. It is particularly useful for mocking out
- * external gRPC-based services and asserting that the expected requests were made.
+ * a {@link GenericMethodHandlerRegistry} for adding services. It is particularly useful for mocking
+ * out external gRPC-based services and asserting that the expected requests were made.
  *
  * <p>An {@link AbstractStub} can be created against this service by using the
  * {@link ManagedChannel} provided by {@link GrpcServerRule#getChannel()}.

@@ -41,9 +41,9 @@ import javax.annotation.Nullable;
  * @since 1.5.0
  */
 @ExperimentalApi() // TODO(zdapeng): tracking url
-public class GenericMethodHandlerRegistry extends HandlerRegistry {
+public final class GenericMethodHandlerRegistry extends HandlerRegistry {
 
-  private MutableHandlerRegistry delegate = new MutableHandlerRegistry();
+  private final MutableHandlerRegistry delegate = new MutableHandlerRegistry();
 
   /**
    * Registers a service with a generic unary method.
@@ -128,7 +128,7 @@ public class GenericMethodHandlerRegistry extends HandlerRegistry {
    *         otherwise {@code null}.
    */
   @Nullable
-  public final ServerServiceDefinition addService(ServerServiceDefinition service) {
+  public ServerServiceDefinition addService(ServerServiceDefinition service) {
     return delegate.addService(service);
   }
 
@@ -139,7 +139,7 @@ public class GenericMethodHandlerRegistry extends HandlerRegistry {
    *         otherwise {@code null}.
    */
   @Nullable
-  public final ServerServiceDefinition addService(BindableService bindableService) {
+  public ServerServiceDefinition addService(BindableService bindableService) {
     return delegate.addService(bindableService);
   }
 
@@ -148,7 +148,7 @@ public class GenericMethodHandlerRegistry extends HandlerRegistry {
    *
    * @return true if the service was found to be removed.
    */
-  public final boolean removeService(ServerServiceDefinition service) {
+  public boolean removeService(ServerServiceDefinition service) {
     return delegate.removeService(service);
   }
 
@@ -157,7 +157,7 @@ public class GenericMethodHandlerRegistry extends HandlerRegistry {
    */
   @Override
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
-  public final List<ServerServiceDefinition> getServices() {
+  public List<ServerServiceDefinition> getServices() {
     return delegate.getServices();
   }
 
@@ -166,7 +166,7 @@ public class GenericMethodHandlerRegistry extends HandlerRegistry {
    */
   @Override
   @Nullable
-  public final ServerMethodDefinition<?, ?> lookupMethod(
+  public ServerMethodDefinition<?, ?> lookupMethod(
       String methodName, @Nullable String authority) {
     return delegate.lookupMethod(methodName, authority);
   }
