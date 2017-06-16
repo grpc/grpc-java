@@ -41,7 +41,6 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
-import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -169,7 +168,7 @@ public final class GrpcUtil {
   /**
    * The reserved headers for client requests. Application supplied values will be stripped.
    */
-  public static final List<Metadata.Key<String>> HTTP2_REQUEST_HEADERS =
+  public static final ImmutableList<Metadata.Key<String>> HTTP2_REQUEST_HEADERS =
       ImmutableList.of(
           AUTHORITY_KEY,
           PATH_KEY,
@@ -183,7 +182,7 @@ public final class GrpcUtil {
   /**
    * The reserved headers for server responses. Application supplied values will be stripped.
    */
-  public static final List<Metadata.Key<String>> HTTP2_RESPONSE_HEADERS =
+  public static final ImmutableList<Metadata.Key<String>> HTTP2_RESPONSE_HEADERS =
       ImmutableList.of(STATUS_KEY, CONTENT_TYPE_KEY);
 
   /**
