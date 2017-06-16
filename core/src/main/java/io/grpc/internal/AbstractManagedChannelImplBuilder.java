@@ -372,7 +372,7 @@ public abstract class AbstractManagedChannelImplBuilder
   /**
    * Returns a {@link NameResolver.Factory} for the channel.
    */
-  public NameResolver.Factory getNameResolverFactory() {
+  NameResolver.Factory getNameResolverFactory() {
     if (authorityOverride == null) {
       return nameResolverFactory;
     } else {
