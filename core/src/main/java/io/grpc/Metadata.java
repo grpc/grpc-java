@@ -610,6 +610,15 @@ public final class Metadata {
       return new TrustedAsciiKey<T>(name, pseudo, marshaller);
     }
 
+    /**
+     * Internal use only. Allows creating a Key with a single ':' character at the beginning, used
+     * to express a HTTP/2 pseudo header.
+     */
+    @Internal
+    static <T> Key<T> pseudoHeaderOf(String name, TrustedAsciiMarshaller<T> marshaller) {
+      return new TrustedAsciiKey<T>(name, true, marshaller);
+    }
+
     private final String originalName;
 
     private final String name;

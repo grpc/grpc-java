@@ -62,6 +62,18 @@ public class MetadataTest {
   private static final String LANCE = "lance";
   private static final byte[] LANCE_BYTES = LANCE.getBytes(US_ASCII);
   private static final Metadata.Key<Fish> KEY = Metadata.Key.of("test-bin", FISH_MARSHALLER);
+  private static final InternalMetadata.TrustedAsciiMarshaller<String> TRUSTED_ASCII_MARSHALLER =
+      new InternalMetadata.TrustedAsciiMarshaller<String>() {
+    @Override
+    public byte[] toAsciiString(String value) {
+      return value.getBytes();
+    }
+
+    @Override
+    public String parseAsciiString(byte[] serialized) {
+      return new String(serialized);
+    }
+  };
 
   @Test
   public void noPseudoHeaders() {
@@ -240,6 +252,17 @@ public class MetadataTest {
     thrown.expectMessage("Binary header is named");
 
     Metadata.Key.of("nonbinary", FISH_MARSHALLER);
+  }
+
+  @Test
+  public void pseudoHeaderWhenDisallowed() {
+    thrown.expect(IllegalArgumentException.class);
+    Metadata.Key.of(":status", Metadata.INTEGER_MARSHALLER);
+  }
+
+  @Test
+  public void pseudoheaderWhenAllowed() {
+    Metadata.Key.pseudoHeaderOf(":status", TRUSTED_ASCII_MARSHALLER);
   }
 
   private void roundTripInteger(Integer i) {

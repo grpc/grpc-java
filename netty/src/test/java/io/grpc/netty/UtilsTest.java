@@ -57,12 +57,8 @@ public class UtilsTest {
 
     // Intentionally being explicit here rather than relying on any pre-defined lists of headers,
     // since the goal of this test is to validate the correctness of such lists in the first place.
-    metaData.put(GrpcUtil.SCHEME_KEY, "to-be-removed");
-    metaData.put(GrpcUtil.METHOD_KEY, "to-be-removed");
     metaData.put(GrpcUtil.CONTENT_TYPE_KEY, "to-be-removed");
     metaData.put(GrpcUtil.USER_AGENT_KEY, "to-be-removed");
-    metaData.put(GrpcUtil.AUTHORITY_KEY, "to-be-removed");
-    metaData.put(GrpcUtil.PATH_KEY, "to-be-removed");
     metaData.put(GrpcUtil.TE_HEADER, "to-be-removed");
     metaData.put(userKey, userValue);
 
@@ -82,13 +78,9 @@ public class UtilsTest {
             new AsciiString(userAgent));
     // 7 reserved headers, 1 user header
     assertEquals(7 + 1, output.size());
-    assertEquals(scheme, output.get(GrpcUtil.SCHEME_KEY.name()).toString());
-    assertEquals(method, output.get(GrpcUtil.METHOD_KEY.name()).toString());
     assertEquals(GrpcUtil.CONTENT_TYPE_GRPC,
         output.get(GrpcUtil.CONTENT_TYPE_KEY.name()).toString());
     assertEquals(userAgent, output.get(GrpcUtil.USER_AGENT_KEY.name()).toString());
-    assertEquals(authority, output.get(GrpcUtil.AUTHORITY_KEY.name()).toString());
-    assertEquals(path, output.get(GrpcUtil.PATH_KEY.name()).toString());
     assertEquals(GrpcUtil.TE_TRAILERS, output.get(GrpcUtil.TE_HEADER.name()).toString());
     assertEquals(userValue, output.get(userKey.name()).toString());
   }
@@ -99,14 +91,12 @@ public class UtilsTest {
 
     // Intentionally being explicit here rather than relying on any pre-defined lists of headers,
     // since the goal of this test is to validate the correctness of such lists in the first place.
-    metaData.put(GrpcUtil.STATUS_KEY, "to-be-removed");
     metaData.put(GrpcUtil.CONTENT_TYPE_KEY, "to-be-removed");
     metaData.put(userKey, userValue);
 
     Http2Headers output = Utils.convertServerHeaders(metaData);
     // 2 reserved headers, 1 user header
     assertEquals(2 + 1, output.size());
-    assertEquals(Utils.STATUS_OK.toString(), output.get(GrpcUtil.STATUS_KEY.name()).toString());
     assertEquals(Utils.CONTENT_TYPE_GRPC.toString(),
         output.get(GrpcUtil.CONTENT_TYPE_KEY.name()).toString());
   }

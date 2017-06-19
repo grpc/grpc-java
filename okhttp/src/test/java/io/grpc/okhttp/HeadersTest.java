@@ -32,12 +32,8 @@ public class HeadersTest {
 
     // Intentionally being explicit here rather than relying on any pre-defined lists of headers,
     // since the goal of this test is to validate the correctness of such lists in the first place.
-    metaData.put(GrpcUtil.SCHEME_KEY, "to-be-removed");
-    metaData.put(GrpcUtil.METHOD_KEY, "to-be-removed");
     metaData.put(GrpcUtil.CONTENT_TYPE_KEY, "to-be-removed");
     metaData.put(GrpcUtil.USER_AGENT_KEY, "to-be-removed");
-    metaData.put(GrpcUtil.AUTHORITY_KEY, "to-be-removed");
-    metaData.put(GrpcUtil.PATH_KEY, "to-be-removed");
     metaData.put(GrpcUtil.TE_HEADER, "to-be-removed");
 
 
@@ -53,12 +49,8 @@ public class HeadersTest {
 
     // 7 reserved headers, 1 user header
     assertEquals(7 + 1, headers.size());
-    assertTrue(headers.contains(Headers.SCHEME_HEADER));
-    assertTrue(headers.contains(Headers.METHOD_HEADER));
     assertTrue(headers.contains(Headers.CONTENT_TYPE_HEADER));
     assertTrue(headers.contains(new Header(GrpcUtil.USER_AGENT_KEY.name(), userAgent)));
-    assertTrue(headers.contains(new Header(GrpcUtil.AUTHORITY_KEY.name(), authority)));
-    assertTrue(headers.contains(new Header(GrpcUtil.PATH_KEY.name(), path)));
     assertTrue(headers.contains(new Header(GrpcUtil.TE_HEADER.name(), GrpcUtil.TE_TRAILERS)));
     assertTrue(headers.contains(new Header(userKey.name(), userValue)));
   }

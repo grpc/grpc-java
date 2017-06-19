@@ -48,6 +48,19 @@ public class Http2ClientStreamTransportStateTest {
   @Mock private ClientStreamListener mockListener;
   @Captor private ArgumentCaptor<Status> statusCaptor;
 
+  private static final InternalMetadata.TrustedAsciiMarshaller<String> MARSHALLER =
+      new InternalMetadata.TrustedAsciiMarshaller<String>() {
+    @Override
+    public byte[] toAsciiString(String value) {
+      return value.getBytes();
+    }
+
+    @Override
+    public String parseAsciiString(byte[] serialized) {
+      return new String(serialized);
+    }
+  };
+
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);

@@ -56,6 +56,11 @@ public final class InternalMetadata {
   }
 
   @Internal
+  public static <T> Key<T> pseudoHeaderOf(String name, TrustedAsciiMarshaller<T> marshaller) {
+    return Metadata.Key.pseudoHeaderOf(name, marshaller);
+  }
+
+  @Internal
   public static Metadata newMetadata(byte[]... binaryValues) {
     return new Metadata(binaryValues);
   }
