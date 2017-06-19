@@ -106,6 +106,16 @@ public abstract class ForwardingReadableBuffer implements ReadableBuffer {
   }
 
   @Override
+  public boolean hasNioBuffer() {
+    return buf.hasNioBuffer();
+  }
+
+  @Override
+  public ByteBuffer nioBuffer() {
+    return buf.nioBuffer();
+  }
+
+  @Override
   public void close() {
     buf.close();
   }

@@ -105,4 +105,14 @@ class NettyReadableBuffer extends AbstractReadableBuffer {
       buffer.release();
     }
   }
+
+  @Override
+  public boolean hasNioBuffer() {
+    return true;
+  }
+
+  @Override
+  public ByteBuffer nioBuffer() {
+    return buffer.nioBuffer();
+  }
 }

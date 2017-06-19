@@ -152,6 +152,23 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
     return newBuffer;
   }
 
+  /**
+   * NIO ByteBuffer access is supported iff there is a single backing ReadableBuffer
+   * and it supports ByteBuffer access.
+   */
+  @Override
+  public boolean hasNioBuffer() {
+    return buffers.size() == 1 && buffers.peek().hasNioBuffer();
+  }
+
+  @Override
+  public ByteBuffer nioBuffer() {
+    if (!hasNioBuffer()) {
+      throw new UnsupportedOperationException();
+    }
+    return buffers.peek().nioBuffer();
+  }
+
   @Override
   public void close() {
     while (!buffers.isEmpty()) {

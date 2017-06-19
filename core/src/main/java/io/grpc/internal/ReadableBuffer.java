@@ -140,6 +140,19 @@ public interface ReadableBuffer extends Closeable {
   int arrayOffset();
 
   /**
+   * Indicates whether or not this buffer exposes a backing NIO ByteBuffer.
+   */
+  boolean hasNioBuffer();
+
+  /**
+   * Gets the backing ByteBuffer for this buffer, if available. This is an optional method, so
+   * callers should first check {@link #hasNioBuffer}.
+   *
+   * @throws UnsupportedOperationException the buffer does not support this method
+   */
+  ByteBuffer nioBuffer();
+
+  /**
    * Closes this buffer and releases any resources.
    */
   @Override
