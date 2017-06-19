@@ -27,7 +27,10 @@ import io.grpc.Attributes;
 import io.grpc.NameResolver;
 import java.net.URI;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
+@RunWith(JUnit4.class)
 public class OverrideAuthorityNameResolverTest {
   @Test
   public void overridesAuthority() {
