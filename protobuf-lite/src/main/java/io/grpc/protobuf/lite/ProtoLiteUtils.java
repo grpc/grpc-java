@@ -30,6 +30,8 @@ import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.PrototypeMarshaller;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.NioBufferBackedStream;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.ref.Reference;
@@ -119,7 +121,15 @@ public class ProtoLiteUtils {
         }
         CodedInputStream cis = null;
         try {
-          if (stream instanceof KnownLength) {
+          if (stream instanceof NioBufferBackedStream) {
+            int size = stream.available();
+            if (size > 0) {
+              NioBufferBackedStream nioBufferBackedStream = (NioBufferBackedStream) stream;
+              cis = CodedInputStream.newInstance(nioBufferBackedStream.nioBuffer());
+            } else {
+              return defaultInstance;
+            }
+          } else if (stream instanceof KnownLength) {
             int size = stream.available();
             if (size > 0 && size <= GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE) {
               // buf should not be used after this method has returned.
