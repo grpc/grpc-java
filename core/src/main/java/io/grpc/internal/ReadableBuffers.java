@@ -106,6 +106,18 @@ public final class ReadableBuffers {
   }
 
   /**
+   * Creates a new {@link InputStream} backed by the given buffer, with the added twist that the
+   * returned InputStream will also implement the NioBufferInputStream interface, allowing access to
+   * its underlying {@link java.nio.ByteBuffer}. Closing this stream also closes the original
+   * buffer.
+   * @param buffer A {@link ReadableBuffer} which supports calls to
+   *        {@link ReadableBuffer#nioBuffer()} backing the new {@link InputStream}.
+   */
+  public static InputStream openNioStream(ReadableBuffer buffer) {
+    return new NioBufferInputStream(buffer);
+  }
+
+  /**
    * Decorates the given {@link ReadableBuffer} to ignore calls to {@link ReadableBuffer#close}.
    *
    * @param buffer the buffer to be decorated.
@@ -290,12 +302,22 @@ public final class ReadableBuffers {
     public int arrayOffset() {
       return bytes.arrayOffset() + bytes.position();
     }
+
+    @Override
+    public boolean hasNioBuffer() {
+      return true;
+    }
+
+    @Override
+    public ByteBuffer nioBuffer() {
+      return bytes.duplicate();
+    }
   }
 
   /**
    * An {@link InputStream} that is backed by a {@link ReadableBuffer}.
    */
-  private static final class BufferInputStream extends InputStream implements KnownLength {
+  private static class BufferInputStream extends InputStream implements KnownLength {
     final ReadableBuffer buffer;
 
     public BufferInputStream(ReadableBuffer buffer) {
@@ -331,6 +353,20 @@ public final class ReadableBuffers {
     @Override
     public void close() throws IOException {
       buffer.close();
+    }
+  }
+
+  private static final class NioBufferInputStream
+          extends BufferInputStream
+          implements NioBufferBackedStream {
+    public NioBufferInputStream(ReadableBuffer buffer) {
+      super(buffer);
+      Preconditions.checkArgument(buffer.hasNioBuffer(), "NIO Buffer required");
+    }
+
+    @Override
+    public ByteBuffer nioBuffer() {
+      return buffer.nioBuffer();
     }
   }
 

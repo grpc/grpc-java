@@ -355,6 +355,9 @@ public class MessageDeframer implements Closeable {
 
   private InputStream getUncompressedBody() {
     statsTraceCtx.inboundUncompressedSize(nextFrame.readableBytes());
+    if (nextFrame.hasNioBuffer()) {
+      return ReadableBuffers.openNioStream(nextFrame);
+    }
     return ReadableBuffers.openStream(nextFrame, true);
   }
 
