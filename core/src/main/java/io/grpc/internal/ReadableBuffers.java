@@ -95,8 +95,8 @@ public final class ReadableBuffers {
 
   /**
    * Creates a new {@link InputStream} backed by the given buffer. Any read taken on the stream will
-   * automatically increment the read position of this buffer. Closing the stream, however, does not
-   * affect the original buffer.
+   * automatically increment the read position of this buffer. Closing the stream will close the
+   * original buffer if {@code owner} is {@code true}.
    *
    * @param buffer the buffer backing the new {@link InputStream}.
    * @param owner if {@code true}, the returned stream will close the buffer when closed.
@@ -326,6 +326,11 @@ public final class ReadableBuffers {
       length = Math.min(buffer.readableBytes(), length);
       buffer.readBytes(dest, destOffset, length);
       return length;
+    }
+
+    @Override
+    public void close() throws IOException {
+      buffer.close();
     }
   }
 
