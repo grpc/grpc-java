@@ -35,7 +35,7 @@ java_library(
     srcs = glob([
         "src/main/java/io/grpc/internal/*.java",
     ]),
-    visibility = ["//visibility:public"],
+    visibility = ["//:__subpackages__"],
     deps = [
         ":core",
         "//context",
