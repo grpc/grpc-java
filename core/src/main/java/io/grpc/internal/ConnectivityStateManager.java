@@ -41,8 +41,6 @@ final class ConnectivityStateManager {
   /**
    * Adds a listener for state change event.
    *
-   * <p>Must be synchronized with {@link #gotoState}.
-   *
    * <p>The {@code executor} must be one that can run RPC call listeners.
    */
   void notifyWhenStateChanged(Runnable callback, Executor executor, ConnectivityState source) {
@@ -58,9 +56,6 @@ final class ConnectivityStateManager {
     }
   }
 
-  /**
-   * Must be synchronized with {@link #notifyWhenStateChanged}.
-   */
   void gotoState(@Nonnull ConnectivityState newState) {
     checkNotNull(newState, "newState");
     checkState(state != null, "ConnectivityStateManager is disabled");
@@ -88,10 +83,11 @@ final class ConnectivityStateManager {
    * Gets the current connectivity state of the channel. This method is threadsafe.
    */
   public ConnectivityState getState() {
-    if (state == null) {
+    ConnectivityState stateCopy = state;
+    if (stateCopy == null) {
       throw new UnsupportedOperationException("Channel state API is not implemented");
     }
-    return state;
+    return stateCopy;
   }
 
   /**

@@ -581,26 +581,26 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   public ConnectivityState getState(boolean requestConnection) {
     ConnectivityState savedChannelState = channelStateManager.getState();
     if (requestConnection && savedChannelState == IDLE) {
-      channelExecutor.executeLater(new LogExceptionRunnable(
+      channelExecutor.executeLater(
           new Runnable() {
             @Override
             public void run() {
               exitIdleMode();
             }
-          })).drain();
+          }).drain();
     }
     return savedChannelState;
   }
 
   @Override
   public void notifyWhenStateChanged(final ConnectivityState source, final Runnable callback) {
-    channelExecutor.executeLater(new LogExceptionRunnable(
+    channelExecutor.executeLater(
         new Runnable() {
           @Override
           public void run() {
             channelStateManager.notifyWhenStateChanged(callback, executor, source);
           }
-        })).drain();
+        }).drain();
   }
 
   private class LbHelperImpl extends LoadBalancer.Helper {
@@ -679,7 +679,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       checkNotNull(newState, "newState");
       checkNotNull(newPicker, "newPicker");
 
-      runSerialized(new LogExceptionRunnable(
+      runSerialized(
           new Runnable() {
             @Override
             public void run() {
@@ -687,7 +687,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
               delayedTransport.reprocess(newPicker);
               channelStateManager.gotoState(newState);
             }
-          }));
+          });
     }
 
     @Override
