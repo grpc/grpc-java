@@ -101,8 +101,8 @@ def com_google_code_gson():
 def com_google_errorprone_error_prone_annotations():
   native.maven_jar(
       name = "com_google_errorprone_error_prone_annotations",
-      sha1 = "c3754a0bdd545b00ddc26884f9e7624f8b6a14de",
       artifact = "com.google.errorprone:error_prone_annotations:2.0.19",
+      sha1 = "c3754a0bdd545b00ddc26884f9e7624f8b6a14de",
   )
 
 def com_google_guava():
@@ -115,120 +115,120 @@ def com_google_guava():
 def com_google_instrumentation_api():
   native.maven_jar(
       name = "com_google_instrumentation_api",
-      sha1 = "41614af3429573dc02645d541638929d877945a2",
       artifact = "com.google.instrumentation:instrumentation-api:0.4.3",
+      sha1 = "41614af3429573dc02645d541638929d877945a2",
   )
 
 def com_google_protobuf():
   native.http_archive(
       name = "com_google_protobuf",
-      urls = ["https://github.com/google/protobuf/archive/v3.3.1.zip"],
-      strip_prefix = "protobuf-3.3.1",
       sha256 = "df77b0e60afcd3d90b2654cd305e61ae8ae2e2281b4d6540c7093da4c4245d75",
+      strip_prefix = "protobuf-3.3.1",
+      urls = ["https://github.com/google/protobuf/archive/v3.3.1.zip"],
   )
 
 def com_google_protobuf_java():
   native.http_archive(
       name = "com_google_protobuf_java",
-      urls = ["https://github.com/google/protobuf/archive/v3.3.1.zip"],
-      strip_prefix = "protobuf-3.3.1",
       sha256 = "df77b0e60afcd3d90b2654cd305e61ae8ae2e2281b4d6540c7093da4c4245d75",
+      strip_prefix = "protobuf-3.3.1",
+      urls = ["https://github.com/google/protobuf/archive/v3.3.1.zip"],
   )
 
 def com_google_protobuf_nano_protobuf_javanano():
   native.maven_jar(
       name = "com_google_protobuf_nano_protobuf_javanano",
-      sha1 = "357e60f95cebb87c72151e49ba1f570d899734f8",
       artifact = "com.google.protobuf.nano:protobuf-javanano:3.0.0-alpha-5",
+      sha1 = "357e60f95cebb87c72151e49ba1f570d899734f8",
   )
 
 def com_squareup_okhttp():
   native.maven_jar(
       name = "com_squareup_okhttp",
-      sha1 = "4de2b4ed3445c37ec1720a7d214712e845a24636",
       artifact = "com.squareup.okhttp:okhttp:2.5.0",
+      sha1 = "4de2b4ed3445c37ec1720a7d214712e845a24636",
   )
 
 def com_squareup_okio():
   native.maven_jar(
       name = "com_squareup_okio",
-      sha1 = "98476622f10715998eacf9240d6b479f12c66143",
       artifact = "com.squareup.okio:okio:1.6.0",
+      sha1 = "98476622f10715998eacf9240d6b479f12c66143",
   )
 
 def io_netty_codec_http2():
   native.maven_jar(
       name = "io_netty_codec_http2",
-      sha1 = "5373bd1a7b61f4620a3c421ee999f6142d8aa06d",
       artifact = "io.netty:netty-codec-http2:4.1.12.Final",
+      sha1 = "5373bd1a7b61f4620a3c421ee999f6142d8aa06d",
   )
 
 def io_netty_buffer():
   native.maven_jar(
       name = "io_netty_buffer",
-      sha1 = "f288fd50a2d2b58bdc51591d584aeaf8b1c10378",
       artifact = "io.netty:netty-buffer:4.1.12.Final",
+      sha1 = "f288fd50a2d2b58bdc51591d584aeaf8b1c10378",
   )
 
 def io_netty_common():
   native.maven_jar(
       name = "io_netty_common",
-      sha1 = "e98289fb3e657657b69d7c024dd93cf08ac7df70",
       artifact = "io.netty:netty-common:4.1.12.Final",
+      sha1 = "e98289fb3e657657b69d7c024dd93cf08ac7df70",
   )
 
 def io_netty_transport():
   native.maven_jar(
       name = "io_netty_transport",
-      sha1 = "147199f4f78f12f04964a440e7b4acf5cc01bf66",
       artifact = "io.netty:netty-transport:4.1.12.Final",
+      sha1 = "147199f4f78f12f04964a440e7b4acf5cc01bf66",
   )
 
 def io_netty_codec():
   native.maven_jar(
       name = "io_netty_codec",
-      sha1 = "5432f42ec70c623be5dd122a9ad358b704e0338f",
       artifact = "io.netty:netty-codec:4.1.12.Final",
+      sha1 = "5432f42ec70c623be5dd122a9ad358b704e0338f",
   )
 
 def io_netty_codec_socks():
   native.maven_jar(
       name = "io_netty_codec_socks",
-      sha1 = "fc491b8a6320f30a468fc16212131b3073ccf703",
       artifact = "io.netty:netty-codec-socks:4.1.12.Final",
+      sha1 = "fc491b8a6320f30a468fc16212131b3073ccf703",
   )
 
 def io_netty_codec_http():
   native.maven_jar(
       name = "io_netty_codec_http",
-      sha1 = "df1561ac7c455faf57c83a45af78771c3d3d0621",
       artifact = "io.netty:netty-codec-http:4.1.12.Final",
+      sha1 = "df1561ac7c455faf57c83a45af78771c3d3d0621",
   )
 
 def io_netty_handler():
   native.maven_jar(
       name = "io_netty_handler",
-      sha1 = "cce3dcbfa9f0832bc446b003dfb64fd7d8649655",
       artifact = "io.netty:netty-handler:4.1.12.Final",
+      sha1 = "cce3dcbfa9f0832bc446b003dfb64fd7d8649655",
   )
 
 def io_netty_handler_proxy():
   native.maven_jar(
       name = "io_netty_handler_proxy",
-      sha1 = "abdeea6b5b590d2fb5c8a7786399aa5a99ade9ac",
       artifact = "io.netty:netty-handler-proxy:4.1.12.Final",
+      sha1 = "abdeea6b5b590d2fb5c8a7786399aa5a99ade9ac",
   )
 
 def io_netty_resolver():
   native.maven_jar(
       name = "io_netty_resolver",
-      sha1 = "fbef9e485ad1aeec284124a357bf78dc3de26f11",
       artifact = "io.netty:netty-resolver:4.1.12.Final",
+      sha1 = "fbef9e485ad1aeec284124a357bf78dc3de26f11",
   )
 
 def io_netty_tcnative_boringssl_static():
   native.maven_jar(
       name = "io_netty_tcnative_boringssl_static",
-      sha1 = "28d278ac2ae302ae9bdf19958c75b16fefbfae00",
       artifact = "io.netty:netty-tcnative-boringssl-static:2.0.3.Final",
+      sha1 = "28d278ac2ae302ae9bdf19958c75b16fefbfae00",
   )
