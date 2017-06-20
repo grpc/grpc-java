@@ -24,4 +24,10 @@ import io.grpc.ExperimentalApi;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1788")
 public abstract class ClientCallStreamObserver<V> extends CallStreamObserver<V> {
+    /**
+     * Prevent any further processing for this {@code ClientCallStreamObserver}. No further messages will be received.
+     * The server is informed of cancellations, but may not stop processing the call. Cancelling an already
+     * {@code cancel()}ed {@code ClientCallStreamObserver} has no effect.
+     */
+    public abstract void cancel();
 }
