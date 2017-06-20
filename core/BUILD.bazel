@@ -4,7 +4,7 @@ java_library(
         "src/main/java/io/grpc/*.java",
     ]),
     resources = glob([
-        "src/main/resources/**/*",
+        "src/main/resources/**",
     ]),
     visibility = ["//visibility:public"],
     deps = [

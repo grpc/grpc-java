@@ -5,7 +5,7 @@ java_library(
         "third_party/netty/java/**/*.java",
     ]),
     resources = glob([
-        "src/main/resources/**/*",
+        "src/main/resources/**",
     ]),
     visibility = ["//visibility:public"],
     deps = [
