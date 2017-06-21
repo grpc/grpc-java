@@ -24,6 +24,7 @@ import io.grpc.ManagedChannel;
 import java.util.ArrayList;
 import java.util.concurrent.Executor;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
@@ -56,10 +57,17 @@ final class ConnectivityStateManager {
     }
   }
 
+  /**
+   * Connectivity state is changed to the specified value. Will trigger some notifications that have
+   * been registered earlier by {@link ManagedChannel#notifyWhenStateChanged}.
+   */
   void gotoState(@Nonnull ConnectivityState newState) {
     checkNotNull(newState, "newState");
-    checkState(state != null, "ConnectivityStateManager is disabled");
+    gotoNullableState(newState);
+  }
 
+  private void gotoNullableState(@Nullable ConnectivityState newState) {
+    checkState(state != null, "ConnectivityStateManager is already disabled");
     if (state != newState) {
       checkState(
           state != ConnectivityState.SHUTDOWN,
@@ -82,7 +90,7 @@ final class ConnectivityStateManager {
   /**
    * Gets the current connectivity state of the channel. This method is threadsafe.
    */
-  public ConnectivityState getState() {
+  ConnectivityState getState() {
     ConnectivityState stateCopy = state;
     if (stateCopy == null) {
       throw new UnsupportedOperationException("Channel state API is not implemented");
@@ -95,7 +103,9 @@ final class ConnectivityStateManager {
    * supported.
    */
   void disable() {
-    state = null;
+    if (state != null) {
+      gotoNullableState(null);
+    }
   }
 
   private static final class Listener {
