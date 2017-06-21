@@ -16,11 +16,17 @@
 
 package io.grpc.testing;
 
+import com.google.common.io.ByteStreams;
+import com.google.common.primitives.Longs;
 import io.grpc.ExperimentalApi;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * A collection of method descriptor constructors useful for tests.  These are useful if you need
@@ -44,8 +50,8 @@ public final class TestMethodDescriptors {
   }
 
   /**
-   * Creates a new method descriptor that always creates zero length messages, and always parses to
-   * null objects.
+   * Creates a new unary method descriptor that always creates zero length messages, always parses
+   * to null objects, and always has the same method name.
    *
    * @since 1.1.0
    */
@@ -93,6 +99,58 @@ public final class TestMethodDescriptors {
     @Override
     public T parse(InputStream stream) {
       return null;
+    }
+  }
+
+  /**
+   * Creates a new method descriptor of the specified type. Each returned instance has a different
+   * method name. The restriction for using this method descriptor is
+   *
+   * <ul>
+   *   <li>it must be used for InProcess transports;</li>
+   *   <li>the request and response message objects must not be mutated after being sent out or
+   *       received.</li>
+   * </ul>
+   *
+   * @since 1.5.0
+   */
+  @ExperimentalApi // TODO(zdapeng): tracking url
+  public static <ReqT, RespT> MethodDescriptor<ReqT, RespT> inProcessGenericMethod(
+      MethodType methodType) {
+    return MethodDescriptor.<ReqT, RespT>newBuilder()
+        .setType(methodType)
+        .setFullMethodName(MethodDescriptor.generateFullMethodName(
+            "serviceName_" + UUID.randomUUID(), "methodName_" + UUID.randomUUID()))
+        .setRequestMarshaller(new InProcessMarshaller<ReqT>())
+        .setResponseMarshaller(new InProcessMarshaller<RespT>())
+        .build();
+  }
+
+  private static final class InProcessMarshaller<T> implements MethodDescriptor.Marshaller<T> {
+    final Map<Long, T> map = new HashMap<Long, T>();
+    long last;
+
+    @Override
+    public synchronized InputStream stream(T value) {
+      final long id = last++;
+      map.put(id, value);
+      return new ByteArrayInputStream(Longs.toByteArray(id)) {
+        @Override
+        public void close() throws IOException {
+          synchronized (InProcessMarshaller.this) {
+            map.remove(id);
+          }
+        }
+      };
+    }
+
+    @Override
+    public synchronized T parse(InputStream stream) {
+      try {
+        return map.get(Longs.fromByteArray(ByteStreams.toByteArray(stream)));
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
     }
   }
 }
