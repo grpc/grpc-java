@@ -98,7 +98,7 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * @since 1.5.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3117")
-  public T addInterceptor(ServerInterceptor interceptor) {
+  public T intercept(ServerInterceptor interceptor) {
     throw new UnsupportedOperationException();
   }
 

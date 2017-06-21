@@ -127,7 +127,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   }
 
   @Override
-  public final T addInterceptor(ServerInterceptor interceptor) {
+  public final T intercept(ServerInterceptor interceptor) {
     interceptors.add(interceptor);
     return thisT();
   }
