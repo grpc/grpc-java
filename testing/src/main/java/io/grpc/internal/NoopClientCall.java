@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
-package io.grpc.testing;
+package io.grpc.internal;
 
 import io.grpc.ClientCall;
-import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
 
 /**
@@ -25,7 +24,6 @@ import io.grpc.Metadata;
  * in places where a scriptable call is necessary.  By default, all methods are noops, and designed
  * to be overriden.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/2234")
 public class NoopClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   /**
