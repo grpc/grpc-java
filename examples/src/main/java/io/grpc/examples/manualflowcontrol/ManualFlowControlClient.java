@@ -11,9 +11,13 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
+import io.grpc.stub.CallStreamObserver;
+import io.grpc.stub.ClientCallStreamObserver;
+import io.grpc.stub.ClientResponseObserver;
 import io.grpc.stub.StreamObserver;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -28,10 +32,48 @@ public class ManualFlowControlClient {
                 .build();
         GreeterGrpc.GreeterStub stub = GreeterGrpc.newStub(channel);
 
-        StreamObserver<HelloReply> responseObserver = new StreamObserver<HelloReply>() {
+        ClientResponseObserver<HelloRequest, HelloReply> clientResponseObserver =
+                new ClientResponseObserver<HelloRequest, HelloReply>() {
+
+            ClientCallStreamObserver<HelloRequest> requestStream;
+
+            @Override
+            public void beforeStart(final ClientCallStreamObserver<HelloRequest> requestStream) {
+                this.requestStream = requestStream;
+                // Set up manual flow control for the response stream.
+                requestStream.disableAutoInboundFlowControl();
+
+                // Set up a back-pressure-aware producer for the request stream. The onReadyHandler will be invoked
+                // when the consuming side has enough buffer space to receive more messages.
+                requestStream.setOnReadyHandler(new Runnable() {
+                    // An iterator is used so we can pause and resume iteration of the request data.
+                    Iterator<String> iterator = names().iterator();
+
+                    @Override
+                    public void run() {
+                        // requestStream.isReady() will go false when the consuming side runs out of buffer space and
+                        // signals to slow down with back-pressure.
+                        while (requestStream.isReady()) {
+                            if (iterator.hasNext()) {
+                                // Send more messages if there are more messages to send.
+                                String name = iterator.next();
+                                System.out.println("Put: " + name);
+                                HelloRequest request = HelloRequest.newBuilder().setName(name).build();
+                                requestStream.onNext(request);
+                            } else {
+                                // Signal completion if there is nothing left to send.
+                                requestStream.onCompleted();
+                            }
+                        }
+                    }
+                });
+            }
+
             @Override
             public void onNext(HelloReply value) {
                 System.out.println("Got: " + value.getMessage());
+                // Signal the sender to send one message.
+                requestStream.request(1);
             }
 
             @Override
@@ -51,16 +93,8 @@ public class ManualFlowControlClient {
             }
         };
 
-        StreamObserver<HelloRequest> requestObserver = stub.sayHelloStreaming(responseObserver);
-
-        // Send each name one at a time.
-        for (String name : names()) {
-            System.out.println("Put: " + name);
-            HelloRequest request = HelloRequest.newBuilder().setName(name).build();
-            requestObserver.onNext(request);
-        }
-        // Tell the server we are done sending messages.
-        requestObserver.onCompleted();
+        // Note: clientResponseObserver is handling both request and response stream processing.
+        stub.sayHelloStreaming(clientResponseObserver);
 
         synchronized (done) {
             done.wait();
