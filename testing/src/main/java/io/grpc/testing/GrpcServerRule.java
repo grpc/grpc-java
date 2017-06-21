@@ -26,7 +26,7 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.stub.AbstractStub;
-import io.grpc.util.MutableHandlerRegistry;
+import io.grpc.stub.util.GenericMethodHandlerRegistry;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import org.junit.rules.ExternalResource;
@@ -34,8 +34,8 @@ import org.junit.rules.TestRule;
 
 /**
  * {@code GrpcServerRule} is a JUnit {@link TestRule} that starts an in-process gRPC service with
- * a {@link MutableHandlerRegistry} for adding services. It is particularly useful for mocking out
- * external gRPC-based services and asserting that the expected requests were made.
+ * a {@link GenericMethodHandlerRegistry} for adding services. It is particularly useful for mocking
+ * out external gRPC-based services and asserting that the expected requests were made.
  *
  * <p>An {@link AbstractStub} can be created against this service by using the
  * {@link ManagedChannel} provided by {@link GrpcServerRule#getChannel()}.
@@ -46,7 +46,7 @@ public class GrpcServerRule extends ExternalResource {
   private ManagedChannel channel;
   private Server server;
   private String serverName;
-  private MutableHandlerRegistry serviceRegistry;
+  private GenericMethodHandlerRegistry serviceRegistry;
   private boolean useDirectExecutor;
 
   /**
@@ -84,7 +84,7 @@ public class GrpcServerRule extends ExternalResource {
    * Returns the service registry for this service. The registry is used to add service instances
    * (e.g. {@link BindableService} or {@link ServerServiceDefinition} to the server.
    */
-  public final MutableHandlerRegistry getServiceRegistry() {
+  public final GenericMethodHandlerRegistry getServiceRegistry() {
     return serviceRegistry;
   }
 
@@ -121,7 +121,7 @@ public class GrpcServerRule extends ExternalResource {
   protected void before() throws Throwable {
     serverName = UUID.randomUUID().toString();
 
-    serviceRegistry = new MutableHandlerRegistry();
+    serviceRegistry = new GenericMethodHandlerRegistry();
 
     InProcessServerBuilder serverBuilder = InProcessServerBuilder.forName(serverName)
         .fallbackHandlerRegistry(serviceRegistry);
