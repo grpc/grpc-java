@@ -21,6 +21,7 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
+import io.grpc.examples.helloworld.StreamingGreeterGrpc;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientResponseObserver;
 
@@ -41,7 +42,7 @@ public class ManualFlowControlClient {
                 .forAddress("localhost", 50051)
                 .usePlaintext(true)
                 .build();
-        GreeterGrpc.GreeterStub stub = GreeterGrpc.newStub(channel);
+        StreamingGreeterGrpc.StreamingGreeterStub stub = StreamingGreeterGrpc.newStub(channel);
 
         // When using manual flow-control and back-pressure on the client, the ClientResponseObserver handles both
         // request and response streams.

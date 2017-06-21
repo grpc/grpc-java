@@ -22,6 +22,7 @@ import io.grpc.Status;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
+import io.grpc.examples.helloworld.StreamingGreeterGrpc;
 import io.grpc.stub.CallStreamObserver;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
@@ -38,7 +39,7 @@ public class ManualFlowControlServer {
         final String COMPLETED = "COMPLETED";
 
         // Service class implementation
-        GreeterGrpc.GreeterImplBase svc = new GreeterGrpc.GreeterImplBase() {
+        StreamingGreeterGrpc.StreamingGreeterImplBase svc = new StreamingGreeterGrpc.StreamingGreeterImplBase() {
             @Override
             public StreamObserver<HelloRequest> sayHelloStreaming(final StreamObserver<HelloReply> responseObserver) {
                 // Use a queue to buffer between received messages and sent messages. This simulates the inner workings
