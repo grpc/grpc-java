@@ -11,18 +11,19 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
-import io.grpc.stub.CallStreamObserver;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientResponseObserver;
-import io.grpc.stub.StreamObserver;
 
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public class ManualFlowControlClient {
     public static void main(String[] args) throws InterruptedException {
+        final ExecutorService pool = Executors.newCachedThreadPool();
         final Object done = new Object();
 
         // Create a channel and a stub
@@ -45,33 +46,45 @@ public class ManualFlowControlClient {
 
                 // Set up a back-pressure-aware producer for the request stream. The onReadyHandler will be invoked
                 // when the consuming side has enough buffer space to receive more messages.
+                //
+                // Note: the onReadyHandler is invoked by gRPC's internal thread pool. You can't block in this in
+                // method or deadlocks can occur.
                 requestStream.setOnReadyHandler(new Runnable() {
                     // An iterator is used so we can pause and resume iteration of the request data.
                     Iterator<String> iterator = names().iterator();
 
                     @Override
                     public void run() {
-                        // requestStream.isReady() will go false when the consuming side runs out of buffer space and
-                        // signals to slow down with back-pressure.
-                        while (requestStream.isReady()) {
-                            if (iterator.hasNext()) {
-                                // Send more messages if there are more messages to send.
-                                String name = iterator.next();
-                                System.out.println("Put: " + name);
-                                HelloRequest request = HelloRequest.newBuilder().setName(name).build();
-                                requestStream.onNext(request);
-                            } else {
-                                // Signal completion if there is nothing left to send.
-                                requestStream.onCompleted();
+                        // Start generating values from where we left off on a non-gRPC thread.
+                        pool.execute(new Runnable() {
+                            @Override
+                            public void run() {
+                                // requestStream.isReady() will go false when the consuming side runs out of buffer space and
+                                // signals to slow down with back-pressure.
+                                while (requestStream.isReady()) {
+                                    if (iterator.hasNext()) {
+                                        // Simulate doing some work to generate the next value
+                                        try { Thread.sleep(100); } catch (InterruptedException e) { e.printStackTrace(); }
+
+                                        // Send more messages if there are more messages to send.
+                                        String name = iterator.next();
+                                        System.out.println("--> " + name);
+                                        HelloRequest request = HelloRequest.newBuilder().setName(name).build();
+                                        requestStream.onNext(request);
+                                    } else {
+                                        // Signal completion if there is nothing left to send.
+                                        requestStream.onCompleted();
+                                    }
+                                }
                             }
-                        }
+                        });
                     }
                 });
             }
 
             @Override
             public void onNext(HelloReply value) {
-                System.out.println("Got: " + value.getMessage());
+                System.out.println("<-- " + value.getMessage());
                 // Signal the sender to send one message.
                 requestStream.request(1);
             }
@@ -101,6 +114,7 @@ public class ManualFlowControlClient {
         }
 
         channel.shutdown();
+        pool.shutdown();
         channel.awaitTermination(1, TimeUnit.SECONDS);
     }
 
@@ -129,7 +143,7 @@ public class ManualFlowControlClient {
         names.add("Elijah");
         names.add("Lily");
         names.add("Grayson");
-        names.add("Layla	");
+        names.add("Layla");
         names.add("Jacob");
         names.add("Amelia");
         names.add("Michael");
@@ -189,7 +203,7 @@ public class ManualFlowControlClient {
         names.add("Julian");
         names.add("Peyton");
         names.add("Eli");
-        names.add("Maria	");
+        names.add("Maria");
         names.add("Levi");
         names.add("Grace");
         names.add("Isaiah");
