@@ -49,4 +49,3 @@ public class NoopClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   @Override
   public void sendMessage(ReqT message) {}
 }
-

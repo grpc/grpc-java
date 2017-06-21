@@ -58,4 +58,3 @@ public class NoopServerCall<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     return null;
   }
 }
-
