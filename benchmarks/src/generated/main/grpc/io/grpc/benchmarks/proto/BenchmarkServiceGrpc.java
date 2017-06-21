@@ -270,7 +270,8 @@ public final class BenchmarkServiceGrpc {
     }
   }
 
-  private static class BenchmarkServiceFileDescriptorSupplier implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
+  private static class BenchmarkServiceFileDescriptorSupplier
+      implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.benchmarks.proto.Services.getDescriptor();
@@ -282,10 +283,12 @@ public final class BenchmarkServiceGrpc {
     }
   }
 
-  private static final class BenchmarkServiceMethodDescriptorSupplier extends BenchmarkServiceFileDescriptorSupplier implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
+  private static final class BenchmarkServiceMethodDescriptorSupplier
+      extends BenchmarkServiceFileDescriptorSupplier
+        implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
     private final String methodName;
 
-    public BenchmarkServiceMethodDescriptorSupplier(String methodName) {
+    private BenchmarkServiceMethodDescriptorSupplier(String methodName) {
       this.methodName = methodName;
     }
 

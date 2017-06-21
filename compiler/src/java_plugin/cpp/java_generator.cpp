@@ -908,7 +908,8 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
     (*vars)["proto_class_name"] = google::protobuf::compiler::java::ClassName(service->file());
     p->Print(
         *vars,
-        "private static class $proto_file_descriptor_supplier$ implements $ProtoFileDescriptorSupplier$, $ProtoServiceDescriptorSupplier$ {\n");
+        "private static class $proto_file_descriptor_supplier$\n"
+        "    implements $ProtoFileDescriptorSupplier$, $ProtoServiceDescriptorSupplier$ {\n");
     p->Indent();
     p->Print(*vars, "@$Override$\n");
     p->Print(
@@ -933,10 +934,12 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
 
     p->Print(
         *vars,
-        "private static final class $proto_method_descriptor_supplier$ extends $proto_file_descriptor_supplier$ implements $ProtoMethodDescriptorSupplier$ {\n");
+        "private static final class $proto_method_descriptor_supplier$\n"
+        "    extends $proto_file_descriptor_supplier$\n"
+        "      implements $ProtoMethodDescriptorSupplier$ {\n");
     p->Indent();
     p->Print(*vars, "private final String methodName;\n\n");
-    p->Print(*vars, "public $proto_method_descriptor_supplier$(String methodName) {\n");
+    p->Print(*vars, "private $proto_method_descriptor_supplier$(String methodName) {\n");
     p->Indent();
     p->Print(*vars, "this.methodName = methodName;\n");
     p->Outdent();

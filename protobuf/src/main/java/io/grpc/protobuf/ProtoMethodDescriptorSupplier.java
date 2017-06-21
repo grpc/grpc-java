@@ -17,13 +17,15 @@
 package io.grpc.protobuf;
 
 import com.google.protobuf.Descriptors.MethodDescriptor;
+import javax.annotation.CheckReturnValue;
 
 /**
  * Provides access to the underlying proto service method descriptor.
  */
-public interface ProtoMethodDescriptorSupplier {
+public interface ProtoMethodDescriptorSupplier extends ProtoServiceDescriptorSupplier {
   /**
    * Returns method descriptor to the proto service method.
    */
+  @CheckReturnValue
   MethodDescriptor getMethodDescriptor();
 }

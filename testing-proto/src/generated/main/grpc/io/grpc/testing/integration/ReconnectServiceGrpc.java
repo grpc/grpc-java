@@ -277,7 +277,8 @@ public final class ReconnectServiceGrpc {
     }
   }
 
-  private static class ReconnectServiceFileDescriptorSupplier implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
+  private static class ReconnectServiceFileDescriptorSupplier
+      implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.testing.integration.Test.getDescriptor();
@@ -289,10 +290,12 @@ public final class ReconnectServiceGrpc {
     }
   }
 
-  private static final class ReconnectServiceMethodDescriptorSupplier extends ReconnectServiceFileDescriptorSupplier implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
+  private static final class ReconnectServiceMethodDescriptorSupplier
+      extends ReconnectServiceFileDescriptorSupplier
+        implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
     private final String methodName;
 
-    public ReconnectServiceMethodDescriptorSupplier(String methodName) {
+    private ReconnectServiceMethodDescriptorSupplier(String methodName) {
       this.methodName = methodName;
     }
 

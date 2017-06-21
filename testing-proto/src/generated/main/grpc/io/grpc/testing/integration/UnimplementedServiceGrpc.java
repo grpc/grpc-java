@@ -239,7 +239,8 @@ public final class UnimplementedServiceGrpc {
     }
   }
 
-  private static class UnimplementedServiceFileDescriptorSupplier implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
+  private static class UnimplementedServiceFileDescriptorSupplier
+      implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.testing.integration.Test.getDescriptor();
@@ -251,10 +252,12 @@ public final class UnimplementedServiceGrpc {
     }
   }
 
-  private static final class UnimplementedServiceMethodDescriptorSupplier extends UnimplementedServiceFileDescriptorSupplier implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
+  private static final class UnimplementedServiceMethodDescriptorSupplier
+      extends UnimplementedServiceFileDescriptorSupplier
+        implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
     private final String methodName;
 
-    public UnimplementedServiceMethodDescriptorSupplier(String methodName) {
+    private UnimplementedServiceMethodDescriptorSupplier(String methodName) {
       this.methodName = methodName;
     }
 

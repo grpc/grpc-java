@@ -659,7 +659,8 @@ public final class TestServiceGrpc {
     }
   }
 
-  private static class TestServiceFileDescriptorSupplier implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
+  private static class TestServiceFileDescriptorSupplier
+      implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.testing.integration.Test.getDescriptor();
@@ -671,10 +672,12 @@ public final class TestServiceGrpc {
     }
   }
 
-  private static final class TestServiceMethodDescriptorSupplier extends TestServiceFileDescriptorSupplier implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
+  private static final class TestServiceMethodDescriptorSupplier
+      extends TestServiceFileDescriptorSupplier
+        implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
     private final String methodName;
 
-    public TestServiceMethodDescriptorSupplier(String methodName) {
+    private TestServiceMethodDescriptorSupplier(String methodName) {
       this.methodName = methodName;
     }
 

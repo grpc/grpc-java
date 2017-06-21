@@ -42,7 +42,7 @@ public final class MethodDescriptor<ReqT, RespT> {
   private final String fullMethodName;
   private final Marshaller<ReqT> requestMarshaller;
   private final Marshaller<RespT> responseMarshaller;
-  private final Object schemaDescriptor;
+  private final @Nullable Object schemaDescriptor;
   private final boolean idempotent;
   private final boolean safe;
 
@@ -324,7 +324,7 @@ public final class MethodDescriptor<ReqT, RespT> {
    *
    * @since 1.5.0
    */
-  public Object getSchemaDescriptor() {
+  public @Nullable Object getSchemaDescriptor() {
     return schemaDescriptor;
   }
 

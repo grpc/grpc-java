@@ -279,7 +279,8 @@ public final class MetricsServiceGrpc {
     }
   }
 
-  private static class MetricsServiceFileDescriptorSupplier implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
+  private static class MetricsServiceFileDescriptorSupplier
+      implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.testing.integration.Metrics.getDescriptor();
@@ -291,10 +292,12 @@ public final class MetricsServiceGrpc {
     }
   }
 
-  private static final class MetricsServiceMethodDescriptorSupplier extends MetricsServiceFileDescriptorSupplier implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
+  private static final class MetricsServiceMethodDescriptorSupplier
+      extends MetricsServiceFileDescriptorSupplier
+        implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
     private final String methodName;
 
-    public MetricsServiceMethodDescriptorSupplier(String methodName) {
+    private MetricsServiceMethodDescriptorSupplier(String methodName) {
       this.methodName = methodName;
     }
 
