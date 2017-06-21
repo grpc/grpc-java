@@ -43,6 +43,8 @@ public class ManualFlowControlClient {
                 .build();
         GreeterGrpc.GreeterStub stub = GreeterGrpc.newStub(channel);
 
+        // When using manual flow-control and back-pressure on the client, the ClientResponseObserver handles both
+        // request and response streams.
         ClientResponseObserver<HelloRequest, HelloReply> clientResponseObserver =
                 new ClientResponseObserver<HelloRequest, HelloReply>() {
 
@@ -51,7 +53,8 @@ public class ManualFlowControlClient {
             @Override
             public void beforeStart(final ClientCallStreamObserver<HelloRequest> requestStream) {
                 this.requestStream = requestStream;
-                // Set up manual flow control for the response stream.
+                // Set up manual flow control for the response stream. It feels backwards to configure the response
+                // stream's flow control using the request stream's observer, but this is the way it is.
                 requestStream.disableAutoInboundFlowControl();
 
                 // Set up a back-pressure-aware producer for the request stream. The onReadyHandler will be invoked

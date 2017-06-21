@@ -23,6 +23,7 @@ import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.stub.CallStreamObserver;
+import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 
 import java.io.IOException;
@@ -40,24 +41,24 @@ public class ManualFlowControlServer {
         GreeterGrpc.GreeterImplBase svc = new GreeterGrpc.GreeterImplBase() {
             @Override
             public StreamObserver<HelloRequest> sayHelloStreaming(final StreamObserver<HelloReply> responseObserver) {
-                // Use a queue to buffer between received messages and sent messages.
-                // The queue is a fixed capacity so that back-pressure will be applied to the request stream when the
-                // work queue is full.
+                // Use a queue to buffer between received messages and sent messages. This simulates the inner workings
+                // of a system.
                 final Queue<String> work = new LinkedList<String>();
 
                 // Set up manual flow control for the request stream. It feels backwards to configure the request
                 // stream's flow control using the response stream's observer, but this is the way it is.
-                final CallStreamObserver<HelloReply> responseCallStreamObserver = (CallStreamObserver<HelloReply>) responseObserver;
-                responseCallStreamObserver.disableAutoInboundFlowControl();
+                final ServerCallStreamObserver<HelloReply> serverCallStreamObserver =
+                        (ServerCallStreamObserver<HelloReply>) responseObserver;
+                serverCallStreamObserver.disableAutoInboundFlowControl();
                 // Signal the request sender to send one message.
-                responseCallStreamObserver.request(1);
+                serverCallStreamObserver.request(1);
 
                 // Set up a back-pressure-aware producer for the response stream. The onReadyHandler will be invoked
                 // when the consuming side has enough buffer space to receive more messages.
                 //
                 // Note: the onReadyHandler is invoked by gRPC's internal thread pool. You can't block in this in
                 // method or deadlocks can occur.
-                responseCallStreamObserver.setOnReadyHandler(new Runnable() {
+                serverCallStreamObserver.setOnReadyHandler(new Runnable() {
                    @Override
                     public void run() {
                         // Start generating values from where we left off on a non-gRPC thread.
@@ -66,7 +67,7 @@ public class ManualFlowControlServer {
                             public void run() {
                                 // requestStream.isReady() will go false when the consuming side runs out of buffer space and
                                 // signals to slow down with back-pressure.
-                                while (responseCallStreamObserver.isReady()) {
+                                while (serverCallStreamObserver.isReady() && !serverCallStreamObserver.isCancelled()) {
                                     if (!work.isEmpty()) {
                                         // Send more messages if there are more messages to send.
                                         String name = work.remove();
@@ -102,7 +103,7 @@ public class ManualFlowControlServer {
                             System.out.println("--> " + name);
                             work.add(name);
                             // Signal the sender to send another request.
-                            responseCallStreamObserver.request(1);
+                            serverCallStreamObserver.request(1);
                         } catch (Throwable throwable) {
                             throwable.printStackTrace();
                             responseObserver.onError(Status.UNKNOWN.withCause(throwable).asException());
