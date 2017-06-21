@@ -33,201 +33,205 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public class ManualFlowControlClient {
-    public static void main(String[] args) throws InterruptedException {
-        final ExecutorService pool = Executors.newCachedThreadPool();
-        final CountDownLatch done = new CountDownLatch(1);
+  public static void main(String[] args) throws InterruptedException {
+    final ExecutorService pool = Executors.newCachedThreadPool();
+    final CountDownLatch done = new CountDownLatch(1);
 
-        // Create a channel and a stub
-        ManagedChannel channel = ManagedChannelBuilder
-                .forAddress("localhost", 50051)
-                .usePlaintext(true)
-                .build();
-        StreamingGreeterGrpc.StreamingGreeterStub stub = StreamingGreeterGrpc.newStub(channel);
+    // Create a channel and a stub
+    ManagedChannel channel = ManagedChannelBuilder
+        .forAddress("localhost", 50051)
+        .usePlaintext(true)
+        .build();
+    StreamingGreeterGrpc.StreamingGreeterStub stub = StreamingGreeterGrpc.newStub(channel);
 
-        // When using manual flow-control and back-pressure on the client, the ClientResponseObserver handles both
-        // request and response streams.
-        ClientResponseObserver<HelloRequest, HelloReply> clientResponseObserver =
-                new ClientResponseObserver<HelloRequest, HelloReply>() {
+    // When using manual flow-control and back-pressure on the client, the ClientResponseObserver handles both
+    // request and response streams.
+    ClientResponseObserver<HelloRequest, HelloReply> clientResponseObserver =
+        new ClientResponseObserver<HelloRequest, HelloReply>() {
 
-            ClientCallStreamObserver<HelloRequest> requestStream;
+          ClientCallStreamObserver<HelloRequest> requestStream;
 
-            @Override
-            public void beforeStart(final ClientCallStreamObserver<HelloRequest> requestStream) {
-                this.requestStream = requestStream;
-                // Set up manual flow control for the response stream. It feels backwards to configure the response
-                // stream's flow control using the request stream's observer, but this is the way it is.
-                requestStream.disableAutoInboundFlowControl();
+          @Override
+          public void beforeStart(final ClientCallStreamObserver<HelloRequest> requestStream) {
+            this.requestStream = requestStream;
+            // Set up manual flow control for the response stream. It feels backwards to configure the response
+            // stream's flow control using the request stream's observer, but this is the way it is.
+            requestStream.disableAutoInboundFlowControl();
 
-                // Set up a back-pressure-aware producer for the request stream. The onReadyHandler will be invoked
-                // when the consuming side has enough buffer space to receive more messages.
-                //
-                // Note: the onReadyHandler is invoked by gRPC's internal thread pool. You can't block in this in
-                // method or deadlocks can occur.
-                requestStream.setOnReadyHandler(new Runnable() {
-                    // An iterator is used so we can pause and resume iteration of the request data.
-                    Iterator<String> iterator = names().iterator();
+            // Set up a back-pressure-aware producer for the request stream. The onReadyHandler will be invoked
+            // when the consuming side has enough buffer space to receive more messages.
+            //
+            // Note: the onReadyHandler is invoked by gRPC's internal thread pool. You can't block in this in
+            // method or deadlocks can occur.
+            requestStream.setOnReadyHandler(new Runnable() {
+              // An iterator is used so we can pause and resume iteration of the request data.
+              Iterator<String> iterator = names().iterator();
 
-                    @Override
-                    public void run() {
-                        // Start generating values from where we left off on a non-gRPC thread.
-                        pool.execute(new Runnable() {
-                            @Override
-                            public void run() {
-                                // requestStream.isReady() will go false when the consuming side runs out of buffer space and
-                                // signals to slow down with back-pressure.
-                                while (requestStream.isReady()) {
-                                    if (iterator.hasNext()) {
-                                        // Simulate doing some work to generate the next value
-                                        try { Thread.sleep(100); } catch (InterruptedException e) { e.printStackTrace(); }
+              @Override
+              public void run() {
+                // Start generating values from where we left off on a non-gRPC thread.
+                pool.execute(new Runnable() {
+                  @Override
+                  public void run() {
+                    // requestStream.isReady() will go false when the consuming side runs out of buffer space and
+                    // signals to slow down with back-pressure.
+                    while (requestStream.isReady()) {
+                      if (iterator.hasNext()) {
+                        // Simulate doing some work to generate the next value
+                        try {
+                          Thread.sleep(100);
+                        } catch (InterruptedException e) {
+                          e.printStackTrace();
+                        }
 
-                                        // Send more messages if there are more messages to send.
-                                        String name = iterator.next();
-                                        System.out.println("--> " + name);
-                                        HelloRequest request = HelloRequest.newBuilder().setName(name).build();
-                                        requestStream.onNext(request);
-                                    } else {
-                                        // Signal completion if there is nothing left to send.
-                                        requestStream.onCompleted();
-                                    }
-                                }
-                            }
-                        });
+                        // Send more messages if there are more messages to send.
+                        String name = iterator.next();
+                        System.out.println("--> " + name);
+                        HelloRequest request = HelloRequest.newBuilder().setName(name).build();
+                        requestStream.onNext(request);
+                      } else {
+                        // Signal completion if there is nothing left to send.
+                        requestStream.onCompleted();
+                      }
                     }
+                  }
                 });
-            }
+              }
+            });
+          }
 
-            @Override
-            public void onNext(HelloReply value) {
-                System.out.println("<-- " + value.getMessage());
-                // Signal the sender to send one message.
-                requestStream.request(1);
-            }
+          @Override
+          public void onNext(HelloReply value) {
+            System.out.println("<-- " + value.getMessage());
+            // Signal the sender to send one message.
+            requestStream.request(1);
+          }
 
-            @Override
-            public void onError(Throwable t) {
-                t.printStackTrace();
-                done.countDown();
-            }
+          @Override
+          public void onError(Throwable t) {
+            t.printStackTrace();
+            done.countDown();
+          }
 
-            @Override
-            public void onCompleted() {
-                System.out.println("All Done");
-                done.countDown();
-            }
+          @Override
+          public void onCompleted() {
+            System.out.println("All Done");
+            done.countDown();
+          }
         };
 
-        // Note: clientResponseObserver is handling both request and response stream processing.
-        stub.sayHelloStreaming(clientResponseObserver);
+    // Note: clientResponseObserver is handling both request and response stream processing.
+    stub.sayHelloStreaming(clientResponseObserver);
 
-        done.await();
+    done.await();
 
-        channel.shutdown();
-        channel.awaitTermination(1, TimeUnit.SECONDS);
-        pool.shutdown();
-    }
+    channel.shutdown();
+    channel.awaitTermination(1, TimeUnit.SECONDS);
+    pool.shutdown();
+  }
 
-    private static List<String> names() {
-        return Arrays.asList(
-            "Sophia",
-            "Jackson",
-            "Emma",
-            "Aiden",
-            "Olivia",
-            "Lucas",
-            "Ava",
-            "Liam",
-            "Mia",
-            "Noah",
-            "Isabella",
-            "Ethan",
-            "Riley",
-            "Mason",
-            "Aria",
-            "Caden",
-            "Zoe",
-            "Oliver",
-            "Charlotte",
-            "Elijah",
-            "Lily",
-            "Grayson",
-            "Layla",
-            "Jacob",
-            "Amelia",
-            "Michael",
-            "Emily",
-            "Benjamin",
-            "Madelyn",
-            "Carter",
-            "Aubrey",
-            "James",
-            "Adalyn",
-            "Jayden",
-            "Madison",
-            "Logan",
-            "Chloe",
-            "Alexander",
-            "Harper",
-            "Caleb",
-            "Abigail",
-            "Ryan",
-            "Aaliyah",
-            "Luke",
-            "Avery",
-            "Daniel",
-            "Evelyn",
-            "Jack",
-            "Kaylee",
-            "William",
-            "Ella",
-            "Owen",
-            "Ellie",
-            "Gabriel",
-            "Scarlett",
-            "Matthew",
-            "Arianna",
-            "Connor",
-            "Hailey",
-            "Jayce",
-            "Nora",
-            "Isaac",
-            "Addison",
-            "Sebastian",
-            "Brooklyn",
-            "Henry",
-            "Hannah",
-            "Muhammad",
-            "Mila",
-            "Cameron",
-            "Leah",
-            "Wyatt",
-            "Elizabeth",
-            "Dylan",
-            "Sarah",
-            "Nathan",
-            "Eliana",
-            "Nicholas",
-            "Mackenzie",
-            "Julian",
-            "Peyton",
-            "Eli",
-            "Maria",
-            "Levi",
-            "Grace",
-            "Isaiah",
-            "Adeline",
-            "Landon",
-            "Elena",
-            "David",
-            "Anna",
-            "Christian",
-            "Victoria",
-            "Andrew",
-            "Camilla",
-            "Brayden",
-            "Lillian",
-            "John",
-            "Natalie",
-            "Lincoln"
-        );
-    }
+  private static List<String> names() {
+    return Arrays.asList(
+        "Sophia",
+        "Jackson",
+        "Emma",
+        "Aiden",
+        "Olivia",
+        "Lucas",
+        "Ava",
+        "Liam",
+        "Mia",
+        "Noah",
+        "Isabella",
+        "Ethan",
+        "Riley",
+        "Mason",
+        "Aria",
+        "Caden",
+        "Zoe",
+        "Oliver",
+        "Charlotte",
+        "Elijah",
+        "Lily",
+        "Grayson",
+        "Layla",
+        "Jacob",
+        "Amelia",
+        "Michael",
+        "Emily",
+        "Benjamin",
+        "Madelyn",
+        "Carter",
+        "Aubrey",
+        "James",
+        "Adalyn",
+        "Jayden",
+        "Madison",
+        "Logan",
+        "Chloe",
+        "Alexander",
+        "Harper",
+        "Caleb",
+        "Abigail",
+        "Ryan",
+        "Aaliyah",
+        "Luke",
+        "Avery",
+        "Daniel",
+        "Evelyn",
+        "Jack",
+        "Kaylee",
+        "William",
+        "Ella",
+        "Owen",
+        "Ellie",
+        "Gabriel",
+        "Scarlett",
+        "Matthew",
+        "Arianna",
+        "Connor",
+        "Hailey",
+        "Jayce",
+        "Nora",
+        "Isaac",
+        "Addison",
+        "Sebastian",
+        "Brooklyn",
+        "Henry",
+        "Hannah",
+        "Muhammad",
+        "Mila",
+        "Cameron",
+        "Leah",
+        "Wyatt",
+        "Elizabeth",
+        "Dylan",
+        "Sarah",
+        "Nathan",
+        "Eliana",
+        "Nicholas",
+        "Mackenzie",
+        "Julian",
+        "Peyton",
+        "Eli",
+        "Maria",
+        "Levi",
+        "Grace",
+        "Isaiah",
+        "Adeline",
+        "Landon",
+        "Elena",
+        "David",
+        "Anna",
+        "Christian",
+        "Victoria",
+        "Andrew",
+        "Camilla",
+        "Brayden",
+        "Lillian",
+        "John",
+        "Natalie",
+        "Lincoln"
+    );
+  }
 }

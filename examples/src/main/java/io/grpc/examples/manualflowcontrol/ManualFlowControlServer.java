@@ -32,115 +32,119 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class ManualFlowControlServer {
-    public static void main(String[] args) throws InterruptedException, IOException {
-        final ExecutorService pool = Executors.newCachedThreadPool();
-        final String COMPLETED = "COMPLETED";
+  public static void main(String[] args) throws InterruptedException, IOException {
+    final ExecutorService pool = Executors.newCachedThreadPool();
+    final String COMPLETED = "COMPLETED";
 
-        // Service class implementation
-        StreamingGreeterGrpc.StreamingGreeterImplBase svc = new StreamingGreeterGrpc.StreamingGreeterImplBase() {
-            @Override
-            public StreamObserver<HelloRequest> sayHelloStreaming(final StreamObserver<HelloReply> responseObserver) {
-                // Use a queue to buffer between received messages and sent messages. This simulates the inner workings
-                // of a system.
-                final Queue<String> work = new LinkedList<String>();
+    // Service class implementation
+    StreamingGreeterGrpc.StreamingGreeterImplBase svc = new StreamingGreeterGrpc.StreamingGreeterImplBase() {
+      @Override
+      public StreamObserver<HelloRequest> sayHelloStreaming(final StreamObserver<HelloReply> responseObserver) {
+        // Use a queue to buffer between received messages and sent messages. This simulates the inner workings
+        // of a system.
+        final Queue<String> work = new LinkedList<String>();
 
-                // Set up manual flow control for the request stream. It feels backwards to configure the request
-                // stream's flow control using the response stream's observer, but this is the way it is.
-                final ServerCallStreamObserver<HelloReply> serverCallStreamObserver =
-                        (ServerCallStreamObserver<HelloReply>) responseObserver;
-                serverCallStreamObserver.disableAutoInboundFlowControl();
-                // Signal the request sender to send one message.
-                serverCallStreamObserver.request(1);
+        // Set up manual flow control for the request stream. It feels backwards to configure the request
+        // stream's flow control using the response stream's observer, but this is the way it is.
+        final ServerCallStreamObserver<HelloReply> serverCallStreamObserver =
+            (ServerCallStreamObserver<HelloReply>) responseObserver;
+        serverCallStreamObserver.disableAutoInboundFlowControl();
+        // Signal the request sender to send one message.
+        serverCallStreamObserver.request(1);
 
-                // Set up a back-pressure-aware producer for the response stream. The onReadyHandler will be invoked
-                // when the consuming side has enough buffer space to receive more messages.
-                //
-                // Note: the onReadyHandler is invoked by gRPC's internal thread pool. You can't block in this in
-                // method or deadlocks can occur.
-                serverCallStreamObserver.setOnReadyHandler(new Runnable() {
-                   @Override
-                    public void run() {
-                        // Start generating values from where we left off on a non-gRPC thread.
-                        pool.execute(new Runnable() {
-                            @Override
-                            public void run() {
-                                // requestStream.isReady() will go false when the consuming side runs out of buffer space and
-                                // signals to slow down with back-pressure.
-                                while (serverCallStreamObserver.isReady() && !serverCallStreamObserver.isCancelled()) {
-                                    if (!work.isEmpty()) {
-                                        // Send more messages if there are more messages to send.
-                                        String name = work.remove();
-                                        if (name != COMPLETED) {
-                                            // Simulate doing some work to generate the next value
-                                            try { Thread.sleep(200); } catch (InterruptedException e) { e.printStackTrace(); }
+        // Set up a back-pressure-aware producer for the response stream. The onReadyHandler will be invoked
+        // when the consuming side has enough buffer space to receive more messages.
+        //
+        // Note: the onReadyHandler is invoked by gRPC's internal thread pool. You can't block in this in
+        // method or deadlocks can occur.
+        serverCallStreamObserver.setOnReadyHandler(new Runnable() {
+          @Override
+          public void run() {
+            // Start generating values from where we left off on a non-gRPC thread.
+            pool.execute(new Runnable() {
+              @Override
+              public void run() {
+                // requestStream.isReady() will go false when the consuming side runs out of buffer space and
+                // signals to slow down with back-pressure.
+                while (serverCallStreamObserver.isReady() && !serverCallStreamObserver.isCancelled()) {
+                  if (!work.isEmpty()) {
+                    // Send more messages if there are more messages to send.
+                    String name = work.remove();
+                    if (name != COMPLETED) {
+                      // Simulate doing some work to generate the next value
+                      try {
+                        Thread.sleep(200);
+                      } catch (InterruptedException e) {
+                        e.printStackTrace();
+                      }
 
-                                            String message = "Hello " + name;
-                                            System.out.println("<-- " + message);
-                                            HelloReply reply = HelloReply.newBuilder().setMessage(message).build();
+                      String message = "Hello " + name;
+                      System.out.println("<-- " + message);
+                      HelloReply reply = HelloReply.newBuilder().setMessage(message).build();
 
-                                            // Send a response.
-                                            responseObserver.onNext(reply);
-                                        } else {
-                                            System.out.println("Done.");
-                                            responseObserver.onCompleted();
-                                        }
-                                    }
-                                }
-                            }
-                        });
+                      // Send a response.
+                      responseObserver.onNext(reply);
+                    } else {
+                      System.out.println("Done.");
+                      responseObserver.onCompleted();
                     }
-                });
-
-                // Give gRPC a StreamObserver it can write incoming requests into.
-                return new StreamObserver<HelloRequest>() {
-                    @Override
-                    public void onNext(HelloRequest request) {
-                        // Process the request and send a response or an error.
-                        try {
-                            // Accept and enqueue the request.
-                            String name = request.getName();
-                            System.out.println("--> " + name);
-                            work.add(name);
-                            // Signal the sender to send another request.
-                            serverCallStreamObserver.request(1);
-                        } catch (Throwable throwable) {
-                            throwable.printStackTrace();
-                            responseObserver.onError(Status.UNKNOWN.withCause(throwable).asException());
-                        }
-                    }
-
-                    @Override
-                    public void onError(Throwable t) {
-                        // End the response stream if the client presents an error.
-                        t.printStackTrace();
-                        responseObserver.onCompleted();
-                    }
-
-                    @Override
-                    public void onCompleted() {
-                        // Signal the end of work when the client ends the request stream.
-                        work.add(COMPLETED);
-                    }
-                };
-            }
-        };
-
-        final Server server = ServerBuilder
-                .forPort(50051)
-                .addService(svc)
-                .build()
-                .start();
-
-        System.out.println("Listening on " + server.getPort());
-
-        Runtime.getRuntime().addShutdownHook(new Thread() {
-            @Override
-            public void run() {
-                System.out.println("Shutting down");
-                server.shutdown();
-            }
+                  }
+                }
+              }
+            });
+          }
         });
-        server.awaitTermination();
-        pool.shutdown();
-    }
+
+        // Give gRPC a StreamObserver it can write incoming requests into.
+        return new StreamObserver<HelloRequest>() {
+          @Override
+          public void onNext(HelloRequest request) {
+            // Process the request and send a response or an error.
+            try {
+              // Accept and enqueue the request.
+              String name = request.getName();
+              System.out.println("--> " + name);
+              work.add(name);
+              // Signal the sender to send another request.
+              serverCallStreamObserver.request(1);
+            } catch (Throwable throwable) {
+              throwable.printStackTrace();
+              responseObserver.onError(Status.UNKNOWN.withCause(throwable).asException());
+            }
+          }
+
+          @Override
+          public void onError(Throwable t) {
+            // End the response stream if the client presents an error.
+            t.printStackTrace();
+            responseObserver.onCompleted();
+          }
+
+          @Override
+          public void onCompleted() {
+            // Signal the end of work when the client ends the request stream.
+            work.add(COMPLETED);
+          }
+        };
+      }
+    };
+
+    final Server server = ServerBuilder
+        .forPort(50051)
+        .addService(svc)
+        .build()
+        .start();
+
+    System.out.println("Listening on " + server.getPort());
+
+    Runtime.getRuntime().addShutdownHook(new Thread() {
+      @Override
+      public void run() {
+        System.out.println("Shutting down");
+        server.shutdown();
+      }
+    });
+    server.awaitTermination();
+    pool.shutdown();
+  }
 }
