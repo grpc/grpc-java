@@ -329,8 +329,8 @@ public final class ClientCalls {
     }
 
     @Override
-    public void cancel() {
-      call.cancel("Call cancelled by request.", new StatusException(Status.CANCELLED));
+    public void cancel(@Nullable String message, @Nullable Throwable cause) {
+      call.cancel(message, cause);
     }
   }
 
