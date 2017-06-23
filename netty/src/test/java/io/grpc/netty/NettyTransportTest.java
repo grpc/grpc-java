@@ -22,15 +22,17 @@ import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.testing.AbstractTransportTest;
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import org.junit.After;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
 
 /** Unit tests for Netty transport. */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class NettyTransportTest extends AbstractTransportTest {
   // Avoid LocalChannel for testing because LocalChannel can fail with
   // io.netty.channel.ChannelException instead of java.net.ConnectException which breaks
@@ -41,6 +43,21 @@ public class NettyTransportTest extends AbstractTransportTest {
       .flowControlWindow(65 * 1024)
       .negotiationType(NegotiationType.PLAINTEXT)
       .buildTransportFactory();
+
+  @Parameterized.Parameters
+  public static Collection<Object[]> data() {
+    int iters = 500;
+    List<Object[]> ret = new ArrayList<Object[]>(iters);
+    for (int i = 0; i < iters; i++) {
+      ret.add(new Object[] { i });
+    }
+    return ret;
+  }
+
+  private final int iter;
+  public NettyTransportTest(int iter) {
+    this.iter = iter;
+  }
 
   @After
   public void releaseClientFactory() {
@@ -63,6 +80,12 @@ public class NettyTransportTest extends AbstractTransportTest {
         .forPort(port)
         .flowControlWindow(65 * 1024)
         .buildTransportServer(streamTracerFactories);
+  }
+
+  @Test
+  public void serverNotListening() throws Exception {
+    System.out.println("iter=" + iter);
+    super.serverNotListening();
   }
 
   @Override
