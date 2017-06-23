@@ -1205,10 +1205,10 @@ public class ManagedChannelImplTest {
 
     Runnable onStateChanged = mock(Runnable.class);
     channel.notifyWhenStateChanged(ConnectivityState.IDLE, onStateChanged);
-    helper.updatePicker(mockPicker);
-    channel.channelExecutor.drain();
     executor.runDueTasks();
-    channel.channelExecutor.drain();
+    verify(onStateChanged, never()).run();
+
+    helper.updatePicker(mockPicker);
     executor.runDueTasks();
 
     verify(onStateChanged).run();
@@ -1230,14 +1230,12 @@ public class ManagedChannelImplTest {
     assertEquals(ConnectivityState.IDLE, channel.getState(false));
 
     channel.notifyWhenStateChanged(ConnectivityState.IDLE, onStateChanged);
-    channel.channelExecutor.drain();
     executor.runDueTasks();
     assertFalse(stateChanged.get());
 
     // state change from IDLE to CONNECTING
     helper.updateBalancingState(ConnectivityState.CONNECTING, mockPicker);
     // onStateChanged callback should run
-    channel.channelExecutor.drain();
     executor.runDueTasks();
     assertTrue(stateChanged.get());
 
@@ -1245,7 +1243,6 @@ public class ManagedChannelImplTest {
     stateChanged.set(false);
     channel.notifyWhenStateChanged(ConnectivityState.IDLE, onStateChanged);
     // onStateChanged callback should run immediately
-    channel.channelExecutor.drain();
     executor.runDueTasks();
     assertTrue(stateChanged.get());
   }

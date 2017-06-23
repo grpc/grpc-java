@@ -63,11 +63,11 @@ final class ConnectivityStateManager {
    */
   void gotoState(@Nonnull ConnectivityState newState) {
     checkNotNull(newState, "newState");
+    checkState(state != null, "ConnectivityStateManager is already disabled");
     gotoNullableState(newState);
   }
 
   private void gotoNullableState(@Nullable ConnectivityState newState) {
-    checkState(state != null, "ConnectivityStateManager is already disabled");
     if (state != newState) {
       checkState(
           state != ConnectivityState.SHUTDOWN,
@@ -103,9 +103,7 @@ final class ConnectivityStateManager {
    * supported.
    */
   void disable() {
-    if (state != null) {
-      gotoNullableState(null);
-    }
+    gotoNullableState(null);
   }
 
   private static final class Listener {
