@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.IDLE;
+import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -470,6 +471,12 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     if (!shutdown.compareAndSet(false, true)) {
       return this;
     }
+    channelExecutor.executeLater(new Runnable() {
+      @Override
+      public void run() {
+        channelStateManager.gotoState(SHUTDOWN);
+      }
+    });
     delayedTransport.shutdown();
     channelExecutor.executeLater(new Runnable() {
         @Override
@@ -678,6 +685,10 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
         final ConnectivityState newState, final SubchannelPicker newPicker) {
       checkNotNull(newState, "newState");
       checkNotNull(newPicker, "newPicker");
+      if (newState == SHUTDOWN) {
+        // It's unclear if it is appropriate to report SHUTDOWN state from lb. Ignore it for now.
+        return;
+      }
 
       runSerialized(
           new Runnable() {

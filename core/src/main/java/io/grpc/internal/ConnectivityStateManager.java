@@ -68,11 +68,7 @@ final class ConnectivityStateManager {
   }
 
   private void gotoNullableState(@Nullable ConnectivityState newState) {
-    if (state != newState) {
-      checkState(
-          state != ConnectivityState.SHUTDOWN,
-          "Cannot transition out of SHUTDOWN to " + newState);
-
+    if (state != newState && state != ConnectivityState.SHUTDOWN) {
       state = newState;
       if (listeners.isEmpty()) {
         return;

@@ -1247,6 +1247,35 @@ public class ManagedChannelImplTest {
     assertTrue(stateChanged.get());
   }
 
+  @Test
+  public void channelStateWhenChannelShutdown() {
+    final AtomicBoolean stateChanged = new AtomicBoolean();
+    Runnable onStateChanged = new Runnable() {
+      @Override
+      public void run() {
+        stateChanged.set(true);
+      }
+    };
+
+    createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
+    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+    channel.notifyWhenStateChanged(ConnectivityState.IDLE, onStateChanged);
+    assertFalse(stateChanged.get());
+
+    channel.shutdown();
+    assertEquals(ConnectivityState.SHUTDOWN, channel.getState(false));
+    executor.runDueTasks();
+    assertTrue(stateChanged.get());
+
+    stateChanged.set(false);
+    channel.notifyWhenStateChanged(ConnectivityState.SHUTDOWN, onStateChanged);
+    helper.updateBalancingState(ConnectivityState.CONNECTING, mockPicker);
+
+    assertEquals(ConnectivityState.SHUTDOWN, channel.getState(false));
+    executor.runDueTasks();
+    assertFalse(stateChanged.get());
+  }
+
   private static class FakeBackoffPolicyProvider implements BackoffPolicy.Provider {
     @Override
     public BackoffPolicy get() {
