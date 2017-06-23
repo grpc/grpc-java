@@ -267,10 +267,8 @@ public abstract class AbstractTransportTest {
     server = null;
 
     InOrder inOrder = inOrder(mockClientTransportListener);
-    Runnable startRunnable = client.start(mockClientTransportListener);
-    assertNull(startRunnable);
-    // longer timeout for flakey test
-    verify(mockClientTransportListener, timeout(10 * TIMEOUT_MS)).transportTerminated();
+    runIfNotNull(client.start(mockClientTransportListener));
+    verify(mockClientTransportListener, timeout(TIMEOUT_MS * 10)).transportTerminated();
     inOrder.verify(mockClientTransportListener).transportShutdown(statusCaptor.capture());
     assertCodeEquals(Status.UNAVAILABLE, statusCaptor.getValue());
     inOrder.verify(mockClientTransportListener).transportTerminated();
