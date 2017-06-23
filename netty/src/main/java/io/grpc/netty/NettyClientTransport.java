@@ -46,6 +46,8 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http2.StreamBufferingEncoder.Http2ChannelClosedException;
 import io.netty.util.AsciiString;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.util.Map;
@@ -200,7 +202,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     channel = regFuture.channel();
     if (channel == null) {
       // Initialization has failed badly. All new streams should be made to fail.
-      Throwable t = regFuture.cause();
+      final Throwable t = regFuture.cause();
       if (t == null) {
         t = new IllegalStateException("Channel is null, but future doesn't have a cause");
       }
@@ -209,7 +211,13 @@ class NettyClientTransport implements ConnectionClientTransport {
       return new Runnable() {
         @Override
         public void run() {
-          System.out.println("_________failed at creating a channel in the first place");
+          Throwable cause = t.getCause() == null ? t : t.getCause();
+          StringWriter sw = new StringWriter();
+          PrintWriter pw = new PrintWriter(sw);
+          cause.printStackTrace(pw);
+          System.out.println(
+              "_________failed at creating a channel in the first place, reason: "
+              + sw);
           // NOTICE: we not are calling lifecycleManager from the event loop. But there isn't really
           // an event loop in this case, so nothing should be accessing the lifecycleManager. We
           // could use GlobalEventExecutor (which is what regFuture would use for notifying
