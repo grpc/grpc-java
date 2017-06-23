@@ -68,7 +68,9 @@ final class ClientTransportLifecycleManager {
     transportTerminated = true;
     System.out.println("_____transport terminated");
     notifyShutdown(s);
+    System.out.println("about to call transportTerminated for listener: " + listener);
     listener.transportTerminated();
+    System.out.println("done callin transportTerminated for listener: " + listener);
   }
 
   public Status getShutdownStatus() {

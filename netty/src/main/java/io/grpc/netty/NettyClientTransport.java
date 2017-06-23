@@ -200,6 +200,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     b.handler(negotiationHandler);
     ChannelFuture regFuture = b.register();
     channel = regFuture.channel();
+    System.out.println("______ channel: " + channel);
     if (channel == null) {
       // Initialization has failed badly. All new streams should be made to fail.
       Throwable t = regFuture.cause();
@@ -253,7 +254,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     channel.closeFuture().addListener(new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
-        System.out.println("________client close future completed");
+        System.out.println("________client close future completed for channel: " + channel);
         // Typically we should have noticed shutdown before this point.
         lifecycleManager.notifyTerminated(
             Status.INTERNAL.withDescription("3: Connection closed with unknown cause"));
