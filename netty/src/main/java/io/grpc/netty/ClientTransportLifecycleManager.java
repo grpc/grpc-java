@@ -50,6 +50,7 @@ final class ClientTransportLifecycleManager {
     transportShutdown = true;
     shutdownStatus = s;
     shutdownThrowable = s.asException();
+    System.out.println("_____shutdown description:" + s.getDescription());
     listener.transportShutdown(s);
   }
 
