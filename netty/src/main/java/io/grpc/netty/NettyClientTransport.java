@@ -209,6 +209,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       return new Runnable() {
         @Override
         public void run() {
+          System.out.println("_________failed at creating a channel in the first place");
           // NOTICE: we not are calling lifecycleManager from the event loop. But there isn't really
           // an event loop in this case, so nothing should be accessing the lifecycleManager. We
           // could use GlobalEventExecutor (which is what regFuture would use for notifying
