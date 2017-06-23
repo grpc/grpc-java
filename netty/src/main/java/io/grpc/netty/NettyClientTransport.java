@@ -202,16 +202,17 @@ class NettyClientTransport implements ConnectionClientTransport {
     channel = regFuture.channel();
     if (channel == null) {
       // Initialization has failed badly. All new streams should be made to fail.
-      final Throwable t = regFuture.cause();
+      Throwable t = regFuture.cause();
       if (t == null) {
         t = new IllegalStateException("Channel is null, but future doesn't have a cause");
       }
+      final Throwable t1 = t;
       statusExplainingWhyTheChannelIsNull = Utils.statusFromThrowable(t);
       // Use a Runnable since lifecycleManager calls transportListener
       return new Runnable() {
         @Override
         public void run() {
-          Throwable cause = t.getCause() == null ? t : t.getCause();
+          Throwable cause = t1.getCause() == null ? t1 : t1.getCause();
           StringWriter sw = new StringWriter();
           PrintWriter pw = new PrintWriter(sw);
           cause.printStackTrace(pw);
