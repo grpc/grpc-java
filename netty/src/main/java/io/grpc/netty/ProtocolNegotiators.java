@@ -455,6 +455,7 @@ public final class ProtocolNegotiators {
     @Override
     public void connect(final ChannelHandlerContext ctx, SocketAddress remoteAddress,
         SocketAddress localAddress, ChannelPromise promise) throws Exception {
+      super.connect(ctx, remoteAddress, localAddress, promise);
       promise.addListener(new ChannelFutureListener() {
         @Override
         public void operationComplete(ChannelFuture future) throws Exception {
@@ -463,7 +464,6 @@ public final class ProtocolNegotiators {
           }
         }
       });
-      super.connect(ctx, remoteAddress, localAddress, promise);
     }
 
     /**
