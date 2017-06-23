@@ -267,7 +267,7 @@ public abstract class AbstractTransportTest {
     server = null;
 
     InOrder inOrder = inOrder(mockClientTransportListener);
-    System.out.println("name of listener is: " + mockClientStreamListener);
+    System.out.println("name of listener is: " + mockClientTransportListener);
     runIfNotNull(client.start(mockClientTransportListener));
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportTerminated();
     inOrder.verify(mockClientTransportListener).transportShutdown(statusCaptor.capture());

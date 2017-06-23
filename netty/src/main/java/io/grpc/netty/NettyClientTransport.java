@@ -200,7 +200,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     b.handler(negotiationHandler);
     ChannelFuture regFuture = b.register();
     channel = regFuture.channel();
-    System.out.println("______ channel: " + channel);
+    System.out.println("______channel: " + channel);
     if (channel == null) {
       // Initialization has failed badly. All new streams should be made to fail.
       Throwable t = regFuture.cause();
