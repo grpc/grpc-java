@@ -224,7 +224,8 @@ class NettyClientTransport implements ConnectionClientTransport {
           // could use GlobalEventExecutor (which is what regFuture would use for notifying
           // listeners in this case), but avoiding on-demand thread creation in an error case seems
           // a good idea and is probably clearer threading.
-          lifecycleManager.notifyTerminated(statusExplainingWhyTheChannelIsNull);
+          lifecycleManager.notifyTerminated(
+              statusExplainingWhyTheChannelIsNull.withDescription("1"));
         }
       };
     }
@@ -241,7 +242,8 @@ class NettyClientTransport implements ConnectionClientTransport {
           System.out.println("________NOOP fence operation failed");
           // Need to notify of this failure, because NettyClientHandler may not have been added to
           // the pipeline before the error occurred.
-          lifecycleManager.notifyTerminated(Utils.statusFromThrowable(future.cause()));
+          lifecycleManager.notifyTerminated(
+              Utils.statusFromThrowable(future.cause()).withDescription("2"));
         } else {
           System.out.println("________NOOP fence operation succeeded. How is this possible?");
         }
@@ -254,7 +256,7 @@ class NettyClientTransport implements ConnectionClientTransport {
         System.out.println("________client close future completed");
         // Typically we should have noticed shutdown before this point.
         lifecycleManager.notifyTerminated(
-            Status.INTERNAL.withDescription("Connection closed with unknown cause"));
+            Status.INTERNAL.withDescription("3: Connection closed with unknown cause"));
       }
     });
 
