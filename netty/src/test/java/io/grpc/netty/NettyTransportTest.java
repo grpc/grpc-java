@@ -55,6 +55,7 @@ public class NettyTransportTest extends AbstractTransportTest {
   }
 
   private final int iter;
+
   public NettyTransportTest(int iter) {
     this.iter = iter;
   }
