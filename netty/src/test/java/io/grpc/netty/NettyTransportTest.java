@@ -89,8 +89,9 @@ public class NettyTransportTest extends AbstractTransportTest {
   @Test
   @Override
   public void serverNotListening() throws Exception {
-    System.out.println("iter=" + iter);
+    System.out.println(String.format("iter=%s begin", iter));
     super.serverNotListening();
+    System.out.println(String.format("iter=%s end", iter));
   }
 
   @Override
