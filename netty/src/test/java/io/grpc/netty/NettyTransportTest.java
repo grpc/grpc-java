@@ -44,9 +44,12 @@ public class NettyTransportTest extends AbstractTransportTest {
       .negotiationType(NegotiationType.PLAINTEXT)
       .buildTransportFactory();
 
+  /**
+   * Required to make checkstyle be quiet.
+   */
   @Parameterized.Parameters
   public static Collection<Object[]> data() {
-    int iters = 500;
+    int iters = 100;
     List<Object[]> ret = new ArrayList<Object[]>(iters);
     for (int i = 0; i < iters; i++) {
       ret.add(new Object[] { i });
