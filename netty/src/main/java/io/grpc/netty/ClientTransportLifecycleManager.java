@@ -65,6 +65,7 @@ final class ClientTransportLifecycleManager {
     if (transportTerminated) {
       return;
     }
+    System.out.println("_____transport terminated");
     transportTerminated = true;
     notifyShutdown(s);
     listener.transportTerminated();

@@ -228,9 +228,12 @@ class NettyClientTransport implements ConnectionClientTransport {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
         if (!future.isSuccess()) {
+          System.out.println("________NOOP fence operation failed");
           // Need to notify of this failure, because NettyClientHandler may not have been added to
           // the pipeline before the error occurred.
           lifecycleManager.notifyTerminated(Utils.statusFromThrowable(future.cause()));
+        } else {
+          System.out.println("________NOOP fence operation succeeded. How is this possible?");
         }
       }
     });
@@ -238,6 +241,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     channel.closeFuture().addListener(new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
+        System.out.println("________client close future completed");
         // Typically we should have noticed shutdown before this point.
         lifecycleManager.notifyTerminated(
             Status.INTERNAL.withDescription("Connection closed with unknown cause"));
