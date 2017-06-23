@@ -270,7 +270,7 @@ public abstract class AbstractTransportTest {
     runIfNotNull(client.start(mockClientTransportListener));
     verify(mockClientTransportListener, timeout(TIMEOUT_MS * 10)).transportTerminated();
     inOrder.verify(mockClientTransportListener).transportShutdown(statusCaptor.capture());
-    System.out.println("status description: " + statusCaptor.getValue(.getDescription());
+    System.out.println("status description: " + statusCaptor.getValue().getDescription());
     assertCodeEquals(Status.UNAVAILABLE, statusCaptor.getValue());
     inOrder.verify(mockClientTransportListener).transportTerminated();
     verify(mockClientTransportListener, never()).transportReady();
