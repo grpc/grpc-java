@@ -49,7 +49,7 @@ public class NettyTransportTest extends AbstractTransportTest {
    */
   @Parameterized.Parameters
   public static Collection<Object[]> data() {
-    int iters = 100;
+    int iters = 1000;
     List<Object[]> ret = new ArrayList<Object[]>(iters);
     for (int i = 0; i < iters; i++) {
       ret.add(new Object[] { i });
