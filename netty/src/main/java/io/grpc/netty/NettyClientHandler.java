@@ -310,6 +310,12 @@ class NettyClientHandler extends AbstractNettyHandler {
     super.close(ctx, promise);
   }
 
+  @Override
+  public void channelActive(ChannelHandlerContext ctx) throws Exception {
+    System.out.println("channel active on client, should never happen for serverNotListening");
+    super.channelActive(ctx);
+  }
+
   /**
    * Handler for the Channel shutting down.
    */

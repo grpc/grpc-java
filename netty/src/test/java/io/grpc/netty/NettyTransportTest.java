@@ -83,6 +83,7 @@ public class NettyTransportTest extends AbstractTransportTest {
   }
 
   @Test
+  @Override
   public void serverNotListening() throws Exception {
     System.out.println("iter=" + iter);
     super.serverNotListening();
