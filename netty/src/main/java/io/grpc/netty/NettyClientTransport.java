@@ -51,6 +51,7 @@ import java.io.StringWriter;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
@@ -233,11 +234,10 @@ class NettyClientTransport implements ConnectionClientTransport {
     // Start the write queue as soon as the channel is constructed
     handler.startWriteQueue(channel);
     // Start the connection operation to the server.
-    channel.connect(address);
     // This write will have no effect, yet it will only complete once the negotiationHandler
     // flushes any pending writes.
-    final ChannelFuture fencePromise = channel.write(NettyClientHandler.NOOP_MESSAGE);
-    fencePromise.addListener(new ChannelFutureListener() {
+    final CountDownLatch latch = new CountDownLatch(1);
+    channel.connect(address).addListener(new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
         if (!future.isSuccess()) {
@@ -249,8 +249,10 @@ class NettyClientTransport implements ConnectionClientTransport {
         } else {
           System.out.println("________NOOP fence operation succeeded. How is this possible?");
         }
+        latch.countDown();
       }
     });
+
     // Handle transport shutdown when the channel is closed.
     channel.closeFuture().addListener(new ChannelFutureListener() {
       @Override
@@ -270,7 +272,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       @Override
       public void run() {
         try {
-          fencePromise.sync();
+          latch.await();
         } catch (InterruptedException e) {
           // noop here. There is already a listener in the promise that handles exceptions.
         }
