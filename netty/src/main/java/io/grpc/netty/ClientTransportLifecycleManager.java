@@ -50,8 +50,7 @@ final class ClientTransportLifecycleManager {
     transportShutdown = true;
     shutdownStatus = s;
     shutdownThrowable = s.asException();
-    System.out.println("_____shutdown description:" + s.getDescription() + " for listener: "
-        + listener);
+    System.out.println("_____shutdown description:" + s.getDescription());
     listener.transportShutdown(s);
   }
 
@@ -68,7 +67,7 @@ final class ClientTransportLifecycleManager {
       return;
     }
     transportTerminated = true;
-    System.out.println("_____transport terminated for transport with listener: " + listener);
+    System.out.println("_____transport terminated");
     notifyShutdown(s);
     System.out.println("about to call transportTerminated for listener: " + listener);
     listener.transportTerminated();
