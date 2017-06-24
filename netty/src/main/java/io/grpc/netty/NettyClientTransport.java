@@ -234,13 +234,10 @@ class NettyClientTransport implements ConnectionClientTransport {
     // Start the write queue as soon as the channel is constructed
     handler.startWriteQueue(channel);
     // Start the connection operation to the server.
-    channel.connect(address);
-
-
     // This write will have no effect, yet it will only complete once the negotiationHandler
     // flushes any pending writes.
     final CountDownLatch latch = new CountDownLatch(1);
-    channel.write(NettyClientHandler.NOOP_MESSAGE).addListener(new ChannelFutureListener() {
+    channel.connect(address).addListener(new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
         if (!future.isSuccess()) {
