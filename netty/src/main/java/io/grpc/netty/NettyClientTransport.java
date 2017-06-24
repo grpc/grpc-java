@@ -236,7 +236,9 @@ class NettyClientTransport implements ConnectionClientTransport {
     channel.connect(address);
     // This write will have no effect, yet it will only complete once the negotiationHandler
     // flushes any pending writes.
-    channel.write(NettyClientHandler.NOOP_MESSAGE).addListener(new ChannelFutureListener() {
+    final ChannelFuture fenceFuture = channel.write(NettyClientHandler.NOOP_MESSAGE);
+
+    fenceFuture.addListener(new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
         if (!future.isSuccess()) {
@@ -265,7 +267,20 @@ class NettyClientTransport implements ConnectionClientTransport {
       keepAliveManager.onTransportStarted();
     }
 
-    return null;
+    return new Runnable() {
+      @Override
+      public void run() {
+        try {
+          fenceFuture.sync();
+        } catch (InterruptedException e) {
+          throw new RuntimeException("interrupted while waiting for noop msg", e);
+        } catch (Exception e) {
+          // Noop msg failed for some reason
+          // Swallow the exception here, because the listener will do the error handling.
+          // The goal of this runnable is purely to wait for the fence operation to finish.
+        }
+      }
+    };
   }
 
   @Override
