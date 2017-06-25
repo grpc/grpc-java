@@ -20,6 +20,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
+import com.google.common.primitives.Longs;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
@@ -78,6 +80,8 @@ final class DnsNameResolver extends NameResolver {
   @GuardedBy("this")
   private ScheduledFuture<?> resolutionTask;
   @GuardedBy("this")
+  private ScheduledFuture<?> refreshTask;
+  @GuardedBy("this")
   private boolean resolving;
   @GuardedBy("this")
   private Listener listener;
@@ -120,6 +124,13 @@ final class DnsNameResolver extends NameResolver {
     executor = SharedResourceHolder.get(executorResource);
     this.listener = Preconditions.checkNotNull(listener, "listener");
     resolve();
+
+    Long addressTtl = Longs.tryParse(Strings.nullToEmpty(
+          java.security.Security.getProperty("networkaddress.cache.ttl")));
+    if (addressTtl != null && addressTtl > 0L) {
+      refreshTask = timerService.scheduleAtFixedRate(refreshRunnable, addressTtl,
+          addressTtl, TimeUnit.SECONDS);
+    }
   }
 
   @Override
@@ -193,6 +204,13 @@ final class DnsNameResolver extends NameResolver {
       }
     };
 
+  private final Runnable refreshRunnable = new Runnable() {
+      @Override
+      public void run() {
+        refresh();
+      }
+  };
+
   @GuardedBy("this")
   private void resolve() {
     if (resolving || shutdown) {
@@ -209,6 +227,9 @@ final class DnsNameResolver extends NameResolver {
     shutdown = true;
     if (resolutionTask != null) {
       resolutionTask.cancel(false);
+    }
+    if (refreshTask != null) {
+      refreshTask.cancel(false);
     }
     if (timerService != null) {
       timerService = SharedResourceHolder.release(timerServiceResource, timerService);
