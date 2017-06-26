@@ -46,6 +46,8 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http2.StreamBufferingEncoder.Http2ChannelClosedException;
 import io.netty.util.AsciiString;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.util.Map;
@@ -198,23 +200,33 @@ class NettyClientTransport implements ConnectionClientTransport {
     b.handler(negotiationHandler);
     ChannelFuture regFuture = b.register();
     channel = regFuture.channel();
+    System.out.println("______channel: " + channel);
     if (channel == null) {
       // Initialization has failed badly. All new streams should be made to fail.
       Throwable t = regFuture.cause();
       if (t == null) {
         t = new IllegalStateException("Channel is null, but future doesn't have a cause");
       }
+      final Throwable t1 = t;
       statusExplainingWhyTheChannelIsNull = Utils.statusFromThrowable(t);
       // Use a Runnable since lifecycleManager calls transportListener
       return new Runnable() {
         @Override
         public void run() {
+          Throwable cause = t1.getCause() == null ? t1 : t1.getCause();
+          StringWriter sw = new StringWriter();
+          PrintWriter pw = new PrintWriter(sw);
+          cause.printStackTrace(pw);
+          System.out.println(
+              "_________failed at creating a channel in the first place, reason: "
+              + sw);
           // NOTICE: we not are calling lifecycleManager from the event loop. But there isn't really
           // an event loop in this case, so nothing should be accessing the lifecycleManager. We
           // could use GlobalEventExecutor (which is what regFuture would use for notifying
           // listeners in this case), but avoiding on-demand thread creation in an error case seems
           // a good idea and is probably clearer threading.
-          lifecycleManager.notifyTerminated(statusExplainingWhyTheChannelIsNull);
+          lifecycleManager.notifyTerminated(
+              statusExplainingWhyTheChannelIsNull.withDescription("1"));
         }
       };
     }
@@ -224,23 +236,31 @@ class NettyClientTransport implements ConnectionClientTransport {
     channel.connect(address);
     // This write will have no effect, yet it will only complete once the negotiationHandler
     // flushes any pending writes.
-    channel.write(NettyClientHandler.NOOP_MESSAGE).addListener(new ChannelFutureListener() {
+    final ChannelFuture fenceFuture = channel.write(NettyClientHandler.NOOP_MESSAGE);
+
+    fenceFuture.addListener(new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
         if (!future.isSuccess()) {
+          System.out.println("________NOOP fence operation failed");
           // Need to notify of this failure, because NettyClientHandler may not have been added to
           // the pipeline before the error occurred.
-          lifecycleManager.notifyTerminated(Utils.statusFromThrowable(future.cause()));
+          lifecycleManager.notifyTerminated(
+              Utils.statusFromThrowable(future.cause()).withDescription("2"));
+        } else {
+          System.out.println("________NOOP fence operation succeeded. How is this possible?");
         }
       }
     });
+    channel.flush();
     // Handle transport shutdown when the channel is closed.
     channel.closeFuture().addListener(new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
+        System.out.println("________client close future completed for channel: " + channel);
         // Typically we should have noticed shutdown before this point.
         lifecycleManager.notifyTerminated(
-            Status.INTERNAL.withDescription("Connection closed with unknown cause"));
+            Status.INTERNAL.withDescription("3: Connection closed with unknown cause"));
       }
     });
 
@@ -248,7 +268,20 @@ class NettyClientTransport implements ConnectionClientTransport {
       keepAliveManager.onTransportStarted();
     }
 
-    return null;
+    return new Runnable() {
+      @Override
+      public void run() {
+        try {
+          fenceFuture.sync();
+        } catch (InterruptedException e) {
+          throw new RuntimeException("interrupted while waiting for noop msg", e);
+        } catch (Exception e) {
+          // Noop msg failed for some reason
+          // Swallow the exception here, because the listener will do the error handling.
+          // The goal of this runnable is purely to wait for the fence operation to finish.
+        }
+      }
+    };
   }
 
   @Override
