@@ -252,6 +252,7 @@ class NettyClientTransport implements ConnectionClientTransport {
         }
       }
     });
+    channel.flush();
     // Handle transport shutdown when the channel is closed.
     channel.closeFuture().addListener(new ChannelFutureListener() {
       @Override
