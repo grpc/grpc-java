@@ -410,6 +410,12 @@ class NettyServerHandler extends AbstractNettyHandler {
   }
 
   @Override
+  public void channelActive(ChannelHandlerContext ctx) throws Exception {
+    System.out.println("channel active on server, should never happen for serverNotListening");
+    super.channelActive(ctx);
+  }
+
+  @Override
   protected void onConnectionError(ChannelHandlerContext ctx, Throwable cause,
       Http2Exception http2Ex) {
     logger.log(Level.FINE, "Connection Error", cause);

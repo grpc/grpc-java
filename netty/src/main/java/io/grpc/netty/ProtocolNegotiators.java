@@ -460,7 +460,10 @@ public final class ProtocolNegotiators {
         @Override
         public void operationComplete(ChannelFuture future) throws Exception {
           if (!future.isSuccess()) {
+            System.out.println("Connect failure detected " + this.getClass().getName());
             fail(ctx, future.cause());
+          } else {
+            System.out.println("Connect success detected " + this.getClass().getName());
           }
         }
       });
