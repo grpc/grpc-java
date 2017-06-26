@@ -482,7 +482,10 @@ public abstract class LoadBalancer {
      * updateBalancingState()} has never been called, the channel will buffer all RPCs until a
      * picker is provided.
      *
-     * <p>implSpec: This method must be overridden
+     * <p>The passed state will be the channel's new state. The SHUTDOWN state should not be passed
+     * and its behavior is undefined.
+     *
+     * <p>This method must be overridden
      */
     public void updateBalancingState(
         @Nonnull ConnectivityState newState, @Nonnull SubchannelPicker newPicker) {

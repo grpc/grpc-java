@@ -1260,6 +1260,7 @@ public class ManagedChannelImplTest {
     createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
     assertEquals(ConnectivityState.IDLE, channel.getState(false));
     channel.notifyWhenStateChanged(ConnectivityState.IDLE, onStateChanged);
+    executor.runDueTasks();
     assertFalse(stateChanged.get());
 
     channel.shutdown();

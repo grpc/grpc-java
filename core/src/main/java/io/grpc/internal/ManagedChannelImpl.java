@@ -95,8 +95,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   private final ObjectPool<? extends Executor> oobExecutorPool;
   private final LogId logId = LogId.allocate(getClass().getName());
 
-  @VisibleForTesting
-  final ChannelExecutor channelExecutor = new ChannelExecutor();
+  private final ChannelExecutor channelExecutor = new ChannelExecutor();
 
   private final DecompressorRegistry decompressorRegistry;
   private final CompressorRegistry compressorRegistry;
@@ -686,7 +685,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       checkNotNull(newState, "newState");
       checkNotNull(newPicker, "newPicker");
       if (newState == SHUTDOWN) {
-        // It's unclear if it is appropriate to report SHUTDOWN state from lb. Ignore it for now.
+        // It's not appropriate to report SHUTDOWN state from lb. Ignore it for now.
         return;
       }
 
