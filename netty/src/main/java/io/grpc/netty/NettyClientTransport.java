@@ -41,6 +41,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -224,8 +225,8 @@ class NettyClientTransport implements ConnectionClientTransport {
     channel.connect(address);
     // This write will have no effect, yet it will only complete once the negotiationHandler
     // flushes any pending writes.
-    final ChannelFuture fenceOperation = channel.write(NettyClientHandler.NOOP_MESSAGE);
-    fenceOperation.addListener(new ChannelFutureListener() {
+    final ChannelPromise listenerDone = channel.newPromise();
+    channel.write(NettyClientHandler.NOOP_MESSAGE).addListener(new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
         if (!future.isSuccess()) {
@@ -233,6 +234,7 @@ class NettyClientTransport implements ConnectionClientTransport {
           // the pipeline before the error occurred.
           lifecycleManager.notifyTerminated(Utils.statusFromThrowable(future.cause()));
         }
+        listenerDone.setSuccess();
       }
     });
     channel.flush();
@@ -254,7 +256,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       @Override
       public void run() {
         try {
-          fenceOperation.await();
+          listenerDone.sync();
         } catch (InterruptedException e) {
           throw new RuntimeException(e);
         }
