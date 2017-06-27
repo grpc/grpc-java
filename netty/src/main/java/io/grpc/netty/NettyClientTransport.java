@@ -225,7 +225,6 @@ class NettyClientTransport implements ConnectionClientTransport {
     channel.connect(address);
     // This write will have no effect, yet it will only complete once the negotiationHandler
     // flushes any pending writes.
-    final ChannelPromise listenerDone = channel.newPromise();
     channel.write(NettyClientHandler.NOOP_MESSAGE).addListener(new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
@@ -234,9 +233,10 @@ class NettyClientTransport implements ConnectionClientTransport {
           // the pipeline before the error occurred.
           lifecycleManager.notifyTerminated(Utils.statusFromThrowable(future.cause()));
         }
-        listenerDone.setSuccess();
       }
     });
+    // Flush the channel to ensure the NOOP_MESSAGE eventually gets processed, but we will not
+    // offer any timing or ordering guarantees on when the listener fires.
     channel.flush();
     // Handle transport shutdown when the channel is closed.
     channel.closeFuture().addListener(new ChannelFutureListener() {
@@ -252,16 +252,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       keepAliveManager.onTransportStarted();
     }
 
-    return new Runnable() {
-      @Override
-      public void run() {
-        try {
-          listenerDone.sync();
-        } catch (InterruptedException e) {
-          throw new RuntimeException(e);
-        }
-      }
-    };
+    return null;
   }
 
   @Override
