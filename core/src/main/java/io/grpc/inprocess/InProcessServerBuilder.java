@@ -43,7 +43,7 @@ import java.util.List;
  *   ExecutorService serverExecutor = Executors.newCachedThreadPool();
  *   Server server = InProcessServerBuilder.forName("unique-name")
  *       .executor(serverExecutor)
- *       .addService(service)
+ *       .fallbackHandlerRegistry(serviceRegistry)
  *       .build().start();
  *   ExecutorService clientExecutor = Executors.newCachedThreadPool();
  *   ManagedChannel channel = InProcessChannelBuilder.forName("unique-name")
