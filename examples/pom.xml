@@ -15,8 +15,8 @@
   <dependencies>
     <dependency>
       <groupId>com.google.api.grpc</groupId>
-      <artifactId>grpc-google-common-protos</artifactId>
-      <version>0.1.12</version>
+      <artifactId>proto-google-common-protos</artifactId>
+      <version>0.1.9</version>
     </dependency>
     <dependency>
       <groupId>io.grpc</groupId>
