@@ -126,6 +126,7 @@ public class UtilServerInterceptorsTest {
     }
 
     @Override
+    @SuppressWarnings("ReferenceEquality")
     public void close(Status status, Metadata trailers) {
       if (status == expectedStatus && trailers == expectedMetadata) {
         numCloses++;
