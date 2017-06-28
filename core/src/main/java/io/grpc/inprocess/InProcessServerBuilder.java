@@ -48,7 +48,7 @@ import java.util.List;
  * </pre>
  *
  * <h4>Usage in tests</h4>
- * The channel can be used like normal. A blocking stub example:
+ * The channel can be used normally. A blocking stub example:
  * <pre>
  *   TestServiceGrpc.TestServiceBlockingStub blockingStub =
  *       TestServiceGrpc.newBlockingStub(channel);
