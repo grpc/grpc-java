@@ -1277,6 +1277,61 @@ public class ManagedChannelImplTest {
     assertFalse(stateChanged.get());
   }
 
+  // TODO(zdapeng): replace usages of updatePicker() in some other tests once it's deprecated
+  @Test
+  public void updateBalancingStateDoesUpdatePicker() {
+    ClientStream mockStream = mock(ClientStream.class);
+    createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, new Metadata());
+
+    // Make the transport available with subchannel2
+    Subchannel subchannel1 = helper.createSubchannel(addressGroup, Attributes.EMPTY);
+    Subchannel subchannel2 = helper.createSubchannel(addressGroup, Attributes.EMPTY);
+    subchannel2.requestConnection();
+
+    MockClientTransportInfo transportInfo = transports.poll();
+    ConnectionClientTransport mockTransport = transportInfo.transport;
+    ManagedClientTransport.Listener transportListener = transportInfo.listener;
+    when(mockTransport.newStream(same(method), any(Metadata.class), any(CallOptions.class)))
+        .thenReturn(mockStream);
+    transportListener.transportReady();
+
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withSubchannel(subchannel1));
+    helper.updateBalancingState(READY, mockPicker);
+
+    executor.runDueTasks();
+    verify(mockTransport, never())
+        .newStream(any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class));
+    verify(mockStream, never()).start(any(ClientStreamListener.class));
+
+
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withSubchannel(subchannel2));
+    helper.updateBalancingState(READY, mockPicker);
+
+    executor.runDueTasks();
+    verify(mockTransport).newStream(same(method), any(Metadata.class), any(CallOptions.class));
+    verify(mockStream).start(any(ClientStreamListener.class));
+  }
+
+  @Test
+  public void updateBalancingStateWithShutdownShouldBeIgnored() {
+    createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
+    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+
+    Runnable onStateChanged = mock(Runnable.class);
+    channel.notifyWhenStateChanged(ConnectivityState.IDLE, onStateChanged);
+
+    helper.updateBalancingState(ConnectivityState.SHUTDOWN, mockPicker);
+
+    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+    executor.runDueTasks();
+    verify(onStateChanged, never()).run();
+  }
+
   private static class FakeBackoffPolicyProvider implements BackoffPolicy.Provider {
     @Override
     public BackoffPolicy get() {

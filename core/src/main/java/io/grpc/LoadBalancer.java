@@ -484,8 +484,6 @@ public abstract class LoadBalancer {
      *
      * <p>The passed state will be the channel's new state. The SHUTDOWN state should not be passed
      * and its behavior is undefined.
-     *
-     * <p>This method must be overridden
      */
     public void updateBalancingState(
         @Nonnull ConnectivityState newState, @Nonnull SubchannelPicker newPicker) {

@@ -684,10 +684,6 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
         final ConnectivityState newState, final SubchannelPicker newPicker) {
       checkNotNull(newState, "newState");
       checkNotNull(newPicker, "newPicker");
-      if (newState == SHUTDOWN) {
-        // It's not appropriate to report SHUTDOWN state from lb. Ignore it for now.
-        return;
-      }
 
       runSerialized(
           new Runnable() {
@@ -695,7 +691,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
             public void run() {
               subchannelPicker = newPicker;
               delayedTransport.reprocess(newPicker);
-              channelStateManager.gotoState(newState);
+              // It's not appropriate to report SHUTDOWN state from lb.
+              // Ignore the case of newState == SHUTDOWN for now.
+              if (newState != SHUTDOWN) {
+                channelStateManager.gotoState(newState);
+              }
             }
           });
     }
