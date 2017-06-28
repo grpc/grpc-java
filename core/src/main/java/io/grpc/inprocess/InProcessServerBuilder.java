@@ -32,42 +32,26 @@ import java.util.List;
  * <h3>Using JUnit TestRule</h3>
  * The class "GrpcServerRule" (from the "grpc-java/testing") is a JUnit TestRule that
  * creates a {@link InProcessServer} and a {@link io.grpc.ManagedChannel ManagedChannel}. This
- * test rule contains the boiler plate code shown below. The classes "HelloWorldServerTest" and
+ * test rule contains the boilerplate code shown below. The classes "HelloWorldServerTest" and
  * "HelloWorldClientTest" (from "grpc-java/examples") demonstrate basic usage.
  *
  * <h3>Usage example</h3>
  * <h4>Server and client channel setup</h4>
  * <pre>
- *   MutableHandlerRegistry serviceRegistry = new MutableHandlerRegistry();
- *   addServicesHelper(serviceRegistry); // your code here
- *   ExecutorService serverExecutor = Executors.newCachedThreadPool();
  *   Server server = InProcessServerBuilder.forName("unique-name")
- *       .executor(serverExecutor)
- *       .fallbackHandlerRegistry(serviceRegistry)
+ *       .directExecutor() // directExecutor is fine for unit tests
+ *       .addService(&#47;* your code here *&#47;)
  *       .build().start();
- *   ExecutorService clientExecutor = Executors.newCachedThreadPool();
  *   ManagedChannel channel = InProcessChannelBuilder.forName("unique-name")
- *       .executor(clientExecutor)
+ *       .directExecutor()
  *       .build();
  * </pre>
  *
- * <h4>Client call usage</h4>
- * <pre>
- *   MethodDescriptor&lt;Integer, Integer&gt; methodDescriptor =
- *       makeMethodDescriptorHelper(); // your code here
- *   ClientCall&lt;Integer, Integer&gt; clientCall = channel.newCall(methodDescriptor,
- *       CallOptions.DEFAULT);
- * </pre>
- *
- * <h4>Stub usage</h4>
- * All stub variants are supported:
+ * <h4>Usage in tests</h4>
+ * The channel can be used like normal. A blocking stub example:
  * <pre>
  *   TestServiceGrpc.TestServiceBlockingStub blockingStub =
  *       TestServiceGrpc.newBlockingStub(channel);
- *   TestServiceGrpc.TestServiceStub asyncStub =
- *       TestServiceGrpc.newStub(channel);
- *   TestServiceGrpc.TestServiceFutureStub futureStub =
- *       TestServiceGrpc.newFutureStub(channel);
  * </pre>
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1783")
