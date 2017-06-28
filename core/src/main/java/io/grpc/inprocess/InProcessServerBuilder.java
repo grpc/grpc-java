@@ -30,7 +30,7 @@ import java.util.List;
  * <p>The server is intended to be fully-featured, high performance, and useful in testing.
  *
  * <h3>Using JUnit TestRule</h3>
- * The class "GrpcServerRule" (from the "grpc-java/testing") is a JUnit TestRule that
+ * The class "GrpcServerRule" (from "grpc-java/testing") is a JUnit TestRule that
  * creates a {@link InProcessServer} and a {@link io.grpc.ManagedChannel ManagedChannel}. This
  * test rule contains the boilerplate code shown below. The classes "HelloWorldServerTest" and
  * "HelloWorldClientTest" (from "grpc-java/examples") demonstrate basic usage.
