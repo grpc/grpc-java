@@ -209,7 +209,6 @@ public class AsyncServer {
   }
 
   public static class BenchmarkServiceImpl extends BenchmarkServiceGrpc.BenchmarkServiceImplBase {
-    private static final long SHUTDOWN_POLL_NANOS = TimeUnit.MILLISECONDS.toNanos(100);
     // Always use the same canned response for bidi. This is allowed by the spec.
     private static final int BIDI_RESPONSE_BYTES = 100;
     private static final Messages.SimpleResponse BIDI_RESPONSE = Messages.SimpleResponse
@@ -218,7 +217,6 @@ public class AsyncServer {
             .setBody(ByteString.copyFrom(new byte[BIDI_RESPONSE_BYTES])).build())
         .build();
 
-    private final ThreadLocal<Long> shutdownPollNanos = new ThreadLocal<Long>();
     private final AtomicBoolean shutdown = new AtomicBoolean();
 
     public BenchmarkServiceImpl() {
@@ -226,25 +224,6 @@ public class AsyncServer {
 
     public void shutdown() {
       this.shutdown.set(true);
-    }
-
-    /**
-     * Helper method to avoid polling the shutdown volatile in a tight loop. The server shutdown
-     * operation only happens once at the end of the test scenario, so there's no need to
-     * constantly check it.
-     */
-    private boolean shouldShutdown() {
-      Long latestPoll = shutdownPollNanos.get();
-      long now = System.nanoTime();
-      if (latestPoll == null) {
-        shutdownPollNanos.set(now);
-        return false;
-      } else if (now - latestPoll < SHUTDOWN_POLL_NANOS) {
-        return false;
-      } else {
-        shutdownPollNanos.set(now);
-        return shutdown.get();
-      }
     }
 
     @Override
@@ -263,7 +242,7 @@ public class AsyncServer {
       return new StreamObserver<Messages.SimpleRequest>() {
         @Override
         public void onNext(Messages.SimpleRequest value) {
-          if (shouldShutdown()) {
+          if (shutdown.get()) {
             responseObserver.onCompleted();
             return;
           }
@@ -292,7 +271,7 @@ public class AsyncServer {
 
         @Override
         public void onNext(Messages.SimpleRequest value) {
-          if (shouldShutdown()) {
+          if (shutdown.get()) {
             responseObserver.onCompleted();
             return;
           }
@@ -333,7 +312,7 @@ public class AsyncServer {
           new Iterator<Messages.SimpleResponse>() {
             @Override
             public boolean hasNext() {
-              return !shouldShutdown() && !responseObserver.isCancelled();
+              return !shutdown.get() && !responseObserver.isCancelled();
             }
 
             @Override
@@ -361,7 +340,7 @@ public class AsyncServer {
           new Iterator<Messages.SimpleResponse>() {
             @Override
             public boolean hasNext() {
-              return !shouldShutdown() && !responseObserver.isCancelled();
+              return !shutdown.get() && !responseObserver.isCancelled();
             }
 
             @Override
