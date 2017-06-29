@@ -223,7 +223,7 @@ public class AsyncServer {
     }
 
     public void shutdown() {
-      this.shutdown.set(true);
+      shutdown.set(true);
     }
 
     @Override
