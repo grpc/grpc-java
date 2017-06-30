@@ -646,7 +646,7 @@ public abstract class AbstractTransportTest {
     StreamCreation serverStreamCreation
         = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     if (metricsExpected()) {
-      clientInOrder.verify(clientStreamTracer).outboundHeaders();
+      verify(clientStreamTracer, timeout(TIMEOUT_MS)).outboundHeaders();
     }
     assertEquals(methodDescriptor.getFullMethodName(), serverStreamCreation.method);
     assertEquals(Lists.newArrayList(clientHeadersCopy.getAll(asciiKey)),
