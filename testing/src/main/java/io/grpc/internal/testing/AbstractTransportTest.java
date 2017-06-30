@@ -128,9 +128,6 @@ public abstract class AbstractTransportTest {
    */
   protected abstract boolean metricsExpected();
 
-
-  protected void sync(ManagedClientTransport client) {}
-
   /**
    * When non-null, will be shut down during tearDown(). However, it _must_ have been started with
    * {@code serverListener}, otherwise tearDown() can't wait for shutdown which can put following
