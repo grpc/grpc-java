@@ -128,6 +128,9 @@ public abstract class AbstractTransportTest {
    */
   protected abstract boolean metricsExpected();
 
+
+  protected void sync(ManagedClientTransport client) {}
+
   /**
    * When non-null, will be shut down during tearDown(). However, it _must_ have been started with
    * {@code serverListener}, otherwise tearDown() can't wait for shutdown which can put following
@@ -1033,7 +1036,7 @@ public abstract class AbstractTransportTest {
       verify(serverStreamTracer, atLeast(1)).outboundUncompressedSize(anyLong());
       // There is a race between client cancelling and server closing.  The final status seen by the
       // server is non-deterministic.
-      verify(serverStreamTracer).streamClosed(any(Status.class));
+      verify(serverStreamTracer, timeout(TIMEOUT_MS)).streamClosed(any(Status.class));
       verifyNoMoreInteractions(clientStreamTracer);
       verifyNoMoreInteractions(serverStreamTracer);
     }
