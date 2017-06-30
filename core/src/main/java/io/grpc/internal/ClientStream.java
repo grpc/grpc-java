@@ -54,7 +54,7 @@ public interface ClientStream extends Stream {
 
   /**
    * Sets the registry to find a decompressor for the framer. May only be called before {@link
-   * #start}.
+   * #start}. If the transport does not support compression, this may do nothing.
    *
    * @param decompressorRegistry the registry of decompressors for decoding responses
    */

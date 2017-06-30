@@ -60,7 +60,8 @@ public interface ServerStream extends Stream {
   void cancel(Status status);
 
   /**
-   * Sets the decompressor on the deframer.
+   * Sets the decompressor on the deframer. If the transport does not support compression, this may
+   * do nothing.
    *
    * @param decompressor the decompressor to use.
    */
