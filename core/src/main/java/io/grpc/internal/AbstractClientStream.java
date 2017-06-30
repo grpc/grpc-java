@@ -242,7 +242,7 @@ public abstract class AbstractClientStream extends AbstractStream
         decompressor = decompressorRegistry.lookupDecompressor(encoding);
         if (decompressor == null) {
           deframeFailed(Status.INTERNAL.withDescription(
-              String.format("Can't find decompressor for %s", encoding)).asException());
+              String.format("Can't find decompressor for %s", encoding)).asRuntimeException());
           return;
         }
       }
