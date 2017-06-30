@@ -237,8 +237,8 @@ public abstract class AbstractClientStream extends AbstractStream
       statsTraceCtx.clientInboundHeaders();
 
       Decompressor decompressor = Codec.Identity.NONE;
-      if (headers.containsKey(MESSAGE_ENCODING_KEY)) {
-        String encoding = headers.get(MESSAGE_ENCODING_KEY);
+      String encoding = headers.get(MESSAGE_ENCODING_KEY);
+      if (encoding != null) {
         decompressor = decompressorRegistry.lookupDecompressor(encoding);
         if (decompressor == null) {
           deframeFailed(Status.INTERNAL.withDescription(
