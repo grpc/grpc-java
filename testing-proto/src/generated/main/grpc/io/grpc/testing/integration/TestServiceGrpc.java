@@ -43,6 +43,10 @@ public final class TestServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               com.google.protobuf.EmptyProtos.Empty.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodEmptyCall extends
+      io.grpc.stub.ServerCalls.UnaryMethod<com.google.protobuf.EmptyProtos.Empty, com.google.protobuf.EmptyProtos.Empty> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.SimpleRequest,
       io.grpc.testing.integration.Messages.SimpleResponse> METHOD_UNARY_CALL =
@@ -55,6 +59,10 @@ public final class TestServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.testing.integration.Messages.SimpleResponse.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodUnaryCall extends
+      io.grpc.stub.ServerCalls.UnaryMethod<io.grpc.testing.integration.Messages.SimpleRequest, io.grpc.testing.integration.Messages.SimpleResponse> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.SimpleRequest,
       io.grpc.testing.integration.Messages.SimpleResponse> METHOD_CACHEABLE_UNARY_CALL =
@@ -67,6 +75,10 @@ public final class TestServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.testing.integration.Messages.SimpleResponse.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodCacheableUnaryCall extends
+      io.grpc.stub.ServerCalls.UnaryMethod<io.grpc.testing.integration.Messages.SimpleRequest, io.grpc.testing.integration.Messages.SimpleResponse> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.StreamingOutputCallRequest,
       io.grpc.testing.integration.Messages.StreamingOutputCallResponse> METHOD_STREAMING_OUTPUT_CALL =
@@ -79,6 +91,10 @@ public final class TestServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.testing.integration.Messages.StreamingOutputCallResponse.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodStreamingOutputCall extends
+      io.grpc.stub.ServerCalls.ServerStreamingMethod<io.grpc.testing.integration.Messages.StreamingOutputCallRequest, io.grpc.testing.integration.Messages.StreamingOutputCallResponse> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.StreamingInputCallRequest,
       io.grpc.testing.integration.Messages.StreamingInputCallResponse> METHOD_STREAMING_INPUT_CALL =
@@ -91,6 +107,10 @@ public final class TestServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.testing.integration.Messages.StreamingInputCallResponse.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodStreamingInputCall extends
+      io.grpc.stub.ServerCalls.ClientStreamingMethod<io.grpc.testing.integration.Messages.StreamingInputCallRequest, io.grpc.testing.integration.Messages.StreamingInputCallResponse> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.StreamingOutputCallRequest,
       io.grpc.testing.integration.Messages.StreamingOutputCallResponse> METHOD_FULL_DUPLEX_CALL =
@@ -103,6 +123,10 @@ public final class TestServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.testing.integration.Messages.StreamingOutputCallResponse.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodFullDuplexCall extends
+      io.grpc.stub.ServerCalls.BidiStreamingMethod<io.grpc.testing.integration.Messages.StreamingOutputCallRequest, io.grpc.testing.integration.Messages.StreamingOutputCallResponse> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.StreamingOutputCallRequest,
       io.grpc.testing.integration.Messages.StreamingOutputCallResponse> METHOD_HALF_DUPLEX_CALL =
@@ -115,6 +139,10 @@ public final class TestServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.testing.integration.Messages.StreamingOutputCallResponse.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodHalfDuplexCall extends
+      io.grpc.stub.ServerCalls.BidiStreamingMethod<io.grpc.testing.integration.Messages.StreamingOutputCallRequest, io.grpc.testing.integration.Messages.StreamingOutputCallResponse> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<com.google.protobuf.EmptyProtos.Empty,
       com.google.protobuf.EmptyProtos.Empty> METHOD_UNIMPLEMENTED_CALL =
@@ -127,6 +155,9 @@ public final class TestServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               com.google.protobuf.EmptyProtos.Empty.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodUnimplementedCall extends
+      io.grpc.stub.ServerCalls.UnaryMethod<com.google.protobuf.EmptyProtos.Empty, com.google.protobuf.EmptyProtos.Empty> {}
 
   /**
    * Creates a new async stub that supports all call types for the service

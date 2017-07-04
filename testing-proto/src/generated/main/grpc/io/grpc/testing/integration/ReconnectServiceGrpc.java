@@ -42,6 +42,10 @@ public final class ReconnectServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               com.google.protobuf.EmptyProtos.Empty.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodStart extends
+      io.grpc.stub.ServerCalls.UnaryMethod<com.google.protobuf.EmptyProtos.Empty, com.google.protobuf.EmptyProtos.Empty> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<com.google.protobuf.EmptyProtos.Empty,
       io.grpc.testing.integration.Messages.ReconnectInfo> METHOD_STOP =
@@ -54,6 +58,9 @@ public final class ReconnectServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.testing.integration.Messages.ReconnectInfo.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodStop extends
+      io.grpc.stub.ServerCalls.UnaryMethod<com.google.protobuf.EmptyProtos.Empty, io.grpc.testing.integration.Messages.ReconnectInfo> {}
 
   /**
    * Creates a new async stub that supports all call types for the service

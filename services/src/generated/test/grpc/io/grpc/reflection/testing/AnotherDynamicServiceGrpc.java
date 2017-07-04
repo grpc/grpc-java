@@ -42,6 +42,9 @@ public final class AnotherDynamicServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.reflection.testing.DynamicReply.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodMethod extends
+      io.grpc.stub.ServerCalls.UnaryMethod<io.grpc.reflection.testing.DynamicRequest, io.grpc.reflection.testing.DynamicReply> {}
 
   /**
    * Creates a new async stub that supports all call types for the service

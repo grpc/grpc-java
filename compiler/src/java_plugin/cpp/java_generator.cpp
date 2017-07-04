@@ -51,6 +51,13 @@ static string MixedLower(const string& word) {
   return w;
 }
 
+// Adjust a method name to match MixedLower, but with the first letter capitalized.
+static string MixedUpper(const string& word) {
+  string w = MixedLower(word);
+  w[0] = toupper(w[0]);
+  return w;
+}
+
 // Converts to the identifier to the ALL_UPPER_CASE format.
 //   - An underscore is inserted where a lower case letter is followed by an
 //     upper case letter.
@@ -72,6 +79,10 @@ static inline string LowerMethodName(const MethodDescriptor* method) {
 
 static inline string MethodPropertiesFieldName(const MethodDescriptor* method) {
   return "METHOD_" + ToAllUpperCase(method->name());
+}
+
+static inline string MethodInterfaceName(const MethodDescriptor* method) {
+  return "Method" + MixedUpper(method->name());
 }
 
 static inline string MethodIdFieldName(const MethodDescriptor* method) {
@@ -313,21 +324,27 @@ static void PrintMethodFields(
     (*vars)["output_type"] = MessageFullJavaName(flavor == ProtoFlavor::NANO,
                                                  method->output_type());
     (*vars)["method_field_name"] = MethodPropertiesFieldName(method);
+    (*vars)["method_interface_name"] = MethodInterfaceName(method);
     bool client_streaming = method->client_streaming();
     bool server_streaming = method->server_streaming();
     if (client_streaming) {
       if (server_streaming) {
         (*vars)["method_type"] = "BIDI_STREAMING";
+        (*vars)["server_calls_interface"] = "io.grpc.stub.ServerCalls.BidiStreamingMethod";
       } else {
         (*vars)["method_type"] = "CLIENT_STREAMING";
+        (*vars)["server_calls_interface"] = "io.grpc.stub.ServerCalls.ClientStreamingMethod";
       }
     } else {
       if (server_streaming) {
         (*vars)["method_type"] = "SERVER_STREAMING";
+        (*vars)["server_calls_interface"] = "io.grpc.stub.ServerCalls.ServerStreamingMethod";
       } else {
         (*vars)["method_type"] = "UNARY";
+        (*vars)["server_calls_interface"] = "io.grpc.stub.ServerCalls.UnaryMethod";
       }
     }
+
 
     if (flavor == ProtoFlavor::NANO) {
       // TODO(zsurocking): we're creating two NanoFactories for each method right now.
@@ -370,8 +387,14 @@ static void PrintMethodFields(
           "            $output_type$.getDefaultInstance()))\n"
           "        .build();\n");
     }
+    p->Print(
+        *vars,
+        "@$ExperimentalApi$(\"https://github.com/grpc/grpc-java/issues/2446\")\n"
+        "public interface $method_interface_name$ extends\n"
+        "    $server_calls_interface$<$input_type$, $output_type$> {}\n"
+    );
+    p->Print("\n");
   }
-  p->Print("\n");
 
   if (flavor == ProtoFlavor::NANO) {
     p->Print(

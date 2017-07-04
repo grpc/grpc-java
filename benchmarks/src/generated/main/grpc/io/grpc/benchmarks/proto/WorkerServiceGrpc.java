@@ -39,6 +39,10 @@ public final class WorkerServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Control.ServerStatus.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodRunServer extends
+      io.grpc.stub.ServerCalls.BidiStreamingMethod<io.grpc.benchmarks.proto.Control.ServerArgs, io.grpc.benchmarks.proto.Control.ServerStatus> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Control.ClientArgs,
       io.grpc.benchmarks.proto.Control.ClientStatus> METHOD_RUN_CLIENT =
@@ -51,6 +55,10 @@ public final class WorkerServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Control.ClientStatus.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodRunClient extends
+      io.grpc.stub.ServerCalls.BidiStreamingMethod<io.grpc.benchmarks.proto.Control.ClientArgs, io.grpc.benchmarks.proto.Control.ClientStatus> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Control.CoreRequest,
       io.grpc.benchmarks.proto.Control.CoreResponse> METHOD_CORE_COUNT =
@@ -63,6 +71,10 @@ public final class WorkerServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Control.CoreResponse.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodCoreCount extends
+      io.grpc.stub.ServerCalls.UnaryMethod<io.grpc.benchmarks.proto.Control.CoreRequest, io.grpc.benchmarks.proto.Control.CoreResponse> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Control.Void,
       io.grpc.benchmarks.proto.Control.Void> METHOD_QUIT_WORKER =
@@ -75,6 +87,9 @@ public final class WorkerServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Control.Void.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodQuitWorker extends
+      io.grpc.stub.ServerCalls.UnaryMethod<io.grpc.benchmarks.proto.Control.Void, io.grpc.benchmarks.proto.Control.Void> {}
 
   /**
    * Creates a new async stub that supports all call types for the service

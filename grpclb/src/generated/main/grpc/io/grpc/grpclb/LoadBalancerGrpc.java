@@ -39,6 +39,9 @@ public final class LoadBalancerGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.grpclb.LoadBalanceResponse.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodBalanceLoad extends
+      io.grpc.stub.ServerCalls.BidiStreamingMethod<io.grpc.grpclb.LoadBalanceRequest, io.grpc.grpclb.LoadBalanceResponse> {}
 
   /**
    * Creates a new async stub that supports all call types for the service

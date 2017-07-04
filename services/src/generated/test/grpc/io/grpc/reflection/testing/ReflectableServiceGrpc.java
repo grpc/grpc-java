@@ -39,6 +39,9 @@ public final class ReflectableServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.reflection.testing.Reply.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodMethod extends
+      io.grpc.stub.ServerCalls.UnaryMethod<io.grpc.reflection.testing.Request, io.grpc.reflection.testing.Reply> {}
 
   /**
    * Creates a new async stub that supports all call types for the service
