@@ -58,8 +58,7 @@ public final class GrpcUtil {
   // AppEngine runtimes have constraints on threading and socket handling
   // that need to be accommodated.
   public static final boolean IS_RESTRICTED_APPENGINE =
-      System.getProperty("com.google.appengine.runtime.environment") != null
-          && "1.7".equals(System.getProperty("java.specification.version"));
+      System.getProperty("com.google.appengine.runtime.environment") != null;
 
   /**
    * {@link io.grpc.Metadata.Key} for the timeout header.
