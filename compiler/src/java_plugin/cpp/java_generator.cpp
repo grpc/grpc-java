@@ -367,7 +367,17 @@ static void PrintMethodFields(
           "        .setRequestMarshaller($ProtoUtils$.marshaller(\n"
           "            $input_type$.getDefaultInstance()))\n"
           "        .setResponseMarshaller($ProtoUtils$.marshaller(\n"
-          "            $output_type$.getDefaultInstance()))\n"
+          "            $output_type$.getDefaultInstance()))\n");
+
+      (*vars)["proto_method_descriptor_supplier"] = service->name() + "MethodDescriptorSupplier";
+      if (flavor == ProtoFlavor::NORMAL) {
+        p->Print(
+            *vars,
+          "        .setSchemaDescriptor(new $proto_method_descriptor_supplier$(\"$method_name$\"))\n");
+      }
+
+      p->Print(
+          *vars,
           "        .build();\n");
     }
   }
@@ -893,11 +903,13 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
 
 
   if (flavor == ProtoFlavor::NORMAL) {
-    (*vars)["proto_descriptor_supplier"] = service->name() + "DescriptorSupplier";
+    (*vars)["proto_file_descriptor_supplier"] = service->name() + "FileDescriptorSupplier";
+    (*vars)["proto_method_descriptor_supplier"] = service->name() + "MethodDescriptorSupplier";
     (*vars)["proto_class_name"] = google::protobuf::compiler::java::ClassName(service->file());
     p->Print(
         *vars,
-        "private static final class $proto_descriptor_supplier$ implements $ProtoFileDescriptorSupplier$ {\n");
+        "private static class $proto_file_descriptor_supplier$\n"
+        "    implements $ProtoFileDescriptorSupplier$, $ProtoServiceDescriptorSupplier$ {\n");
     p->Indent();
     p->Print(*vars, "@$Override$\n");
     p->Print(
@@ -906,7 +918,42 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
     p->Indent();
     p->Print(*vars, "return $proto_class_name$.getDescriptor();\n");
     p->Outdent();
+    p->Print(*vars, "}\n\n");
+
+    p->Print(*vars, "@$Override$\n");
+    p->Print(
+        *vars,
+        "public com.google.protobuf.Descriptors.ServiceDescriptor getServiceDescriptor() {\n");
+    p->Indent();
+    p->Print(*vars, "return getFileDescriptor().findServiceByName(\"$service_name$\");\n");
+    p->Outdent();
     p->Print(*vars, "}\n");
+
+    p->Outdent();
+    p->Print(*vars, "}\n\n");
+
+    p->Print(
+        *vars,
+        "private static final class $proto_method_descriptor_supplier$\n"
+        "    extends $proto_file_descriptor_supplier$\n"
+        "      implements $ProtoMethodDescriptorSupplier$ {\n");
+    p->Indent();
+    p->Print(*vars, "private final String methodName;\n\n");
+    p->Print(*vars, "private $proto_method_descriptor_supplier$(String methodName) {\n");
+    p->Indent();
+    p->Print(*vars, "this.methodName = methodName;\n");
+    p->Outdent();
+    p->Print(*vars, "}\n\n");
+
+    p->Print(*vars, "@$Override$\n");
+    p->Print(
+        *vars,
+        "public com.google.protobuf.Descriptors.MethodDescriptor getMethodDescriptor() {\n");
+    p->Indent();
+    p->Print(*vars, "return getServiceDescriptor().findMethodByName(methodName);\n");
+    p->Outdent();
+    p->Print(*vars, "}\n");
+
     p->Outdent();
     p->Print(*vars, "}\n\n");
   }
@@ -940,7 +987,7 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
   if (flavor == ProtoFlavor::NORMAL) {
     p->Print(
         *vars,
-        "\n.setSchemaDescriptor(new $proto_descriptor_supplier$())");
+        "\n.setSchemaDescriptor(new $proto_file_descriptor_supplier$())");
   }
   for (int i = 0; i < service->method_count(); ++i) {
     const MethodDescriptor* method = service->method(i);
@@ -1187,6 +1234,10 @@ void GenerateService(const ServiceDescriptor* service,
       "io.grpc.ServiceDescriptor";
   vars["ProtoFileDescriptorSupplier"] =
       "io.grpc.protobuf.ProtoFileDescriptorSupplier";
+  vars["ProtoServiceDescriptorSupplier"] =
+      "io.grpc.protobuf.ProtoServiceDescriptorSupplier";
+  vars["ProtoMethodDescriptorSupplier"] =
+      "io.grpc.protobuf.ProtoMethodDescriptorSupplier";
   vars["AbstractStub"] = "io.grpc.stub.AbstractStub";
   vars["MethodDescriptor"] = "io.grpc.MethodDescriptor";
   vars["NanoUtils"] = "io.grpc.protobuf.nano.NanoUtils";
