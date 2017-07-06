@@ -143,6 +143,7 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    *
    * @param certChain file containing the full certificate chain
    * @param privateKey file containing the private key
+   * @throws UnsupportedOperationException if the server does not support TLS.
    *
    * @return this
    * @since 1.0.0
