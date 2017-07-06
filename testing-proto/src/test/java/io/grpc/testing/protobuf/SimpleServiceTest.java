@@ -23,8 +23,6 @@ import static io.grpc.MethodDescriptor.MethodType.UNARY;
 import static org.junit.Assert.assertEquals;
 
 import io.grpc.MethodDescriptor;
-import io.grpc.testing.protobuf.SimpleServiceProto.SimpleRequest;
-import io.grpc.testing.protobuf.SimpleServiceProto.SimpleResponse;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;

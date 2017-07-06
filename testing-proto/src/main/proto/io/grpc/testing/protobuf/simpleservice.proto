@@ -21,7 +21,7 @@ package grpc.testing;
 
 option java_package = "io.grpc.testing.protobuf";
 option java_outer_classname = "SimpleServiceProto";
-
+option java_multiple_files = true;
 
 // A simple service for test.
 service SimpleService {
