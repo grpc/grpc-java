@@ -39,6 +39,9 @@ public final class ReportQpsScenarioServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Control.Void.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodReportScenario extends
+      io.grpc.stub.ServerCalls.UnaryMethod<io.grpc.benchmarks.proto.Control.ScenarioResult, io.grpc.benchmarks.proto.Control.Void> {}
 
   /**
    * Creates a new async stub that supports all call types for the service

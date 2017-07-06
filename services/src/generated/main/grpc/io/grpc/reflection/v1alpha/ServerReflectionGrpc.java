@@ -39,6 +39,9 @@ public final class ServerReflectionGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.reflection.v1alpha.ServerReflectionResponse.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodServerReflectionInfo extends
+      io.grpc.stub.ServerCalls.BidiStreamingMethod<io.grpc.reflection.v1alpha.ServerReflectionRequest, io.grpc.reflection.v1alpha.ServerReflectionResponse> {}
 
   /**
    * Creates a new async stub that supports all call types for the service

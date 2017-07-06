@@ -43,6 +43,9 @@ public final class UnimplementedServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               com.google.protobuf.EmptyProtos.Empty.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodUnimplementedCall extends
+      io.grpc.stub.ServerCalls.UnaryMethod<com.google.protobuf.EmptyProtos.Empty, com.google.protobuf.EmptyProtos.Empty> {}
 
   /**
    * Creates a new async stub that supports all call types for the service

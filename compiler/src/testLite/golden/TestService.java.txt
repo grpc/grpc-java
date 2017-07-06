@@ -42,6 +42,10 @@ public final class TestServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
               io.grpc.testing.integration.Test.SimpleResponse.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodUnaryCall extends
+      io.grpc.stub.ServerCalls.UnaryMethod<io.grpc.testing.integration.Test.SimpleRequest, io.grpc.testing.integration.Test.SimpleResponse> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.testing.integration.Test.StreamingOutputCallRequest,
       io.grpc.testing.integration.Test.StreamingOutputCallResponse> METHOD_STREAMING_OUTPUT_CALL =
@@ -54,6 +58,10 @@ public final class TestServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
               io.grpc.testing.integration.Test.StreamingOutputCallResponse.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodStreamingOutputCall extends
+      io.grpc.stub.ServerCalls.ServerStreamingMethod<io.grpc.testing.integration.Test.StreamingOutputCallRequest, io.grpc.testing.integration.Test.StreamingOutputCallResponse> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.testing.integration.Test.StreamingInputCallRequest,
       io.grpc.testing.integration.Test.StreamingInputCallResponse> METHOD_STREAMING_INPUT_CALL =
@@ -66,6 +74,10 @@ public final class TestServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
               io.grpc.testing.integration.Test.StreamingInputCallResponse.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodStreamingInputCall extends
+      io.grpc.stub.ServerCalls.ClientStreamingMethod<io.grpc.testing.integration.Test.StreamingInputCallRequest, io.grpc.testing.integration.Test.StreamingInputCallResponse> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.testing.integration.Test.StreamingOutputCallRequest,
       io.grpc.testing.integration.Test.StreamingOutputCallResponse> METHOD_FULL_BIDI_CALL =
@@ -78,6 +90,10 @@ public final class TestServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
               io.grpc.testing.integration.Test.StreamingOutputCallResponse.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodFullBidiCall extends
+      io.grpc.stub.ServerCalls.BidiStreamingMethod<io.grpc.testing.integration.Test.StreamingOutputCallRequest, io.grpc.testing.integration.Test.StreamingOutputCallResponse> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.testing.integration.Test.StreamingOutputCallRequest,
       io.grpc.testing.integration.Test.StreamingOutputCallResponse> METHOD_HALF_BIDI_CALL =
@@ -90,6 +106,9 @@ public final class TestServiceGrpc {
           .setResponseMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
               io.grpc.testing.integration.Test.StreamingOutputCallResponse.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodHalfBidiCall extends
+      io.grpc.stub.ServerCalls.BidiStreamingMethod<io.grpc.testing.integration.Test.StreamingOutputCallRequest, io.grpc.testing.integration.Test.StreamingOutputCallResponse> {}
 
   /**
    * Creates a new async stub that supports all call types for the service

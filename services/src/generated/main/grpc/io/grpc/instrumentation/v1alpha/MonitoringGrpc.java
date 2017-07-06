@@ -39,6 +39,10 @@ public final class MonitoringGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.instrumentation.v1alpha.CanonicalRpcStats.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodGetCanonicalRpcStats extends
+      io.grpc.stub.ServerCalls.UnaryMethod<com.google.protobuf.Empty, io.grpc.instrumentation.v1alpha.CanonicalRpcStats> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.StatsRequest,
       io.grpc.instrumentation.v1alpha.StatsResponse> METHOD_GET_STATS =
@@ -51,6 +55,10 @@ public final class MonitoringGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.instrumentation.v1alpha.StatsResponse.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodGetStats extends
+      io.grpc.stub.ServerCalls.UnaryMethod<io.grpc.instrumentation.v1alpha.StatsRequest, io.grpc.instrumentation.v1alpha.StatsResponse> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.StatsRequest,
       io.grpc.instrumentation.v1alpha.StatsResponse> METHOD_WATCH_STATS =
@@ -63,6 +71,10 @@ public final class MonitoringGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.instrumentation.v1alpha.StatsResponse.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodWatchStats extends
+      io.grpc.stub.ServerCalls.ServerStreamingMethod<io.grpc.instrumentation.v1alpha.StatsRequest, io.grpc.instrumentation.v1alpha.StatsResponse> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.TraceRequest,
       io.grpc.instrumentation.v1alpha.TraceResponse> METHOD_GET_REQUEST_TRACES =
@@ -75,6 +87,10 @@ public final class MonitoringGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.instrumentation.v1alpha.TraceResponse.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodGetRequestTraces extends
+      io.grpc.stub.ServerCalls.UnaryMethod<io.grpc.instrumentation.v1alpha.TraceRequest, io.grpc.instrumentation.v1alpha.TraceResponse> {}
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.MonitoringDataGroup,
       io.grpc.instrumentation.v1alpha.CustomMonitoringData> METHOD_GET_CUSTOM_MONITORING_DATA =
@@ -87,6 +103,9 @@ public final class MonitoringGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.instrumentation.v1alpha.CustomMonitoringData.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodGetCustomMonitoringData extends
+      io.grpc.stub.ServerCalls.UnaryMethod<io.grpc.instrumentation.v1alpha.MonitoringDataGroup, io.grpc.instrumentation.v1alpha.CustomMonitoringData> {}
 
   /**
    * Creates a new async stub that supports all call types for the service

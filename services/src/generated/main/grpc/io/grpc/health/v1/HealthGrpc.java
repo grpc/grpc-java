@@ -39,6 +39,9 @@ public final class HealthGrpc {
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.health.v1.HealthCheckResponse.getDefaultInstance()))
           .build();
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/2446")
+  public interface MethodCheck extends
+      io.grpc.stub.ServerCalls.UnaryMethod<io.grpc.health.v1.HealthCheckRequest, io.grpc.health.v1.HealthCheckResponse> {}
 
   /**
    * Creates a new async stub that supports all call types for the service
