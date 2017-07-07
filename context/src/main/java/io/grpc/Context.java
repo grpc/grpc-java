@@ -113,7 +113,6 @@ public class Context {
   // problematic (e.g., NullPointerException) if the Context class has not done loading at this
   // point.
   private static volatile Storage storage;
-  private static Exception storageInitError;
 
   // For testing
   static Storage storage() {
@@ -122,10 +121,6 @@ public class Context {
       synchronized (Context.class) {
         tmp = storage;
         if (tmp == null) {
-          if (storageInitError != null) {
-            throw new RuntimeException(
-                "Storage override had failed to initialize", storageInitError);
-          }
           try {
             Class<?> clazz = Class.forName("io.grpc.override.ContextStorageOverride");
             tmp = (Storage) clazz.getConstructor().newInstance();
@@ -135,7 +130,6 @@ public class Context {
             storage = tmp;
             log.log(Level.FINE, "Storage override doesn't exist. Using default.", e);
           } catch (Exception e) {
-            storageInitError = e;
             throw new RuntimeException("Storage override had failed to initialize", e);
           }
         }
