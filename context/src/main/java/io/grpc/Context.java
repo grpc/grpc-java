@@ -108,6 +108,10 @@ public class Context {
    */
   public static final Context ROOT = new Context(null);
 
+  // Lazily init this field instead of making it static final. This avoids writing to logger before
+  // the class loading is done. Because custom log handlers may try to use Context, which is
+  // problematic (e.g., NullPointerException) if the Context class has not done loading at this
+  // point.
   private static volatile Storage storage;
   private static Exception storageInitError;
 
