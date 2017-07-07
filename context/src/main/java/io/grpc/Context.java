@@ -19,7 +19,6 @@ package io.grpc;
 import java.util.ArrayList;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -111,8 +110,7 @@ public class Context {
 
   // One and only one of them is non-null
   private static final Storage storage;
-  private static final LinkedBlockingQueue<ClassNotFoundException> storageOverrideNotFoundErrors =
-      new LinkedBlockingQueue<ClassNotFoundException>();
+  private static volatile ClassNotFoundException storageOverrideNotFoundError;
   private static final Exception storageInitError;
 
   static {
@@ -125,7 +123,7 @@ public class Context {
       // Avoid writing to logger because custom log handlers may try to use Context, which is
       // problemantic (e.g., NullPointerException) because the Context class has not done loading
       // at this point.
-      storageOverrideNotFoundErrors.add(e);
+      storageOverrideNotFoundError = e;
       newStorage = new ThreadLocalContextStorage();
     } catch (Exception e) {
       error = e;
@@ -214,8 +212,9 @@ public class Context {
   }
 
   private static void maybeLogStorageOverrideNotFound() {
-    ClassNotFoundException e;
-    while ((e = storageOverrideNotFoundErrors.poll()) != null) {
+    ClassNotFoundException e = storageOverrideNotFoundError;
+    if (e != null) {
+      storageOverrideNotFoundError = null;
       log.log(Level.FINE, "Storage override doesn't exist. Using default.", e);
     }
   }
