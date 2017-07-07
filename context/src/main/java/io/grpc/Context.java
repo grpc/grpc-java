@@ -19,7 +19,6 @@ package io.grpc;
 import java.util.ArrayList;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -109,37 +108,36 @@ public class Context {
    */
   public static final Context ROOT = new Context(null);
 
-  // One and only one of them is non-null
-  private static final Storage storage;
-  private static final LinkedBlockingQueue<ClassNotFoundException> storageOverrideNotFoundErrors =
-      new LinkedBlockingQueue<ClassNotFoundException>();
-  private static final Exception storageInitError;
-
-  static {
-    Storage newStorage = null;
-    Exception error = null;
-    try {
-      Class<?> clazz = Class.forName("io.grpc.override.ContextStorageOverride");
-      newStorage = (Storage) clazz.getConstructor().newInstance();
-    } catch (ClassNotFoundException e) {
-      // Avoid writing to logger because custom log handlers may try to use Context, which is
-      // problemantic (e.g., NullPointerException) because the Context class has not done loading
-      // at this point.
-      storageOverrideNotFoundErrors.add(e);
-      newStorage = new ThreadLocalContextStorage();
-    } catch (Exception e) {
-      error = e;
-    }
-    storage = newStorage;
-    storageInitError = error;
-  }
+  private static volatile Storage storage;
+  private static Exception storageInitError;
 
   // For testing
   static Storage storage() {
-    if (storage == null) {
-      throw new RuntimeException("Storage override had failed to initialize", storageInitError);
+    Storage tmp = storage;
+    if (tmp == null) {
+      synchronized (Context.class) {
+        tmp = storage;
+        if (tmp == null) {
+          if (storageInitError != null) {
+            throw new RuntimeException(
+                "Storage override had failed to initialize", storageInitError);
+          }
+          try {
+            Class<?> clazz = Class.forName("io.grpc.override.ContextStorageOverride");
+            tmp = (Storage) clazz.getConstructor().newInstance();
+            storage = tmp;
+          } catch (ClassNotFoundException e) {
+            tmp = new ThreadLocalContextStorage();
+            storage = tmp;
+            log.log(Level.FINE, "Storage override doesn't exist. Using default.", e);
+          } catch (Exception e) {
+            storageInitError = e;
+            throw new RuntimeException("Storage override had failed to initialize", e);
+          }
+        }
+      }
     }
-    return storage;
+    return tmp;
   }
 
   /**
@@ -211,13 +209,6 @@ public class Context {
     this.keyValueEntries = keyValueEntries;
     cascadesCancellation = true;
     canBeCancelled = isCancellable;
-  }
-
-  private static void maybeLogStorageOverrideNotFound() {
-    ClassNotFoundException e;
-    while ((e = storageOverrideNotFoundErrors.poll()) != null) {
-      log.log(Level.FINE, "Storage override doesn't exist. Using default.", e);
-    }
   }
 
   /**
@@ -387,7 +378,6 @@ public class Context {
    * }}</pre>
    */
   public Context attach() {
-    maybeLogStorageOverrideNotFound();
     Context previous = current();
     storage().attach(this);
     return previous;
