@@ -119,28 +119,32 @@ public class Context {
   static Storage storage() {
     Storage tmp = storage.get();
     if (tmp == null) {
-      // Note that this section may be run more than once
-      try {
-        Class<?> clazz = Class.forName("io.grpc.override.ContextStorageOverride");
-        // The override's constructor is prohibited from triggering any code that can loop back to
-        // Context
-        Storage newStorage = (Storage) clazz.getConstructor().newInstance();
-        storage.compareAndSet(null, newStorage);
-      } catch (ClassNotFoundException e) {
-        Storage newStorage = new ThreadLocalContextStorage();
-        // Must set storage before logging, since logging may call Context.current().
-        if (storage.compareAndSet(null, newStorage)) {
-          // Avoid logging if this thread lost the race, to avoid confusion
-          log.log(Level.FINE, "Storage override doesn't exist. Using default", e);
-        }
-      } catch (Exception e) {
-        throw new RuntimeException("Storage override failed to initialize", e);
-      }
-      // Re-retreive from storage since compareAndSet may have failed (returned false) in case of
-      // race.
-      tmp = storage.get();
+      tmp = createStorage();
     }
     return tmp;
+  }
+
+  private static Storage createStorage() {
+    // Note that this method may be run more than once
+    try {
+      Class<?> clazz = Class.forName("io.grpc.override.ContextStorageOverride");
+      // The override's constructor is prohibited from triggering any code that can loop back to
+      // Context
+      Storage newStorage = (Storage) clazz.getConstructor().newInstance();
+      storage.compareAndSet(null, newStorage);
+    } catch (ClassNotFoundException e) {
+      Storage newStorage = new ThreadLocalContextStorage();
+      // Must set storage before logging, since logging may call Context.current().
+      if (storage.compareAndSet(null, newStorage)) {
+        // Avoid logging if this thread lost the race, to avoid confusion
+        log.log(Level.FINE, "Storage override doesn't exist. Using default", e);
+      }
+    } catch (Exception e) {
+      throw new RuntimeException("Storage override failed to initialize", e);
+    }
+    // Re-retreive from storage since compareAndSet may have failed (returned false) in case of
+    // race.
+    return storage.get();
   }
 
   /**
