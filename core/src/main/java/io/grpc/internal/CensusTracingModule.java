@@ -17,7 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.opencensus.trace.ContextUtils.CONTEXT_SPAN_KEY;
+import static io.opencensus.trace.unsafe.ContextUtils.CONTEXT_SPAN_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.CallOptions;
