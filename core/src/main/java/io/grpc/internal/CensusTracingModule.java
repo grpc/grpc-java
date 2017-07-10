@@ -60,28 +60,28 @@ final class CensusTracingModule {
   private static final ClientStreamTracer noopClientTracer = new ClientStreamTracer() {};
 
   private final Tracer censusTracer;
-  private final BinaryFormat censusTracingPropagationHandler;
+  private final BinaryFormat censusPropagationBinaryFormat;
   @VisibleForTesting
   final Metadata.Key<SpanContext> tracingHeader;
   private final TracingClientInterceptor clientInterceptor = new TracingClientInterceptor();
   private final ServerTracerFactory serverTracerFactory = new ServerTracerFactory();
 
   CensusTracingModule(
-      Tracer censusTracer, final BinaryFormat censusTracingPropagationHandler) {
+      Tracer censusTracer, final BinaryFormat censusPropagationBinaryFormat) {
     this.censusTracer = checkNotNull(censusTracer, "censusTracer");
-    this.censusTracingPropagationHandler =
-        checkNotNull(censusTracingPropagationHandler, "censusTracingPropagationHandler");
+    this.censusPropagationBinaryFormat =
+        checkNotNull(censusPropagationBinaryFormat, "censusPropagationBinaryFormat");
     this.tracingHeader =
         Metadata.Key.of("grpc-trace-bin", new Metadata.BinaryMarshaller<SpanContext>() {
             @Override
             public byte[] toBytes(SpanContext context) {
-              return censusTracingPropagationHandler.toBinaryValue(context);
+              return censusPropagationBinaryFormat.toBinaryValue(context);
             }
 
             @Override
             public SpanContext parseBytes(byte[] serialized) {
               try {
-                return censusTracingPropagationHandler.fromBinaryValue(serialized);
+                return censusPropagationBinaryFormat.fromBinaryValue(serialized);
               } catch (Exception e) {
                 logger.log(Level.FINE, "Failed to parse tracing header", e);
                 return SpanContext.INVALID;
@@ -251,6 +251,9 @@ final class CensusTracingModule {
 
     @Override
     public <ReqT, RespT> Context filterContext(Context context) {
+      // Access directly the unsafe trace API to create the new Context. This is a safe usage
+      // because gRPC always creates a new Context for each of the server calls and does not
+      // inherit from the parent Context.
       return context.withValue(CONTEXT_SPAN_KEY, span);
     }
   }
@@ -272,6 +275,9 @@ final class CensusTracingModule {
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
       // New RPCs on client-side inherit the tracing context from the current Context.
+      // Safe usage of the unsafe trace API because CONTEXT_SPAN_KEY.get() returns the same value
+      // as Tracer.getCurrentSpan() except when no value available when the return value is null
+      // for the direct access and BlankSpan when Tracer API is used.
       final ClientCallTracer tracerFactory =
           newClientCallTracer(CONTEXT_SPAN_KEY.get(), method.getFullMethodName());
       ClientCall<ReqT, RespT> call =

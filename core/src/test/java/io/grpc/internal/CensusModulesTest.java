@@ -140,7 +140,7 @@ public class CensusModulesTest {
           .build();
   private final FakeClock fakeClock = new FakeClock();
   private final FakeStatsContextFactory statsCtxFactory = new FakeStatsContextFactory();
-  private final Random random = new Random();
+  private final Random random = new Random(1234);
   private final Span fakeClientParentSpan = MockableSpan.generateRandomSpan(random);
   private final Span spyClientSpan = spy(MockableSpan.generateRandomSpan(random));
   private final SpanContext fakeClientSpanContext = spyClientSpan.getContext();
