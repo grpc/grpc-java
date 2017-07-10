@@ -31,6 +31,8 @@ public abstract class ClientCallStreamObserver<V> extends CallStreamObserver<V> 
      * The server is informed of cancellations, but may not stop processing the call. Cancelling an already
      * {@code cancel()}ed {@code ClientCallStreamObserver} has no effect.
      *
+     * <p>No other methods on this class can be called after this method has been called.
+     *
      * <p>It is recommended that at least one of the arguments to be non-{@code null}, to provide
      * useful debug information. Both argument being null may log warnings and result in suboptimal
      * performance. Also note that the provided information will not be sent to the server.
