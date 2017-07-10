@@ -82,8 +82,9 @@ public class TestServiceClient {
   private String defaultServiceAccount;
   private String serviceAccountKeyFile;
   private String oauthScope;
+  private boolean useGapic;
 
-  private Tester tester = new Tester();
+  private Tester tester;
 
   private void parseArgs(String[] args) {
     boolean usage = false;
@@ -131,6 +132,8 @@ public class TestServiceClient {
         serviceAccountKeyFile = value;
       } else if ("oauth_scope".equals(key)) {
         oauthScope = value;
+      } else if ("use_gapic".equals(key)) {
+        useGapic = Boolean.parseBoolean(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -165,6 +168,9 @@ public class TestServiceClient {
   }
 
   private void setUp() {
+    if (tester == null) {
+      tester = new Tester(useGapic);
+    }
     tester.setUp();
   }
 
@@ -293,6 +299,11 @@ public class TestServiceClient {
   }
 
   private class Tester extends AbstractInteropTest {
+
+    public Tester(boolean useGapic) {
+      super(useGapic);
+    }
+
     @Override
     protected ManagedChannel createChannel() {
       if (!useOkHttp) {

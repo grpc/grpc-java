@@ -1,0 +1,61 @@
+# Run:
+#   protoc -o test.desc --include_source_info --include_imports ../grpc_testing/test.proto
+#   /path/to/toolkit/gradlew runCodeGen '-Pclargs=--descriptor_set=/path/to/test.desc,--service_yaml=/path/to/test.yaml,--gapic_yaml=/path/to/test_gapic.yaml,--gapic_yaml=/path/to/googleapis/gapic/lang/go_gapic.yaml'
+
+type: com.google.api.codegen.ConfigProto
+language_settings:
+  java:
+    package_name: io.grpc.testing.integration.gapic
+license_header:
+  copyright_file: copyright-google.txt
+  license_file: license-header-apache-2.0.txt
+interfaces:
+- name: grpc.testing.TestService
+  retry_codes_def:
+  - name: idempotent
+    retry_codes:
+    - UNAVAILABLE
+    - DEADLINE_EXCEEDED
+  - name: non_idempotent
+    retry_codes: []
+  - name: pull
+    retry_codes:
+    - DEADLINE_EXCEEDED
+    - INTERNAL
+    - CANCELLED
+    - RESOURCE_EXHAUSTED
+    - UNAVAILABLE
+  retry_params_def:
+  - name: default
+    initial_retry_delay_millis: 100
+    retry_delay_multiplier: 1.3
+    max_retry_delay_millis: 60000 # 60 seconds
+    initial_rpc_timeout_millis: 60000 # 60 seconds
+    rpc_timeout_multiplier: 1
+    max_rpc_timeout_millis: 60000 # 60 seconds
+    total_timeout_millis: 600000 # 10 minutes
+  methods:
+  - name: EmptyCall
+    retry_codes_name: non_idempotent
+    retry_params_name: default
+    timeout_millis: 60000
+  - name: UnaryCall
+    retry_codes_name: non_idempotent
+    retry_params_name: default
+    timeout_millis: 60000
+  - name: StreamingOutputCall
+    retry_codes_name: non_idempotent
+    retry_params_name: default
+    timeout_millis: 60000
+  - name: StreamingInputCall
+    retry_codes_name: non_idempotent
+    retry_params_name: default
+    timeout_millis: 60000
+  - name: FullDuplexCall
+    retry_codes_name: non_idempotent
+    retry_params_name: default
+    timeout_millis: 60000
+  - name: HalfDuplexCall
+    retry_codes_name: non_idempotent
+    retry_params_name: default
+    timeout_millis: 60000

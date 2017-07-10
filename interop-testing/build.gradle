@@ -2,6 +2,8 @@ apply plugin: 'application'
 
 description = "gRPC: Integration Testing"
 startScripts.enabled = false
+sourceCompatibility = 1.7
+targetCompatibility = 1.7
 
 // Add dependency on the protobuf plugin
 buildscript {
@@ -24,7 +26,11 @@ dependencies {
             libraries.junit,
             libraries.mockito,
             libraries.netty_tcnative,
-            libraries.oauth_client
+            libraries.oauth_client,
+            libraries.protobuf,
+            libraries.guava,
+            'com.google.api:gax:1.4.1',
+            'com.google.api:gax-grpc:0.21.1'
 }
 
 configureProtoCompilation()

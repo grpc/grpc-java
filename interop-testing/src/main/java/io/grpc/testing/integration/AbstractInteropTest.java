@@ -32,6 +32,9 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 
+import com.google.api.gax.grpc.ChannelProvider;
+import com.google.api.gax.grpc.FixedChannelProvider;
+import com.google.api.gax.grpc.StreamingCallable;
 import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.ComputeEngineCredentials;
 import com.google.auth.oauth2.GoogleCredentials;
@@ -104,6 +107,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
+
+import io.grpc.testing.integration.gapic.TestServiceSettings;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Assume;
@@ -158,6 +163,11 @@ public abstract class AbstractInteropTest {
       };
 
   protected static final Empty EMPTY = Empty.getDefaultInstance();
+  private final boolean useGapic;
+
+  public AbstractInteropTest(boolean useGapic) {
+    this.useGapic = useGapic;
+  }
 
   protected static void startStaticServer(
       AbstractServerImplBuilder<?> builder, ServerInterceptor ... interceptors) {
@@ -198,6 +208,8 @@ public abstract class AbstractInteropTest {
   protected TestServiceGrpc.TestServiceBlockingStub blockingStub;
   protected TestServiceGrpc.TestServiceStub asyncStub;
 
+  protected io.grpc.testing.integration.gapic.TestServiceClient gapicClient;
+
   private final LinkedBlockingQueue<ClientStreamTracer> clientStreamTracers =
       new LinkedBlockingQueue<ClientStreamTracer>();
 
@@ -229,6 +241,17 @@ public abstract class AbstractInteropTest {
     blockingStub =
         TestServiceGrpc.newBlockingStub(channel).withInterceptors(tracerSetupInterceptor);
     asyncStub = TestServiceGrpc.newStub(channel).withInterceptors(tracerSetupInterceptor);
+
+    if (useGapic) {
+      try {
+        ChannelProvider channelProvider = FixedChannelProvider.create(channel);
+        TestServiceSettings settings = TestServiceSettings.defaultBuilder().setChannelProvider(channelProvider).build();
+        gapicClient = io.grpc.testing.integration.gapic.TestServiceClient.create(settings);
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    }
+
     requestHeadersCapture.set(null);
     clientStatsCtxFactory.rolloverRecords();
     serverStatsCtxFactory.rolloverRecords();
@@ -353,12 +376,18 @@ public abstract class AbstractInteropTest {
                 .setType(PayloadType.COMPRESSABLE)
                 .setBody(ByteString.copyFrom(new byte[58979])))
             .build());
-
     StreamRecorder<StreamingOutputCallResponse> recorder = StreamRecorder.create();
-    asyncStub.streamingOutputCall(request, recorder);
-    recorder.awaitCompletion();
-    assertSuccess(recorder);
-    assertEquals(goldenResponses, recorder.getValues());
+
+    if (useGapic) {
+      StreamingCallable<StreamingOutputCallRequest, StreamingOutputCallResponse> callable =
+          gapicClient.streamingOutputCallCallable();
+      callable.serverStreamingCall(request, recorder);
+    } else {
+      asyncStub.streamingOutputCall(request, recorder);
+      recorder.awaitCompletion();
+      assertSuccess(recorder);
+      assertEquals(goldenResponses, recorder.getValues());
+    }
   }
 
   @Test(timeout = 10000)

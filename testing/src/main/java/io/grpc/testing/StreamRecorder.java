@@ -16,6 +16,7 @@
 
 package io.grpc.testing;
 
+import com.google.api.gax.grpc.ApiStreamObserver;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.ExperimentalApi;
@@ -32,7 +33,7 @@ import javax.annotation.Nullable;
  * values produced by the stream as well as any errors.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1791")
-public class StreamRecorder<T> implements StreamObserver<T> {
+public class StreamRecorder<T> implements StreamObserver<T>, ApiStreamObserver<T> {
 
   /**
    * Creates a new recorder.
