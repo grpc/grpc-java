@@ -1,0 +1,18 @@
+type: google.api.Service
+config_version: 3
+name: testing.googleapis.com
+
+title: gRPC Testing API
+
+documentation:
+  summary: >
+    Tests gRPC client.
+apis:
+- name: grpc.testing.TestService
+
+authentication:
+  rules:
+    - selector: '*'
+      oauth:
+        canonical_scopes: https://www.googleapis.com/auth/pubsub,
+                          https://www.googleapis.com/auth/cloud-platform

@@ -20,6 +20,7 @@ subprojects {
     apply plugin: "idea"
     apply plugin: "signing"
     apply plugin: "jacoco"
+    apply plugin: 'idea'
 
     apply plugin: "com.google.osdetector"
     // The plugin only has an effect if a signature is specified

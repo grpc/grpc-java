@@ -5,7 +5,9 @@ dependencies {
             project(':grpc-stub'),
             libraries.junit,
             libraries.mockito,
-            libraries.truth
+            libraries.truth,
+            'com.google.api:gax:1.4.1',
+            'com.google.api:gax-grpc:0.21.1'
 
     testCompile project(':grpc-testing-proto')
 }
