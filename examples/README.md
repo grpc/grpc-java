@@ -31,7 +31,7 @@ $ ./build/install/examples/bin/hello-world-client
 That's it!
 
 Please refer to gRPC Java's [README](../README.md) and
-[tutorial](http://www.grpc.io/docs/tutorials/basic/java.html) for more
+[tutorial](https://grpc.io/docs/tutorials/basic/java.html) for more
 information.
 
 ## Maven
