@@ -577,7 +577,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     }
 
     @Override
-    public SubchannelImpl createSubchannel(EquivalentAddressGroup addressGroup, Attributes attrs) {
+    public AbstractSubchannel createSubchannel(
+        EquivalentAddressGroup addressGroup, Attributes attrs) {
       checkNotNull(addressGroup, "addressGroup");
       checkNotNull(attrs, "attrs");
       ScheduledExecutorService scheduledExecutorCopy = scheduledExecutor;
@@ -793,7 +794,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     }
   }
 
-  private final class SubchannelImplImpl extends SubchannelImpl {
+  private final class SubchannelImplImpl extends AbstractSubchannel {
     // Set right after SubchannelImplImpl is created.
     InternalSubchannel subchannel;
     final Object shutdownLock = new Object();
