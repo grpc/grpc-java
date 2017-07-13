@@ -795,7 +795,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   }
 
   private final class SubchannelImpl extends AbstractSubchannel {
-    // Set right after SubchannelImplImpl is created.
+    // Set right after SubchannelImpl is created.
     InternalSubchannel subchannel;
     final Object shutdownLock = new Object();
     final Attributes attrs;
