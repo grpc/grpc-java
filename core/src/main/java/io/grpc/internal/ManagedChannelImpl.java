@@ -585,7 +585,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       checkState(scheduledExecutorCopy != null,
           "scheduledExecutor is already cleared. Looks like you are calling this method after "
           + "you've already shut down");
-      final SubchannelImplImpl subchannel = new SubchannelImplImpl(attrs);
+      final SubchannelImpl subchannel = new SubchannelImpl(attrs);
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
             addressGroup, authority(), userAgent, backoffPolicyProvider, transportFactory,
             scheduledExecutorCopy, stopwatchSupplier, channelExecutor,
@@ -642,9 +642,9 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     @Override
     public void updateSubchannelAddresses(
         LoadBalancer.Subchannel subchannel, EquivalentAddressGroup addrs) {
-      checkArgument(subchannel instanceof SubchannelImplImpl,
+      checkArgument(subchannel instanceof SubchannelImpl,
           "subchannel must have been returned from createSubchannel");
-      ((SubchannelImplImpl) subchannel).subchannel.updateAddresses(addrs);
+      ((SubchannelImpl) subchannel).subchannel.updateAddresses(addrs);
     }
 
     @Override
@@ -794,7 +794,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     }
   }
 
-  private final class SubchannelImplImpl extends AbstractSubchannel {
+  private final class SubchannelImpl extends AbstractSubchannel {
     // Set right after SubchannelImplImpl is created.
     InternalSubchannel subchannel;
     final Object shutdownLock = new Object();
@@ -805,7 +805,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     @GuardedBy("shutdownLock")
     ScheduledFuture<?> delayedShutdownTask;
 
-    SubchannelImplImpl(Attributes attrs) {
+    SubchannelImpl(Attributes attrs) {
       this.attrs = checkNotNull(attrs, "attrs");
     }
 
