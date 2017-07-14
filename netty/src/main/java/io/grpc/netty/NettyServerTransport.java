@@ -16,6 +16,7 @@
 
 package io.grpc.netty;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import io.grpc.ServerStreamTracer;
@@ -135,7 +136,8 @@ class NettyServerTransport implements ServerTransport {
    * Accepts a throwable and returns the appropriate logging level. Uninteresting exceptions
    * should not clutter the log.
    */
-  private static Level getLogLevel(Throwable t) {
+  @VisibleForTesting
+  static Level getLogLevel(Throwable t) {
     if (t instanceof IOException && t.getMessage() != null) {
       for (String msg : QUIET_ERRORS) {
         if (t.getMessage().equals(msg)) {
