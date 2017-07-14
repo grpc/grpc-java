@@ -47,9 +47,6 @@ import javax.annotation.Nullable;
  * that the runtime can vary behavior without requiring regeneration of the stub.
  */
 public final class ClientCalls {
-  // Non private to avoid synthetic class
-  static final Logger log = Logger.getLogger(ClientCalls.class.getName());
-
   // Prevent instantiation
   private ClientCalls() {}
 
@@ -269,8 +266,7 @@ public final class ClientCalls {
     }
   }
 
-  // Non private to avoid synthetic class
-  static final class CallToStreamObserverAdapter<T> extends ClientCallStreamObserver<T> {
+  private static final class CallToStreamObserverAdapter<T> extends ClientCallStreamObserver<T> {
     private boolean frozen;
     private final ClientCall<T, ?> call;
     private Runnable onReadyHandler;
@@ -332,8 +328,7 @@ public final class ClientCalls {
     }
   }
 
-  // Non private to avoid synthetic class
-  static final class StreamObserverToCallListenerAdapter<ReqT, RespT>
+  private static final class StreamObserverToCallListenerAdapter<ReqT, RespT>
       extends ClientCall.Listener<RespT> {
     private final StreamObserver<RespT> observer;
     private final CallToStreamObserverAdapter<ReqT> adapter;
@@ -397,11 +392,11 @@ public final class ClientCalls {
   /**
    * Complete a GrpcFuture using {@link StreamObserver} events.
    */
-  // Non private to avoid synthetic class
-  static final class UnaryStreamToFuture<RespT> extends ClientCall.Listener<RespT> {
+  private static final class UnaryStreamToFuture<RespT> extends ClientCall.Listener<RespT> {
     private final GrpcFuture<RespT> responseFuture;
     private RespT value;
 
+    // Non private to avoid synthetic class
     UnaryStreamToFuture(GrpcFuture<RespT> responseFuture) {
       this.responseFuture = responseFuture;
     }
@@ -435,10 +430,10 @@ public final class ClientCalls {
     }
   }
 
-  // Non private to avoid synthetic class
-  static final class GrpcFuture<RespT> extends AbstractFuture<RespT> {
+  private static final class GrpcFuture<RespT> extends AbstractFuture<RespT> {
     private final ClientCall<?, RespT> call;
 
+    // Non private to avoid synthetic class
     GrpcFuture(ClientCall<?, RespT> call) {
       this.call = call;
     }
@@ -467,8 +462,7 @@ public final class ClientCalls {
    * separate thread from {@code Iterator} calls.
    */
   // TODO(ejona86): determine how to allow ClientCall.cancel() in case of application error.
-  // Non private to avoid synthetic class
-  static final class BlockingResponseStream<T> implements Iterator<T> {
+  private static final class BlockingResponseStream<T> implements Iterator<T> {
     // Due to flow control, only needs to hold up to 2 items: 1 for value, 1 for close.
     private final BlockingQueue<Object> buffer = new ArrayBlockingQueue<Object>(2);
     private final ClientCall.Listener<T> listener = new QueuingListener();
@@ -478,10 +472,12 @@ public final class ClientCalls {
     // Only accessed when iterating.
     private Object last;
 
+    // Non private to avoid synthetic class
     BlockingResponseStream(ClientCall<?, T> call) {
       this(call, null);
     }
 
+    // Non private to avoid synthetic class
     BlockingResponseStream(ClientCall<?, T> call, ThreadlessExecutor threadless) {
       this.call = call;
       this.threadless = threadless;
@@ -544,8 +540,10 @@ public final class ClientCalls {
       throw new UnsupportedOperationException();
     }
 
-    // Non private to avoid synthetic class
-    final class QueuingListener extends ClientCall.Listener<T> {
+    private final class QueuingListener extends ClientCall.Listener<T> {
+      // Non private to avoid synthetic class
+      QueuingListener() {}
+
       private boolean done = false;
 
       @Override
@@ -571,9 +569,13 @@ public final class ClientCalls {
     }
   }
 
-  // Non private to avoid synthetic class
-  static final class ThreadlessExecutor implements Executor {
+  private static final class ThreadlessExecutor implements Executor {
+    private static final Logger log = Logger.getLogger(ClientCalls.class.getName());
+
     private final BlockingQueue<Runnable> queue = new LinkedBlockingQueue<Runnable>();
+
+    // Non private to avoid synthetic class
+    ThreadlessExecutor() {}
 
     /**
      * Waits until there is a Runnable, then executes it and all queued Runnables after it.
