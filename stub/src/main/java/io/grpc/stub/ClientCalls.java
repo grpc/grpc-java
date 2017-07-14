@@ -570,7 +570,7 @@ public final class ClientCalls {
   }
 
   private static final class ThreadlessExecutor implements Executor {
-    private static final Logger log = Logger.getLogger(ClientCalls.class.getName());
+    private static final Logger log = Logger.getLogger(ThreadlessExecutor.class.getName());
 
     private final BlockingQueue<Runnable> queue = new LinkedBlockingQueue<Runnable>();
 
