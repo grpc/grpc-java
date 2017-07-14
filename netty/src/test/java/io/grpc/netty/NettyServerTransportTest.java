@@ -34,19 +34,19 @@ public class NettyServerTransportTest {
   }
 
   @Test
-  public void IOException_quiet() {
+  public void quiet() {
     assertEquals(Level.FINE, getLogLevel(new IOException("Connection reset by peer")));
     assertEquals(Level.FINE, getLogLevel(new IOException(
         "An existing connection was forcibly closed by the remote host")));
   }
 
   @Test
-  public void IOException_nonquiet() {
+  public void nonquiet() {
     assertEquals(Level.INFO, getLogLevel(new IOException("foo")));
   }
 
   @Test
-  public void IOException_nullMessage() {
+  public void nullMessage() {
     IOException e = new IOException();
     assertNull(e.getMessage());
     assertEquals(Level.INFO, getLogLevel(e));
