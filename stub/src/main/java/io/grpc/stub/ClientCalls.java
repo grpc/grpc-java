@@ -47,7 +47,8 @@ import javax.annotation.Nullable;
  * that the runtime can vary behavior without requiring regeneration of the stub.
  */
 public final class ClientCalls {
-  private static final Logger log = Logger.getLogger(ClientCalls.class.getName());
+  // Non private to avoid synthetic class
+  static final Logger log = Logger.getLogger(ClientCalls.class.getName());
 
   // Prevent instantiation
   private ClientCalls() {}
@@ -173,7 +174,7 @@ public final class ClientCalls {
   }
 
   /**
-   * Returns the result of calling {@link Future#get()} interruptably on a task known not to throw a
+   * Returns the result of calling {@link Future#get()} interruptibly on a task known not to throw a
    * checked exception.
    *
    * <p>If interrupted, the interrupt is restored before throwing an exception..
@@ -268,13 +269,15 @@ public final class ClientCalls {
     }
   }
 
-  private static class CallToStreamObserverAdapter<T> extends ClientCallStreamObserver<T> {
+  // Non private to avoid synthetic class
+  static final class CallToStreamObserverAdapter<T> extends ClientCallStreamObserver<T> {
     private boolean frozen;
     private final ClientCall<T, ?> call;
     private Runnable onReadyHandler;
     private boolean autoFlowControlEnabled = true;
 
-    public CallToStreamObserverAdapter(ClientCall<T, ?> call) {
+    // Non private to avoid synthetic class
+    CallToStreamObserverAdapter(ClientCall<T, ?> call) {
       this.call = call;
     }
 
@@ -329,13 +332,15 @@ public final class ClientCalls {
     }
   }
 
-  private static class StreamObserverToCallListenerAdapter<ReqT, RespT>
+  // Non private to avoid synthetic class
+  static final class StreamObserverToCallListenerAdapter<ReqT, RespT>
       extends ClientCall.Listener<RespT> {
     private final StreamObserver<RespT> observer;
     private final CallToStreamObserverAdapter<ReqT> adapter;
     private final boolean streamingResponse;
     private boolean firstResponseReceived;
 
+    // Non private to avoid synthetic class
     StreamObserverToCallListenerAdapter(
         StreamObserver<RespT> observer,
         CallToStreamObserverAdapter<ReqT> adapter,
@@ -392,11 +397,12 @@ public final class ClientCalls {
   /**
    * Complete a GrpcFuture using {@link StreamObserver} events.
    */
-  private static class UnaryStreamToFuture<RespT> extends ClientCall.Listener<RespT> {
+  // Non private to avoid synthetic class
+  static final class UnaryStreamToFuture<RespT> extends ClientCall.Listener<RespT> {
     private final GrpcFuture<RespT> responseFuture;
     private RespT value;
 
-    public UnaryStreamToFuture(GrpcFuture<RespT> responseFuture) {
+    UnaryStreamToFuture(GrpcFuture<RespT> responseFuture) {
       this.responseFuture = responseFuture;
     }
 
@@ -429,7 +435,8 @@ public final class ClientCalls {
     }
   }
 
-  private static class GrpcFuture<RespT> extends AbstractFuture<RespT> {
+  // Non private to avoid synthetic class
+  static final class GrpcFuture<RespT> extends AbstractFuture<RespT> {
     private final ClientCall<?, RespT> call;
 
     GrpcFuture(ClientCall<?, RespT> call) {
@@ -460,7 +467,8 @@ public final class ClientCalls {
    * separate thread from {@code Iterator} calls.
    */
   // TODO(ejona86): determine how to allow ClientCall.cancel() in case of application error.
-  private static class BlockingResponseStream<T> implements Iterator<T> {
+  // Non private to avoid synthetic class
+  static final class BlockingResponseStream<T> implements Iterator<T> {
     // Due to flow control, only needs to hold up to 2 items: 1 for value, 1 for close.
     private final BlockingQueue<Object> buffer = new ArrayBlockingQueue<Object>(2);
     private final ClientCall.Listener<T> listener = new QueuingListener();
@@ -470,11 +478,11 @@ public final class ClientCalls {
     // Only accessed when iterating.
     private Object last;
 
-    private BlockingResponseStream(ClientCall<?, T> call) {
+    BlockingResponseStream(ClientCall<?, T> call) {
       this(call, null);
     }
 
-    private BlockingResponseStream(ClientCall<?, T> call, ThreadlessExecutor threadless) {
+    BlockingResponseStream(ClientCall<?, T> call, ThreadlessExecutor threadless) {
       this.call = call;
       this.threadless = threadless;
     }
@@ -536,7 +544,8 @@ public final class ClientCalls {
       throw new UnsupportedOperationException();
     }
 
-    private class QueuingListener extends ClientCall.Listener<T> {
+    // Non private to avoid synthetic class
+    final class QueuingListener extends ClientCall.Listener<T> {
       private boolean done = false;
 
       @Override
@@ -562,7 +571,8 @@ public final class ClientCalls {
     }
   }
 
-  private static class ThreadlessExecutor implements Executor {
+  // Non private to avoid synthetic class
+  static final class ThreadlessExecutor implements Executor {
     private final BlockingQueue<Runnable> queue = new LinkedBlockingQueue<Runnable>();
 
     /**
