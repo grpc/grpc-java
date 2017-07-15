@@ -84,6 +84,7 @@ public class AsyncServer {
         }
       }
     });
+    server.awaitTermination();
   }
 
   @SuppressWarnings("LiteralClassName") // Epoll is not available on windows
