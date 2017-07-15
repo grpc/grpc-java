@@ -42,7 +42,7 @@ subprojects {
         }
       }
     }
-    // TODO(zpencer): workaround until intellij 2017.2 is released
+    // TODO(zpencer): remove when intellij 2017.2 is released
     // https://github.com/gradle/gradle/issues/2315
     idea.module.inheritOutputDirs = true
 
