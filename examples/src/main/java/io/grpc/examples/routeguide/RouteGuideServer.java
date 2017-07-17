@@ -148,7 +148,7 @@ public class RouteGuideServer {
 
       // This example is a bit contrived, but demonstrates to show how to use flow control to
       // avoid sending too many responses on the network all at once.
-      List<Feature> inRectangle = new ArrayList<>();
+      List<Feature> inRectangle = new ArrayList<Feature>();
       for (Feature feature : features) {
         if (!RouteGuideUtil.exists(feature)) {
           continue;
