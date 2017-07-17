@@ -187,6 +187,7 @@ applications to interact with it directly.
 #### Server
 * [Server call handler - analog to Channel on server](https://github.com/google/grpc-java/blob/master/core/src/main/java/io/grpc/ServerCallHandler.java)
 * [Server Call](https://github.com/google/grpc-java/blob/master/core/src/main/java/io/grpc/ServerCall.java)
+* [Server Interceptor](https://github.com/grpc/grpc-java/blob/master/core/src/main/java/io/grpc/ServerInterceptor.java)
 
 
 ### Transport
