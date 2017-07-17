@@ -17,13 +17,11 @@
 package io.grpc.inprocess;
 
 import io.grpc.ServerStreamTracer;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.testing.AbstractTransportTest;
 import java.util.List;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import org.junit.AfterClass;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -33,17 +31,9 @@ public class InProcessTransportTest extends AbstractTransportTest {
   private static final String TRANSPORT_NAME = "perfect-for-testing";
   private static final String AUTHORITY = "a-testing-authority";
 
-  private static final ScheduledExecutorService scheduler =
-      Executors.newSingleThreadScheduledExecutor();
-
-  @AfterClass
-  public static void shutdown() {
-    scheduler.shutdown();
-  }
-
   @Override
   protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
-    return new InProcessServer(TRANSPORT_NAME);
+    return new InProcessServer(TRANSPORT_NAME, GrpcUtil.TIMER_SERVICE);
   }
 
   @Override
@@ -59,7 +49,7 @@ public class InProcessTransportTest extends AbstractTransportTest {
 
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
-    return new InProcessTransport(TRANSPORT_NAME, testAuthority(server), scheduler);
+    return new InProcessTransport(TRANSPORT_NAME, testAuthority(server));
   }
 
   @Override

@@ -33,6 +33,7 @@ import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.LogId;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.NoopClientStream;
+import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransport;
@@ -59,7 +60,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   private final LogId logId = LogId.allocate(getClass().getName());
   private final String name;
   private final String authority;
-  private final ScheduledExecutorService scheduler;
+  private ObjectPool<ScheduledExecutorService> serverSchedulerPool;
+  private ScheduledExecutorService serverScheduler;
   private ServerTransportListener serverTransportListener;
   private Attributes serverStreamAttributes;
   private ManagedClientTransport.Listener clientTransportListener;
@@ -72,10 +74,9 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   @GuardedBy("this")
   private Set<InProcessStream> streams = new HashSet<InProcessStream>();
 
-  public InProcessTransport(String name, String authority, ScheduledExecutorService scheduler) {
+  public InProcessTransport(String name, String authority) {
     this.name = name;
     this.authority = authority;
-    this.scheduler = scheduler;
   }
 
   @CheckReturnValue
@@ -84,6 +85,9 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
     this.clientTransportListener = listener;
     InProcessServer server = InProcessServer.findServer(name);
     if (server != null) {
+      serverSchedulerPool = server.getScheduledExecutorServicePool();
+      serverScheduler = serverSchedulerPool.getObject();
+      // Must be semi-initialized; past this point, can begin receiving requests
       serverTransportListener = server.register(this);
     }
     if (serverTransportListener == null) {
@@ -201,7 +205,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
   @Override
   public ScheduledExecutorService getScheduledExecutorService() {
-    return scheduler;
+    return serverScheduler;
   }
 
   private synchronized void notifyShutdown(Status s) {
@@ -217,6 +221,9 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       return;
     }
     terminated = true;
+    if (serverScheduler != null) {
+      serverScheduler = serverSchedulerPool.returnObject(serverScheduler);
+    }
     clientTransportListener.transportTerminated();
     if (serverTransportListener != null) {
       serverTransportListener.transportTerminated();

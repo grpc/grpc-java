@@ -22,10 +22,7 @@ import io.grpc.Internal;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
-import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.SharedResourceHolder;
 import java.net.SocketAddress;
-import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * Builder for a channel that issues in-process requests. Clients identify the in-process server by
@@ -88,8 +85,6 @@ public final class InProcessChannelBuilder extends
   @Internal
   static final class InProcessClientTransportFactory implements ClientTransportFactory {
     private final String name;
-    private final ScheduledExecutorService timerService =
-        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
 
     private boolean closed;
 
@@ -103,16 +98,13 @@ public final class InProcessChannelBuilder extends
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
       }
-      return new InProcessTransport(name, authority, timerService);
+      return new InProcessTransport(name, authority);
     }
 
     @Override
     public void close() {
-      if (closed) {
-        return;
-      }
       closed = true;
-      SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timerService);
+      // Do nothing.
     }
   }
 }
