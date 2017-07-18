@@ -35,7 +35,6 @@ import java.util.Enumeration;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.ServiceConfigurationError;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 import org.junit.Test;
 import org.junit.runner.RunWith;
