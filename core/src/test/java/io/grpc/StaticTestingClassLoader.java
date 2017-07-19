@@ -27,16 +27,16 @@ import java.util.regex.Pattern;
  * instance is required per test.
  */
 public final class StaticTestingClassLoader extends ClassLoader {
-  private final Pattern pattern;
+  private final Pattern classesToDefine;
 
-  public StaticTestingClassLoader(ClassLoader parent, Pattern pattern) {
+  public StaticTestingClassLoader(ClassLoader parent, Pattern classesToDefine) {
     super(parent);
-    this.pattern = Preconditions.checkNotNull(pattern, "pattern");
+    this.classesToDefine = Preconditions.checkNotNull(classesToDefine, "classesToDefine");
   }
 
   @Override
   protected Class<?> findClass(String name) throws ClassNotFoundException {
-    if (!pattern.matcher(name).matches()) {
+    if (!classesToDefine.matcher(name).matches()) {
       throw new ClassNotFoundException(name);
     }
     InputStream is = getResourceAsStream(name.replace('.', '/') + ".class");
