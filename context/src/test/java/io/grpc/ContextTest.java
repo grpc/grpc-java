@@ -57,6 +57,30 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ContextTest {
 
+  // The following logger setup is to test the scenario when the logger itself is using Context,
+  // the Context/Storage initialization shouldn't fail.
+  private static final Logger logger = Logger.getLogger(Context.class.getName());
+
+  static {
+    logger.setLevel(Level.ALL);
+    logger.addHandler(new Handler() {
+      @Override
+      public void publish(LogRecord record) {
+        Context ctx = Context.current();
+        Context previous = ctx.attach();
+        ctx.detach(previous);
+      }
+
+      @Override
+      public void flush() {
+      }
+
+      @Override
+      public void close() throws SecurityException {
+      }
+    });
+  }
+
   private static final Context.Key<String> PET = Context.key("pet");
   private static final Context.Key<String> FOOD = Context.keyWithDefault("food", "lasagna");
   private static final Context.Key<String> COLOR = Context.key("color");
