@@ -470,12 +470,18 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     if (!shutdown.compareAndSet(false, true)) {
       return this;
     }
+
+    // Put gotoState(SHUTDOWN) as early into the channelExecutor's queue as possible.
+    // delayedTransport.shutdown() may also add some tasks into the queue. But some things inside
+    // delayedTransport.shutdown() like setting delayedTransport.shutdown = true are not run in the
+    // channelExecutor's queue and should not be blocked, so we do not drain() immediately here.
     channelExecutor.executeLater(new Runnable() {
       @Override
       public void run() {
         channelStateManager.gotoState(SHUTDOWN);
       }
     });
+
     delayedTransport.shutdown();
     channelExecutor.executeLater(new Runnable() {
         @Override
