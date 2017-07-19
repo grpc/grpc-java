@@ -39,10 +39,6 @@ public final class StaticTestingClassLoader extends ClassLoader {
     if (!pattern.matcher(name).matches()) {
       throw new ClassNotFoundException(name);
     }
-    return findClass0(name);
-  }
-
-  private Class<?> findClass0(String name) throws ClassNotFoundException {
     InputStream is = getResourceAsStream(name.replace('.', '/') + ".class");
     if (is == null) {
       throw new ClassNotFoundException(name);
@@ -58,10 +54,15 @@ public final class StaticTestingClassLoader extends ClassLoader {
 
   @Override
   protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+    // Reverse normal loading order; check this class loader before its parent
     synchronized (getClassLoadingLock(name)) {
       Class<?> klass = findLoadedClass(name);
-      if (klass == null && pattern.matcher(name).matches()) {
-        klass = findClass0(name);
+      if (klass == null) {
+        try {
+          klass = findClass(name);
+        } catch (ClassNotFoundException e) {
+          // This ClassLoader doesn't know a class with that name; that's part of normal operation
+        }
       }
       if (klass == null) {
         klass = super.loadClass(name, false);
