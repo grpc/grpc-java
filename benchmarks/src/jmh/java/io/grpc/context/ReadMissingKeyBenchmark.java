@@ -83,7 +83,6 @@ public class ReadMissingKeyBenchmark {
   @Benchmark
   @BenchmarkMode(Mode.SampleTime)
   @OutputTimeUnit(TimeUnit.NANOSECONDS)
-  @GroupThreads(6)
   public void readMissingKey() throws ExecutionException, InterruptedException {
     missingKey.get(contextChain);
   }
