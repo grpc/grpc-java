@@ -49,7 +49,6 @@ public class ReadMissingKeyBenchmark {
 
   /**
    * Number of keys to put for each iteration.
-   * Large numbers (>4) are generally discouraged.
    */
   @Param({"1", "4", "10"})
   public int numKeys;
