@@ -1,3 +1,19 @@
+/*
+ * Copyright 2017, gRPC Authors All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package io.grpc.context;
 
 import com.google.common.collect.Lists;
@@ -17,17 +33,13 @@ import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 
-/**
- * Caveat: jmh setup and teardown can happen on different threads, so we use our own single
- * thread executor instead. This means the context measurement is inflated with a context switch.
- */
 @State(Scope.Benchmark)
 public class ReadMissingKeyBenchmark {
   /**
-   * The number of contexts in the chain.
+   * The number of times to insert the set of keys.
    */
   @Param({"1", "5", "20"})
-  public int contextDepth;
+  public int putIterations;
 
   /**
    * If true we will use the 4-pair batch put, otherwise puts will be individual.
@@ -36,7 +48,8 @@ public class ReadMissingKeyBenchmark {
   public boolean batched;
 
   /**
-   * Number of keys to insert to each context level. Large numbers are discouraged in practice (>4).
+   * Number of keys to put for each iteration.
+   * Large numbers (>4) are generally discouraged.
    */
   @Param({"1", "4", "10"})
   public int numKeys;
@@ -52,7 +65,7 @@ public class ReadMissingKeyBenchmark {
   public void setUp() throws ExecutionException, InterruptedException {
     final List<Key<Integer>> keys = makeKeys(numKeys);
     final List<List<Key<Integer>>> keyBatches = Lists.partition(keys, CONTEXT_MAX_BATCH_SIZE);
-    for (int i = 0; i < contextDepth; i++) {
+    for (int i = 0; i < putIterations; i++) {
       if (batched) {
         for (Key<Integer> key : keys) {
           contextChain = contextChain.withValue(key, DUMMY_VAL);
@@ -66,7 +79,7 @@ public class ReadMissingKeyBenchmark {
   }
 
   /**
-   * Missing keys are typically the slow path for Contexts
+   * Missing keys are typically the slow path for Contexts.
    */
   @Benchmark
   @BenchmarkMode(Mode.SampleTime)
@@ -92,22 +105,22 @@ public class ReadMissingKeyBenchmark {
    * Returns a new Context based off of `c` where all keys from `batch` are inserted with `val`.
    */
   private static Context batchPut(Context c, List<Key<Integer>> batch, int val) {
-      switch (batch.size()) {
+    switch (batch.size()) {
       case 4:
-          return c.withValues(
-                  batch.get(0), val,
-                  batch.get(1), val,
-                  batch.get(2), val,
-                  batch.get(3), val);
+        return c.withValues(
+            batch.get(0), val,
+            batch.get(1), val,
+            batch.get(2), val,
+            batch.get(3), val);
       case 3:
         return c.withValues(
-                  batch.get(0), val,
-                  batch.get(1), val,
-                  batch.get(2), val);
+            batch.get(0), val,
+            batch.get(1), val,
+            batch.get(2), val);
       case 2:
         return c.withValues(
-                  batch.get(0), val,
-                  batch.get(1), val);
+            batch.get(0), val,
+            batch.get(1), val);
       case 1:
         return c.withValue(batch.get(0), val);
       default:
