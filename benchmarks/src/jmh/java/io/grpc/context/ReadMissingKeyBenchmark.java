@@ -62,14 +62,13 @@ public class ReadMissingKeyBenchmark {
   @Setup
   public void setUp() throws ExecutionException, InterruptedException {
     final List<Key<Integer>> keys = makeKeys(numKeys);
-    final List<List<Key<Integer>>> keyBatches = Lists.partition(keys, CONTEXT_MAX_BATCH_SIZE);
     for (int i = 0; i < putIterations; i++) {
       if (batched) {
         for (Key<Integer> key : keys) {
           contextChain = contextChain.withValue(key, DUMMY_VAL);
         }
       } else {
-        for (List<Key<Integer>> batch : keyBatches) {
+        for (List<Key<Integer>> batch : Lists.partition(keys, CONTEXT_MAX_BATCH_SIZE)) {
           contextChain = batchPut(contextChain, batch, DUMMY_VAL);
         }
       }
@@ -82,8 +81,8 @@ public class ReadMissingKeyBenchmark {
   @Benchmark
   @BenchmarkMode(Mode.SampleTime)
   @OutputTimeUnit(TimeUnit.NANOSECONDS)
-  public void readMissingKey() throws ExecutionException, InterruptedException {
-    missingKey.get(contextChain);
+  public Integer readMissingKey() throws ExecutionException, InterruptedException {
+    return missingKey.get(contextChain);
   }
 
   /**
@@ -121,7 +120,7 @@ public class ReadMissingKeyBenchmark {
       case 1:
         return c.withValue(batch.get(0), val);
       default:
-        throw new RuntimeException();
+        throw new AssertionError("Batch size should be between 1 and 4");
     }
   }
 }
