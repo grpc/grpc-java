@@ -136,8 +136,7 @@ public class ReadMissingKeyBenchmark {
           c = c.withValue(key, DUMMY_VAL);
         }
       }
-      List<Key<Integer>> reads = readWorkload.next();
-      for (Key<Integer> r : reads) {
+      for (Key<Integer> r : readWorkload.next()) {
         Integer val = r.get(c);
         // Not important what we do here as long as we prevent the JIT from throwing away code
         dummy += (val == null ? 0 : val);
