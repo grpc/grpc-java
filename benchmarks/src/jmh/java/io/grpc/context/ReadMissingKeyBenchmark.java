@@ -96,16 +96,14 @@ public class ReadMissingKeyBenchmark {
     rand.setSeed(0); // for workload determinism
     List<Key<Integer>> presentKeys = makeKeys("_p", numKeys);
     List<Key<Integer>> missingKeys = makeKeys("_m", NUM_MISSING_KEYS);
+
+    // Create a buffer of random read keys and write keys, then partition them up into
+    // the appropriately sized chunks for the test parameters.
     List<Key<Integer>> writeKeys = new ArrayList<Key<Integer>>();
     List<Key<Integer>> readKeys = new ArrayList<Key<Integer>>();
-
     for (int i = 0; i < WORKLOAD_BUFFER_SIZE; i++) {
       writeKeys.add(randomPick(presentKeys));
-      if (rand.nextDouble() < missingKeyPct) {
-        readKeys.add(randomPick(missingKeys));
-      } else {
-        readKeys.add(randomPick(presentKeys));
-      }
+      readKeys.add(randomPick(rand.nextDouble() < missingKeyPct ? missingKeys : presentKeys));
     }
     List<List<Key<Integer>>> writesPerIter = Lists.partition(writeKeys, writesPerIteration);
     writeWorkload = Iterators.cycle(writesPerIter);
