@@ -28,7 +28,6 @@ jmh {
     iterations = 10
     fork = 1
     jvmArgs = "-server -Xms2g -Xmx2g"
-    include = "ReadMissingKey.*"
 }
 
 dependencies {
