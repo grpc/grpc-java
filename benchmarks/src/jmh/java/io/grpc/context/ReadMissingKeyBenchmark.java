@@ -16,11 +16,17 @@
 
 package io.grpc.context;
 
+import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import io.grpc.Context;
 import io.grpc.Context.Key;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -35,10 +41,11 @@ import org.openjdk.jmh.annotations.State;
 @State(Scope.Benchmark)
 public class ReadMissingKeyBenchmark {
   /**
-   * The number of times to insert the set of keys.
+   * The number of iterations the workload should run for. An iteration is defined as a series
+   * of puts and a series of gets.
    */
   @Param({"1", "5", "20"})
-  public int putIterations;
+  public int iterations;
 
   /**
    * If true we will use the 4-pair batch put, otherwise puts will be individual.
@@ -47,32 +54,69 @@ public class ReadMissingKeyBenchmark {
   public boolean batched;
 
   /**
+   * Number of possible present keys.
+   */
+  @Param({"4", "10"})
+  public int numKeys;
+
+  /**
+   * The percentage of time we will query for an missing key.
+   */
+  @Param("0.50")
+  public double missingKeyPct;
+
+  /**
    * Number of keys to put for each iteration.
    */
   @Param({"1", "4", "10"})
-  public int numKeys;
+  public int writesPerIteration;
+
+  /**
+   * Number of keys to read for each iteration.
+   */
+  @Param({"10"})
+  public int readsPerIteration;
 
   // Context only supports a 4-pair put function
   private static final int CONTEXT_MAX_BATCH_SIZE = 4;
   private static final int DUMMY_VAL = 1;
+  private static final int WORKLOAD_BUFFER_SIZE = 200;
+  // Just an arbitrarily chosen number to avoid always reading the same key.
+  private static final int NUM_MISSING_KEYS = 20;
 
-  private Context contextChain = Context.ROOT;
-  private final Key<Integer> missingKey = Context.key("missing_key");
+  private final Random rand = new Random();
+  private Iterator<List<Key<Integer>>> writeWorkload;
+  // Pre-batch the bulk put workload to avoid unnecessary allocation during benchmarks
+  private Iterator<List<List<Key<Integer>>>> writeWorkloadBatched;
+  private Iterator<List<Key<Integer>>> readWorkload;
+
 
   @Setup
-  public void setUp() throws ExecutionException, InterruptedException {
-    final List<Key<Integer>> keys = makeKeys(numKeys);
-    for (int i = 0; i < putIterations; i++) {
-      if (batched) {
-        for (Key<Integer> key : keys) {
-          contextChain = contextChain.withValue(key, DUMMY_VAL);
-        }
+  public void setUp() throws ExecutionException, InterruptedException, IOException {
+    rand.setSeed(0); // for workload determinism
+    List<Key<Integer>> presentKeys = makeKeys("_p", numKeys);
+    List<Key<Integer>> missingKeys = makeKeys("_m", NUM_MISSING_KEYS);
+    List<Key<Integer>> writeKeys = new ArrayList<Key<Integer>>();
+    List<Key<Integer>> readKeys = new ArrayList<Key<Integer>>();
+
+    for (int i = 0; i < WORKLOAD_BUFFER_SIZE; i++) {
+      writeKeys.add(randomPick(presentKeys));
+      if (rand.nextDouble() < missingKeyPct) {
+        readKeys.add(randomPick(missingKeys));
       } else {
-        for (List<Key<Integer>> batch : Lists.partition(keys, CONTEXT_MAX_BATCH_SIZE)) {
-          contextChain = batchPut(contextChain, batch, DUMMY_VAL);
-        }
+        readKeys.add(randomPick(presentKeys));
       }
     }
+    List<List<Key<Integer>>> writesPerIter = Lists.partition(writeKeys, writesPerIteration);
+    writeWorkload = Iterators.cycle(writesPerIter);
+
+    List<List<List<Key<Integer>>>> writesPerIterbatched = new ArrayList<List<List<Key<Integer>>>>();
+    for (List<Key<Integer>> writeIter : writesPerIter) {
+      writesPerIterbatched.add(Lists.partition(writeIter, CONTEXT_MAX_BATCH_SIZE));
+    }
+    writeWorkloadBatched = Iterators.cycle(writesPerIterbatched);
+
+    readWorkload = Iterators.cycle(Lists.partition(readKeys, readsPerIteration));
   }
 
   /**
@@ -81,20 +125,45 @@ public class ReadMissingKeyBenchmark {
   @Benchmark
   @BenchmarkMode(Mode.SampleTime)
   @OutputTimeUnit(TimeUnit.NANOSECONDS)
-  public Integer readMissingKey() throws ExecutionException, InterruptedException {
-    return missingKey.get(contextChain);
+  public int readWrite() throws ExecutionException, InterruptedException {
+    int dummy = 0;
+    Context c = Context.ROOT;
+    for (int i = 0; i < iterations; i++) {
+      if (batched) {
+        for (List<Key<Integer>> keys : writeWorkloadBatched.next()) {
+          c = batchPut(c, keys, DUMMY_VAL);
+        }
+      } else {
+        for (Key<Integer> key : writeWorkload.next()) {
+          c = c.withValue(key, DUMMY_VAL);
+        }
+      }
+      List<Key<Integer>> reads = readWorkload.next();
+      for (Key<Integer> r : reads) {
+        Integer val = r.get(c);
+        // Not important what we do here as long as we prevent the JIT from throwing away code
+        dummy += (val == null ? 0 : val);
+      }
+    }
+    // Return a result so that the JIT can not optimize us into oblivion
+    return dummy;
+  }
+
+  private Key<Integer> randomPick(List<Key<Integer>> source) {
+    return source.get(rand.nextInt(source.size()));
   }
 
   /**
    * Creates a list of unique keys.
    */
-  private static List<Key<Integer>> makeKeys(int numKeys) {
-    List<Key<Integer>> keys = new ArrayList<Key<Integer>>();
-    for (int k = 0; k < numKeys; k++) {
-      Key<Integer> key = Context.key(String.format("key_%d", k));
+  private List<Key<Integer>> makeKeys(String suffix, int numKeys) {
+    Set<Key<Integer>> keys = new HashSet<Key<Integer>>();
+    while (keys.size() < numKeys) {
+      String randomStr = String.format("%x", rand.nextInt(1024 * 1024));
+      Key<Integer> key = Context.key(String.format("%s_%s", randomStr, suffix));
       keys.add(key);
     }
-    return keys;
+    return new ArrayList<Key<Integer>>(keys);
   }
 
   /**

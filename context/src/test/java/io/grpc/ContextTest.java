@@ -31,6 +31,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import java.util.ArrayDeque;
 import java.util.Queue;
+import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
@@ -129,6 +130,14 @@ public class ContextTest {
   public void rootIsNotCancelled() {
     assertFalse(Context.ROOT.isCancelled());
     assertNull(Context.ROOT.cancellationCause());
+  }
+
+  @Test
+  public void foo() {
+    Random r = new Random();
+    for (int i = 0; i < 5; i++) {
+      System.out.println(String.format("%x", r.nextInt(1024*1024)));
+    }
   }
 
   @Test
