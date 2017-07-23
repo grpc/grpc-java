@@ -39,7 +39,7 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 
 @State(Scope.Benchmark)
-public class ReadMissingKeyBenchmark {
+public class ReadWriteBenchmark {
   /**
    * The number of iterations the workload should run for. An iteration is defined as a series
    * of puts and a series of gets.
