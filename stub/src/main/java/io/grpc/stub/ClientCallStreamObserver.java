@@ -25,7 +25,8 @@ import javax.annotation.Nullable;
  * client calls.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1788")
-public abstract class ClientCallStreamObserver<V> extends CallStreamObserver<V> {  /**
+public abstract class ClientCallStreamObserver<V> extends CallStreamObserver<V> {
+ /**
   * Prevent any further processing for this {@code ClientCallStreamObserver}. No further messages
   * will be received. The server is informed of cancellations, but may not stop processing the
   * call. Cancelling an already
