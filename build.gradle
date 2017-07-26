@@ -25,7 +25,7 @@ subprojects {
     // The plugin only has an effect if a signature is specified
     apply plugin: "ru.vyarus.animalsniffer"
     if (!rootProject.hasProperty('errorProne') || rootProject.errorProne.toBoolean()) {
-      apply plugin: "net.ltgt.errorprone"
+      apply plugin: "net.ltgt.errorprone-base"
 
       dependencies {
         // The ErrorProne plugin defaults to the latest, which would break our
@@ -63,6 +63,7 @@ subprojects {
         if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
             it.options.compilerArgs += ["-Werror"]
         }
+        it.toolChain net.ltgt.gradle.errorprone.ErrorProneToolChain.create(project)
     }
 
     compileTestJava {
@@ -98,6 +99,12 @@ subprojects {
 
         configureProtoCompilation = {
           String generatedSourcePath = "${projectDir}/src/generated"
+
+          sourceSets {
+            generatedMain {}
+            generatedTest {}
+          }
+
           if (rootProject.childProjects.containsKey('grpc-compiler')) {
             // Only when the codegen is built along with the project, will we be able to recompile
             // the proto files.
@@ -133,7 +140,50 @@ subprojects {
                     }
                   }
                 }
+                generateProto.doLast {
+                  sourceSets {
+                    main {
+                      java {
+                        srcDir "${generatedSourcePath}/main/grpc"
+                      }
+                    }
+                    generatedMain {
+                      java {
+                        srcDir "${generatedSourcePath}/main/java"
+                        srcDir "${generatedSourcePath}/main/javanano"
+                      }
+                    }
+                  }
+                }
+                generateTestProto.doLast {
+                  sourceSets {
+                    test {
+                      java {
+                        srcDir "${generatedSourcePath}/test/grpc"
+                      }
+                    }
+                    generatedTest {
+                      java {
+                        srcDir "${generatedSourcePath}/test/java"
+                        srcDir "${generatedSourcePath}/test/javanano"
+                      }
+                    }
+                  }
+                }
+                compileGeneratedMainJava.dependsOn generateProto
+                compileGeneratedTestJava.dependsOn generateTestProto
               }
+
+              // exclude generated source from main/test sourceSet
+              compileJava.doFirst {
+                source -= fileTree(dir: "${generatedSourcePath}/main/java")
+                source -= fileTree(dir: "${generatedSourcePath}/main/javanano")
+              }
+              compileTestJava.doFirst {
+                source -= fileTree(dir: "${generatedSourcePath}/test/java")
+                source -= fileTree(dir: "${generatedSourcePath}/test/javanano")
+              }
+
               generatedFilesBaseDir = generatedSourcePath
             }
 
@@ -144,32 +194,53 @@ subprojects {
                 }
               }
             }
+
+            compileJava.dependsOn compileGeneratedMainJava
+            compileTestJava.dependsOn compileGeneratedTestJava
+            dependencies {
+              generatedMainCompile configurations.compile
+              generatedTestCompile configurations.testCompile
+              compile files("${projectDir}/build/classes/java/generatedMain"),
+                      files("${projectDir}/build/classes/javanano/generatedMain")
+              testCompile files("${projectDir}/build/classes/java/generatedTest"),
+                      files("${projectDir}/build/classes/javanano/generatedTest")
+            }
           } else {
             // Otherwise, we just use the checked-in generated code.
             project.sourceSets {
               main {
                 java {
-                  srcDir "${generatedSourcePath}/main/java"
-                  srcDir "${generatedSourcePath}/main/javanano"
                   srcDir "${generatedSourcePath}/main/grpc"
                 }
               }
               test {
                 java {
-                  srcDir "${generatedSourcePath}/test/java"
-                  srcDir "${generatedSourcePath}/test/javanano"
                   srcDir "${generatedSourcePath}/test/grpc"
                 }
               }
+              generatedMain {
+                java {
+                  srcDir "${generatedSourcePath}/main/java"
+                  srcDir "${generatedSourcePath}/main/javanano"
+                }
+              }
+              generatedTest {
+                java {
+                  srcDir "${generatedSourcePath}/test/java"
+                  srcDir "${generatedSourcePath}/test/javanano"
+                }
+              }
+            }
+            dependencies {
+              generatedMainCompile file("${generatedSourcePath}/main/javanano").exists()? libraries.protobuf_nano : libraries.protobuf
+              generatedTestCompile file("${generatedSourcePath}/test/javanano").exists()? libraries.protobuf_nano : libraries.protobuf
+              compile sourceSets.generatedMain.output
+              testCompile sourceSets.generatedTest.output
             }
           }
 
-          [compileJava, compileTestJava].each() {
-            // Protobuf-generated code produces some warnings.
-            // https://github.com/google/protobuf/issues/2718
-            it.options.compilerArgs += ["-Xlint:-cast", "-Xep:MissingOverride:OFF",
-                "-Xep:ReferenceEquality:OFF", "-Xep:FunctionalInterfaceClash:OFF"]
-          }
+          compileGeneratedMainJava.options.compilerArgs += ["-Xlint:-options"]
+          compileGeneratedTestJava.options.compilerArgs += ["-Xlint:-options"]
         }
 
         def epoll_suffix = "";
@@ -249,6 +320,7 @@ subprojects {
         if (rootProject.hasProperty("checkstyle.ignoreFailures")) {
             ignoreFailures = rootProject.properties["checkstyle.ignoreFailures"].toBoolean()
         }
+        sourceSets = [project.sourceSets.main, project.sourceSets.test]
         configProperties["rootDir"] = rootDir
     }
 

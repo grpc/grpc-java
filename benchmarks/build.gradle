@@ -51,6 +51,7 @@ compileJava {
 }
 
 compileJmhJava {
+  toolChain net.ltgt.gradle.errorprone.ErrorProneToolChain.create(project)
   options.compilerArgs = compileJava.options.compilerArgs
 }
 
