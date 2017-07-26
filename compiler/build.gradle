@@ -114,47 +114,49 @@ model {
   }
 }
 
-configurations {
-  testLiteCompile
-  testNanoCompile
-}
-
-dependencies {
-  testCompile project(':grpc-protobuf'),
-              project(':grpc-stub')
-  testLiteCompile project(':grpc-protobuf-lite'),
-                  project(':grpc-stub')
-  testNanoCompile project(':grpc-protobuf-nano'),
-                  project(':grpc-stub')
-}
-
 sourceSets {
-  testLite {
+  testNormalProto {
     proto {
       setSrcDirs(['src/test/proto'])
     }
   }
-  testNano {
+  testLiteProto {
     proto {
       setSrcDirs(['src/test/proto'])
     }
   }
+  testNanoProto {
+    proto {
+      setSrcDirs(['src/test/proto'])
+    }
+  }
+  testNormalGrpc {}
+  testLiteGrpc {}
+  testNanoGrpc{}
 }
 
 compileTestJava {
-  options.compilerArgs += ["-Xlint:-cast", "-Xep:MissingOverride:OFF",
-      "-Xep:ReferenceEquality:OFF", "-Xep:FunctionalInterfaceClash:OFF"]
+  enabled = false
 }
 
-compileTestLiteJava {
+compileTestNormalProtoJava {
+  options.compilerArgs += ["-Xlint:-cast", "-Xlint:-options"]
+}
+
+compileTestLiteProtoJava {
   // Protobuf-generated Lite produces quite a few warnings.
-  options.compilerArgs += ["-Xlint:-rawtypes", "-Xlint:-unchecked",
-      "-Xep:MissingOverride:OFF", "-Xep:ReferenceEquality:OFF",
-      "-Xep:FallThrough:OFF"]
+  options.compilerArgs += ["-Xlint:-rawtypes", "-Xlint:-unchecked", "-Xlint:-options"]
 }
 
-compileTestNanoJava {
-  options.compilerArgs = compileTestJava.options.compilerArgs
+compileTestNanoProtoJava {
+  options.compilerArgs += ["-Xlint:-cast", "-Xlint:-options"]
+}
+
+[compileTestNormalGrpcJava, compileTestLiteGrpcJava, compileTestNanoGrpcJava].each() {
+  it.options.compilerArgs += ["-Xlint:-options"]
+  if (checkErrorProne) {
+    it.toolChain net.ltgt.gradle.errorprone.ErrorProneToolChain.create(project)
+  }
 }
 
 protobuf {
@@ -182,10 +184,12 @@ protobuf {
       task.dependsOn 'java_pluginExecutable'
       task.inputs.file javaPluginPath
     }
-    ofSourceSet('test')*.plugins {
-      grpc {}
+    ofSourceSet('testNormalProto')*.each {
+      task -> task.plugins {
+        grpc {}
+      }
     }
-    ofSourceSet('testLite')*.each { task ->
+    ofSourceSet('testLiteProto')*.each { task ->
       task.builtins {
         remove java
       }
@@ -196,7 +200,7 @@ protobuf {
         }
       }
     }
-    ofSourceSet('testNano').each { task ->
+    ofSourceSet('testNanoProto').each { task ->
       task.builtins {
         remove java
         javanano {
@@ -209,12 +213,52 @@ protobuf {
         }
       }
     }
+
+    ["testNormal", "testLite", "testNano"].each() { prefix ->
+      project.tasks["compile${prefix.capitalize()}GrpcJava"].dependsOn "generate${prefix.capitalize()}ProtoProto"
+      project.tasks["generate${prefix.capitalize()}ProtoProto"].doLast {
+        // add generated service code to test*Grpc sourceSet
+        sourceSets {
+          "${prefix}Grpc" {
+            java {
+              srcDir "${projectDir}/build/generated/source/proto/${prefix}Proto/grpc"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // exclude generated service code from test*Proto sourceSet
+  ["testNormalProto", "testLiteProto", "testNanoProto"].each() { prefix ->
+    project.tasks["compile${prefix.capitalize()}Java"].doFirst {
+      source -= fileTree(dir: "${projectDir}/build/generated/source/proto/${prefix}/grpc")
+    }
   }
 }
 
-checkstyleTestNano {
-  source = fileTree(dir: "src/testNano", include: "**/*.java")
+// task dependency
+["testNormal", "testLite", "testNano"].each() { prefix ->
+  tasks["compile${prefix.capitalize()}GrpcJava"].dependsOn "compile${prefix.capitalize()}ProtoJava"
 }
+
+// classpath dependency
+dependencies {
+  testNormalProtoCompile project(':grpc-protobuf')
+  testNormalGrpcCompile project(':grpc-protobuf'),
+          project(':grpc-stub'),
+          files("${projectDir}/build/classes/java/testNormalProto")
+  testLiteProtoCompile project(':grpc-protobuf-lite')
+  testLiteGrpcCompile  project(':grpc-protobuf-lite'),
+          project(':grpc-stub'),
+          files("${projectDir}/build/classes/java/testLiteProto")
+  testNanoProtoCompile project(':grpc-protobuf-nano')
+  testNanoGrpcCompile project(':grpc-protobuf-nano'),
+          project(':grpc-stub'),
+          files("${projectDir}/build/classes/java/testNanoProto")
+}
+
+
 
 println "*** Building codegen requires Protobuf version ${protocVersion}"
 println "*** Please refer to https://github.com/grpc/grpc-java/blob/master/COMPILING.md#how-to-build-code-generation-plugin"
@@ -276,7 +320,7 @@ artifacts {
 
 def configureTestTask(Task task, String dep, String extraPackage) {
   test.dependsOn task
-  task.dependsOn "generateTest${dep}Proto"
+  task.dependsOn "generateTest${dep}ProtoProto"
   if (osdetector.os != 'windows') {
     task.executable "diff"
   } else {
@@ -284,13 +328,23 @@ def configureTestTask(Task task, String dep, String extraPackage) {
   }
   // File isn't found on Windows if last slash is forward-slash
   def slash = System.getProperty("file.separator")
-  task.args "$buildDir/generated/source/proto/test${dep}/grpc/io/grpc/testing/integration${extraPackage}${slash}TestServiceGrpc.java",
+  task.args "$buildDir/generated/source/proto/test${dep}Proto/grpc/io/grpc/testing/integration${extraPackage}${slash}TestServiceGrpc.java",
        "$projectDir/src/test${dep}/golden/TestService.java.txt"
 }
 
-task testGolden(type: Exec)
-task testLiteGolden(type: Exec)
-task testNanoGolden(type: Exec)
-configureTestTask(testGolden, '', '')
-configureTestTask(testLiteGolden, 'Lite', '')
-configureTestTask(testNanoGolden, 'Nano', '/nano')
+// configure the test task
+["testNormal", "testLite", "testNano"].each() { prefix ->
+  def testTask = task "${prefix}ProtoGolden"(type: Exec)
+  test.dependsOn testTask
+  testTask.dependsOn "generate${prefix.capitalize()}ProtoProto"
+  if (osdetector.os != 'windows') {
+    testTask.executable "diff"
+  } else {
+    testTask.executable "fc"
+  }
+  // File isn't found on Windows if last slash is forward-slash
+  def extraPackage = prefix.equals("testNano") ? "/nano" : ""
+  def slash = System.getProperty("file.separator")
+  testTask.args "$buildDir/generated/source/proto/${prefix}Proto/grpc/io/grpc/testing/integration${extraPackage}${slash}TestServiceGrpc.java",
+          "$projectDir/src/${prefix}/golden/TestService.java.txt"
+}

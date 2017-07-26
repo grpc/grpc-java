@@ -23,9 +23,12 @@ project.sourceSets {
 }
 
 compileTestJava {
-  // Thrift-generated code produces some warnings.
-  options.compilerArgs += ["-Xep:MissingOverride:OFF",
-    "-Xep:NonOverridingEquals:OFF", "-Xep:TypeParameterUnusedInFormals:OFF"]
+    // Thrift-generated code produces some warnings.
+    if (checkErrorProne) {
+        options.compilerArgs += [
+                "-Xep:MissingOverride:OFF", "-Xep:NonOverridingEquals:OFF",
+                "-Xep:TypeParameterUnusedInFormals:OFF"]
+    }
 }
 
 idea {

@@ -15,6 +15,12 @@ dependencies {
             project(':grpc-stub')
 }
 
+compileJava.onlyIf {
+    // Because there is no source file in the main sourceSet, skip the task.
+    // But all tasks it dependsOn will still run.
+    !rootProject.childProjects.containsKey('grpc-compiler')
+}
+
 configureProtoCompilation()
 
 // Let intellij projects refer to generated code

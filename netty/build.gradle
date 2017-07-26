@@ -12,8 +12,10 @@ dependencies {
 }
 
 [compileJava, compileTestJava].each() {
-  // Netty retuns a lot of futures that we mostly don't care about.
-  it.options.compilerArgs += ["-Xep:FutureReturnValueIgnored:OFF"]
+    // Netty retuns a lot of futures that we mostly don't care about.
+    if (checkErrorProne) {
+        it.options.compilerArgs += ["-Xep:FutureReturnValueIgnored:OFF"]
+    }
 }
 
 javadoc {

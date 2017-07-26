@@ -22,13 +22,6 @@ dependencies {
     signature "org.codehaus.mojo.signature:java16:1.1@signature"
 }
 
-compileTestJava {
-  // Protobuf-generated Lite produces quite a few warnings.
-  options.compilerArgs += ["-Xlint:-rawtypes", "-Xlint:-unchecked", "-Xlint:-fallthrough",
-        "-Xep:MissingOverride:OFF", "-Xep:ReferenceEquality:OFF", "-Xep:FallThrough:OFF",
-        "-Xep:JavaLangClash:OFF" /* The Enum protobuf clashes */]
-}
-
 protobuf {
   protoc {
     if (project.hasProperty('protoc')) {
@@ -46,6 +39,10 @@ protobuf {
       }
     }
   }
+  sourceSets {
+    javaProtoTest {}
+  }
+
   generateProtoTasks {
     ofSourceSet('test')*.each { task ->
       task.builtins {
@@ -55,5 +52,39 @@ protobuf {
         javalite {}
       }
     }
+
+    compileJavaProtoTestJava.dependsOn generateTestProto
+
+    generateTestProto.doLast {
+      sourceSets {
+        // add generated code to javaProtoTest source set
+        javaProtoTest {
+          java {
+            srcDir "${generatedFilesBaseDir}/test/javalite"
+          }
+        }
+      }
+    }
   }
+
+  compileTestJava.dependsOn task(deleteGeneratedCode) {
+    delete fileTree(dir: "${projectDir}/build")
+  }
+
+  compileTestJava.doFirst {
+    // exclude generated code from test sourceSet
+    source -= fileTree(dir: "${generatedFilesBaseDir}/test/javalite")
+  }
+}
+
+compileTestJava.dependsOn  compileJavaProtoTestJava
+
+dependencies {
+    javaProtoTestCompile configurations.testCompile
+    testCompile files("${projectDir}/build/classes/java/javaProtoTest")
+}
+
+compileJavaProtoTestJava {
+    // Protobuf-generated Lite produces quite a few warnings.
+    options.compilerArgs += ["-Xlint:-rawtypes", "-Xlint:-unchecked", "-Xlint:-fallthrough", "-Xlint:-options"]
 }

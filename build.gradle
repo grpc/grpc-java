@@ -24,24 +24,19 @@ subprojects {
     apply plugin: "com.google.osdetector"
     // The plugin only has an effect if a signature is specified
     apply plugin: "ru.vyarus.animalsniffer"
-    if (!rootProject.hasProperty('errorProne') || rootProject.errorProne.toBoolean()) {
-      apply plugin: "net.ltgt.errorprone"
+    ext{
+        checkErrorProne = !rootProject.hasProperty('errorProne') || rootProject.errorProne.toBoolean()
+    }
+    if (checkErrorProne) {
+      apply plugin: "net.ltgt.errorprone-base"
 
       dependencies {
         // The ErrorProne plugin defaults to the latest, which would break our
         // build if error prone releases a new version with a new check
         errorprone 'com.google.errorprone:error_prone_core:2.0.21'
       }
-    } else {
-      // Remove per-project error-prone checker config
-      allprojects {
-        afterEvaluate { project ->
-          project.tasks.withType(JavaCompile) {
-            options.compilerArgs.removeAll { it.startsWith("-Xep:") }
-          }
-        }
-      }
     }
+
     // TODO(zpencer): remove when intellij 2017.2 is released
     // https://github.com/gradle/gradle/issues/2315
     idea.module.inheritOutputDirs = true
@@ -62,6 +57,9 @@ subprojects {
         it.options.encoding = "UTF-8"
         if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
             it.options.compilerArgs += ["-Werror"]
+        }
+        if (checkErrorProne) {
+            it.toolChain net.ltgt.gradle.errorprone.ErrorProneToolChain.create(project)
         }
     }
 
@@ -98,6 +96,14 @@ subprojects {
 
         configureProtoCompilation = {
           String generatedSourcePath = "${projectDir}/src/generated"
+
+          sourceSets {
+            javaProtoMain {}
+            javaGrpcMain {}
+            javaProtoTest {}
+            javaGrpcTest {}
+          }
+
           if (rootProject.childProjects.containsKey('grpc-compiler')) {
             // Only when the codegen is built along with the project, will we be able to recompile
             // the proto files.
@@ -133,7 +139,62 @@ subprojects {
                     }
                   }
                 }
+
+                // task dependency on generateProto
+                compileJavaProtoMainJava.dependsOn generateProto
+                compileJavaGrpcMainJava.dependsOn generateProto
+                compileJavaProtoTestJava.dependsOn generateTestProto
+                compileJavaGrpcTestJava.dependsOn generateTestProto
+
+                generateProto.doLast {
+                  sourceSets {
+                    // add generated service code to javaGrpcMain sourceSet
+                    javaGrpcMain {
+                      java {
+                        srcDir "${generatedSourcePath}/main/grpc"
+                      }
+                    }
+                    // add generated proto message code to javaProtoMain sourceSet
+                    javaProtoMain {
+                      java {
+                        srcDir "${generatedSourcePath}/main/java"
+                        srcDir "${generatedSourcePath}/main/javanano"
+                      }
+                    }
+                  }
+                }
+                generateTestProto.doLast {
+                  sourceSets {
+                    // add generated service code to javaGrpcTest sourceSet
+                    javaGrpcTest {
+                      java {
+                        srcDir "${generatedSourcePath}/test/grpc"
+                      }
+                    }
+                    // add generated proto message code to javaProtoTest sourceSet
+                    javaProtoTest {
+                      java {
+                        srcDir "${generatedSourcePath}/test/java"
+                        srcDir "${generatedSourcePath}/test/javanano"
+                      }
+                    }
+                  }
+                }
               }
+
+              // exclude generated source from main sourceSet
+              compileJava.doFirst {
+                source -= fileTree(dir: "${generatedSourcePath}/main/java")
+                source -= fileTree(dir: "${generatedSourcePath}/main/javanano")
+                source -= fileTree(dir: "${generatedSourcePath}/main/grpc")
+              }
+              // exclude generated source from test sourceSet
+              compileTestJava.doFirst {
+                source -= fileTree(dir: "${generatedSourcePath}/test/java")
+                source -= fileTree(dir: "${generatedSourcePath}/test/javanano")
+                source -= fileTree(dir: "${generatedSourcePath}/test/grpc")
+              }
+
               generatedFilesBaseDir = generatedSourcePath
             }
 
@@ -144,31 +205,81 @@ subprojects {
                 }
               }
             }
+
+            // task dependencies
+            compileJavaGrpcMainJava.dependsOn compileJavaProtoMainJava
+            compileJava.dependsOn compileJavaGrpcMainJava
+            compileJavaGrpcTestJava.dependsOn compileJavaProtoTestJava
+            compileTestJava.dependsOn compileJavaGrpcTestJava
+
+            // class path dependencies
+            dependencies {
+              javaProtoMainCompile configurations.compile
+              javaGrpcMainCompile configurations.compile,
+                      files("${projectDir}/build/classes/java/javaProtoMain")
+              compile files("${projectDir}/build/classes/java/javaProtoMain"),
+                      files("${projectDir}/build/classes/java/javaGrpcMain"),
+                      files("${projectDir}/build/classes/javanano/javaProtoMain"),
+                      files("${projectDir}/build/classes/javanano/javaGrpcMain")
+
+              javaProtoTestCompile configurations.testCompile
+              javaGrpcTestCompile configurations.testCompile,
+                      files("${projectDir}/build/classes/java/javaProtoTest")
+              testCompile files("${projectDir}/build/classes/java/javaProtoTest"),
+                      files("${projectDir}/build/classes/java/javaGrpcTest"),
+                      files("${projectDir}/build/classes/javanano/javaProtoTest"),
+                      files("${projectDir}/build/classes/javanano/javaGrpcTest")
+            }
           } else {
             // Otherwise, we just use the checked-in generated code.
             project.sourceSets {
-              main {
+              javaProtoMain {
                 java {
                   srcDir "${generatedSourcePath}/main/java"
                   srcDir "${generatedSourcePath}/main/javanano"
+                }
+              }
+              javaGrpcMain {
+                java {
                   srcDir "${generatedSourcePath}/main/grpc"
                 }
               }
-              test {
+              javaProtoTest {
                 java {
                   srcDir "${generatedSourcePath}/test/java"
                   srcDir "${generatedSourcePath}/test/javanano"
+                }
+              }
+              javaGrpcTest {
+                java {
                   srcDir "${generatedSourcePath}/test/grpc"
                 }
               }
             }
+            dependencies {
+              javaProtoMainCompile file("${generatedSourcePath}/main/javanano").exists()? libraries.protobuf_nano : libraries.protobuf
+              javaGrpcMainCompile file("${generatedSourcePath}/main/javanano").exists()? libraries.protobuf_nano : project(':grpc-protobuf'),
+                      sourceSets.javaProtoMain.output,
+                      project(':grpc-stub')
+              compile sourceSets.javaProtoMain.output,
+                      sourceSets.javaGrpcMain.output
+
+              javaProtoTestCompile file("${generatedSourcePath}/test/javanano").exists()? libraries.protobuf_nano : libraries.protobuf
+              javaGrpcTestCompile file("${generatedSourcePath}/test/javanano").exists()? libraries.protobuf_nano : project(':grpc-protobuf'),
+                      sourceSets.javaProtoTest.output,
+                      project(':grpc-stub')
+              testCompile sourceSets.javaProtoTest.output,
+                      sourceSets.javaGrpcTest.output
+            }
           }
 
-          [compileJava, compileTestJava].each() {
-            // Protobuf-generated code produces some warnings.
-            // https://github.com/google/protobuf/issues/2718
-            it.options.compilerArgs += ["-Xlint:-cast", "-Xep:MissingOverride:OFF",
-                "-Xep:ReferenceEquality:OFF", "-Xep:FunctionalInterfaceClash:OFF"]
+          [compileJavaProtoMainJava, compileJavaGrpcMainJava, compileJavaProtoTestJava, compileJavaGrpcTestJava]
+                  .each() { it.options.compilerArgs += ["-Xlint:-options"]
+          }
+          if (checkErrorProne) {
+            [compileJavaGrpcMainJava, compileJavaGrpcTestJava].each() {
+                it.toolChain net.ltgt.gradle.errorprone.ErrorProneToolChain.create(project)
+            }
           }
         }
 
@@ -249,11 +360,8 @@ subprojects {
         if (rootProject.hasProperty("checkstyle.ignoreFailures")) {
             ignoreFailures = rootProject.properties["checkstyle.ignoreFailures"].toBoolean()
         }
+        sourceSets = [project.sourceSets.main, project.sourceSets.test]
         configProperties["rootDir"] = rootDir
-    }
-
-    checkstyleMain {
-        source = fileTree(dir: "src/main", include: "**/*.java")
     }
 
     checkstyleTest {
