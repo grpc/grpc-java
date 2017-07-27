@@ -27,8 +27,10 @@ public final class MoreCallCredentials {
   /**
    * Converts a Google Auth Library {@link Credentials} to {@link CallCredentials}.
    *
-   * <p>Although this is a stable API, note that the returned instance's API is not stable. See
-   * {@link CallCredentials}.
+   * <p>Although this is a stable API, note that the returned instance's API is not stable. You are
+   * free to use the class name {@code CallCredentials} and pass the instance to other code, but the
+   * instance can't be called directly from code expecting stable behavior. See {@link
+   * CallCredentials}.
    */
   public static CallCredentials from(Credentials creds) {
     return new GoogleAuthLibraryCallCredentials(creds);
