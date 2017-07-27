@@ -41,7 +41,7 @@ public interface CallCredentials {
    * to {@link #applyRequestMetadata}. It is by default {@link SecurityLevel#NONE} but can be
    * overridden by the transport.
    */
-  @ExperimentalApi("https//github.com/grpc/grpc-java/issues/1914")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
   public static final Key<SecurityLevel> ATTR_SECURITY_LEVEL =
       Key.of("io.grpc.CallCredentials.securityLevel");
 
@@ -51,7 +51,7 @@ public interface CallCredentials {
    * by default from the channel, but can be overridden by the transport and {@link
    * io.grpc.CallOptions} with increasing precedence.
    */
-  @ExperimentalApi("https//github.com/grpc/grpc-java/issues/1914")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
   public static final Key<String> ATTR_AUTHORITY = Key.of("io.grpc.CallCredentials.authority");
 
   /**
@@ -72,7 +72,7 @@ public interface CallCredentials {
    * @param applier The outlet of the produced headers. It can be called either before or after this
    *        method returns.
    */
-  @ExperimentalApi("https//github.com/grpc/grpc-java/issues/1914")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
   void applyRequestMetadata(
       MethodDescriptor<?, ?> method, Attributes attrs,
       Executor appExecutor, MetadataApplier applier);
@@ -82,7 +82,7 @@ public interface CallCredentials {
    *
    * <p>Exactly one of its methods must be called to make the RPC proceed.
    */
-  @ExperimentalApi("https//github.com/grpc/grpc-java/issues/1914")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
   public interface MetadataApplier {
     /**
      * Called when headers are successfully generated. They will be merged into the original
