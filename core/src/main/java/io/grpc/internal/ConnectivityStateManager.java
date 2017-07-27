@@ -63,7 +63,13 @@ final class ConnectivityStateManager {
    */
   void gotoState(@Nonnull ConnectivityState newState) {
     checkNotNull(newState, "newState");
-    checkState(state != null, "ConnectivityStateManager is already disabled");
+    if (newState != ConnectivityState.SHUTDOWN) {
+      checkState(state != null, "ConnectivityStateManager is already disabled");
+    } else if (state == null ) {
+      // When ConnectivityStateManager is already disabled, then channel shutdown is called.
+      // Keep state being null.
+      return;
+    }
     gotoNullableState(newState);
   }
 
