@@ -35,6 +35,7 @@ import io.grpc.ClientInterceptors;
 import io.grpc.CompressorRegistry;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
+import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
@@ -46,6 +47,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
+import io.grpc.internal.ClientCallImpl.DeadlineHandler;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -54,9 +56,13 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
@@ -90,6 +96,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   private final LoadBalancer.Factory loadBalancerFactory;
   private final ClientTransportFactory transportFactory;
   private final Executor executor;
+  private final Executor directFallbackExecutor = new DirectFallbackExecutor();
+  private final DeadlineHandler deadlineHandler = new DeadlineHandlerImpl();
   private final ObjectPool<? extends Executor> executorPool;
   private final ObjectPool<? extends Executor> oobExecutorPool;
   private final LogId logId = LogId.allocate(getClass().getName());
@@ -106,6 +114,9 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   private final ConnectivityStateManager channelStateManager = new ConnectivityStateManager();
 
   private final BackoffPolicy.Provider backoffPolicyProvider;
+
+  private final ReadWriteLock shutdownReadWriteLock = new ReadWriteLock();
+  private boolean shutdownWriteLockUsed;
 
   /**
    * We delegate to this channel, so that we can have interceptors as necessary. If there aren't
@@ -457,6 +468,30 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       return this;
     }
 
+    runShutdownTask();
+    return this;
+  }
+
+  private void runShutdownTask() {
+    checkState(shutdown.get(), "shutdown must be true");
+
+    if (shutdownReadWriteLock.tryToAcquireWriteLock()) {
+      if (!shutdownWriteLockUsed) {
+        shutdownWriteLockUsed = true;
+        shutdownReadWriteLock.releaseWriteLock();
+        // Continue the following shutdown process.
+      } else {
+        shutdownReadWriteLock.releaseWriteLock();
+        return;
+      }
+    } else {
+      // Either the read or the write lock is currently acquired. Quit here, and let one of the read
+      // lock acquisitions or the write lock acquisition take over the following shutdown process.
+      return;
+    }
+
+    // The following is the shutdown process. It can be run only once.
+
     // Put gotoState(SHUTDOWN) as early into the channelExecutor's queue as possible.
     // delayedTransport.shutdown() may also add some tasks into the queue. But some things inside
     // delayedTransport.shutdown() like setting delayedTransport.shutdown = true are not run in the
@@ -478,7 +513,6 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
         }
       }).drain();
     log.log(Level.FINE, "[{0}] Shutting down", getLogId());
-    return this;
   }
 
   /**
@@ -535,18 +569,18 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
   private class RealChannel extends Channel {
     @Override
-    public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(MethodDescriptor<ReqT, RespT> method,
+    public <ReqT, RespT> ClientCall<ReqT, RespT>    newCall(MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions) {
       Executor executor = callOptions.getExecutor();
       if (executor == null) {
-        executor = ManagedChannelImpl.this.executor;
+        executor = directFallbackExecutor;
       }
       return new ClientCallImpl<ReqT, RespT>(
           method,
           executor,
           callOptions,
           transportProvider,
-          terminated ? null : transportFactory.getScheduledExecutorService())
+          terminated ? null : deadlineHandler)
               .setDecompressorRegistry(decompressorRegistry)
               .setCompressorRegistry(compressorRegistry);
     }
@@ -556,6 +590,151 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       String authority = nameResolver.getServiceAuthority();
       return checkNotNull(authority, "authority");
     }
+  }
+
+
+  /**
+   * Maintains a pair of associated locks. The read lock can be acquired many times as long as the
+   * write lock is not currently acquired. The write lock can be acquired only when no lock is
+   * currently acquired. Each acquisition of the locks must be released once and only once later.
+   * The lock is not reentrant. The lock is irrelevant to the threads in which you try to acquire or
+   * release.
+   */
+  private static final class ReadWriteLock {
+    /**
+     * A positive number counts the times the read lock has been acquired, and Long.MIN_VALUE or a
+     * negative number close to Long.MIN_VALUE means a write lock is currently acquired.
+     */
+    final AtomicLong readRef = new AtomicLong();
+
+    /**
+     * Try to acquire the read lock. Return true if succeeded; and false if not able to acquire it
+     * right now, meaning that the write lock is currently acquired. The method does not block.
+     */
+    boolean tryToAcquireReadLock() {
+      return readRef.getAndIncrement() >= 0L;
+    }
+
+    /**
+     * Release an acquisition of the read lock.
+     *
+     * @throws IllegalStateException if the read lock is not currently acquired.
+     */
+    void releaseReadLock() {
+      checkState(readRef.getAndDecrement() > 0L);
+    }
+
+    /**
+     * Try to acquire the write lock. Return true if succeeded; and false if not able to acquire it
+     * right now, meaning that either the read or the write lock is currently acquired. The method
+     * does not block.
+     */
+    boolean tryToAcquireWriteLock() {
+      return readRef.compareAndSet(0L, Long.MIN_VALUE);
+    }
+
+    /**
+     * Release an acquisition of the write lock.
+     *
+     * @throws IllegalStateException if the write lock is not currently acquired.
+     */
+    void releaseWriteLock() {
+      checkState(readRef.getAndSet(0L) < 0L);
+    }
+  }
+
+  private final class DirectFallbackExecutor implements Executor {
+    @Override
+    public void execute(final Runnable command) {
+      if (shutdown.get()) {
+        command.run();
+        return;
+      }
+
+      if (!shutdownReadWriteLock.tryToAcquireReadLock()) {
+        // The write lock is currently acquired, so shutdown is in progress.
+        command.run();
+        return;
+      }
+      if (shutdownWriteLockUsed) {
+        // The write lock had been acquired and then released, so shutdown is in progress.
+        shutdownReadWriteLock.releaseReadLock();
+        command.run();
+        return;
+      }
+
+      final boolean[] accepted = new boolean[1];
+      try {
+        final Thread thread = Thread.currentThread();
+        executor.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (Thread.currentThread() == thread && !accepted[0]) {
+              // Just in case the executor is a direct one.
+              accepted[0] = true;
+              shutdownReadWriteLock.releaseReadLock();
+              if (shutdown.get()) {
+                // May take over the shutdown process.
+                runShutdownTask();
+              }
+            }
+            command.run();
+          }
+        });
+      } catch (RuntimeException e) {
+        // TODO(zdapeng): Handle exception properly
+        throw e;
+      } finally {
+        if (!accepted[0]) {
+          accepted[0] = true;
+          shutdownReadWriteLock.releaseReadLock();
+          if (shutdown.get()) {
+            // May take over the shutdown process.
+            runShutdownTask();
+          }
+        }
+      }
+    }
+  }
+
+  private final class DeadlineHandlerImpl implements DeadlineHandler {
+    @Override
+    public Future<?> scheduleDeadlineCancellation(Runnable command, Deadline deadline) {
+      if (shutdown.get()) {
+        return cancelledFuture(command);
+      }
+
+      if (!shutdownReadWriteLock.tryToAcquireReadLock()) {
+        // The write lock is currently acquired, so shutdown is in progress.
+        command.run();
+        return cancelledFuture(command);
+      }
+      if (shutdownWriteLockUsed) {
+        // The write lock had been acquired and then released, so shutdown is in progress.
+        shutdownReadWriteLock.releaseReadLock();
+        return cancelledFuture(command);
+      }
+
+      try {
+        return transportFactory.getScheduledExecutorService()
+            .schedule(command, deadline.timeRemaining(TimeUnit.NANOSECONDS), TimeUnit.NANOSECONDS);
+      } catch (RejectedExecutionException e) {
+        // TODO(zdapeng): Handle Exception properly
+        throw e;
+      } finally {
+        shutdownReadWriteLock.releaseReadLock();
+        if (shutdown.get()) {
+          // May take over the shutdown process.
+          runShutdownTask();
+        }
+      }
+    }
+  }
+
+  private static Future<Void> cancelledFuture(Runnable command) {
+    Future<Void> future = new FutureTask<Void>(command, null);
+    future.cancel(false);
+    return future;
   }
 
   /**
@@ -708,8 +887,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       // TODO(ejona): can we be even stricter? Like terminating?
       checkState(!terminated, "Channel is terminated");
       final OobChannel oobChannel = new OobChannel(
-          authority, oobExecutorPool, transportFactory.getScheduledExecutorService(),
-          channelExecutor);
+          authority, oobExecutorPool, deadlineHandler, channelExecutor);
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
           addressGroup, authority, userAgent, backoffPolicyProvider, transportFactory,
           transportFactory.getScheduledExecutorService(), stopwatchSupplier, channelExecutor,

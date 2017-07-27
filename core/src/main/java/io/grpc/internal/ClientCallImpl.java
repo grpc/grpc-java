@@ -48,8 +48,7 @@ import io.grpc.Status;
 import java.io.InputStream;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -65,7 +64,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private final MethodDescriptor<ReqT, RespT> method;
   private final Executor callExecutor;
   private final Context context;
-  private volatile ScheduledFuture<?> deadlineCancellationFuture;
+  private volatile Future<?> deadlineCancellationFuture;
   private final boolean unaryRequest;
   private final CallOptions callOptions;
   private ClientStream stream;
@@ -74,14 +73,14 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private boolean halfCloseCalled;
   private final ClientTransportProvider clientTransportProvider;
   private final CancellationListener cancellationListener = new ContextCancellationListener();
-  private ScheduledExecutorService deadlineCancellationExecutor;
+  private final DeadlineHandler deadlineHandler;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
 
   ClientCallImpl(
       MethodDescriptor<ReqT, RespT> method, Executor executor, CallOptions callOptions,
       ClientTransportProvider clientTransportProvider,
-      ScheduledExecutorService deadlineCancellationExecutor) {
+      DeadlineHandler deadlineHandler) {
     this.method = method;
     // If we know that the executor is a direct executor, we don't need to wrap it with a
     // SerializingExecutor. This is purely for performance reasons.
@@ -95,7 +94,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         || method.getType() == MethodType.SERVER_STREAMING;
     this.callOptions = callOptions;
     this.clientTransportProvider = clientTransportProvider;
-    this.deadlineCancellationExecutor = deadlineCancellationExecutor;
+    this.deadlineHandler = deadlineHandler;
   }
 
   private final class ContextCancellationListener implements CancellationListener {
@@ -115,6 +114,17 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
      * @param args object containing call arguments.
      */
     ClientTransport get(PickSubchannelArgs args);
+  }
+
+
+  /**
+   * Handler for RPC deadline.
+   */
+  interface DeadlineHandler {
+    /**
+     * Schedules a task for deadline cancellation.
+     */
+    Future<?> scheduleDeadlineCancellation(Runnable command, Deadline deadline);
   }
 
   ClientCallImpl<ReqT, RespT> setDecompressorRegistry(DecompressorRegistry decompressorRegistry) {
@@ -234,9 +244,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     context.addListener(cancellationListener, directExecutor());
     if (effectiveDeadline != null
         // If the context has the effective deadline, we don't need to schedule an extra task.
-        && context.getDeadline() != effectiveDeadline
-        // If the channel has been terminated, we don't need to schedule an extra task.
-        && deadlineCancellationExecutor != null) {
+        && context.getDeadline() != effectiveDeadline) {
       deadlineCancellationFuture = startDeadlineTimer(effectiveDeadline);
     }
     if (cancelListenersShouldBeRemoved) {
@@ -288,7 +296,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   private void removeContextListenerAndCancelDeadlineFuture() {
     context.removeListener(cancellationListener);
-    ScheduledFuture<?> f = deadlineCancellationFuture;
+    Future<?> f = deadlineCancellationFuture;
     if (f != null) {
       f.cancel(false);
     }
@@ -310,11 +318,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
   }
 
-  private ScheduledFuture<?> startDeadlineTimer(Deadline deadline) {
+  private Future<?> startDeadlineTimer(final Deadline deadline) {
     long remainingNanos = deadline.timeRemaining(TimeUnit.NANOSECONDS);
-    return deadlineCancellationExecutor.schedule(
-        new LogExceptionRunnable(
-            new DeadlineTimer(remainingNanos)), remainingNanos, TimeUnit.NANOSECONDS);
+    return deadlineHandler.scheduleDeadlineCancellation(
+        new LogExceptionRunnable(new DeadlineTimer(remainingNanos)), deadline);
   }
 
   @Nullable

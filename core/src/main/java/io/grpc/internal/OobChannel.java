@@ -31,9 +31,9 @@ import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
+import io.grpc.internal.ClientCallImpl.DeadlineHandler;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -56,7 +56,7 @@ final class OobChannel extends ManagedChannel implements WithLogId {
   private final DelayedClientTransport delayedTransport;
   private final ObjectPool<? extends Executor> executorPool;
   private final Executor executor;
-  private final ScheduledExecutorService deadlineCancellationExecutor;
+  private final DeadlineHandler deadlineHandler;
   private final CountDownLatch terminatedLatch = new CountDownLatch(1);
   private volatile boolean shutdown;
 
@@ -72,12 +72,12 @@ final class OobChannel extends ManagedChannel implements WithLogId {
 
   OobChannel(
       String authority, ObjectPool<? extends Executor> executorPool,
-      ScheduledExecutorService deadlineCancellationExecutor, ChannelExecutor channelExecutor) {
+      DeadlineHandler deadlineHandler, ChannelExecutor channelExecutor) {
     this.authority = checkNotNull(authority, "authority");
     this.executorPool = checkNotNull(executorPool, "executorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
-    this.deadlineCancellationExecutor = checkNotNull(
-        deadlineCancellationExecutor, "deadlineCancellationExecutor");
+    this.deadlineHandler = checkNotNull(
+        deadlineHandler, "deadlineCancellationExecutor");
     this.delayedTransport = new DelayedClientTransport(executor, channelExecutor);
     this.delayedTransport.start(new ManagedClientTransport.Listener() {
         @Override
@@ -153,7 +153,7 @@ final class OobChannel extends ManagedChannel implements WithLogId {
       MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
     return new ClientCallImpl<RequestT, ResponseT>(methodDescriptor,
         callOptions.getExecutor() == null ? executor : callOptions.getExecutor(),
-        callOptions, transportProvider, deadlineCancellationExecutor);
+        callOptions, transportProvider, deadlineHandler);
   }
 
   @Override
