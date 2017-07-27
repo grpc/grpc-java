@@ -70,8 +70,8 @@ final class GrpcHttp2OutboundHeaders extends AbstractHttp2Headers {
   @SuppressWarnings("ReferenceEquality") // STATUS.value() never changes.
   public CharSequence status() {
     // preHeaders is never null.  It has status as the first element or not at all.
-    if (preHeaders.length >= 2 && preHeaders[0] == Http2Headers.PseudoHeaderName.STATUS.value()) {
-      return preHeaders[1];
+    if (preHeaders.length >= 1 && preHeaders[0] == Http2Headers.PseudoHeaderName.STATUS.value()) {
+      return Utils.STATUS_OK;
     }
     return null;
   }
