@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.ConnectivityState;
@@ -232,6 +233,7 @@ public class ConnectivityStateManagerTest {
   @Test
   public void disable() {
     state.disable();
+    assertTrue(state.isDisabled());
 
     thrown.expect(UnsupportedOperationException.class);
     thrown.expectMessage("Channel state API is not implemented");
@@ -242,21 +244,11 @@ public class ConnectivityStateManagerTest {
   public void disableThenDisable() {
     state.disable();
     state.disable();
+    assertTrue(state.isDisabled());
 
     thrown.expect(UnsupportedOperationException.class);
     thrown.expectMessage("Channel state API is not implemented");
     state.getState();
-  }
-
-  @Test
-  public void diableThenShutdown() {
-    state.disable();
-    state.gotoState(ConnectivityState.SHUTDOWN);
-
-    thrown.expect(UnsupportedOperationException.class);
-    thrown.expectMessage("Channel state API is not implemented");
-    state.getState();
-
   }
 
   @Test

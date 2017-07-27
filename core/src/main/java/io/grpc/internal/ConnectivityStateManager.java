@@ -63,13 +63,7 @@ final class ConnectivityStateManager {
    */
   void gotoState(@Nonnull ConnectivityState newState) {
     checkNotNull(newState, "newState");
-    if (newState != ConnectivityState.SHUTDOWN) {
-      checkState(state != null, "ConnectivityStateManager is already disabled");
-    } else if (state == null ) {
-      // When ConnectivityStateManager is already disabled, then channel shutdown is called.
-      // Keep state being null.
-      return;
-    }
+    checkState(!isDisabled(), "ConnectivityStateManager is already disabled");
     gotoNullableState(newState);
   }
 
@@ -106,6 +100,13 @@ final class ConnectivityStateManager {
    */
   void disable() {
     gotoNullableState(null);
+  }
+
+  /**
+   * This method is threadsafe.
+   */
+  boolean isDisabled() {
+    return state == null;
   }
 
   private static final class Listener {
