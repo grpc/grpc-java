@@ -58,6 +58,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
      *        method.  It should not be saved because it is not safe for read or write after the
      *        method returns.
      */
+    @SuppressWarnings("deprecation")
     public ClientStreamTracer newClientStreamTracer(CallOptions callOptions, Metadata headers) {
       return newClientStreamTracer(headers);
     }
