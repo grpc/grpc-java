@@ -18,7 +18,6 @@ package io.grpc.auth;
 
 import com.google.auth.Credentials;
 import io.grpc.CallCredentials;
-import io.grpc.ExperimentalApi;
 
 /**
  * A utility class that converts other types of credentials to {@link CallCredentials}.

@@ -78,6 +78,13 @@ public interface CallCredentials {
       Executor appExecutor, MetadataApplier applier);
 
   /**
+   * Should be a noop but never called; tries to make it clearer to implementors that they may break
+   * in the future.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
+  void thisUsesUnstableApi();
+
+  /**
    * The outlet of the produced headers. Not thread-safe.
    *
    * <p>Exactly one of its methods must be called to make the RPC proceed.
