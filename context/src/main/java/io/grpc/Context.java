@@ -882,7 +882,7 @@ public class Context {
      *
      * @param toAttach the context to be attached
      * @return A {@link Context} that should be passed back into {@link #detach(Context, Context)}
-     *   as the {@code toRestore} parameter.
+     *        as the {@code toRestore} parameter.
      */
     public abstract Context attach(Context toAttach);
 
