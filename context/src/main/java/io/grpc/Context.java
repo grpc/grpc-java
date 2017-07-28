@@ -881,8 +881,10 @@ public class Context {
      * Implements {@link io.grpc.Context#attach}.
      *
      * @param toAttach the context to be attached
+     * @return A {@link Context} that should be passed back into {@link #detach(Context, Context)}
+     *   as the {@code toRestore} parameter.
      */
-    public abstract void attach(Context toAttach);
+    public abstract Context attach(Context toAttach);
 
     /**
      * Implements {@link io.grpc.Context#detach}
