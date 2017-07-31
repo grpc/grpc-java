@@ -73,6 +73,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsContextFactory;
 import io.grpc.internal.testing.StatsTestUtils.MetricsRecord;
 import io.grpc.protobuf.ProtoUtils;
+import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
@@ -350,7 +351,6 @@ public abstract class AbstractInteropTest {
       fail("expected INVALID_ARGUMENT");
     } catch (StatusRuntimeException e) {
       assertEquals(Status.INVALID_ARGUMENT.getCode(), e.getStatus().getCode());
-      assertEquals("Compressed request expectation not met.", e.getStatus().getDescription());
     }
     if (metricsExpected()) {
       assertMetrics("grpc.testing.TestService/UnaryCall", Status.Code.INVALID_ARGUMENT);
@@ -527,21 +527,18 @@ public abstract class AbstractInteropTest {
     Throwable e = responseObserver.getError();
     assertNotNull("expected INVALID_ARGUMENT", e);
     assertEquals(Status.INVALID_ARGUMENT.getCode(), Status.fromThrowable(e).getCode());
-    assertEquals(
-        "Compressed request expectation not met.", Status.fromThrowable(e).getDescription());
 
     // Start a new stream
     responseObserver = StreamRecorder.create();
-    ClientCall<StreamingInputCallRequest, StreamingInputCallResponse> call =
-        channel.newCall(
-            TestServiceGrpc.METHOD_STREAMING_INPUT_CALL,
-            CallOptions.DEFAULT.withCompression("gzip"));
-    requestObserver = ClientCalls.asyncClientStreamingCall(call, responseObserver);
-    call.setMessageCompression(true);
-    requestObserver.onNext(expectCompressedRequest);
-    call.setMessageCompression(false);
-    requestObserver.onNext(expectUncompressedRequest);
-    requestObserver.onCompleted();
+    @SuppressWarnings("unchecked")
+    ClientCallStreamObserver<StreamingInputCallRequest> clientCallStreamObserver =
+        (ClientCallStreamObserver)
+            asyncStub.withCompression("gzip").streamingInputCall(responseObserver);
+    clientCallStreamObserver.setMessageCompression(true);
+    clientCallStreamObserver.onNext(expectCompressedRequest);
+    clientCallStreamObserver.setMessageCompression(false);
+    clientCallStreamObserver.onNext(expectUncompressedRequest);
+    clientCallStreamObserver.onCompleted();
     responseObserver.awaitCompletion();
     assertSuccess(responseObserver);
     assertEquals(goldenResponse, responseObserver.firstValue().get());
