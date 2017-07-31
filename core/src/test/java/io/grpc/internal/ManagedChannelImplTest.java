@@ -1193,18 +1193,6 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void getState_loadBalancerDoesNotSupportChannelStateThenChannelShutdown() {
-    createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
-    assertEquals(ConnectivityState.IDLE, channel.getState(false));
-    helper.updatePicker(mockPicker);
-
-    channel.shutdown();
-
-    thrown.expect(UnsupportedOperationException.class);
-    channel.getState(false);
-  }
-
-  @Test
   public void notifyWhenStateChanged_loadBalancerDoesNotSupportChannelState() {
     createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
     assertEquals(ConnectivityState.IDLE, channel.getState(false));
