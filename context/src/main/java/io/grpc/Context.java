@@ -385,9 +385,7 @@ public class Context {
    * }}</pre>
    */
   public Context attach() {
-    Context previous = current();
-    storage().attach(this);
-    return previous;
+    return storage().doAttach(this);
   }
 
   /**
@@ -878,13 +876,21 @@ public class Context {
    */
   public abstract static class Storage {
     /**
+     * @deprecated This is an old API that is no longer used.
+     */
+    @Deprecated
+    public void attach(Context toAttach) {
+      throw new UnsupportedOperationException("Deprecated. Do not call.");
+    }
+
+    /**
      * Implements {@link io.grpc.Context#attach}.
      *
      * @param toAttach the context to be attached
      * @return A {@link Context} that should be passed back into {@link #detach(Context, Context)}
      *        as the {@code toRestore} parameter.
      */
-    public abstract Context attach(Context toAttach);
+    public abstract Context doAttach(Context toAttach);
 
     /**
      * Implements {@link io.grpc.Context#detach}
