@@ -35,7 +35,6 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -772,8 +771,7 @@ public class ContextTest {
    */
   @Test
   public void attachDetachNewThread() throws ExecutionException, InterruptedException {
-    ExecutorService exec = Executors.newSingleThreadExecutor();
-    Future<?> future = exec.submit(Context.current().wrap(new Runnable() {
+    Future<?> future = scheduler.submit(Context.current().wrap(new Runnable() {
       @Override
       public void run() {
         // noop
