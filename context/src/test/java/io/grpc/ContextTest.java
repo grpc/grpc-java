@@ -33,8 +33,11 @@ import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -761,6 +764,23 @@ public class ContextTest {
         classLoader.loadClass(LoadMeWithStaticTestingClassLoader.class.getName());
 
     ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+  }
+
+  /**
+   * The context storage has per thread data structures.
+   * Ensure that newly created threads can attach/detach.
+   */
+  @Test
+  public void attachDetachNewThread() throws ExecutionException, InterruptedException {
+    ExecutorService exec = Executors.newSingleThreadExecutor();
+    Future<?> future = exec.submit(Context.current().wrap(new Runnable() {
+      @Override
+      public void run() {
+        // noop
+      }
+    }));
+    // just check that attach/detach completed without exceptions
+    future.get();
   }
 
   // UsedReflectively
