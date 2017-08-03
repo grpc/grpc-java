@@ -19,7 +19,6 @@ package io.grpc.internal;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.internal.ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS;
 import static junit.framework.TestCase.assertNotSame;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -38,7 +37,6 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -70,7 +68,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
-import io.grpc.PickFirstBalancerFactory;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
@@ -745,7 +742,7 @@ public class ManagedChannelImplTest {
 
     // shutdown() has a delay
     sub1.shutdown();
-    timer.forwardTime(SUBCHANNEL_SHUTDOWN_DELAY_SECONDS - 1, TimeUnit.SECONDS);
+    timer.forwardTime(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS - 1, TimeUnit.SECONDS);
     sub1.shutdown();
     verify(transportInfo1.transport, never()).shutdown();
     timer.forwardTime(1, TimeUnit.SECONDS);
@@ -1280,23 +1277,17 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void pickFirstLbOnIdleTimeout() {
-    mockLoadBalancerFactory = spy(new LoadBalancer.Factory() {
-      @Override
-      public LoadBalancer newLoadBalancer(Helper helper) {
-        return PickFirstBalancerFactory.getInstance().newLoadBalancer(helper);
-      }
-    });
+  public void stateIsIdleOnIdleTimeout() {
     long idleTimeoutMillis = 2000L;
     createChannel(
         new FakeNameResolverFactory(true), NO_INTERCEPTOR, true /* request connection*/,
         idleTimeoutMillis);
+    assertEquals(ConnectivityState.IDLE, channel.getState(false));
 
-    assertEquals(ConnectivityState.CONNECTING, channel.getState(false));
+    helper.updateBalancingState(CONNECTING, mockPicker);
+    assertEquals(CONNECTING, channel.getState(false));
 
     timer.forwardNanos(TimeUnit.MILLISECONDS.toNanos(idleTimeoutMillis));
-    timer.forwardNanos(TimeUnit.SECONDS.toNanos(SUBCHANNEL_SHUTDOWN_DELAY_SECONDS));
-
     assertEquals(ConnectivityState.IDLE, channel.getState(false));
   }
 

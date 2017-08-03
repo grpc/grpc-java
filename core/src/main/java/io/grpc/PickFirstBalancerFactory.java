@@ -18,7 +18,6 @@ package io.grpc;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.CONNECTING;
-import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
@@ -93,12 +92,8 @@ public final class PickFirstBalancerFactory extends LoadBalancer.Factory {
     @Override
     public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
       ConnectivityState currentState = stateInfo.getState();
-      if (subchannel != this.subchannel) {
+      if (subchannel != this.subchannel || currentState == SHUTDOWN) {
         return;
-      }
-      if (currentState == SHUTDOWN) {
-        // Either IDLE_TIMEOUT or channel is shutdown. Won't have any effect for the latter case.
-        helper.updateBalancingState(IDLE, new Picker(PickResult.withNoResult()));
       }
 
       PickResult pickResult;

@@ -250,6 +250,9 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       loadBalancer.shutdown();
       loadBalancer = null;
       subchannelPicker = null;
+      if (!channelStateManager.isDisabled()) {
+        channelStateManager.gotoState(IDLE);
+      }
     }
   }
 
