@@ -207,9 +207,13 @@ public abstract class AbstractInteropTest {
       new ClientStreamTracer.Factory() {
         @Override
         public ClientStreamTracer newClientStreamTracer(CallOptions callOptions, Metadata headers) {
-          ClientStreamTracer tracer = spy(new ClientStreamTracer() {});
-          clientStreamTracers.add(tracer);
-          return tracer;
+          if (metricsExpected()) {
+              ClientStreamTracer tracer = spy(new ClientStreamTracer() {});
+              clientStreamTracers.add(tracer);
+              return tracer;
+          } else {
+              return new ClientStreamTracer() {};
+          }
         }
       };
   private final ClientInterceptor tracerSetupInterceptor = new ClientInterceptor() {
