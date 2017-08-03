@@ -72,7 +72,11 @@ public final class PickFirstBalancerFactory extends LoadBalancer.Factory {
       EquivalentAddressGroup newEag = flattenEquivalentAddressGroup(servers);
       if (subchannel == null) {
         subchannel = helper.createSubchannel(newEag, Attributes.EMPTY);
+
+        // The channel state does not get updated when doing name resolving today, so for the moment
+        // let LB report CONNECTION and call subchannel.requestConnection() immediately.
         helper.updateBalancingState(CONNECTING, new Picker(PickResult.withSubchannel(subchannel)));
+        subchannel.requestConnection();
       } else {
         helper.updateSubchannelAddresses(subchannel, newEag);
       }

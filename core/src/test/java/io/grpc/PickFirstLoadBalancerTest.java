@@ -103,6 +103,7 @@ public class PickFirstLoadBalancerTest {
 
     verify(mockHelper).createSubchannel(eagCaptor.capture(), attrsCaptor.capture());
     verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verify(mockSubchannel).requestConnection();
 
     assertEquals(new EquivalentAddressGroup(socketAddresses), eagCaptor.getValue());
     assertEquals(pickerCaptor.getValue().pickSubchannel(mockArgs),
@@ -114,7 +115,9 @@ public class PickFirstLoadBalancerTest {
   @Test
   public void pickAfterResolvedAndUnchanged() throws Exception {
     loadBalancer.handleResolvedAddressGroups(servers, affinity);
+    verify(mockSubchannel).requestConnection();
     loadBalancer.handleResolvedAddressGroups(servers, affinity);
+    verifyNoMoreInteractions(mockSubchannel);
 
     verify(mockHelper).createSubchannel(any(EquivalentAddressGroup.class),
         any(Attributes.class));
@@ -138,6 +141,7 @@ public class PickFirstLoadBalancerTest {
     loadBalancer.handleResolvedAddressGroups(servers, affinity);
     inOrder.verify(mockHelper).createSubchannel(eagCaptor.capture(), any(Attributes.class));
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verify(mockSubchannel).requestConnection();
     assertEquals(socketAddresses, eagCaptor.getValue().getAddresses());
     assertEquals(mockSubchannel, pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel());
 
@@ -145,8 +149,7 @@ public class PickFirstLoadBalancerTest {
     inOrder.verify(mockHelper).updateSubchannelAddresses(eq(mockSubchannel), eagCaptor.capture());
     assertEquals(newSocketAddresses, eagCaptor.getValue().getAddresses());
 
-    verify(mockSubchannel, never()).shutdown();
-
+    verifyNoMoreInteractions(mockSubchannel);
     verifyNoMoreInteractions(mockHelper);
   }
 
@@ -191,6 +194,7 @@ public class PickFirstLoadBalancerTest {
     PickResult pickResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
     assertEquals(null, pickResult.getSubchannel());
     assertEquals(error, pickResult.getStatus());
+    verify(mockSubchannel, never()).requestConnection();
     verifyNoMoreInteractions(mockHelper);
   }
 
@@ -201,11 +205,13 @@ public class PickFirstLoadBalancerTest {
     loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
     inOrder.verify(mockHelper)
         .updateBalancingState(any(ConnectivityState.class), any(Picker.class));
+    verify(mockSubchannel, never()).requestConnection();
 
     loadBalancer.handleResolvedAddressGroups(servers, affinity);
     inOrder.verify(mockHelper).createSubchannel(eq(new EquivalentAddressGroup(socketAddresses)),
         eq(Attributes.EMPTY));
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verify(mockSubchannel).requestConnection();
 
     assertEquals(mockSubchannel, pickerCaptor.getValue().pickSubchannel(mockArgs)
         .getSubchannel());
