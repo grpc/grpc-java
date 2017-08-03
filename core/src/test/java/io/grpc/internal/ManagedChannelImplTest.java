@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.internal.ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS;
 import static junit.framework.TestCase.assertNotSame;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -37,6 +38,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -68,6 +70,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
+import io.grpc.PickFirstBalancerFactory;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
@@ -168,12 +171,14 @@ public class ManagedChannelImplTest {
 
   private void createChannel(
       NameResolver.Factory nameResolverFactory, List<ClientInterceptor> interceptors) {
-    createChannel(nameResolverFactory, interceptors, true /* requestConnection */);
+    createChannel(
+        nameResolverFactory, interceptors, true /* requestConnection */,
+        ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE);
   }
 
   private void createChannel(
       NameResolver.Factory nameResolverFactory, List<ClientInterceptor> interceptors,
-      boolean requestConnection) {
+      boolean requestConnection, long idleTimeoutMillis) {
     class Builder extends AbstractManagedChannelImplBuilder<Builder> {
       Builder(String target) {
         super(target);
@@ -197,7 +202,7 @@ public class ManagedChannelImplTest {
         .loadBalancerFactory(mockLoadBalancerFactory)
         .userAgent(userAgent);
     builder.executorPool = executorPool;
-    builder.idleTimeoutMillis = ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE;
+    builder.idleTimeoutMillis = idleTimeoutMillis;
     channel = new ManagedChannelImpl(
         builder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         oobExecutorPool, timer.getStopwatchSupplier(), interceptors);
@@ -205,7 +210,9 @@ public class ManagedChannelImplTest {
     if (requestConnection) {
       // Force-exit the initial idle-mode
       channel.exitIdleMode();
-      assertEquals(0, timer.numPendingTasks());
+      assertEquals(
+          idleTimeoutMillis == ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE ? 0 : 1,
+          timer.numPendingTasks());
 
       ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
       verify(mockLoadBalancerFactory).newLoadBalancer(helperCaptor.capture());
@@ -738,7 +745,7 @@ public class ManagedChannelImplTest {
 
     // shutdown() has a delay
     sub1.shutdown();
-    timer.forwardTime(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS - 1, TimeUnit.SECONDS);
+    timer.forwardTime(SUBCHANNEL_SHUTDOWN_DELAY_SECONDS - 1, TimeUnit.SECONDS);
     sub1.shutdown();
     verify(transportInfo1.transport, never()).shutdown();
     timer.forwardTime(1, TimeUnit.SECONDS);
@@ -1165,7 +1172,8 @@ public class ManagedChannelImplTest {
   @Test
   public void getState_withRequestConnect() {
     createChannel(
-        new FakeNameResolverFactory(false), NO_INTERCEPTOR, false /* requestConnection */);
+        new FakeNameResolverFactory(false), NO_INTERCEPTOR, false /* requestConnection */,
+        ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE);
 
     assertEquals(ConnectivityState.IDLE, channel.getState(false));
     verify(mockLoadBalancerFactory, never()).newLoadBalancer(any(Helper.class));
@@ -1269,6 +1277,27 @@ public class ManagedChannelImplTest {
     assertEquals(ConnectivityState.SHUTDOWN, channel.getState(false));
     executor.runDueTasks();
     assertFalse(stateChanged.get());
+  }
+
+  @Test
+  public void pickFirstLbOnIdleTimeout() {
+    mockLoadBalancerFactory = spy(new LoadBalancer.Factory() {
+      @Override
+      public LoadBalancer newLoadBalancer(Helper helper) {
+        return PickFirstBalancerFactory.getInstance().newLoadBalancer(helper);
+      }
+    });
+    long idleTimeoutMillis = 2000L;
+    createChannel(
+        new FakeNameResolverFactory(true), NO_INTERCEPTOR, true /* request connection*/,
+        idleTimeoutMillis);
+
+    assertEquals(ConnectivityState.CONNECTING, channel.getState(false));
+
+    timer.forwardNanos(TimeUnit.MILLISECONDS.toNanos(idleTimeoutMillis));
+    timer.forwardNanos(TimeUnit.SECONDS.toNanos(SUBCHANNEL_SHUTDOWN_DELAY_SECONDS));
+
+    assertEquals(ConnectivityState.IDLE, channel.getState(false));
   }
 
   // TODO(zdapeng): replace usages of updatePicker() in some other tests once it's deprecated
