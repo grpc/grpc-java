@@ -677,13 +677,13 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       checkNotNull(newState, "newState");
       checkNotNull(newPicker, "newPicker");
 
-      if (this != lbHelper) {
-        return;
-      }
       runSerialized(
           new Runnable() {
             @Override
             public void run() {
+              if (LbHelperImpl.this != lbHelper) {
+                return;
+              }
               subchannelPicker = newPicker;
               delayedTransport.reprocess(newPicker);
               // It's not appropriate to report SHUTDOWN state from lb.
@@ -769,12 +769,12 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     @Deprecated
     @Override
     public void updatePicker(final SubchannelPicker picker) {
-      if (this != lbHelper) {
-        return;
-      }
       runSerialized(new Runnable() {
           @Override
           public void run() {
+            if (LbHelperImpl.this != lbHelper) {
+              return;
+            }
             subchannelPicker = picker;
             delayedTransport.reprocess(picker);
             channelStateManager.disable();
