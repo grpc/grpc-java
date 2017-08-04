@@ -33,7 +33,6 @@ import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -766,19 +765,64 @@ public class ContextTest {
   }
 
   /**
-   * The context storage has per thread data structures.
-   * Ensure that newly created threads can attach/detach.
+   * Ensure that newly created threads can attach/detach a context.
    */
   @Test
-  public void attachDetachNewThread() throws ExecutionException, InterruptedException {
-    Future<?> future = scheduler.submit(Context.current().wrap(new Runnable() {
+  public void newThreadAttachContext() throws Exception {
+    Context parent = Context.current().withValue(COLOR, "blue");
+    parent.call(new Callable<Object>() {
       @Override
-      public void run() {
-        // noop
+      public Object call() throws Exception {
+        assertEquals("blue", COLOR.get());
+
+        final Context child = Context.current().withValue(COLOR, "red");
+        Future<String> workerThreadVal = scheduler
+            .submit(new Callable<String>() {
+              @Override
+              public String call() {
+                Context initial = Context.current();
+                Context toRestore = child.attach();
+                try {
+                  assertNotNull(toRestore);
+                  return COLOR.get();
+                } finally {
+                  child.detach(toRestore);
+                  assertEquals(initial, Context.current());
+                }
+              }
+            });
+        assertEquals("red", workerThreadVal.get());
+
+        assertEquals("blue", COLOR.get());
+        return null;
       }
-    }));
-    // just check that attach/detach completed without exceptions
-    future.get();
+    });
+  }
+
+  /**
+   * Similar to {@link #newThreadAttachContext()} but without giving the new thread a specific ctx.
+   */
+  @Test
+  public void newThreadWithoutContext() throws Exception {
+    Context parent = Context.current().withValue(COLOR, "blue");
+    parent.call(new Callable<Object>() {
+      @Override
+      public Object call() throws Exception {
+        assertEquals("blue", COLOR.get());
+
+        Future<String> workerThreadVal = scheduler
+            .submit(new Callable<String>() {
+              @Override
+              public String call() {
+                return COLOR.get();
+              }
+            });
+        assertEquals(null, workerThreadVal.get());
+
+        assertEquals("blue", COLOR.get());
+        return null;
+      }
+    });
   }
 
   // UsedReflectively

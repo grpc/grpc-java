@@ -385,7 +385,11 @@ public class Context {
    * }}</pre>
    */
   public Context attach() {
-    return storage().doAttach(this);
+    Context prev = storage().doAttach(this);
+    if (prev == null) {
+      return ROOT;
+    }
+    return prev;
   }
 
   /**
@@ -890,7 +894,13 @@ public class Context {
      * @return A {@link Context} that should be passed back into {@link #detach(Context, Context)}
      *        as the {@code toRestore} parameter.
      */
-    public abstract Context doAttach(Context toAttach);
+    public Context doAttach(Context toAttach) {
+      // This is a default implementation to help migrate existing Storage implementations that
+      // have an attach() method but no doAttach() method.
+      Context current = current();
+      attach(toAttach);
+      return current;
+    }
 
     /**
      * Implements {@link io.grpc.Context#detach}
