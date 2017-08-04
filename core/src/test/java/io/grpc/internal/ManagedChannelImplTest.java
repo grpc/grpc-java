@@ -1291,6 +1291,30 @@ public class ManagedChannelImplTest {
     assertEquals(ConnectivityState.IDLE, channel.getState(false));
   }
 
+  @Test
+  public void idleTimeoutAndReconnect() {
+    long idleTimeoutMillis = 2000L;
+    createChannel(
+        new FakeNameResolverFactory(true), NO_INTERCEPTOR, true /* request connection*/,
+        idleTimeoutMillis);
+
+    timer.forwardNanos(TimeUnit.MILLISECONDS.toNanos(idleTimeoutMillis));
+    assertEquals(ConnectivityState.IDLE, channel.getState(true /* request connection */));
+
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
+    // Two times of requesting connection will create loadBalancer twice.
+    verify(mockLoadBalancerFactory, times(2)).newLoadBalancer(helperCaptor.capture());
+    Helper helper2 = helperCaptor.getValue();
+
+    // Updating on the old helper (whose balancer has been shutdown) does not change the channel
+    // state.
+    helper.updateBalancingState(CONNECTING, mockPicker);
+    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+
+    helper2.updateBalancingState(CONNECTING, mockPicker);
+    assertEquals(ConnectivityState.CONNECTING, channel.getState(false));
+  }
+
   // TODO(zdapeng): replace usages of updatePicker() in some other tests once it's deprecated
   @Test
   public void updateBalancingStateDoesUpdatePicker() {

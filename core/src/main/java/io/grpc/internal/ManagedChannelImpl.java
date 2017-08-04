@@ -119,7 +119,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
   // null when channel is in idle mode.  Must be assigned from channelExecutor.
   @Nullable
-  private LoadBalancer loadBalancer;
+  private LbHelperImpl lbHelper;
 
   // Must be assigned from channelExecutor.  null if channel is in idle mode.
   @Nullable
@@ -183,9 +183,9 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
         public void transportTerminated() {
           checkState(shutdown.get(), "Channel must have been shut down");
           terminating = true;
-          if (loadBalancer != null) {
-            loadBalancer.shutdown();
-            loadBalancer = null;
+          if (lbHelper != null) {
+            lbHelper.lb.shutdown();
+            lbHelper = null;
           }
           if (nameResolver != null) {
             nameResolver.shutdown();
@@ -247,8 +247,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       // did not cancel idleModeTimer, both of which are bugs.
       nameResolver.shutdown();
       nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
-      loadBalancer.shutdown();
-      loadBalancer = null;
+      lbHelper.lb.shutdown();
+      lbHelper = null;
       subchannelPicker = null;
       if (!channelStateManager.isDisabled()) {
         channelStateManager.gotoState(IDLE);
@@ -282,15 +282,14 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       // isInUse() == false, in which case we still need to schedule the timer.
       rescheduleIdleTimer();
     }
-    if (loadBalancer != null) {
+    if (lbHelper != null) {
       return;
     }
     log.log(Level.FINE, "[{0}] Exiting idle mode", getLogId());
-    LbHelperImpl helper = new LbHelperImpl(nameResolver);
-    helper.lb = loadBalancerFactory.newLoadBalancer(helper);
-    this.loadBalancer = helper.lb;
+    lbHelper = new LbHelperImpl(nameResolver);
+    lbHelper.lb = loadBalancerFactory.newLoadBalancer(lbHelper);
 
-    NameResolverListenerImpl listener = new NameResolverListenerImpl(helper);
+    NameResolverListenerImpl listener = new NameResolverListenerImpl(lbHelper);
     try {
       nameResolver.start(listener);
     } catch (Throwable t) {
@@ -678,6 +677,9 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       checkNotNull(newState, "newState");
       checkNotNull(newPicker, "newPicker");
 
+      if (this != lbHelper) {
+        return;
+      }
       runSerialized(
           new Runnable() {
             @Override
@@ -767,6 +769,9 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     @Deprecated
     @Override
     public void updatePicker(final SubchannelPicker picker) {
+      if (this != lbHelper) {
+        return;
+      }
       runSerialized(new Runnable() {
           @Override
           public void run() {
