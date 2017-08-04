@@ -766,6 +766,7 @@ public class ContextTest {
 
   /**
    * Ensure that newly created threads can attach/detach a context.
+   * The current test thread already has a context manually attached in {@link #setUp()}.
    */
   @Test
   public void newThreadAttachContext() throws Exception {
@@ -781,6 +782,7 @@ public class ContextTest {
               @Override
               public String call() {
                 Context initial = Context.current();
+                assertNotNull(initial);
                 Context toRestore = child.attach();
                 try {
                   assertNotNull(toRestore);
@@ -814,6 +816,7 @@ public class ContextTest {
             .submit(new Callable<String>() {
               @Override
               public String call() {
+                assertNotNull(Context.current());
                 return COLOR.get();
               }
             });
