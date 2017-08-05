@@ -17,6 +17,7 @@
 package io.grpc.okhttp;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.internal.AbstractClientStream.GRPC_PAYLOAD_BIN_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.eq;
@@ -193,9 +194,16 @@ public class OkHttpClientStreamTest {
     stream.transportState().start(3);
 
     verify(frameWriter).synStream(eq(false), eq(false), eq(3), eq(0), headersCaptor.capture());
-    assertThat(headersCaptor.getValue()).contains(
-        new Header(Header.TARGET_PATH, "/" + getMethod.getFullMethodName() + "?"
-            + BaseEncoding.base64().encode(msg)));
+    assertThat(headersCaptor.getValue())
+        .contains(
+            new Header(
+                Header.TARGET_PATH,
+                "/"
+                    + getMethod.getFullMethodName()
+                    + "?"
+                    + GRPC_PAYLOAD_BIN_KEY
+                    + "="
+                    + BaseEncoding.base64().encode(msg)));
   }
 
   // TODO(carl-mastrangelo): extract this out into a testing/ directory and remove other definitions
@@ -214,4 +222,3 @@ public class OkHttpClientStreamTest {
     public void closed(Status status, Metadata trailers) {}
   }
 }
-

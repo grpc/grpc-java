@@ -114,7 +114,7 @@ class OkHttpClientStream extends AbstractClientStream {
     public void writeHeaders(Metadata metadata, byte[] payload) {
       String defaultPath = "/" + method.getFullMethodName();
       if (payload != null) {
-        defaultPath += "?" + BaseEncoding.base64().encode(payload);
+        defaultPath += "?" + GRPC_PAYLOAD_BIN_KEY + "=" + BaseEncoding.base64().encode(payload);
       }
       metadata.discardAll(GrpcUtil.USER_AGENT_KEY);
       synchronized (state.lock) {
