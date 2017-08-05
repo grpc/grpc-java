@@ -344,6 +344,8 @@ public abstract class AbstractClientStream extends AbstractStream
     }
   }
 
+  public static final String GRPC_PAYLOAD_BIN_KEY = "grpc-payload-bin";
+
   private class GetFramer implements Framer {
     private Metadata headers;
     private boolean closed;

@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.internal.AbstractClientStream.GRPC_PAYLOAD_BIN_KEY;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.netty.NettyTestUtil.messageFrame;
 import static io.grpc.netty.Utils.CONTENT_TYPE_GRPC;
@@ -407,8 +408,13 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     ArgumentCaptor<CreateStreamCommand> cmdCap = ArgumentCaptor.forClass(CreateStreamCommand.class);
     verify(writeQueue).enqueue(cmdCap.capture(), eq(true));
     assertThat(ImmutableListMultimap.copyOf(cmdCap.getValue().headers()))
-        .containsEntry(AsciiString.of(":path"), AsciiString.of(
-            "//testService/test?" + BaseEncoding.base64().encode(msg)));
+        .containsEntry(
+            AsciiString.of(":path"),
+            AsciiString.of(
+                "//testService/test?"
+                    + GRPC_PAYLOAD_BIN_KEY
+                    + "="
+                    + BaseEncoding.base64().encode(msg)));
   }
 
   @Override

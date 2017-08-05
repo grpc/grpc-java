@@ -113,9 +113,13 @@ class NettyClientStream extends AbstractClientStream {
       AsciiString httpMethod;
       if (get) {
         // Forge the query string
-        // TODO(ericgribkoff) Add the key back to the query string
         defaultPath =
-            new AsciiString(defaultPath + "?" + BaseEncoding.base64().encode(requestPayload));
+            new AsciiString(
+                defaultPath
+                    + "?"
+                    + GRPC_PAYLOAD_BIN_KEY
+                    + "="
+                    + BaseEncoding.base64().encode(requestPayload));
         httpMethod = Utils.HTTP_GET_METHOD;
       } else {
         httpMethod = Utils.HTTP_METHOD;
