@@ -152,7 +152,7 @@ class NettyClientStream extends AbstractClientStream {
             channel.newPromise().addListener(new ChannelFutureListener() {
               @Override
               public void operationComplete(ChannelFuture future) throws Exception {
-                if (future.isSuccess()) {
+                if (future.isSuccess() && transportState().http2Stream() != null) {
                   // Remove the bytes from outbound flow control, optionally notifying
                   // the client that they can send more bytes.
                   transportState().onSentBytes(numBytes);
