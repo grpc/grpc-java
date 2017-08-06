@@ -16,7 +16,6 @@
 
 package io.grpc;
 
-import com.sun.istack.internal.Nullable;
 import java.util.ArrayList;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
@@ -893,6 +892,7 @@ public class Context {
      *
      * <p>Caution: {@link Context#attach()} interprets a return value of {@code null} to mean
      * the same thing as {@link Context#ROOT}.
+     *
      * <p>See also: {@link #current()}.
 
      * @param toAttach the context to be attached
@@ -900,7 +900,6 @@ public class Context {
      *        as the {@code toRestore} parameter. {@code null} is a valid return value, but see
      *        caution note.
      */
-    @Nullable
     public Context doAttach(Context toAttach) {
       // This is a default implementation to help migrate existing Storage implementations that
       // have an attach() method but no doAttach() method.
@@ -924,12 +923,12 @@ public class Context {
      *
      * <p>Caution: {@link Context} interprets a return value of {@code null} to mean the same
      * thing as {@code Context{@link #ROOT}}.
+     *
      * <p>See also {@link #doAttach(Context)}.
      *
      * @return The context of the current scope. {@code null} is a valid return value, but see
      *        caution note.
      */
-    @Nullable
     public abstract Context current();
   }
 

@@ -29,6 +29,8 @@ import static org.junit.Assert.fail;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.concurrent.Callable;
@@ -826,6 +828,52 @@ public class ContextTest {
         return null;
       }
     });
+  }
+
+  @Test
+  public void storageReturnsNullTest() throws Exception {
+    Class<?> contextClass = Class.forName("io.grpc.Context");
+    Field storage = contextClass.getDeclaredField("storage");
+    assertTrue(Modifier.isFinal(storage.getModifiers()));
+    // use reflection to forcibly change the storage object to a test object
+    storage.setAccessible(true);
+    Object o = storage.get(null);
+    @SuppressWarnings("unchecked")
+    AtomicReference<Context.Storage> storageRef = (AtomicReference<Context.Storage>) o;
+    Context.Storage originalStorage = storageRef.get();
+    try {
+      storageRef.set(new Context.Storage() {
+        @Override
+        public Context doAttach(Context toAttach) {
+          return null;
+        }
+
+        @Override
+        public void detach(Context toDetach, Context toRestore) {
+          // noop
+        }
+
+        @Override
+        public Context current() {
+          return null;
+        }
+      });
+      // current() returning null gets transformed into ROOT
+      assertEquals(Context.ROOT, Context.current());
+
+      // doAttach() returning null gets transformed into ROOT
+      Context blueContext = Context.current().withValue(COLOR, "blue");
+      Context toRestore = blueContext.attach();
+      assertEquals(Context.ROOT, toRestore);
+
+      // final sanity check
+      blueContext.detach(toRestore);
+      assertEquals(Context.ROOT, Context.current());
+    } finally {
+      // undo the changes
+      storageRef.set(originalStorage);
+      storage.setAccessible(false);
+    }
   }
 
   // UsedReflectively
