@@ -49,9 +49,12 @@ public class HeadersTest {
 
     // 7 reserved headers, 1 user header
     assertEquals(7 + 1, headers.size());
+    // Check the 3 reserved headers that are non pseudo
+    // Users can not create pseudo headers keys so no need to check for them here
     assertTrue(headers.contains(Headers.CONTENT_TYPE_HEADER));
     assertTrue(headers.contains(new Header(GrpcUtil.USER_AGENT_KEY.name(), userAgent)));
     assertTrue(headers.contains(new Header(GrpcUtil.TE_HEADER.name(), GrpcUtil.TE_TRAILERS)));
+    // Check the user header is in tact
     assertTrue(headers.contains(new Header(userKey.name(), userValue)));
   }
 }

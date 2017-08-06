@@ -78,10 +78,13 @@ public class UtilsTest {
             new AsciiString(userAgent));
     // 7 reserved headers, 1 user header
     assertEquals(7 + 1, output.size());
+    // Check the 3 reserved headers that are non pseudo
+    // Users can not create pseudo headers keys so no need to check for them here
     assertEquals(GrpcUtil.CONTENT_TYPE_GRPC,
         output.get(GrpcUtil.CONTENT_TYPE_KEY.name()).toString());
     assertEquals(userAgent, output.get(GrpcUtil.USER_AGENT_KEY.name()).toString());
     assertEquals(GrpcUtil.TE_TRAILERS, output.get(GrpcUtil.TE_HEADER.name()).toString());
+    // Check the user header is in tact
     assertEquals(userValue, output.get(userKey.name()).toString());
   }
 
