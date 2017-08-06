@@ -16,8 +16,6 @@
 
 package io.grpc.netty;
 
-import static io.grpc.internal.GrpcUtil.discardHttp2RequestHeaders;
-import static io.grpc.internal.GrpcUtil.discardHttp2ResponseHeaders;
 import static io.grpc.internal.TransportFrameUtil.toHttp2Headers;
 import static io.grpc.internal.TransportFrameUtil.toRawSerializedHeaders;
 import static io.netty.util.CharsetUtil.UTF_8;
@@ -110,7 +108,9 @@ class Utils {
     Preconditions.checkNotNull(method, "method");
 
     // Discard any application supplied duplicates of the reserved headers
-    discardHttp2RequestHeaders(headers);
+    headers.discardAll(GrpcUtil.CONTENT_TYPE_KEY);
+    headers.discardAll(GrpcUtil.TE_HEADER);
+    headers.discardAll(GrpcUtil.USER_AGENT_KEY);
 
     return GrpcHttp2OutboundHeaders.clientRequestHeaders(
         toHttp2Headers(headers),
@@ -123,7 +123,8 @@ class Utils {
 
   public static Http2Headers convertServerHeaders(Metadata headers) {
     // Discard any application supplied duplicates of the reserved headers
-    discardHttp2ResponseHeaders(headers);
+    headers.discardAll(GrpcUtil.CONTENT_TYPE_KEY);
+
     return GrpcHttp2OutboundHeaders.serverResponseHeaders(toHttp2Headers(headers));
   }
 

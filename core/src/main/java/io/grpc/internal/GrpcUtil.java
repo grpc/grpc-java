@@ -619,20 +619,4 @@ public final class GrpcUtil {
     }
     return "";
   }
-
-  /**
-   * Strips away any reserved headers for client requests.
-   */
-  public static void discardHttp2RequestHeaders(Metadata headers) {
-    headers.discardAll(CONTENT_TYPE_KEY);
-    headers.discardAll(TE_HEADER);
-    headers.discardAll(USER_AGENT_KEY);
-  }
-
-  /**
-   * Strips away any reserved headers for server responses.
-   */
-  public static void discardHttp2ResponseHeaders(Metadata headers) {
-    headers.discardAll(CONTENT_TYPE_KEY);
-  }
 }
