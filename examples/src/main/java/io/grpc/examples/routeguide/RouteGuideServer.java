@@ -146,7 +146,7 @@ public class RouteGuideServer {
       int top = max(request.getLo().getLatitude(), request.getHi().getLatitude());
       int bottom = min(request.getLo().getLatitude(), request.getHi().getLatitude());
 
-      // This example is a bit contrived, but demonstrates to show how to use flow control to
+      // This example is a bit contrived, but demonstrates how to use flow control to
       // avoid sending too many responses on the network all at once.
       List<Feature> inRectangle = new ArrayList<Feature>();
       for (Feature feature : features) {
@@ -164,6 +164,7 @@ public class RouteGuideServer {
       // It is safe make this cast in generated stubs
       ServerCallStreamObserver<Feature> observer =
           (ServerCallStreamObserver<Feature>) responseObserver;
+      // copyWithFlowControl is a utility that uses ServerCallStreamObserver#setOnReadyHandler
       StreamObservers.copyWithFlowControl(inRectangle, observer);
     }
 

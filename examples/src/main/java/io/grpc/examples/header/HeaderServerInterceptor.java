@@ -53,10 +53,10 @@ public class HeaderServerInterceptor implements ServerInterceptor {
         };
     // Pass the decorated server call into grpc so that any remaining interceptors may be applied.
     // We receive a ServerCall.Listener that will be used in the inbound path, and have an
-    // opportunity to decorate it here.
+    // opportunity to decorate it here using SimpleForwardingServerCallListener if we wish.
     ServerCall.Listener<ReqT> listener = next.startCall(decoratedServerCall, requestHeaders);
     // Note that because the inbound and outbound handlers execute in separate threads, it is not
-    // safe for the ServerCall and ServerCall.Listener to interact here without synchronization.
+    // safe for the ServerCall and ServerCall.Listener to interact without synchronization.
     return listener;
   }
 }

@@ -54,9 +54,9 @@ public class HeaderClientInterceptor implements ClientInterceptor {
             headers.put(CUSTOM_HEADER_KEY, "customRequestValue");
 
             // Decorate the Listener before passing it into grpc.
-            // Note that because the inbound and outbound handlers execute in separate threads,
-            // it is not safe for the ClientCall and ClientCall.Listener to interact here without
-            // synchronization.
+            // Note that because the inbound and outbound handlers are independent,
+            // it is not safe for the ClientCall (outbound) and ClientCall.Listener (inbound)
+            // to interact here without synchronization.
             SimpleForwardingClientCallListener<RespT> decoratedListener =
                 new SimpleForwardingClientCallListener<RespT>(responseListener) {
                   @Override
