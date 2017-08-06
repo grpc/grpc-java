@@ -16,6 +16,7 @@
 
 package io.grpc.netty;
 
+import static io.grpc.internal.GrpcUtil.CONTENT_TYPE_KEY;
 import static io.grpc.internal.TransportFrameUtil.toHttp2Headers;
 import static io.grpc.internal.TransportFrameUtil.toRawSerializedHeaders;
 import static io.netty.util.CharsetUtil.UTF_8;
@@ -51,8 +52,7 @@ class Utils {
   public static final AsciiString HTTP_GET_METHOD = AsciiString.of("GET");
   public static final AsciiString HTTPS = AsciiString.of("https");
   public static final AsciiString HTTP = AsciiString.of("http");
-  public static final AsciiString CONTENT_TYPE_HEADER =
-      AsciiString.of(GrpcUtil.CONTENT_TYPE_KEY.name());
+  public static final AsciiString CONTENT_TYPE_HEADER = AsciiString.of(CONTENT_TYPE_KEY.name());
   public static final AsciiString CONTENT_TYPE_GRPC = AsciiString.of(GrpcUtil.CONTENT_TYPE_GRPC);
   public static final AsciiString TE_HEADER = AsciiString.of(GrpcUtil.TE_HEADER.name());
   public static final AsciiString TE_TRAILERS = AsciiString.of(GrpcUtil.TE_TRAILERS);
@@ -108,7 +108,7 @@ class Utils {
     Preconditions.checkNotNull(method, "method");
 
     // Discard any application supplied duplicates of the reserved headers
-    headers.discardAll(GrpcUtil.CONTENT_TYPE_KEY);
+    headers.discardAll(CONTENT_TYPE_KEY);
     headers.discardAll(GrpcUtil.TE_HEADER);
     headers.discardAll(GrpcUtil.USER_AGENT_KEY);
 
@@ -123,7 +123,7 @@ class Utils {
 
   public static Http2Headers convertServerHeaders(Metadata headers) {
     // Discard any application supplied duplicates of the reserved headers
-    headers.discardAll(GrpcUtil.CONTENT_TYPE_KEY);
+    headers.discardAll(CONTENT_TYPE_KEY);
 
     return GrpcHttp2OutboundHeaders.serverResponseHeaders(toHttp2Headers(headers));
   }
