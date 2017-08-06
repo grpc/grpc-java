@@ -62,18 +62,6 @@ public class MetadataTest {
   private static final String LANCE = "lance";
   private static final byte[] LANCE_BYTES = LANCE.getBytes(US_ASCII);
   private static final Metadata.Key<Fish> KEY = Metadata.Key.of("test-bin", FISH_MARSHALLER);
-  private static final InternalMetadata.TrustedAsciiMarshaller<String> TRUSTED_ASCII_MARSHALLER =
-      new InternalMetadata.TrustedAsciiMarshaller<String>() {
-    @Override
-    public byte[] toAsciiString(String value) {
-      return value.getBytes();
-    }
-
-    @Override
-    public String parseAsciiString(byte[] serialized) {
-      return new String(serialized);
-    }
-  };
 
   @Test
   public void noPseudoHeaders() {
