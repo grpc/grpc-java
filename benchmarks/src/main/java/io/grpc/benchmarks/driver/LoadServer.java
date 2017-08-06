@@ -64,9 +64,9 @@ final class LoadServer {
           .build();
 
   /**
-   * Generic version of the streaming ping-pong method call.
+   * Generic version of the streaming method call.
    */
-  static final MethodDescriptor<ByteBuf, ByteBuf> GENERIC_STREAMING_PING_PONG_METHOD =
+  static final MethodDescriptor<ByteBuf, ByteBuf> GENERIC_STREAMING_METHOD =
       BenchmarkServiceGrpc.METHOD_STREAMING_CALL.toBuilder(marshaller, marshaller)
           .build();
 
@@ -124,8 +124,8 @@ final class LoadServer {
       serverBuilder.addService(
           ServerServiceDefinition
               .builder(new ServiceDescriptor(BenchmarkServiceGrpc.SERVICE_NAME,
-                  GENERIC_STREAMING_PING_PONG_METHOD))
-              .addMethod(GENERIC_STREAMING_PING_PONG_METHOD, new GenericServiceCallHandler())
+                  GENERIC_STREAMING_METHOD))
+              .addMethod(GENERIC_STREAMING_METHOD, new GenericServiceCallHandler())
               .build());
     } else {
       serverBuilder.addService(benchmarkService);

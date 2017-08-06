@@ -16,6 +16,7 @@
 
 package io.grpc.benchmarks.driver;
 
+import com.google.common.collect.Iterables;
 import com.sun.management.OperatingSystemMXBean;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -30,13 +31,16 @@ import io.grpc.benchmarks.proto.Control;
 import io.grpc.benchmarks.proto.Messages;
 import io.grpc.benchmarks.proto.Payloads;
 import io.grpc.benchmarks.proto.Stats;
+import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientCalls;
+import io.grpc.stub.ClientResponseObserver;
 import io.grpc.stub.StreamObserver;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.epoll.Epoll;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import java.lang.management.ManagementFactory;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -55,7 +59,6 @@ import org.apache.commons.math3.distribution.ExponentialDistribution;
  * Implements the client-side contract for the load testing scenarios.
  */
 class LoadClient {
-
   private static final Logger log = Logger.getLogger(LoadClient.class.getName());
   private ByteBuf genericRequest;
 
@@ -179,28 +182,64 @@ class LoadClient {
       switch (config.getPayloadConfig().getPayloadCase()) {
         case SIMPLE_PARAMS: {
           if (config.getClientType() == Control.ClientType.SYNC_CLIENT) {
+            BenchmarkServiceGrpc.BenchmarkServiceBlockingStub blockingStub =
+                blockingStubs[i % blockingStubs.length];
             if (config.getRpcType() == Control.RpcType.UNARY) {
-              r = new BlockingUnaryWorker(blockingStubs[i % blockingStubs.length]);
+              r = new BlockingUnaryWorker(blockingStub);
             }
           } else if (config.getClientType() == Control.ClientType.ASYNC_CLIENT) {
+            BenchmarkServiceGrpc.BenchmarkServiceStub asyncStub = asyncStubs[i % asyncStubs.length];
             if (config.getRpcType() == Control.RpcType.UNARY) {
-              r = new AsyncUnaryWorker(asyncStubs[i % asyncStubs.length]);
+              r = new AsyncUnaryWorker(asyncStub);
             } else if (config.getRpcType() == Control.RpcType.STREAMING) {
-              r = new AsyncPingPongWorker(asyncStubs[i % asyncStubs.length]);
+              r = new AsyncPingPongWorker(asyncStub);
+            } else if (config.getRpcType() == Control.RpcType.STREAMING_FROM_CLIENT) {
+              r = new StreamingWorker<Messages.SimpleRequest, Messages.SimpleResponse>(
+                  asyncStub.getChannel().newCall(
+                      BenchmarkServiceGrpc.METHOD_STREAMING_FROM_CLIENT,
+                      asyncStub.getCallOptions()),
+                  Iterables.cycle(simpleRequest).iterator()
+              );
+            } else if (config.getRpcType() == Control.RpcType.STREAMING_FROM_SERVER) {
+              r = new ServerStreamingWorker<Messages.SimpleRequest, Messages.SimpleResponse>(
+                  asyncStub.getChannel().newCall(
+                      BenchmarkServiceGrpc.METHOD_STREAMING_FROM_SERVER,
+                      asyncStub.getCallOptions()),
+                  simpleRequest
+              );
+            } else if (config.getRpcType() == Control.RpcType.STREAMING_BOTH_WAYS) {
+              r = new StreamingWorker<Messages.SimpleRequest, Messages.SimpleResponse>(
+                  asyncStub.getChannel().newCall(
+                      BenchmarkServiceGrpc.METHOD_STREAMING_BOTH_WAYS,
+                      asyncStub.getCallOptions()),
+                  Iterables.cycle(simpleRequest).iterator());
             }
           }
           break;
         }
         case BYTEBUF_PARAMS: {
+          ManagedChannel channel = channels[i % channels.length];
           if (config.getClientType() == Control.ClientType.SYNC_CLIENT) {
             if (config.getRpcType() == Control.RpcType.UNARY) {
-              r = new GenericBlockingUnaryWorker(channels[i % channels.length]);
+              r = new GenericBlockingUnaryWorker(channel);
             }
           } else if (config.getClientType() == Control.ClientType.ASYNC_CLIENT) {
             if (config.getRpcType() == Control.RpcType.UNARY) {
-              r = new GenericAsyncUnaryWorker(channels[i % channels.length]);
+              r = new GenericAsyncUnaryWorker(channel);
             } else if (config.getRpcType() == Control.RpcType.STREAMING) {
-              r = new GenericAsyncPingPongWorker(channels[i % channels.length]);
+              r = new GenericAsyncPingPongWorker(channel);
+            } else if (config.getRpcType() == Control.RpcType.STREAMING_FROM_CLIENT) {
+              r = new StreamingWorker<ByteBuf, ByteBuf>(
+                  channel.newCall(LoadServer.GENERIC_STREAMING_METHOD, CallOptions.DEFAULT),
+                  Iterables.cycle(genericRequest.slice()).iterator());
+            } else if (config.getRpcType() == Control.RpcType.STREAMING_FROM_SERVER) {
+              r = new ServerStreamingWorker<ByteBuf, ByteBuf>(
+                  channel.newCall(LoadServer.GENERIC_STREAMING_METHOD, CallOptions.DEFAULT),
+                  genericRequest.slice());
+            } else if (config.getRpcType() == Control.RpcType.STREAMING_BOTH_WAYS) {
+              r = new StreamingWorker<ByteBuf, ByteBuf>(
+                  channel.newCall(LoadServer.GENERIC_STREAMING_METHOD, CallOptions.DEFAULT),
+                  Iterables.cycle(genericRequest.slice()).iterator());
             }
           }
 
@@ -302,7 +341,7 @@ class LoadClient {
    * Worker which executes blocking unary calls. Event timing is the duration between sending the
    * request and receiving the response.
    */
-  class BlockingUnaryWorker implements Runnable {
+  private class BlockingUnaryWorker implements Runnable {
     final BenchmarkServiceGrpc.BenchmarkServiceBlockingStub stub;
 
     private BlockingUnaryWorker(BenchmarkServiceGrpc.BenchmarkServiceBlockingStub stub) {
@@ -508,7 +547,7 @@ class LoadClient {
           return;
         }
         final ClientCall<ByteBuf, ByteBuf> call =
-            channel.newCall(LoadServer.GENERIC_STREAMING_PING_PONG_METHOD, CallOptions.DEFAULT);
+            channel.newCall(LoadServer.GENERIC_STREAMING_METHOD, CallOptions.DEFAULT);
         call.start(new ClientCall.Listener<ByteBuf>() {
           long now = System.nanoTime();
 
@@ -536,6 +575,98 @@ class LoadClient {
         call.request(1);
         call.sendMessage(genericRequest.slice());
       }
+    }
+  }
+
+  /**
+   * Used for both STREAMING_FROM_CLIENT as well as STREAMING_BOTH_WAYS.
+   */
+  private class StreamingWorker<ReqT, RespT>  implements Runnable {
+    final ClientCall<ReqT, RespT> call;
+    final Iterator<ReqT> requests;
+
+    private StreamingWorker(ClientCall<ReqT, RespT> call, Iterator<ReqT> requests) {
+      this.call = call;
+      this.requests = requests;
+    }
+
+    @Override
+    public void run() {
+      ClientCalls.asyncClientStreamingCall(call, new ClientResponseObserver<ReqT, RespT>() {
+        private boolean stopSending = false;
+        @Override
+        public void beforeStart(ClientCallStreamObserver<ReqT> requestStream) {
+          requestStream.setOnReadyHandler(
+              new Runnable() {
+                long now = System.nanoTime();
+                @Override
+                public void run() {
+                  if (stopSending) {
+                    return;
+                  }
+                  while (call.isReady() && !shutdown && !stopSending) {
+                    delay(System.nanoTime() - now);
+                    call.sendMessage(requests.next());
+                    now = System.nanoTime();
+                  }
+                  if (shutdown) {
+                    call.cancel("shutting down", null);
+                    stopSending = true;
+                  }
+                }
+              }
+          );
+        }
+
+        @Override
+        public void onNext(RespT value) {
+          // noop
+        }
+
+        @Override
+        public void onError(Throwable t) {
+          call.cancel("onError called on client", null);
+          stopSending = true;
+        }
+
+        @Override
+        public void onCompleted() {
+          call.halfClose();
+          stopSending = true;
+        }
+      });
+    }
+  }
+
+  private class ServerStreamingWorker<ReqT, RespT> implements Runnable {
+    final ClientCall<ReqT, RespT> call;
+    final ReqT initialRequest;
+
+    ServerStreamingWorker(ClientCall<ReqT, RespT> call, ReqT initialRequest) {
+      this.call = call;
+      this.initialRequest = initialRequest;
+    }
+
+    @Override
+    public void run() {
+      ClientCalls.asyncServerStreamingCall(call, initialRequest, new StreamObserver<RespT>() {
+        @Override
+        public void onNext(RespT value) {
+          if (shutdown) {
+            call.cancel("shutting down", null);
+          }
+        }
+
+        @Override
+        public void onError(Throwable t) {
+          call.cancel("onError called on client", null);
+        }
+
+        @Override
+        public void onCompleted() {
+          // we already half closed, nothing left for us to do
+        }
+      });
     }
   }
 }
