@@ -55,8 +55,8 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
         }
       };
 
-  private static final Metadata.Key<Integer> HTTP2_STATUS = InternalMetadata.pseudoHeaderOf(
-      ":status", HTTP_STATUS_MARSHALLER);
+  private static final Metadata.Key<Integer> HTTP2_STATUS = InternalMetadata.keyOf(":status",
+      HTTP_STATUS_MARSHALLER);
 
   /** When non-{@code null}, {@link #transportErrorMetadata} must also be non-{@code null}. */
   private Status transportError;

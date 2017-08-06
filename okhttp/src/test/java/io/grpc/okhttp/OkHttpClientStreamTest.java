@@ -130,6 +130,21 @@ public class OkHttpClientStreamTest {
   }
 
   @Test
+  public void start_userAgentRemoved() {
+    Metadata metaData = new Metadata();
+    metaData.put(GrpcUtil.USER_AGENT_KEY, "misbehaving-application");
+    stream = new OkHttpClientStream(methodDescriptor, metaData, frameWriter, transport,
+        flowController, lock, MAX_MESSAGE_SIZE, "localhost", "good-application",
+        StatsTraceContext.NOOP);
+    stream.start(new BaseClientStreamListener());
+    stream.transportState().start(3);
+
+    verify(frameWriter).synStream(eq(false), eq(false), eq(3), eq(0), headersCaptor.capture());
+    assertThat(headersCaptor.getValue())
+        .contains(new Header(GrpcUtil.USER_AGENT_KEY.name(), "good-application"));
+  }
+
+  @Test
   public void start_headerFieldOrder() {
     Metadata metaData = new Metadata();
     metaData.put(GrpcUtil.USER_AGENT_KEY, "misbehaving-application");
