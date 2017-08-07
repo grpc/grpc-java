@@ -610,8 +610,7 @@ class LoadClient {
                     call.cancel("shutting down", null);
                   }
                 }
-              }
-          );
+              });
         }
 
         @Override
