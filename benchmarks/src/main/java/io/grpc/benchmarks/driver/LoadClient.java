@@ -593,7 +593,6 @@ class LoadClient {
     @Override
     public void run() {
       ClientCalls.asyncClientStreamingCall(call, new ClientResponseObserver<ReqT, RespT>() {
-        private boolean stopSending = false;
         @Override
         public void beforeStart(ClientCallStreamObserver<ReqT> requestStream) {
           requestStream.setOnReadyHandler(
@@ -601,17 +600,14 @@ class LoadClient {
                 long now = System.nanoTime();
                 @Override
                 public void run() {
-                  if (stopSending) {
-                    return;
-                  }
-                  while (call.isReady() && !shutdown && !stopSending) {
+                  // if the stream is cancelled, it will stop claiming to be ready
+                  while (call.isReady() && !shutdown) {
                     delay(System.nanoTime() - now);
                     call.sendMessage(requests.next());
                     now = System.nanoTime();
                   }
                   if (shutdown) {
                     call.cancel("shutting down", null);
-                    stopSending = true;
                   }
                 }
               }
@@ -626,13 +622,11 @@ class LoadClient {
         @Override
         public void onError(Throwable t) {
           call.cancel("onError called on client", null);
-          stopSending = true;
         }
 
         @Override
         public void onCompleted() {
           call.halfClose();
-          stopSending = true;
         }
       });
     }
