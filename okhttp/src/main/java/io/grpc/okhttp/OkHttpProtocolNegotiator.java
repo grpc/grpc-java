@@ -31,9 +31,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLSocket;
 
-/**
- * A helper class located in package com.squareup.okhttp.internal for TLS negotiation.
- */
+/** A helper class for TLS negotiation. */
 class OkHttpProtocolNegotiator {
   private static final Platform DEFAULT_PLATFORM = Platform.get();
   private static OkHttpProtocolNegotiator NEGOTIATOR =

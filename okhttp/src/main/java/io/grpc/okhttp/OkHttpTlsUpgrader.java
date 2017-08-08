@@ -31,10 +31,7 @@ import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
-/**
- * A helper class that located in package com.squareup.okhttp, so that we can use OkHttp internals
- * to do TLS upgrading.
- */
+/** A helper class so that we can use OkHttp internals to do TLS upgrading. */
 final class OkHttpTlsUpgrader {
 
   /*
