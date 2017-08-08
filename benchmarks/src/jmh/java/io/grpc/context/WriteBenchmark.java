@@ -42,7 +42,7 @@ public class WriteBenchmark {
   @BenchmarkMode(Mode.SampleTime)
   @OutputTimeUnit(TimeUnit.NANOSECONDS)
   public void testContextWrite(ContextState state, Blackhole bh) {
-    // always reset Context to avoid unbounded memory u
+    // always reset Context to avoid unbounded memory usage
     state.context = Context.ROOT;
     if (state.batched) {
       for (Context.Key<Object> key : state.keys) {
