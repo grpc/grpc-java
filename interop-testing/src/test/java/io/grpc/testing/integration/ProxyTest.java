@@ -61,7 +61,7 @@ public class ProxyTest {
 
   @Test
   public void smallLatency()
-      throws IOException, InterruptedException, ExecutionException {
+      throws UnknownHostException, IOException, InterruptedException, ExecutionException {
     server = new Server();
     int serverPort = server.init();
     executor.execute(server);
@@ -93,7 +93,7 @@ public class ProxyTest {
 
   @Test
   public void bigLatency()
-      throws IOException, InterruptedException, ExecutionException {
+      throws UnknownHostException, IOException, InterruptedException, ExecutionException {
     server = new Server();
     int serverPort = server.init();
     executor.execute(server);
@@ -124,7 +124,7 @@ public class ProxyTest {
 
   @Test
   public void smallBandwidth()
-      throws IOException, InterruptedException, ExecutionException {
+      throws UnknownHostException, IOException, InterruptedException, ExecutionException {
     server = new Server();
     int serverPort = server.init();
     server.setMode("stream");
@@ -150,7 +150,7 @@ public class ProxyTest {
 
   @Test
   public void largeBandwidth()
-      throws IOException, InterruptedException, ExecutionException {
+      throws UnknownHostException, IOException, InterruptedException, ExecutionException {
     server = new Server();
     int serverPort = server.init();
     server.setMode("stream");
