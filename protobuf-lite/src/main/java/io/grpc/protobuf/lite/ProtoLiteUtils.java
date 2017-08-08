@@ -132,6 +132,9 @@ public class ProtoLiteUtils {
               int position = 0;
               while ((chunkSize = stream.read(buf, position, size - position)) != -1) {
                 position += chunkSize;
+                if (chunkSize == 0 && position == size) {
+                  break;
+                }
               }
               if (size != position) {
                 throw new RuntimeException("size inaccurate: " + size + " != " + position);
