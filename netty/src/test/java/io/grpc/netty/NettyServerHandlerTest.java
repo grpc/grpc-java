@@ -20,6 +20,7 @@ import static com.google.common.base.Charsets.UTF_8;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
+import static io.grpc.internal.testing.TestUtils.sleepAtLeast;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
@@ -28,7 +29,6 @@ import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
 import static io.grpc.netty.Utils.HTTP_METHOD;
 import static io.grpc.netty.Utils.TE_HEADER;
 import static io.grpc.netty.Utils.TE_TRAILERS;
-import static io.grpc.testing.TestUtils.sleepAtLeast;
 import static io.netty.buffer.Unpooled.directBuffer;
 import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
 import static org.junit.Assert.assertArrayEquals;
@@ -64,6 +64,7 @@ import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
+import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ServerHeadersDecoder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
@@ -106,7 +107,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   private ServerStreamTracer.Factory streamTracerFactory;
 
   private final ServerTransportListener transportListener = spy(new ServerTransportListenerImpl());
-  private final ServerStreamTracer streamTracer = spy(new ServerStreamTracer() {});
+  private final TestServerStreamTracer streamTracer = new TestServerStreamTracer();
 
   private NettyServerStream stream;
   private KeepAliveManager spyKeepAliveManager;
@@ -497,12 +498,13 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     ByteBuf payload = handler().ctx().alloc().buffer(8);
     payload.writeLong(1);
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < KeepAliveEnforcer.MAX_PING_STRIKES + 1; i++) {
       channelRead(pingFrame(false /* isAck */, payload.slice()));
     }
     payload.release();
     verifyWrite().writeGoAway(eq(ctx()), eq(0), eq(Http2Error.ENHANCE_YOUR_CALM.code()),
         any(ByteBuf.class), any(ChannelPromise.class));
+    assertFalse(channel().isActive());
   }
 
   @Test(timeout = 1000)
@@ -538,12 +540,13 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     ByteBuf payload = handler().ctx().alloc().buffer(8);
     payload.writeLong(1);
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < KeepAliveEnforcer.MAX_PING_STRIKES + 1; i++) {
       channelRead(pingFrame(false /* isAck */, payload.slice()));
     }
     payload.release();
     verifyWrite().writeGoAway(eq(ctx()), eq(0),
         eq(Http2Error.ENHANCE_YOUR_CALM.code()), any(ByteBuf.class), any(ChannelPromise.class));
+    assertFalse(channel().isActive());
   }
 
   @Test
@@ -573,12 +576,13 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     channelRead(rstStreamFrame(STREAM_ID, (int) Http2Error.CANCEL.code()));
     ByteBuf payload = handler().ctx().alloc().buffer(8);
     payload.writeLong(1);
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < KeepAliveEnforcer.MAX_PING_STRIKES + 1; i++) {
       channelRead(pingFrame(false /* isAck */, payload.slice()));
     }
     payload.release();
     verifyWrite().writeGoAway(eq(ctx()), eq(STREAM_ID),
         eq(Http2Error.ENHANCE_YOUR_CALM.code()), any(ByteBuf.class), any(ChannelPromise.class));
+    assertFalse(channel().isActive());
   }
 
   @Test

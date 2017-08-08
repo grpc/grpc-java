@@ -36,7 +36,6 @@ import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -62,6 +61,7 @@ import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
+import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.util.MutableHandlerRegistry;
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -129,16 +129,15 @@ public class ServerImplTest {
   @Mock
   private ServerStreamTracer.Factory streamTracerFactory;
   private List<ServerStreamTracer.Factory> streamTracerFactories;
-  private final ServerStreamTracer streamTracer = spy(new ServerStreamTracer() {
+  private final TestServerStreamTracer streamTracer = new TestServerStreamTracer() {
       @Override
       public <ReqT, RespT> Context filterContext(Context context) {
-        return context.withValue(SERVER_TRACER_ADDED_KEY, "context added by tracer");
+        Context newCtx = super.filterContext(context);
+        return newCtx.withValue(SERVER_TRACER_ADDED_KEY, "context added by tracer");
       }
-    });
+    };
   @Mock
   private ObjectPool<Executor> executorPool;
-  @Mock
-  private ObjectPool<ScheduledExecutorService> timerPool;
   private Builder builder = new Builder();
   private MutableHandlerRegistry mutableFallbackRegistry = new MutableHandlerRegistry();
   private HandlerRegistry fallbackRegistry = mutableFallbackRegistry;
@@ -165,7 +164,6 @@ public class ServerImplTest {
     MockitoAnnotations.initMocks(this);
     streamTracerFactories = Arrays.asList(streamTracerFactory);
     when(executorPool.getObject()).thenReturn(executor.getScheduledExecutorService());
-    when(timerPool.getObject()).thenReturn(timer.getScheduledExecutorService());
     when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
         .thenReturn(streamTracer);
   }
@@ -203,7 +201,6 @@ public class ServerImplTest {
     assertTrue(server.isShutdown());
     assertTrue(server.isTerminated());
     verifyNoMoreInteractions(executorPool);
-    verifyNoMoreInteractions(timerPool);
   }
 
   @Test
@@ -346,7 +343,6 @@ public class ServerImplTest {
       assertSame(ex, e);
     }
     verifyNoMoreInteractions(executorPool);
-    verifyNoMoreInteractions(timerPool);
   }
 
   @Test
@@ -370,7 +366,7 @@ public class ServerImplTest {
     assertEquals("Method not found: Waiter/nonexist", status.getDescription());
 
     verify(streamTracerFactory).newServerStreamTracer(eq("Waiter/nonexist"), same(requestHeaders));
-    verify(streamTracer, never()).serverCallStarted(any(ServerCall.class));
+    assertNull(streamTracer.getServerCall());
     assertEquals(Status.Code.UNIMPLEMENTED, statusCaptor.getValue().getCode());
   }
 
@@ -440,7 +436,7 @@ public class ServerImplTest {
     assertEquals(1, executor.runDueTasks());
     ServerCall<String, Integer> call = callReference.get();
     assertNotNull(call);
-    verify(streamTracer).serverCallStarted(same(call));
+    assertSame(call, streamTracer.getServerCall());
     verify(stream).getAuthority();
     Context callContext = callContextReference.get();
     assertNotNull(callContext);
@@ -1168,26 +1164,21 @@ public class ServerImplTest {
 
     builder.fallbackHandlerRegistry(fallbackRegistry);
     builder.executorPool = executorPool;
-    server = new ServerImpl(builder, timerPool, transportServer, SERVER_CONTEXT);
+    server = new ServerImpl(builder, transportServer, SERVER_CONTEXT);
   }
 
   private void verifyExecutorsAcquired() {
     verify(executorPool).getObject();
-    verify(timerPool).getObject();
     verifyNoMoreInteractions(executorPool);
-    verifyNoMoreInteractions(timerPool);
   }
 
   private void verifyExecutorsNotReturned() {
     verify(executorPool, never()).returnObject(any(Executor.class));
-    verify(timerPool, never()).returnObject(any(ScheduledExecutorService.class));
   }
 
   private void verifyExecutorsReturned() {
     verify(executorPool).returnObject(same(executor.getScheduledExecutorService()));
-    verify(timerPool).returnObject(same(timer.getScheduledExecutorService()));
     verifyNoMoreInteractions(executorPool);
-    verifyNoMoreInteractions(timerPool);
   }
 
   private void ensureServerStateNotLeaked() {
@@ -1220,7 +1211,7 @@ public class ServerImplTest {
     }
   }
 
-  private static class SimpleServerTransport implements ServerTransport {
+  private class SimpleServerTransport implements ServerTransport {
     ServerTransportListener listener;
 
     @Override
@@ -1236,6 +1227,11 @@ public class ServerImplTest {
     @Override
     public LogId getLogId() {
       throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public ScheduledExecutorService getScheduledExecutorService() {
+      return timer.getScheduledExecutorService();
     }
   }
 

@@ -23,7 +23,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.instrumentation.stats.Stats;
 import com.google.instrumentation.stats.StatsContextFactory;
-import com.google.instrumentation.trace.Tracing;
 import io.grpc.Attributes;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
@@ -36,6 +35,7 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.PickFirstBalancerFactory;
+import io.opencensus.trace.Tracing;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -119,7 +119,6 @@ public abstract class AbstractManagedChannelImplBuilder
 
   private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 
-  private boolean enableStatsTagPropagation;
   private boolean enableTracing;
 
   /**
@@ -301,15 +300,6 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   /**
-   * Set it to true to propagate the stats tags on the wire.  This will be deleted assuming always
-   * enabled once the instrumentation-java wire format is stabilized.
-   */
-  @Deprecated
-  public void setEnableStatsTagPropagation(boolean enabled) {
-    this.enableStatsTagPropagation = enabled;
-  }
-
-  /**
    * Set it to true to record traces and propagate tracing information on the wire.  This will be
    * deleted assuming always enabled once the instrumentation-java wire format is stabilized.
    */
@@ -325,7 +315,6 @@ public abstract class AbstractManagedChannelImplBuilder
         buildTransportFactory(),
         // TODO(carl-mastrangelo): Allow clients to pass this in
         new ExponentialBackoffPolicy.Provider(),
-        SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE),
         SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
         GrpcUtil.STOPWATCH_SUPPLIER,
         getEffectiveInterceptors());
@@ -339,8 +328,7 @@ public abstract class AbstractManagedChannelImplBuilder
           this.statsFactory != null ? this.statsFactory : Stats.getStatsContextFactory();
       if (statsCtxFactory != null) {
         CensusStatsModule censusStats =
-            new CensusStatsModule(
-                statsCtxFactory, GrpcUtil.STOPWATCH_SUPPLIER, enableStatsTagPropagation);
+            new CensusStatsModule(statsCtxFactory, GrpcUtil.STOPWATCH_SUPPLIER, true);
         // First interceptor runs last (see ClientInterceptors.intercept()), so that no
         // other interceptor can override the tracer factory we set in CallOptions.
         effectiveInterceptors.add(0, censusStats.getClientInterceptor());
@@ -348,7 +336,8 @@ public abstract class AbstractManagedChannelImplBuilder
     }
     if (enableTracing) {
       CensusTracingModule censusTracing =
-          new CensusTracingModule(Tracing.getTracer(), Tracing.getBinaryPropagationHandler());
+          new CensusTracingModule(Tracing.getTracer(),
+              Tracing.getPropagationComponent().getBinaryFormat());
       effectiveInterceptors.add(0, censusTracing.getClientInterceptor());
     }
     return effectiveInterceptors;

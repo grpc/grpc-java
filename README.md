@@ -8,7 +8,7 @@ Readme](SECURITY.md).
 <table>
   <tr>
     <td><b>Homepage:</b></td>
-    <td><a href="http://www.grpc.io/">www.grpc.io</a></td>
+    <td><a href="https://grpc.io/">grpc.io</a></td>
   </tr>
   <tr>
     <td><b>Mailing List:</b></td>
@@ -76,7 +76,7 @@ For protobuf-based codegen integrated with the Maven build system, you can use
     <extension>
       <groupId>kr.motd.maven</groupId>
       <artifactId>os-maven-plugin</artifactId>
-      <version>1.4.1.Final</version>
+      <version>1.5.0.Final</version>
     </extension>
   </extensions>
   <plugins>
@@ -117,7 +117,7 @@ buildscript {
   dependencies {
     // ASSUMES GRADLE 2.12 OR HIGHER. Use plugin version 0.7.5 with earlier
     // gradle versions
-    classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.0'
+    classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.1'
   }
 }
 

@@ -14,28 +14,20 @@
  * limitations under the License.
  */
 
-package io.grpc.testing;
+package io.grpc.testing.integration;
 
-import static com.google.common.truth.Truth.assertThat;
-
-import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/**
- * Unit tests for {@link TestUtils}.
- */
+/** Unit tests for {@link TestServiceClient}. */
 @RunWith(JUnit4.class)
-public class TestUtilsTest {
+public class TestServiceClientTest {
+
   @Test
-  public void sleepAtLeast() throws Exception {
-    long sleepMilis = 10L;
-
-    long start = System.nanoTime();
-    TestUtils.sleepAtLeast(sleepMilis);
-    long end = System.nanoTime();
-
-    assertThat(end - start).isAtLeast(TimeUnit.MILLISECONDS.toNanos(sleepMilis));
+  public void emptyArgumentListShouldNotThrowException() {
+    TestServiceClient client = new TestServiceClient();
+    client.parseArgs(new String[0]);
+    client.setUp();
   }
 }
