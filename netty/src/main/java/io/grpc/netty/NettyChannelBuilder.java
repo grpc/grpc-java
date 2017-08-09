@@ -47,6 +47,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
@@ -431,7 +432,6 @@ public final class NettyChannelBuilder
     private final Class<? extends Channel> channelType;
     private final Map<ChannelOption<?>, ?> channelOptions;
     private final NegotiationType negotiationType;
-    private final SslContext sslContext;
     private final EventLoopGroup group;
     private final boolean usingSharedGroup;
     private final int flowControlWindow;
@@ -451,27 +451,10 @@ public final class NettyChannelBuilder
       this.channelType = channelType;
       this.negotiationType = negotiationType;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
-      if (negotiationType == NegotiationType.TLS && sslContext == null) {
-        try {
-          sslContext = GrpcSslContexts.forClient().build();
-        } catch (SSLException ex) {
-          throw new RuntimeException(ex);
-        }
-      }
-      this.sslContext = sslContext;
 
       if (transportCreationParamsFilterFactory == null) {
-        transportCreationParamsFilterFactory = new TransportCreationParamsFilterFactory() {
-          @Override
-          public TransportCreationParamsFilter create(
-              SocketAddress targetServerAddress,
-              String authority,
-              String userAgent,
-              ProxyParameters proxy) {
-            return new DynamicNettyTransportParams(
-                targetServerAddress, authority, userAgent, proxy);
-          }
-        };
+        transportCreationParamsFilterFactory =
+            new DefaultNettyTransportCreationParamsFilterFactory(sslContext);
       }
       this.transportCreationParamsFilterFactory = transportCreationParamsFilterFactory;
 
@@ -516,6 +499,11 @@ public final class NettyChannelBuilder
     }
 
     @Override
+    public ScheduledExecutorService getScheduledExecutorService() {
+      return group;
+    }
+
+    @Override
     public void close() {
       if (closed) {
         return;
@@ -527,41 +515,69 @@ public final class NettyChannelBuilder
       }
     }
 
-    @CheckReturnValue
-    private final class DynamicNettyTransportParams implements TransportCreationParamsFilter {
+    private final class DefaultNettyTransportCreationParamsFilterFactory
+        implements TransportCreationParamsFilterFactory {
+      private final SslContext sslContext;
 
-      private final SocketAddress targetServerAddress;
-      private final String authority;
-      @Nullable private final String userAgent;
-      @Nullable private final ProxyParameters proxy;
-
-      private DynamicNettyTransportParams(
-          SocketAddress targetServerAddress, String authority, @Nullable String userAgent,
-          @Nullable ProxyParameters proxy) {
-        this.targetServerAddress = targetServerAddress;
-        this.authority = authority;
-        this.userAgent = userAgent;
-        this.proxy = proxy;
+      private DefaultNettyTransportCreationParamsFilterFactory(SslContext sslContext) {
+        if (negotiationType == NegotiationType.TLS && sslContext == null) {
+          try {
+            sslContext = GrpcSslContexts.forClient().build();
+          } catch (SSLException ex) {
+            throw new RuntimeException(ex);
+          }
+        }
+        this.sslContext = sslContext;
       }
 
       @Override
-      public SocketAddress getTargetServerAddress() {
-        return targetServerAddress;
+      public TransportCreationParamsFilter create(
+          SocketAddress targetServerAddress,
+          String authority,
+          String userAgent,
+          ProxyParameters proxyParams) {
+        return new DynamicNettyTransportParams(
+            targetServerAddress, authority, userAgent, proxyParams);
       }
 
-      @Override
-      public String getAuthority() {
-        return authority;
-      }
+      @CheckReturnValue
+      private final class DynamicNettyTransportParams implements TransportCreationParamsFilter {
 
-      @Override
-      public String getUserAgent() {
-        return userAgent;
-      }
+        private final SocketAddress targetServerAddress;
+        private final String authority;
+        @Nullable private final String userAgent;
+        private ProxyParameters proxyParams;
 
-      @Override
-      public ProtocolNegotiator getProtocolNegotiator() {
-        return createProtocolNegotiator(authority, negotiationType, sslContext, proxy);
+        private DynamicNettyTransportParams(
+            SocketAddress targetServerAddress,
+            String authority,
+            String userAgent,
+            ProxyParameters proxyParams) {
+          this.targetServerAddress = targetServerAddress;
+          this.authority = authority;
+          this.userAgent = userAgent;
+          this.proxyParams = proxyParams;
+        }
+
+        @Override
+        public SocketAddress getTargetServerAddress() {
+          return targetServerAddress;
+        }
+
+        @Override
+        public String getAuthority() {
+          return authority;
+        }
+
+        @Override
+        public String getUserAgent() {
+          return userAgent;
+        }
+
+        @Override
+        public ProtocolNegotiator getProtocolNegotiator() {
+          return createProtocolNegotiator(authority, negotiationType, sslContext, proxyParams);
+        }
       }
     }
   }

@@ -22,6 +22,7 @@ import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Compressor;
 import io.grpc.Decompressor;
+import io.grpc.DecompressorRegistry;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -32,6 +33,7 @@ import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.LogId;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.NoopClientStream;
+import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransport;
@@ -44,6 +46,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.CheckReturnValue;
@@ -51,12 +54,14 @@ import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 @ThreadSafe
-class InProcessTransport implements ServerTransport, ConnectionClientTransport {
+final class InProcessTransport implements ServerTransport, ConnectionClientTransport {
   private static final Logger log = Logger.getLogger(InProcessTransport.class.getName());
 
   private final LogId logId = LogId.allocate(getClass().getName());
   private final String name;
   private final String authority;
+  private ObjectPool<ScheduledExecutorService> serverSchedulerPool;
+  private ScheduledExecutorService serverScheduler;
   private ServerTransportListener serverTransportListener;
   private Attributes serverStreamAttributes;
   private ManagedClientTransport.Listener clientTransportListener;
@@ -69,10 +74,6 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
   @GuardedBy("this")
   private Set<InProcessStream> streams = new HashSet<InProcessStream>();
 
-  public InProcessTransport(String name) {
-    this(name, null);
-  }
-
   public InProcessTransport(String name, String authority) {
     this.name = name;
     this.authority = authority;
@@ -84,6 +85,9 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
     this.clientTransportListener = listener;
     InProcessServer server = InProcessServer.findServer(name);
     if (server != null) {
+      serverSchedulerPool = server.getScheduledExecutorServicePool();
+      serverScheduler = serverSchedulerPool.getObject();
+      // Must be semi-initialized; past this point, can begin receiving requests
       serverTransportListener = server.register(this);
     }
     if (serverTransportListener == null) {
@@ -127,12 +131,6 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
       };
     }
     return new InProcessStream(method, headers, authority).clientStream;
-  }
-
-  @Override
-  public synchronized ClientStream newStream(
-      final MethodDescriptor<?, ?> method, final Metadata headers) {
-    return newStream(method, headers, CallOptions.DEFAULT);
   }
 
   @Override
@@ -199,6 +197,11 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
     return Attributes.EMPTY;
   }
 
+  @Override
+  public ScheduledExecutorService getScheduledExecutorService() {
+    return serverScheduler;
+  }
+
   private synchronized void notifyShutdown(Status s) {
     if (shutdown) {
       return;
@@ -212,6 +215,9 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
       return;
     }
     terminated = true;
+    if (serverScheduler != null) {
+      serverScheduler = serverSchedulerPool.returnObject(serverScheduler);
+    }
     clientTransportListener.transportTerminated();
     if (serverTransportListener != null) {
       serverTransportListener.transportTerminated();
@@ -569,7 +575,7 @@ class InProcessTransport implements ServerTransport, ConnectionClientTransport {
       public void setCompressor(Compressor compressor) {}
 
       @Override
-      public void setDecompressor(Decompressor decompressor) {}
+      public void setDecompressorRegistry(DecompressorRegistry decompressorRegistry) {}
 
       @Override
       public void setMaxInboundMessageSize(int maxSize) {}

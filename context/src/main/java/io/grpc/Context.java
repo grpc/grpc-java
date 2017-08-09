@@ -23,6 +23,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -108,39 +109,42 @@ public class Context {
    */
   public static final Context ROOT = new Context(null);
 
-  // One and only one of them is non-null
-  private static final Storage storage;
-  private static final Exception storageInitError;
-
-  static {
-    Storage newStorage = null;
-    Exception error = null;
-    try {
-      Class<?> clazz = Class.forName("io.grpc.override.ContextStorageOverride");
-      newStorage = (Storage) clazz.getConstructor().newInstance();
-    } catch (ClassNotFoundException e) {
-      if (log.isLoggable(Level.FINE)) {
-        // Avoid writing to logger because custom log handlers may try to use Context, which is
-        // problemantic (e.g., NullPointerException) because the Context class has not done loading
-        // at this point.  The caveat is that in environments stderr may be disabled, thus this
-        // message would go nowhere.
-        System.err.println("io.grpc.Context: Storage override doesn't exist. Using default.");
-        e.printStackTrace();
-      }
-      newStorage = new ThreadLocalContextStorage();
-    } catch (Exception e) {
-      error = e;
-    }
-    storage = newStorage;
-    storageInitError = error;
-  }
+  // Lazy-loaded storage. Delaying storage initialization until after class initialization makes it
+  // much easier to avoid circular loading since there can still be references to Context as long as
+  // they don't depend on storage, like key() and currentContextExecutor(). It also makes it easier
+  // to handle exceptions.
+  private static final AtomicReference<Storage> storage = new AtomicReference<Storage>();
 
   // For testing
   static Storage storage() {
-    if (storage == null) {
-      throw new RuntimeException("Storage override had failed to initialize", storageInitError);
+    Storage tmp = storage.get();
+    if (tmp == null) {
+      tmp = createStorage();
     }
-    return storage;
+    return tmp;
+  }
+
+  private static Storage createStorage() {
+    // Note that this method may be run more than once
+    try {
+      Class<?> clazz = Class.forName("io.grpc.override.ContextStorageOverride");
+      // The override's constructor is prohibited from triggering any code that can loop back to
+      // Context
+      Storage newStorage = (Storage) clazz.getConstructor().newInstance();
+      storage.compareAndSet(null, newStorage);
+    } catch (ClassNotFoundException e) {
+      Storage newStorage = new ThreadLocalContextStorage();
+      // Must set storage before logging, since logging may call Context.current().
+      if (storage.compareAndSet(null, newStorage)) {
+        // Avoid logging if this thread lost the race, to avoid confusion
+        log.log(Level.FINE, "Storage override doesn't exist. Using default", e);
+      }
+    } catch (Exception e) {
+      throw new RuntimeException("Storage override failed to initialize", e);
+    }
+    // Re-retreive from storage since compareAndSet may have failed (returned false) in case of
+    // race.
+    return storage.get();
   }
 
   /**
@@ -696,7 +700,6 @@ public class Context {
         ScheduledExecutorService scheduler) {
       super(parent, deriveDeadline(parent, deadline), true);
       if (DEADLINE_KEY.get(this) == deadline) {
-        final TimeoutException cause = new TimeoutException("context timed out");
         if (!deadline.isExpired()) {
           // The parent deadline was after the new deadline so we need to install a listener
           // on the new earlier deadline to trigger expiration for this context.
@@ -704,7 +707,7 @@ public class Context {
             @Override
             public void run() {
               try {
-                cancel(cause);
+                cancel(new TimeoutException("context timed out"));
               } catch (Throwable t) {
                 log.log(Level.SEVERE, "Cancel threw an exception, which should not happen", t);
               }
@@ -712,7 +715,7 @@ public class Context {
           }, scheduler);
         } else {
           // Cancel immediately if the deadline is already expired.
-          cancel(cause);
+          cancel(new TimeoutException("context timed out"));
         }
       }
       uncancellableSurrogate = new Context(this, EMPTY_ENTRIES);
@@ -860,7 +863,11 @@ public class Context {
   }
 
   /**
-   * Defines the mechanisms for attaching and detaching the "current" context.
+   * Defines the mechanisms for attaching and detaching the "current" context. The constructor for
+   * extending classes <em>must not</em> trigger any activity that can use Context, which includes
+   * logging, otherwise it can trigger an infinite initialization loop. Extending classes must not
+   * assume that only one instance will be created; Context guarantees it will only use one
+   * instance, but it may create multiple and then throw away all but one.
    *
    * <p>The default implementation will put the current context in a {@link ThreadLocal}.  If an
    * alternative implementation named {@code io.grpc.override.ContextStorageOverride} exists in the

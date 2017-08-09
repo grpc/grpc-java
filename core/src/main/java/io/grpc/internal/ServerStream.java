@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import io.grpc.Attributes;
+import io.grpc.Decompressor;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import javax.annotation.Nullable;
@@ -42,6 +43,10 @@ public interface ServerStream extends Stream {
    * {@link io.grpc.Status.Code#OK} implies normal termination of the
    * stream. Any other value implies abnormal termination.
    *
+   * <p>Attempts to read from or write to the stream after closing
+   * should be ignored by implementations, and should not throw
+   * exceptions.
+   *
    * @param status details of the closure
    * @param trailers an additional block of metadata to pass to the client on stream closure.
    */
@@ -53,6 +58,14 @@ public interface ServerStream extends Stream {
    * times and from any thread.
    */
   void cancel(Status status);
+
+  /**
+   * Sets the decompressor on the deframer. If the transport does not support compression, this may
+   * do nothing.
+   *
+   * @param decompressor the decompressor to use.
+   */
+  void setDecompressor(Decompressor decompressor);
 
   /**
    * Attributes describing stream.  This is inherited from the transport attributes, and used

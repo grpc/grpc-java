@@ -16,21 +16,19 @@
 
 package io.grpc.testing.integration;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Files;
 import io.grpc.ManagedChannel;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.okhttp.internal.Platform;
-import io.grpc.testing.TestUtils;
 import io.netty.handler.ssl.SslContext;
 import java.io.File;
 import java.io.FileInputStream;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
 import java.nio.charset.Charset;
 import javax.net.ssl.SSLSocketFactory;
 
@@ -46,6 +44,8 @@ public class TestServiceClient {
    * The main application allowing this client to be launched from the command line.
    */
   public static void main(String[] args) throws Exception {
+    // Let OkHttp use Conscrypt if it is available.
+    Util.installConscryptIfAvailable();
     final TestServiceClient client = new TestServiceClient();
     client.parseArgs(args);
     client.setUp();
@@ -83,7 +83,8 @@ public class TestServiceClient {
 
   private Tester tester = new Tester();
 
-  private void parseArgs(String[] args) {
+  @VisibleForTesting
+  void parseArgs(String[] args) {
     boolean usage = false;
     for (String arg : args) {
       if (!arg.startsWith("--")) {
@@ -162,7 +163,8 @@ public class TestServiceClient {
     }
   }
 
-  private void setUp() {
+  @VisibleForTesting
+  void setUp() {
     tester.setUp();
   }
 
@@ -203,12 +205,28 @@ public class TestServiceClient {
         tester.largeUnary();
         break;
 
+      case CLIENT_COMPRESSED_UNARY:
+        tester.clientCompressedUnary();
+        break;
+
+      case SERVER_COMPRESSED_UNARY:
+        tester.serverCompressedUnary();
+        break;
+
       case CLIENT_STREAMING:
         tester.clientStreaming();
         break;
 
+      case CLIENT_COMPRESSED_STREAMING:
+        tester.clientCompressedStreaming();
+        break;
+
       case SERVER_STREAMING:
         tester.serverStreaming();
+        break;
+
+      case SERVER_COMPRESSED_STREAMING:
+        tester.serverCompressedStreaming();
         break;
 
       case PING_PONG:
@@ -294,16 +312,6 @@ public class TestServiceClient {
     @Override
     protected ManagedChannel createChannel() {
       if (!useOkHttp) {
-        InetAddress address;
-        try {
-          address = InetAddress.getByName(serverHost);
-          if (serverHostOverride != null) {
-            // Force the hostname to match the cert the server uses.
-            address = InetAddress.getByAddress(serverHostOverride, address.getAddress());
-          }
-        } catch (UnknownHostException ex) {
-          throw new RuntimeException(ex);
-        }
         SslContext sslContext = null;
         if (useTestCa) {
           try {
@@ -313,11 +321,15 @@ public class TestServiceClient {
             throw new RuntimeException(ex);
           }
         }
-        return NettyChannelBuilder.forAddress(new InetSocketAddress(address, serverPort))
-            .flowControlWindow(65 * 1024)
-            .negotiationType(useTls ? NegotiationType.TLS : NegotiationType.PLAINTEXT)
-            .sslContext(sslContext)
-            .build();
+        NettyChannelBuilder builder =
+            NettyChannelBuilder.forAddress(serverHost, serverPort)
+                .flowControlWindow(65 * 1024)
+                .negotiationType(useTls ? NegotiationType.TLS : NegotiationType.PLAINTEXT)
+                .sslContext(sslContext);
+        if (serverHostOverride != null) {
+          builder.overrideAuthority(serverHostOverride);
+        }
+        return builder.build();
       } else {
         OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress(serverHost, serverPort);
         if (serverHostOverride != null) {

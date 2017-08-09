@@ -47,8 +47,10 @@ import java.security.SecureRandom;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
+import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManagerFactory;
@@ -104,6 +106,7 @@ public class OkHttpChannelBuilder extends
   private Executor transportExecutor;
 
   private SSLSocketFactory sslSocketFactory;
+  private HostnameVerifier hostnameVerifier;
   private ConnectionSpec connectionSpec = DEFAULT_CONNECTION_SPEC;
   private NegotiationType negotiationType = NegotiationType.TLS;
   private long keepAliveTimeNanos = KEEPALIVE_TIME_NANOS_DISABLED;
@@ -244,6 +247,31 @@ public class OkHttpChannelBuilder extends
   }
 
   /**
+   * Set the hostname verifier to use when using TLS negotiation. The hostnameVerifier is only used
+   * if using TLS negotiation. If the hostname verifier is not set, a default hostname verifier is
+   * used.
+   *
+   * <p>Be careful when setting a custom hostname verifier! By setting a non-null value, you are
+   * replacing all default verification behavior. If the hostname verifier you supply does not
+   * effectively supply the same checks, you may be removing the security assurances that TLS aims
+   * to provide.</p>
+   *
+   * <p>This method should not be used to avoid hostname verification, even during testing, since
+   * {@link #overrideAuthority} is a safer alternative as it does not disable any security checks.
+   * </p>
+   *
+   * @see io.grpc.okhttp.internal.OkHostnameVerifier
+   *
+   * @since 1.6.0
+   * @return this
+   *
+   */
+  public final OkHttpChannelBuilder hostnameVerifier(@Nullable HostnameVerifier hostnameVerifier) {
+    this.hostnameVerifier = hostnameVerifier;
+    return this;
+  }
+
+  /**
    * For secure connection, provides a ConnectionSpec to specify Cipher suite and
    * TLS versions.
    *
@@ -279,8 +307,8 @@ public class OkHttpChannelBuilder extends
   protected final ClientTransportFactory buildTransportFactory() {
     boolean enableKeepAlive = keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED;
     return new OkHttpTransportFactory(transportExecutor,
-        createSocketFactory(), connectionSpec, maxInboundMessageSize(), enableKeepAlive,
-        keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls);
+        createSocketFactory(), hostnameVerifier, connectionSpec, maxInboundMessageSize(),
+        enableKeepAlive, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls);
   }
 
   @Override
@@ -348,16 +376,21 @@ public class OkHttpChannelBuilder extends
     private final boolean usingSharedExecutor;
     @Nullable
     private final SSLSocketFactory socketFactory;
+    @Nullable
+    private final HostnameVerifier hostnameVerifier;
     private final ConnectionSpec connectionSpec;
     private final int maxMessageSize;
     private final boolean enableKeepAlive;
     private final AtomicBackoff keepAliveTimeNanos;
     private final long keepAliveTimeoutNanos;
     private final boolean keepAliveWithoutCalls;
+    private final ScheduledExecutorService timeoutService =
+        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
     private boolean closed;
 
     private OkHttpTransportFactory(Executor executor,
         @Nullable SSLSocketFactory socketFactory,
+        @Nullable HostnameVerifier hostnameVerifier,
         ConnectionSpec connectionSpec,
         int maxMessageSize,
         boolean enableKeepAlive,
@@ -365,6 +398,7 @@ public class OkHttpChannelBuilder extends
         long keepAliveTimeoutNanos,
         boolean keepAliveWithoutCalls) {
       this.socketFactory = socketFactory;
+      this.hostnameVerifier = hostnameVerifier;
       this.connectionSpec = connectionSpec;
       this.maxMessageSize = maxMessageSize;
       this.enableKeepAlive = enableKeepAlive;
@@ -396,10 +430,19 @@ public class OkHttpChannelBuilder extends
         }
       };
       InetSocketAddress inetSocketAddr = (InetSocketAddress) addr;
-      OkHttpClientTransport transport = new OkHttpClientTransport(inetSocketAddr, authority,
-          userAgent, executor, socketFactory, Utils.convertSpec(connectionSpec), maxMessageSize,
-          proxy == null ? null : proxy.proxyAddress, proxy == null ? null : proxy.username,
-          proxy == null ? null : proxy.password, tooManyPingsRunnable);
+      OkHttpClientTransport transport = new OkHttpClientTransport(
+          inetSocketAddr,
+          authority,
+          userAgent,
+          executor,
+          socketFactory,
+          hostnameVerifier,
+          Utils.convertSpec(connectionSpec),
+          maxMessageSize,
+          proxy == null ? null : proxy.proxyAddress,
+          proxy == null ? null : proxy.username,
+          proxy == null ? null : proxy.password,
+          tooManyPingsRunnable);
       if (enableKeepAlive) {
         transport.enableKeepAlive(
             true, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos, keepAliveWithoutCalls);
@@ -408,11 +451,17 @@ public class OkHttpChannelBuilder extends
     }
 
     @Override
+    public ScheduledExecutorService getScheduledExecutorService() {
+      return timeoutService;
+    }
+
+    @Override
     public void close() {
       if (closed) {
         return;
       }
       closed = true;
+      SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timeoutService);
 
       if (usingSharedExecutor) {
         SharedResourceHolder.release(SHARED_EXECUTOR, (ExecutorService) executor);

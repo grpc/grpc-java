@@ -27,11 +27,11 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
+import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
-import io.grpc.testing.TestUtils;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.SslContext;
@@ -90,7 +90,11 @@ public class TlsTest {
       Assume.assumeTrue(Arrays.asList(
           SSLContext.getDefault().getSupportedSSLParameters().getCipherSuites())
           .contains("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"));
-
+      try {
+        GrpcSslContexts.configure(SslContextBuilder.forClient(), SslProvider.JDK);
+      } catch (IllegalArgumentException ex) {
+        Assume.assumeNoException("Jetty ALPN does not seem available", ex);
+      }
     }
     clientContextBuilder = GrpcSslContexts.configure(SslContextBuilder.forClient(), sslProvider);
   }

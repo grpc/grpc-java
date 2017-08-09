@@ -8,7 +8,7 @@ dependencies {
     testCompile project(':grpc-core').sourceSets.test.output,
                 project(':grpc-testing')
     testRuntime libraries.netty_tcnative
-    signature "org.codehaus.mojo.signature:java17:+@signature"
+    signature "org.codehaus.mojo.signature:java17:1.0@signature"
 }
 
 [compileJava, compileTestJava].each() {
@@ -16,7 +16,10 @@ dependencies {
   it.options.compilerArgs += ["-Xep:FutureReturnValueIgnored:OFF"]
 }
 
-javadoc.options.links 'http://netty.io/4.1/api/'
+javadoc {
+    options.links 'http://netty.io/4.1/api/'
+    exclude 'io/grpc/netty/Internal*'
+}
 
 project.sourceSets {
     main {

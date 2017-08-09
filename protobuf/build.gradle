@@ -25,14 +25,5 @@ dependencies {
         exclude group: 'com.google.protobuf', module: 'protobuf-lite'
     }
 
-    signature "org.codehaus.mojo.signature:java16:+@signature"
-}
-
-configureProtoCompilation()
-
-idea {
-    module {
-        sourceDirs += file("${projectDir}/src/generated/main/grpc");
-        sourceDirs += file("${projectDir}/src/generated/main/java");
-    }
+    signature "org.codehaus.mojo.signature:java16:1.1@signature"
 }

@@ -575,7 +575,7 @@ public final class GrpcUtil {
     final ClientTransport transport;
     Subchannel subchannel = result.getSubchannel();
     if (subchannel != null) {
-      transport = ((SubchannelImpl) subchannel).obtainActiveTransport();
+      transport = ((AbstractSubchannel) subchannel).obtainActiveTransport();
     } else {
       transport = null;
     }
@@ -590,11 +590,6 @@ public final class GrpcUtil {
             MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
           return transport.newStream(
               method, headers, callOptions.withStreamTracerFactory(streamTracerFactory));
-        }
-
-        @Override
-        public ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers) {
-          return newStream(method, headers, CallOptions.DEFAULT);
         }
 
         @Override

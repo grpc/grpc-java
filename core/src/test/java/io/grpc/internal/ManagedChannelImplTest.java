@@ -52,10 +52,9 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
-import io.grpc.CompressorRegistry;
+import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
-import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer;
@@ -82,8 +81,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.After;
 import org.junit.Before;
@@ -158,8 +157,6 @@ public class ManagedChannelImplTest {
   @Mock
   private ClientCall.Listener<Integer> mockCallListener5;
   @Mock
-  private ObjectPool<ScheduledExecutorService> timerServicePool;
-  @Mock
   private ObjectPool<Executor> executorPool;
   @Mock
   private ObjectPool<Executor> oobExecutorPool;
@@ -172,19 +169,49 @@ public class ManagedChannelImplTest {
 
   private void createChannel(
       NameResolver.Factory nameResolverFactory, List<ClientInterceptor> interceptors) {
-    channel = new ManagedChannelImpl(target, new FakeBackoffPolicyProvider(),
-        nameResolverFactory, NAME_RESOLVER_PARAMS, mockLoadBalancerFactory,
-        mockTransportFactory, DecompressorRegistry.getDefaultInstance(),
-        CompressorRegistry.getDefaultInstance(), timerServicePool, executorPool, oobExecutorPool,
-        timer.getStopwatchSupplier(),  ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE, userAgent,
-        interceptors, ProxyDetector.NOOP_INSTANCE);
-    // Force-exit the initial idle-mode
-    channel.exitIdleMode();
-    assertEquals(0, timer.numPendingTasks());
+    createChannel(nameResolverFactory, interceptors, true /* requestConnection */);
+  }
 
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
-    verify(mockLoadBalancerFactory).newLoadBalancer(helperCaptor.capture());
-    helper = helperCaptor.getValue();
+  private void createChannel(
+      NameResolver.Factory nameResolverFactory, List<ClientInterceptor> interceptors,
+      boolean requestConnection) {
+    class Builder extends AbstractManagedChannelImplBuilder<Builder> {
+      Builder(String target) {
+        super(target);
+      }
+
+      @Override protected ClientTransportFactory buildTransportFactory() {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override protected Attributes getNameResolverParams() {
+        return NAME_RESOLVER_PARAMS;
+      }
+
+      @Override public Builder usePlaintext(boolean b) {
+        throw new UnsupportedOperationException();
+      }
+    }
+
+    Builder builder = new Builder(target)
+        .nameResolverFactory(nameResolverFactory)
+        .loadBalancerFactory(mockLoadBalancerFactory)
+        .userAgent(userAgent);
+    builder.executorPool = executorPool;
+    builder.idleTimeoutMillis = ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE;
+    channel = new ManagedChannelImpl(
+        builder, mockTransportFactory, new FakeBackoffPolicyProvider(),
+        oobExecutorPool, timer.getStopwatchSupplier(), interceptors, ProxyDetector.NOOP_INSTANCE);
+
+    if (requestConnection) {
+      // Force-exit the initial idle-mode
+      channel.exitIdleMode();
+      assertEquals(0, timer.numPendingTasks());
+
+      ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+      verify(mockLoadBalancerFactory).newLoadBalancer(helperCaptor.capture());
+      helper = helperCaptor.getValue();
+    }
   }
 
   @Before
@@ -193,7 +220,8 @@ public class ManagedChannelImplTest {
     expectedUri = new URI(target);
     when(mockLoadBalancerFactory.newLoadBalancer(any(Helper.class))).thenReturn(mockLoadBalancer);
     transports = TestUtils.captureTransports(mockTransportFactory);
-    when(timerServicePool.getObject()).thenReturn(timer.getScheduledExecutorService());
+    when(mockTransportFactory.getScheduledExecutorService())
+        .thenReturn(timer.getScheduledExecutorService());
     when(executorPool.getObject()).thenReturn(executor.getScheduledExecutorService());
     when(oobExecutorPool.getObject()).thenReturn(oobExecutor.getScheduledExecutorService());
   }
@@ -236,15 +264,12 @@ public class ManagedChannelImplTest {
   public void shutdownWithNoTransportsEverCreated() {
     createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
     verify(executorPool).getObject();
-    verify(timerServicePool).getObject();
     verify(executorPool, never()).returnObject(anyObject());
-    verify(timerServicePool, never()).returnObject(anyObject());
     verifyNoMoreInteractions(mockTransportFactory);
     channel.shutdown();
     assertTrue(channel.isShutdown());
     assertTrue(channel.isTerminated());
     verify(executorPool).returnObject(executor.getScheduledExecutorService());
-    verify(timerServicePool).returnObject(timer.getScheduledExecutorService());
   }
 
   @Test
@@ -267,7 +292,6 @@ public class ManagedChannelImplTest {
     FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory(true);
     createChannel(nameResolverFactory, NO_INTERCEPTOR);
     verify(executorPool).getObject();
-    verify(timerServicePool).getObject();
     ClientStream mockStream = mock(ClientStream.class);
     ClientStream mockStream2 = mock(ClientStream.class);
     Metadata headers = new Metadata();
@@ -298,7 +322,8 @@ public class ManagedChannelImplTest {
 
     // First RPC, will be pending
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
-    verifyNoMoreInteractions(mockTransportFactory);
+    verify(mockTransportFactory).newClientTransport(
+        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class));
     call.start(mockCallListener, headers);
 
     verify(mockTransport, never())
@@ -376,15 +401,14 @@ public class ManagedChannelImplTest {
     transportListener.transportShutdown(Status.UNAVAILABLE);
     assertFalse(channel.isTerminated());
     verify(executorPool, never()).returnObject(anyObject());
-    verify(timerServicePool, never()).returnObject(anyObject());
     transportListener.transportTerminated();
     assertTrue(channel.isTerminated());
     verify(executorPool).returnObject(executor.getScheduledExecutorService());
-    verify(timerServicePool).returnObject(timer.getScheduledExecutorService());
     verifyNoMoreInteractions(oobExecutorPool);
 
+    verify(mockTransportFactory).newClientTransport(
+        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class));
     verify(mockTransportFactory).close();
-    verifyNoMoreInteractions(mockTransportFactory);
     verify(mockTransport, atLeast(0)).getLogId();
     verifyNoMoreInteractions(mockTransport);
   }
@@ -681,9 +705,9 @@ public class ManagedChannelImplTest {
     verifyNoMoreInteractions(mockCallListener);
     // No real stream was ever created
     verify(transportInfo1.transport, times(0))
-        .newStream(any(MethodDescriptor.class), any(Metadata.class));
+        .newStream(any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class));
     verify(transportInfo2.transport, times(0))
-        .newStream(any(MethodDescriptor.class), any(Metadata.class));
+        .newStream(any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class));
   }
 
   @Test
@@ -1137,6 +1161,179 @@ public class ManagedChannelImplTest {
     // The factories are safely not stubbed because we do not expect any usage of them.
     verifyZeroInteractions(factory1);
     verifyZeroInteractions(factory2);
+  }
+
+  @Test
+  public void getState_loadBalancerSupportsChannelState() {
+    createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
+    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+
+    helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, mockPicker);
+    assertEquals(ConnectivityState.TRANSIENT_FAILURE, channel.getState(false));
+  }
+
+  @Test
+  public void getState_withRequestConnect() {
+    createChannel(
+        new FakeNameResolverFactory(false), NO_INTERCEPTOR, false /* requestConnection */);
+
+    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+    verify(mockLoadBalancerFactory, never()).newLoadBalancer(any(Helper.class));
+
+    // call getState() with requestConnection = true
+    assertEquals(ConnectivityState.IDLE, channel.getState(true));
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    verify(mockLoadBalancerFactory).newLoadBalancer(helperCaptor.capture());
+    helper = helperCaptor.getValue();
+
+    helper.updateBalancingState(ConnectivityState.CONNECTING, mockPicker);
+    assertEquals(ConnectivityState.CONNECTING, channel.getState(false));
+    assertEquals(ConnectivityState.CONNECTING, channel.getState(true));
+    verifyNoMoreInteractions(mockLoadBalancerFactory);
+  }
+
+  @Test
+  public void getState_loadBalancerDoesNotSupportChannelState() {
+    createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
+    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+    helper.updatePicker(mockPicker);
+
+    thrown.expect(UnsupportedOperationException.class);
+    channel.getState(false);
+  }
+
+  @Test
+  public void notifyWhenStateChanged_loadBalancerDoesNotSupportChannelState() {
+    createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
+    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+
+    Runnable onStateChanged = mock(Runnable.class);
+    channel.notifyWhenStateChanged(ConnectivityState.IDLE, onStateChanged);
+    executor.runDueTasks();
+    verify(onStateChanged, never()).run();
+
+    helper.updatePicker(mockPicker);
+    executor.runDueTasks();
+
+    verify(onStateChanged).run();
+    thrown.expect(UnsupportedOperationException.class);
+    channel.getState(false);
+  }
+
+  @Test
+  public void notifyWhenStateChanged() {
+    final AtomicBoolean stateChanged = new AtomicBoolean();
+    Runnable onStateChanged = new Runnable() {
+      @Override
+      public void run() {
+        stateChanged.set(true);
+      }
+    };
+
+    createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
+    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+
+    channel.notifyWhenStateChanged(ConnectivityState.IDLE, onStateChanged);
+    executor.runDueTasks();
+    assertFalse(stateChanged.get());
+
+    // state change from IDLE to CONNECTING
+    helper.updateBalancingState(ConnectivityState.CONNECTING, mockPicker);
+    // onStateChanged callback should run
+    executor.runDueTasks();
+    assertTrue(stateChanged.get());
+
+    // clear and test form CONNECTING
+    stateChanged.set(false);
+    channel.notifyWhenStateChanged(ConnectivityState.IDLE, onStateChanged);
+    // onStateChanged callback should run immediately
+    executor.runDueTasks();
+    assertTrue(stateChanged.get());
+  }
+
+  @Test
+  public void channelStateWhenChannelShutdown() {
+    final AtomicBoolean stateChanged = new AtomicBoolean();
+    Runnable onStateChanged = new Runnable() {
+      @Override
+      public void run() {
+        stateChanged.set(true);
+      }
+    };
+
+    createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
+    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+    channel.notifyWhenStateChanged(ConnectivityState.IDLE, onStateChanged);
+    executor.runDueTasks();
+    assertFalse(stateChanged.get());
+
+    channel.shutdown();
+    assertEquals(ConnectivityState.SHUTDOWN, channel.getState(false));
+    executor.runDueTasks();
+    assertTrue(stateChanged.get());
+
+    stateChanged.set(false);
+    channel.notifyWhenStateChanged(ConnectivityState.SHUTDOWN, onStateChanged);
+    helper.updateBalancingState(ConnectivityState.CONNECTING, mockPicker);
+
+    assertEquals(ConnectivityState.SHUTDOWN, channel.getState(false));
+    executor.runDueTasks();
+    assertFalse(stateChanged.get());
+  }
+
+  // TODO(zdapeng): replace usages of updatePicker() in some other tests once it's deprecated
+  @Test
+  public void updateBalancingStateDoesUpdatePicker() {
+    ClientStream mockStream = mock(ClientStream.class);
+    createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, new Metadata());
+
+    // Make the transport available with subchannel2
+    Subchannel subchannel1 = helper.createSubchannel(addressGroup, Attributes.EMPTY);
+    Subchannel subchannel2 = helper.createSubchannel(addressGroup, Attributes.EMPTY);
+    subchannel2.requestConnection();
+
+    MockClientTransportInfo transportInfo = transports.poll();
+    ConnectionClientTransport mockTransport = transportInfo.transport;
+    ManagedClientTransport.Listener transportListener = transportInfo.listener;
+    when(mockTransport.newStream(same(method), any(Metadata.class), any(CallOptions.class)))
+        .thenReturn(mockStream);
+    transportListener.transportReady();
+
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withSubchannel(subchannel1));
+    helper.updateBalancingState(READY, mockPicker);
+
+    executor.runDueTasks();
+    verify(mockTransport, never())
+        .newStream(any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class));
+    verify(mockStream, never()).start(any(ClientStreamListener.class));
+
+
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withSubchannel(subchannel2));
+    helper.updateBalancingState(READY, mockPicker);
+
+    executor.runDueTasks();
+    verify(mockTransport).newStream(same(method), any(Metadata.class), any(CallOptions.class));
+    verify(mockStream).start(any(ClientStreamListener.class));
+  }
+
+  @Test
+  public void updateBalancingStateWithShutdownShouldBeIgnored() {
+    createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
+    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+
+    Runnable onStateChanged = mock(Runnable.class);
+    channel.notifyWhenStateChanged(ConnectivityState.IDLE, onStateChanged);
+
+    helper.updateBalancingState(ConnectivityState.SHUTDOWN, mockPicker);
+
+    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+    executor.runDueTasks();
+    verify(onStateChanged, never()).run();
   }
 
   private static class FakeBackoffPolicyProvider implements BackoffPolicy.Provider {

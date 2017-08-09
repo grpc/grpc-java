@@ -26,20 +26,23 @@ import com.squareup.okhttp.ConnectionSpec;
 import com.squareup.okhttp.TlsVersion;
 import io.grpc.ManagedChannel;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.okhttp.internal.Platform;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.StreamRecorder;
-import io.grpc.testing.TestUtils;
 import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import java.io.IOException;
+import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.net.ssl.SSLSession;
+
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -51,6 +54,15 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class Http2OkHttpTest extends AbstractInteropTest {
+
+  private static final String BAD_HOSTNAME = "I.am.a.bad.hostname";
+
+  @BeforeClass
+  public static void loadConscrypt() throws Exception {
+    // Load conscrypt if it is available. Either Conscrypt or Jetty ALPN needs to be available for
+    // OkHttp to negotiate.
+    Util.installConscryptIfAvailable();
+  }
 
   /** Starts the server with HTTPS. */
   @BeforeClass
@@ -82,6 +94,10 @@ public class Http2OkHttpTest extends AbstractInteropTest {
 
   @Override
   protected ManagedChannel createChannel() {
+    return createChannelBuilder().build();
+  }
+
+  private OkHttpChannelBuilder createChannelBuilder() {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("::1", getPort())
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .connectionSpec(new ConnectionSpec.Builder(OkHttpChannelBuilder.DEFAULT_CONNECTION_SPEC)
@@ -93,11 +109,11 @@ public class Http2OkHttpTest extends AbstractInteropTest {
     io.grpc.internal.TestingAccessor.setStatsContextFactory(builder, getClientStatsFactory());
     try {
       builder.sslSocketFactory(TestUtils.newSslSocketFactoryForCa(Platform.get().getProvider(),
-              TestUtils.loadCert("ca.pem")));
+          TestUtils.loadCert("ca.pem")));
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
-    return builder.build();
+    return builder;
   }
 
   @Test(timeout = 10000)
@@ -127,16 +143,56 @@ public class Http2OkHttpTest extends AbstractInteropTest {
 
   @Test(timeout = 10000)
   public void wrongHostNameFailHostnameVerification() throws Exception {
-    OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("::1", getPort())
-        .connectionSpec(new ConnectionSpec.Builder(OkHttpChannelBuilder.DEFAULT_CONNECTION_SPEC)
-            .cipherSuites(TestUtils.preferredTestCiphers().toArray(new String[0]))
-            .tlsVersions(ConnectionSpec.MODERN_TLS.tlsVersions().toArray(new TlsVersion[0]))
-            .build())
+    ManagedChannel channel = createChannelBuilder()
         .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
-            "I.am.a.bad.hostname", getPort()));
-    ManagedChannel channel = builder.sslSocketFactory(
-        TestUtils.newSslSocketFactoryForCa(Platform.get().getProvider(),
-            TestUtils.loadCert("ca.pem"))).build();
+            BAD_HOSTNAME, getPort()))
+        .build();
+    TestServiceGrpc.TestServiceBlockingStub blockingStub =
+        TestServiceGrpc.newBlockingStub(channel);
+
+    try {
+      blockingStub.emptyCall(Empty.getDefaultInstance());
+      fail("The rpc should have been failed due to hostname verification");
+    } catch (Throwable t) {
+      Throwable cause = Throwables.getRootCause(t);
+      assertTrue("Failed by unexpected exception: " + cause,
+          cause instanceof SSLPeerUnverifiedException);
+    }
+    channel.shutdown();
+  }
+
+  @Test(timeout = 10000)
+  public void hostnameVerifierWithBadHostname() throws Exception {
+    ManagedChannel channel = createChannelBuilder()
+        .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
+            BAD_HOSTNAME, getPort()))
+        .hostnameVerifier(new HostnameVerifier() {
+          @Override
+          public boolean verify(String hostname, SSLSession session) {
+            return true;
+          }
+        })
+        .build();
+    TestServiceGrpc.TestServiceBlockingStub blockingStub =
+        TestServiceGrpc.newBlockingStub(channel);
+
+    blockingStub.emptyCall(Empty.getDefaultInstance());
+
+    channel.shutdown();
+  }
+
+  @Test(timeout = 10000)
+  public void hostnameVerifierWithCorrectHostname() throws Exception {
+    ManagedChannel channel = createChannelBuilder()
+        .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
+            TestUtils.TEST_SERVER_HOST, getPort()))
+        .hostnameVerifier(new HostnameVerifier() {
+          @Override
+          public boolean verify(String hostname, SSLSession session) {
+            return false;
+          }
+        })
+        .build();
     TestServiceGrpc.TestServiceBlockingStub blockingStub =
         TestServiceGrpc.newBlockingStub(channel);
 

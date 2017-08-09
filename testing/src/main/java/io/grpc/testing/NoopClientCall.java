@@ -24,7 +24,11 @@ import io.grpc.Metadata;
  * {@link NoopClientCall} is a class that is designed for use in tests.  It is designed to be used
  * in places where a scriptable call is necessary.  By default, all methods are noops, and designed
  * to be overriden.
+ *
+ * @deprecated moved to {@link io.grpc.internal.NoopClientCall} and for internal use only. Please
+ *             use {@link GrpcServerRule} to test on InProcess channels instead
  */
+@Deprecated
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2234")
 public class NoopClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
@@ -33,6 +37,7 @@ public class NoopClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
    * It is designed to be used in places where a scriptable call listener is necessary.  By
    * default, all methods are noops, and designed to be overriden.
    */
+  @Deprecated
   public static class NoopClientCallListener<T> extends ClientCall.Listener<T> {
   }
 
@@ -51,4 +56,3 @@ public class NoopClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   @Override
   public void sendMessage(ReqT message) {}
 }
-

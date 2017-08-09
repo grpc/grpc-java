@@ -133,6 +133,8 @@ final class CensusStatsModule {
   }
 
   private static final class ClientTracer extends ClientStreamTracer {
+    final AtomicLong outboundMessageCount = new AtomicLong();
+    final AtomicLong inboundMessageCount = new AtomicLong();
     final AtomicLong outboundWireSize = new AtomicLong();
     final AtomicLong inboundWireSize = new AtomicLong();
     final AtomicLong outboundUncompressedSize = new AtomicLong();
@@ -157,6 +159,16 @@ final class CensusStatsModule {
     public void inboundUncompressedSize(long bytes) {
       inboundUncompressedSize.addAndGet(bytes);
     }
+
+    @Override
+    public void inboundMessage() {
+      inboundMessageCount.incrementAndGet();
+    }
+
+    @Override
+    public void outboundMessage() {
+      outboundMessageCount.incrementAndGet();
+    }
   }
 
   @VisibleForTesting
@@ -175,7 +187,7 @@ final class CensusStatsModule {
     }
 
     @Override
-    public ClientStreamTracer newClientStreamTracer(Metadata headers) {
+    public ClientStreamTracer newClientStreamTracer(CallOptions callOptions, Metadata headers) {
       ClientTracer tracer = new ClientTracer();
       // TODO(zhangkun83): Once retry or hedging is implemented, a ClientCall may start more than
       // one streams.  We will need to update this file to support them.
@@ -209,6 +221,8 @@ final class CensusStatsModule {
       MeasurementMap.Builder builder = MeasurementMap.builder()
           // The metrics are in double
           .put(RpcConstants.RPC_CLIENT_ROUNDTRIP_LATENCY, roundtripNanos / NANOS_PER_MILLI)
+          .put(RpcConstants.RPC_CLIENT_REQUEST_COUNT, tracer.outboundMessageCount.get())
+          .put(RpcConstants.RPC_CLIENT_RESPONSE_COUNT, tracer.inboundMessageCount.get())
           .put(RpcConstants.RPC_CLIENT_REQUEST_BYTES, tracer.outboundWireSize.get())
           .put(RpcConstants.RPC_CLIENT_RESPONSE_BYTES, tracer.inboundWireSize.get())
           .put(
@@ -234,6 +248,8 @@ final class CensusStatsModule {
     private final StatsContext parentCtx;
     private final AtomicBoolean streamClosed = new AtomicBoolean(false);
     private final Stopwatch stopwatch;
+    private final AtomicLong outboundMessageCount = new AtomicLong();
+    private final AtomicLong inboundMessageCount = new AtomicLong();
     private final AtomicLong outboundWireSize = new AtomicLong();
     private final AtomicLong inboundWireSize = new AtomicLong();
     private final AtomicLong outboundUncompressedSize = new AtomicLong();
@@ -265,6 +281,16 @@ final class CensusStatsModule {
       inboundUncompressedSize.addAndGet(bytes);
     }
 
+    @Override
+    public void inboundMessage() {
+      inboundMessageCount.incrementAndGet();
+    }
+
+    @Override
+    public void outboundMessage() {
+      outboundMessageCount.incrementAndGet();
+    }
+
     /**
      * Record a finished stream and mark the current time as the end time.
      *
@@ -281,6 +307,8 @@ final class CensusStatsModule {
       MeasurementMap.Builder builder = MeasurementMap.builder()
           // The metrics are in double
           .put(RpcConstants.RPC_SERVER_SERVER_LATENCY, elapsedTimeNanos / NANOS_PER_MILLI)
+          .put(RpcConstants.RPC_SERVER_RESPONSE_COUNT, outboundMessageCount.get())
+          .put(RpcConstants.RPC_SERVER_REQUEST_COUNT, inboundMessageCount.get())
           .put(RpcConstants.RPC_SERVER_RESPONSE_BYTES, outboundWireSize.get())
           .put(RpcConstants.RPC_SERVER_REQUEST_BYTES, inboundWireSize.get())
           .put(

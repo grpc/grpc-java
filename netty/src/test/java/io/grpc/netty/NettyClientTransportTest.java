@@ -36,6 +36,7 @@ import static org.junit.Assert.fail;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
+import io.grpc.CallOptions;
 import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
@@ -56,7 +57,7 @@ import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
-import io.grpc.testing.TestUtils;
+import io.grpc.internal.testing.TestUtils;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -511,7 +512,7 @@ public class NettyClientTransportTest {
     }
 
     Rpc(NettyClientTransport transport, Metadata headers) {
-      stream = transport.newStream(METHOD, headers);
+      stream = transport.newStream(METHOD, headers, CallOptions.DEFAULT);
       stream.start(listener);
       stream.request(1);
       stream.writeMessage(new ByteArrayInputStream(MESSAGE.getBytes(UTF_8)));

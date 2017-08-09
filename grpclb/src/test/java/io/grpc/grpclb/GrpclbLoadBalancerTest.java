@@ -46,6 +46,7 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
 import io.grpc.Attributes;
+import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -366,7 +367,7 @@ public class GrpclbLoadBalancerTest {
         ClientStats.newBuilder().build());
 
     ClientStreamTracer tracer1 =
-        pick1.getStreamTracerFactory().newClientStreamTracer(new Metadata());
+        pick1.getStreamTracerFactory().newClientStreamTracer(CallOptions.DEFAULT, new Metadata());
 
     PickResult pick2 = picker.pickSubchannel(args);
     assertNull(pick2.getSubchannel());
@@ -385,7 +386,7 @@ public class GrpclbLoadBalancerTest {
     assertSame(subchannel2, pick3.getSubchannel());
     assertSame(balancer.getLoadRecorder(), pick3.getStreamTracerFactory());
     ClientStreamTracer tracer3 =
-        pick3.getStreamTracerFactory().newClientStreamTracer(new Metadata());
+        pick3.getStreamTracerFactory().newClientStreamTracer(CallOptions.DEFAULT, new Metadata());
 
     // pick3 has sent out headers
     tracer3.outboundHeaders();
@@ -418,7 +419,7 @@ public class GrpclbLoadBalancerTest {
     assertSame(subchannel1, pick1.getSubchannel());
     assertSame(balancer.getLoadRecorder(), pick5.getStreamTracerFactory());
     ClientStreamTracer tracer5 =
-        pick5.getStreamTracerFactory().newClientStreamTracer(new Metadata());
+        pick5.getStreamTracerFactory().newClientStreamTracer(CallOptions.DEFAULT, new Metadata());
 
     // pick3 ended without receiving response headers
     tracer3.streamClosed(Status.DEADLINE_EXCEEDED);
@@ -492,7 +493,7 @@ public class GrpclbLoadBalancerTest {
     PickResult pick1p = picker.pickSubchannel(args);
     assertSame(subchannel1, pick1p.getSubchannel());
     assertSame(balancer.getLoadRecorder(), pick1p.getStreamTracerFactory());
-    pick1p.getStreamTracerFactory().newClientStreamTracer(new Metadata());
+    pick1p.getStreamTracerFactory().newClientStreamTracer(CallOptions.DEFAULT, new Metadata());
 
     // The pick from the new stream will be included in the report
     assertNextReport(
@@ -754,7 +755,7 @@ public class GrpclbLoadBalancerTest {
 
     // Switch to PICK_FIRST
     List<EquivalentAddressGroup> pickFirstResolutionList =
-        createResolvedServerAddresses(true, false);
+        createResolvedServerAddresses(false, false);
     Attributes pickFirstResolutionAttrs = Attributes.newBuilder()
         .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.PICK_FIRST).build();
     verify(pickFirstBalancerFactory, never()).newLoadBalancer(any(Helper.class));
@@ -768,7 +769,7 @@ public class GrpclbLoadBalancerTest {
     verify(pickFirstBalancerFactory).newLoadBalancer(same(helper));
     // Only non-LB addresses are passed to the delegate
     verify(pickFirstBalancer).handleResolvedAddressGroups(
-        eq(Arrays.asList(pickFirstResolutionList.get(1))), same(pickFirstResolutionAttrs));
+        eq(pickFirstResolutionList), same(pickFirstResolutionAttrs));
     assertSame(LbPolicy.PICK_FIRST, balancer.getLbPolicy());
     assertSame(pickFirstBalancer, balancer.getDelegate());
     // GRPCLB connection is closed
@@ -777,7 +778,7 @@ public class GrpclbLoadBalancerTest {
 
     // Switch to ROUND_ROBIN
     List<EquivalentAddressGroup> roundRobinResolutionList =
-        createResolvedServerAddresses(true, false, false);
+        createResolvedServerAddresses(false, false, false);
     Attributes roundRobinResolutionAttrs = Attributes.newBuilder()
         .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.ROUND_ROBIN).build();
     verify(roundRobinBalancerFactory, never()).newLoadBalancer(any(Helper.class));
@@ -786,13 +787,13 @@ public class GrpclbLoadBalancerTest {
     verify(roundRobinBalancerFactory).newLoadBalancer(same(helper));
     // Only non-LB addresses are passed to the delegate
     verify(roundRobinBalancer).handleResolvedAddressGroups(
-        eq(roundRobinResolutionList.subList(1, 3)), same(roundRobinResolutionAttrs));
+        eq(roundRobinResolutionList), same(roundRobinResolutionAttrs));
     assertSame(LbPolicy.ROUND_ROBIN, balancer.getLbPolicy());
     assertSame(roundRobinBalancer, balancer.getDelegate());
 
-    // Special case: if all addresses are loadbalancers, use GRPCLB no matter what the NameResolver
-    // says.
-    grpclbResolutionList = createResolvedServerAddresses(true, true, true);
+    // Special case: if at least one address is loadbalancer, use GRPCLB no matter what the
+    // NameResolver says.
+    grpclbResolutionList = createResolvedServerAddresses(true, false, true, false);
     grpclbResolutionAttrs = Attributes.newBuilder()
         .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.PICK_FIRST).build();
     deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
@@ -801,7 +802,6 @@ public class GrpclbLoadBalancerTest {
     assertNull(balancer.getDelegate());
     EquivalentAddressGroup combinedEag = new EquivalentAddressGroup(Arrays.asList(
         grpclbResolutionList.get(0).getAddresses().get(0),
-        grpclbResolutionList.get(1).getAddresses().get(0),
         grpclbResolutionList.get(2).getAddresses().get(0)));
     verify(helper).createOobChannel(eq(combinedEag), eq(lbAuthority(0)));
     assertEquals(1, fakeOobChannels.size());
@@ -809,7 +809,7 @@ public class GrpclbLoadBalancerTest {
     verify(mockLbService, times(2)).balanceLoad(lbResponseObserverCaptor.capture());
 
     // Special case: PICK_FIRST is the default
-    pickFirstResolutionList = createResolvedServerAddresses(true, false, false);
+    pickFirstResolutionList = createResolvedServerAddresses(false, false, false);
     pickFirstResolutionAttrs = Attributes.EMPTY;
     verify(pickFirstBalancerFactory).newLoadBalancer(any(Helper.class));
     assertFalse(oobChannel.isShutdown());
@@ -818,7 +818,7 @@ public class GrpclbLoadBalancerTest {
     verify(pickFirstBalancerFactory, times(2)).newLoadBalancer(same(helper));
     // Only non-LB addresses are passed to the delegate
     verify(pickFirstBalancer).handleResolvedAddressGroups(
-        eq(pickFirstResolutionList.subList(1, 3)), same(pickFirstResolutionAttrs));
+        eq(pickFirstResolutionList), same(pickFirstResolutionAttrs));
     assertSame(LbPolicy.PICK_FIRST, balancer.getLbPolicy());
     assertSame(pickFirstBalancer, balancer.getDelegate());
     // GRPCLB connection is closed

@@ -8,7 +8,7 @@ Readme](SECURITY.md).
 <table>
   <tr>
     <td><b>Homepage:</b></td>
-    <td><a href="http://www.grpc.io/">www.grpc.io</a></td>
+    <td><a href="https://grpc.io/">grpc.io</a></td>
   </tr>
   <tr>
     <td><b>Mailing List:</b></td>
@@ -28,37 +28,37 @@ Download [the JARs][]. Or for Maven with non-Android, add to your `pom.xml`:
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-netty</artifactId>
-  <version>1.3.0</version>
+  <version>1.4.0</version>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-protobuf</artifactId>
-  <version>1.3.0</version>
+  <version>1.4.0</version>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-stub</artifactId>
-  <version>1.3.0</version>
+  <version>1.4.0</version>
 </dependency>
 ```
 
 Or for Gradle with non-Android, add to your dependencies:
 ```gradle
-compile 'io.grpc:grpc-netty:1.3.0'
-compile 'io.grpc:grpc-protobuf:1.3.0'
-compile 'io.grpc:grpc-stub:1.3.0'
+compile 'io.grpc:grpc-netty:1.4.0'
+compile 'io.grpc:grpc-protobuf:1.4.0'
+compile 'io.grpc:grpc-stub:1.4.0'
 ```
 
 For Android client, use `grpc-okhttp` instead of `grpc-netty` and
 `grpc-protobuf-lite` or `grpc-protobuf-nano` instead of `grpc-protobuf`:
 ```gradle
-compile 'io.grpc:grpc-okhttp:1.3.0'
-compile 'io.grpc:grpc-protobuf-lite:1.3.0'
-compile 'io.grpc:grpc-stub:1.3.0'
+compile 'io.grpc:grpc-okhttp:1.4.0'
+compile 'io.grpc:grpc-protobuf-lite:1.4.0'
+compile 'io.grpc:grpc-stub:1.4.0'
 ```
 
 [the JARs]:
-http://search.maven.org/#search%7Cga%7C1%7Cg%3A%22io.grpc%22%20AND%20v%3A%221.3.0%22
+http://search.maven.org/#search%7Cga%7C1%7Cg%3A%22io.grpc%22%20AND%20v%3A%221.4.0%22
 
 Development snapshots are available in [Sonatypes's snapshot
 repository](https://oss.sonatype.org/content/repositories/snapshots/).
@@ -76,7 +76,7 @@ For protobuf-based codegen integrated with the Maven build system, you can use
     <extension>
       <groupId>kr.motd.maven</groupId>
       <artifactId>os-maven-plugin</artifactId>
-      <version>1.4.1.Final</version>
+      <version>1.5.0.Final</version>
     </extension>
   </extensions>
   <plugins>
@@ -85,9 +85,9 @@ For protobuf-based codegen integrated with the Maven build system, you can use
       <artifactId>protobuf-maven-plugin</artifactId>
       <version>0.5.0</version>
       <configuration>
-        <protocArtifact>com.google.protobuf:protoc:3.2.0:exe:${os.detected.classifier}</protocArtifact>
+        <protocArtifact>com.google.protobuf:protoc:3.3.0:exe:${os.detected.classifier}</protocArtifact>
         <pluginId>grpc-java</pluginId>
-        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.3.0:exe:${os.detected.classifier}</pluginArtifact>
+        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.4.0:exe:${os.detected.classifier}</pluginArtifact>
       </configuration>
       <executions>
         <execution>
@@ -117,7 +117,7 @@ buildscript {
   dependencies {
     // ASSUMES GRADLE 2.12 OR HIGHER. Use plugin version 0.7.5 with earlier
     // gradle versions
-    classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.0'
+    classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.1'
   }
 }
 
@@ -127,7 +127,7 @@ protobuf {
   }
   plugins {
     grpc {
-      artifact = 'io.grpc:protoc-gen-grpc-java:1.3.0'
+      artifact = 'io.grpc:protoc-gen-grpc-java:1.4.0'
     }
   }
   generateProtoTasks {
