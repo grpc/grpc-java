@@ -47,7 +47,6 @@ import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,19 +69,8 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   private static final Logger logger = Logger.getLogger(GrpclbLoadBalancer.class.getName());
 
   @VisibleForTesting
-  static final Map<DropType, PickResult> DROP_PICK_RESULTS;
-
-  static {
-    EnumMap<DropType, PickResult> map = new EnumMap<DropType, PickResult>(DropType.class);
-    for (DropType dropType : DropType.values()) {
-      map.put(
-          dropType,
-          PickResult.withError(
-              Status.UNAVAILABLE.withDescription(
-                  "Dropped as requested by balancer. Type: " + dropType)));
-    }
-    DROP_PICK_RESULTS = Collections.unmodifiableMap(map);
-  }
+  static final PickResult DROP_PICK_RESULT =
+      PickResult.withError(Status.UNAVAILABLE.withDescription("Dropped as requested by balancer"));
 
   @VisibleForTesting
   static final SubchannelPicker BUFFER_PICKER = new SubchannelPicker() {
@@ -455,10 +443,9 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       // TODO(zhangkun83): honor expiration_interval
       // Construct the new collections. Create new Subchannels when necessary.
       for (Server server : serverList.getServersList()) {
-        if (server.getDropForRateLimiting()) {
-          newRoundRobinList.add(new RoundRobinEntry(DropType.RATE_LIMITING, loadRecorder));
-        } else if (server.getDropForLoadBalancing()) {
-          newRoundRobinList.add(new RoundRobinEntry(DropType.LOAD_BALANCING, loadRecorder));
+        String token = server.getLoadBalanceToken();
+        if (server.getDrop()) {
+          newRoundRobinList.add(new RoundRobinEntry(loadRecorder, token));
         } else {
           InetSocketAddress address;
           try {
@@ -469,7 +456,6 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
             continue;
           }
           EquivalentAddressGroup eag = new EquivalentAddressGroup(address);
-          String token = server.getLoadBalanceToken();
           Subchannel subchannel = newSubchannelMap.get(eag);
           if (subchannel == null) {
             subchannel = subchannels.get(eag);
@@ -660,10 +646,8 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   static final class RoundRobinEntry {
     final PickResult result;
     final GrpclbClientLoadRecorder loadRecorder;
-    @Nullable
-    private final String token;
-    @Nullable
-    private final DropType dropType;
+    final String token;
+    final boolean isDrop;
 
     /**
      * A non-drop result.
@@ -672,23 +656,21 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       this.loadRecorder = checkNotNull(loadRecorder, "loadRecorder");
       this.result = PickResult.withSubchannel(subchannel, loadRecorder);
       this.token = token;
-      this.dropType = null;
+      this.isDrop = false;
     }
 
     /**
      * A drop result.
      */
-    RoundRobinEntry(DropType dropType, GrpclbClientLoadRecorder loadRecorder) {
+    RoundRobinEntry(GrpclbClientLoadRecorder loadRecorder, String token) {
       this.loadRecorder = checkNotNull(loadRecorder, "loadRecorder");
-      // We re-use the status for each DropType to make it easy to test, because Status class
-      // intentionally doesn't implement equals().
-      this.result = DROP_PICK_RESULTS.get(dropType);
-      this.token = null;
-      this.dropType = dropType;
+      this.result = DROP_PICK_RESULT;
+      this.token = token;
+      this.isDrop = true;
     }
 
     void updateHeaders(Metadata headers) {
-      if (token != null) {
+      if (!isDrop) {
         headers.discardAll(GrpclbConstants.TOKEN_METADATA_KEY);
         headers.put(GrpclbConstants.TOKEN_METADATA_KEY, token);
       }
@@ -699,13 +681,12 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       return MoreObjects.toStringHelper(this)
           .add("result", result)
           .add("token", token)
-          .add("dropType", dropType)
           .toString();
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(result, token, dropType);
+      return Objects.hashCode(result, token);
     }
 
     @Override
@@ -714,8 +695,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
         return false;
       }
       RoundRobinEntry that = (RoundRobinEntry) other;
-      return Objects.equal(result, that.result) && Objects.equal(token, that.token)
-          && Objects.equal(dropType, that.dropType);
+      return Objects.equal(result, that.result) && Objects.equal(token, that.token);
     }
   }
 
@@ -738,8 +718,8 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
           index = 0;
         }
         result.updateHeaders(args.getHeaders());
-        if (result.dropType != null) {
-          result.loadRecorder.recordDroppedRequest(result.dropType);
+        if (result.result == DROP_PICK_RESULT) {
+          result.loadRecorder.recordDroppedRequest(result.token);
         }
         return result.result;
       }
