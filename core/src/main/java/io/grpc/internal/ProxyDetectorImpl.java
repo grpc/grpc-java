@@ -43,7 +43,7 @@ class ProxyDetectorImpl implements ProxyDetector {
     @Override
     public PasswordAuthentication requestPasswordAuthentication(
         String host, InetAddress addr, int port, String protocol, String prompt, String scheme) {
-      //TODO(spencerfang): consider using java.security.AccessController here
+      // TODO(spencerfang): consider using java.security.AccessController here
       return Authenticator.requestPasswordAuthentication(
           host, addr, port, protocol, prompt, scheme);
     }
@@ -52,7 +52,7 @@ class ProxyDetectorImpl implements ProxyDetector {
       new Supplier<ProxySelector>() {
         @Override
         public ProxySelector get() {
-          //TODO(spencerfang): consider using java.security.AccessController here
+          // TODO(spencerfang): consider using java.security.AccessController here
           return ProxySelector.getDefault();
         }
       };
@@ -138,7 +138,7 @@ class ProxyDetectorImpl implements ProxyDetector {
       return new ProxyParameters(proxyAddr, null, null);
     }
 
-    //TODO(spencerfang): users of ProxyParameters should clear the password when done
+    // TODO(spencerfang): users of ProxyParameters should clear the password when done
     return new ProxyParameters(proxyAddr, auth.getUserName(), new String(auth.getPassword()));
   }
 
