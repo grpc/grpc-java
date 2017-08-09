@@ -125,7 +125,8 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
   private static boolean isAndroid() {
     try {
       // Specify a class loader instead of null because we may be running under Robolectric
-      Class.forName("android.app.Application", /*initialize=*/ false, NameResolverProvider.class);
+      Class.forName("android.app.Application", /*initialize=*/ false,
+          NameResolverProvider.class.getClassLoader());
       return true;
     } catch (Exception e) {
       // If Application isn't loaded, it might as well not be Android.
