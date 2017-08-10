@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -42,6 +43,7 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
   // Specific finish types
   // Access to it should be protected by lock.  Contention is not an issue for these counts, because
   // normally only a small portion of all RPCs are dropped.
+  @GuardedBy("this")
   private HashMap<String, AtomicLong> callsDroppedPerToken = new HashMap<String, AtomicLong>();
   private final AtomicLong callsFailedToSend = new AtomicLong();
   private final AtomicLong callsFinishedKnownReceived = new AtomicLong();
@@ -85,15 +87,17 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
         .setNumCallsFinished(callsFinished.getAndSet(0))
         .setNumCallsFinishedWithClientFailedToSend(callsFailedToSend.getAndSet(0))
         .setNumCallsFinishedKnownReceived(callsFinishedKnownReceived.getAndSet(0));
+    HashMap<String, AtomicLong> savedCallsDroppedPerToken;
     synchronized (this) {
-      for (Map.Entry<String, AtomicLong> dropCount : callsDroppedPerToken.entrySet()) {
-        statsBuilder.addCallsFinishedWithDrop(
-            ClientStatsPerToken.newBuilder()
-                .setLoadBalanceToken(dropCount.getKey())
-                .setNumCalls(dropCount.getValue().get())
-                .build());
-      }
+      savedCallsDroppedPerToken = callsDroppedPerToken;
       callsDroppedPerToken = new HashMap<String, AtomicLong>();
+    }
+    for (Map.Entry<String, AtomicLong> dropCount : savedCallsDroppedPerToken.entrySet()) {
+      statsBuilder.addCallsFinishedWithDrop(
+          ClientStatsPerToken.newBuilder()
+              .setLoadBalanceToken(dropCount.getKey())
+              .setNumCalls(dropCount.getValue().get())
+              .build());
     }
     return statsBuilder.build();
   }
