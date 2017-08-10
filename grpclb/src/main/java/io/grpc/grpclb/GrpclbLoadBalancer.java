@@ -445,7 +445,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       for (Server server : serverList.getServersList()) {
         String token = server.getLoadBalanceToken();
         if (server.getDrop()) {
-          newRoundRobinList.add(new RoundRobinEntry(loadRecorder, token));
+          newRoundRobinList.add(RoundRobinEntry.newDropEntry(loadRecorder, token));
         } else {
           InetSocketAddress address;
           try {
@@ -470,7 +470,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
             }
             newSubchannelMap.put(eag, subchannel);
           }
-          newRoundRobinList.add(new RoundRobinEntry(subchannel, loadRecorder, token));
+          newRoundRobinList.add(RoundRobinEntry.newEntry(subchannel, loadRecorder, token));
         }
       }
       // Close Subchannels whose addresses have been delisted
@@ -649,24 +649,28 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     final String token;
     final boolean isDrop;
 
-    /**
-     * A non-drop result.
-     */
-    RoundRobinEntry(Subchannel subchannel, GrpclbClientLoadRecorder loadRecorder, String token) {
+    private RoundRobinEntry(
+        PickResult result, GrpclbClientLoadRecorder loadRecorder, String token, boolean isDrop) {
+      this.result = checkNotNull(result);
       this.loadRecorder = checkNotNull(loadRecorder, "loadRecorder");
-      this.result = PickResult.withSubchannel(subchannel, loadRecorder);
-      this.token = token;
-      this.isDrop = false;
+      this.token = checkNotNull(token, "token");
+      this.isDrop = isDrop;
     }
 
     /**
-     * A drop result.
+     * Create a non-drop result.
      */
-    RoundRobinEntry(GrpclbClientLoadRecorder loadRecorder, String token) {
-      this.loadRecorder = checkNotNull(loadRecorder, "loadRecorder");
-      this.result = DROP_PICK_RESULT;
-      this.token = token;
-      this.isDrop = true;
+    static RoundRobinEntry newEntry(
+        Subchannel subchannel, GrpclbClientLoadRecorder loadRecorder, String token) {
+      return new RoundRobinEntry(
+          PickResult.withSubchannel(subchannel, loadRecorder), loadRecorder, token, false);
+    }
+
+    /**
+     * Create a drop result.
+     */
+    static RoundRobinEntry newDropEntry(GrpclbClientLoadRecorder loadRecorder, String token) {
+      return new RoundRobinEntry(DROP_PICK_RESULT, loadRecorder, token, true);
     }
 
     void updateHeaders(Metadata headers) {

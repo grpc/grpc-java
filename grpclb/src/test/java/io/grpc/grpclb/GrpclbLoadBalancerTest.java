@@ -247,9 +247,9 @@ public class GrpclbLoadBalancerTest {
   public void roundRobinPicker() {
     GrpclbClientLoadRecorder loadRecorder = new GrpclbClientLoadRecorder(timeProvider);
     Subchannel subchannel = mock(Subchannel.class);
-    RoundRobinEntry r1 = new RoundRobinEntry(loadRecorder, "LBTOKEN0001");
-    RoundRobinEntry r2 = new RoundRobinEntry(subchannel, loadRecorder, "LBTOKEN0001");
-    RoundRobinEntry r3 = new RoundRobinEntry(subchannel, loadRecorder, "LBTOKEN0002");
+    RoundRobinEntry r1 = RoundRobinEntry.newDropEntry(loadRecorder, "LBTOKEN0001");
+    RoundRobinEntry r2 = RoundRobinEntry.newEntry(subchannel, loadRecorder, "LBTOKEN0001");
+    RoundRobinEntry r3 = RoundRobinEntry.newEntry(subchannel, loadRecorder, "LBTOKEN0002");
 
     List<RoundRobinEntry> list = Arrays.asList(r1, r2, r3);
     RoundRobinPicker picker = new RoundRobinPicker(list);
@@ -346,10 +346,10 @@ public class GrpclbLoadBalancerTest {
     helperInOrder.verify(helper, atLeast(1)).updatePicker(pickerCaptor.capture());
     RoundRobinPicker picker = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker.list).containsExactly(
-        new RoundRobinEntry(subchannel1, balancer.getLoadRecorder(), "token0001"),
-        new RoundRobinEntry(balancer.getLoadRecorder(), "token0001"),
-        new RoundRobinEntry(subchannel2, balancer.getLoadRecorder(), "token0002"),
-        new RoundRobinEntry(balancer.getLoadRecorder(), "token0003")).inOrder();
+        RoundRobinEntry.newEntry(subchannel1, balancer.getLoadRecorder(), "token0001"),
+        RoundRobinEntry.newDropEntry(balancer.getLoadRecorder(), "token0001"),
+        RoundRobinEntry.newEntry(subchannel2, balancer.getLoadRecorder(), "token0002"),
+        RoundRobinEntry.newDropEntry(balancer.getLoadRecorder(), "token0003")).inOrder();
 
     // Report, no data
     assertNextReport(
@@ -931,14 +931,14 @@ public class GrpclbLoadBalancerTest {
     RoundRobinPicker picker1 = (RoundRobinPicker) pickerCaptor.getValue();
 
     assertThat(picker1.list).containsExactly(
-        new RoundRobinEntry(subchannel2, balancer.getLoadRecorder(), "token0002"));
+        RoundRobinEntry.newEntry(subchannel2, balancer.getLoadRecorder(), "token0002"));
 
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updatePicker(pickerCaptor.capture());
     RoundRobinPicker picker2 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker2.list).containsExactly(
-        new RoundRobinEntry(subchannel1, balancer.getLoadRecorder(), "token0001"),
-        new RoundRobinEntry(subchannel2, balancer.getLoadRecorder(), "token0002"))
+        RoundRobinEntry.newEntry(subchannel1, balancer.getLoadRecorder(), "token0001"),
+        RoundRobinEntry.newEntry(subchannel2, balancer.getLoadRecorder(), "token0002"))
         .inOrder();
 
     // Disconnected subchannels
@@ -948,7 +948,7 @@ public class GrpclbLoadBalancerTest {
     inOrder.verify(helper).updatePicker(pickerCaptor.capture());
     RoundRobinPicker picker3 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker3.list).containsExactly(
-        new RoundRobinEntry(subchannel2, balancer.getLoadRecorder(), "token0002"));
+        RoundRobinEntry.newEntry(subchannel2, balancer.getLoadRecorder(), "token0002"));
 
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(CONNECTING));
     inOrder.verifyNoMoreInteractions();
@@ -993,8 +993,8 @@ public class GrpclbLoadBalancerTest {
     inOrder.verify(helper).updatePicker(pickerCaptor.capture());
     RoundRobinPicker picker7 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker7.list).containsExactly(
-        new RoundRobinEntry(balancer.getLoadRecorder(), "token0003"),
-        new RoundRobinEntry(balancer.getLoadRecorder(), "token0006")).inOrder();
+        RoundRobinEntry.newDropEntry(balancer.getLoadRecorder(), "token0003"),
+        RoundRobinEntry.newDropEntry(balancer.getLoadRecorder(), "token0006")).inOrder();
 
     // State updates on obsolete subchannel1 will have no effect
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
@@ -1008,20 +1008,20 @@ public class GrpclbLoadBalancerTest {
     RoundRobinPicker picker8 = (RoundRobinPicker) pickerCaptor.getValue();
     // subchannel2 is still IDLE, thus not in the active list
     assertThat(picker8.list).containsExactly(
-        new RoundRobinEntry(subchannel3, balancer.getLoadRecorder(), "token0003"),
-        new RoundRobinEntry(balancer.getLoadRecorder(), "token0003"),
-        new RoundRobinEntry(subchannel3, balancer.getLoadRecorder(), "token0005"),
-        new RoundRobinEntry(balancer.getLoadRecorder(), "token0006")).inOrder();
+        RoundRobinEntry.newEntry(subchannel3, balancer.getLoadRecorder(), "token0003"),
+        RoundRobinEntry.newDropEntry(balancer.getLoadRecorder(), "token0003"),
+        RoundRobinEntry.newEntry(subchannel3, balancer.getLoadRecorder(), "token0005"),
+        RoundRobinEntry.newDropEntry(balancer.getLoadRecorder(), "token0006")).inOrder();
     // subchannel2 becomes READY and makes it into the list
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updatePicker(pickerCaptor.capture());
     RoundRobinPicker picker9 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker9.list).containsExactly(
-        new RoundRobinEntry(subchannel3, balancer.getLoadRecorder(), "token0003"),
-        new RoundRobinEntry(balancer.getLoadRecorder(), "token0003"),
-        new RoundRobinEntry(subchannel2, balancer.getLoadRecorder(), "token0004"),
-        new RoundRobinEntry(subchannel3, balancer.getLoadRecorder(), "token0005"),
-        new RoundRobinEntry(balancer.getLoadRecorder(), "token0006")).inOrder();
+        RoundRobinEntry.newEntry(subchannel3, balancer.getLoadRecorder(), "token0003"),
+        RoundRobinEntry.newDropEntry(balancer.getLoadRecorder(), "token0003"),
+        RoundRobinEntry.newEntry(subchannel2, balancer.getLoadRecorder(), "token0004"),
+        RoundRobinEntry.newEntry(subchannel3, balancer.getLoadRecorder(), "token0005"),
+        RoundRobinEntry.newDropEntry(balancer.getLoadRecorder(), "token0006")).inOrder();
     verify(subchannel3, never()).shutdown();
 
     // Update backends, with no entry
