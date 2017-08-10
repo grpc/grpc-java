@@ -647,14 +647,12 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     final PickResult result;
     final GrpclbClientLoadRecorder loadRecorder;
     final String token;
-    final boolean isDrop;
 
     private RoundRobinEntry(
-        PickResult result, GrpclbClientLoadRecorder loadRecorder, String token, boolean isDrop) {
+        PickResult result, GrpclbClientLoadRecorder loadRecorder, String token) {
       this.result = checkNotNull(result);
       this.loadRecorder = checkNotNull(loadRecorder, "loadRecorder");
       this.token = checkNotNull(token, "token");
-      this.isDrop = isDrop;
     }
 
     /**
@@ -663,18 +661,18 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     static RoundRobinEntry newEntry(
         Subchannel subchannel, GrpclbClientLoadRecorder loadRecorder, String token) {
       return new RoundRobinEntry(
-          PickResult.withSubchannel(subchannel, loadRecorder), loadRecorder, token, false);
+          PickResult.withSubchannel(subchannel, loadRecorder), loadRecorder, token);
     }
 
     /**
      * Create a drop result.
      */
     static RoundRobinEntry newDropEntry(GrpclbClientLoadRecorder loadRecorder, String token) {
-      return new RoundRobinEntry(DROP_PICK_RESULT, loadRecorder, token, true);
+      return new RoundRobinEntry(DROP_PICK_RESULT, loadRecorder, token);
     }
 
     void updateHeaders(Metadata headers) {
-      if (!isDrop) {
+      if (!isDrop()) {
         headers.discardAll(GrpclbConstants.TOKEN_METADATA_KEY);
         headers.put(GrpclbConstants.TOKEN_METADATA_KEY, token);
       }
@@ -701,6 +699,10 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
       RoundRobinEntry that = (RoundRobinEntry) other;
       return Objects.equal(result, that.result) && Objects.equal(token, that.token);
     }
+
+    boolean isDrop() {
+      return result == DROP_PICK_RESULT;
+    }
   }
 
   @VisibleForTesting
@@ -722,7 +724,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
           index = 0;
         }
         result.updateHeaders(args.getHeaders());
-        if (result.result == DROP_PICK_RESULT) {
+        if (result.isDrop()) {
           result.loadRecorder.recordDroppedRequest(result.token);
         }
         return result.result;
