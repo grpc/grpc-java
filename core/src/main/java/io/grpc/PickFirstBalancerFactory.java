@@ -127,9 +127,7 @@ public final class PickFirstBalancerFactory extends LoadBalancer.Factory {
         List<EquivalentAddressGroup> groupList) {
       List<SocketAddress> addrs = new ArrayList<SocketAddress>();
       for (EquivalentAddressGroup group : groupList) {
-        for (SocketAddress addr : group.getAddresses()) {
-          addrs.add(addr);
-        }
+        addrs.addAll(group.getAddresses());
       }
       return new EquivalentAddressGroup(addrs);
     }
