@@ -545,9 +545,6 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     List<RoundRobinEntry> pickList = new ArrayList<RoundRobinEntry>(backendList.size());
     Status error = null;
     boolean hasIdle = false;
-    // TODO(zhangkun83): if roundRobinList contains at least one address, but none of them are
-    // ready, maybe we should always return BUFFER_PICKER, no matter if there are drop entries or
-    // not.
     for (BackendEntry entry : backendList) {
       Subchannel subchannel = entry.result.getSubchannel();
       Attributes attrs = subchannel.getAttributes();
