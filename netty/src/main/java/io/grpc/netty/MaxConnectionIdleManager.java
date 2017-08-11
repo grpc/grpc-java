@@ -82,6 +82,11 @@ abstract class MaxConnectionIdleManager {
           shutdownFuture = null;
         }
       }
+
+      @Override
+      public String toString() {
+        return MaxConnectionIdleManager.class.getName() + ".shutdownTask";
+      }
     });
 
     shutdownFuture =

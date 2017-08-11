@@ -18,13 +18,19 @@ package io.grpc.netty;
 
 import static com.google.common.base.Charsets.UTF_8;
 import static org.junit.Assert.assertEquals;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyLong;
+import static org.mockito.Matchers.argThat;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.MessageFramer;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.WritableBuffer;
@@ -35,6 +41,7 @@ import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoop;
@@ -52,11 +59,12 @@ import io.netty.handler.codec.http2.Http2LocalFlowController;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import java.io.ByteArrayInputStream;
+import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Mockito;
+import org.mockito.ArgumentMatcher;
 import org.mockito.verification.VerificationMode;
 
 /**
@@ -84,6 +92,17 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
    */
   protected void manualSetUp() throws Exception {}
 
+  private final FakeClock fakeClock = new FakeClock();
+  private String[] scheduleTheseWithFakeClock = new String[0];
+
+  FakeClock fakeClock() {
+    return fakeClock;
+  }
+
+  void useFakeClockWhenSchdulingThese(String... taskNames) {
+    scheduleTheseWithFakeClock = taskNames;
+  }
+
   /**
    * Must be called by subclasses to initialize the handler and channel.
    */
@@ -94,10 +113,48 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
 
     handler = newHandler();
 
-    channel = new EmbeddedChannel(handler);
+    channel = new FakeClockSupportedChanel(handler);
     ctx = channel.pipeline().context(handler);
 
     writeQueue = initWriteQueue();
+  }
+
+  private final class FakeClockSupportedChanel extends EmbeddedChannel {
+    EventLoop eventLoop;
+
+    FakeClockSupportedChanel(ChannelHandler... handlers) {
+      super(handlers);
+    }
+
+    @Override
+    public EventLoop eventLoop() {
+      if (eventLoop == null) {
+        createEventLoop();
+      }
+      return eventLoop;
+    }
+
+    void createEventLoop() {
+      EventLoop realEventLoop = super.eventLoop();
+      if (realEventLoop == null) {
+        return;
+      }
+      eventLoop = mock(EventLoop.class, delegatesTo(realEventLoop));
+      ArgumentMatcher<Runnable> isFakeClockRunnable = new ArgumentMatcher<Runnable>() {
+        @Override
+        public boolean matches(Object argument) {
+          String name = argument.toString();
+          for (String taskName : scheduleTheseWithFakeClock) {
+            if (name.contains(taskName)) {
+              return true;
+            }
+          }
+          return false;
+        }
+      };
+      doAnswer(delegatesTo(fakeClock.getScheduledExecutorService())).when(eventLoop)
+          .schedule(argThat(isFakeClockRunnable), anyLong(), any(TimeUnit.class));
+    }
   }
 
   protected final T handler() {
@@ -221,9 +278,9 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
   }
 
   protected final ChannelHandlerContext newMockContext() {
-    ChannelHandlerContext ctx = Mockito.mock(ChannelHandlerContext.class);
+    ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
     when(ctx.alloc()).thenReturn(UnpooledByteBufAllocator.DEFAULT);
-    EventLoop eventLoop = Mockito.mock(EventLoop.class);
+    EventLoop eventLoop = mock(EventLoop.class);
     when(ctx.executor()).thenReturn(eventLoop);
     return ctx;
   }
