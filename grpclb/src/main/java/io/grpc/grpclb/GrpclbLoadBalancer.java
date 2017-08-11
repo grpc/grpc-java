@@ -638,6 +638,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
     return new EquivalentAddressGroup(addrs);
   }
 
+  @VisibleForTesting
   static final class DropEntry {
     private final GrpclbClientLoadRecorder loadRecorder;
     private final String token;
