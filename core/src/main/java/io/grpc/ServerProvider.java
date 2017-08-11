@@ -39,6 +39,7 @@ public abstract class ServerProvider {
 
     for (ServerProvider current : providers) {
       if (!current.isAvailable()) {
+        continue;
       } else if (best == null) {
         best = current;
       } else if (current.priority() > best.priority()) {

@@ -116,7 +116,7 @@ public abstract class AbstractServerStream extends AbstractStream
   public final void deliverFrame(WritableBuffer frame, boolean endOfStream, boolean flush) {
     // Since endOfStream is triggered by the sending of trailers, avoid flush here and just flush
     // after the trailers.
-    abstractServerStreamSink().writeFrame(frame, !endOfStream && flush);
+    abstractServerStreamSink().writeFrame(frame, endOfStream ? false : flush);
   }
 
   @Override
