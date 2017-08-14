@@ -140,7 +140,8 @@ public class ProtoLiteUtils {
               }
 
               if (remaining != 0) {
-                throw new RuntimeException("size inaccurate: " + size + " != " + (size - remaining));
+                int position = size - remaining;
+                throw new RuntimeException("size inaccurate: " + size + " != " + position);
               }
               cis = CodedInputStream.newInstance(buf, 0, size);
             } else if (size == 0) {
