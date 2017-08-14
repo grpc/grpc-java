@@ -165,17 +165,17 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
           try {
             command.run();
           } catch (Throwable t) {
-            NettyScheduledFuture.this.setFailure(t);
+            setFailure(t);
             return;
           }
-          if (!NettyScheduledFuture.this.isDone()) {
-            Promise<Void> unused = NettyScheduledFuture.this.setSuccess(null);
+          if (!isDone()) {
+            Promise<Void> unused = setSuccess(null);
           }
           // else: The command itself, such as a shutdown task, might have cancelled all the
           // scheduled tasks already.
         }
       };
-      this.future = fakeClock.getScheduledExecutorService().schedule(wrap, delay, timeUnit);
+      future = fakeClock.getScheduledExecutorService().schedule(wrap, delay, timeUnit);
     }
 
     @Override
