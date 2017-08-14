@@ -683,7 +683,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
 
     fakeClock().forwardTime(20, TimeUnit.MINUTES);
-    channel().runPendingTasks();
 
     // channel not closed yet
     assertTrue(channel().isOpen());
