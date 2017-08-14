@@ -58,11 +58,6 @@ public class KeepAliveManager {
         keepAlivePinger.onPingTimeout();
       }
     }
-
-    @Override
-    public String toString() {
-      return KeepAliveManager.class.getName() + ".shutdown";
-    }
   });
   private final Runnable sendPing = new LogExceptionRunnable(new Runnable() {
     @Override
@@ -89,11 +84,6 @@ public class KeepAliveManager {
         // Send the ping.
         keepAlivePinger.ping();
       }
-    }
-
-    @Override
-    public String toString() {
-      return KeepAliveManager.class.getName() + ".sendPing";
     }
   });
 

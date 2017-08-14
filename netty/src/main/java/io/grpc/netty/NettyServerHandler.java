@@ -78,7 +78,6 @@ import io.netty.handler.logging.LogLevel;
 import io.netty.util.AsciiString;
 import io.netty.util.ReferenceCountUtil;
 import java.util.List;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -290,8 +289,7 @@ class NettyServerHandler extends AbstractNettyHandler {
 
     // init max connection age monitor
     if (maxConnectionAgeInNanos != MAX_CONNECTION_AGE_NANOS_DISABLED) {
-      ScheduledExecutorService scheduledExecutorService = ctx.executor();
-      maxConnectionAgeMonitor = scheduledExecutorService.schedule(
+      maxConnectionAgeMonitor = ctx.executor().schedule(
           new LogExceptionRunnable(new Runnable() {
             @Override
             public void run() {
@@ -315,11 +313,6 @@ class NettyServerHandler extends AbstractNettyHandler {
               } finally {
                 gracefulShutdownTimeoutMillis(savedGracefulShutdownTime);
               }
-            }
-
-            @Override
-            public String toString() {
-              return NettyServerHandler.class.getName() + ".maxConnectionAgeMonitor";
             }
           }),
           maxConnectionAgeInNanos,

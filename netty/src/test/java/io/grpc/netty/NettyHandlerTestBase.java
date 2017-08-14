@@ -21,7 +21,6 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyLong;
-import static org.mockito.Matchers.argThat;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -58,13 +57,18 @@ import io.netty.handler.codec.http2.Http2HeadersDecoder;
 import io.netty.handler.codec.http2.Http2LocalFlowController;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
+import io.netty.util.concurrent.DefaultPromise;
+import io.netty.util.concurrent.Promise;
 import java.io.ByteArrayInputStream;
+import java.util.concurrent.Delayed;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.ArgumentMatcher;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 import org.mockito.verification.VerificationMode;
 
 /**
@@ -93,14 +97,9 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
   protected void manualSetUp() throws Exception {}
 
   private final FakeClock fakeClock = new FakeClock();
-  private String[] scheduleTheseWithFakeClock = new String[0];
 
   FakeClock fakeClock() {
     return fakeClock;
-  }
-
-  void useFakeClockWhenSchdulingThese(String... taskNames) {
-    scheduleTheseWithFakeClock = taskNames;
   }
 
   /**
@@ -140,20 +139,61 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
         return;
       }
       eventLoop = mock(EventLoop.class, delegatesTo(realEventLoop));
-      ArgumentMatcher<Runnable> isFakeClockRunnable = new ArgumentMatcher<Runnable>() {
-        @Override
-        public boolean matches(Object argument) {
-          String name = argument.toString();
-          for (String taskName : scheduleTheseWithFakeClock) {
-            if (name.contains(taskName)) {
-              return true;
+      doAnswer(
+          new Answer<ScheduledFuture<Void>>() {
+            @Override
+            public ScheduledFuture<Void> answer(InvocationOnMock invocation) throws Throwable {
+              Runnable command = (Runnable) invocation.getArguments()[0];
+              Long delay = (Long) invocation.getArguments()[1];
+              TimeUnit timeUnit = (TimeUnit) invocation.getArguments()[2];
+              return new NettyScheduledFuture(eventLoop, command, delay, timeUnit);
             }
+          }).when(eventLoop).schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
+    }
+  }
+
+  private final class NettyScheduledFuture extends DefaultPromise<Void>
+      implements io.netty.util.concurrent.ScheduledFuture<Void> {
+    final ScheduledFuture<?> future;
+
+    NettyScheduledFuture(
+        EventLoop eventLoop, final Runnable command, long delay, TimeUnit timeUnit) {
+      super(eventLoop);
+      Runnable wrap = new Runnable() {
+        @Override
+        public void run() {
+          try {
+            command.run();
+          } catch (Throwable t) {
+            NettyScheduledFuture.this.setFailure(t);
+            return;
           }
-          return false;
+          if (!NettyScheduledFuture.this.isDone()) {
+            Promise<Void> unused = NettyScheduledFuture.this.setSuccess(null);
+          }
+          // else: The command itself, such as a shutdown task, might have cancelled all the
+          // scheduled tasks already.
         }
       };
-      doAnswer(delegatesTo(fakeClock.getScheduledExecutorService())).when(eventLoop)
-          .schedule(argThat(isFakeClockRunnable), anyLong(), any(TimeUnit.class));
+      this.future = fakeClock.getScheduledExecutorService().schedule(wrap, delay, timeUnit);
+    }
+
+    @Override
+    public boolean cancel(boolean mayInterruptIfRunning) {
+      if (future.cancel(mayInterruptIfRunning)) {
+        return super.cancel(mayInterruptIfRunning);
+      }
+      return false;
+    }
+
+    @Override
+    public long getDelay(TimeUnit unit) {
+      return Math.max(future.getDelay(unit), 1L); // never return zero or negative delay.
+    }
+
+    @Override
+    public int compareTo(Delayed o) {
+      return future.compareTo(o);
     }
   }
 
