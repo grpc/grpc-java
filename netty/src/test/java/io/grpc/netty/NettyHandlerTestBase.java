@@ -59,9 +59,9 @@ import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.concurrent.DefaultPromise;
 import io.netty.util.concurrent.Promise;
+import io.netty.util.concurrent.ScheduledFuture;
 import java.io.ByteArrayInputStream;
 import java.util.concurrent.Delayed;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -146,17 +146,17 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
               Runnable command = (Runnable) invocation.getArguments()[0];
               Long delay = (Long) invocation.getArguments()[1];
               TimeUnit timeUnit = (TimeUnit) invocation.getArguments()[2];
-              return new NettyScheduledFuture(eventLoop, command, delay, timeUnit);
+              return new FakeClockScheduledNettyFuture(eventLoop, command, delay, timeUnit);
             }
           }).when(eventLoop).schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
     }
   }
 
-  private final class NettyScheduledFuture extends DefaultPromise<Void>
-      implements io.netty.util.concurrent.ScheduledFuture<Void> {
-    final ScheduledFuture<?> future;
+  private final class FakeClockScheduledNettyFuture extends DefaultPromise<Void>
+      implements ScheduledFuture<Void> {
+    final java.util.concurrent.ScheduledFuture<?> future;
 
-    NettyScheduledFuture(
+    FakeClockScheduledNettyFuture(
         EventLoop eventLoop, final Runnable command, long delay, TimeUnit timeUnit) {
       super(eventLoop);
       Runnable wrap = new Runnable() {
