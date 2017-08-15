@@ -84,6 +84,10 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   static final Status SHUTDOWN_NOW_STATUS =
       Status.UNAVAILABLE.withDescription("Channel shutdownNow invoked");
 
+  @VisibleForTesting
+  static final Status SHUTDOWN_STATUS =
+      Status.UNAVAILABLE.withDescription("Channel shutdown invoked");
+
   private final String target;
   private final NameResolver.Factory nameResolverFactory;
   private final Attributes nameResolverParams;
@@ -470,7 +474,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       }
     });
 
-    delayedTransport.shutdown();
+    delayedTransport.shutdown(SHUTDOWN_STATUS);
     channelExecutor.executeLater(new Runnable() {
         @Override
         public void run() {
@@ -659,7 +663,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
               // shutdown even if "terminating" is already true.  The subchannel will not be used in
               // this case, because delayed transport has terminated when "terminating" becomes
               // true, and no more requests will be sent to balancer beyond this point.
-              internalSubchannel.shutdown();
+              internalSubchannel.shutdown(SHUTDOWN_STATUS);
             }
             if (!terminated) {
               // If channel has not terminated, it will track the subchannel and block termination
@@ -904,7 +908,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
                   new Runnable() {
                     @Override
                     public void run() {
-                      subchannel.shutdown();
+                      subchannel.shutdown(SHUTDOWN_STATUS);
                     }
                   }), SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS);
           return;
@@ -912,7 +916,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       }
       // When terminating == true, no more real streams will be created. It's safe and also
       // desirable to shutdown timely.
-      subchannel.shutdown();
+      subchannel.shutdown(SHUTDOWN_STATUS);
     }
 
     @Override
