@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package io.grpc.context;
 
 import io.grpc.Context;
@@ -79,6 +80,7 @@ public class ReadBenchmark {
     }
   }
 
+  /** Perform the read operation. */
   @Benchmark
   @BenchmarkMode(Mode.SampleTime)
   @OutputTimeUnit(TimeUnit.NANOSECONDS)
