@@ -188,7 +188,7 @@ public class Context {
   private final Object[] keyValueEntries;
   private final boolean cascadesCancellation;
   private ArrayList<ExecutableListener> listeners;
-  private final CancellationListener parentListener = new ParentListener();
+  private CancellationListener parentListener = new ParentListener();
   private final boolean canBeCancelled;
 
   /**
@@ -216,8 +216,8 @@ public class Context {
   }
 
   /**
-   * Construct a context that can be cancelled and will cascade cancellation from its parent if it
-   * is cancellable.
+   * Construct a context that can be cancelled and will cascade cancellation from its parent if
+   * it is cancellable.
    */
   private Context(Context parent, Object[] keyValueEntries, boolean isCancellable) {
     this.parent = parent;
