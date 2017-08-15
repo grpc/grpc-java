@@ -703,8 +703,8 @@ public class Context {
     private ScheduledFuture<?> pendingDeadline;
 
     /**
-     * If the parent deadline is before the given deadline there is no need to install the value or
-     * listen for its expiration as the parent context will already be listening for it.
+     * If the parent deadline is before the given deadline there is no need to install the value
+     * or listen for its expiration as the parent context will already be listening for it.
      */
     private static Object[] deriveDeadline(Context parent, Deadline deadline) {
       Deadline parentDeadline = DEADLINE_KEY.get(parent);
