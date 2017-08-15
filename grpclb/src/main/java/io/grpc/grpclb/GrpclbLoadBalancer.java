@@ -122,7 +122,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   private Map<EquivalentAddressGroup, Subchannel> subchannels = Collections.emptyMap();
 
   // Has the same size as the round-robin list from the balancer.
-  // A drop entry from the round-robin list becomes a DropListEntry here.
+  // A drop entry from the round-robin list becomes a DropEntry here.
   // A backend entry from the robin-robin list becomes a null here.
   private List<DropEntry> dropList = Collections.emptyList();
   // Contains only non-drop, i.e., backends from the round-robin list from the balancer.
