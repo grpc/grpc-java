@@ -120,7 +120,9 @@ public class DeadlineTest {
 
   @Test
   public void deadlineMatchesLongValue() {
-    assertEquals(10, Deadline.after(10, TimeUnit.MINUTES, ticker).timeRemaining(TimeUnit.MINUTES));
+    assertEquals(
+        10,
+        Deadline.after(10, TimeUnit.MINUTES, ticker).timeRemaining(TimeUnit.MINUTES));
   }
 
   @Test
@@ -249,7 +251,7 @@ public class DeadlineTest {
     assertEquals("12000 ns from now", d.toString());
   }
 
-  private static class FakeTicker extends Deadline.Ticker {
+  private static class FakeTicker implements Deadline.Ticker {
     private long time;
 
     @Override

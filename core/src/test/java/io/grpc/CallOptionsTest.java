@@ -229,7 +229,7 @@ public class CallOptionsTest {
         && Objects.equal(o1.getCredentials(), o2.getCredentials());
   }
 
-  private static class FakeTicker extends Deadline.Ticker {
+  private static class FakeTicker implements Deadline.Ticker {
     private long time;
 
     @Override

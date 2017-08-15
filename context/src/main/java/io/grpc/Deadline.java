@@ -31,7 +31,6 @@ import java.util.concurrent.TimeUnit;
  * passed to the various components unambiguously.
  */
 public final class Deadline implements Comparable<Deadline> {
-  private static final SystemTicker SYSTEM_TICKER = new SystemTicker();
   // nanoTime has a range of just under 300 years. Only allow up to 100 years in the past or future
   // to prevent wraparound as long as process runs for less than ~100 years.
   private static final long MAX_OFFSET = TimeUnit.DAYS.toNanos(100 * 365);
@@ -44,11 +43,11 @@ public final class Deadline implements Comparable<Deadline> {
    * @return A new deadline.
    */
   public static Deadline after(long duration, TimeUnit units) {
-    return after(duration, units, SYSTEM_TICKER);
+    checkNotNull(units, "units");
+    return new Deadline(SystemTicker.INSTANCE, units.toNanos(duration), true);
   }
 
-  // For testing
-  static Deadline after(long duration, TimeUnit units, Ticker ticker) {
+  public static Deadline after(long duration, TimeUnit units, Ticker ticker) {
     checkNotNull(units, "units");
     return new Deadline(ticker, units.toNanos(duration), true);
   }
@@ -156,13 +155,37 @@ public final class Deadline implements Comparable<Deadline> {
     return 0;
   }
 
-  /** Time source representing nanoseconds since fixed but arbitrary point in time. */
-  abstract static class Ticker {
-    /** Returns the number of nanoseconds since this source's epoch. */
-    public abstract long read();
+  @Override
+  public boolean equals(Object obj) {
+    if (!(obj instanceof Deadline)) {
+      return false;
+    }
+    Deadline that = (Deadline) obj;
+    return this.deadlineNanos == that.deadlineNanos
+        && ticker.equals(that.ticker);
   }
 
-  private static class SystemTicker extends Ticker {
+  /**
+   * It is not expected that this will be used, but is added for completeness.
+   */
+  @Override
+  public int hashCode() {
+    return ((int)(deadlineNanos ^ (deadlineNanos >>> 32))) ^ ticker.hashCode();
+  }
+
+  /**
+   * Time source representing nanoseconds since fixed but arbitrary point in time.
+   *
+   * <p>This is public for testing purposes.
+   */
+  public interface Ticker {
+    /** Returns the number of nanoseconds since this source's epoch. */
+    long read();
+  }
+
+  private enum SystemTicker implements Ticker {
+    INSTANCE;
+
     @Override
     public long read() {
       return System.nanoTime();
