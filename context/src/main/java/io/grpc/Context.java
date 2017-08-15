@@ -340,7 +340,7 @@ public class Context {
    *
    */
   public <V> Context withValue(Key<V> k1, V v1) {
-    return new Context(this, new Object[] {k1, v1});
+    return new Context(this, new Object[][]{{k1, v1}});
   }
 
   /**
@@ -730,7 +730,6 @@ public class Context {
         ScheduledExecutorService scheduler) {
       super(parent, deriveDeadline(parent, deadline), true);
       if (DEADLINE_KEY.get(this) == deadline) {
-        final TimeoutException cause = new TimeoutException("context timed out");
         if (!deadline.isExpired()) {
           // The parent deadline was after the new deadline so we need to install a listener
           // on the new earlier deadline to trigger expiration for this context.
@@ -738,7 +737,7 @@ public class Context {
             @Override
             public void run() {
               try {
-                cancel(cause);
+                cancel(new TimeoutException("context timed out"));
               } catch (Throwable t) {
                 log.log(Level.SEVERE, "Cancel threw an exception, which should not happen", t);
               }
@@ -746,7 +745,7 @@ public class Context {
           }, scheduler);
         } else {
           // Cancel immediately if the deadline is already expired.
-          cancel(cause);
+          cancel(new TimeoutException("context timed out"));
         }
       }
       uncancellableSurrogate = new Context(this, EMPTY_ENTRIES);
@@ -896,7 +895,11 @@ public class Context {
   }
 
   /**
-   * Defines the mechanisms for attaching and detaching the "current" context.
+   * Defines the mechanisms for attaching and detaching the "current" context. The constructor for
+   * extending classes <em>must not</em> trigger any activity that can use Context, which includes
+   * logging, otherwise it can trigger an infinite initialization loop. Extending classes must not
+   * assume that only one instance will be created; Context guarantees it will only use one
+   * instance, but it may create multiple and then throw away all but one.
    *
    * <p>The default implementation will put the current context in a {@link ThreadLocal}.  If an
    * alternative implementation named {@code io.grpc.override.ContextStorageOverride} exists in the
@@ -946,7 +949,15 @@ public class Context {
     public abstract void detach(Context toDetach, Context toRestore);
 
     /**
-     * Implements {@link io.grpc.Context#current}.  Returns the context of the current scope.
+     * Implements {@link io.grpc.Context#current}.
+     *
+     * <p>Caution: {@link Context} interprets a return value of {@code null} to mean the same
+     * thing as {@code Context{@link #ROOT}}.
+     *
+     * <p>See also {@link #doAttach(Context)}.
+     *
+     * @return The context of the current scope. {@code null} is a valid return value, but see
+     *        caution note.
      */
     public abstract Context current();
   }
