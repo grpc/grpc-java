@@ -55,12 +55,11 @@ public class WriteBenchmark {
   @Benchmark
   @BenchmarkMode(Mode.SampleTime)
   @OutputTimeUnit(TimeUnit.NANOSECONDS)
-  public void doWrite(ContextState state, Blackhole bh) {
-    Context result = state.context.withValues(
+  public Context doWrite(ContextState state, Blackhole bh) {
+    return state.context.withValues(
         state.key1, state.val,
         state.key2, state.val,
         state.key3, state.val,
         state.key4, state.val);
-    bh.consume(result);
   }
 }
