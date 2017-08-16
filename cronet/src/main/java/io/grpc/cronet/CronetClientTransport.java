@@ -40,7 +40,7 @@ import javax.annotation.concurrent.GuardedBy;
 /**
  * A cronet-based {@link ConnectionClientTransport} implementation.
  */
-public class CronetClientTransport implements ConnectionClientTransport, WithLogId {
+class CronetClientTransport implements ConnectionClientTransport, WithLogId {
   /**
    * Note: this flag is only for experimental use. We may remove this in the future.
    * Turning on this flag will cause all grpc requests going out through cronet to use PUT instead

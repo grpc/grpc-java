@@ -20,7 +20,7 @@ import com.google.common.base.Preconditions;
 import io.grpc.internal.WritableBuffer;
 import java.nio.ByteBuffer;
 
-public class CronetWritableBuffer implements WritableBuffer {
+class CronetWritableBuffer implements WritableBuffer {
   private final ByteBuffer buffer;
 
   public CronetWritableBuffer(ByteBuffer buffer, int capacity) {
