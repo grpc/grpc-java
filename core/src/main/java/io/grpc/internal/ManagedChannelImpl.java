@@ -88,6 +88,10 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   static final Status SHUTDOWN_STATUS =
       Status.UNAVAILABLE.withDescription("Channel shutdown invoked");
 
+  @VisibleForTesting
+  static final Status SUBCHANNEL_SHUTDOWN_STATUS =
+      Status.UNAVAILABLE.withDescription("Subchannel shutdown invoked");
+
   private final String target;
   private final NameResolver.Factory nameResolverFactory;
   private final Attributes nameResolverParams;
@@ -908,7 +912,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
                   new Runnable() {
                     @Override
                     public void run() {
-                      subchannel.shutdown(SHUTDOWN_STATUS);
+                      subchannel.shutdown(SUBCHANNEL_SHUTDOWN_STATUS);
                     }
                   }), SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS);
           return;

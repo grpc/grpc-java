@@ -747,7 +747,7 @@ public class ManagedChannelImplTest {
     sub1.shutdown();
     verify(transportInfo1.transport, never()).shutdown(any(Status.class));
     timer.forwardTime(1, TimeUnit.SECONDS);
-    verify(transportInfo1.transport).shutdown(same(ManagedChannelImpl.SHUTDOWN_STATUS));
+    verify(transportInfo1.transport).shutdown(same(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_STATUS));
 
     // ... but not after Channel is terminating
     verify(mockLoadBalancer, never()).shutdown();
