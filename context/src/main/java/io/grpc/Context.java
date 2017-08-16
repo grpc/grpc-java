@@ -340,7 +340,7 @@ public class Context {
    *
    */
   public <V> Context withValue(Key<V> k1, V v1) {
-    return new Context(this, new Object[][]{{k1, v1}});
+    return new Context(this, new Object[] {k1, v1});
   }
 
   /**
