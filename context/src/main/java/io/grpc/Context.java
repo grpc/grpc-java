@@ -691,7 +691,7 @@ public class Context {
       super(parent, parent.keyValueEntries, true);
       // Create a surrogate that inherits from this to attach so that you cannot retrieve a
       // cancellable context from Context.current()
-      uncancellableSurrogate = new Context(this, parent.keyValueEntries);
+      uncancellableSurrogate = new Context(this, keyValueEntries);
     }
 
     /**
