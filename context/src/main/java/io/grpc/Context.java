@@ -105,7 +105,8 @@ public class Context {
    * <p>Never assume this is the default context for new threads, because {@link Storage} may define
    * a default context that is different from ROOT.
    */
-  public static final Context ROOT = new Context(null, LinkedArrayKeyValueEntries.EMPTY, false, false);
+  public static final Context ROOT =
+      new Context(null, LinkedArrayKeyValueEntries.EMPTY, false, false);
 
   // Lazy-loaded storage. Delaying storage initialization until after class initialization makes it
   // much easier to avoid circular loading since there can still be references to Context as long as
@@ -217,6 +218,9 @@ public class Context {
     canBeCancelled = isCancellable;
   }
 
+  /**
+   * Constructs a context that can be arbitrarily configured.
+   */
   private Context(
       Context parent,
       KeyValueEntries keyValueEntries,

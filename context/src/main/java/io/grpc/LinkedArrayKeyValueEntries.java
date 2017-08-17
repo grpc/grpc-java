@@ -1,17 +1,33 @@
+/*
+ * Copyright 2017, gRPC Authors All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package io.grpc;
 
 /**
  * A {@link Context.KeyValueEntries} that is implemented as a linked list of arrays. Key-values
  * are stored in alternating slots of an array. Modifications are performed by appending to the
- * end of the linked list. Reads are performed by following the parent pointers until the desired
- * key is found, or if it is determined to be absent.
+ * end of the linked list. Reads are performed by following the previous pointers until the
+ * desired key is found, or when the root is reached.
  *
- * A bloom filter is used to fast-fail reading keys that are absent.
+ * <p>A bloom filter is used to fast-fail reading keys that are absent.
  */
 final class LinkedArrayKeyValueEntries extends Context.KeyValueEntries {
   private static final Object[] EMPTY_ENTRIES = new Object[0];
 
-  private final LinkedArrayKeyValueEntries parent;
+  private final LinkedArrayKeyValueEntries previous;
   // A 64 bit bloom filter of all the Key.bloomFilterMask values in this Context and all the parents
   // this will help us detect failed lookups faster.  In fact if there are fewer than 64 key objects
   // this will be perfect (though we don't currently take advantage of that fact).
@@ -22,9 +38,9 @@ final class LinkedArrayKeyValueEntries extends Context.KeyValueEntries {
   public static final LinkedArrayKeyValueEntries EMPTY =
       new LinkedArrayKeyValueEntries(null, EMPTY_ENTRIES);
 
-  private LinkedArrayKeyValueEntries(LinkedArrayKeyValueEntries parent, Object[] overwrites) {
-    this.parent = parent;
-    keyBloomFilter = computeFilter(parent, overwrites);
+  private LinkedArrayKeyValueEntries(LinkedArrayKeyValueEntries previous, Object[] overwrites) {
+    this.previous = previous;
+    keyBloomFilter = computeFilter(previous, overwrites);
     keyValueEntries = overwrites;
   }
 
@@ -47,7 +63,7 @@ final class LinkedArrayKeyValueEntries extends Context.KeyValueEntries {
           return entries[i + 1];
         }
       }
-      current = current.parent;
+      current = current.previous;
       if (current == null) {
         return null;
       }
@@ -83,7 +99,8 @@ final class LinkedArrayKeyValueEntries extends Context.KeyValueEntries {
       Context.Key<V1> key1, V1 value1,
       Context.Key<V2> key2, V2 value2,
       Context.Key<V3> key3, V3 value3) {
-    return new LinkedArrayKeyValueEntries(this, new Object[] {key1, value1, key2, value2, key3, value3});
+    return new LinkedArrayKeyValueEntries(
+        this, new Object[] {key1, value1, key2, value2, key3, value3});
   }
 
   @Override
