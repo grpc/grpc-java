@@ -22,8 +22,8 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.grpclb.GrpclbLoadBalancer.BUFFER_ENTRY;
-import static io.grpc.grpclb.GrpclbLoadBalancer.DROP_PICK_RESULT;
+import static io.grpc.grpclb.GrpclbState.BUFFER_ENTRY;
+import static io.grpc.grpclb.GrpclbState.DROP_PICK_RESULT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -63,10 +63,10 @@ import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.grpclb.GrpclbConstants.LbPolicy;
-import io.grpc.grpclb.GrpclbLoadBalancer.BackendEntry;
-import io.grpc.grpclb.GrpclbLoadBalancer.DropEntry;
-import io.grpc.grpclb.GrpclbLoadBalancer.ErrorEntry;
-import io.grpc.grpclb.GrpclbLoadBalancer.RoundRobinPicker;
+import io.grpc.grpclb.GrpclbState.BackendEntry;
+import io.grpc.grpclb.GrpclbState.DropEntry;
+import io.grpc.grpclb.GrpclbState.ErrorEntry;
+import io.grpc.grpclb.GrpclbState.RoundRobinPicker;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
@@ -410,7 +410,7 @@ public class GrpclbLoadBalancerTest {
 
     PickResult pick2 = picker.pickSubchannel(args);
     assertNull(pick2.getSubchannel());
-    assertSame(GrpclbLoadBalancer.DROP_PICK_RESULT, pick2);
+    assertSame(DROP_PICK_RESULT, pick2);
 
     // Report includes upstart of pick1 and the drop of pick2
     assertNextReport(
@@ -443,7 +443,7 @@ public class GrpclbLoadBalancerTest {
 
     PickResult pick4 = picker.pickSubchannel(args);
     assertNull(pick4.getSubchannel());
-    assertSame(GrpclbLoadBalancer.DROP_PICK_RESULT, pick4);
+    assertSame(DROP_PICK_RESULT, pick4);
 
     // pick1 ended without sending anything
     tracer1.streamClosed(Status.CANCELLED);
@@ -522,7 +522,7 @@ public class GrpclbLoadBalancerTest {
     // that picker is associated with the previous stream.
     PickResult pick6 = picker.pickSubchannel(args);
     assertNull(pick6.getSubchannel());
-    assertSame(GrpclbLoadBalancer.DROP_PICK_RESULT, pick6);
+    assertSame(DROP_PICK_RESULT, pick6);
     assertNextReport(
         inOrder, lbRequestObserver, loadReportIntervalMillis,
         ClientStats.newBuilder().build());
