@@ -27,16 +27,16 @@ import java.util.concurrent.TimeUnit;
  * <p>A subclass of it typically has the following signature:
  *
  * <pre>
- * public class CustomNettyChannelBuilder
- *     extends DelegatedChannelBuilder&lt;CustomNettyChannelBuilder, NettyChannelBuilder&gt;
+ * public class CustomChannelBuilder
+ *     extends ForwardingDelegateChannelBuilder&lt;CustomChannelBuilder, NettyChannelBuilder&gt;
  * </pre>
  *
  * @param <T> The type of the subclass extending this abstract class.
  * @param <DelegateT> The type of the delegate.
  *
- * @since 1.6.0
+ * @since 1.7.0
  */
-@ExperimentalApi
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/3363")
 public abstract class ForwardingDelegateChannelBuilder<
         T extends ForwardingDelegateChannelBuilder<T, DelegateT>,
         DelegateT extends ManagedChannelBuilder<DelegateT>>
