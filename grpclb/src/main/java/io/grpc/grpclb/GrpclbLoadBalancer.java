@@ -217,11 +217,8 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
 
   @VisibleForTesting
   @Nullable
-  GrpclbClientLoadRecorder getLoadRecorder() {
-    if (grpclbState == null) {
-      return null;
-    }
-    return grpclbState.getLoadRecorder();
+  GrpclbState getGrpclbState() {
+    return grpclbState;
   }
 
   @VisibleForTesting
