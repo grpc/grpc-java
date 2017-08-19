@@ -24,32 +24,22 @@ import java.util.concurrent.TimeUnit;
  * A {@link ManagedChannelBuilder} that delegates all its builder method to another builder by
  * default.
  *
- * <p>A subclass of it typically has the following signature:
- *
- * <pre>
- * public class CustomChannelBuilder
- *     extends ForwardingDelegateChannelBuilder&lt;CustomChannelBuilder, NettyChannelBuilder&gt;
- * </pre>
- *
  * @param <T> The type of the subclass extending this abstract class.
- * @param <DelegateT> The type of the delegate.
  *
  * @since 1.7.0
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3363")
-public abstract class ForwardingDelegateChannelBuilder<
-        T extends ForwardingDelegateChannelBuilder<T, DelegateT>,
-        DelegateT extends ManagedChannelBuilder<DelegateT>>
+public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilder<T>>
     extends ManagedChannelBuilder<T> {
   /**
    * The default constructor.
    */
-  protected ForwardingDelegateChannelBuilder() {}
+  protected ForwardingChannelBuilder() {}
 
   /**
    * Returns the delegated {@code ManagedChannelBuilder}.
    */
-  protected abstract DelegateT delegate();
+  protected abstract ManagedChannelBuilder<?> delegate();
 
   @Override
   public T directExecutor() {

@@ -29,15 +29,15 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * Unit tests for {@link ForwardingDelegateChannelBuilder}.
+ * Unit tests for {@link ForwardingChannelBuilder}.
  */
 @RunWith(JUnit4.class)
-public class ForwardingDelegateChannelBuilderTest {
+public class ForwardingChannelBuilderTest {
   private final ManagedChannelBuilder<?> mockDelegate = mock(ManagedChannelBuilder.class);
 
   @SuppressWarnings("rawtypes")
-  private final ForwardingDelegateChannelBuilder<?, ?> testChannelBuilder =
-      new ForwardingDelegateChannelBuilder() {
+  private final ForwardingChannelBuilder<?> testChannelBuilder =
+      new ForwardingChannelBuilder() {
         @Override
         protected ManagedChannelBuilder delegate() {
           return mockDelegate;
