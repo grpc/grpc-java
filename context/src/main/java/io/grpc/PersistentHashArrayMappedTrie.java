@@ -1,3 +1,19 @@
+/*
+ * Copyright 2017, gRPC Authors All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package io.grpc;
 
 import java.util.Arrays;
@@ -14,13 +30,13 @@ import java.util.Arrays;
  * paper.
  */
 public class PersistentHashArrayMappedTrie<K,V> {
-  private final Node<K,V> root;
+  final Node<K,V> root;
 
   public PersistentHashArrayMappedTrie() {
     this(null);
   }
 
-  private PersistentHashArrayMappedTrie(Node<K,V> root) {
+  PersistentHashArrayMappedTrie(Node<K,V> root) {
     this.root = root;
   }
 
@@ -39,9 +55,11 @@ public class PersistentHashArrayMappedTrie<K,V> {
     }
   }
 
-  private static class Leaf<K,V> implements Node<K,V> {
-    private final K key;
-    private final V value;
+  // Not actually annotated to avoid depending on guava
+  // @VisibleForTesting
+  static class Leaf<K,V> implements Node<K,V> {
+    final K key;
+    final V value;
 
     public Leaf(K key, V value) {
       this.key = key;
@@ -72,9 +90,16 @@ public class PersistentHashArrayMappedTrie<K,V> {
         return new CollisionLeaf<K,V>(this.key, this.value, key, value);
       }
     }
+
+    @Override
+    public String toString() {
+      return String.format("Leaf(key=%s value=%s)", key, value);
+    }
   }
 
-  private static class CollisionLeaf<K,V> implements Node<K,V> {
+  // Not actually annotated to avoid depending on guava
+  // @VisibleForTesting
+  static class CollisionLeaf<K,V> implements Node<K,V> {
     // All keys must have same hash, but not have the same reference
     private final K[] keys;
     private final V[] values;
@@ -83,13 +108,12 @@ public class PersistentHashArrayMappedTrie<K,V> {
     public CollisionLeaf(K key1, V value1, K key2, V value2) {
       this((K[]) new Object[] {key1, key2}, (V[]) new Object[] {value1, value2});
       assert key1 != key2;
-      if (key1.hashCode() != key2.hashCode()) {
-        System.out.println("sfdbg bad!");
-      }
       assert key1.hashCode() == key2.hashCode();
     }
 
-    private CollisionLeaf(K[] keys, V[] values) {
+    // Not actually annotated to avoid depending on guava
+    // @VisibleForTesting
+    CollisionLeaf(K[] keys, V[] values) {
       this.keys = keys;
       this.values = values;
     }
@@ -138,9 +162,21 @@ public class PersistentHashArrayMappedTrie<K,V> {
       }
       return -1;
     }
+
+    @Override
+    public String toString() {
+      StringBuilder valuesSb = new StringBuilder();
+      valuesSb.append("CollisionLeaf(");
+      for (int i = 0; i < values.length; i++) {
+        valuesSb.append("(key=").append(keys[i]).append(" value=").append(values[i]).append(") ");
+      }
+      return valuesSb.append(")").toString();
+    }
   }
 
-  private static class CompressedIndex<K,V> implements Node<K,V> {
+  // Not actually annotated to avoid depending on guava
+  // @VisibleForTesting
+  static class CompressedIndex<K,V> implements Node<K,V> {
     private static final int BITS = 5;
     private static final int BITS_MASK = 0x1F;
 
@@ -158,7 +194,8 @@ public class PersistentHashArrayMappedTrie<K,V> {
       if ((bitmap & indexBit) == 0) {
         return null;
       }
-      return values[compressedIndex(indexBit)].get(key, hash, bitsConsumed + BITS);
+      int compressedIndex = compressedIndex(indexBit);
+      return values[compressedIndex].get(key, hash, bitsConsumed + BITS);
     }
 
     @Override
@@ -188,7 +225,7 @@ public class PersistentHashArrayMappedTrie<K,V> {
       }
     }
 
-    private static <K,V> Node<K,V> combine(
+    static <K,V> Node<K,V> combine(
         Node<K,V> node1, int hash1, Node<K,V> node2, int hash2, int bitsConsumed) {
       assert hash1 != hash2;
       int indexBit1 = indexBit(hash1, bitsConsumed);
@@ -200,7 +237,7 @@ public class PersistentHashArrayMappedTrie<K,V> {
         return new CompressedIndex<K,V>(indexBit1, values);
       } else {
         // Make node1 the smallest
-        if (hash1 > hash2) {
+        if (uncompressedIndex(hash1, bitsConsumed) > uncompressedIndex(hash2, bitsConsumed)) {
           Node<K,V> nodeCopy = node1;
           node1 = node2;
           node2 = nodeCopy;
@@ -211,8 +248,23 @@ public class PersistentHashArrayMappedTrie<K,V> {
       }
     }
 
+    @Override
+    public String toString() {
+      StringBuilder valuesSb = new StringBuilder();
+      valuesSb.append("CompressedIndex(")
+          .append(String.format("bitmap=%s ", Integer.toBinaryString(bitmap)));
+      for (Node<K, V> value : values) {
+        valuesSb.append(value).append(" ");
+      }
+      return valuesSb.append(")").toString();
+    }
+
+    private static int uncompressedIndex(int hash, int bitsConsumed) {
+      return (hash >>> bitsConsumed) & BITS_MASK;
+    }
+
     private static int indexBit(int hash, int bitsConsumed) {
-      int uncompressedIndex = (hash >>> bitsConsumed) & BITS_MASK;
+      int uncompressedIndex = uncompressedIndex(hash, bitsConsumed);
       return 1 << uncompressedIndex;
     }
 
@@ -221,8 +273,8 @@ public class PersistentHashArrayMappedTrie<K,V> {
     }
   }
 
-  private interface Node<K,V> {
-    public V get(K key, int hash, int bitsConsumed);
-    public Node<K,V> put(K key, V value, int hash, int bitsConsumed);
+  interface Node<K,V> {
+    V get(K key, int hash, int bitsConsumed);
+    Node<K,V> put(K key, V value, int hash, int bitsConsumed);
   }
 }

@@ -350,7 +350,7 @@ public class Context {
    * from its parent.
    */
   public <V1, V2> Context withValues(Key<V1> k1, V1 v1, Key<V2> k2, V2 v2) {
-    return new Context(this, keyValueEntries.put(k1, v2).put(k2, v2));
+    return new Context(this, keyValueEntries.put(k1, v1).put(k2, v2));
   }
 
   /**
@@ -358,7 +358,7 @@ public class Context {
    * from its parent.
    */
   public <V1, V2, V3> Context withValues(Key<V1> k1, V1 v1, Key<V2> k2, V2 v2, Key<V3> k3, V3 v3) {
-    return new Context(this, keyValueEntries.put(k1, v2).put(k2, v2).put(k3, v3));
+    return new Context(this, keyValueEntries.put(k1, v1).put(k2, v2).put(k3, v3));
   }
 
   /**
@@ -367,7 +367,7 @@ public class Context {
    */
   public <V1, V2, V3, V4> Context withValues(Key<V1> k1, V1 v1, Key<V2> k2, V2 v2,
       Key<V3> k3, V3 v3, Key<V4> k4, V4 v4) {
-    return new Context(this, keyValueEntries.put(k1, v2).put(k2, v2).put(k3, v3).put(k4, v4));
+    return new Context(this, keyValueEntries.put(k1, v1).put(k2, v2).put(k3, v3).put(k4, v4));
   }
 
   /**

@@ -221,7 +221,9 @@ public class ContextTest {
   @Test
   public void withValuesThree() {
     Object fav = new Object();
-    Context base = Context.current().withValues(PET, "dog", COLOR, "blue");
+    Context base = Context.current().withValue(PET, "dog");
+    base = base.withValue(COLOR, "blue");
+
     assertEquals("dog", PET.get(base));
     assertEquals("blue", COLOR.get(base));
     Context child = base.withValue(PET, "cat");
