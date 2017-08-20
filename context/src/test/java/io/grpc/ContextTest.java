@@ -26,6 +26,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static io.grpc.Context.cancellableAncestor;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
@@ -880,6 +881,26 @@ public class ContextTest {
       storageRef.set(originalStorage);
       storage.setAccessible(false);
     }
+  }
+
+  @Test
+  public void cancellableAncestorTest() {
+    assertEquals(null, cancellableAncestor(null));
+
+    Context c = Context.current();
+    assertFalse(c.canBeCancelled());
+    assertEquals(null, cancellableAncestor(c));
+
+    Context.CancellableContext withCancellation = c.withCancellation();
+    assertEquals(withCancellation, cancellableAncestor(withCancellation));
+
+    Context child = withCancellation.withValue(COLOR, "blue");
+    assertFalse(child instanceof Context.CancellableContext);
+    assertEquals(withCancellation, cancellableAncestor(child));
+
+    Context grandChild = child.withValue(COLOR, "red");
+    assertFalse(grandChild instanceof Context.CancellableContext);
+    assertEquals(withCancellation, cancellableAncestor(grandChild));
   }
 
   // UsedReflectively

@@ -180,7 +180,7 @@ public class Context {
     return current;
   }
 
-  private final Context parent;
+  private final CancellableContext cancellableAncestor;
   private final boolean cascadesCancellation;
   private ArrayList<ExecutableListener> listeners;
   private CancellationListener parentListener = new ParentListener();
@@ -191,7 +191,7 @@ public class Context {
    * Construct a context that cannot be cancelled and will not cascade cancellation from its parent.
    */
   private Context(Context parent) {
-    this.parent = parent;
+    cancellableAncestor = cancellableAncestor(parent);
     // Not inheriting cancellation implies not inheriting a deadline too.
     keyValueEntries = parent.keyValueEntries.put(DEADLINE_KEY, null);
     cascadesCancellation = false;
@@ -203,10 +203,10 @@ public class Context {
    * it is cancellable.
    */
   private Context(Context parent, PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries) {
-    this.parent = parent;
+    cancellableAncestor = cancellableAncestor(parent);
     this.keyValueEntries = keyValueEntries;
     cascadesCancellation = true;
-    canBeCancelled = this.parent != null && this.parent.canBeCancelled;
+    canBeCancelled = cancellableAncestor != null && this.cancellableAncestor.canBeCancelled();
   }
 
   /**
@@ -217,7 +217,7 @@ public class Context {
       Context parent,
       PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries,
       boolean isCancellable) {
-    this.parent = parent;
+    cancellableAncestor = cancellableAncestor(parent);
     this.keyValueEntries = keyValueEntries;
     cascadesCancellation = true;
     canBeCancelled = isCancellable;
@@ -231,7 +231,7 @@ public class Context {
       PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries,
       boolean cascadesCancellation,
       boolean isCancellable) {
-    this.parent = parent;
+    cancellableAncestor = cancellableAncestor(parent);
     this.keyValueEntries = keyValueEntries;
     this.cascadesCancellation = cascadesCancellation;
     canBeCancelled = isCancellable;
@@ -439,10 +439,10 @@ public class Context {
    * Is this context cancelled.
    */
   public boolean isCancelled() {
-    if (parent == null || !cascadesCancellation) {
+    if (cancellableAncestor == null || !cascadesCancellation) {
       return false;
     } else {
-      return parent.isCancelled();
+      return cancellableAncestor.isCancelled();
     }
   }
 
@@ -455,10 +455,10 @@ public class Context {
    * should generally assume that it has already been handled and logged properly.
    */
   public Throwable cancellationCause() {
-    if (parent == null || !cascadesCancellation) {
+    if (cancellableAncestor == null || !cascadesCancellation) {
       return null;
     } else {
-      return parent.cancellationCause();
+      return cancellableAncestor.cancellationCause();
     }
   }
 
@@ -489,7 +489,9 @@ public class Context {
             // we can cascade listener notification.
             listeners = new ArrayList<ExecutableListener>();
             listeners.add(executableListener);
-            parent.addListener(parentListener, DirectExecutor.INSTANCE);
+            if (cancellableAncestor != null) {
+              cancellableAncestor.addListener(parentListener, DirectExecutor.INSTANCE);
+            }
           } else {
             listeners.add(executableListener);
           }
@@ -517,7 +519,9 @@ public class Context {
         }
         // We have no listeners so no need to listen to our parent
         if (listeners.isEmpty()) {
-          parent.removeListener(parentListener);
+          if (cancellableAncestor != null) {
+            cancellableAncestor.removeListener(parentListener);
+          }
           listeners = null;
         }
       }
@@ -554,7 +558,9 @@ public class Context {
         tmpListeners.get(i).deliver();
       }
     }
-    parent.removeListener(parentListener);
+    if (cancellableAncestor != null) {
+      cancellableAncestor.removeListener(parentListener);
+    }
   }
 
   // Used in tests to ensure that listeners are defined and released when cancellation cascades.
@@ -1003,5 +1009,21 @@ public class Context {
     public String toString() {
       return "Context.DirectExecutor";
     }
+  }
+
+  /**
+   * Returns {@code parent} if it is a {@link CancellableContext}, otherwise returns the parent's
+   * {@link #cancellableAncestor}.
+   */
+  static CancellableContext cancellableAncestor(Context parent) {
+    if (parent == null || !parent.canBeCancelled()) {
+      return null;
+    }
+    if (parent instanceof CancellableContext) {
+      return (CancellableContext) parent;
+    }
+    // The parent simply cascades cancellations.
+    // Bypass the parent and reference the ancestor directly.
+    return parent.cancellableAncestor;
   }
 }
