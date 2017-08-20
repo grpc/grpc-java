@@ -180,8 +180,8 @@ public class PersistentHashArrayMappedTrie<K,V> {
     private static final int BITS = 5;
     private static final int BITS_MASK = 0x1F;
 
-    private final int bitmap;
-    private final Node<K,V>[] values;
+    final int bitmap;
+    final Node<K,V>[] values;
 
     private CompressedIndex(int bitmap, Node<K,V>[] values) {
       this.bitmap = bitmap;
@@ -259,6 +259,10 @@ public class PersistentHashArrayMappedTrie<K,V> {
       return valuesSb.append(")").toString();
     }
 
+    private int compressedIndex(int indexBit) {
+      return Integer.bitCount(bitmap & (indexBit - 1));
+    }
+
     private static int uncompressedIndex(int hash, int bitsConsumed) {
       return (hash >>> bitsConsumed) & BITS_MASK;
     }
@@ -266,10 +270,6 @@ public class PersistentHashArrayMappedTrie<K,V> {
     private static int indexBit(int hash, int bitsConsumed) {
       int uncompressedIndex = uncompressedIndex(hash, bitsConsumed);
       return 1 << uncompressedIndex;
-    }
-
-    private int compressedIndex(int indexBit) {
-      return Integer.bitCount(bitmap & (indexBit - 1));
     }
   }
 

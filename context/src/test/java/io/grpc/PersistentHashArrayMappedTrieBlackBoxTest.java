@@ -9,13 +9,12 @@ import org.junit.Test;
 
 public class PersistentHashArrayMappedTrieBlackBoxTest {
   private static final int NUM_OBJECTS = 20000;
-  private static final int WRITES_PER_ITER = 100;
-  private static final Random r = new Random(0);
+  private static final int WRITES_PER_ITER = 300;
+  private static final Random r = new Random(87);
   private final Object[] keys;
 
   public PersistentHashArrayMappedTrieBlackBoxTest() {
     keys = new Object[NUM_OBJECTS];
-
     for (int i = 0; i < NUM_OBJECTS; i++) {
       keys[i] = new PersistentHashArrayMappedTrieTest.Key(r.nextInt());
     }
@@ -23,7 +22,7 @@ public class PersistentHashArrayMappedTrieBlackBoxTest {
 
   @Test
   public void test() {
-    for (int i = 0; i < 10000; i++) {
+    for (int i = 0; i < 1000000; i++) {
       PersistentHashArrayMappedTrie<Object, Object> trie =
         new PersistentHashArrayMappedTrie<Object, Object>();
       Map<Object, Object> map = new HashMap<Object, Object>();

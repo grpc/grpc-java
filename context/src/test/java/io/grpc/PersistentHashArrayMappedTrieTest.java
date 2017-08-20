@@ -1,6 +1,7 @@
 package io.grpc;
 
 import static junit.framework.TestCase.assertTrue;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 
 import io.grpc.PersistentHashArrayMappedTrie.CollisionLeaf;
@@ -86,7 +87,6 @@ public class PersistentHashArrayMappedTrieTest {
     assertSame(value1, leaf.get(key1, key1.hashCode(), 0));
     assertSame(value2, leaf.get(key2, key2.hashCode(), 0));
     assertSame(null, leaf.get(insertKey, insertKey.hashCode(), 0));
-
   }
 
   @Test
@@ -131,11 +131,80 @@ public class PersistentHashArrayMappedTrieTest {
     assertSame(null, leaf.get(key3, key3.hashCode(), 0));
   }
 
+  @Test
+  public void compressedIndex_combine_differentIndexBit() {
+    Key key1 = new Key(7);
+    Key key2 = new Key(19);
+    Object value1 = new Object();
+    Object value2 = new Object();
+    Leaf<Key, Object> leaf1 = new Leaf<Key, Object>(key1, value1);
+    Leaf<Key, Object> leaf2 = new Leaf<Key, Object>(key2, value2);
+    // ordering should not matter
+    {
+      Node<Key, Object> ret =
+          CompressedIndex.combine(leaf1, key1.hashCode(), leaf2, key2.hashCode, 0);
+      CompressedIndex<Key, Object> collisionLeaf = (CompressedIndex<Key, Object>) ret;
+      assertEquals((1 << 7) | (1 << 19), collisionLeaf.bitmap);
+      assertEquals(2, collisionLeaf.values.length);
+      assertSame(value1, collisionLeaf.values[0].get(key1, key1.hashCode(), 0));
+      assertSame(value2, collisionLeaf.values[1].get(key2, key2.hashCode(), 0));
+
+      assertSame(value1, ret.get(key1, key1.hashCode(), 0));
+      assertSame(value2, ret.get(key2, key2.hashCode(), 0));
+    }
+    {
+      Node<Key, Object> ret =
+          CompressedIndex.combine(leaf2, key2.hashCode(), leaf1, key1.hashCode, 0);
+      assertTrue(ret instanceof CompressedIndex);
+      CompressedIndex<Key, Object> collisionLeaf = (CompressedIndex<Key, Object>) ret;
+      assertEquals((1 << 7) | (1 << 19), collisionLeaf.bitmap);
+      assertEquals(2, collisionLeaf.values.length);
+      assertSame(value1, collisionLeaf.values[0].get(key1, key1.hashCode(), 0));
+      assertSame(value2, collisionLeaf.values[1].get(key2, key2.hashCode(), 0));
+
+      assertSame(value1, ret.get(key1, key1.hashCode(), 0));
+      assertSame(value2, ret.get(key2, key2.hashCode(), 0));
+    }
+  }
+
+  @Test
+  public void compressedIndex_combine_sameIndexBit() {
+    Key key1 = new Key(1 << 5 | 1); // 5 bit regions: (1, 1)
+    Key key2 = new Key(17 << 5 | 1); // 5 bit regions: (17, 1)
+    Object value1 = new Object();
+    Object value2 = new Object();
+    Leaf<Key, Object> leaf1 = new Leaf<Key, Object>(key1, value1);
+    Leaf<Key, Object> leaf2 = new Leaf<Key, Object>(key2, value2);
+    // ordering should not matter
+    {
+      Node<Key, Object> ret =
+          CompressedIndex.combine(leaf1, key1.hashCode(), leaf2, key2.hashCode, 0);
+      CompressedIndex collisionInternal = (CompressedIndex) ret;
+      assertEquals(1 << 1, collisionInternal.bitmap);
+      assertEquals(1, collisionInternal.values.length);
+      CompressedIndex collisionLeaf = (CompressedIndex) collisionInternal.values[0];
+      assertEquals((1 << 17) | (1 << 1), collisionLeaf.bitmap);
+      assertSame(value1, ret.get(key1, key1.hashCode(), 0));
+      assertSame(value2, ret.get(key2, key2.hashCode(), 0));
+    }
+    {
+      Node<Key, Object> ret =
+          CompressedIndex.combine(leaf2, key2.hashCode(), leaf1, key1.hashCode, 0);
+      CompressedIndex collisionInternal = (CompressedIndex) ret;
+      assertEquals(1 << 1, collisionInternal.bitmap);
+      assertEquals(1, collisionInternal.values.length);
+      CompressedIndex collisionLeaf = (CompressedIndex) collisionInternal.values[0];
+      assertEquals((1 << 17) | (1 << 1), collisionLeaf.bitmap);
+      assertSame(value1, ret.get(key1, key1.hashCode(), 0));
+      assertSame(value2, ret.get(key2, key2.hashCode(), 0));
+    }
+  }
+
   /**
    * A key with a settable hashcode.
    */
   static final class Key {
-    private int hashCode;
+    private final int hashCode;
 
     Key(int hashCode) {
       this.hashCode = hashCode;
