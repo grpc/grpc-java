@@ -341,7 +341,7 @@ class LoadClient {
    * Worker which executes blocking unary calls. Event timing is the duration between sending the
    * request and receiving the response.
    */
-  private class BlockingUnaryWorker implements Runnable {
+  private final class BlockingUnaryWorker implements Runnable {
     final BenchmarkServiceGrpc.BenchmarkServiceBlockingStub stub;
 
     private BlockingUnaryWorker(BenchmarkServiceGrpc.BenchmarkServiceBlockingStub stub) {
@@ -362,7 +362,7 @@ class LoadClient {
    * Worker which executes async unary calls. Event timing is the duration between sending the
    * request and receiving the response.
    */
-  private class AsyncUnaryWorker implements Runnable {
+  private final class AsyncUnaryWorker implements Runnable {
     final BenchmarkServiceGrpc.BenchmarkServiceStub stub;
     final Semaphore maxOutstanding = new Semaphore(config.getOutstandingRpcsPerChannel());
 
@@ -406,7 +406,7 @@ class LoadClient {
    * Worker which executes a streaming ping-pong call. Event timing is the duration between
    * sending the ping and receiving the pong.
    */
-  private class AsyncPingPongWorker implements Runnable {
+  private final class AsyncPingPongWorker implements Runnable {
     final BenchmarkServiceGrpc.BenchmarkServiceStub stub;
     final Semaphore maxOutstanding = new Semaphore(config.getOutstandingRpcsPerChannel());
 
@@ -458,7 +458,7 @@ class LoadClient {
    * Worker which executes generic blocking unary calls. Event timing is the duration between
    * sending the request and receiving the response.
    */
-  private class GenericBlockingUnaryWorker implements Runnable {
+  private final class GenericBlockingUnaryWorker implements Runnable {
     final Channel channel;
 
     GenericBlockingUnaryWorker(Channel channel) {
@@ -482,7 +482,7 @@ class LoadClient {
    * Worker which executes generic async unary calls. Event timing is the duration between
    * sending the request and receiving the response.
    */
-  private class GenericAsyncUnaryWorker implements Runnable {
+  private final class GenericAsyncUnaryWorker implements Runnable {
     final Channel channel;
     final Semaphore maxOutstanding = new Semaphore(config.getOutstandingRpcsPerChannel());
 
@@ -530,7 +530,7 @@ class LoadClient {
    * Worker which executes a streaming ping-pong call. Event timing is the duration between
    * sending the ping and receiving the pong.
    */
-  private class GenericAsyncPingPongWorker implements Runnable {
+  private final class GenericAsyncPingPongWorker implements Runnable {
     final Semaphore maxOutstanding = new Semaphore(config.getOutstandingRpcsPerChannel());
     final Channel channel;
 
@@ -581,7 +581,7 @@ class LoadClient {
   /**
    * Used for both STREAMING_FROM_CLIENT as well as STREAMING_BOTH_WAYS.
    */
-  private class StreamingWorker<ReqT, RespT>  implements Runnable {
+  private final class StreamingWorker<ReqT, RespT>  implements Runnable {
     final ClientCall<ReqT, RespT> call;
     final Iterator<ReqT> requests;
 
@@ -620,6 +620,7 @@ class LoadClient {
 
         @Override
         public void onError(Throwable t) {
+          log.log(Level.INFO, "onError called on client", t);
           call.cancel("onError called on client", null);
         }
 
@@ -631,7 +632,7 @@ class LoadClient {
     }
   }
 
-  private class ServerStreamingWorker<ReqT, RespT> implements Runnable {
+  private final class ServerStreamingWorker<ReqT, RespT> implements Runnable {
     final ClientCall<ReqT, RespT> call;
     final ReqT initialRequest;
 
@@ -652,6 +653,7 @@ class LoadClient {
 
         @Override
         public void onError(Throwable t) {
+          log.log(Level.INFO, "onError called on client", t);
           call.cancel("onError called on client", null);
         }
 
