@@ -29,14 +29,14 @@ import java.util.Arrays;
  * Bagwell (2000). The rest of the implementation is ignorant of/ignores the
  * paper.
  */
-public final class PersistentHashArrayMappedTrie<K,V> {
-  final Node<K,V> root;
+final class PersistentHashArrayMappedTrie<K,V> {
+  private final Node<K,V> root;
 
-  public PersistentHashArrayMappedTrie() {
+  PersistentHashArrayMappedTrie() {
     this(null);
   }
 
-  PersistentHashArrayMappedTrie(Node<K,V> root) {
+  private PersistentHashArrayMappedTrie(Node<K,V> root) {
     this.root = root;
   }
 
@@ -64,8 +64,8 @@ public final class PersistentHashArrayMappedTrie<K,V> {
   // Not actually annotated to avoid depending on guava
   // @VisibleForTesting
   static final class Leaf<K,V> implements Node<K,V> {
-    final K key;
-    final V value;
+    private final K key;
+    private final V value;
 
     public Leaf(K key, V value) {
       this.key = key;
@@ -110,16 +110,16 @@ public final class PersistentHashArrayMappedTrie<K,V> {
     private final K[] keys;
     private final V[] values;
 
+    // Not actually annotated to avoid depending on guava
+    // @VisibleForTesting
     @SuppressWarnings("unchecked")
-    public CollisionLeaf(K key1, V value1, K key2, V value2) {
+    CollisionLeaf(K key1, V value1, K key2, V value2) {
       this((K[]) new Object[] {key1, key2}, (V[]) new Object[] {value1, value2});
       assert key1 != key2;
       assert key1.hashCode() == key2.hashCode();
     }
 
-    // Not actually annotated to avoid depending on guava
-    // @VisibleForTesting
-    CollisionLeaf(K[] keys, V[] values) {
+    private CollisionLeaf(K[] keys, V[] values) {
       this.keys = keys;
       this.values = values;
     }

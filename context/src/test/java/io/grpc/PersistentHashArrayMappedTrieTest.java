@@ -92,7 +92,7 @@ public class PersistentHashArrayMappedTrieTest {
     Object value2 = new Object();
     Object insertValue = new Object();
     CollisionLeaf<Key, Object> leaf =
-        new CollisionLeaf<Key, Object>(new Key[]{key1, key2}, new Object[]{value1, value2});
+        new CollisionLeaf<Key, Object>(key1, value1, key2, value2);
 
     Node<Key, Object> ret = leaf.put(insertKey, insertValue, insertKey.hashCode(), 0);
     assertTrue(ret instanceof CompressedIndex);
@@ -112,9 +112,7 @@ public class PersistentHashArrayMappedTrieTest {
     Key key = new Key(replaceKey.hashCode());
     Object value = new Object();
     CollisionLeaf<Key, Object> leaf =
-        new CollisionLeaf<Key, Object>(
-            new Key[]{replaceKey, key},
-            new Object[]{originalValue, value});
+        new CollisionLeaf<Key, Object>(replaceKey, originalValue, key, value);
     Object replaceValue = new Object();
     Node<Key, Object> ret = leaf.put(replaceKey, replaceValue, replaceKey.hashCode(), 0);
     assertTrue(ret instanceof CollisionLeaf);
@@ -134,7 +132,7 @@ public class PersistentHashArrayMappedTrieTest {
     Object value2 = new Object();
     Object value3 = new Object();
     CollisionLeaf<Key, Object> leaf =
-        new CollisionLeaf<Key, Object>(new Key[]{key1, key2}, new Object[]{value1, value2});
+        new CollisionLeaf<Key, Object>(key1, value1, key2, value2);
 
     Node<Key, Object> ret = leaf.put(key3, value3, key3.hashCode(), 0);
     assertTrue(ret instanceof CollisionLeaf);

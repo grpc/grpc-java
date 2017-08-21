@@ -759,7 +759,8 @@ public class ContextTest {
     StaticTestingClassLoader classLoader =
         new StaticTestingClassLoader(
             getClass().getClassLoader(),
-            Pattern.compile("(io\\.grpc\\.Context.*)|(io\\.grpc\\.ThreadLocalContextStorage.*)"));
+            Pattern.compile("(io\\.grpc\\.Context.*)|(io\\.grpc\\.ThreadLocalContextStorage.*)|"
+                + "(io\\.grpc\\.PersistentHashArrayMappedTrie)"));
     Class<?> runnable =
         classLoader.loadClass(LoadMeWithStaticTestingClassLoader.class.getName());
 
