@@ -173,8 +173,8 @@ public class PersistentHashArrayMappedTrieTest {
 
   @Test
   public void compressedIndex_combine_sameIndexBit() {
-    final Key key1 = new Key(1 << 5 | 1); // 5 bit regions: (1, 1)
-    final Key key2 = new Key(17 << 5 | 1); // 5 bit regions: (17, 1)
+    final Key key1 = new Key(17 << 5 | 1); // 5 bit regions: (17, 1)
+    final Key key2 = new Key(31 << 5 | 1); // 5 bit regions: (31, 1)
     final Object value1 = new Object();
     final Object value2 = new Object();
     Leaf<Key, Object> leaf1 = new Leaf<Key, Object>(key1, value1);
@@ -186,7 +186,7 @@ public class PersistentHashArrayMappedTrieTest {
         assertEquals(1, collisionInternal.values.length);
         CompressedIndex<Key, Object> collisionLeaf =
             (CompressedIndex<Key, Object>) collisionInternal.values[0];
-        assertEquals((1 << 17) | (1 << 1), collisionLeaf.bitmap);
+        assertEquals((1 << 31) | (1 << 17), collisionLeaf.bitmap);
         assertSame(value1, ret.get(key1, key1.hashCode(), 0));
         assertSame(value2, ret.get(key2, key2.hashCode(), 0));
       }
