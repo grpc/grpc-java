@@ -758,8 +758,7 @@ public class ContextTest {
   public void initContextWithCustomClassLoaderWithCustomLogger() throws Exception {
     StaticTestingClassLoader classLoader =
         new StaticTestingClassLoader(
-            getClass().getClassLoader(),
-            Pattern.compile("(io\\.grpc\\.[^.]+)"));
+            getClass().getClassLoader(), Pattern.compile("(io\\.grpc\\.[^.]+)"));
     Class<?> runnable =
         classLoader.loadClass(LoadMeWithStaticTestingClassLoader.class.getName());
 
