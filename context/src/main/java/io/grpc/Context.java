@@ -180,20 +180,20 @@ public class Context {
     return current;
   }
 
-  private final CancellableContext cancellableAncestor;
   private final boolean cascadesCancellation;
   private ArrayList<ExecutableListener> listeners;
   private CancellationListener parentListener = new ParentListener();
   private final boolean canBeCancelled;
+  final CancellableContext cancellableAncestor;
   final PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries;
 
   /**
    * Construct a context that cannot be cancelled and will not cascade cancellation from its parent.
    */
-  private Context(Context parent) {
-    cancellableAncestor = cancellableAncestor(parent);
+  private Context(PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries) {
+    cancellableAncestor = null;
     // Not inheriting cancellation implies not inheriting a deadline too.
-    keyValueEntries = parent.keyValueEntries.put(DEADLINE_KEY, null);
+    this.keyValueEntries = keyValueEntries.put(DEADLINE_KEY, null);
     cascadesCancellation = false;
     canBeCancelled = false;
   }
@@ -375,7 +375,7 @@ public class Context {
    * cancellation.
    */
   public Context fork() {
-    return new Context(this);
+    return new Context(keyValueEntries);
   }
 
   boolean canBeCancelled() {

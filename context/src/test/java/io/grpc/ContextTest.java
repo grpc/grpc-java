@@ -903,6 +903,32 @@ public class ContextTest {
     assertEquals(withCancellation, cancellableAncestor(grandChild));
   }
 
+  @Test
+  public void cancellableAncestorTree() {
+    Context base = Context.current();
+
+    Context blue = base.withValue(COLOR, "blue");
+    assertNull(blue.cancellableAncestor);
+    Context.CancellableContext cancellable = blue.withCancellation();
+    assertNull(cancellable.cancellableAncestor);
+    Context childOfCancel = cancellable.withValue(PET, "cat");
+    assertSame(cancellable, childOfCancel.cancellableAncestor);
+    Context grandChildOfCancel = childOfCancel.withValue(FOOD, "lasagna");
+    assertSame(cancellable, grandChildOfCancel.cancellableAncestor);
+
+    Context.CancellableContext cancellable2 = childOfCancel.withCancellation();
+    assertSame(cancellable, cancellable2.cancellableAncestor);
+    Context childOfCancellable2 = cancellable2.withValue(PET, "dog");
+    assertSame(cancellable2, childOfCancellable2.cancellableAncestor);
+  }
+
+  @Test
+  public void cancellableAncestorFork() {
+    Context.CancellableContext cancellable = Context.current().withCancellation();
+    Context fork = cancellable.fork();
+    assertNull(fork.cancellableAncestor);
+  }
+
   // UsedReflectively
   public static final class LoadMeWithStaticTestingClassLoader implements Runnable {
     @Override
