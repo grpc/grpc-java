@@ -63,7 +63,7 @@ public final class PersistentHashArrayMappedTrie<K,V> {
 
   // Not actually annotated to avoid depending on guava
   // @VisibleForTesting
-  static class Leaf<K,V> implements Node<K,V> {
+  static final class Leaf<K,V> implements Node<K,V> {
     final K key;
     final V value;
 
@@ -105,7 +105,7 @@ public final class PersistentHashArrayMappedTrie<K,V> {
 
   // Not actually annotated to avoid depending on guava
   // @VisibleForTesting
-  static class CollisionLeaf<K,V> implements Node<K,V> {
+  static final class CollisionLeaf<K,V> implements Node<K,V> {
     // All keys must have same hash, but not have the same reference
     private final K[] keys;
     private final V[] values;
@@ -182,7 +182,7 @@ public final class PersistentHashArrayMappedTrie<K,V> {
 
   // Not actually annotated to avoid depending on guava
   // @VisibleForTesting
-  static class CompressedIndex<K,V> implements Node<K,V> {
+  static final class CompressedIndex<K,V> implements Node<K,V> {
     private static final int BITS = 5;
     private static final int BITS_MASK = 0x1F;
 
