@@ -35,14 +35,14 @@ import org.junit.runners.JUnit4;
 public class ForwardingChannelBuilderTest {
   private final ManagedChannelBuilder<?> mockDelegate = mock(ManagedChannelBuilder.class);
 
-  @SuppressWarnings("rawtypes")
-  private final ForwardingChannelBuilder<?> testChannelBuilder =
-      new ForwardingChannelBuilder() {
-        @Override
-        protected ManagedChannelBuilder delegate() {
-          return mockDelegate;
-        }
-      };
+  private final ForwardingChannelBuilder<?> testChannelBuilder = new TestBuilder();
+
+  private final class TestBuilder extends ForwardingChannelBuilder<TestBuilder> {
+    @Override
+    protected ManagedChannelBuilder<?> delegate() {
+      return mockDelegate;
+    }
+  }
 
   @Test
   public void allBuilderMethodsForwarded() throws Exception {
