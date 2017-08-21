@@ -165,9 +165,6 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
         default:
           // Do nohting
       }
-      // TODO(zhangkun83): if switched away from GRPCLB, clear all GRPCLB states and shutdown all
-      // Subchannels so that when switched back to GRPCLB it will have a fresh start.
-      //
       // TODO(zhangkun83): intercept the Helper to transfer Subchannels created by the delegate
       // balancers to GRPCLB if their addresses re-appear in the first response from the
       // balancer.  It returns intercepted Subchannel that let GRPCLB to control whether shutdown()

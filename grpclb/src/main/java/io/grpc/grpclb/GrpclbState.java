@@ -132,6 +132,9 @@ final class GrpclbState {
     maybeUpdatePicker();
   }
 
+  /**
+   * Set the address of the balancer, and create connection if not yet connected.
+   */
   void setLbAddress(LbAddressGroup newLbAddressGroup) {
     lbAddressGroup = checkNotNull(newLbAddressGroup, "newLbAddressGroup");
     startLbComm();
@@ -155,6 +158,7 @@ final class GrpclbState {
   private void shutdownLbRpc() {
     if (lbStream != null) {
       lbStream.close(null);
+      // lbStream will be set to null in LbStream.cleanup()
     }
   }
 
