@@ -23,10 +23,12 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
 import io.netty.channel.ConnectTimeoutException;
+import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.AsciiString;
+import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -76,16 +78,21 @@ public class UtilsTest {
             new AsciiString(authority),
             new AsciiString(method),
             new AsciiString(userAgent));
+    DefaultHttp2Headers headers = new DefaultHttp2Headers();
+    for (Map.Entry<CharSequence, CharSequence> entry : output) {
+      headers.add(entry.getKey(), entry.getValue());
+    }
+
     // 7 reserved headers, 1 user header
-    assertEquals(7 + 1, output.size());
+    assertEquals(7 + 1, headers.size());
     // Check the 3 reserved headers that are non pseudo
     // Users can not create pseudo headers keys so no need to check for them here
     assertEquals(GrpcUtil.CONTENT_TYPE_GRPC,
-        output.get(GrpcUtil.CONTENT_TYPE_KEY.name()).toString());
-    assertEquals(userAgent, output.get(GrpcUtil.USER_AGENT_KEY.name()).toString());
-    assertEquals(GrpcUtil.TE_TRAILERS, output.get(GrpcUtil.TE_HEADER.name()).toString());
+        headers.get(GrpcUtil.CONTENT_TYPE_KEY.name()).toString());
+    assertEquals(userAgent, headers.get(GrpcUtil.USER_AGENT_KEY.name()).toString());
+    assertEquals(GrpcUtil.TE_TRAILERS, headers.get(GrpcUtil.TE_HEADER.name()).toString());
     // Check the user header is in tact
-    assertEquals(userValue, output.get(userKey.name()).toString());
+    assertEquals(userValue, headers.get(userKey.name()).toString());
   }
 
   @Test
@@ -98,10 +105,14 @@ public class UtilsTest {
     metaData.put(userKey, userValue);
 
     Http2Headers output = Utils.convertServerHeaders(metaData);
+    DefaultHttp2Headers headers = new DefaultHttp2Headers();
+    for (Map.Entry<CharSequence, CharSequence> entry : output) {
+      headers.add(entry.getKey(), entry.getValue());
+    }
     // 2 reserved headers, 1 user header
-    assertEquals(2 + 1, output.size());
+    assertEquals(2 + 1, headers.size());
     assertEquals(Utils.CONTENT_TYPE_GRPC.toString(),
-        output.get(GrpcUtil.CONTENT_TYPE_KEY.name()).toString());
+        headers.get(GrpcUtil.CONTENT_TYPE_KEY.name()).toString());
   }
 
   private static void assertStatusEquals(Status expected, Status actual) {

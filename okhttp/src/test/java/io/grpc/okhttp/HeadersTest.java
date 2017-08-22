@@ -16,8 +16,8 @@
 
 package io.grpc.okhttp;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 import io.grpc.Metadata;
 import io.grpc.internal.GrpcUtil;
@@ -38,12 +38,12 @@ public class HeadersTest {
 
 
     Metadata.Key<String> userKey = Metadata.Key.of("user-key", Metadata.ASCII_STRING_MARSHALLER);
-    String userValue =  "user-value";
+    String userValue = "user-value";
     metaData.put(userKey, userValue);
 
-    final String path = "//testServerice/test";
-    final String authority = "localhost";
-    final String userAgent = "useragent";
+    String path = "//testServerice/test";
+    String authority = "localhost";
+    String userAgent = "useragent";
 
     List<Header> headers = Headers.createRequestHeaders(metaData, path, authority, userAgent);
 
@@ -51,10 +51,10 @@ public class HeadersTest {
     assertEquals(7 + 1, headers.size());
     // Check the 3 reserved headers that are non pseudo
     // Users can not create pseudo headers keys so no need to check for them here
-    assertTrue(headers.contains(Headers.CONTENT_TYPE_HEADER));
-    assertTrue(headers.contains(new Header(GrpcUtil.USER_AGENT_KEY.name(), userAgent)));
-    assertTrue(headers.contains(new Header(GrpcUtil.TE_HEADER.name(), GrpcUtil.TE_TRAILERS)));
+    assertThat(headers).contains(Headers.CONTENT_TYPE_HEADER);
+    assertThat(headers).contains(new Header(GrpcUtil.USER_AGENT_KEY.name(), userAgent));
+    assertThat(headers).contains(new Header(GrpcUtil.TE_HEADER.name(), GrpcUtil.TE_TRAILERS));
     // Check the user header is in tact
-    assertTrue(headers.contains(new Header(userKey.name(), userValue)));
+    assertThat(headers).contains(new Header(userKey.name(), userValue));
   }
 }

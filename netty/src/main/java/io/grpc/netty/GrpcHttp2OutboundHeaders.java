@@ -81,21 +81,6 @@ final class GrpcHttp2OutboundHeaders extends AbstractHttp2Headers {
     return new Itr();
   }
 
-  /**
-   * Returns the first value whose key matches the input.
-   */
-  @Override
-  public CharSequence get(CharSequence name) {
-    Iterator<Entry<CharSequence, CharSequence>> iterator = iterator();
-    while (iterator.hasNext()) {
-      Entry<CharSequence, CharSequence> next = iterator.next();
-      if (next.getKey().toString().equals(name)) {
-        return next.getValue();
-      }
-    }
-    return null;
-  }
-
   @Override
   public int size() {
     return (normalHeaders.length + preHeaders.length) / 2;
