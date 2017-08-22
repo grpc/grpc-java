@@ -1,3 +1,19 @@
+/*
+ * Copyright 2017, gRPC Authors All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package io.grpc;
 
 import static junit.framework.TestCase.assertTrue;
@@ -76,7 +92,7 @@ public class PersistentHashArrayMappedTrieTest {
     Object value2 = new Object();
     Object insertValue = new Object();
     CollisionLeaf<Key, Object> leaf =
-        new CollisionLeaf<Key, Object>(new Key[]{key1, key2}, new Object[]{value1, value2});
+        new CollisionLeaf<Key, Object>(key1, value1, key2, value2);
 
     Node<Key, Object> ret = leaf.put(insertKey, insertValue, insertKey.hashCode(), 0);
     assertTrue(ret instanceof CompressedIndex);
@@ -96,9 +112,7 @@ public class PersistentHashArrayMappedTrieTest {
     Key key = new Key(replaceKey.hashCode());
     Object value = new Object();
     CollisionLeaf<Key, Object> leaf =
-        new CollisionLeaf<Key, Object>(
-            new Key[]{replaceKey, key},
-            new Object[]{originalValue, value});
+        new CollisionLeaf<Key, Object>(replaceKey, originalValue, key, value);
     Object replaceValue = new Object();
     Node<Key, Object> ret = leaf.put(replaceKey, replaceValue, replaceKey.hashCode(), 0);
     assertTrue(ret instanceof CollisionLeaf);
@@ -118,7 +132,7 @@ public class PersistentHashArrayMappedTrieTest {
     Object value2 = new Object();
     Object value3 = new Object();
     CollisionLeaf<Key, Object> leaf =
-        new CollisionLeaf<Key, Object>(new Key[]{key1, key2}, new Object[]{value1, value2});
+        new CollisionLeaf<Key, Object>(key1, value1, key2, value2);
 
     Node<Key, Object> ret = leaf.put(key3, value3, key3.hashCode(), 0);
     assertTrue(ret instanceof CollisionLeaf);
@@ -133,71 +147,54 @@ public class PersistentHashArrayMappedTrieTest {
 
   @Test
   public void compressedIndex_combine_differentIndexBit() {
-    Key key1 = new Key(7);
-    Key key2 = new Key(19);
-    Object value1 = new Object();
-    Object value2 = new Object();
+    final Key key1 = new Key(7);
+    final Key key2 = new Key(19);
+    final Object value1 = new Object();
+    final Object value2 = new Object();
     Leaf<Key, Object> leaf1 = new Leaf<Key, Object>(key1, value1);
     Leaf<Key, Object> leaf2 = new Leaf<Key, Object>(key2, value2);
-    // ordering should not matter
-    {
-      Node<Key, Object> ret =
-          CompressedIndex.combine(leaf1, key1.hashCode(), leaf2, key2.hashCode, 0);
-      CompressedIndex<Key, Object> collisionLeaf = (CompressedIndex<Key, Object>) ret;
-      assertEquals((1 << 7) | (1 << 19), collisionLeaf.bitmap);
-      assertEquals(2, collisionLeaf.values.length);
-      assertSame(value1, collisionLeaf.values[0].get(key1, key1.hashCode(), 0));
-      assertSame(value2, collisionLeaf.values[1].get(key2, key2.hashCode(), 0));
+    class Verifier {
+      private void verify(Node<Key, Object> ret) {
+        CompressedIndex<Key, Object> collisionLeaf = (CompressedIndex<Key, Object>) ret;
+        assertEquals((1 << 7) | (1 << 19), collisionLeaf.bitmap);
+        assertEquals(2, collisionLeaf.values.length);
+        assertSame(value1, collisionLeaf.values[0].get(key1, key1.hashCode(), 0));
+        assertSame(value2, collisionLeaf.values[1].get(key2, key2.hashCode(), 0));
 
-      assertSame(value1, ret.get(key1, key1.hashCode(), 0));
-      assertSame(value2, ret.get(key2, key2.hashCode(), 0));
+        assertSame(value1, ret.get(key1, key1.hashCode(), 0));
+        assertSame(value2, ret.get(key2, key2.hashCode(), 0));
+      }
     }
-    {
-      Node<Key, Object> ret =
-          CompressedIndex.combine(leaf2, key2.hashCode(), leaf1, key1.hashCode, 0);
-      assertTrue(ret instanceof CompressedIndex);
-      CompressedIndex<Key, Object> collisionLeaf = (CompressedIndex<Key, Object>) ret;
-      assertEquals((1 << 7) | (1 << 19), collisionLeaf.bitmap);
-      assertEquals(2, collisionLeaf.values.length);
-      assertSame(value1, collisionLeaf.values[0].get(key1, key1.hashCode(), 0));
-      assertSame(value2, collisionLeaf.values[1].get(key2, key2.hashCode(), 0));
 
-      assertSame(value1, ret.get(key1, key1.hashCode(), 0));
-      assertSame(value2, ret.get(key2, key2.hashCode(), 0));
-    }
+    Verifier verifier = new Verifier();
+    verifier.verify(CompressedIndex.combine(leaf1, key1.hashCode(), leaf2, key2.hashCode(), 0));
+    verifier.verify(CompressedIndex.combine(leaf2, key2.hashCode(), leaf1, key1.hashCode(), 0));
   }
 
   @Test
   public void compressedIndex_combine_sameIndexBit() {
-    Key key1 = new Key(1 << 5 | 1); // 5 bit regions: (1, 1)
-    Key key2 = new Key(17 << 5 | 1); // 5 bit regions: (17, 1)
-    Object value1 = new Object();
-    Object value2 = new Object();
+    final Key key1 = new Key(17 << 5 | 1); // 5 bit regions: (17, 1)
+    final Key key2 = new Key(31 << 5 | 1); // 5 bit regions: (31, 1)
+    final Object value1 = new Object();
+    final Object value2 = new Object();
     Leaf<Key, Object> leaf1 = new Leaf<Key, Object>(key1, value1);
     Leaf<Key, Object> leaf2 = new Leaf<Key, Object>(key2, value2);
-    // ordering should not matter
-    {
-      Node<Key, Object> ret =
-          CompressedIndex.combine(leaf1, key1.hashCode(), leaf2, key2.hashCode, 0);
-      CompressedIndex collisionInternal = (CompressedIndex) ret;
-      assertEquals(1 << 1, collisionInternal.bitmap);
-      assertEquals(1, collisionInternal.values.length);
-      CompressedIndex collisionLeaf = (CompressedIndex) collisionInternal.values[0];
-      assertEquals((1 << 17) | (1 << 1), collisionLeaf.bitmap);
-      assertSame(value1, ret.get(key1, key1.hashCode(), 0));
-      assertSame(value2, ret.get(key2, key2.hashCode(), 0));
+    class Verifier {
+      private void verify(Node<Key, Object> ret) {
+        CompressedIndex<Key, Object> collisionInternal = (CompressedIndex<Key, Object>) ret;
+        assertEquals(1 << 1, collisionInternal.bitmap);
+        assertEquals(1, collisionInternal.values.length);
+        CompressedIndex<Key, Object> collisionLeaf =
+            (CompressedIndex<Key, Object>) collisionInternal.values[0];
+        assertEquals((1 << 31) | (1 << 17), collisionLeaf.bitmap);
+        assertSame(value1, ret.get(key1, key1.hashCode(), 0));
+        assertSame(value2, ret.get(key2, key2.hashCode(), 0));
+      }
     }
-    {
-      Node<Key, Object> ret =
-          CompressedIndex.combine(leaf2, key2.hashCode(), leaf1, key1.hashCode, 0);
-      CompressedIndex collisionInternal = (CompressedIndex) ret;
-      assertEquals(1 << 1, collisionInternal.bitmap);
-      assertEquals(1, collisionInternal.values.length);
-      CompressedIndex collisionLeaf = (CompressedIndex) collisionInternal.values[0];
-      assertEquals((1 << 17) | (1 << 1), collisionLeaf.bitmap);
-      assertSame(value1, ret.get(key1, key1.hashCode(), 0));
-      assertSame(value2, ret.get(key2, key2.hashCode(), 0));
-    }
+
+    Verifier verifier = new Verifier();
+    verifier.verify(CompressedIndex.combine(leaf1, key1.hashCode(), leaf2, key2.hashCode, 0));
+    verifier.verify(CompressedIndex.combine(leaf2, key2.hashCode(), leaf1, key1.hashCode, 0));
   }
 
   /**

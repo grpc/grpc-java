@@ -699,8 +699,8 @@ public class Context {
         Context parent, Deadline deadline) {
       Deadline parentDeadline = DEADLINE_KEY.get(parent);
       return parentDeadline == null || deadline.isBefore(parentDeadline)
-          ? parent.keyValueEntries.put(DEADLINE_KEY, deadline) :
-          parent.keyValueEntries;
+          ? parent.keyValueEntries.put(DEADLINE_KEY, deadline)
+          : parent.keyValueEntries;
     }
 
     /**
