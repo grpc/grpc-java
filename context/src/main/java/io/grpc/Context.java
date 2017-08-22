@@ -206,7 +206,7 @@ public class Context {
     cancellableAncestor = cancellableAncestor(parent);
     this.keyValueEntries = keyValueEntries;
     cascadesCancellation = true;
-    canBeCancelled = cancellableAncestor != null && this.cancellableAncestor.canBeCancelled();
+    canBeCancelled = cancellableAncestor != null;
   }
 
   /**
