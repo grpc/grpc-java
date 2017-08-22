@@ -185,11 +185,6 @@ class NettyClientHandler extends AbstractNettyHandler {
       }
 
       @Override
-      public void onStreamAdded(Http2Stream stream) {
-        NettyClientHandler.this.lifecycleManager.notifyInUse(true);
-      }
-
-      @Override
       public void onStreamRemoved(Http2Stream stream) {
         if (connection().numActiveStreams() == 0) {
           NettyClientHandler.this.lifecycleManager.notifyInUse(false);
@@ -198,8 +193,13 @@ class NettyClientHandler extends AbstractNettyHandler {
 
       @Override
       public void onStreamActive(Http2Stream stream) {
-        if (NettyClientHandler.this.keepAliveManager != null
-            && connection().numActiveStreams() == 1) {
+        if (connection().numActiveStreams() != 1) {
+          return;
+        }
+
+        NettyClientHandler.this.lifecycleManager.notifyInUse(true);
+
+        if (NettyClientHandler.this.keepAliveManager != null) {
           NettyClientHandler.this.keepAliveManager.onTransportActive();
         }
       }
