@@ -64,11 +64,11 @@ public class UtilsTest {
     metaData.put(GrpcUtil.TE_HEADER, "to-be-removed");
     metaData.put(userKey, userValue);
 
-    final String scheme = "https";
-    final String userAgent = "user-agent";
-    final String method = "POST";
-    final String authority = "authority";
-    final String path = "//testService/test";
+    String scheme = "https";
+    String userAgent = "user-agent";
+    String method = "POST";
+    String authority = "authority";
+    String path = "//testService/test";
 
     Http2Headers output =
         Utils.convertClientHeaders(
