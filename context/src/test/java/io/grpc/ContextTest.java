@@ -897,7 +897,7 @@ public class ContextTest {
   }
 
   @Test
-  public void cancellableAncestorTree() {
+  public void cancellableAncestorIntegrationTest() {
     Context base = Context.current();
 
     Context blue = base.withValue(COLOR, "blue");
