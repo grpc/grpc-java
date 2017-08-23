@@ -32,7 +32,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * A manipulable clock that provides a {@link ScheduledExecutorService} and a
+ * A clock that can be manually manipulated and provides a {@link ScheduledExecutorService} and a
  * {@link io.grpc.Deadline} factory. The clock only moves forward when {@link #forwardNanos(long)}
  * or {@link #forwardTime(long, TimeUnit)} is called.
  *
