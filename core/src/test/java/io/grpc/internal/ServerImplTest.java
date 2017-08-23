@@ -46,6 +46,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.Compressor;
 import io.grpc.Context;
+import io.grpc.FrozenClock;
 import io.grpc.Grpc;
 import io.grpc.HandlerRegistry;
 import io.grpc.IntegerMarshaller;
@@ -108,8 +109,8 @@ public class ServerImplTest {
   private static final Context.Key<String> SERVER_TRACER_ADDED_KEY = Context.key("tracer-added");
   private static final Context.CancellableContext SERVER_CONTEXT =
       Context.ROOT.withValue(SERVER_ONLY, "yes").withCancellation();
-  private static final FakeClock.TaskFilter CONTEXT_CLOSER_TASK_FITLER =
-      new FakeClock.TaskFilter() {
+  private static final FrozenClock.TaskFilter CONTEXT_CLOSER_TASK_FITLER =
+      new FrozenClock.TaskFilter() {
         @Override
         public boolean shouldRun(Runnable runnable) {
           return runnable instanceof ServerImpl.ContextCloser;
@@ -125,8 +126,8 @@ public class ServerImplTest {
     SERVER_CONTEXT.cancel(null);
   }
 
-  private final FakeClock executor = new FakeClock();
-  private final FakeClock timer = new FakeClock();
+  private final FrozenClock executor = new FrozenClock();
+  private final FrozenClock timer = new FrozenClock();
   @Mock
   private ServerStreamTracer.Factory streamTracerFactory;
   private List<ServerStreamTracer.Factory> streamTracerFactories;

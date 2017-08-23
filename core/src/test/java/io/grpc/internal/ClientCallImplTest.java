@@ -50,6 +50,7 @@ import io.grpc.Context;
 import io.grpc.Deadline;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
+import io.grpc.FrozenClock;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -86,7 +87,7 @@ import org.mockito.MockitoAnnotations;
 @RunWith(JUnit4.class)
 public class ClientCallImplTest {
 
-  private final FakeClock fakeClock = new FakeClock();
+  private final FrozenClock fakeClock = new FrozenClock();
   private final ScheduledExecutorService deadlineCancellationExecutor =
       fakeClock.getScheduledExecutorService();
   private final DecompressorRegistry decompressorRegistry =

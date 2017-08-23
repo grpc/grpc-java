@@ -57,6 +57,7 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.FrozenClock;
 import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -124,9 +125,9 @@ public class ManagedChannelImplTest {
   private URI expectedUri;
   private final SocketAddress socketAddress = new SocketAddress() {};
   private final EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(socketAddress);
-  private final FakeClock timer = new FakeClock();
-  private final FakeClock executor = new FakeClock();
-  private final FakeClock oobExecutor = new FakeClock();
+  private final FrozenClock timer = new FrozenClock();
+  private final FrozenClock executor = new FrozenClock();
+  private final FrozenClock oobExecutor = new FrozenClock();
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
@@ -442,7 +443,7 @@ public class ManagedChannelImplTest {
   public void callOptionsExecutor() {
     Metadata headers = new Metadata();
     ClientStream mockStream = mock(ClientStream.class);
-    FakeClock callExecutor = new FakeClock();
+    FrozenClock callExecutor = new FrozenClock();
     createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
 
     // Start a call with a call executor

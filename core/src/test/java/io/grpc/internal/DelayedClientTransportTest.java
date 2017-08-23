@@ -34,6 +34,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import io.grpc.CallOptions;
+import io.grpc.FrozenClock;
 import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -96,7 +97,7 @@ public class DelayedClientTransportTest {
   private final CallOptions callOptions = CallOptions.DEFAULT.withAuthority("dummy_value");
   private final CallOptions callOptions2 = CallOptions.DEFAULT.withAuthority("dummy_value2");
 
-  private final FakeClock fakeExecutor = new FakeClock();
+  private final FrozenClock fakeExecutor = new FrozenClock();
 
   private final DelayedClientTransport delayedTransport = new DelayedClientTransport(
       fakeExecutor.getScheduledExecutorService(), new ChannelExecutor());
@@ -315,7 +316,7 @@ public class DelayedClientTransportTest {
         failFastCallOptions);
 
     // Wait-for-ready streams
-    FakeClock wfr3Executor = new FakeClock();
+    FrozenClock wfr3Executor = new FrozenClock();
     DelayedStream wfr1 = (DelayedStream) delayedTransport.newStream(
         method, headers, waitForReadyCallOptions);
     PickSubchannelArgsImpl wfr1args = new PickSubchannelArgsImpl(method, headers,

@@ -26,6 +26,7 @@ import static org.junit.Assert.assertTrue;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.ConnectivityState;
+import io.grpc.FrozenClock;
 import java.util.LinkedList;
 import java.util.concurrent.Executor;
 import org.junit.Rule;
@@ -42,7 +43,7 @@ public class ConnectivityStateManagerTest {
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
 
-  private final FakeClock executor = new FakeClock();
+  private final FrozenClock executor = new FrozenClock();
   private final ConnectivityStateManager state = new ConnectivityStateManager();
   private final LinkedList<ConnectivityState> sink = new LinkedList<ConnectivityState>();
 

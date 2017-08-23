@@ -30,6 +30,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.FrozenClock;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.DnsNameResolver.DelegateResolver;
@@ -67,8 +68,8 @@ public class DnsNameResolverTest {
       Attributes.newBuilder().set(NameResolver.Factory.PARAMS_DEFAULT_PORT, DEFAULT_PORT).build();
 
   private final DnsNameResolverProvider provider = new DnsNameResolverProvider();
-  private final FakeClock fakeClock = new FakeClock();
-  private final FakeClock fakeExecutor = new FakeClock();
+  private final FrozenClock fakeClock = new FrozenClock();
+  private final FrozenClock fakeExecutor = new FrozenClock();
   private MockResolver mockResolver = new MockResolver();
   private final Resource<ScheduledExecutorService> fakeTimerServiceResource =
       new Resource<ScheduledExecutorService>() {

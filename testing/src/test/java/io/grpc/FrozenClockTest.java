@@ -14,28 +14,37 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
+package io.grpc;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import com.google.common.base.Stopwatch;
+import com.google.common.util.concurrent.MoreExecutors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link FakeClock}. */
+/** Unit tests for {@link FrozenClock}. */
 @RunWith(JUnit4.class)
-public class FakeClockTest {
+public class FrozenClockTest {
+  private FrozenClock fakeClock;
+
+  @Before
+  public void setUp() {
+    fakeClock = new FrozenClock();
+  }
 
   @Test
   public void testScheduledExecutorService_sameInstance() {
-    FakeClock fakeClock = new FakeClock();
     ScheduledExecutorService scheduledExecutorService1 = fakeClock.getScheduledExecutorService();
     ScheduledExecutorService scheduledExecutorService2 = fakeClock.getScheduledExecutorService();
     assertTrue(scheduledExecutorService1 == scheduledExecutorService2);
@@ -43,7 +52,6 @@ public class FakeClockTest {
 
   @Test
   public void testScheduledExecutorService_isDone() {
-    FakeClock fakeClock = new FakeClock();
     ScheduledFuture<?> future = fakeClock.getScheduledExecutorService()
         .schedule(newRunnable(), 100L, TimeUnit.NANOSECONDS);
 
@@ -56,7 +64,6 @@ public class FakeClockTest {
 
   @Test
   public void testScheduledExecutorService_cancel() {
-    FakeClock fakeClock = new FakeClock();
     ScheduledFuture<?> future = fakeClock.getScheduledExecutorService()
         .schedule(newRunnable(), 100L, TimeUnit.NANOSECONDS);
 
@@ -69,7 +76,6 @@ public class FakeClockTest {
 
   @Test
   public void testScheduledExecutorService_getDelay() {
-    FakeClock fakeClock = new FakeClock();
     ScheduledFuture<?> future = fakeClock.getScheduledExecutorService()
         .schedule(newRunnable(), 100L, TimeUnit.NANOSECONDS);
 
@@ -79,7 +85,7 @@ public class FakeClockTest {
 
   @Test
   public void testScheduledExecutorService_result() {
-    FakeClock fakeClock = new FakeClock();
+    FrozenClock fakeClock = new FrozenClock();
     final boolean[] result = new boolean[]{false};
     ScheduledFuture<?> unused = fakeClock.getScheduledExecutorService().schedule(
         new Runnable() {
@@ -97,7 +103,6 @@ public class FakeClockTest {
 
   @Test
   public void testStopWatch() {
-    FakeClock fakeClock = new FakeClock();
     Stopwatch stopwatch = fakeClock.getStopwatchSupplier().get();
     long expectedElapsedNanos = 0L;
 
@@ -125,7 +130,6 @@ public class FakeClockTest {
   @Test
   @SuppressWarnings("FutureReturnValueIgnored")
   public void testPendingAndDueTasks() {
-    FakeClock fakeClock = new FakeClock();
     ScheduledExecutorService scheduledExecutorService = fakeClock.getScheduledExecutorService();
 
     scheduledExecutorService.schedule(newRunnable(), 200L, TimeUnit.NANOSECONDS);
@@ -159,7 +163,6 @@ public class FakeClockTest {
 
   @Test
   public void testTaskFilter() {
-    FakeClock fakeClock = new FakeClock();
     ScheduledExecutorService scheduledExecutorService = fakeClock.getScheduledExecutorService();
     final AtomicBoolean selectedDone = new AtomicBoolean();
     final AtomicBoolean ignoredDone = new AtomicBoolean();
@@ -178,7 +181,7 @@ public class FakeClockTest {
     scheduledExecutorService.execute(selectedRunnable);
     scheduledExecutorService.execute(ignoredRunnable);
     assertEquals(2, fakeClock.numPendingTasks());
-    assertEquals(1, fakeClock.runDueTasks(new FakeClock.TaskFilter() {
+    assertEquals(1, fakeClock.runDueTasks(new FrozenClock.TaskFilter() {
       @Override
       public boolean shouldRun(Runnable runnable) {
         return runnable == selectedRunnable;
@@ -186,6 +189,32 @@ public class FakeClockTest {
     }));
     assertTrue(selectedDone.get());
     assertFalse(ignoredDone.get());
+  }
+
+  @Test
+  public void testDeadlineExpires() {
+    Deadline deadline = fakeClock.createDeadlineAfter(10, TimeUnit.MILLISECONDS);
+    assertFalse(deadline.isExpired());
+    fakeClock.forwardTime(9, TimeUnit.MILLISECONDS);
+    assertFalse(deadline.isExpired());
+    fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
+    assertTrue(deadline.isExpired());
+  }
+
+  @Test
+  public void testDeadlineExpirationListeners() {
+    Deadline deadline = fakeClock.createDeadlineAfter(10, TimeUnit.MILLISECONDS);
+    Context withDeadline = Context.current().withDeadline(
+        deadline, fakeClock.getScheduledExecutorService());
+    final AtomicReference<Context> cancelledContext = new AtomicReference<Context>();
+    withDeadline.addListener(new Context.CancellationListener() {
+      @Override
+      public void cancelled(Context context) {
+        cancelledContext.set(context);
+      }
+    }, MoreExecutors.directExecutor());
+    assertEquals(1, fakeClock.forwardTime(10, TimeUnit.MILLISECONDS));
+    assertSame(withDeadline, cancelledContext.get());
   }
 
   private Runnable newRunnable() {

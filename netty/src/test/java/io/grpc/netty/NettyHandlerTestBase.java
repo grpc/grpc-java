@@ -29,7 +29,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
-import io.grpc.internal.FakeClock;
+import io.grpc.FrozenClock;
 import io.grpc.internal.MessageFramer;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.WritableBuffer;
@@ -96,9 +96,9 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
    */
   protected void manualSetUp() throws Exception {}
 
-  private final FakeClock fakeClock = new FakeClock();
+  private final FrozenClock fakeClock = new FrozenClock();
 
-  FakeClock fakeClock() {
+  FrozenClock fakeClock() {
     return fakeClock;
   }
 

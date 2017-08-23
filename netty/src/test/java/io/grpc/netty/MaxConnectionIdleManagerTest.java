@@ -22,7 +22,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 
-import io.grpc.internal.FakeClock;
+import io.grpc.FrozenClock;
 import io.grpc.netty.MaxConnectionIdleManager.Ticker;
 import io.netty.channel.ChannelHandlerContext;
 import org.junit.Before;
@@ -35,7 +35,7 @@ import org.mockito.MockitoAnnotations;
 /** Unit tests for {@link MaxConnectionIdleManager}. */
 @RunWith(JUnit4.class)
 public class MaxConnectionIdleManagerTest {
-  private final FakeClock fakeClock = new FakeClock();
+  private final FrozenClock fakeClock = new FrozenClock();
   private final Ticker ticker = new Ticker() {
     @Override
     public long nanoTime() {

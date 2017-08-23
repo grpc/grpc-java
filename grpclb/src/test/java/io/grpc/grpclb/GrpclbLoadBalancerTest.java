@@ -53,6 +53,7 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.FrozenClock;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -69,7 +70,6 @@ import io.grpc.grpclb.GrpclbState.ErrorEntry;
 import io.grpc.grpclb.GrpclbState.RoundRobinPicker;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
-import io.grpc.internal.FakeClock;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.stub.StreamObserver;
@@ -107,7 +107,7 @@ public class GrpclbLoadBalancerTest {
   private LoadBalancerGrpc.LoadBalancerImplBase mockLbService;
   @Captor
   private ArgumentCaptor<StreamObserver<LoadBalanceResponse>> lbResponseObserverCaptor;
-  private final FakeClock fakeClock = new FakeClock();
+  private final FrozenClock fakeClock = new FrozenClock();
   private final LinkedList<StreamObserver<LoadBalanceRequest>> lbRequestObservers =
       new LinkedList<StreamObserver<LoadBalanceRequest>>();
   private final LinkedList<Subchannel> mockSubchannels = new LinkedList<Subchannel>();
@@ -574,7 +574,7 @@ public class GrpclbLoadBalancerTest {
 
     // Load reporting task is scheduled
     assertEquals(1, fakeClock.numPendingTasks());
-    FakeClock.ScheduledTask scheduledTask = fakeClock.getPendingTasks().iterator().next();
+    FrozenClock.ScheduledTask scheduledTask = fakeClock.getPendingTasks().iterator().next();
     assertEquals(1983, scheduledTask.getDelay(TimeUnit.MILLISECONDS));
 
     // Simulate an abundant LB initial response, with a different report interval
@@ -612,7 +612,7 @@ public class GrpclbLoadBalancerTest {
 
     // Load reporting task is scheduled
     assertEquals(1, fakeClock.numPendingTasks());
-    FakeClock.ScheduledTask scheduledTask = fakeClock.getPendingTasks().iterator().next();
+    FrozenClock.ScheduledTask scheduledTask = fakeClock.getPendingTasks().iterator().next();
     assertEquals(1983, scheduledTask.getDelay(TimeUnit.MILLISECONDS));
 
     // Close lbStream
