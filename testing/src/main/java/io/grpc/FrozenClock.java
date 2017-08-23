@@ -193,7 +193,7 @@ public final class FrozenClock {
   }
 
   /**
-   * Provides a partially implemented instance of {@link ScheduledExecutorService} that uses this
+   * Returns a partially implemented instance of {@link ScheduledExecutorService} that uses this
    * clock ticker for testing.
    *
    * <p>Only {@link ScheduledExecutorService#schedule(Runnable, long, TimeUnit)} and
@@ -218,11 +218,12 @@ public final class FrozenClock {
   }
 
   /**
-   * Returns a {@link Deadline} whose time is derived from this class, whose remaining time will
-   * not decrease until {@link #forwardTime(long, TimeUnit)} or {@link #forwardNanos(long)} is
-   * called. If the return value is to be passed into
+   * Returns a {@link Deadline} whose remaining time is controlled by this class.
+   *
+   * <p>If the deadline is to be passed into
    * {@link Context#withDeadline(Deadline, ScheduledExecutorService)}, then
-   * {@link #getScheduledExecutorService()} should be used as the executor.
+   * {@link #getScheduledExecutorService()} should be used as the executor to ensure deadline
+   * cancellations are not scheduled based on system time.
    */
   public Deadline createDeadlineAfter(int duration, TimeUnit unit) {
     return Deadline.after(duration, unit, deadlineTicker);

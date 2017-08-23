@@ -35,7 +35,7 @@ import org.junit.runners.JUnit4;
 
 /** Unit tests for {@link FrozenClock}. */
 @RunWith(JUnit4.class)
-public class FakeClockTest {
+public class FrozenClockTest {
   private FrozenClock fakeClock;
 
   @Before
