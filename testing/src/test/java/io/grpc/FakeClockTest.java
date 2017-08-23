@@ -192,7 +192,7 @@ public class FakeClockTest {
   }
 
   @Test
-  public void deadlineExpires() {
+  public void testDeadlineExpires() {
     Deadline deadline = fakeClock.createDeadlineAfter(10, TimeUnit.MILLISECONDS);
     assertFalse(deadline.isExpired());
     fakeClock.forwardTime(9, TimeUnit.MILLISECONDS);
@@ -202,7 +202,7 @@ public class FakeClockTest {
   }
 
   @Test
-  public void deadlineExpirationNotifies() {
+  public void testDeadlineExpirationListeners() {
     Deadline deadline = fakeClock.createDeadlineAfter(10, TimeUnit.MILLISECONDS);
     Context withDeadline = Context.current().withDeadline(
         deadline, fakeClock.getScheduledExecutorService());
