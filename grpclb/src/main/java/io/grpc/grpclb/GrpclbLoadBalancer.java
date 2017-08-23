@@ -165,22 +165,6 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
         default:
           // Do nohting
       }
-      // TODO(zhangkun83): intercept the Helper to transfer Subchannels created by the delegate
-      // balancers to GRPCLB if their addresses re-appear in the first response from the
-      // balancer.  It returns intercepted Subchannel that let GRPCLB to control whether shutdown()
-      // is passed to the actual Subchannel.  It wraps the picker that unwrap Subchannels from
-      // the delegate, because the channel only accepts the original Subchannel.
-      //
-      // If fallback to RR happens after switching back to GRPCLB, maybe we don't want to
-      // reconnect the Subchannels for the RR delegate. We may just keep the delegate balancer
-      // unclosed to keep their Subchannels until balancer's first response arrives.
-      //  1. When fallback timer expires, feed the resolver-returned backend addresses to the RR
-      //     delegate, and use it as the current delegate.  If the RR delegate has Subchannels
-      //     from the last time it was used, they may be re-used as long as addresses match.
-      //  2. When first LB response arrives, set the current delegate to null, transfer any
-      //     re-usable Subchannels (same address) from the RR delegate, and shut down the RR
-      //     delegate.  The intercepted Helper returns interceptred Subchannels, which will not
-      //     actually shutdown the Subchannel if it's been transferred from RR delegate to GRPCLB.
     }
     lbPolicy = newLbPolicy;
   }

@@ -68,6 +68,8 @@ import javax.annotation.concurrent.NotThreadSafe;
  * GrpclbLoadBalancer switches to GRPCLB mode.  Closed and discarded when GrpclbLoadBalancer
  * switches away from GRPCLB mode.
  */
+// TODO(zhangkun83): round-robin on the backend list from the resolver if we don't get a server list
+// within a configurable timeout.
 @NotThreadSafe
 final class GrpclbState {
   private static final Logger logger = Logger.getLogger(GrpclbState.class.getName());
