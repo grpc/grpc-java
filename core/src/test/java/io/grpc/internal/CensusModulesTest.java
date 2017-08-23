@@ -48,6 +48,7 @@ import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
+import io.grpc.FrozenClock;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
@@ -138,7 +139,7 @@ public class CensusModulesTest {
           .setResponseMarshaller(MARSHALLER)
           .setFullMethodName("package1.service2/method3")
           .build();
-  private final FakeClock fakeClock = new FakeClock();
+  private final FrozenClock fakeClock = new FrozenClock();
   private final FakeStatsContextFactory statsCtxFactory = new FakeStatsContextFactory();
   private final Random random = new Random(1234);
   private final Span fakeClientParentSpan = MockableSpan.generateRandomSpan(random);

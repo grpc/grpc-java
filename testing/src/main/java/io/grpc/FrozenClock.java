@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
+package io.grpc;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
@@ -32,14 +32,17 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * A manipulated clock that exports a {@link Ticker} and a {@link ScheduledExecutorService}.
+ * A manipulable clock that provides a {@link ScheduledExecutorService} and a
+ * {@link io.grpc.Deadline} factory. The clock only moves forward when {@link #forwardNanos(long)}
+ * or {@link #forwardTime(long, TimeUnit)} is called.
  *
- * <p>To simulate the locking scenario of using real executors, it never runs tasks within {@code
- * schedule()} or {@code execute()}. Instead, you should call {@link #runDueTasks} in your test
- * method to run all due tasks. {@link #forwardTime} and {@link #forwardNanos} call {@link
- * #runDueTasks} automatically.
+ * <p>The {@link ScheduledExecutorService} only supports a limited set of methods. Due tasks will
+ * not execute until {@link #runDueTasks} is called, or if time is moved forward beyond their
+ * due time. If unit tests use {@link Context#withDeadline(Deadline, ScheduledExecutorService)} or
+ * {@link Context#withDeadlineAfter(long, TimeUnit, ScheduledExecutorService)}, then this is the
+ * executor that should be used.
  */
-public final class FakeClock {
+public final class FrozenClock {
 
   private final ScheduledExecutorService scheduledExecutorService = new ScheduledExecutorImpl();
 
@@ -53,6 +56,13 @@ public final class FakeClock {
         }
       };
 
+  private final Deadline.Ticker deadlineTicker = new Deadline.Ticker() {
+    @Override
+    public long read() {
+      return currentTimeNanos;
+    }
+  };
+
   private final Supplier<Stopwatch> stopwatchSupplier =
       new Supplier<Stopwatch>() {
         @Override public Stopwatch get() {
@@ -62,6 +72,9 @@ public final class FakeClock {
 
   private long currentTimeNanos;
 
+  /**
+   * A task that is scheduled to be run at some future time.
+   */
   public class ScheduledTask extends AbstractFuture<Void> implements ScheduledFuture<Void> {
     public final Runnable command;
     public final long dueTimeNanos;
@@ -180,25 +193,39 @@ public final class FakeClock {
   }
 
   /**
-   * Provides a partially implemented instance of {@link ScheduledExecutorService} that uses the
-   * fake clock ticker for testing.
+   * Provides a partially implemented instance of {@link ScheduledExecutorService} that uses this
+   * clock ticker for testing.
+   *
+   * <p>Only {@link ScheduledExecutorService#schedule(Runnable, long, TimeUnit)} and
+   * {@link ScheduledExecutorService#execute(Runnable)} are supported.
    */
   public ScheduledExecutorService getScheduledExecutorService() {
     return scheduledExecutorService;
   }
 
   /**
-   * Provides a stopwatch instance that uses the fake clock ticker.
+   * Provides a stopwatch instance that uses the clock ticker.
    */
   public Supplier<Stopwatch> getStopwatchSupplier() {
     return stopwatchSupplier;
   }
 
   /**
-   * Ticker of the FakeClock.
+   * Ticker of the clock.
    */
   public Ticker getTicker() {
     return ticker;
+  }
+
+  /**
+   * Returns a {@link Deadline} whose time is derived from this class, whose remaining time will
+   * not decrease until {@link #forwardTime(long, TimeUnit)} or {@link #forwardNanos(long)} is
+   * called. If the return value is to be passed into
+   * {@link Context#withDeadline(Deadline, ScheduledExecutorService)}, then
+   * {@link #getScheduledExecutorService()} should be used as the executor.
+   */
+  public Deadline createDeadlineAfter(int duration, TimeUnit unit) {
+    return Deadline.after(duration, unit, deadlineTicker);
   }
 
   /**
@@ -289,6 +316,9 @@ public final class FakeClock {
     return tasks.size();
   }
 
+  /**
+   * Returns the clock's current time in millis.
+   */
   public long currentTimeMillis() {
     // Normally millis and nanos are of different epochs. Add an offset to simulate that.
     return TimeUnit.NANOSECONDS.toMillis(currentTimeNanos + 123456789L);

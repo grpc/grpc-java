@@ -38,6 +38,7 @@ import static org.mockito.Mockito.when;
 
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.FrozenClock;
 import io.grpc.Status;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import java.net.SocketAddress;
@@ -68,9 +69,9 @@ public class InternalSubchannelTest {
   private static final Status SHUTDOWN_REASON = Status.UNAVAILABLE.withDescription("for test");
 
   // For scheduled executor
-  private final FakeClock fakeClock = new FakeClock();
+  private final FrozenClock fakeClock = new FrozenClock();
   // For channelExecutor
-  private final FakeClock fakeExecutor = new FakeClock();
+  private final FrozenClock fakeExecutor = new FrozenClock();
   private final ChannelExecutor channelExecutor = new ChannelExecutor();
 
   @Mock private BackoffPolicy mockBackoffPolicy1;
@@ -651,8 +652,8 @@ public class InternalSubchannelTest {
     assertExactCallbackInvokes("onStateChange:" + UNAVAILABLE_STATE);
 
     // Save the reconnectTask before shutting down
-    FakeClock.ScheduledTask reconnectTask = null;
-    for (FakeClock.ScheduledTask task : fakeClock.getPendingTasks()) {
+    FrozenClock.ScheduledTask reconnectTask = null;
+    for (FrozenClock.ScheduledTask task : fakeClock.getPendingTasks()) {
       if (task.command.toString().contains("EndOfCurrentBackoff")) {
         assertNull("There shouldn't be more than one reconnectTask", reconnectTask);
         assertFalse(task.isDone());

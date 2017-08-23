@@ -17,7 +17,7 @@
 package io.grpc.inprocess;
 
 import com.google.common.truth.Truth;
-import io.grpc.internal.FakeClock;
+import io.grpc.FrozenClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServerListener;
@@ -40,7 +40,7 @@ public class InProcessServerTest {
 
   @Test
   public void serverHoldsRefToScheduler() throws Exception {
-    final ScheduledExecutorService ses = new FakeClock().getScheduledExecutorService();
+    final ScheduledExecutorService ses = new FrozenClock().getScheduledExecutorService();
     class RefCountingObjectPool implements ObjectPool<ScheduledExecutorService> {
       private int count;
 

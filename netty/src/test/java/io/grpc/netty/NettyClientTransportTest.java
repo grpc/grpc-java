@@ -50,7 +50,7 @@ import io.grpc.StatusException;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
-import io.grpc.internal.FakeClock;
+import io.grpc.FrozenClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ServerListener;
@@ -392,7 +392,7 @@ public class NettyClientTransportTest {
     }
 
     final SettableFuture<Object> pingResult = SettableFuture.create();
-    FakeClock clock = new FakeClock();
+    FrozenClock clock = new FrozenClock();
     ClientTransport.PingCallback pingCallback = new ClientTransport.PingCallback() {
       @Override
       public void onSuccess(long roundTripTimeNanos) {

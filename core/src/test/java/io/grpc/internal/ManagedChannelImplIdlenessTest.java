@@ -37,6 +37,7 @@ import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.FrozenClock;
 import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -75,9 +76,9 @@ import org.mockito.MockitoAnnotations;
  */
 @RunWith(JUnit4.class)
 public class ManagedChannelImplIdlenessTest {
-  private final FakeClock timer = new FakeClock();
-  private final FakeClock executor = new FakeClock();
-  private final FakeClock oobExecutor = new FakeClock();
+  private final FrozenClock timer = new FrozenClock();
+  private final FrozenClock executor = new FrozenClock();
+  private final FrozenClock oobExecutor = new FrozenClock();
   private static final String AUTHORITY = "fakeauthority";
   private static final String USER_AGENT = "fakeagent";
   private static final long IDLE_TIMEOUT_SECONDS = 30;

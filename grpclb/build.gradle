@@ -15,6 +15,7 @@ dependencies {
             project(':grpc-stub'),
             libraries.protobuf
     testCompile libraries.truth,
+                project(':grpc-testing'),
                 project(':grpc-core').sourceSets.test.output
 }
 

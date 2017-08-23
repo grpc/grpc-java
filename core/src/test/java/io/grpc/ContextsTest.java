@@ -28,7 +28,6 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import io.grpc.internal.FakeClock;
 import io.grpc.internal.NoopServerCall;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -213,7 +212,7 @@ public class ContextsTest {
 
   @Test
   public void statusFromCancelled_TimeoutExceptionShouldMapToDeadlineExceeded() {
-    FakeClock fakeClock = new FakeClock();
+    FrozenClock fakeClock = new FrozenClock();
     Context.CancellableContext cancellableContext = Context.current()
         .withDeadlineAfter(100, TimeUnit.NANOSECONDS, fakeClock.getScheduledExecutorService());
     fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
