@@ -96,9 +96,6 @@ final class GrpclbState {
       Attributes.Key.of("io.grpc.grpclb.GrpclbLoadBalancer.stateInfo");
 
   @Nullable
-  private LbAddressGroup lbAddressGroup;
-
-  @Nullable
   private ManagedChannel lbCommChannel;
 
   @Nullable
@@ -138,8 +135,7 @@ final class GrpclbState {
    * Set the address of the balancer, and create connection if not yet connected.
    */
   void setLbAddress(LbAddressGroup newLbAddressGroup) {
-    lbAddressGroup = checkNotNull(newLbAddressGroup, "newLbAddressGroup");
-    startLbComm();
+    startLbComm(newLbAddressGroup);
     // Avoid creating a new RPC just because the addresses were updated, as it can cause a
     // stampeding herd. The current RPC may be on a connection to an address not present in
     // newLbAddressGroups, but we're considering that "okay". If we detected the RPC is to an
@@ -164,7 +160,8 @@ final class GrpclbState {
     }
   }
 
-  private void startLbComm() {
+  private void startLbComm(LbAddressGroup lbAddressGroup) {
+    checkNotNull(lbAddressGroup, "lbAddressGroup");
     if (lbCommChannel == null) {
       lbCommChannel = helper.createOobChannel(
           lbAddressGroup.getAddresses(), lbAddressGroup.getAuthority());
