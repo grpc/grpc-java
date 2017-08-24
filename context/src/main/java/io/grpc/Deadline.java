@@ -34,11 +34,18 @@ public final class Deadline implements Comparable<Deadline> {
   /**
    * A {@link Ticker} that returns {@code System.nanoTime()};
    */
-  public static final Ticker SYSTEM_TICKER = new SystemTicker();
+  private static final Ticker SYSTEM_TICKER = new SystemTicker();
   // nanoTime has a range of just under 300 years. Only allow up to 100 years in the past or future
   // to prevent wraparound as long as process runs for less than ~100 years.
   private static final long MAX_OFFSET = TimeUnit.DAYS.toNanos(100 * 365);
   private static final long MIN_OFFSET = -MAX_OFFSET;
+
+  /**
+   * A {@link Context.Key} used to store the ticker in a context. This serves as a way to inject
+   * custom tickers into deadlines created by gRPC.
+   */
+  public static final Context.Key<Ticker> TICKER_KEY =
+      Context.keyWithDefault("deadline-ticker", SYSTEM_TICKER);
 
   /**
    * Create a deadline that will expire at the specified offset from the current system clock.
