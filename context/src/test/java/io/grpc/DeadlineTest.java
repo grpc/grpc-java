@@ -54,6 +54,7 @@ public class DeadlineTest {
   }
 
   private FakeTicker ticker = new FakeTicker();
+  private FakeTicker ticker2 = new FakeTicker();
 
   public DeadlineTest(long epoch) {
     ticker.reset(epoch);
@@ -243,13 +244,31 @@ public class DeadlineTest {
     Truth.assertThat(d1).isEquivalentAccordingToCompareTo(d2);
   }
 
+  @Test(expected = IllegalArgumentException.class)
+  public void throwWhenDifferentTickers_compareTo() {
+    Deadline.after(10, TimeUnit.SECONDS, ticker)
+        .compareTo(Deadline.after(10, TimeUnit.SECONDS, ticker2));
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void throwWhenDifferentTickers_isBefore() {
+    Deadline.after(10, TimeUnit.SECONDS, ticker)
+        .isBefore(Deadline.after(10, TimeUnit.SECONDS, ticker2));
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void throwWhenDifferentTickers_minimum() {
+    Deadline.after(10, TimeUnit.SECONDS, ticker)
+        .minimum(Deadline.after(10, TimeUnit.SECONDS, ticker2));
+  }
+
   @Test
   public void toString_before() {
     Deadline d = Deadline.after(12, TimeUnit.MICROSECONDS, ticker);
     assertEquals("12000 ns from now", d.toString());
   }
 
-  private static class FakeTicker extends Deadline.Ticker {
+  private static class FakeTicker implements Deadline.Ticker {
     private long time;
 
     @Override
