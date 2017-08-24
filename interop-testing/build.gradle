@@ -97,3 +97,30 @@ idea {
     sourceDirs += file("${projectDir}/src/generated/main/grpc")
   }
 }
+
+class LoadTest extends Test{
+  private numberOfClients = 1000
+
+  public LoadTest(){
+    super()
+    setTestNameIncludePatterns(
+        ['io.grpc.testing.integration.AutoWindowSizingOnTest.deadlineExceeded',
+         'io.grpc.testing.integration.Http2NettyLocalChannelTest.deadlineExceeded',
+         'io.grpc.testing.integration.Http2NettyTest.deadlineExceeded',
+         'io.grpc.testing.integration.InProcessTest.deadlineExceeded',
+         'io.grpc.testing.integration.TransportCompressionTest.deadlineExceeded'])
+  }
+  public FileTree getCandidateClassFiles() {
+    FileTree candidateTimes = super.getCandidateClassFiles()
+    for(int client  = 1; client<numberOfClients;client++){
+      candidateTimes = candidateTimes + super.getCandidateClassFiles()
+    }
+    return candidateTimes
+  }
+
+}
+
+task loadTest(type:LoadTest){
+}
+
+test.dependsOn loadTest
