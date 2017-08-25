@@ -199,8 +199,10 @@ public final class ServerReflectionGrpc {
     }
   }
 
-  private static class ServerReflectionFileDescriptorSupplier
+  private static abstract class ServerReflectionBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
+    ServerReflectionBaseDescriptorSupplier() {}
+
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.reflection.v1alpha.ServerReflectionProto.getDescriptor();
@@ -212,12 +214,17 @@ public final class ServerReflectionGrpc {
     }
   }
 
+  private static final class ServerReflectionFileDescriptorSupplier
+      extends ServerReflectionBaseDescriptorSupplier {
+    ServerReflectionFileDescriptorSupplier() {}
+  }
+
   private static final class ServerReflectionMethodDescriptorSupplier
-      extends ServerReflectionFileDescriptorSupplier
-        implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
+      extends ServerReflectionBaseDescriptorSupplier
+      implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
     private final String methodName;
 
-    private ServerReflectionMethodDescriptorSupplier(String methodName) {
+    ServerReflectionMethodDescriptorSupplier(String methodName) {
       this.methodName = methodName;
     }
 

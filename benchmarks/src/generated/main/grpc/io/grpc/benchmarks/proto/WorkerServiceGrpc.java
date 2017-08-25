@@ -396,8 +396,10 @@ public final class WorkerServiceGrpc {
     }
   }
 
-  private static class WorkerServiceFileDescriptorSupplier
+  private static abstract class WorkerServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
+    WorkerServiceBaseDescriptorSupplier() {}
+
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.benchmarks.proto.Services.getDescriptor();
@@ -409,12 +411,17 @@ public final class WorkerServiceGrpc {
     }
   }
 
+  private static final class WorkerServiceFileDescriptorSupplier
+      extends WorkerServiceBaseDescriptorSupplier {
+    WorkerServiceFileDescriptorSupplier() {}
+  }
+
   private static final class WorkerServiceMethodDescriptorSupplier
-      extends WorkerServiceFileDescriptorSupplier
-        implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
+      extends WorkerServiceBaseDescriptorSupplier
+      implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
     private final String methodName;
 
-    private WorkerServiceMethodDescriptorSupplier(String methodName) {
+    WorkerServiceMethodDescriptorSupplier(String methodName) {
       this.methodName = methodName;
     }
 

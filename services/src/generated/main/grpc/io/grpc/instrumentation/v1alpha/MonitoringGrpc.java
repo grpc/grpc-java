@@ -489,8 +489,10 @@ public final class MonitoringGrpc {
     }
   }
 
-  private static class MonitoringFileDescriptorSupplier
+  private static abstract class MonitoringBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
+    MonitoringBaseDescriptorSupplier() {}
+
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.instrumentation.v1alpha.MonitoringProto.getDescriptor();
@@ -502,12 +504,17 @@ public final class MonitoringGrpc {
     }
   }
 
+  private static final class MonitoringFileDescriptorSupplier
+      extends MonitoringBaseDescriptorSupplier {
+    MonitoringFileDescriptorSupplier() {}
+  }
+
   private static final class MonitoringMethodDescriptorSupplier
-      extends MonitoringFileDescriptorSupplier
-        implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
+      extends MonitoringBaseDescriptorSupplier
+      implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
     private final String methodName;
 
-    private MonitoringMethodDescriptorSupplier(String methodName) {
+    MonitoringMethodDescriptorSupplier(String methodName) {
       this.methodName = methodName;
     }
 

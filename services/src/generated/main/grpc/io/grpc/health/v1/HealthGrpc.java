@@ -207,8 +207,10 @@ public final class HealthGrpc {
     }
   }
 
-  private static class HealthFileDescriptorSupplier
+  private static abstract class HealthBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
+    HealthBaseDescriptorSupplier() {}
+
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.health.v1.HealthProto.getDescriptor();
@@ -220,12 +222,17 @@ public final class HealthGrpc {
     }
   }
 
+  private static final class HealthFileDescriptorSupplier
+      extends HealthBaseDescriptorSupplier {
+    HealthFileDescriptorSupplier() {}
+  }
+
   private static final class HealthMethodDescriptorSupplier
-      extends HealthFileDescriptorSupplier
-        implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
+      extends HealthBaseDescriptorSupplier
+      implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
     private final String methodName;
 
-    private HealthMethodDescriptorSupplier(String methodName) {
+    HealthMethodDescriptorSupplier(String methodName) {
       this.methodName = methodName;
     }
 

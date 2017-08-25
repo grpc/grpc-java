@@ -234,8 +234,10 @@ public final class DynamicServiceGrpc {
     }
   }
 
-  private static class DynamicServiceFileDescriptorSupplier
+  private static abstract class DynamicServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
+    DynamicServiceBaseDescriptorSupplier() {}
+
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.reflection.testing.DynamicReflectionTestProto.getDescriptor();
@@ -247,12 +249,17 @@ public final class DynamicServiceGrpc {
     }
   }
 
+  private static final class DynamicServiceFileDescriptorSupplier
+      extends DynamicServiceBaseDescriptorSupplier {
+    DynamicServiceFileDescriptorSupplier() {}
+  }
+
   private static final class DynamicServiceMethodDescriptorSupplier
-      extends DynamicServiceFileDescriptorSupplier
-        implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
+      extends DynamicServiceBaseDescriptorSupplier
+      implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
     private final String methodName;
 
-    private DynamicServiceMethodDescriptorSupplier(String methodName) {
+    DynamicServiceMethodDescriptorSupplier(String methodName) {
       this.methodName = methodName;
     }
 
