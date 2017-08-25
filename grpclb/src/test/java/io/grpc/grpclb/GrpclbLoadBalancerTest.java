@@ -1170,6 +1170,48 @@ public class GrpclbLoadBalancerTest {
   }
 
   @Test
+  public void grpclbFallbackToBackendsFromResolver() {
+    // Create a resolution list with a mixture of balancer and backend addresses
+    List<EquivalentAddressGroup> grpclbResolutionList =
+        createResolvedServerAddresses(false, true, false);
+    Attributes grpclbResolutionAttrs = Attributes.newBuilder()
+        .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.GRPCLB).build();
+    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+
+    assertSame(LbPolicy.GRPCLB, balancer.getLbPolicy());
+    verify(helper).createOobChannel(addrsEq(grpclbResolutionList.get(0)), eq(lbAuthority(0)));
+
+    // Attempted to connect to balancer
+    assertEquals(1, fakeOobChannels.size());
+    ManagedChannel oobChannel = fakeOobChannels.poll();
+    verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
+    verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
+                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            .build()));
+
+    // ... but haven't received the response, for now.
+    verifyNoMoreInteractions(helper);
+
+    // Let fallback timer expire
+    fakeClock.forwardTime(GrpclbState.FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+    // Fall back to the backends from resolver
+    verify(helper).createSubchannel(
+        eq(grpclbResolutionList.get(0)), any(Attributes.class));
+    verify(helper).createSubchannel(
+        eq(grpclbResolutionList.get(2)), any(Attributes.class));
+    
+    lbResponseObserver.onNext(buildInitialResponse());
+    
+    assertNull(balancer.getDelegate());
+
+  }
+
+  @Test
   public void grpclbMultipleAuthorities() throws Exception {
     List<EquivalentAddressGroup> grpclbResolutionList = Arrays.asList(
         new EquivalentAddressGroup(
