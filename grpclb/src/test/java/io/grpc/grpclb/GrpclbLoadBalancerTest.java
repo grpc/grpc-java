@@ -101,6 +101,13 @@ public class GrpclbLoadBalancerTest {
   private static final Attributes.Key<String> RESOLUTION_ATTR =
       Attributes.Key.of("resolution-attr");
   private static final String SERVICE_AUTHORITY = "api.google.com";
+  private static final FakeClock.TaskFilter LOAD_REPORTING_TASK_FILTER =
+      new FakeClock.TaskFilter() {
+        @Override
+        public boolean shouldAccept(Runnable command) {
+          return command instanceof GrpclbState.LoadReportingTask;
+        }
+      };
 
   @Mock
   private Helper helper;
@@ -356,11 +363,11 @@ public class GrpclbLoadBalancerTest {
             .build()));
 
     // Simulate receiving LB response
-    assertEquals(0, fakeClock.numPendingTasks());
+    assertEquals(0, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
     lbResponseObserver.onNext(buildInitialResponse(loadReportIntervalMillis));
 
     // Load reporting task is scheduled
-    assertEquals(1, fakeClock.numPendingTasks());
+    assertEquals(1, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
     assertEquals(0, fakeClock.runDueTasks());
 
     List<ServerEntry> backends = Arrays.asList(
@@ -569,18 +576,19 @@ public class GrpclbLoadBalancerTest {
     StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
 
     // Simulate LB initial response
-    assertEquals(0, fakeClock.numPendingTasks());
+    assertEquals(0, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
     lbResponseObserver.onNext(buildInitialResponse(1983));
 
     // Load reporting task is scheduled
-    assertEquals(1, fakeClock.numPendingTasks());
+    assertEquals(1, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
     FakeClock.ScheduledTask scheduledTask = fakeClock.getPendingTasks().iterator().next();
     assertEquals(1983, scheduledTask.getDelay(TimeUnit.MILLISECONDS));
 
     // Simulate an abundant LB initial response, with a different report interval
     lbResponseObserver.onNext(buildInitialResponse(9097));
     // It doesn't affect load-reporting at all
-    assertThat(fakeClock.getPendingTasks()).containsExactly(scheduledTask);
+    assertThat(fakeClock.getPendingTasks(LOAD_REPORTING_TASK_FILTER))
+        .containsExactly(scheduledTask);
     assertEquals(1983, scheduledTask.getDelay(TimeUnit.MILLISECONDS));
   }
 
@@ -607,11 +615,11 @@ public class GrpclbLoadBalancerTest {
             .build()));
 
     // Simulate receiving LB response
-    assertEquals(0, fakeClock.numPendingTasks());
+    assertEquals(0, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
     lbResponseObserver.onNext(buildInitialResponse(1983));
 
     // Load reporting task is scheduled
-    assertEquals(1, fakeClock.numPendingTasks());
+    assertEquals(1, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
     FakeClock.ScheduledTask scheduledTask = fakeClock.getPendingTasks().iterator().next();
     assertEquals(1983, scheduledTask.getDelay(TimeUnit.MILLISECONDS));
 
@@ -619,14 +627,14 @@ public class GrpclbLoadBalancerTest {
     lbResponseObserver.onCompleted();
 
     // Reporting task cancelled
-    assertEquals(0, fakeClock.numPendingTasks());
+    assertEquals(0, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
 
     // Simulate a race condition where the task has just started when its cancelled
     scheduledTask.command.run();
 
     // No report sent. No new task scheduled
     inOrder.verify(lbRequestObserver, never()).onNext(any(LoadBalanceRequest.class));
-    assertEquals(0, fakeClock.numPendingTasks());
+    assertEquals(0, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
   }
 
   private void assertNextReport(
