@@ -99,8 +99,6 @@ public class Context {
   private static final PersistentHashArrayMappedTrie<Key<?>, Object> EMPTY_ENTRIES =
       new PersistentHashArrayMappedTrie<Key<?>, Object>();
 
-  private static final Key<Deadline> DEADLINE_KEY = new Key<Deadline>("deadline");
-
   /**
    * The logical root context which is the ultimate ancestor of all contexts. This context
    * is not cancellable and so will not cascade cancellation or retain listeners.
@@ -108,7 +106,7 @@ public class Context {
    * <p>Never assume this is the default context for new threads, because {@link Storage} may define
    * a default context that is different from ROOT.
    */
-  public static final Context ROOT = new Context(null, EMPTY_ENTRIES, false, false);
+  public static final Context ROOT = new Context(null, EMPTY_ENTRIES);
 
   // Lazy-loaded storage. Delaying storage initialization until after class initialization makes it
   // much easier to avoid circular loading since there can still be references to Context as long as
@@ -179,10 +177,8 @@ public class Context {
     return current;
   }
 
-  private final boolean cascadesCancellation;
   private ArrayList<ExecutableListener> listeners;
   private CancellationListener parentListener = new ParentListener();
-  private final boolean canBeCancelled;
   final CancellableContext cancellableAncestor;
   final PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries;
 
@@ -191,10 +187,7 @@ public class Context {
    */
   private Context(PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries) {
     cancellableAncestor = null;
-    // Not inheriting cancellation implies not inheriting a deadline too.
-    this.keyValueEntries = keyValueEntries.put(DEADLINE_KEY, null);
-    cascadesCancellation = false;
-    canBeCancelled = false;
+    this.keyValueEntries = keyValueEntries;
   }
 
   /**
@@ -204,36 +197,6 @@ public class Context {
   private Context(Context parent, PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries) {
     cancellableAncestor = cancellableAncestor(parent);
     this.keyValueEntries = keyValueEntries;
-    cascadesCancellation = true;
-    canBeCancelled = cancellableAncestor != null;
-  }
-
-  /**
-   * Construct a context that can be cancelled and will cascade cancellation from its parent if
-   * it is cancellable.
-   */
-  private Context(
-      Context parent,
-      PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries,
-      boolean isCancellable) {
-    cancellableAncestor = cancellableAncestor(parent);
-    this.keyValueEntries = keyValueEntries;
-    cascadesCancellation = true;
-    canBeCancelled = isCancellable;
-  }
-
-  /**
-   * Constructs a context that can be arbitrarily configured.
-   */
-  private Context(
-      Context parent,
-      PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries,
-      boolean cascadesCancellation,
-      boolean isCancellable) {
-    cancellableAncestor = cancellableAncestor(parent);
-    this.keyValueEntries = keyValueEntries;
-    this.cascadesCancellation = cascadesCancellation;
-    canBeCancelled = isCancellable;
   }
 
   /**
@@ -378,9 +341,7 @@ public class Context {
   }
 
   boolean canBeCancelled() {
-    // A context is cancellable if it cascades from its parent and its parent is
-    // cancellable or is itself directly cancellable..
-    return canBeCancelled;
+    return cancellableAncestor != null;
   }
 
   /**
@@ -438,7 +399,7 @@ public class Context {
    * Is this context cancelled.
    */
   public boolean isCancelled() {
-    if (cancellableAncestor == null || !cascadesCancellation) {
+    if (cancellableAncestor == null) {
       return false;
     } else {
       return cancellableAncestor.isCancelled();
@@ -454,7 +415,7 @@ public class Context {
    * should generally assume that it has already been handled and logged properly.
    */
   public Throwable cancellationCause() {
-    if (cancellableAncestor == null || !cascadesCancellation) {
+    if (cancellableAncestor == null) {
       return null;
     } else {
       return cancellableAncestor.cancellationCause();
@@ -466,7 +427,10 @@ public class Context {
    * @return A {@link io.grpc.Deadline} or {@code null} if no deadline is set.
    */
   public Deadline getDeadline() {
-    return DEADLINE_KEY.get(this);
+    if (cancellableAncestor == null) {
+      return null;
+    }
+    return cancellableAncestor.getDeadline();
   }
 
   /**
@@ -476,7 +440,7 @@ public class Context {
                           final Executor executor) {
     checkNotNull(cancellationListener, "cancellationListener");
     checkNotNull(executor, "executor");
-    if (canBeCancelled) {
+    if (canBeCancelled()) {
       ExecutableListener executableListener =
           new ExecutableListener(executor, cancellationListener);
       synchronized (this) {
@@ -503,7 +467,7 @@ public class Context {
    * Remove a {@link CancellationListener}.
    */
   public void removeListener(CancellationListener cancellationListener) {
-    if (!canBeCancelled) {
+    if (!canBeCancelled()) {
       return;
     }
     synchronized (this) {
@@ -532,7 +496,7 @@ public class Context {
    * any reference to them so that they may be garbage collected.
    */
   void notifyAndClearListeners() {
-    if (!canBeCancelled) {
+    if (!canBeCancelled()) {
       return;
     }
     ArrayList<ExecutableListener> tmpListeners;
@@ -685,28 +649,19 @@ public class Context {
    */
   public static final class CancellableContext extends Context {
 
+    private final Deadline deadline;
+    private final Context uncancellableSurrogate;
+
     private boolean cancelled;
     private Throwable cancellationCause;
-    private final Context uncancellableSurrogate;
     private ScheduledFuture<?> pendingDeadline;
-
-    /**
-     * If the parent deadline is before the given deadline there is no need to install the value
-     * or listen for its expiration as the parent context will already be listening for it.
-     */
-    private static PersistentHashArrayMappedTrie<Key<?>, Object> deriveDeadline(
-        Context parent, Deadline deadline) {
-      Deadline parentDeadline = DEADLINE_KEY.get(parent);
-      return parentDeadline == null || deadline.isBefore(parentDeadline)
-          ? parent.keyValueEntries.put(DEADLINE_KEY, deadline)
-          : parent.keyValueEntries;
-    }
 
     /**
      * Create a cancellable context that does not have a deadline.
      */
     private CancellableContext(Context parent) {
-      super(parent, parent.keyValueEntries, true);
+      super(parent, parent.keyValueEntries);
+      deadline = parent.getDeadline();
       // Create a surrogate that inherits from this to attach so that you cannot retrieve a
       // cancellable context from Context.current()
       uncancellableSurrogate = new Context(this, keyValueEntries);
@@ -717,8 +672,13 @@ public class Context {
      */
     private CancellableContext(Context parent, Deadline deadline,
         ScheduledExecutorService scheduler) {
-      super(parent, deriveDeadline(parent, deadline), true);
-      if (DEADLINE_KEY.get(this) == deadline) {
+      super(parent, parent.keyValueEntries);
+      Deadline parentDeadline = parent.getDeadline();
+      if (parentDeadline != null && parentDeadline.compareTo(deadline) <= 0) {
+        // The new deadline won't have an effect, so ignore it
+        deadline = parentDeadline;
+      } else {
+        // The new deadline has an effect
         if (!deadline.isExpired()) {
           // The parent deadline was after the new deadline so we need to install a listener
           // on the new earlier deadline to trigger expiration for this context.
@@ -737,6 +697,7 @@ public class Context {
           cancel(new TimeoutException("context timed out"));
         }
       }
+      this.deadline = deadline;
       uncancellableSurrogate = new Context(this, keyValueEntries);
     }
 
@@ -828,6 +789,16 @@ public class Context {
         return cancellationCause;
       }
       return null;
+    }
+
+    @Override
+    public Deadline getDeadline() {
+      return deadline;
+    }
+
+    @Override
+    boolean canBeCancelled() {
+      return true;
     }
   }
 
@@ -1012,14 +983,14 @@ public class Context {
    * {@link #cancellableAncestor}.
    */
   static CancellableContext cancellableAncestor(Context parent) {
-    if (parent == null || !parent.canBeCancelled()) {
+    if (parent == null) {
       return null;
     }
     if (parent instanceof CancellableContext) {
       return (CancellableContext) parent;
     }
     // The parent simply cascades cancellations.
-    // Bypass the parent and reference the ancestor directly.
+    // Bypass the parent and reference the ancestor directly (may be null).
     return parent.cancellableAncestor;
   }
 }
