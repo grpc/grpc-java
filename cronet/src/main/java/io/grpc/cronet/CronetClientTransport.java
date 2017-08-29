@@ -107,7 +107,7 @@ class CronetClientTransport implements ConnectionClientTransport, WithLogId {
     final String defaultPath = "/" + method.getFullMethodName();
     final String url = "https://" + authority + defaultPath;
 
-    StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(callOptions, headers);
+    final StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(callOptions, headers);
     class StartCallback implements Runnable {
       final CronetClientStream clientStream = new CronetClientStream(
           url, userAgent, executor, headers, CronetClientTransport.this, this, lock, maxMessageSize,
@@ -156,20 +156,24 @@ class CronetClientTransport implements ConnectionClientTransport, WithLogId {
     return super.toString() + "(" + address + ")";
   }
 
-  @Override
   public void shutdown() {
+    shutdown(Status.UNAVAILABLE.withDescription("Transport stopped"));
+  }
+
+  @Override
+  public void shutdown(Status status) {
     synchronized (lock) {
       if (goAway) {
         return;
       }
     }
 
-    startGoAway(Status.UNAVAILABLE.withDescription("Transport stopped"));
+    startGoAway(status);
   }
 
   @Override
   public void shutdownNow(Status status) {
-    shutdown();
+    shutdown(status);
     ArrayList<CronetClientStream> streamsCopy;
     synchronized (lock) {
       // A copy is always necessary since cancel() can call finishStream() which calls

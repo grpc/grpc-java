@@ -225,15 +225,22 @@ class CronetClientStream extends AbstractClientStream {
 
     @GuardedBy("lock")
     @Override
-    protected void http2ProcessingFailed(Status status, Metadata trailers) {
+    protected void http2ProcessingFailed(Status status, boolean stopDelivery, Metadata trailers) {
       stream.cancel();
-      transportReportStatus(status, false, trailers);
+      transportReportStatus(status, stopDelivery, trailers);
     }
 
     @GuardedBy("lock")
     @Override
-    protected void deframeFailed(Throwable cause) {
-      http2ProcessingFailed(Status.fromThrowable(cause), new Metadata());
+    public void deframeFailed(Throwable cause) {
+      http2ProcessingFailed(Status.fromThrowable(cause), true, new Metadata());
+    }
+
+    @Override
+    public void runOnTransportThread(final Runnable r) {
+      synchronized (lock) {
+        r.run();
+      }
     }
 
     @GuardedBy("lock")
