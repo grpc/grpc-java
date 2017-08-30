@@ -23,6 +23,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.common.io.Closeables;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.CallOptions;
@@ -609,16 +610,7 @@ public final class GrpcUtil {
   static void closeQuietly(MessageProducer producer) {
     InputStream message;
     while ((message = producer.next()) != null) {
-      closeQuietly(message);
-    }
-  }
-
-  /** Closes an InputStream, ignoring IOExceptions. */
-  static void closeQuietly(InputStream message) {
-    try {
-      message.close();
-    } catch (IOException ioException) {
-      // do nothing
+      Closeables.closeQuietly(message);
     }
   }
 
