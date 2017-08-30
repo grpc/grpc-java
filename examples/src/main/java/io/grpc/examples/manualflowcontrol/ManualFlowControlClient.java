@@ -28,8 +28,6 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
@@ -38,7 +36,6 @@ public class ManualFlowControlClient {
         Logger.getLogger(ManualFlowControlClient.class.getName());
 
   public static void main(String[] args) throws InterruptedException {
-    final ExecutorService pool = Executors.newCachedThreadPool();
     final CountDownLatch done = new CountDownLatch(1);
 
     // Create a channel and a stub
@@ -65,8 +62,12 @@ public class ManualFlowControlClient {
             // Set up a back-pressure-aware producer for the request stream. The onReadyHandler will be invoked
             // when the consuming side has enough buffer space to receive more messages.
             //
-            // Note: the onReadyHandler is invoked by gRPC's internal thread pool. You can't block in this in
-            // method or deadlocks can occur.
+            // Messages are serialized into a transport-specific transmit buffer. Depending on the size of this buffer,
+            // MANY messages may be buffered, however, they haven't yet been sent to the server. The server must call
+            // request() to pull a buffered message from the client.
+            //
+            // Note: the onReadyHandler is invoked by gRPC's internal thread pool. You can't block here or deadlocks
+            // can occur.
             requestStream.setOnReadyHandler(new Runnable() {
               // An iterator is used so we can pause and resume iteration of the request data.
               Iterator<String> iterator = names().iterator();
@@ -74,32 +75,18 @@ public class ManualFlowControlClient {
               @Override
               public void run() {
                 // Start generating values from where we left off on a non-gRPC thread.
-                pool.execute(new Runnable() {
-                  @Override
-                  public void run() {
-                    // requestStream.isReady() will go false when the consuming side runs out of buffer space and
-                    // signals to slow down with back-pressure.
-                    while (requestStream.isReady()) {
-                      if (iterator.hasNext()) {
-                        // Simulate doing some work to generate the next value
-                        try {
-                          Thread.sleep(100);
-                        } catch (InterruptedException e) {
-                          e.printStackTrace();
-                        }
-
-                        // Send more messages if there are more messages to send.
-                        String name = iterator.next();
-                        logger.info("--> " + name);
-                        HelloRequest request = HelloRequest.newBuilder().setName(name).build();
-                        requestStream.onNext(request);
-                      } else {
-                        // Signal completion if there is nothing left to send.
-                        requestStream.onCompleted();
-                      }
-                    }
+                while (requestStream.isReady()) {
+                  if (iterator.hasNext()) {
+                      // Send more messages if there are more messages to send.
+                      String name = iterator.next();
+                      logger.info("--> " + name);
+                      HelloRequest request = HelloRequest.newBuilder().setName(name).build();
+                      requestStream.onNext(request);
+                  } else {
+                      // Signal completion if there is nothing left to send.
+                      requestStream.onCompleted();
                   }
-                });
+                }
               }
             });
           }
@@ -131,7 +118,6 @@ public class ManualFlowControlClient {
 
     channel.shutdown();
     channel.awaitTermination(1, TimeUnit.SECONDS);
-    pool.shutdown();
   }
 
   private static List<String> names() {
