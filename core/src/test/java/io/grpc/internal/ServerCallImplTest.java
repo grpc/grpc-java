@@ -54,7 +54,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 @RunWith(JUnit4.class)
@@ -180,12 +179,12 @@ public class ServerCallImplTest {
       }
     };
     MethodDescriptor<Long, Long> testableInputStreamMethod =
-      MethodDescriptor.<Long, Long>newBuilder()
-          .setType(MethodType.UNARY)
-          .setFullMethodName("/service/method")
-          .setRequestMarshaller(new LongMarshaller())
-          .setResponseMarshaller(marshaller)
-          .build();
+        MethodDescriptor.<Long, Long>newBuilder()
+            .setType(MethodType.UNARY)
+            .setFullMethodName("/service/method")
+            .setRequestMarshaller(new LongMarshaller())
+            .setResponseMarshaller(marshaller)
+            .build();
     ServerCallImpl<Long, Long> call = new ServerCallImpl<Long, Long>(
         stream,
         testableInputStreamMethod,

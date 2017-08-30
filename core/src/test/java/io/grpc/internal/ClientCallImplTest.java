@@ -938,11 +938,11 @@ public class ClientCallImplTest {
       }
     };
     MethodDescriptor<Void, Void> method = MethodDescriptor.<Void, Void>newBuilder()
-      .setType(MethodType.UNARY)
-      .setFullMethodName("service/method")
-      .setRequestMarshaller(marshaller)
-      .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
-      .build();
+        .setType(MethodType.UNARY)
+        .setFullMethodName("service/method")
+        .setRequestMarshaller(marshaller)
+        .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
+        .build();
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
         method, MoreExecutors.directExecutor(), baseCallOptions, provider,
         deadlineCancellationExecutor);
