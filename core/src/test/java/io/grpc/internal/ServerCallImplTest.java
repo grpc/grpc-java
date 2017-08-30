@@ -25,6 +25,7 @@ import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.isA;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -53,6 +54,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 @RunWith(JUnit4.class)
@@ -161,6 +163,39 @@ public class ServerCallImplTest {
     call.sendMessage(1234L);
 
     verify(stream).close(isA(Status.class), isA(Metadata.class));
+  }
+
+  @Test
+  public void sendMessage_closeMarshallerInputStream() throws Exception {
+    final InputStream mockInputStream = mock(InputStream.class);
+    Marshaller<Long> marshaller = new Marshaller<Long>() {
+      @Override
+      public InputStream stream(Long value) {
+        return mockInputStream;
+      }
+
+      @Override
+      public Long parse(InputStream stream) {
+        throw new UnsupportedOperationException();
+      }
+    };
+    MethodDescriptor<Long, Long> testableInputStreamMethod =
+      MethodDescriptor.<Long, Long>newBuilder()
+          .setType(MethodType.UNARY)
+          .setFullMethodName("/service/method")
+          .setRequestMarshaller(new LongMarshaller())
+          .setResponseMarshaller(marshaller)
+          .build();
+    ServerCallImpl<Long, Long> call = new ServerCallImpl<Long, Long>(
+        stream,
+        testableInputStreamMethod,
+        requestHeaders,
+        context,
+        DecompressorRegistry.getDefaultInstance(),
+        CompressorRegistry.getDefaultInstance());
+    call.sendHeaders(new Metadata());
+    call.sendMessage(1L);
+    verify(mockInputStream, times(1)).close();
   }
 
   @Test

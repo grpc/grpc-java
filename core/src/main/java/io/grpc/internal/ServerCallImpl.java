@@ -24,6 +24,7 @@ import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.io.Closeables;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.Codec;
@@ -129,8 +130,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     }
 
     messageSent = true;
+    InputStream resp = null;
     try {
-      InputStream resp = method.streamResponse(message);
+      resp = method.streamResponse(message);
       stream.writeMessage(resp);
       stream.flush();
     } catch (RuntimeException e) {
@@ -140,6 +142,11 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
           Status.CANCELLED.withDescription("Server sendMessage() failed with Error"),
           new Metadata());
       throw e;
+    } catch (Throwable t) {
+      close(Status.fromThrowable(t), new Metadata());
+      throw new RuntimeException(t);
+    } finally {
+      Closeables.closeQuietly(resp);
     }
   }
 
@@ -251,7 +258,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
           try {
             listener.onMessage(call.method.parseRequest(message));
           } catch (Throwable t) {
-            GrpcUtil.closeQuietly(message);
+            Closeables.closeQuietly(message);
             throw t;
           }
           message.close();

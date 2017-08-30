@@ -30,6 +30,8 @@ import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.io.Closeables;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
@@ -425,6 +427,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     checkState(stream != null, "Not started");
     checkState(!cancelCalled, "call was cancelled");
     checkState(!halfCloseCalled, "call was half-closed");
+    InputStream messageIs = null;
     try {
       if (stream instanceof RetriableStream) {
         @SuppressWarnings("unchecked")
@@ -432,7 +435,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         retriableStream.sendMessage(message);
       } else {
         // TODO(notcarl): Find out if messageIs needs to be closed.
-        InputStream messageIs = method.streamRequest(message);
+        messageIs = method.streamRequest(message);
         stream.writeMessage(messageIs);
       }
     } catch (RuntimeException e) {
@@ -441,6 +444,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     } catch (Error e) {
       stream.cancel(Status.CANCELLED.withDescription("Client sendMessage() failed with Error"));
       throw e;
+    } finally {
+      Closeables.closeQuietly(messageIs);
     }
     // For unary requests, we don't flush since we know that halfClose should be coming soon. This
     // allows us to piggy-back the END_STREAM=true on the last message frame without opening the
