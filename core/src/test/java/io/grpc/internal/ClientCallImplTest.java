@@ -30,7 +30,6 @@ import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
@@ -53,7 +52,6 @@ import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
@@ -921,33 +919,6 @@ public class ClientCallImplTest {
     call.start(callListener, new Metadata());
 
     assertEquals(attrs, call.getAttributes());
-  }
-
-  @Test
-  public void sendMessage_closeMarshallerInputStream() throws Exception {
-    final InputStream mockInputStream = mock(InputStream.class);
-    Marshaller<Void> marshaller = new Marshaller<Void>() {
-      @Override
-      public InputStream stream(Void value) {
-        return mockInputStream;
-      }
-
-      @Override
-      public Void parse(InputStream stream) {
-        throw new UnsupportedOperationException();
-      }
-    };
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        TestMethodDescriptors.voidMethod().toBuilder().setRequestMarshaller(marshaller).build(),
-        MoreExecutors.directExecutor(),
-        baseCallOptions,
-        provider,
-        deadlineCancellationExecutor,
-        CallTracer.getDefaultFactory().create(),
-        false);
-    call.start(callListener, new Metadata());
-    call.sendMessage(null);
-    verify(mockInputStream, times(1)).close();
   }
 
   private static void assertTimeoutBetween(long timeout, long from, long to) {

@@ -25,7 +25,6 @@ import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.isA;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -163,34 +162,6 @@ public class ServerCallImplTest {
     call.sendMessage(1234L);
 
     verify(stream).close(isA(Status.class), isA(Metadata.class));
-  }
-
-  @Test
-  public void sendMessage_closeMarshallerInputStream() throws Exception {
-    final InputStream mockInputStream = mock(InputStream.class);
-    Marshaller<Void> marshaller = new Marshaller<Void>() {
-      @Override
-      public InputStream stream(Void value) {
-        return mockInputStream;
-      }
-
-      @Override
-      public Void parse(InputStream stream) {
-        throw new UnsupportedOperationException();
-      }
-    };
-    MethodDescriptor<Void, Void> testableInputStreamMethod =
-        TestMethodDescriptors.voidMethod().toBuilder().setResponseMarshaller(marshaller).build();
-    ServerCallImpl<Void, Void> call = new ServerCallImpl<Void, Void>(
-        stream,
-        testableInputStreamMethod,
-        requestHeaders,
-        context,
-        DecompressorRegistry.getDefaultInstance(),
-        CompressorRegistry.getDefaultInstance());
-    call.sendHeaders(new Metadata());
-    call.sendMessage(null);
-    verify(mockInputStream, times(1)).close();
   }
 
   @Test

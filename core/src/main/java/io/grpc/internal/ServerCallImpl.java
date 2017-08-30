@@ -129,9 +129,8 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     }
 
     messageSent = true;
-    InputStream resp = null;
     try {
-      resp = method.streamResponse(message);
+      InputStream resp = method.streamResponse(message);
       stream.writeMessage(resp);
       stream.flush();
     } catch (RuntimeException e) {
@@ -144,8 +143,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     } catch (Throwable t) {
       close(Status.fromThrowable(t), new Metadata());
       throw new RuntimeException(t);
-    } finally {
-      GrpcUtil.closeQuietly(resp);
     }
   }
 

@@ -425,7 +425,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     checkState(stream != null, "Not started");
     checkState(!cancelCalled, "call was cancelled");
     checkState(!halfCloseCalled, "call was half-closed");
-    InputStream messageIs = null;
     try {
       if (stream instanceof RetriableStream) {
         @SuppressWarnings("unchecked")
@@ -442,8 +441,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     } catch (Error e) {
       stream.cancel(Status.CANCELLED.withDescription("Client sendMessage() failed with Error"));
       throw e;
-    } finally {
-      GrpcUtil.closeQuietly(messageIs);
     }
     // For unary requests, we don't flush since we know that halfClose should be coming soon. This
     // allows us to piggy-back the END_STREAM=true on the last message frame without opening the
