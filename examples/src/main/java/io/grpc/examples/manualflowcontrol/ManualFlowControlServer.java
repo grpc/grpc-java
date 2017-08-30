@@ -30,8 +30,12 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.logging.Logger;
 
 public class ManualFlowControlServer {
+  private static final Logger logger =
+      Logger.getLogger(ManualFlowControlServer.class.getName());
+
   public static void main(String[] args) throws InterruptedException, IOException {
     final ExecutorService pool = Executors.newCachedThreadPool();
     final String COMPLETED = "COMPLETED";
@@ -79,13 +83,13 @@ public class ManualFlowControlServer {
                       }
 
                       String message = "Hello " + name;
-                      System.out.println("<-- " + message);
+                      logger.info("<-- " + message);
                       HelloReply reply = HelloReply.newBuilder().setMessage(message).build();
 
                       // Send a response.
                       responseObserver.onNext(reply);
                     } else {
-                      System.out.println("Done.");
+                      logger.info("Done.");
                       responseObserver.onCompleted();
                     }
                   }
@@ -103,7 +107,7 @@ public class ManualFlowControlServer {
             try {
               // Accept and enqueue the request.
               String name = request.getName();
-              System.out.println("--> " + name);
+              logger.info("--> " + name);
               work.add(name);
               // Signal the sender to send another request.
               serverCallStreamObserver.request(1);
@@ -135,12 +139,12 @@ public class ManualFlowControlServer {
         .build()
         .start();
 
-    System.out.println("Listening on " + server.getPort());
+    logger.info("Listening on " + server.getPort());
 
     Runtime.getRuntime().addShutdownHook(new Thread() {
       @Override
       public void run() {
-        System.out.println("Shutting down");
+        logger.info("Shutting down");
         server.shutdown();
       }
     });

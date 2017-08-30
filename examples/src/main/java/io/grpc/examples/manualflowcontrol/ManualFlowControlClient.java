@@ -31,8 +31,12 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 
 public class ManualFlowControlClient {
+    private static final Logger logger =
+        Logger.getLogger(ManualFlowControlClient.class.getName());
+
   public static void main(String[] args) throws InterruptedException {
     final ExecutorService pool = Executors.newCachedThreadPool();
     final CountDownLatch done = new CountDownLatch(1);
@@ -86,7 +90,7 @@ public class ManualFlowControlClient {
 
                         // Send more messages if there are more messages to send.
                         String name = iterator.next();
-                        System.out.println("--> " + name);
+                        logger.info("--> " + name);
                         HelloRequest request = HelloRequest.newBuilder().setName(name).build();
                         requestStream.onNext(request);
                       } else {
@@ -102,7 +106,7 @@ public class ManualFlowControlClient {
 
           @Override
           public void onNext(HelloReply value) {
-            System.out.println("<-- " + value.getMessage());
+            logger.info("<-- " + value.getMessage());
             // Signal the sender to send one message.
             requestStream.request(1);
           }
@@ -115,7 +119,7 @@ public class ManualFlowControlClient {
 
           @Override
           public void onCompleted() {
-            System.out.println("All Done");
+            logger.info("All Done");
             done.countDown();
           }
         };
