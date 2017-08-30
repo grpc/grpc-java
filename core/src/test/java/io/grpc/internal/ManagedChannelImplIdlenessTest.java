@@ -16,6 +16,8 @@
 
 package io.grpc.internal;
 
+import static io.grpc.ConnectivityState.READY;
+import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -57,7 +59,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
@@ -91,8 +92,6 @@ public class ManagedChannelImplIdlenessTest {
           .build();
 
   private final List<EquivalentAddressGroup> servers = Lists.newArrayList();
-  private final ObjectPool<ScheduledExecutorService> timerServicePool =
-      new FixedObjectPool<ScheduledExecutorService>(timer.getScheduledExecutorService());
   private final ObjectPool<Executor> executorPool =
       new FixedObjectPool<Executor>(executor.getScheduledExecutorService());
   private final ObjectPool<Executor> oobExecutorPool =
@@ -116,6 +115,8 @@ public class ManagedChannelImplIdlenessTest {
     when(mockNameResolverFactory
         .newNameResolver(any(URI.class), any(Attributes.class)))
         .thenReturn(mockNameResolver);
+    when(mockTransportFactory.getScheduledExecutorService())
+        .thenReturn(timer.getScheduledExecutorService());
 
     class Builder extends AbstractManagedChannelImplBuilder<Builder> {
       Builder(String target) {
@@ -139,7 +140,7 @@ public class ManagedChannelImplIdlenessTest {
     builder.executorPool = executorPool;
     channel = new ManagedChannelImpl(
         builder, mockTransportFactory, new FakeBackoffPolicyProvider(),
-        timerServicePool, oobExecutorPool, timer.getStopwatchSupplier(),
+        oobExecutorPool, timer.getStopwatchSupplier(),
         Collections.<ClientInterceptor>emptyList());
     newTransports = TestUtils.captureTransports(mockTransportFactory);
 
@@ -261,7 +262,7 @@ public class ManagedChannelImplIdlenessTest {
     SubchannelPicker mockPicker = mock(SubchannelPicker.class);
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
-    helper.updatePicker(mockPicker);
+    helper.updateBalancingState(READY, mockPicker);
     // Delayed transport creates real streams in the app executor
     executor.runDueTasks();
 
@@ -341,7 +342,7 @@ public class ManagedChannelImplIdlenessTest {
     SubchannelPicker failingPicker = mock(SubchannelPicker.class);
     when(failingPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withError(Status.UNAVAILABLE));
-    helper.updatePicker(failingPicker);
+    helper.updateBalancingState(TRANSIENT_FAILURE, failingPicker);
     executor.runDueTasks();
     verify(mockCallListener).onClose(same(Status.UNAVAILABLE), any(Metadata.class));
 

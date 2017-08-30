@@ -8,7 +8,7 @@ buildscript {
   dependencies {
     // ASSUMES GRADLE 2.12 OR HIGHER. Use plugin version 0.7.5 with earlier
     // gradle versions
-    classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.0'
+    classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.1'
   }
 }
 
@@ -22,9 +22,10 @@ repositories {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.5.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.7.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 
 dependencies {
+  compile "com.google.api.grpc:proto-google-common-protos:0.1.9"
   compile "io.grpc:grpc-netty:${grpcVersion}"
   compile "io.grpc:grpc-protobuf:${grpcVersion}"
   compile "io.grpc:grpc-stub:${grpcVersion}"
@@ -36,7 +37,7 @@ dependencies {
 
 protobuf {
   protoc {
-    artifact = 'com.google.protobuf:protoc:3.3.0'
+    artifact = 'com.google.protobuf:protoc:3.4.0'
   }
   plugins {
     grpc {

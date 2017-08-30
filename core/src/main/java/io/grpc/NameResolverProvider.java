@@ -43,14 +43,14 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
       NameResolver.Factory.PARAMS_DEFAULT_PORT;
 
   private static final List<NameResolverProvider> providers
-      = load(getCorrectClassLoader());
+      = load(NameResolverProvider.class.getClassLoader());
   private static final NameResolver.Factory factory = new NameResolverFactory(providers);
 
   @VisibleForTesting
   static List<NameResolverProvider> load(ClassLoader classLoader) {
     Iterable<NameResolverProvider> candidates;
     if (isAndroid()) {
-      candidates = getCandidatesViaHardCoded(classLoader);
+      candidates = getCandidatesViaHardCoded();
     } else {
       candidates = getCandidatesViaServiceLoader(classLoader);
     }
@@ -83,11 +83,13 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
    * be used on Android is free to be added here.
    */
   @VisibleForTesting
-  public static Iterable<NameResolverProvider> getCandidatesViaHardCoded(ClassLoader classLoader) {
+  public static Iterable<NameResolverProvider> getCandidatesViaHardCoded() {
+    // Class.forName(String) is used to remove the need for ProGuard configuration. Note that
+    // ProGuard does not detect usages of Class.forName(String, boolean, ClassLoader):
+    // https://sourceforge.net/p/proguard/bugs/418/
     List<NameResolverProvider> list = new ArrayList<NameResolverProvider>();
     try {
-      list.add(create(
-          Class.forName("io.grpc.internal.DnsNameResolverProvider", true, classLoader)));
+      list.add(create(Class.forName("io.grpc.internal.DnsNameResolverProvider")));
     } catch (ClassNotFoundException ex) {
       // ignore
     }
@@ -120,20 +122,11 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
     return new NameResolverFactory(providers);
   }
 
-  private static ClassLoader getCorrectClassLoader() {
-    if (isAndroid()) {
-      // When android:sharedUserId or android:process is used, Android will setup a dummy
-      // ClassLoader for the thread context (http://stackoverflow.com/questions/13407006),
-      // instead of letting users to manually set context class loader, we choose the
-      // correct class loader here.
-      return NameResolverProvider.class.getClassLoader();
-    }
-    return Thread.currentThread().getContextClassLoader();
-  }
-
   private static boolean isAndroid() {
     try {
-      Class.forName("android.app.Application", /*initialize=*/ false, null);
+      // Specify a class loader instead of null because we may be running under Robolectric
+      Class.forName("android.app.Application", /*initialize=*/ false,
+          NameResolverProvider.class.getClassLoader());
       return true;
     } catch (Exception e) {
       // If Application isn't loaded, it might as well not be Android.

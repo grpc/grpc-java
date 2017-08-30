@@ -78,7 +78,28 @@ would be used to create all `v0.7` tags (e.g. `v0.7.0`, `v0.7.1`).
    $ git checkout -b v$MAJOR.$MINOR.x master
    $ git push upstream v$MAJOR.$MINOR.x
    ```
-2. For `master`, change root build files to the next minor snapshot (e.g.
+2. Make sure you are [logged in](https://grpc-testing.appspot.com/manage) to
+   Jenkins, then make a [new release
+   job](https://grpc-testing.appspot.com/view/Releases/newJob)
+   * _Name_: gRPC-Java-$MAJOR.$MINOR-Windows
+   * _Copy from_: gRPC-Java-master-windows
+   * Click _OK_ button
+   * _Display Name_ under _Use custom workspace_ (not ~~Project
+     url~~): gRPC Java $MAJOR.$MINOR Windows
+   * Under _Source Code Management_, _Branches to build_'s
+   _Branch Specifier_: `*/v$MAJOR.$MINOR.x`
+   * Under _Build Triggers_, _Build periodically_: `H H * * H`
+   * Click _SAVE_ button
+   * Click _Build Now_
+   * Click on job #1, then _Console Output_. Verify the `git checkout` checked
+     out the correct commit
+3. Go to [Travis CI settings](https://travis-ci.org/grpc/grpc-java/settings) and
+   add a _Cron Job_:
+   * Branch: `v$MAJOR.$MINOR.x`
+   * Interval: `weekly`
+   * Options: `Do not run if there has been a build in the last 24h`
+   * Click _Add_ button
+4. For `master`, change root build files to the next minor snapshot (e.g.
    ``0.8.0-SNAPSHOT``).
 
    ```bash
@@ -89,14 +110,14 @@ would be used to create all `v0.7` tags (e.g. `v0.7.0`, `v0.7.1`).
    $ ./gradlew build
    $ git commit -a -m "Start $MAJOR.$((MINOR+1)).0 development cycle"
    ```
-3. Go through PR review and push the master branch to GitHub:
+5. Go through PR review and push the master branch to GitHub:
 
    ```bash
    $ git checkout master
    $ git merge --ff-only bump-version
    $ git push upstream master
    ```
-4. For vMajor.Minor.x branch, change `README.md` to refer to the next release
+6. For vMajor.Minor.x branch, change `README.md` to refer to the next release
    version. _Also_ update the version numbers for protoc if the protobuf library
    version was updated since the last release.
 
@@ -106,7 +127,7 @@ would be used to create all `v0.7` tags (e.g. `v0.7.0`, `v0.7.1`).
    $ ${EDITOR:-nano -w} README.md
    $ git commit -a -m "Update README to reference $MAJOR.$MINOR.$PATCH"
    ```
-5. Change root build files to remove "-SNAPSHOT" for the next release version
+7. Change root build files to remove "-SNAPSHOT" for the next release version
    (e.g. `0.7.0`). Commit the result and make a tag:
 
    ```bash
@@ -116,7 +137,7 @@ would be used to create all `v0.7` tags (e.g. `v0.7.0`, `v0.7.1`).
    $ git commit -a -m "Bump version to $MAJOR.$MINOR.$PATCH"
    $ git tag -a v$MAJOR.$MINOR.$PATCH -m "Version $MAJOR.$MINOR.$PATCH"
    ```
-6. Change root build files to the next snapshot version (e.g. `0.7.1-SNAPSHOT`).
+8. Change root build files to the next snapshot version (e.g. `0.7.1-SNAPSHOT`).
    Commit the result:
 
    ```bash
@@ -126,7 +147,7 @@ would be used to create all `v0.7` tags (e.g. `v0.7.0`, `v0.7.1`).
    $ ./gradlew build
    $ git commit -a -m "Bump version to $MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT"
    ```
-7. Go through PR review and push the release tag and updated release branch to
+9. Go through PR review and push the release tag and updated release branch to
    GitHub:
 
    ```bash
@@ -135,20 +156,6 @@ would be used to create all `v0.7` tags (e.g. `v0.7.0`, `v0.7.1`).
    $ git push upstream v$MAJOR.$MINOR.$PATCH
    $ git push upstream v$MAJOR.$MINOR.x
    ```
-8. Make sure you are [logged in](https://grpc-testing.appspot.com/manage) to
-   Jenkins, then make a [new release
-   job](https://grpc-testing.appspot.com/view/Releases/newJob)
-   * _Name_: gRPC-Java-$MAJOR.$MINOR-Windows
-   * _Copy from_: gRPC-Java-master-windows
-   * Click _OK_ button
-   * _Display Name_ under _Use custom workspace_ (not ~~Project
-     url~~): gRPC Java $MAJOR.$MINOR Windows
-   * Under _Source Code Management_, _Branches to build_'s
-   _Branch Specifier_: `*/v$MAJOR.$MINOR.x`
-   * Click _SAVE_ button
-   * Click _Build Now_
-   * Click on job #1, then _Console Output_. Verify the `git checkout` checked
-     out the correct commit
 
 Setup Build Environment
 ---------------------------
@@ -335,14 +342,14 @@ repository must first be `closed`, which will trigger several sanity checks
 on the repository. If this completes successfully, the repository can then
 be `released`, which will begin the process of pushing the new artifacts to
 Maven Central (the staging repository will be destroyed in the process). You can
-see the complete process for releasing to Maven Central on the [OSSRH site]
-(http://central.sonatype.org/pages/releasing-the-deployment.html).
+see the complete process for releasing to Maven Central on the [OSSRH
+site](http://central.sonatype.org/pages/releasing-the-deployment.html).
 
 Update README.md
 ----------------
-After waiting ~1 day and verifying that the release appears on [Maven Central]
-(http://mvnrepository.com/), cherry-pick the commit that updated the README into
-the master branch and go through review process.
+After waiting ~1 day and verifying that the release appears on [Maven
+Central](http://mvnrepository.com/), cherry-pick the commit that updated the
+README into the master branch and go through review process.
 
 ```
 $ git checkout -b bump-readme master
@@ -385,4 +392,4 @@ git commit -m "Javadoc for $MAJOR.$MINOR.$PATCH"
 ```
 
 Push gh-pages to the main repository and verify the current version is [live
-on grpc.io](http://www.grpc.io/grpc-java/javadoc/).
+on grpc.io](https://grpc.io/grpc-java/javadoc/).

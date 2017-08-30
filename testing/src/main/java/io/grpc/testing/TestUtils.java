@@ -53,6 +53,7 @@ import javax.security.auth.x500.X500Principal;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1791")
 public class TestUtils {
+  @Deprecated
   public static final String TEST_SERVER_HOST = "foo.test.google.fr";
 
   /**
@@ -92,7 +93,10 @@ public class TestUtils {
 
   /**
    * Creates a new {@link InetSocketAddress} that overrides the host with {@link #TEST_SERVER_HOST}.
+   *
+   * @deprecated Not for public use
    */
+  @Deprecated
   public static InetSocketAddress testServerAddress(String host, int port) {
     try {
       InetAddress inetAddress = InetAddress.getByName(host);
@@ -106,7 +110,10 @@ public class TestUtils {
   /**
    * Creates a new {@link InetSocketAddress} on localhost that overrides the host with
    * {@link #TEST_SERVER_HOST}.
+   *
+   * @deprecated Not for public use
    */
+  @Deprecated
   public static InetSocketAddress testServerAddress(int port) {
     try {
       InetAddress inetAddress = InetAddress.getByName("::1");
@@ -121,7 +128,10 @@ public class TestUtils {
    * Returns the ciphers preferred to use during tests. They may be chosen because they are widely
    * available or because they are fast. There is no requirement that they provide confidentiality
    * or integrity.
+   *
+   * @deprecated Not for public use
    */
+  @Deprecated
   public static List<String> preferredTestCiphers() {
     String[] ciphers;
     try {
@@ -145,7 +155,10 @@ public class TestUtils {
    * filesystem.
    *
    * @param name  name of a file in src/main/resources/certs.
+   *
+   * @deprecated Not for public use
    */
+  @Deprecated
   public static File loadCert(String name) throws IOException {
     InputStream in = new BufferedInputStream(TestUtils.class.getResourceAsStream("/certs/" + name));
     File tmpFile = File.createTempFile(name, "");
@@ -170,7 +183,10 @@ public class TestUtils {
    * Loads an X.509 certificate from the classpath resources in src/main/resources/certs.
    *
    * @param fileName  name of a file in src/main/resources/certs.
+   *
+   * @deprecated Not for public use
    */
+  @Deprecated
   public static X509Certificate loadX509Cert(String fileName)
       throws CertificateException, IOException {
     CertificateFactory cf = CertificateFactory.getInstance("X.509");
@@ -185,7 +201,10 @@ public class TestUtils {
 
   /**
    * Creates an SSLSocketFactory which contains {@code certChainFile} as its only root certificate.
+   *
+   * @deprecated Not for public use
    */
+  @Deprecated
   public static SSLSocketFactory newSslSocketFactoryForCa(Provider provider,
       File certChainFile) throws Exception {
     KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
@@ -208,7 +227,10 @@ public class TestUtils {
   /**
    * Sleeps for at least the specified time. When in need of a guaranteed sleep time, use this in
    * preference to {@code Thread.sleep} which might not sleep for the required time.
+   *
+   * @deprecated Not for public use
    */
+  @Deprecated
   public static void sleepAtLeast(long millis) throws InterruptedException {
     long delay = TimeUnit.MILLISECONDS.toNanos(millis);
     long end = System.nanoTime() + delay;

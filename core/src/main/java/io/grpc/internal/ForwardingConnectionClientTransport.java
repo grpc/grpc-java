@@ -30,8 +30,8 @@ abstract class ForwardingConnectionClientTransport implements ConnectionClientTr
   }
 
   @Override
-  public void shutdown() {
-    delegate().shutdown();
+  public void shutdown(Status status) {
+    delegate().shutdown(status);
   }
 
   @Override
@@ -43,11 +43,6 @@ abstract class ForwardingConnectionClientTransport implements ConnectionClientTr
   public ClientStream newStream(
       MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
     return delegate().newStream(method, headers, callOptions);
-  }
-
-  @Override
-  public ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers) {
-    return delegate().newStream(method, headers);
   }
 
   @Override

@@ -48,7 +48,7 @@ final class OobChannel extends ManagedChannel implements WithLogId {
   private static final Logger log = Logger.getLogger(OobChannel.class.getName());
 
   private InternalSubchannel subchannel;
-  private SubchannelImpl subchannelImpl;
+  private AbstractSubchannel subchannelImpl;
   private SubchannelPicker subchannelPicker;
 
   private final LogId logId = LogId.allocate(getClass().getName());
@@ -106,10 +106,10 @@ final class OobChannel extends ManagedChannel implements WithLogId {
   void setSubchannel(final InternalSubchannel subchannel) {
     log.log(Level.FINE, "[{0}] Created with [{1}]", new Object[] {this, subchannel});
     this.subchannel = subchannel;
-    subchannelImpl = new SubchannelImpl() {
+    subchannelImpl = new AbstractSubchannel() {
         @Override
         public void shutdown() {
-          subchannel.shutdown();
+          subchannel.shutdown(Status.UNAVAILABLE.withDescription("OobChannel is shutdown"));
         }
 
         @Override
@@ -179,7 +179,7 @@ final class OobChannel extends ManagedChannel implements WithLogId {
   @Override
   public ManagedChannel shutdown() {
     shutdown = true;
-    delayedTransport.shutdown();
+    delayedTransport.shutdown(Status.UNAVAILABLE.withDescription("OobChannel.shutdown() called"));
     return this;
   }
 

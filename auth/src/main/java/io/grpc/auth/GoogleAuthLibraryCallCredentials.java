@@ -69,6 +69,9 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
   }
 
   @Override
+  public void thisUsesUnstableApi() {}
+
+  @Override
   public void applyRequestMetadata(MethodDescriptor<?, ?> method, Attributes attrs,
       Executor appExecutor, final MetadataApplier applier) {
     String authority = checkNotNull(attrs.get(ATTR_AUTHORITY), "authority");
@@ -175,7 +178,7 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
   static JwtHelper createJwtHelperOrNull(ClassLoader loader) {
     Class<?> rawServiceAccountClass;
     try {
-      // Specify loader so it can be overriden in tests
+      // Specify loader so it can be overridden in tests
       rawServiceAccountClass
           = Class.forName("com.google.auth.oauth2.ServiceAccountCredentials", false, loader);
     } catch (ClassNotFoundException ex) {

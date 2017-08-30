@@ -55,6 +55,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
+import io.grpc.internal.testing.SingleMessageProducer;
 import io.grpc.testing.TestMethodDescriptors;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -183,7 +184,8 @@ public class ClientCallImplTest {
      * stream.  However, since the server closed it "first" the second exception is lost leading to
      * the call being counted as successful.
      */
-    streamListener.messageRead(new ByteArrayInputStream(new byte[]{}));
+    streamListener
+        .messagesAvailable(new SingleMessageProducer(new ByteArrayInputStream(new byte[]{})));
     streamListener.closed(Status.OK, new Metadata());
     executor.release();
 
@@ -466,8 +468,8 @@ public class ClientCallImplTest {
     ClientStreamListener listener = listenerArgumentCaptor.getValue();
     listener.onReady();
     listener.headersRead(new Metadata());
-    listener.messageRead(new ByteArrayInputStream(new byte[0]));
-    listener.messageRead(new ByteArrayInputStream(new byte[0]));
+    listener.messagesAvailable(new SingleMessageProducer(new ByteArrayInputStream(new byte[0])));
+    listener.messagesAvailable(new SingleMessageProducer(new ByteArrayInputStream(new byte[0])));
     listener.closed(Status.OK, new Metadata());
 
     assertTrue(latch.await(5, TimeUnit.SECONDS));
@@ -563,7 +565,8 @@ public class ClientCallImplTest {
         deadlineCancellationExecutor)
             .setDecompressorRegistry(decompressorRegistry);
     call.start(callListener, new Metadata());
-    verify(transport, times(0)).newStream(any(MethodDescriptor.class), any(Metadata.class));
+    verify(transport, times(0))
+        .newStream(any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class));
     verify(callListener, timeout(1000)).onClose(statusCaptor.capture(), any(Metadata.class));
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     verifyZeroInteractions(provider);
@@ -759,7 +762,8 @@ public class ClientCallImplTest {
     ClientStreamListener streamListener = listenerArgumentCaptor.getValue();
     streamListener.onReady();
     streamListener.headersRead(new Metadata());
-    streamListener.messageRead(new ByteArrayInputStream(new byte[0]));
+    streamListener
+        .messagesAvailable(new SingleMessageProducer(new ByteArrayInputStream(new byte[0])));
     verify(stream).cancel(statusCaptor.capture());
     Status status = statusCaptor.getValue();
     assertEquals(Status.CANCELLED.getCode(), status.getCode());

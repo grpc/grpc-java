@@ -22,9 +22,11 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.same;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -34,18 +36,35 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.Matchers;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 /** Unit tests for {@link Http2ClientStreamTransportState}. */
 @RunWith(JUnit4.class)
 public class Http2ClientStreamTransportStateTest {
+
+  private final Metadata.Key<String> testStatusMashaller =
+      InternalMetadata.keyOf(":status", Metadata.ASCII_STRING_MARSHALLER);
+
   @Mock private ClientStreamListener mockListener;
   @Captor private ArgumentCaptor<Status> statusCaptor;
 
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
+
+    doAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) throws Throwable {
+        StreamListener.MessageProducer producer =
+            (StreamListener.MessageProducer) invocation.getArguments()[0];
+        while (producer.next() != null) {}
+        return null;
+      }
+    }).when(mockListener).messagesAvailable(Matchers.<StreamListener.MessageProducer>any());
   }
 
   @Test
@@ -53,7 +72,7 @@ public class Http2ClientStreamTransportStateTest {
     BaseTransportState state = new BaseTransportState();
     state.setListener(mockListener);
     Metadata headers = new Metadata();
-    headers.put(Metadata.Key.of(":status", Metadata.ASCII_STRING_MARSHALLER), "200");
+    headers.put(testStatusMashaller, "200");
     headers.put(Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER),
         "application/grpc");
     state.transportHeadersReceived(headers);
@@ -67,7 +86,7 @@ public class Http2ClientStreamTransportStateTest {
     BaseTransportState state = new BaseTransportState();
     state.setListener(mockListener);
     Metadata headers = new Metadata();
-    headers.put(Metadata.Key.of(":status", Metadata.ASCII_STRING_MARSHALLER), "500");
+    headers.put(testStatusMashaller, "500");
     headers.put(Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER),
         "application/grpc");
     state.transportHeadersReceived(headers);
@@ -96,7 +115,7 @@ public class Http2ClientStreamTransportStateTest {
     BaseTransportState state = new BaseTransportState();
     state.setListener(mockListener);
     Metadata headers = new Metadata();
-    headers.put(Metadata.Key.of(":status", Metadata.ASCII_STRING_MARSHALLER), "200");
+    headers.put(testStatusMashaller, "200");
     headers.put(Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER), "text/html");
     state.transportHeadersReceived(headers);
     state.transportDataReceived(ReadableBuffers.empty(), true);
@@ -112,7 +131,7 @@ public class Http2ClientStreamTransportStateTest {
     BaseTransportState state = new BaseTransportState();
     state.setListener(mockListener);
     Metadata headers = new Metadata();
-    headers.put(Metadata.Key.of(":status", Metadata.ASCII_STRING_MARSHALLER), "401");
+    headers.put(testStatusMashaller, "401");
     headers.put(Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER), "text/html");
     state.transportHeadersReceived(headers);
     state.transportDataReceived(ReadableBuffers.empty(), true);
@@ -130,14 +149,14 @@ public class Http2ClientStreamTransportStateTest {
     state.setListener(mockListener);
 
     Metadata infoHeaders = new Metadata();
-    infoHeaders.put(Metadata.Key.of(":status", Metadata.ASCII_STRING_MARSHALLER), "100");
+    infoHeaders.put(testStatusMashaller, "100");
     state.transportHeadersReceived(infoHeaders);
     Metadata infoHeaders2 = new Metadata();
-    infoHeaders2.put(Metadata.Key.of(":status", Metadata.ASCII_STRING_MARSHALLER), "101");
+    infoHeaders2.put(testStatusMashaller, "101");
     state.transportHeadersReceived(infoHeaders2);
 
     Metadata headers = new Metadata();
-    headers.put(Metadata.Key.of(":status", Metadata.ASCII_STRING_MARSHALLER), "200");
+    headers.put(testStatusMashaller, "200");
     headers.put(Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER),
         "application/grpc");
     state.transportHeadersReceived(headers);
@@ -151,7 +170,7 @@ public class Http2ClientStreamTransportStateTest {
     BaseTransportState state = new BaseTransportState();
     state.setListener(mockListener);
     Metadata headers = new Metadata();
-    headers.put(Metadata.Key.of(":status", Metadata.ASCII_STRING_MARSHALLER), "200");
+    headers.put(testStatusMashaller, "200");
     headers.put(Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER),
         "application/grpc");
     state.transportHeadersReceived(headers);
@@ -170,7 +189,7 @@ public class Http2ClientStreamTransportStateTest {
     BaseTransportState state = new BaseTransportState();
     state.setListener(mockListener);
     Metadata headers = new Metadata();
-    headers.put(Metadata.Key.of(":status", Metadata.ASCII_STRING_MARSHALLER), "200");
+    headers.put(testStatusMashaller, "200");
     headers.put(Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER), "text/html");
     state.transportHeadersReceived(headers);
     Metadata headersAgain = new Metadata();
@@ -201,7 +220,7 @@ public class Http2ClientStreamTransportStateTest {
     BaseTransportState state = new BaseTransportState();
     state.setListener(mockListener);
     Metadata headers = new Metadata();
-    headers.put(Metadata.Key.of(":status", Metadata.ASCII_STRING_MARSHALLER), "200");
+    headers.put(testStatusMashaller, "200");
     headers.put(Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER), "text/html");
     state.transportHeadersReceived(headers);
     String testString = "This is a test";
@@ -216,7 +235,7 @@ public class Http2ClientStreamTransportStateTest {
     BaseTransportState state = new BaseTransportState();
     state.setListener(mockListener);
     Metadata trailers = new Metadata();
-    trailers.put(Metadata.Key.of(":status", Metadata.ASCII_STRING_MARSHALLER), "200");
+    trailers.put(testStatusMashaller, "200");
     trailers.put(Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER),
         "application/grpc");
     trailers.put(Metadata.Key.of("grpc-status", Metadata.ASCII_STRING_MARSHALLER), "0");
@@ -231,7 +250,7 @@ public class Http2ClientStreamTransportStateTest {
     BaseTransportState state = new BaseTransportState();
     state.setListener(mockListener);
     Metadata headers = new Metadata();
-    headers.put(Metadata.Key.of(":status", Metadata.ASCII_STRING_MARSHALLER), "200");
+    headers.put(testStatusMashaller, "200");
     headers.put(Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER),
         "application/grpc");
     state.transportHeadersReceived(headers);
@@ -248,7 +267,7 @@ public class Http2ClientStreamTransportStateTest {
     BaseTransportState state = new BaseTransportState();
     state.setListener(mockListener);
     Metadata trailers = new Metadata();
-    trailers.put(Metadata.Key.of(":status", Metadata.ASCII_STRING_MARSHALLER), "200");
+    trailers.put(testStatusMashaller, "200");
     trailers.put(Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER),
         "application/grpc");
     trailers.put(Metadata.Key.of("grpc-status", Metadata.ASCII_STRING_MARSHALLER), "1");
@@ -263,7 +282,7 @@ public class Http2ClientStreamTransportStateTest {
     BaseTransportState state = new BaseTransportState();
     state.setListener(mockListener);
     Metadata trailers = new Metadata();
-    trailers.put(Metadata.Key.of(":status", Metadata.ASCII_STRING_MARSHALLER), "401");
+    trailers.put(testStatusMashaller, "401");
     trailers.put(Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER),
         "application/grpc");
     state.transportTrailersReceived(trailers);
@@ -308,12 +327,12 @@ public class Http2ClientStreamTransportStateTest {
     BaseTransportState state = new BaseTransportState();
     state.setListener(mockListener);
     Metadata headers = new Metadata();
-    headers.put(Metadata.Key.of(":status", Metadata.ASCII_STRING_MARSHALLER), "200");
+    headers.put(testStatusMashaller, "200");
     headers.put(Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER),
         "application/grpc");
     state.transportHeadersReceived(headers);
     Metadata trailers = new Metadata();
-    trailers.put(Metadata.Key.of(":status", Metadata.ASCII_STRING_MARSHALLER), "401");
+    trailers.put(testStatusMashaller, "401");
     state.transportTrailersReceived(trailers);
 
     verify(mockListener).headersRead(headers);
@@ -327,14 +346,19 @@ public class Http2ClientStreamTransportStateTest {
     }
 
     @Override
-    protected void http2ProcessingFailed(Status status, Metadata trailers) {
-      transportReportStatus(status, false, trailers);
+    protected void http2ProcessingFailed(Status status, boolean stopDelivery, Metadata trailers) {
+      transportReportStatus(status, stopDelivery, trailers);
     }
 
     @Override
-    protected void deframeFailed(Throwable cause) {}
+    public void deframeFailed(Throwable cause) {}
 
     @Override
     public void bytesRead(int processedBytes) {}
+
+    @Override
+    public void runOnTransportThread(Runnable r) {
+      r.run();
+    }
   }
 }

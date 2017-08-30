@@ -36,16 +36,18 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.Status;
-import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
+import java.util.logging.Logger;
 
 final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
+  private static final Logger log = Logger.getLogger(ServerCallImpl.class.getName());
+
   @VisibleForTesting
-  static String TOO_MANY_RESPONSES = "Too many responses";
+  static final String TOO_MANY_RESPONSES = "Too many responses";
   @VisibleForTesting
-  static String MISSING_RESPONSE = "Completed without a response";
+  static final String MISSING_RESPONSE = "Completed without a response";
 
   private final ServerStream stream;
   private final MethodDescriptor<ReqT, RespT> method;
@@ -237,27 +239,27 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
     @SuppressWarnings("Finally") // The code avoids suppressing the exception thrown from try
     @Override
-    public void messageRead(final InputStream message) {
-      Throwable t = null;
+    public void messagesAvailable(final MessageProducer producer) {
+      if (call.cancelled) {
+        GrpcUtil.closeQuietly(producer);
+        return;
+      }
+
+      InputStream message;
       try {
-        if (call.cancelled) {
-          return;
-        }
-        listener.onMessage(call.method.parseRequest(message));
-      } catch (Throwable e) {
-        t = e;
-      } finally {
-        try {
-          message.close();
-        } catch (IOException e) {
-          throw new RuntimeException(e);
-        } finally {
-          if (t != null) {
-            // TODO(carl-mastrangelo): Maybe log e here.
-            MoreThrowables.throwIfUnchecked(t);
-            throw new RuntimeException(t);
+        while ((message = producer.next()) != null) {
+          try {
+            listener.onMessage(call.method.parseRequest(message));
+          } catch (Throwable t) {
+            GrpcUtil.closeQuietly(message);
+            throw t;
           }
+          message.close();
         }
+      } catch (Throwable t) {
+        GrpcUtil.closeQuietly(producer);
+        MoreThrowables.throwIfUnchecked(t);
+        throw new RuntimeException(t);
       }
     }
 

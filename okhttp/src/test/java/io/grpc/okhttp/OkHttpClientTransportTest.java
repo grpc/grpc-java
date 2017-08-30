@@ -27,6 +27,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
@@ -34,6 +35,7 @@ import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
+import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -48,6 +50,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.CallOptions;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -111,6 +114,7 @@ public class OkHttpClientTransportTest {
   private static final String ERROR_MESSAGE = "simulated error";
   // The gRPC header length, which includes 1 byte compression flag and 4 bytes message length.
   private static final int HEADER_LENGTH = 5;
+  private static final Status SHUTDOWN_REASON = Status.UNAVAILABLE.withDescription("for test");
 
   @Rule
   public Timeout globalTimeout = new Timeout(10 * 1000);
@@ -183,7 +187,8 @@ public class OkHttpClientTransportTest {
   public void testToString() throws Exception {
     InetSocketAddress address = InetSocketAddress.createUnresolved("hostname", 31415);
     clientTransport = new OkHttpClientTransport(
-        address, "hostname", null /* agent */, executor, null,
+        address, "hostname", null /* agent */, executor, /* sslSocketFactory */ null,
+        /* hostnameVerifier */null,
         Utils.convertSpec(OkHttpChannelBuilder.DEFAULT_CONNECTION_SPEC), DEFAULT_MAX_MESSAGE_SIZE,
         null, null, null, tooManyPingsRunnable);
     String s = clientTransport.toString();
@@ -197,7 +202,8 @@ public class OkHttpClientTransportTest {
     startTransport(3, null, true, 1, null);
 
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     stream.request(1);
     assertContainStream(3);
@@ -222,10 +228,12 @@ public class OkHttpClientTransportTest {
     initTransport();
     MockStreamListener listener1 = new MockStreamListener();
     MockStreamListener listener2 = new MockStreamListener();
-    OkHttpClientStream stream1 = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream1 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream1.start(listener1);
     stream1.request(1);
-    OkHttpClientStream stream2 = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream2 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream2.start(listener2);
     stream2.request(1);
     assertEquals(2, activeStreamCount());
@@ -254,7 +262,8 @@ public class OkHttpClientTransportTest {
   public void nextFrameThrowsError() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     stream.request(1);
     assertEquals(1, activeStreamCount());
@@ -274,7 +283,8 @@ public class OkHttpClientTransportTest {
   public void nextFrameReturnFalse() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     stream.request(1);
     frameReader.nextFrameAtEndOfStream();
@@ -291,7 +301,8 @@ public class OkHttpClientTransportTest {
     final int numMessages = 10;
     final String message = "Hello Client";
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     stream.request(numMessages);
     assertContainStream(3);
@@ -340,7 +351,8 @@ public class OkHttpClientTransportTest {
   public void invalidInboundHeadersCancelStream() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     stream.request(1);
     assertContainStream(3);
@@ -363,7 +375,8 @@ public class OkHttpClientTransportTest {
   public void invalidInboundTrailersPropagateToMetadata() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     stream.request(1);
     assertContainStream(3);
@@ -382,7 +395,8 @@ public class OkHttpClientTransportTest {
   public void readStatus() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     assertContainStream(3);
     frameHandler().headers(true, true, 3, 0, grpcResponseTrailers(), HeadersMode.HTTP_20_HEADERS);
@@ -395,7 +409,8 @@ public class OkHttpClientTransportTest {
   public void receiveReset() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     assertContainStream(3);
     frameHandler().rstStream(3, ErrorCode.PROTOCOL_ERROR);
@@ -410,7 +425,8 @@ public class OkHttpClientTransportTest {
   public void cancelStream() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     getStream(3).cancel(Status.CANCELLED);
     verify(frameWriter, timeout(TIME_OUT_MS)).rstStream(eq(3), eq(ErrorCode.CANCEL));
@@ -424,7 +440,8 @@ public class OkHttpClientTransportTest {
   public void addDefaultUserAgent() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     Header userAgentHeader = new Header(GrpcUtil.USER_AGENT_KEY.name(),
             GrpcUtil.getGrpcUserAgent("okhttp", null));
@@ -442,7 +459,8 @@ public class OkHttpClientTransportTest {
   public void overrideDefaultUserAgent() throws Exception {
     startTransport(3, null, true, DEFAULT_MAX_MESSAGE_SIZE, "fakeUserAgent");
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     List<Header> expectedHeaders = Arrays.asList(SCHEME_HEADER, METHOD_HEADER,
         new Header(Header.TARGET_AUTHORITY, "notarealauthority:80"),
@@ -460,7 +478,8 @@ public class OkHttpClientTransportTest {
   public void cancelStreamForDeadlineExceeded() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     getStream(3).cancel(Status.DEADLINE_EXCEEDED);
     verify(frameWriter, timeout(TIME_OUT_MS)).rstStream(eq(3), eq(ErrorCode.CANCEL));
@@ -473,7 +492,8 @@ public class OkHttpClientTransportTest {
     initTransport();
     final String message = "Hello Server";
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     InputStream input = new ByteArrayInputStream(message.getBytes(UTF_8));
     assertEquals(12, input.available());
@@ -493,11 +513,13 @@ public class OkHttpClientTransportTest {
     initTransport();
     MockStreamListener listener1 = new MockStreamListener();
     MockStreamListener listener2 = new MockStreamListener();
-    OkHttpClientStream stream1 = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream1 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream1.start(listener1);
     stream1.request(2);
 
-    OkHttpClientStream stream2 = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream2 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream2.start(listener2);
     stream2.request(2);
     assertEquals(2, activeStreamCount());
@@ -557,7 +579,8 @@ public class OkHttpClientTransportTest {
   public void windowUpdateWithInboundFlowControl() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     int messageLength = Utils.DEFAULT_WINDOW_SIZE / 2 + 1;
     byte[] fakeMessage = new byte[messageLength];
@@ -589,7 +612,8 @@ public class OkHttpClientTransportTest {
   public void outboundFlowControl() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     // The first message should be sent out.
     int messageLength = Utils.DEFAULT_WINDOW_SIZE / 2 + 1;
@@ -625,7 +649,8 @@ public class OkHttpClientTransportTest {
   public void outboundFlowControlWithInitialWindowSizeChange() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     int messageLength = 20;
     setInitialWindowSize(HEADER_LENGTH + 10);
@@ -671,15 +696,17 @@ public class OkHttpClientTransportTest {
     initTransport();
     MockStreamListener listener1 = new MockStreamListener();
     MockStreamListener listener2 = new MockStreamListener();
-    OkHttpClientStream stream1 = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream1 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream1.start(listener1);
-    OkHttpClientStream stream2 = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream2 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream2.start(listener2);
     assertEquals(2, activeStreamCount());
-    clientTransport.shutdown();
+    clientTransport.shutdown(SHUTDOWN_REASON);
 
     assertEquals(2, activeStreamCount());
-    verify(transportListener).transportShutdown(isA(Status.class));
+    verify(transportListener).transportShutdown(same(SHUTDOWN_REASON));
 
     stream1.cancel(Status.CANCELLED);
     stream2.cancel(Status.CANCELLED);
@@ -699,10 +726,12 @@ public class OkHttpClientTransportTest {
     // start 2 streams.
     MockStreamListener listener1 = new MockStreamListener();
     MockStreamListener listener2 = new MockStreamListener();
-    OkHttpClientStream stream1 = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream1 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream1.start(listener1);
     stream1.request(1);
-    OkHttpClientStream stream2 = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream2 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream2.start(listener2);
     stream2.request(1);
     assertEquals(2, activeStreamCount());
@@ -757,7 +786,8 @@ public class OkHttpClientTransportTest {
     initTransport(startId);
 
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     stream.request(1);
 
@@ -792,10 +822,12 @@ public class OkHttpClientTransportTest {
     setMaxConcurrentStreams(1);
     final MockStreamListener listener1 = new MockStreamListener();
     final MockStreamListener listener2 = new MockStreamListener();
-    OkHttpClientStream stream1 = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream1 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream1.start(listener1);
     // The second stream should be pending.
-    OkHttpClientStream stream2 = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream2 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream2.start(listener2);
     String sentMessage = "hello";
     InputStream input = new ByteArrayInputStream(sentMessage.getBytes(UTF_8));
@@ -829,7 +861,8 @@ public class OkHttpClientTransportTest {
     initTransport();
     setMaxConcurrentStreams(0);
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     waitForStreamPending(1);
     stream.cancel(Status.CANCELLED);
@@ -847,10 +880,12 @@ public class OkHttpClientTransportTest {
     setMaxConcurrentStreams(1);
     final MockStreamListener listener1 = new MockStreamListener();
     final MockStreamListener listener2 = new MockStreamListener();
-    OkHttpClientStream stream1 = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream1 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream1.start(listener1);
     // The second stream should be pending.
-    OkHttpClientStream stream2 = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream2 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream2.start(listener2);
 
     waitForStreamPending(1);
@@ -875,11 +910,12 @@ public class OkHttpClientTransportTest {
     setMaxConcurrentStreams(0);
     final MockStreamListener listener = new MockStreamListener();
     // The second stream should be pending.
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     waitForStreamPending(1);
 
-    clientTransport.shutdown();
+    clientTransport.shutdown(SHUTDOWN_REASON);
     setMaxConcurrentStreams(1);
     verify(frameWriter, timeout(TIME_OUT_MS))
         .synStream(anyBoolean(), anyBoolean(), eq(3), anyInt(), anyListHeader());
@@ -898,13 +934,16 @@ public class OkHttpClientTransportTest {
     final MockStreamListener listener2 = new MockStreamListener();
     final MockStreamListener listener3 = new MockStreamListener();
 
-    OkHttpClientStream stream1 = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream1 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream1.start(listener1);
 
     // The second and third stream should be pending.
-    OkHttpClientStream stream2 = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream2 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream2.start(listener2);
-    OkHttpClientStream stream3 = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream3 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream3.start(listener3);
 
     waitForStreamPending(2);
@@ -927,7 +966,8 @@ public class OkHttpClientTransportTest {
   public void receivingWindowExceeded() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     stream.request(1);
 
@@ -978,7 +1018,8 @@ public class OkHttpClientTransportTest {
   private void shouldHeadersBeFlushed(boolean shouldBeFlushed) throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     verify(frameWriter, timeout(TIME_OUT_MS)).synStream(
         eq(false), eq(false), eq(3), eq(0), Matchers.anyListOf(Header.class));
@@ -994,7 +1035,8 @@ public class OkHttpClientTransportTest {
   public void receiveDataWithoutHeader() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     stream.request(1);
     Buffer buffer = createMessageFrame(new byte[1]);
@@ -1015,7 +1057,8 @@ public class OkHttpClientTransportTest {
   public void receiveDataWithoutHeaderAndTrailer() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     stream.request(1);
     Buffer buffer = createMessageFrame(new byte[1]);
@@ -1036,7 +1079,8 @@ public class OkHttpClientTransportTest {
   public void receiveLongEnoughDataWithoutHeaderAndTrailer() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     stream.request(1);
     Buffer buffer = createMessageFrame(new byte[1000]);
@@ -1056,7 +1100,8 @@ public class OkHttpClientTransportTest {
   public void receiveDataForUnknownStreamUpdateConnectionWindow() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     stream.cancel(Status.CANCELLED);
 
@@ -1082,7 +1127,8 @@ public class OkHttpClientTransportTest {
   public void receiveWindowUpdateForUnknownStream() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     stream.cancel(Status.CANCELLED);
     // This should be ignored.
@@ -1101,7 +1147,8 @@ public class OkHttpClientTransportTest {
   public void shouldBeInitiallyReady() throws Exception {
     initTransport();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     assertTrue(stream.isReady());
     assertTrue(listener.isOnReadyCalled());
@@ -1118,7 +1165,8 @@ public class OkHttpClientTransportTest {
         AbstractStream.TransportState.DEFAULT_ONREADY_THRESHOLD - HEADER_LENGTH - 1;
     setInitialWindowSize(0);
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     assertTrue(stream.isReady());
     // Be notified at the beginning.
@@ -1216,20 +1264,18 @@ public class OkHttpClientTransportTest {
     clientTransport.ping(callback, MoreExecutors.directExecutor());
     assertEquals(0, callback.invocationCount);
 
-    clientTransport.shutdown();
+    clientTransport.shutdown(SHUTDOWN_REASON);
     // ping failed on channel shutdown
     assertEquals(1, callback.invocationCount);
     assertTrue(callback.failureCause instanceof StatusException);
-    assertEquals(Status.Code.UNAVAILABLE,
-        ((StatusException) callback.failureCause).getStatus().getCode());
+    assertSame(SHUTDOWN_REASON, ((StatusException) callback.failureCause).getStatus());
 
     // now that handler is in terminal state, all future pings fail immediately
     callback = new PingCallbackImpl();
     clientTransport.ping(callback, MoreExecutors.directExecutor());
     assertEquals(1, callback.invocationCount);
     assertTrue(callback.failureCause instanceof StatusException);
-    assertEquals(Status.Code.UNAVAILABLE,
-        ((StatusException) callback.failureCause).getStatus().getCode());
+    assertSame(SHUTDOWN_REASON, ((StatusException) callback.failureCause).getStatus());
     shutdownAndVerify();
   }
 
@@ -1262,7 +1308,8 @@ public class OkHttpClientTransportTest {
     initTransportAndDelayConnected();
     final String message = "Hello Server";
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     InputStream input = new ByteArrayInputStream(message.getBytes(UTF_8));
     stream.writeMessage(input);
@@ -1287,7 +1334,8 @@ public class OkHttpClientTransportTest {
     initTransportAndDelayConnected();
     final String message = "Hello Server";
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     InputStream input = new ByteArrayInputStream(message.getBytes(UTF_8));
     stream.writeMessage(input);
@@ -1304,9 +1352,10 @@ public class OkHttpClientTransportTest {
   public void shutdownDuringConnecting() throws Exception {
     initTransportAndDelayConnected();
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
-    clientTransport.shutdown();
+    clientTransport.shutdown(SHUTDOWN_REASON);
     allowTransportConnected();
 
     // The new stream should be failed, but not the pending stream.
@@ -1327,6 +1376,7 @@ public class OkHttpClientTransportTest {
         "invalid_authority",
         "userAgent",
         executor,
+        null,
         null,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
@@ -1350,6 +1400,7 @@ public class OkHttpClientTransportTest {
         "userAgent",
         executor,
         null,
+        null,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
         null,
@@ -1366,7 +1417,7 @@ public class OkHttpClientTransportTest {
     assertTrue(status.getCause().toString(), status.getCause() instanceof IOException);
 
     MockStreamListener streamListener = new MockStreamListener();
-    clientTransport.newStream(method, new Metadata()).start(streamListener);
+    clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT).start(streamListener);
     streamListener.waitUntilStreamClosed();
     assertEquals(Status.UNAVAILABLE.getCode(), streamListener.status.getCode());
   }
@@ -1379,6 +1430,7 @@ public class OkHttpClientTransportTest {
         "authority",
         "userAgent",
         executor,
+        null,
         null,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
@@ -1429,6 +1481,7 @@ public class OkHttpClientTransportTest {
         "userAgent",
         executor,
         null,
+        null,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
         (InetSocketAddress) serverSocket.getLocalSocketAddress(),
@@ -1476,6 +1529,7 @@ public class OkHttpClientTransportTest {
         "authority",
         "userAgent",
         executor,
+        null,
         null,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
@@ -1571,7 +1625,8 @@ public class OkHttpClientTransportTest {
 
   private void assertNewStreamFail() throws Exception {
     MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream = clientTransport.newStream(method, new Metadata());
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     listener.waitUntilStreamClosed();
     assertFalse(listener.status.isOk());
@@ -1704,10 +1759,13 @@ public class OkHttpClientTransportTest {
     }
 
     @Override
-    public void messageRead(InputStream message) {
-      String msg = getContent(message);
-      if (msg != null) {
-        messages.add(msg);
+    public void messagesAvailable(MessageProducer producer) {
+      InputStream inputStream;
+      while ((inputStream = producer.next()) != null) {
+        String msg = getContent(inputStream);
+        if (msg != null) {
+          messages.add(msg);
+        }
       }
     }
 
@@ -1789,7 +1847,7 @@ public class OkHttpClientTransportTest {
   }
 
   private void shutdownAndVerify() {
-    clientTransport.shutdown();
+    clientTransport.shutdown(SHUTDOWN_REASON);
     assertEquals(0, activeStreamCount());
     try {
       verify(frameWriter, timeout(TIME_OUT_MS)).close();

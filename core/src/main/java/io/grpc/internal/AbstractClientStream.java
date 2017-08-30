@@ -16,9 +16,14 @@
 
 package io.grpc.internal;
 
+import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import io.grpc.Codec;
 import io.grpc.Compressor;
+import io.grpc.Decompressor;
+import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import java.io.InputStream;
@@ -111,6 +116,11 @@ public abstract class AbstractClientStream extends AbstractStream
     transportState().setMaxInboundMessageSize(maxSize);
   }
 
+  @Override
+  public final void setDecompressorRegistry(DecompressorRegistry decompressorRegistry) {
+    transportState().setDecompressorRegistry(decompressorRegistry);
+  }
+
   /** {@inheritDoc} */
   @Override
   protected abstract TransportState transportState();
@@ -172,8 +182,10 @@ public abstract class AbstractClientStream extends AbstractStream
     private final StatsTraceContext statsTraceCtx;
     private boolean listenerClosed;
     private ClientStreamListener listener;
+    private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
 
-    private Runnable deliveryStalledTask;
+    private boolean deframerClosed = false;
+    private Runnable deframerClosedTask;
 
     /**
      * Whether the stream is closed from the transport's perspective. This can differ from {@link
@@ -186,6 +198,12 @@ public abstract class AbstractClientStream extends AbstractStream
       this.statsTraceCtx = Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
     }
 
+    private void setDecompressorRegistry(DecompressorRegistry decompressorRegistry) {
+      Preconditions.checkState(this.listener == null, "Already called start");
+      this.decompressorRegistry =
+          Preconditions.checkNotNull(decompressorRegistry, "decompressorRegistry");
+    }
+
     @VisibleForTesting
     public final void setListener(ClientStreamListener listener) {
       Preconditions.checkState(this.listener == null, "Already called setListener");
@@ -193,16 +211,12 @@ public abstract class AbstractClientStream extends AbstractStream
     }
 
     @Override
-    public final void deliveryStalled() {
-      if (deliveryStalledTask != null) {
-        deliveryStalledTask.run();
-        deliveryStalledTask = null;
+    public void deframerClosed(boolean hasPartialMessageIgnored) {
+      deframerClosed = true;
+      if (deframerClosedTask != null) {
+        deframerClosedTask.run();
+        deframerClosedTask = null;
       }
-    }
-
-    @Override
-    public final void endOfStream() {
-      deliveryStalled();
     }
 
     @Override
@@ -218,6 +232,19 @@ public abstract class AbstractClientStream extends AbstractStream
     protected void inboundHeadersReceived(Metadata headers) {
       Preconditions.checkState(!statusReported, "Received headers on closed stream");
       statsTraceCtx.clientInboundHeaders();
+
+      Decompressor decompressor = Codec.Identity.NONE;
+      String encoding = headers.get(MESSAGE_ENCODING_KEY);
+      if (encoding != null) {
+        decompressor = decompressorRegistry.lookupDecompressor(encoding);
+        if (decompressor == null) {
+          deframeFailed(Status.INTERNAL.withDescription(
+              String.format("Can't find decompressor for %s", encoding)).asRuntimeException());
+          return;
+        }
+      }
+      setDecompressor(decompressor);
+
       listener().headersRead(headers);
     }
 
@@ -236,7 +263,7 @@ public abstract class AbstractClientStream extends AbstractStream
         }
 
         needToCloseFrame = false;
-        deframe(frame, false);
+        deframe(frame);
       } finally {
         if (needToCloseFrame) {
           frame.close();
@@ -284,18 +311,18 @@ public abstract class AbstractClientStream extends AbstractStream
       statusReported = true;
       onStreamDeallocated();
 
-      // If not stopping delivery, then we must wait until the deframer is stalled (i.e., it has no
-      // complete messages to deliver).
-      if (stopDelivery || isDeframerStalled()) {
-        deliveryStalledTask = null;
+      if (deframerClosed) {
+        deframerClosedTask = null;
         closeListener(status, trailers);
       } else {
-        deliveryStalledTask = new Runnable() {
-          @Override
-          public void run() {
-            closeListener(status, trailers);
-          }
-        };
+        deframerClosedTask =
+            new Runnable() {
+              @Override
+              public void run() {
+                closeListener(status, trailers);
+              }
+            };
+        closeDeframer(stopDelivery);
       }
     }
 
@@ -307,7 +334,6 @@ public abstract class AbstractClientStream extends AbstractStream
     private void closeListener(Status status, Metadata trailers) {
       if (!listenerClosed) {
         listenerClosed = true;
-        closeDeframer();
         statsTraceCtx.streamClosed(status);
         listener().closed(status, trailers);
       }

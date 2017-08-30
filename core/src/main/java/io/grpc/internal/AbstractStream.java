@@ -74,11 +74,6 @@ public abstract class AbstractStream implements Stream {
   }
 
   @Override
-  public final void setDecompressor(Decompressor decompressor) {
-    transportState().setDecompressor(checkNotNull(decompressor, "decompressor"));
-  }
-
-  @Override
   public boolean isReady() {
     if (framer().isClosed()) {
       return false;
@@ -100,17 +95,20 @@ public abstract class AbstractStream implements Stream {
    * Stream state as used by the transport. This should only called from the transport thread
    * (except for private interactions with {@code AbstractStream2}).
    */
-  public abstract static class TransportState implements MessageDeframer.Listener {
+  public abstract static class TransportState
+      implements ApplicationThreadDeframer.TransportExecutor, MessageDeframer.Listener {
     /**
      * The default number of queued bytes for a given stream, below which
      * {@link StreamListener#onReady()} will be called.
      */
     @VisibleForTesting
     public static final int DEFAULT_ONREADY_THRESHOLD = 32 * 1024;
+    private static final boolean DEFRAME_IN_APPLICATION_THREAD = false;
 
-    private final MessageDeframer deframer;
+    private final Deframer deframer;
     private final Object onReadyLock = new Object();
     private final StatsTraceContext statsTraceCtx;
+
     /**
      * The number of bytes currently queued, waiting to be sent. When this falls below
      * DEFAULT_ONREADY_THRESHOLD, {@link StreamListener#onReady()} will be called.
@@ -132,8 +130,20 @@ public abstract class AbstractStream implements Stream {
 
     protected TransportState(int maxMessageSize, StatsTraceContext statsTraceCtx) {
       this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
-      deframer = new MessageDeframer(
-          this, Codec.Identity.NONE, maxMessageSize, statsTraceCtx, getClass().getName());
+      if (DEFRAME_IN_APPLICATION_THREAD) {
+        deframer =
+            new ApplicationThreadDeframer(
+                this,
+                Codec.Identity.NONE,
+                maxMessageSize,
+                statsTraceCtx,
+                getClass().getName(),
+                this);
+      } else {
+        deframer =
+            new MessageDeframer(
+                this, Codec.Identity.NONE, maxMessageSize, statsTraceCtx, getClass().getName());
+      }
     }
 
     final void setMaxInboundMessageSize(int maxSize) {
@@ -146,56 +156,46 @@ public abstract class AbstractStream implements Stream {
     protected abstract StreamListener listener();
 
     @Override
-    public void messageRead(InputStream is) {
-      listener().messageRead(is);
+    public void messagesAvailable(StreamListener.MessageProducer producer) {
+      listener().messagesAvailable(producer);
     }
 
     /**
-     * Called when a {@link #deframe(ReadableBuffer, boolean)} operation failed.
-     *
-     * @param cause the actual failure
-     */
-    protected abstract void deframeFailed(Throwable cause);
-
-    /**
-     * Closes this deframer and frees any resources. After this method is called, additional calls
+     * Closes the deframer and frees any resources. After this method is called, additional calls
      * will have no effect.
+     *
+     * <p>When {@code stopDelivery} is false, the deframer will wait to close until any already
+     * queued messages have been delivered.
+     *
+     * <p>The deframer will invoke {@link #deframerClosed(boolean)} upon closing.
+     *
+     * @param stopDelivery interrupt pending deliveries and close immediately
      */
-    protected final void closeDeframer() {
-      deframer.close();
-    }
-
-    /**
-     * Indicates whether delivery is currently stalled, pending receipt of more data.
-     */
-    protected final boolean isDeframerStalled() {
-      return deframer.isStalled();
-    }
-
-    /**
-     * Called to parse a received frame and attempt delivery of any completed
-     * messages. Must be called from the transport thread.
-     */
-    protected final void deframe(ReadableBuffer frame, boolean endOfStream) {
-      if (deframer.isClosed()) {
-        frame.close();
-        return;
+    protected final void closeDeframer(boolean stopDelivery) {
+      if (stopDelivery) {
+        deframer.close();
+      } else {
+        deframer.closeWhenComplete();
       }
+    }
+
+    /**
+     * Called to parse a received frame and attempt delivery of any completed messages. Must be
+     * called from the transport thread.
+     */
+    protected final void deframe(final ReadableBuffer frame) {
       try {
-        deframer.deframe(frame, endOfStream);
+        deframer.deframe(frame);
       } catch (Throwable t) {
         deframeFailed(t);
       }
     }
 
     /**
-     * Called to request the given number of messages from the deframer. Must be called
-     * from the transport thread.
+     * Called to request the given number of messages from the deframer. Must be called from the
+     * transport thread.
      */
-    public final void requestMessagesFromDeframer(int numMessages) {
-      if (deframer.isClosed()) {
-        return;
-      }
+    public final void requestMessagesFromDeframer(final int numMessages) {
       try {
         deframer.request(numMessages);
       } catch (Throwable t) {
@@ -207,10 +207,7 @@ public abstract class AbstractStream implements Stream {
       return statsTraceCtx;
     }
 
-    private void setDecompressor(Decompressor decompressor) {
-      if (deframer.isClosed()) {
-        return;
-      }
+    protected final void setDecompressor(Decompressor decompressor) {
       deframer.setDecompressor(decompressor);
     }
 

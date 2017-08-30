@@ -19,13 +19,14 @@ dependencies {
 
     testProtobuf libraries.protobuf
 
-    signature "org.codehaus.mojo.signature:java16:+@signature"
+    signature "org.codehaus.mojo.signature:java16:1.1@signature"
 }
 
 compileTestJava {
   // Protobuf-generated Lite produces quite a few warnings.
   options.compilerArgs += ["-Xlint:-rawtypes", "-Xlint:-unchecked", "-Xlint:-fallthrough",
-        "-Xep:MissingOverride:OFF", "-Xep:ReferenceEquality:OFF", "-Xep:FallThrough:OFF"]
+        "-Xep:MissingOverride:OFF", "-Xep:ReferenceEquality:OFF", "-Xep:FallThrough:OFF",
+        "-Xep:JavaLangClash:OFF" /* The Enum protobuf clashes */]
 }
 
 protobuf {

@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.IDLE;
+import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -32,6 +33,7 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.CompressorRegistry;
+import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
@@ -52,7 +54,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -83,6 +84,14 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   static final Status SHUTDOWN_NOW_STATUS =
       Status.UNAVAILABLE.withDescription("Channel shutdownNow invoked");
 
+  @VisibleForTesting
+  static final Status SHUTDOWN_STATUS =
+      Status.UNAVAILABLE.withDescription("Channel shutdown invoked");
+
+  @VisibleForTesting
+  static final Status SUBCHANNEL_SHUTDOWN_STATUS =
+      Status.UNAVAILABLE.withDescription("Subchannel shutdown invoked");
+
   private final String target;
   private final NameResolver.Factory nameResolverFactory;
   private final Attributes nameResolverParams;
@@ -98,16 +107,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   private final DecompressorRegistry decompressorRegistry;
   private final CompressorRegistry compressorRegistry;
 
-  private final ObjectPool<ScheduledExecutorService> timerServicePool;
   private final Supplier<Stopwatch> stopwatchSupplier;
   /** The timout before entering idle mode. */
   private final long idleTimeoutMillis;
 
-  /**
-   * Executor that runs deadline timers for requests.
-   */
-  // Must be assigned from channelExecutor
-  private volatile ScheduledExecutorService scheduledExecutor;
+  private final ConnectivityStateManager channelStateManager = new ConnectivityStateManager();
 
   private final BackoffPolicy.Provider backoffPolicyProvider;
 
@@ -123,7 +127,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
   // null when channel is in idle mode.  Must be assigned from channelExecutor.
   @Nullable
-  private LoadBalancer loadBalancer;
+  private LbHelperImpl lbHelper;
 
   // Must be assigned from channelExecutor.  null if channel is in idle mode.
   @Nullable
@@ -187,9 +191,9 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
         public void transportTerminated() {
           checkState(shutdown.get(), "Channel must have been shut down");
           terminating = true;
-          if (loadBalancer != null) {
-            loadBalancer.shutdown();
-            loadBalancer = null;
+          if (lbHelper != null) {
+            lbHelper.lb.shutdown();
+            lbHelper = null;
           }
           if (nameResolver != null) {
             nameResolver.shutdown();
@@ -251,9 +255,12 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       // did not cancel idleModeTimer, both of which are bugs.
       nameResolver.shutdown();
       nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
-      loadBalancer.shutdown();
-      loadBalancer = null;
+      lbHelper.lb.shutdown();
+      lbHelper = null;
       subchannelPicker = null;
+      if (!channelStateManager.isDisabled()) {
+        channelStateManager.gotoState(IDLE);
+      }
     }
   }
 
@@ -283,15 +290,14 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       // isInUse() == false, in which case we still need to schedule the timer.
       rescheduleIdleTimer();
     }
-    if (loadBalancer != null) {
+    if (lbHelper != null) {
       return;
     }
     log.log(Level.FINE, "[{0}] Exiting idle mode", getLogId());
-    LbHelperImpl helper = new LbHelperImpl(nameResolver);
-    helper.lb = loadBalancerFactory.newLoadBalancer(helper);
-    this.loadBalancer = helper.lb;
+    lbHelper = new LbHelperImpl(nameResolver);
+    lbHelper.lb = loadBalancerFactory.newLoadBalancer(lbHelper);
 
-    NameResolverListenerImpl listener = new NameResolverListenerImpl(helper);
+    NameResolverListenerImpl listener = new NameResolverListenerImpl(lbHelper);
     try {
       nameResolver.start(listener);
     } catch (Throwable t) {
@@ -316,7 +322,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     }
     cancelIdleTimer();
     idleModeTimer = new IdleModeTimer();
-    idleModeTimerFuture = scheduledExecutor.schedule(
+    idleModeTimerFuture = transportFactory.getScheduledExecutorService().schedule(
         new LogExceptionRunnable(new Runnable() {
             @Override
             public void run() {
@@ -368,7 +374,6 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       AbstractManagedChannelImplBuilder<?> builder,
       ClientTransportFactory clientTransportFactory,
       BackoffPolicy.Provider backoffPolicyProvider,
-      ObjectPool<ScheduledExecutorService> timerServicePool,
       ObjectPool<? extends Executor> oobExecutorPool,
       Supplier<Stopwatch> stopwatchSupplier,
       List<ClientInterceptor> interceptors) {
@@ -387,8 +392,6 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     this.transportFactory =
         new CallCredentialsApplyingTransportFactory(clientTransportFactory, this.executor);
     this.interceptorChannel = ClientInterceptors.intercept(new RealChannel(), interceptors);
-    this.timerServicePool = checkNotNull(timerServicePool, "timerServicePool");
-    this.scheduledExecutor = checkNotNull(timerServicePool.getObject(), "timerService");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     if (builder.idleTimeoutMillis == IDLE_TIMEOUT_MILLIS_DISABLE) {
       this.idleTimeoutMillis = builder.idleTimeoutMillis;
@@ -461,7 +464,21 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     if (!shutdown.compareAndSet(false, true)) {
       return this;
     }
-    delayedTransport.shutdown();
+
+    // Put gotoState(SHUTDOWN) as early into the channelExecutor's queue as possible.
+    // delayedTransport.shutdown() may also add some tasks into the queue. But some things inside
+    // delayedTransport.shutdown() like setting delayedTransport.shutdown = true are not run in the
+    // channelExecutor's queue and should not be blocked, so we do not drain() immediately here.
+    channelExecutor.executeLater(new Runnable() {
+      @Override
+      public void run() {
+        if (!channelStateManager.isDisabled()) {
+          channelStateManager.gotoState(SHUTDOWN);
+        }
+      }
+    });
+
+    delayedTransport.shutdown(SHUTDOWN_STATUS);
     channelExecutor.executeLater(new Runnable() {
         @Override
         public void run() {
@@ -537,7 +554,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
           executor,
           callOptions,
           transportProvider,
-          scheduledExecutor)
+          terminated ? null : transportFactory.getScheduledExecutorService())
               .setDecompressorRegistry(decompressorRegistry)
               .setCompressorRegistry(compressorRegistry);
     }
@@ -562,10 +579,35 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       terminated = true;
       terminatedLatch.countDown();
       executorPool.returnObject(executor);
-      scheduledExecutor = timerServicePool.returnObject(scheduledExecutor);
       // Release the transport factory so that it can deallocate any resources.
       transportFactory.close();
     }
+  }
+
+  @Override
+  public ConnectivityState getState(boolean requestConnection) {
+    ConnectivityState savedChannelState = channelStateManager.getState();
+    if (requestConnection && savedChannelState == IDLE) {
+      channelExecutor.executeLater(
+          new Runnable() {
+            @Override
+            public void run() {
+              exitIdleMode();
+            }
+          }).drain();
+    }
+    return savedChannelState;
+  }
+
+  @Override
+  public void notifyWhenStateChanged(final ConnectivityState source, final Runnable callback) {
+    channelExecutor.executeLater(
+        new Runnable() {
+          @Override
+          public void run() {
+            channelStateManager.notifyWhenStateChanged(callback, executor, source);
+          }
+        }).drain();
   }
 
   private class LbHelperImpl extends LoadBalancer.Helper {
@@ -577,17 +619,16 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     }
 
     @Override
-    public SubchannelImpl createSubchannel(EquivalentAddressGroup addressGroup, Attributes attrs) {
+    public AbstractSubchannel createSubchannel(
+        EquivalentAddressGroup addressGroup, Attributes attrs) {
       checkNotNull(addressGroup, "addressGroup");
       checkNotNull(attrs, "attrs");
-      ScheduledExecutorService scheduledExecutorCopy = scheduledExecutor;
-      checkState(scheduledExecutorCopy != null,
-          "scheduledExecutor is already cleared. Looks like you are calling this method after "
-          + "you've already shut down");
-      final SubchannelImplImpl subchannel = new SubchannelImplImpl(attrs);
+      // TODO(ejona): can we be even stricter? Like loadBalancer == null?
+      checkState(!terminated, "Channel is terminated");
+      final SubchannelImpl subchannel = new SubchannelImpl(attrs);
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
             addressGroup, authority(), userAgent, backoffPolicyProvider, transportFactory,
-            scheduledExecutorCopy, stopwatchSupplier, channelExecutor,
+            transportFactory.getScheduledExecutorService(), stopwatchSupplier, channelExecutor,
             new InternalSubchannel.Callback() {
               // All callbacks are run in channelExecutor
               @Override
@@ -626,7 +667,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
               // shutdown even if "terminating" is already true.  The subchannel will not be used in
               // this case, because delayed transport has terminated when "terminating" becomes
               // true, and no more requests will be sent to balancer beyond this point.
-              internalSubchannel.shutdown();
+              internalSubchannel.shutdown(SHUTDOWN_STATUS);
             }
             if (!terminated) {
               // If channel has not terminated, it will track the subchannel and block termination
@@ -639,24 +680,47 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     }
 
     @Override
+    public void updateBalancingState(
+        final ConnectivityState newState, final SubchannelPicker newPicker) {
+      checkNotNull(newState, "newState");
+      checkNotNull(newPicker, "newPicker");
+
+      runSerialized(
+          new Runnable() {
+            @Override
+            public void run() {
+              if (LbHelperImpl.this != lbHelper) {
+                return;
+              }
+              subchannelPicker = newPicker;
+              delayedTransport.reprocess(newPicker);
+              // It's not appropriate to report SHUTDOWN state from lb.
+              // Ignore the case of newState == SHUTDOWN for now.
+              if (newState != SHUTDOWN) {
+                channelStateManager.gotoState(newState);
+              }
+            }
+          });
+    }
+
+    @Override
     public void updateSubchannelAddresses(
         LoadBalancer.Subchannel subchannel, EquivalentAddressGroup addrs) {
-      checkArgument(subchannel instanceof SubchannelImplImpl,
+      checkArgument(subchannel instanceof SubchannelImpl,
           "subchannel must have been returned from createSubchannel");
-      ((SubchannelImplImpl) subchannel).subchannel.updateAddresses(addrs);
+      ((SubchannelImpl) subchannel).subchannel.updateAddresses(addrs);
     }
 
     @Override
     public ManagedChannel createOobChannel(EquivalentAddressGroup addressGroup, String authority) {
-      ScheduledExecutorService scheduledExecutorCopy = scheduledExecutor;
-      checkState(scheduledExecutorCopy != null,
-          "scheduledExecutor is already cleared. Looks like you are calling this method after "
-          + "you've already shut down");
+      // TODO(ejona): can we be even stricter? Like terminating?
+      checkState(!terminated, "Channel is terminated");
       final OobChannel oobChannel = new OobChannel(
-          authority, oobExecutorPool, scheduledExecutorCopy, channelExecutor);
+          authority, oobExecutorPool, transportFactory.getScheduledExecutorService(),
+          channelExecutor);
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
           addressGroup, authority, userAgent, backoffPolicyProvider, transportFactory,
-          scheduledExecutorCopy, stopwatchSupplier, channelExecutor,
+          transportFactory.getScheduledExecutorService(), stopwatchSupplier, channelExecutor,
           // All callback methods are run from channelExecutor
           new InternalSubchannel.Callback() {
             @Override
@@ -710,13 +774,18 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       channelExecutor.executeLater(task).drain();
     }
 
+    @Deprecated
     @Override
     public void updatePicker(final SubchannelPicker picker) {
       runSerialized(new Runnable() {
           @Override
           public void run() {
+            if (LbHelperImpl.this != lbHelper) {
+              return;
+            }
             subchannelPicker = picker;
             delayedTransport.reprocess(picker);
+            channelStateManager.disable();
           }
         });
     }
@@ -793,8 +862,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     }
   }
 
-  private final class SubchannelImplImpl extends SubchannelImpl {
-    // Set right after SubchannelImplImpl is created.
+  private final class SubchannelImpl extends AbstractSubchannel {
+    // Set right after SubchannelImpl is created.
     InternalSubchannel subchannel;
     final Object shutdownLock = new Object();
     final Attributes attrs;
@@ -804,7 +873,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     @GuardedBy("shutdownLock")
     ScheduledFuture<?> delayedShutdownTask;
 
-    SubchannelImplImpl(Attributes attrs) {
+    SubchannelImpl(Attributes attrs) {
       this.attrs = checkNotNull(attrs, "attrs");
     }
 
@@ -829,7 +898,6 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
         } else {
           shutdownRequested = true;
         }
-        ScheduledExecutorService scheduledExecutorCopy = scheduledExecutor;
         // Add a delay to shutdown to deal with the race between 1) a transport being picked and
         // newStream() being called on it, and 2) its Subchannel is shut down by LoadBalancer (e.g.,
         // because of address change, or because LoadBalancer is shutdown by Channel entering idle
@@ -838,26 +906,21 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
         //
         // TODO(zhangkun83): consider a better approach
         // (https://github.com/grpc/grpc-java/issues/2562).
-        if (!terminating && scheduledExecutorCopy != null) {
-          delayedShutdownTask = scheduledExecutorCopy.schedule(
+        if (!terminating) {
+          delayedShutdownTask = transportFactory.getScheduledExecutorService().schedule(
               new LogExceptionRunnable(
                   new Runnable() {
                     @Override
                     public void run() {
-                      subchannel.shutdown();
+                      subchannel.shutdown(SUBCHANNEL_SHUTDOWN_STATUS);
                     }
                   }), SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS);
           return;
         }
       }
-      // Two possible ways to get here:
-      //
-      // 1. terminating == true: no more real streams will be created, it's safe and also desirable
-      // to shutdown timely.
-      //
-      // 2. scheduledExecutor == null: possible only when Channel has already been terminated.
-      // Though may not be necessary, we'll do it anyway.
-      subchannel.shutdown();
+      // When terminating == true, no more real streams will be created. It's safe and also
+      // desirable to shutdown timely.
+      subchannel.shutdown(SHUTDOWN_STATUS);
     }
 
     @Override
@@ -873,6 +936,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     @Override
     public Attributes getAttributes() {
       return attrs;
+    }
+
+    @Override
+    public String toString() {
+      return subchannel.getLogId().toString();
     }
   }
 }

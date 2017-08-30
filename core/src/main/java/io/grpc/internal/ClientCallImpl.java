@@ -36,8 +36,8 @@ import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
+import io.grpc.Context.CancellationListener;
 import io.grpc.Deadline;
-import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
 import io.grpc.InternalDecompressorRegistry;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -58,8 +58,7 @@ import javax.annotation.Nullable;
 /**
  * Implementation of {@link ClientCall}.
  */
-final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
-    implements Context.CancellationListener {
+final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   private static final Logger log = Logger.getLogger(ClientCallImpl.class.getName());
 
@@ -74,6 +73,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
   private boolean cancelCalled;
   private boolean halfCloseCalled;
   private final ClientTransportProvider clientTransportProvider;
+  private final CancellationListener cancellationListener = new ContextCancellationListener();
   private ScheduledExecutorService deadlineCancellationExecutor;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
@@ -98,9 +98,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
     this.deadlineCancellationExecutor = deadlineCancellationExecutor;
   }
 
-  @Override
-  public void cancelled(Context context) {
-    stream.cancel(statusFromCancelled(context));
+  private final class ContextCancellationListener implements CancellationListener {
+    @Override
+    public void cancelled(Context context) {
+      stream.cancel(statusFromCancelled(context));
+    }
   }
 
   /**
@@ -222,13 +224,14 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
       stream.setMaxOutboundMessageSize(callOptions.getMaxOutboundMessageSize());
     }
     stream.setCompressor(compressor);
+    stream.setDecompressorRegistry(decompressorRegistry);
     stream.start(new ClientStreamListenerImpl(observer));
 
     // Delay any sources of cancellation after start(), because most of the transports are broken if
     // they receive cancel before start. Issue #1343 has more details
 
     // Propagate later Context cancellation to the remote side.
-    context.addListener(this, directExecutor());
+    context.addListener(cancellationListener, directExecutor());
     if (effectiveDeadline != null
         // If the context has the effective deadline, we don't need to schedule an extra task.
         && context.getDeadline() != effectiveDeadline
@@ -284,7 +287,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
   }
 
   private void removeContextListenerAndCancelDeadlineFuture() {
-    context.removeListener(this);
+    context.removeListener(cancellationListener);
     ScheduledFuture<?> f = deadlineCancellationFuture;
     if (f != null) {
       f.cancel(false);
@@ -429,18 +432,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
 
     @Override
     public void headersRead(final Metadata headers) {
-      Decompressor decompressor = Codec.Identity.NONE;
-      if (headers.containsKey(MESSAGE_ENCODING_KEY)) {
-        String encoding = headers.get(MESSAGE_ENCODING_KEY);
-        decompressor = decompressorRegistry.lookupDecompressor(encoding);
-        if (decompressor == null) {
-          stream.cancel(Status.INTERNAL.withDescription(
-              String.format("Can't find decompressor for %s", encoding)));
-          return;
-        }
-      }
-      stream.setDecompressor(decompressor);
-
       class HeadersRead extends ContextRunnable {
         HeadersRead() {
           super(context);
@@ -466,24 +457,32 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
     }
 
     @Override
-    public void messageRead(final InputStream message) {
-      class MessageRead extends ContextRunnable {
-        MessageRead() {
+    public void messagesAvailable(final MessageProducer producer) {
+      class MessagesAvailable extends ContextRunnable {
+        MessagesAvailable() {
           super(context);
         }
 
         @Override
         public final void runInContext() {
+          if (closed) {
+            GrpcUtil.closeQuietly(producer);
+            return;
+          }
+
+          InputStream message;
           try {
-            if (closed) {
-              return;
-            }
-            try {
-              observer.onMessage(method.parseResponse(message));
-            } finally {
+            while ((message = producer.next()) != null) {
+              try {
+                observer.onMessage(method.parseResponse(message));
+              } catch (Throwable t) {
+                GrpcUtil.closeQuietly(message);
+                throw t;
+              }
               message.close();
             }
           } catch (Throwable t) {
+            GrpcUtil.closeQuietly(producer);
             Status status =
                 Status.CANCELLED.withCause(t).withDescription("Failed to read message.");
             stream.cancel(status);
@@ -492,7 +491,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT>
         }
       }
 
-      callExecutor.execute(new MessageRead());
+      callExecutor.execute(new MessagesAvailable());
     }
 
     /**

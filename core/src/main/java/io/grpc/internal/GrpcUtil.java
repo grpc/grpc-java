@@ -35,6 +35,9 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.SharedResourceHolder.Resource;
+import io.grpc.internal.StreamListener.MessageProducer;
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.URI;
@@ -479,12 +482,10 @@ public final class GrpcUtil {
    * @return a {@link ThreadFactory}.
    */
   public static ThreadFactory getThreadFactory(String nameFormat, boolean daemon) {
-    ThreadFactory threadFactory = MoreExecutors.platformThreadFactory();
     if (IS_RESTRICTED_APPENGINE) {
-      return threadFactory;
+      return MoreExecutors.platformThreadFactory();
     } else {
       return new ThreadFactoryBuilder()
-          .setThreadFactory(threadFactory)
           .setDaemon(daemon)
           .setNameFormat(nameFormat)
           .build();
@@ -575,7 +576,7 @@ public final class GrpcUtil {
     final ClientTransport transport;
     Subchannel subchannel = result.getSubchannel();
     if (subchannel != null) {
-      transport = ((SubchannelImpl) subchannel).obtainActiveTransport();
+      transport = ((AbstractSubchannel) subchannel).obtainActiveTransport();
     } else {
       transport = null;
     }
@@ -593,11 +594,6 @@ public final class GrpcUtil {
         }
 
         @Override
-        public ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers) {
-          return newStream(method, headers, CallOptions.DEFAULT);
-        }
-
-        @Override
         public void ping(PingCallback callback, Executor executor) {
           transport.ping(callback, executor);
         }
@@ -607,6 +603,23 @@ public final class GrpcUtil {
       return new FailingClientTransport(result.getStatus());
     }
     return null;
+  }
+
+  /** Quietly closes all messages in MessageProducer. */
+  static void closeQuietly(MessageProducer producer) {
+    InputStream message;
+    while ((message = producer.next()) != null) {
+      closeQuietly(message);
+    }
+  }
+
+  /** Closes an InputStream, ignoring IOExceptions. */
+  static void closeQuietly(InputStream message) {
+    try {
+      message.close();
+    } catch (IOException ioException) {
+      // do nothing
+    }
   }
 
   private GrpcUtil() {}

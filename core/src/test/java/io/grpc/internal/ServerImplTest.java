@@ -36,20 +36,16 @@ import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.truth.Truth;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.Compressor;
-import io.grpc.CompressorRegistry;
 import io.grpc.Context;
-import io.grpc.DecompressorRegistry;
 import io.grpc.Grpc;
 import io.grpc.HandlerRegistry;
 import io.grpc.IntegerMarshaller;
@@ -57,6 +53,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
@@ -64,12 +61,16 @@ import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
+import io.grpc.internal.testing.SingleMessageProducer;
+import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.util.MutableHandlerRegistry;
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketAddress;
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
@@ -96,11 +97,17 @@ import org.mockito.MockitoAnnotations;
 public class ServerImplTest {
   private static final IntegerMarshaller INTEGER_MARSHALLER = IntegerMarshaller.INSTANCE;
   private static final StringMarshaller STRING_MARSHALLER = StringMarshaller.INSTANCE;
+  private static final MethodDescriptor<String, Integer> METHOD =
+      MethodDescriptor.<String, Integer>newBuilder()
+          .setType(MethodDescriptor.MethodType.UNKNOWN)
+          .setFullMethodName("Waiter/serve")
+          .setRequestMarshaller(STRING_MARSHALLER)
+          .setResponseMarshaller(INTEGER_MARSHALLER)
+          .build();
   private static final Context.Key<String> SERVER_ONLY = Context.key("serverOnly");
   private static final Context.Key<String> SERVER_TRACER_ADDED_KEY = Context.key("tracer-added");
   private static final Context.CancellableContext SERVER_CONTEXT =
       Context.ROOT.withValue(SERVER_ONLY, "yes").withCancellation();
-  private static final ImmutableList<ServerTransportFilter> NO_FILTERS = ImmutableList.of();
   private static final FakeClock.TaskFilter CONTEXT_CLOSER_TASK_FITLER =
       new FakeClock.TaskFilter() {
         @Override
@@ -108,10 +115,6 @@ public class ServerImplTest {
           return runnable instanceof ServerImpl.ContextCloser;
         }
       };
-
-  private final CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
-  private final DecompressorRegistry decompressorRegistry =
-      DecompressorRegistry.getDefaultInstance();
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
@@ -127,17 +130,16 @@ public class ServerImplTest {
   @Mock
   private ServerStreamTracer.Factory streamTracerFactory;
   private List<ServerStreamTracer.Factory> streamTracerFactories;
-  private final ServerStreamTracer streamTracer = spy(new ServerStreamTracer() {
+  private final TestServerStreamTracer streamTracer = new TestServerStreamTracer() {
       @Override
       public <ReqT, RespT> Context filterContext(Context context) {
-        return context.withValue(SERVER_TRACER_ADDED_KEY, "context added by tracer");
+        Context newCtx = super.filterContext(context);
+        return newCtx.withValue(SERVER_TRACER_ADDED_KEY, "context added by tracer");
       }
-    });
+    };
   @Mock
   private ObjectPool<Executor> executorPool;
-  @Mock
-  private ObjectPool<ScheduledExecutorService> timerPool;
-  private InternalHandlerRegistry registry = new InternalHandlerRegistry.Builder().build();
+  private Builder builder = new Builder();
   private MutableHandlerRegistry mutableFallbackRegistry = new MutableHandlerRegistry();
   private HandlerRegistry fallbackRegistry = mutableFallbackRegistry;
   private SimpleServer transportServer = new SimpleServer();
@@ -163,7 +165,6 @@ public class ServerImplTest {
     MockitoAnnotations.initMocks(this);
     streamTracerFactories = Arrays.asList(streamTracerFactory);
     when(executorPool.getObject()).thenReturn(executor.getScheduledExecutorService());
-    when(timerPool.getObject()).thenReturn(timer.getScheduledExecutorService());
     when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
         .thenReturn(streamTracer);
   }
@@ -180,7 +181,7 @@ public class ServerImplTest {
       @Override
       public void shutdown() {}
     };
-    createAndStartServer(NO_FILTERS);
+    createAndStartServer();
     server.shutdown();
     assertTrue(server.isShutdown());
     assertFalse(server.isTerminated());
@@ -196,17 +197,16 @@ public class ServerImplTest {
         throw new AssertionError("Should not be called, because wasn't started");
       }
     };
-    createServer(NO_FILTERS);
+    createServer();
     server.shutdown();
     assertTrue(server.isShutdown());
     assertTrue(server.isTerminated());
     verifyNoMoreInteractions(executorPool);
-    verifyNoMoreInteractions(timerPool);
   }
 
   @Test
   public void startStopImmediateWithChildTransport() throws IOException {
-    createAndStartServer(NO_FILTERS);
+    createAndStartServer();
     verifyExecutorsAcquired();
     class DelayedShutdownServerTransport extends SimpleServerTransport {
       boolean shutdown;
@@ -232,7 +232,7 @@ public class ServerImplTest {
 
   @Test
   public void startShutdownNowImmediateWithChildTransport() throws IOException {
-    createAndStartServer(NO_FILTERS);
+    createAndStartServer();
     verifyExecutorsAcquired();
     class DelayedShutdownServerTransport extends SimpleServerTransport {
       boolean shutdown;
@@ -261,7 +261,7 @@ public class ServerImplTest {
 
   @Test
   public void shutdownNowAfterShutdown() throws IOException {
-    createAndStartServer(NO_FILTERS);
+    createAndStartServer();
     verifyExecutorsAcquired();
     class DelayedShutdownServerTransport extends SimpleServerTransport {
       boolean shutdown;
@@ -297,7 +297,7 @@ public class ServerImplTest {
         // Don't call super which calls listener.serverShutdown(). We'll call it manually.
       }
     };
-    createAndStartServer(NO_FILTERS);
+    createAndStartServer();
     verifyExecutorsAcquired();
     class DelayedShutdownServerTransport extends SimpleServerTransport {
       boolean shutdown;
@@ -336,7 +336,7 @@ public class ServerImplTest {
     }
 
     transportServer = new FailingStartupServer();
-    createServer(NO_FILTERS);
+    createServer();
     try {
       server.start();
       fail("expected exception");
@@ -344,12 +344,11 @@ public class ServerImplTest {
       assertSame(ex, e);
     }
     verifyNoMoreInteractions(executorPool);
-    verifyNoMoreInteractions(timerPool);
   }
 
   @Test
   public void methodNotFound() throws Exception {
-    createAndStartServer(NO_FILTERS);
+    createAndStartServer();
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
     Metadata requestHeaders = new Metadata();
@@ -368,14 +367,14 @@ public class ServerImplTest {
     assertEquals("Method not found: Waiter/nonexist", status.getDescription());
 
     verify(streamTracerFactory).newServerStreamTracer(eq("Waiter/nonexist"), same(requestHeaders));
-    verify(streamTracer, never()).serverCallStarted(any(ServerCall.class));
+    assertNull(streamTracer.getServerCall());
     assertEquals(Status.Code.UNIMPLEMENTED, statusCaptor.getValue().getCode());
   }
 
   @Test
   public void decompressorNotFound() throws Exception {
     String decompressorName = "NON_EXISTENT_DECOMPRESSOR";
-    createAndStartServer(NO_FILTERS);
+    createAndStartServer();
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
     Metadata requestHeaders = new Metadata();
@@ -396,22 +395,16 @@ public class ServerImplTest {
 
   @Test
   public void basicExchangeSuccessful() throws Exception {
-    createAndStartServer(NO_FILTERS);
+    createAndStartServer();
     final Metadata.Key<String> metadataKey
         = Metadata.Key.of("inception", Metadata.ASCII_STRING_MARSHALLER);
     final AtomicReference<ServerCall<String, Integer>> callReference
         = new AtomicReference<ServerCall<String, Integer>>();
     final AtomicReference<Context> callContextReference = new AtomicReference<Context>();
-    MethodDescriptor<String, Integer> method = MethodDescriptor.<String, Integer>newBuilder()
-        .setType(MethodDescriptor.MethodType.UNKNOWN)
-        .setFullMethodName("Waiter/serve")
-        .setRequestMarshaller(STRING_MARSHALLER)
-        .setResponseMarshaller(INTEGER_MARSHALLER)
-        .build();
     mutableFallbackRegistry.addService(ServerServiceDefinition.builder(
-        new ServiceDescriptor("Waiter", method))
+        new ServiceDescriptor("Waiter", METHOD))
         .addMethod(
-            method,
+            METHOD,
             new ServerCallHandler<String, Integer>() {
               @Override
               public ServerCall.Listener<String> startCall(
@@ -444,14 +437,14 @@ public class ServerImplTest {
     assertEquals(1, executor.runDueTasks());
     ServerCall<String, Integer> call = callReference.get();
     assertNotNull(call);
-    verify(streamTracer).serverCallStarted(same(call));
+    assertSame(call, streamTracer.getServerCall());
     verify(stream).getAuthority();
     Context callContext = callContextReference.get();
     assertNotNull(callContext);
     assertEquals("context added by tracer", SERVER_TRACER_ADDED_KEY.get(callContext));
 
     String order = "Lots of pizza, please";
-    streamListener.messageRead(STRING_MARSHALLER.stream(order));
+    streamListener.messagesAvailable(new SingleMessageProducer(STRING_MARSHALLER.stream(order)));
     assertEquals(1, executor.runDueTasks());
     verify(callListener).onMessage(order);
 
@@ -505,7 +498,7 @@ public class ServerImplTest {
         new AtomicReference<Attributes>();
     final AtomicInteger readyCallbackCalled = new AtomicInteger(0);
     final AtomicInteger terminationCallbackCalled = new AtomicInteger(0);
-    ServerTransportFilter filter1 = new ServerTransportFilter() {
+    builder.addTransportFilter(new ServerTransportFilter() {
         @Override
         public Attributes transportReady(Attributes attrs) {
           assertEquals(Attributes.newBuilder()
@@ -523,8 +516,8 @@ public class ServerImplTest {
           terminationCallbackCalled.incrementAndGet();
           filter1TerminationCallbackArgument.set(attrs);
         }
-      };
-    ServerTransportFilter filter2 = new ServerTransportFilter() {
+      });
+    builder.addTransportFilter(new ServerTransportFilter() {
         @Override
         public Attributes transportReady(Attributes attrs) {
           assertEquals(Attributes.newBuilder()
@@ -544,7 +537,7 @@ public class ServerImplTest {
           terminationCallbackCalled.incrementAndGet();
           filter2TerminationCallbackArgument.set(attrs);
         }
-      };
+      });
     Attributes expectedTransportAttrs = Attributes.newBuilder()
         .set(key1, "ouch")
         .set(key2, "blabla")
@@ -552,7 +545,7 @@ public class ServerImplTest {
         .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddr)
         .build();
 
-    createAndStartServer(ImmutableList.of(filter1, filter2));
+    createAndStartServer();
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
     Attributes transportAttrs = transportListener.transportReady(Attributes.newBuilder()
@@ -570,18 +563,97 @@ public class ServerImplTest {
   }
 
   @Test
+  public void interceptors() throws Exception {
+    final LinkedList<Context> capturedContexts = new LinkedList<Context>();
+    final Context.Key<String> key1 = Context.key("key1");
+    final Context.Key<String> key2 = Context.key("key2");
+    final Context.Key<String> key3 = Context.key("key3");
+    ServerInterceptor intercepter1 = new ServerInterceptor() {
+        @Override
+        public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+            ServerCall<ReqT, RespT> call,
+            Metadata headers,
+            ServerCallHandler<ReqT, RespT> next) {
+          Context ctx = Context.current().withValue(key1, "value1");
+          Context origCtx = ctx.attach();
+          try {
+            capturedContexts.add(ctx);
+            return next.startCall(call, headers);
+          } finally {
+            ctx.detach(origCtx);
+          }
+        }
+      };
+    ServerInterceptor intercepter2 = new ServerInterceptor() {
+        @Override
+        public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+            ServerCall<ReqT, RespT> call,
+            Metadata headers,
+            ServerCallHandler<ReqT, RespT> next) {
+          Context ctx = Context.current().withValue(key2, "value2");
+          Context origCtx = ctx.attach();
+          try {
+            capturedContexts.add(ctx);
+            return next.startCall(call, headers);
+          } finally {
+            ctx.detach(origCtx);
+          }
+        }
+      };
+    ServerCallHandler<String, Integer> callHandler = new ServerCallHandler<String, Integer>() {
+        @Override
+        public ServerCall.Listener<String> startCall(
+            ServerCall<String, Integer> call,
+            Metadata headers) {
+          capturedContexts.add(Context.current().withValue(key3, "value3"));
+          return callListener;
+        }
+      };
+
+    mutableFallbackRegistry.addService(
+        ServerServiceDefinition.builder(new ServiceDescriptor("Waiter", METHOD))
+            .addMethod(METHOD, callHandler).build());
+    builder.intercept(intercepter2);
+    builder.intercept(intercepter1);
+    createServer();
+    server.start();
+
+    ServerTransportListener transportListener
+        = transportServer.registerNewServerTransport(new SimpleServerTransport());
+
+    Metadata requestHeaders = new Metadata();
+    StatsTraceContext statsTraceCtx =
+        StatsTraceContext.newServerContext(streamTracerFactories, "Waiter/serve", requestHeaders);
+    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
+
+    transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
+    assertEquals(1, executor.runDueTasks());
+
+    Context ctx1 = capturedContexts.poll();
+    assertEquals("value1", key1.get(ctx1));
+    assertNull(key2.get(ctx1));
+    assertNull(key3.get(ctx1));
+
+    Context ctx2 = capturedContexts.poll();
+    assertEquals("value1", key1.get(ctx2));
+    assertEquals("value2", key2.get(ctx2));
+    assertNull(key3.get(ctx2));
+
+    Context ctx3 = capturedContexts.poll();
+    assertEquals("value1", key1.get(ctx3));
+    assertEquals("value2", key2.get(ctx3));
+    assertEquals("value3", key3.get(ctx3));
+
+    assertTrue(capturedContexts.isEmpty());
+  }
+
+  @Test
   public void exceptionInStartCallPropagatesToStream() throws Exception {
-    createAndStartServer(NO_FILTERS);
+    createAndStartServer();
     final Status status = Status.ABORTED.withDescription("Oh, no!");
-    MethodDescriptor<String, Integer> method = MethodDescriptor.<String, Integer>newBuilder()
-        .setType(MethodDescriptor.MethodType.UNKNOWN)
-        .setFullMethodName("Waiter/serve")
-        .setRequestMarshaller(STRING_MARSHALLER)
-        .setResponseMarshaller(INTEGER_MARSHALLER)
-        .build();
     mutableFallbackRegistry.addService(ServerServiceDefinition.builder(
-        new ServiceDescriptor("Waiter", method))
-        .addMethod(method,
+        new ServiceDescriptor("Waiter", METHOD))
+        .addMethod(METHOD,
             new ServerCallHandler<String, Integer>() {
               @Override
               public ServerCall.Listener<String> startCall(
@@ -633,7 +705,7 @@ public class ServerImplTest {
     }
 
     transportServer = new MaybeDeadlockingServer();
-    createAndStartServer(NO_FILTERS);
+    createAndStartServer();
     new Thread() {
       @Override
       public void run() {
@@ -653,7 +725,7 @@ public class ServerImplTest {
 
   @Test
   public void testNoDeadlockOnTransportShutdown() throws Exception {
-    createAndStartServer(NO_FILTERS);
+    createAndStartServer();
     final Object lock = new Object();
     final CyclicBarrier barrier = new CyclicBarrier(2);
     class MaybeDeadlockingServerTransport extends SimpleServerTransport {
@@ -694,21 +766,15 @@ public class ServerImplTest {
 
   @Test
   public void testCallContextIsBoundInListenerCallbacks() throws Exception {
-    createAndStartServer(NO_FILTERS);
-    MethodDescriptor<String, Integer> method = MethodDescriptor.<String, Integer>newBuilder()
-        .setType(MethodDescriptor.MethodType.UNKNOWN)
-        .setFullMethodName("Waiter/serve")
-        .setRequestMarshaller(STRING_MARSHALLER)
-        .setResponseMarshaller(INTEGER_MARSHALLER)
-        .build();
+    createAndStartServer();
     final AtomicBoolean  onReadyCalled = new AtomicBoolean(false);
     final AtomicBoolean onMessageCalled = new AtomicBoolean(false);
     final AtomicBoolean onHalfCloseCalled = new AtomicBoolean(false);
     final AtomicBoolean onCancelCalled = new AtomicBoolean(false);
     mutableFallbackRegistry.addService(ServerServiceDefinition.builder(
-        new ServiceDescriptor("Waiter", method))
+        new ServiceDescriptor("Waiter", METHOD))
         .addMethod(
-            method,
+            METHOD,
             new ServerCallHandler<String, Integer>() {
               @Override
               public ServerCall.Listener<String> startCall(
@@ -774,7 +840,8 @@ public class ServerImplTest {
     assertEquals(1, executor.runDueTasks());
     assertTrue(onReadyCalled.get());
 
-    streamListener.messageRead(new ByteArrayInputStream(new byte[0]));
+    streamListener
+        .messagesAvailable(new SingleMessageProducer(new ByteArrayInputStream(new byte[0])));
     assertEquals(1, executor.runDueTasks());
     assertTrue(onMessageCalled.get());
 
@@ -795,7 +862,7 @@ public class ServerImplTest {
       final AtomicReference<ServerCall<String, Integer>> callReference,
       final AtomicReference<Context> context,
       final AtomicBoolean contextCancelled) throws Exception {
-    createAndStartServer(NO_FILTERS);
+    createAndStartServer();
     callListener = new ServerCall.Listener<String>() {
       @Override
       public void onReady() {
@@ -809,16 +876,9 @@ public class ServerImplTest {
       }
     };
 
-    MethodDescriptor<String, Integer> method = MethodDescriptor.<String, Integer>newBuilder()
-        .setType(MethodDescriptor.MethodType.UNKNOWN)
-        .setFullMethodName("Waiter/serve")
-        .setRequestMarshaller(STRING_MARSHALLER)
-        .setResponseMarshaller(INTEGER_MARSHALLER)
-        .build();
-
     mutableFallbackRegistry.addService(ServerServiceDefinition.builder(
-        new ServiceDescriptor("Waiter", method))
-        .addMethod(method,
+        new ServiceDescriptor("Waiter", METHOD))
+        .addMethod(METHOD,
             new ServerCallHandler<String, Integer>() {
               @Override
               public ServerCall.Listener<String> startCall(
@@ -900,7 +960,7 @@ public class ServerImplTest {
         return 65535;
       }
     };
-    createAndStartServer(NO_FILTERS);
+    createAndStartServer();
 
     Truth.assertThat(server.getPort()).isEqualTo(65535);
   }
@@ -908,7 +968,7 @@ public class ServerImplTest {
   @Test
   public void getPortBeforeStartedFails() {
     transportServer = new SimpleServer();
-    createServer(NO_FILTERS);
+    createServer();
     thrown.expect(IllegalStateException.class);
     thrown.expectMessage("started");
     server.getPort();
@@ -917,7 +977,7 @@ public class ServerImplTest {
   @Test
   public void getPortAfterTerminationFails() throws Exception {
     transportServer = new SimpleServer();
-    createAndStartServer(NO_FILTERS);
+    createAndStartServer();
     server.shutdown();
     server.awaitTermination();
     thrown.expect(IllegalStateException.class);
@@ -928,28 +988,21 @@ public class ServerImplTest {
   @Test
   public void handlerRegistryPriorities() throws Exception {
     fallbackRegistry = mock(HandlerRegistry.class);
-    MethodDescriptor<String, Integer> method1 = MethodDescriptor.<String, Integer>newBuilder()
-        .setType(MethodDescriptor.MethodType.UNKNOWN)
-        .setFullMethodName("Service1/Method1")
-        .setRequestMarshaller(STRING_MARSHALLER)
-        .setResponseMarshaller(INTEGER_MARSHALLER)
-        .build();
-    registry = new InternalHandlerRegistry.Builder()
-        .addService(ServerServiceDefinition.builder(new ServiceDescriptor("Service1", method1))
-            .addMethod(method1, callHandler).build())
-        .build();
+    builder.addService(
+        ServerServiceDefinition.builder(new ServiceDescriptor("Waiter", METHOD))
+            .addMethod(METHOD, callHandler).build());
     transportServer = new SimpleServer();
-    createAndStartServer(NO_FILTERS);
+    createAndStartServer();
 
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
     Metadata requestHeaders = new Metadata();
     StatsTraceContext statsTraceCtx =
-        StatsTraceContext.newServerContext(streamTracerFactories, "Waitier/serve", requestHeaders);
+        StatsTraceContext.newServerContext(streamTracerFactories, "Waiter/serve", requestHeaders);
     when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
 
     // This call will be handled by callHandler from the internal registry
-    transportListener.streamCreated(stream, "Service1/Method1", requestHeaders);
+    transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
     assertEquals(1, executor.runDueTasks());
     verify(callHandler).startCall(Matchers.<ServerCall<String, Integer>>anyObject(),
         Matchers.<Metadata>anyObject());
@@ -975,9 +1028,10 @@ public class ServerImplTest {
     listener.setListener(mockListener);
 
     Throwable expectedT = new AssertionError();
-    doThrow(expectedT).when(mockListener).messageRead(any(InputStream.class));
+    doThrow(expectedT).when(mockListener)
+        .messagesAvailable(any(StreamListener.MessageProducer.class));
     // Closing the InputStream is done by the delegated listener (generally ServerCallImpl)
-    listener.messageRead(mock(InputStream.class));
+    listener.messagesAvailable(mock(StreamListener.MessageProducer.class));
     try {
       executor.runDueTasks();
       fail("Expected exception");
@@ -999,9 +1053,10 @@ public class ServerImplTest {
     listener.setListener(mockListener);
 
     Throwable expectedT = new RuntimeException();
-    doThrow(expectedT).when(mockListener).messageRead(any(InputStream.class));
+    doThrow(expectedT).when(mockListener)
+        .messagesAvailable(any(StreamListener.MessageProducer.class));
     // Closing the InputStream is done by the delegated listener (generally ServerCallImpl)
-    listener.messageRead(mock(InputStream.class));
+    listener.messagesAvailable(mock(StreamListener.MessageProducer.class));
     try {
       executor.runDueTasks();
       fail("Expected exception");
@@ -1103,34 +1158,31 @@ public class ServerImplTest {
     }
   }
 
-  private void createAndStartServer(List<ServerTransportFilter> filters) throws IOException {
-    createServer(filters);
+  private void createAndStartServer() throws IOException {
+    createServer();
     server.start();
   }
 
-  private void createServer(List<ServerTransportFilter> filters) {
+  private void createServer() {
     assertNull(server);
-    server = new ServerImpl(executorPool, timerPool, registry, fallbackRegistry,
-        transportServer, SERVER_CONTEXT, decompressorRegistry, compressorRegistry, filters);
+
+    builder.fallbackHandlerRegistry(fallbackRegistry);
+    builder.executorPool = executorPool;
+    server = new ServerImpl(builder, transportServer, SERVER_CONTEXT);
   }
 
   private void verifyExecutorsAcquired() {
     verify(executorPool).getObject();
-    verify(timerPool).getObject();
     verifyNoMoreInteractions(executorPool);
-    verifyNoMoreInteractions(timerPool);
   }
 
   private void verifyExecutorsNotReturned() {
     verify(executorPool, never()).returnObject(any(Executor.class));
-    verify(timerPool, never()).returnObject(any(ScheduledExecutorService.class));
   }
 
   private void verifyExecutorsReturned() {
     verify(executorPool).returnObject(same(executor.getScheduledExecutorService()));
-    verify(timerPool).returnObject(same(timer.getScheduledExecutorService()));
     verifyNoMoreInteractions(executorPool);
-    verifyNoMoreInteractions(timerPool);
   }
 
   private void ensureServerStateNotLeaked() {
@@ -1163,7 +1215,7 @@ public class ServerImplTest {
     }
   }
 
-  private static class SimpleServerTransport implements ServerTransport {
+  private class SimpleServerTransport implements ServerTransport {
     ServerTransportListener listener;
 
     @Override
@@ -1178,6 +1230,22 @@ public class ServerImplTest {
 
     @Override
     public LogId getLogId() {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public ScheduledExecutorService getScheduledExecutorService() {
+      return timer.getScheduledExecutorService();
+    }
+  }
+
+  private static class Builder extends AbstractServerImplBuilder<Builder> {
+    @Override protected InternalServer buildTransportServer(
+        List<ServerStreamTracer.Factory> streamTracerFactories) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override public Builder useTransportSecurity(File f1, File f2)  {
       throw new UnsupportedOperationException();
     }
   }

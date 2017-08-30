@@ -37,6 +37,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.EventLoop;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
@@ -129,7 +130,13 @@ class NettyClientStream extends AbstractClientStream {
         public void operationComplete(ChannelFuture future) throws Exception {
           if (!future.isSuccess()) {
             // Stream creation failed. Close the stream if not already closed.
-            Status s = transportState().statusFromFailedFuture(future);
+            // When the channel is shutdown, the lifecycle manager has a better view of the failure,
+            // especially before negotiation completes (because the negotiator commonly doesn't
+            // receive the execeptionCaught because NettyClientHandler does not propagate it).
+            Status s = transportState().handler.getLifecycleManager().getShutdownStatus();
+            if (s == null) {
+              s = transportState().statusFromFailedFuture(future);
+            }
             transportState().transportReportStatus(s, true, new Metadata());
           }
         }
@@ -152,7 +159,9 @@ class NettyClientStream extends AbstractClientStream {
             channel.newPromise().addListener(new ChannelFutureListener() {
               @Override
               public void operationComplete(ChannelFuture future) throws Exception {
-                if (future.isSuccess()) {
+                // If the future succeeds when http2stream is null, the stream has been cancelled
+                // before it began and Netty is purging pending writes from the flow-controller.
+                if (future.isSuccess() && transportState().http2Stream() != null) {
                   // Remove the bytes from outbound flow control, optionally notifying
                   // the client that they can send more bytes.
                   transportState().onSentBytes(numBytes);
@@ -190,13 +199,15 @@ class NettyClientStream extends AbstractClientStream {
   public abstract static class TransportState extends Http2ClientStreamTransportState
       implements StreamIdHolder {
     private final NettyClientHandler handler;
+    private final EventLoop eventLoop;
     private int id;
     private Http2Stream http2Stream;
 
-    public TransportState(NettyClientHandler handler, int maxMessageSize,
+    public TransportState(NettyClientHandler handler, EventLoop eventLoop, int maxMessageSize,
         StatsTraceContext statsTraceCtx) {
       super(maxMessageSize, statsTraceCtx);
       this.handler = checkNotNull(handler, "handler");
+      this.eventLoop = checkNotNull(eventLoop, "eventLoop");
     }
 
     @Override
@@ -232,15 +243,24 @@ class NettyClientStream extends AbstractClientStream {
     }
 
     /**
-     * Intended to be overriden by NettyClientTransport, which has more information about failures.
+     * Intended to be overridden by NettyClientTransport, which has more information about failures.
      * May only be called from event loop.
      */
     protected abstract Status statusFromFailedFuture(ChannelFuture f);
 
     @Override
-    protected void http2ProcessingFailed(Status status, Metadata trailers) {
-      transportReportStatus(status, false, trailers);
+    protected void http2ProcessingFailed(Status status, boolean stopDelivery, Metadata trailers) {
+      transportReportStatus(status, stopDelivery, trailers);
       handler.getWriteQueue().enqueue(new CancelClientStreamCommand(this, status), true);
+    }
+
+    @Override
+    public void runOnTransportThread(final Runnable r) {
+      if (eventLoop.inEventLoop()) {
+        r.run();
+      } else {
+        eventLoop.execute(r);
+      }
     }
 
     @Override
@@ -250,8 +270,8 @@ class NettyClientStream extends AbstractClientStream {
     }
 
     @Override
-    protected void deframeFailed(Throwable cause) {
-      http2ProcessingFailed(Status.fromThrowable(cause), new Metadata());
+    public void deframeFailed(Throwable cause) {
+      http2ProcessingFailed(Status.fromThrowable(cause), true, new Metadata());
     }
 
     void transportHeadersReceived(Http2Headers headers, boolean endOfStream) {

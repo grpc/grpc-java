@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import io.grpc.Compressor;
-import io.grpc.Decompressor;
 import java.io.InputStream;
 
 /**
@@ -27,10 +26,10 @@ import java.io.InputStream;
  */
 public interface Stream {
   /**
-   * Requests up to the given number of messages from the call to be delivered to
-   * {@link StreamListener#messageRead(java.io.InputStream)}. No additional messages will be
-   * delivered.  If the stream has a {@code start()} method, it must be called before requesting
-   * messages.
+   * Requests up to the given number of messages from the call to be delivered via
+   * {@link StreamListener#messagesAvailable(StreamListener.MessageProducer)}. No additional
+   * messages will be delivered.  If the stream has a {@code start()} method, it must be called
+   * before requesting messages.
    *
    * @param numMessages the requested number of messages to be delivered to the listener.
    */
@@ -71,13 +70,6 @@ public interface Stream {
    * @param compressor the compressor to use
    */
   void setCompressor(Compressor compressor);
-
-  /**
-   * Sets the decompressor on the deframer.
-   *
-   * @param decompressor the decompressor to use.
-   */
-  void setDecompressor(Decompressor decompressor);
 
   /**
    * Enables per-message compression, if an encoding type has been negotiated.  If no message

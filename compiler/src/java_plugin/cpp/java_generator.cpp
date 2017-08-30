@@ -87,7 +87,7 @@ static inline string MessageFullJavaName(bool nano, const Descriptor* desc) {
       // No java package specified.
       return "nano." + name;
     }
-    for (int i = 0; i < name.size(); ++i) {
+    for (size_t i = 0; i < name.size(); ++i) {
       if ((name[i] == '.') && (i < (name.size() - 1)) && isupper(name[i + 1])) {
         return name.substr(0, i + 1) + "nano." + name.substr(i + 1);
       }
@@ -251,7 +251,7 @@ static void GrpcWriteDocCommentBody(Printer* printer,
       printer->Print(" * <pre>\n");
     }
 
-    for (int i = 0; i < lines.size(); i++) {
+    for (size_t i = 0; i < lines.size(); i++) {
       // Most lines should start with a space.  Watch out for lines that start
       // with a /, since putting that right after the leading asterisk will
       // close the comment.
@@ -781,7 +781,7 @@ static void PrintMethodHandlerClass(const ServiceDescriptor* service,
   }
   stable_sort(sorted_methods.begin(), sorted_methods.end(),
               CompareMethodClientStreaming);
-  for (int i = 0; i < sorted_methods.size(); i++) {
+  for (size_t i = 0; i < sorted_methods.size(); i++) {
     const MethodDescriptor* method = sorted_methods[i];
     (*vars)["method_id"] = to_string(i);
     (*vars)["method_id_name"] = MethodIdFieldName(method);
@@ -1023,14 +1023,16 @@ static void PrintService(const ServiceDescriptor* service,
                          std::map<string, string>* vars,
                          Printer* p,
                          ProtoFlavor flavor,
-                         bool enable_deprecated) {
+                         bool enable_deprecated,
+                         bool disable_version) {
   (*vars)["service_name"] = service->name();
   (*vars)["file_name"] = service->file()->name();
   (*vars)["service_class_name"] = ServiceClassName(service);
+  (*vars)["grpc_version"] = "";
   #ifdef GRPC_VERSION
+  if (!disable_version) {
     (*vars)["grpc_version"] = " (version " XSTR(GRPC_VERSION) ")";
-  #else
-    (*vars)["grpc_version"] = "";
+  }
   #endif
   // TODO(nmittler): Replace with WriteServiceDocComment once included by protobuf distro.
   GrpcWriteServiceDocComment(p, service);
@@ -1168,7 +1170,8 @@ void PrintImports(Printer* p, bool generate_nano) {
 void GenerateService(const ServiceDescriptor* service,
                      google::protobuf::io::ZeroCopyOutputStream* out,
                      ProtoFlavor flavor,
-                     bool enable_deprecated) {
+                     bool enable_deprecated,
+                     bool disable_version) {
   // All non-generated classes must be referred by fully qualified names to
   // avoid collision with generated classes.
   std::map<string, string> vars;
@@ -1212,7 +1215,7 @@ void GenerateService(const ServiceDescriptor* service,
   if (!vars["Package"].empty()) {
     vars["Package"].append(".");
   }
-  PrintService(service, &vars, &printer, flavor, enable_deprecated);
+  PrintService(service, &vars, &printer, flavor, enable_deprecated, disable_version);
 }
 
 string ServiceJavaPackage(const FileDescriptor* file, bool nano) {

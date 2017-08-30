@@ -40,7 +40,6 @@ import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
@@ -145,7 +144,8 @@ class NettyClientTransport implements ConnectionClientTransport {
     }
     StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(callOptions, headers);
     return new NettyClientStream(
-        new NettyClientStream.TransportState(handler, maxMessageSize, statsTraceCtx) {
+        new NettyClientStream.TransportState(handler, channel.eventLoop(), maxMessageSize,
+            statsTraceCtx) {
           @Override
           protected Status statusFromFailedFuture(ChannelFuture f) {
             return NettyClientTransport.this.statusFromFailedFuture(f);
@@ -153,11 +153,6 @@ class NettyClientTransport implements ConnectionClientTransport {
         },
         method, headers, channel, authority, negotiationHandler.scheme(), userAgent,
         statsTraceCtx);
-  }
-
-  @Override
-  public ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers) {
-    return newStream(method, headers, CallOptions.DEFAULT);
   }
 
   @SuppressWarnings("unchecked")
@@ -174,7 +169,7 @@ class NettyClientTransport implements ConnectionClientTransport {
 
     handler = NettyClientHandler.newHandler(lifecycleManager, keepAliveManager, flowControlWindow,
         maxHeaderListSize, Ticker.systemTicker(), tooManyPingsRunnable);
-    InternalHandlerSettings.setAutoWindow(handler);
+    NettyHandlerSettings.setAutoWindow(handler);
 
     negotiationHandler = negotiator.newHandler(handler);
 
@@ -221,25 +216,12 @@ class NettyClientTransport implements ConnectionClientTransport {
     }
     // Start the write queue as soon as the channel is constructed
     handler.startWriteQueue(channel);
-    // Start the connection operation to the server.
-    channel.connect(address).addListener(new ChannelFutureListener() {
-      @Override
-      public void operationComplete(ChannelFuture future) throws Exception {
-        if (!future.isSuccess()) {
-          ChannelHandlerContext ctx = future.channel().pipeline().context(handler);
-          if (ctx != null) {
-            // NettyClientHandler doesn't propagate exceptions, but the negotiator will need the
-            // exception to fail any writes. Note that this fires after handler, because it is as if
-            // handler was propagating the notification.
-            ctx.fireExceptionCaught(future.cause());
-          }
-          future.channel().pipeline().fireExceptionCaught(future.cause());
-        }
-      }
-    });
     // This write will have no effect, yet it will only complete once the negotiationHandler
-    // flushes any pending writes.
-    channel.write(NettyClientHandler.NOOP_MESSAGE).addListener(new ChannelFutureListener() {
+    // flushes any pending writes. We need it to be staged *before* the `connect` so that
+    // the channel can't have been closed yet, removing all handlers. This write will sit in the
+    // AbstractBufferingHandler's buffer, and will either be flushed on a successful connection,
+    // or failed if the connection fails.
+    channel.writeAndFlush(NettyClientHandler.NOOP_MESSAGE).addListener(new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
         if (!future.isSuccess()) {
@@ -249,15 +231,8 @@ class NettyClientTransport implements ConnectionClientTransport {
         }
       }
     });
-    // Handle transport shutdown when the channel is closed.
-    channel.closeFuture().addListener(new ChannelFutureListener() {
-      @Override
-      public void operationComplete(ChannelFuture future) throws Exception {
-        // Typically we should have noticed shutdown before this point.
-        lifecycleManager.notifyTerminated(
-            Status.INTERNAL.withDescription("Connection closed with unknown cause"));
-      }
-    });
+    // Start the connection operation to the server.
+    channel.connect(address);
 
     if (keepAliveManager != null) {
       keepAliveManager.onTransportStarted();
@@ -267,24 +242,31 @@ class NettyClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public void shutdown() {
+  public void shutdown(Status reason) {
     // start() could have failed
     if (channel == null) {
       return;
     }
     // Notifying of termination is automatically done when the channel closes.
     if (channel.isOpen()) {
-      Status status
-          = Status.UNAVAILABLE.withDescription("Channel requested transport to shut down");
-      handler.getWriteQueue().enqueue(new GracefulCloseCommand(status), true);
+      handler.getWriteQueue().enqueue(new GracefulCloseCommand(reason), true);
     }
   }
 
   @Override
-  public void shutdownNow(Status reason) {
+  public void shutdownNow(final Status reason) {
     // Notifying of termination is automatically done when the channel closes.
     if (channel != null && channel.isOpen()) {
-      handler.getWriteQueue().enqueue(new ForcefulCloseCommand(reason), true);
+      handler.getWriteQueue().enqueue(new Runnable() {
+        @Override
+        public void run() {
+          lifecycleManager.notifyShutdown(reason);
+          // Call close() directly since negotiation may not have completed, such that a write would
+          // be queued.
+          channel.close();
+          channel.write(new ForcefulCloseCommand(reason));
+        }
+      }, true);
     }
   }
 

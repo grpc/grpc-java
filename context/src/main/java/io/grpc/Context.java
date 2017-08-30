@@ -23,6 +23,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -95,9 +96,8 @@ public class Context {
 
   private static final Logger log = Logger.getLogger(Context.class.getName());
 
-  private static final Object[][] EMPTY_ENTRIES = new Object[0][2];
-
-  private static final Key<Deadline> DEADLINE_KEY = new Key<Deadline>("deadline");
+  private static final PersistentHashArrayMappedTrie<Key<?>, Object> EMPTY_ENTRIES =
+      new PersistentHashArrayMappedTrie<Key<?>, Object>();
 
   /**
    * The logical root context which is the ultimate ancestor of all contexts. This context
@@ -106,41 +106,44 @@ public class Context {
    * <p>Never assume this is the default context for new threads, because {@link Storage} may define
    * a default context that is different from ROOT.
    */
-  public static final Context ROOT = new Context(null);
+  public static final Context ROOT = new Context(null, EMPTY_ENTRIES);
 
-  // One and only one of them is non-null
-  private static final Storage storage;
-  private static final Exception storageInitError;
-
-  static {
-    Storage newStorage = null;
-    Exception error = null;
-    try {
-      Class<?> clazz = Class.forName("io.grpc.override.ContextStorageOverride");
-      newStorage = (Storage) clazz.getConstructor().newInstance();
-    } catch (ClassNotFoundException e) {
-      if (log.isLoggable(Level.FINE)) {
-        // Avoid writing to logger because custom log handlers may try to use Context, which is
-        // problemantic (e.g., NullPointerException) because the Context class has not done loading
-        // at this point.  The caveat is that in environments stderr may be disabled, thus this
-        // message would go nowhere.
-        System.err.println("io.grpc.Context: Storage override doesn't exist. Using default.");
-        e.printStackTrace();
-      }
-      newStorage = new ThreadLocalContextStorage();
-    } catch (Exception e) {
-      error = e;
-    }
-    storage = newStorage;
-    storageInitError = error;
-  }
+  // Lazy-loaded storage. Delaying storage initialization until after class initialization makes it
+  // much easier to avoid circular loading since there can still be references to Context as long as
+  // they don't depend on storage, like key() and currentContextExecutor(). It also makes it easier
+  // to handle exceptions.
+  private static final AtomicReference<Storage> storage = new AtomicReference<Storage>();
 
   // For testing
   static Storage storage() {
-    if (storage == null) {
-      throw new RuntimeException("Storage override had failed to initialize", storageInitError);
+    Storage tmp = storage.get();
+    if (tmp == null) {
+      tmp = createStorage();
     }
-    return storage;
+    return tmp;
+  }
+
+  private static Storage createStorage() {
+    // Note that this method may be run more than once
+    try {
+      Class<?> clazz = Class.forName("io.grpc.override.ContextStorageOverride");
+      // The override's constructor is prohibited from triggering any code that can loop back to
+      // Context
+      Storage newStorage = (Storage) clazz.getConstructor().newInstance();
+      storage.compareAndSet(null, newStorage);
+    } catch (ClassNotFoundException e) {
+      Storage newStorage = new ThreadLocalContextStorage();
+      // Must set storage before logging, since logging may call Context.current().
+      if (storage.compareAndSet(null, newStorage)) {
+        // Avoid logging if this thread lost the race, to avoid confusion
+        log.log(Level.FINE, "Storage override doesn't exist. Using default", e);
+      }
+    } catch (Exception e) {
+      throw new RuntimeException("Storage override failed to initialize", e);
+    }
+    // Re-retreive from storage since compareAndSet may have failed (returned false) in case of
+    // race.
+    return storage.get();
   }
 
   /**
@@ -174,44 +177,26 @@ public class Context {
     return current;
   }
 
-  private final Context parent;
-  private final Object[][] keyValueEntries;
-  private final boolean cascadesCancellation;
   private ArrayList<ExecutableListener> listeners;
   private CancellationListener parentListener = new ParentListener();
-  private final boolean canBeCancelled;
+  final CancellableContext cancellableAncestor;
+  final PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries;
 
   /**
    * Construct a context that cannot be cancelled and will not cascade cancellation from its parent.
    */
-  private Context(Context parent) {
-    this.parent = parent;
-    // Not inheriting cancellation implies not inheriting a deadline too.
-    keyValueEntries = new Object[][]{{DEADLINE_KEY, null}};
-    cascadesCancellation = false;
-    canBeCancelled = false;
+  private Context(PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries) {
+    cancellableAncestor = null;
+    this.keyValueEntries = keyValueEntries;
   }
 
   /**
    * Construct a context that cannot be cancelled but will cascade cancellation from its parent if
    * it is cancellable.
    */
-  private Context(Context parent, Object[][] keyValueEntries) {
-    this.parent = parent;
+  private Context(Context parent, PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries) {
+    cancellableAncestor = cancellableAncestor(parent);
     this.keyValueEntries = keyValueEntries;
-    cascadesCancellation = true;
-    canBeCancelled = this.parent != null && this.parent.canBeCancelled;
-  }
-
-  /**
-   * Construct a context that can be cancelled and will cascade cancellation from its parent if
-   * it is cancellable.
-   */
-  private Context(Context parent, Object[][] keyValueEntries, boolean isCancellable) {
-    this.parent = parent;
-    this.keyValueEntries = keyValueEntries;
-    cascadesCancellation = true;
-    canBeCancelled = isCancellable;
   }
 
   /**
@@ -319,7 +304,7 @@ public class Context {
    *
    */
   public <V> Context withValue(Key<V> k1, V v1) {
-    return new Context(this, new Object[][]{{k1, v1}});
+    return new Context(this, keyValueEntries.put(k1, v1));
   }
 
   /**
@@ -327,7 +312,7 @@ public class Context {
    * from its parent.
    */
   public <V1, V2> Context withValues(Key<V1> k1, V1 v1, Key<V2> k2, V2 v2) {
-    return new Context(this, new Object[][]{{k1, v1}, {k2, v2}});
+    return new Context(this, keyValueEntries.put(k1, v1).put(k2, v2));
   }
 
   /**
@@ -335,7 +320,7 @@ public class Context {
    * from its parent.
    */
   public <V1, V2, V3> Context withValues(Key<V1> k1, V1 v1, Key<V2> k2, V2 v2, Key<V3> k3, V3 v3) {
-    return new Context(this, new Object[][]{{k1, v1}, {k2, v2}, {k3, v3}});
+    return new Context(this, keyValueEntries.put(k1, v1).put(k2, v2).put(k3, v3));
   }
 
   /**
@@ -344,7 +329,7 @@ public class Context {
    */
   public <V1, V2, V3, V4> Context withValues(Key<V1> k1, V1 v1, Key<V2> k2, V2 v2,
       Key<V3> k3, V3 v3, Key<V4> k4, V4 v4) {
-    return new Context(this, new Object[][]{{k1, v1}, {k2, v2}, {k3, v3}, {k4, v4}});
+    return new Context(this, keyValueEntries.put(k1, v1).put(k2, v2).put(k3, v3).put(k4, v4));
   }
 
   /**
@@ -352,13 +337,11 @@ public class Context {
    * cancellation.
    */
   public Context fork() {
-    return new Context(this);
+    return new Context(keyValueEntries);
   }
 
   boolean canBeCancelled() {
-    // A context is cancellable if it cascades from its parent and its parent is
-    // cancellable or is itself directly cancellable..
-    return canBeCancelled;
+    return cancellableAncestor != null;
   }
 
   /**
@@ -381,9 +364,11 @@ public class Context {
    * }}</pre>
    */
   public Context attach() {
-    Context previous = current();
-    storage().attach(this);
-    return previous;
+    Context prev = storage().doAttach(this);
+    if (prev == null) {
+      return ROOT;
+    }
+    return prev;
   }
 
   /**
@@ -414,10 +399,10 @@ public class Context {
    * Is this context cancelled.
    */
   public boolean isCancelled() {
-    if (parent == null || !cascadesCancellation) {
+    if (cancellableAncestor == null) {
       return false;
     } else {
-      return parent.isCancelled();
+      return cancellableAncestor.isCancelled();
     }
   }
 
@@ -430,10 +415,10 @@ public class Context {
    * should generally assume that it has already been handled and logged properly.
    */
   public Throwable cancellationCause() {
-    if (parent == null || !cascadesCancellation) {
+    if (cancellableAncestor == null) {
       return null;
     } else {
-      return parent.cancellationCause();
+      return cancellableAncestor.cancellationCause();
     }
   }
 
@@ -442,7 +427,10 @@ public class Context {
    * @return A {@link io.grpc.Deadline} or {@code null} if no deadline is set.
    */
   public Deadline getDeadline() {
-    return DEADLINE_KEY.get(this);
+    if (cancellableAncestor == null) {
+      return null;
+    }
+    return cancellableAncestor.getDeadline();
   }
 
   /**
@@ -452,7 +440,7 @@ public class Context {
                           final Executor executor) {
     checkNotNull(cancellationListener, "cancellationListener");
     checkNotNull(executor, "executor");
-    if (canBeCancelled) {
+    if (canBeCancelled()) {
       ExecutableListener executableListener =
           new ExecutableListener(executor, cancellationListener);
       synchronized (this) {
@@ -464,7 +452,9 @@ public class Context {
             // we can cascade listener notification.
             listeners = new ArrayList<ExecutableListener>();
             listeners.add(executableListener);
-            parent.addListener(parentListener, DirectExecutor.INSTANCE);
+            if (cancellableAncestor != null) {
+              cancellableAncestor.addListener(parentListener, DirectExecutor.INSTANCE);
+            }
           } else {
             listeners.add(executableListener);
           }
@@ -477,7 +467,7 @@ public class Context {
    * Remove a {@link CancellationListener}.
    */
   public void removeListener(CancellationListener cancellationListener) {
-    if (!canBeCancelled) {
+    if (!canBeCancelled()) {
       return;
     }
     synchronized (this) {
@@ -492,7 +482,9 @@ public class Context {
         }
         // We have no listeners so no need to listen to our parent
         if (listeners.isEmpty()) {
-          parent.removeListener(parentListener);
+          if (cancellableAncestor != null) {
+            cancellableAncestor.removeListener(parentListener);
+          }
           listeners = null;
         }
       }
@@ -504,7 +496,7 @@ public class Context {
    * any reference to them so that they may be garbage collected.
    */
   void notifyAndClearListeners() {
-    if (!canBeCancelled) {
+    if (!canBeCancelled()) {
       return;
     }
     ArrayList<ExecutableListener> tmpListeners;
@@ -529,7 +521,9 @@ public class Context {
         tmpListeners.get(i).deliver();
       }
     }
-    parent.removeListener(parentListener);
+    if (cancellableAncestor != null) {
+      cancellableAncestor.removeListener(parentListener);
+    }
   }
 
   // Used in tests to ensure that listeners are defined and released when cancellation cascades.
@@ -644,15 +638,7 @@ public class Context {
    * Lookup the value for a key in the context inheritance chain.
    */
   private Object lookup(Key<?> key) {
-    for (int i = 0; i < keyValueEntries.length; i++) {
-      if (key.equals(keyValueEntries[i][0])) {
-        return keyValueEntries[i][1];
-      }
-    }
-    if (parent == null) {
-      return null;
-    }
-    return parent.lookup(key);
+    return keyValueEntries.get(key);
   }
 
   /**
@@ -663,30 +649,22 @@ public class Context {
    */
   public static final class CancellableContext extends Context {
 
+    private final Deadline deadline;
+    private final Context uncancellableSurrogate;
+
     private boolean cancelled;
     private Throwable cancellationCause;
-    private final Context uncancellableSurrogate;
     private ScheduledFuture<?> pendingDeadline;
-
-    /**
-     * If the parent deadline is before the given deadline there is no need to install the value
-     * or listen for its expiration as the parent context will already be listening for it.
-     */
-    private static Object[][] deriveDeadline(Context parent, Deadline deadline) {
-      Deadline parentDeadline = DEADLINE_KEY.get(parent);
-      return parentDeadline == null || deadline.isBefore(parentDeadline)
-          ? new Object[][]{{ DEADLINE_KEY, deadline}} :
-          EMPTY_ENTRIES;
-    }
 
     /**
      * Create a cancellable context that does not have a deadline.
      */
     private CancellableContext(Context parent) {
-      super(parent, EMPTY_ENTRIES, true);
+      super(parent, parent.keyValueEntries);
+      deadline = parent.getDeadline();
       // Create a surrogate that inherits from this to attach so that you cannot retrieve a
       // cancellable context from Context.current()
-      uncancellableSurrogate = new Context(this, EMPTY_ENTRIES);
+      uncancellableSurrogate = new Context(this, keyValueEntries);
     }
 
     /**
@@ -694,9 +672,13 @@ public class Context {
      */
     private CancellableContext(Context parent, Deadline deadline,
         ScheduledExecutorService scheduler) {
-      super(parent, deriveDeadline(parent, deadline), true);
-      if (DEADLINE_KEY.get(this) == deadline) {
-        final TimeoutException cause = new TimeoutException("context timed out");
+      super(parent, parent.keyValueEntries);
+      Deadline parentDeadline = parent.getDeadline();
+      if (parentDeadline != null && parentDeadline.compareTo(deadline) <= 0) {
+        // The new deadline won't have an effect, so ignore it
+        deadline = parentDeadline;
+      } else {
+        // The new deadline has an effect
         if (!deadline.isExpired()) {
           // The parent deadline was after the new deadline so we need to install a listener
           // on the new earlier deadline to trigger expiration for this context.
@@ -704,7 +686,7 @@ public class Context {
             @Override
             public void run() {
               try {
-                cancel(cause);
+                cancel(new TimeoutException("context timed out"));
               } catch (Throwable t) {
                 log.log(Level.SEVERE, "Cancel threw an exception, which should not happen", t);
               }
@@ -712,10 +694,11 @@ public class Context {
           }, scheduler);
         } else {
           // Cancel immediately if the deadline is already expired.
-          cancel(cause);
+          cancel(new TimeoutException("context timed out"));
         }
       }
-      uncancellableSurrogate = new Context(this, EMPTY_ENTRIES);
+      this.deadline = deadline;
+      uncancellableSurrogate = new Context(this, keyValueEntries);
     }
 
 
@@ -807,6 +790,16 @@ public class Context {
       }
       return null;
     }
+
+    @Override
+    public Deadline getDeadline() {
+      return deadline;
+    }
+
+    @Override
+    boolean canBeCancelled() {
+      return true;
+    }
   }
 
   /**
@@ -823,7 +816,6 @@ public class Context {
    * Key for indexing values stored in a context.
    */
   public static final class Key<T> {
-
     private final String name;
     private final T defaultValue;
 
@@ -860,7 +852,11 @@ public class Context {
   }
 
   /**
-   * Defines the mechanisms for attaching and detaching the "current" context.
+   * Defines the mechanisms for attaching and detaching the "current" context. The constructor for
+   * extending classes <em>must not</em> trigger any activity that can use Context, which includes
+   * logging, otherwise it can trigger an infinite initialization loop. Extending classes must not
+   * assume that only one instance will be created; Context guarantees it will only use one
+   * instance, but it may create multiple and then throw away all but one.
    *
    * <p>The default implementation will put the current context in a {@link ThreadLocal}.  If an
    * alternative implementation named {@code io.grpc.override.ContextStorageOverride} exists in the
@@ -871,11 +867,33 @@ public class Context {
    */
   public abstract static class Storage {
     /**
+     * @deprecated This is an old API that is no longer used.
+     */
+    @Deprecated
+    public void attach(Context toAttach) {
+      throw new UnsupportedOperationException("Deprecated. Do not call.");
+    }
+
+    /**
      * Implements {@link io.grpc.Context#attach}.
      *
+     * <p>Caution: {@link Context#attach()} interprets a return value of {@code null} to mean
+     * the same thing as {@link Context#ROOT}.
+     *
+     * <p>See also: {@link #current()}.
+
      * @param toAttach the context to be attached
+     * @return A {@link Context} that should be passed back into {@link #detach(Context, Context)}
+     *        as the {@code toRestore} parameter. {@code null} is a valid return value, but see
+     *        caution note.
      */
-    public abstract void attach(Context toAttach);
+    public Context doAttach(Context toAttach) {
+      // This is a default implementation to help migrate existing Storage implementations that
+      // have an attach() method but no doAttach() method.
+      Context current = current();
+      attach(toAttach);
+      return current;
+    }
 
     /**
      * Implements {@link io.grpc.Context#detach}
@@ -888,7 +906,15 @@ public class Context {
     public abstract void detach(Context toDetach, Context toRestore);
 
     /**
-     * Implements {@link io.grpc.Context#current}.  Returns the context of the current scope.
+     * Implements {@link io.grpc.Context#current}.
+     *
+     * <p>Caution: {@link Context} interprets a return value of {@code null} to mean the same
+     * thing as {@code Context{@link #ROOT}}.
+     *
+     * <p>See also {@link #doAttach(Context)}.
+     *
+     * @return The context of the current scope. {@code null} is a valid return value, but see
+     *        caution note.
      */
     public abstract Context current();
   }
@@ -950,5 +976,21 @@ public class Context {
     public String toString() {
       return "Context.DirectExecutor";
     }
+  }
+
+  /**
+   * Returns {@code parent} if it is a {@link CancellableContext}, otherwise returns the parent's
+   * {@link #cancellableAncestor}.
+   */
+  static CancellableContext cancellableAncestor(Context parent) {
+    if (parent == null) {
+      return null;
+    }
+    if (parent instanceof CancellableContext) {
+      return (CancellableContext) parent;
+    }
+    // The parent simply cascades cancellations.
+    // Bypass the parent and reference the ancestor directly (may be null).
+    return parent.cancellableAncestor;
   }
 }

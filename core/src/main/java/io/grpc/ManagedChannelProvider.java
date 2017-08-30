@@ -34,13 +34,13 @@ import java.util.ServiceLoader;
 @Internal
 public abstract class ManagedChannelProvider {
   private static final ManagedChannelProvider provider
-      = load(getCorrectClassLoader());
+      = load(ManagedChannelProvider.class.getClassLoader());
 
   @VisibleForTesting
   static ManagedChannelProvider load(ClassLoader classLoader) {
     Iterable<ManagedChannelProvider> candidates;
     if (isAndroid()) {
-      candidates = getCandidatesViaHardCoded(classLoader);
+      candidates = getCandidatesViaHardCoded();
     } else {
       candidates = getCandidatesViaServiceLoader(classLoader);
     }
@@ -79,16 +79,18 @@ public abstract class ManagedChannelProvider {
    * be used on Android is free to be added here.
    */
   @VisibleForTesting
-  public static Iterable<ManagedChannelProvider> getCandidatesViaHardCoded(
-      ClassLoader classLoader) {
+  public static Iterable<ManagedChannelProvider> getCandidatesViaHardCoded() {
+    // Class.forName(String) is used to remove the need for ProGuard configuration. Note that
+    // ProGuard does not detect usages of Class.forName(String, boolean, ClassLoader):
+    // https://sourceforge.net/p/proguard/bugs/418/
     List<ManagedChannelProvider> list = new ArrayList<ManagedChannelProvider>();
     try {
-      list.add(create(Class.forName("io.grpc.okhttp.OkHttpChannelProvider", true, classLoader)));
+      list.add(create(Class.forName("io.grpc.okhttp.OkHttpChannelProvider")));
     } catch (ClassNotFoundException ex) {
       // ignore
     }
     try {
-      list.add(create(Class.forName("io.grpc.netty.NettyChannelProvider", true, classLoader)));
+      list.add(create(Class.forName("io.grpc.netty.NettyChannelProvider")));
     } catch (ClassNotFoundException ex) {
       // ignore
     }
@@ -118,23 +120,14 @@ public abstract class ManagedChannelProvider {
     return provider;
   }
 
-  private static ClassLoader getCorrectClassLoader() {
-    if (isAndroid()) {
-      // When android:sharedUserId or android:process is used, Android will setup a dummy
-      // ClassLoader for the thread context (http://stackoverflow.com/questions/13407006),
-      // instead of letting users to manually set context class loader, we choose the
-      // correct class loader here.
-      return ManagedChannelProvider.class.getClassLoader();
-    }
-    return Thread.currentThread().getContextClassLoader();
-  }
-
   /**
    * Returns whether current platform is Android.
    */
   protected static boolean isAndroid() {
     try {
-      Class.forName("android.app.Application", /*initialize=*/ false, null);
+      // Specify a class loader instead of null because we may be running under Robolectric
+      Class.forName("android.app.Application", /*initialize=*/ false,
+          ManagedChannelProvider.class.getClassLoader());
       return true;
     } catch (Exception e) {
       // If Application isn't loaded, it might as well not be Android.

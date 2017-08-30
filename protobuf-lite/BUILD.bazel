@@ -1,0 +1,15 @@
+java_library(
+    name = "protobuf_lite",
+    srcs = glob([
+        "src/main/java/**/*.java",
+    ]),
+    # TOOD(zdapeng): fix visibility and deps (https://github.com/google/protobuf/issues/2762)
+    visibility = ["//protobuf:__pkg__"],
+    deps = [
+        "//core",
+        "//core:internal",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava_guava//jar",
+        "@com_google_protobuf_java//:protobuf_java",
+    ],
+)

@@ -32,8 +32,11 @@ import io.grpc.Context;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
+import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerTransportFilter;
@@ -46,8 +49,9 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.concurrent.GuardedBy;
 
 /**
@@ -65,6 +69,7 @@ import javax.annotation.concurrent.GuardedBy;
  * server stops servicing new requests and waits for all connections to terminate.
  */
 public final class ServerImpl extends io.grpc.Server implements WithLogId {
+  private static final Logger log = Logger.getLogger(ServerImpl.class.getName());
   private static final ServerStreamListener NOOP_LISTENER = new NoopListener();
 
   private final LogId logId = LogId.allocate(getClass().getName());
@@ -74,6 +79,9 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
   private final InternalHandlerRegistry registry;
   private final HandlerRegistry fallbackRegistry;
   private final List<ServerTransportFilter> transportFilters;
+  // This is iterated on a per-call basis.  Use an array instead of a Collection to avoid iterator
+  // creations.
+  private final ServerInterceptor[] interceptors;
   @GuardedBy("lock") private boolean started;
   @GuardedBy("lock") private boolean shutdown;
   /** non-{@code null} if immediate shutdown has been requested. */
@@ -89,8 +97,6 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
   @GuardedBy("lock") private final Collection<ServerTransport> transports =
       new HashSet<ServerTransport>();
 
-  private final ObjectPool<ScheduledExecutorService> timeoutServicePool;
-  private ScheduledExecutorService timeoutService;
   private final Context rootContext;
 
   private final DecompressorRegistry decompressorRegistry;
@@ -99,29 +105,28 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
   /**
    * Construct a server.
    *
-   * @param executorPool provides an executor to call methods on behalf of remote clients
-   * @param registry the primary method registry
-   * @param fallbackRegistry the secondary method registry, used only if the primary registry
-   *        doesn't have the method
+   * @param builder builder with configuration for server
+   * @param transportServer transport server that will create new incoming transports
+   * @param rootContext context that callbacks for new RPCs should be derived from
    */
-  ServerImpl(ObjectPool<? extends Executor> executorPool,
-      ObjectPool<ScheduledExecutorService> timeoutServicePool,
-      InternalHandlerRegistry registry, HandlerRegistry fallbackRegistry,
-      InternalServer transportServer, Context rootContext,
-      DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
-      List<ServerTransportFilter> transportFilters) {
-    this.executorPool = Preconditions.checkNotNull(executorPool, "executorPool");
-    this.timeoutServicePool = Preconditions.checkNotNull(timeoutServicePool, "timeoutServicePool");
-    this.registry = Preconditions.checkNotNull(registry, "registry");
-    this.fallbackRegistry = Preconditions.checkNotNull(fallbackRegistry, "fallbackRegistry");
+  ServerImpl(
+      AbstractServerImplBuilder<?> builder,
+      InternalServer transportServer,
+      Context rootContext) {
+    this.executorPool = Preconditions.checkNotNull(builder.executorPool, "executorPool");
+    this.registry = Preconditions.checkNotNull(builder.registryBuilder.build(), "registryBuilder");
+    this.fallbackRegistry =
+        Preconditions.checkNotNull(builder.fallbackRegistry, "fallbackRegistry");
     this.transportServer = Preconditions.checkNotNull(transportServer, "transportServer");
     // Fork from the passed in context so that it does not propagate cancellation, it only
     // inherits values.
     this.rootContext = Preconditions.checkNotNull(rootContext, "rootContext").fork();
-    this.decompressorRegistry = decompressorRegistry;
-    this.compressorRegistry = compressorRegistry;
+    this.decompressorRegistry = builder.decompressorRegistry;
+    this.compressorRegistry = builder.compressorRegistry;
     this.transportFilters = Collections.unmodifiableList(
-        new ArrayList<ServerTransportFilter>(transportFilters));
+        new ArrayList<ServerTransportFilter>(builder.transportFilters));
+    this.interceptors =
+        builder.interceptors.toArray(new ServerInterceptor[builder.interceptors.size()]);
   }
 
   /**
@@ -138,7 +143,6 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       checkState(!shutdown, "Shutting down");
       // Start and wait for any port to actually be bound.
       transportServer.start(new ServerListenerImpl());
-      timeoutService = Preconditions.checkNotNull(timeoutServicePool.getObject(), "timeoutService");
       executor = Preconditions.checkNotNull(executorPool.getObject(), "executor");
       started = true;
       return this;
@@ -289,9 +293,6 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
           throw new AssertionError("Server already terminated");
         }
         terminated = true;
-        if (timeoutService != null) {
-          timeoutService = timeoutServicePool.returnObject(timeoutService);
-        }
         if (executor != null) {
           executor = executorPool.returnObject(executor);
         }
@@ -444,8 +445,8 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
         return baseContext.withCancellation();
       }
 
-      Context.CancellableContext context =
-          baseContext.withDeadlineAfter(timeoutNanos, NANOSECONDS, timeoutService);
+      Context.CancellableContext context = baseContext.withDeadlineAfter(
+          timeoutNanos, NANOSECONDS, transport.getScheduledExecutorService());
       context.addListener(new Context.CancellationListener() {
         @Override
         public void cancelled(Context context) {
@@ -469,9 +470,12 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       ServerCallImpl<ReqT, RespT> call = new ServerCallImpl<ReqT, RespT>(
           stream, methodDef.getMethodDescriptor(), headers, context,
           decompressorRegistry, compressorRegistry);
+      ServerCallHandler<ReqT, RespT> callHandler = methodDef.getServerCallHandler();
       statsTraceCtx.serverCallStarted(call);
-      ServerCall.Listener<ReqT> listener =
-          methodDef.getServerCallHandler().startCall(call, headers);
+      for (ServerInterceptor interceptor : interceptors) {
+        callHandler = InternalServerInterceptors.interceptCallHandler(interceptor, callHandler);
+      }
+      ServerCall.Listener<ReqT> listener = callHandler.startCall(call, headers);
       if (listener == null) {
         throw new NullPointerException(
             "startCall() returned a null listener for method " + fullMethodName);
@@ -487,11 +491,23 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
 
   private static class NoopListener implements ServerStreamListener {
     @Override
-    public void messageRead(InputStream value) {
-      try {
-        value.close();
-      } catch (IOException e) {
-        throw new RuntimeException(e);
+    public void messagesAvailable(MessageProducer producer) {
+      InputStream message;
+      while ((message = producer.next()) != null) {
+        try {
+          message.close();
+        } catch (IOException e) {
+          // Close any remaining messages
+          while ((message = producer.next()) != null) {
+            try {
+              message.close();
+            } catch (IOException ioException) {
+              // just log additional exceptions as we are already going to throw
+              log.log(Level.WARNING, "Exception closing stream", ioException);
+            }
+          }
+          throw new RuntimeException(e);
+        }
       }
     }
 
@@ -552,12 +568,12 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
     }
 
     @Override
-    public void messageRead(final InputStream message) {
+    public void messagesAvailable(final MessageProducer producer) {
       callExecutor.execute(new ContextRunnable(context) {
         @Override
         public void runInContext() {
           try {
-            getListener().messageRead(message);
+            getListener().messagesAvailable(producer);
           } catch (RuntimeException e) {
             internalClose();
             throw e;
