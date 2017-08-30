@@ -24,7 +24,6 @@ import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.io.Closeables;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.Codec;
@@ -146,7 +145,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       close(Status.fromThrowable(t), new Metadata());
       throw new RuntimeException(t);
     } finally {
-      Closeables.closeQuietly(resp);
+      GrpcUtil.closeQuietly(resp);
     }
   }
 
@@ -258,7 +257,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
           try {
             listener.onMessage(call.method.parseRequest(message));
           } catch (Throwable t) {
-            Closeables.closeQuietly(message);
+            GrpcUtil.closeQuietly(message);
             throw t;
           }
           message.close();
