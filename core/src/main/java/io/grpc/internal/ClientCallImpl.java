@@ -29,6 +29,7 @@ import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.io.Closeables;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
@@ -476,7 +477,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
               try {
                 observer.onMessage(method.parseResponse(message));
               } catch (Throwable t) {
-                GrpcUtil.closeQuietly(message);
+                Closeables.closeQuietly(message);
                 throw t;
               }
               message.close();
