@@ -10,6 +10,7 @@ public  final class ServerList extends
     com.google.protobuf.GeneratedMessageV3 implements
     // @@protoc_insertion_point(message_implements:grpc.lb.v1.ServerList)
     ServerListOrBuilder {
+private static final long serialVersionUID = 0L;
   // Use ServerList.newBuilder() to construct.
   private ServerList(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
     super(builder);
@@ -21,7 +22,7 @@ public  final class ServerList extends
   @java.lang.Override
   public final com.google.protobuf.UnknownFieldSet
   getUnknownFields() {
-    return com.google.protobuf.UnknownFieldSet.getDefaultInstance();
+    return this.unknownFields;
   }
   private ServerList(
       com.google.protobuf.CodedInputStream input,
@@ -29,6 +30,8 @@ public  final class ServerList extends
       throws com.google.protobuf.InvalidProtocolBufferException {
     this();
     int mutable_bitField0_ = 0;
+    com.google.protobuf.UnknownFieldSet.Builder unknownFields =
+        com.google.protobuf.UnknownFieldSet.newBuilder();
     try {
       boolean done = false;
       while (!done) {
@@ -38,7 +41,8 @@ public  final class ServerList extends
             done = true;
             break;
           default: {
-            if (!input.skipField(tag)) {
+            if (!parseUnknownFieldProto3(
+                input, unknownFields, extensionRegistry, tag)) {
               done = true;
             }
             break;
@@ -52,19 +56,6 @@ public  final class ServerList extends
                 input.readMessage(io.grpc.grpclb.Server.parser(), extensionRegistry));
             break;
           }
-          case 26: {
-            com.google.protobuf.Duration.Builder subBuilder = null;
-            if (expirationInterval_ != null) {
-              subBuilder = expirationInterval_.toBuilder();
-            }
-            expirationInterval_ = input.readMessage(com.google.protobuf.Duration.parser(), extensionRegistry);
-            if (subBuilder != null) {
-              subBuilder.mergeFrom(expirationInterval_);
-              expirationInterval_ = subBuilder.buildPartial();
-            }
-
-            break;
-          }
         }
       }
     } catch (com.google.protobuf.InvalidProtocolBufferException e) {
@@ -76,6 +67,7 @@ public  final class ServerList extends
       if (((mutable_bitField0_ & 0x00000001) == 0x00000001)) {
         servers_ = java.util.Collections.unmodifiableList(servers_);
       }
+      this.unknownFields = unknownFields.build();
       makeExtensionsImmutable();
     }
   }
@@ -91,7 +83,6 @@ public  final class ServerList extends
             io.grpc.grpclb.ServerList.class, io.grpc.grpclb.ServerList.Builder.class);
   }
 
-  private int bitField0_;
   public static final int SERVERS_FIELD_NUMBER = 1;
   private java.util.List<io.grpc.grpclb.Server> servers_;
   /**
@@ -162,48 +153,6 @@ public  final class ServerList extends
     return servers_.get(index);
   }
 
-  public static final int EXPIRATION_INTERVAL_FIELD_NUMBER = 3;
-  private com.google.protobuf.Duration expirationInterval_;
-  /**
-   * <pre>
-   * Indicates the amount of time that the client should consider this server
-   * list as valid. It may be considered stale after waiting this interval of
-   * time after receiving the list. If the interval is not positive, the
-   * client can assume the list is valid until the next list is received.
-   * </pre>
-   *
-   * <code>.google.protobuf.Duration expiration_interval = 3;</code>
-   */
-  public boolean hasExpirationInterval() {
-    return expirationInterval_ != null;
-  }
-  /**
-   * <pre>
-   * Indicates the amount of time that the client should consider this server
-   * list as valid. It may be considered stale after waiting this interval of
-   * time after receiving the list. If the interval is not positive, the
-   * client can assume the list is valid until the next list is received.
-   * </pre>
-   *
-   * <code>.google.protobuf.Duration expiration_interval = 3;</code>
-   */
-  public com.google.protobuf.Duration getExpirationInterval() {
-    return expirationInterval_ == null ? com.google.protobuf.Duration.getDefaultInstance() : expirationInterval_;
-  }
-  /**
-   * <pre>
-   * Indicates the amount of time that the client should consider this server
-   * list as valid. It may be considered stale after waiting this interval of
-   * time after receiving the list. If the interval is not positive, the
-   * client can assume the list is valid until the next list is received.
-   * </pre>
-   *
-   * <code>.google.protobuf.Duration expiration_interval = 3;</code>
-   */
-  public com.google.protobuf.DurationOrBuilder getExpirationIntervalOrBuilder() {
-    return getExpirationInterval();
-  }
-
   private byte memoizedIsInitialized = -1;
   public final boolean isInitialized() {
     byte isInitialized = memoizedIsInitialized;
@@ -219,9 +168,7 @@ public  final class ServerList extends
     for (int i = 0; i < servers_.size(); i++) {
       output.writeMessage(1, servers_.get(i));
     }
-    if (expirationInterval_ != null) {
-      output.writeMessage(3, getExpirationInterval());
-    }
+    unknownFields.writeTo(output);
   }
 
   public int getSerializedSize() {
@@ -233,15 +180,11 @@ public  final class ServerList extends
       size += com.google.protobuf.CodedOutputStream
         .computeMessageSize(1, servers_.get(i));
     }
-    if (expirationInterval_ != null) {
-      size += com.google.protobuf.CodedOutputStream
-        .computeMessageSize(3, getExpirationInterval());
-    }
+    size += unknownFields.getSerializedSize();
     memoizedSize = size;
     return size;
   }
 
-  private static final long serialVersionUID = 0L;
   @java.lang.Override
   public boolean equals(final java.lang.Object obj) {
     if (obj == this) {
@@ -255,11 +198,7 @@ public  final class ServerList extends
     boolean result = true;
     result = result && getServersList()
         .equals(other.getServersList());
-    result = result && (hasExpirationInterval() == other.hasExpirationInterval());
-    if (hasExpirationInterval()) {
-      result = result && getExpirationInterval()
-          .equals(other.getExpirationInterval());
-    }
+    result = result && unknownFields.equals(other.unknownFields);
     return result;
   }
 
@@ -273,10 +212,6 @@ public  final class ServerList extends
     if (getServersCount() > 0) {
       hash = (37 * hash) + SERVERS_FIELD_NUMBER;
       hash = (53 * hash) + getServersList().hashCode();
-    }
-    if (hasExpirationInterval()) {
-      hash = (37 * hash) + EXPIRATION_INTERVAL_FIELD_NUMBER;
-      hash = (53 * hash) + getExpirationInterval().hashCode();
     }
     hash = (29 * hash) + unknownFields.hashCode();
     memoizedHashCode = hash;
@@ -414,12 +349,6 @@ public  final class ServerList extends
       } else {
         serversBuilder_.clear();
       }
-      if (expirationIntervalBuilder_ == null) {
-        expirationInterval_ = null;
-      } else {
-        expirationInterval_ = null;
-        expirationIntervalBuilder_ = null;
-      }
       return this;
     }
 
@@ -443,7 +372,6 @@ public  final class ServerList extends
     public io.grpc.grpclb.ServerList buildPartial() {
       io.grpc.grpclb.ServerList result = new io.grpc.grpclb.ServerList(this);
       int from_bitField0_ = bitField0_;
-      int to_bitField0_ = 0;
       if (serversBuilder_ == null) {
         if (((bitField0_ & 0x00000001) == 0x00000001)) {
           servers_ = java.util.Collections.unmodifiableList(servers_);
@@ -453,12 +381,6 @@ public  final class ServerList extends
       } else {
         result.servers_ = serversBuilder_.build();
       }
-      if (expirationIntervalBuilder_ == null) {
-        result.expirationInterval_ = expirationInterval_;
-      } else {
-        result.expirationInterval_ = expirationIntervalBuilder_.build();
-      }
-      result.bitField0_ = to_bitField0_;
       onBuilt();
       return result;
     }
@@ -468,7 +390,7 @@ public  final class ServerList extends
     }
     public Builder setField(
         com.google.protobuf.Descriptors.FieldDescriptor field,
-        Object value) {
+        java.lang.Object value) {
       return (Builder) super.setField(field, value);
     }
     public Builder clearField(
@@ -481,12 +403,12 @@ public  final class ServerList extends
     }
     public Builder setRepeatedField(
         com.google.protobuf.Descriptors.FieldDescriptor field,
-        int index, Object value) {
+        int index, java.lang.Object value) {
       return (Builder) super.setRepeatedField(field, index, value);
     }
     public Builder addRepeatedField(
         com.google.protobuf.Descriptors.FieldDescriptor field,
-        Object value) {
+        java.lang.Object value) {
       return (Builder) super.addRepeatedField(field, value);
     }
     public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -526,9 +448,7 @@ public  final class ServerList extends
           }
         }
       }
-      if (other.hasExpirationInterval()) {
-        mergeExpirationInterval(other.getExpirationInterval());
-      }
+      this.mergeUnknownFields(other.unknownFields);
       onChanged();
       return this;
     }
@@ -921,194 +841,14 @@ public  final class ServerList extends
       }
       return serversBuilder_;
     }
-
-    private com.google.protobuf.Duration expirationInterval_ = null;
-    private com.google.protobuf.SingleFieldBuilderV3<
-        com.google.protobuf.Duration, com.google.protobuf.Duration.Builder, com.google.protobuf.DurationOrBuilder> expirationIntervalBuilder_;
-    /**
-     * <pre>
-     * Indicates the amount of time that the client should consider this server
-     * list as valid. It may be considered stale after waiting this interval of
-     * time after receiving the list. If the interval is not positive, the
-     * client can assume the list is valid until the next list is received.
-     * </pre>
-     *
-     * <code>.google.protobuf.Duration expiration_interval = 3;</code>
-     */
-    public boolean hasExpirationInterval() {
-      return expirationIntervalBuilder_ != null || expirationInterval_ != null;
-    }
-    /**
-     * <pre>
-     * Indicates the amount of time that the client should consider this server
-     * list as valid. It may be considered stale after waiting this interval of
-     * time after receiving the list. If the interval is not positive, the
-     * client can assume the list is valid until the next list is received.
-     * </pre>
-     *
-     * <code>.google.protobuf.Duration expiration_interval = 3;</code>
-     */
-    public com.google.protobuf.Duration getExpirationInterval() {
-      if (expirationIntervalBuilder_ == null) {
-        return expirationInterval_ == null ? com.google.protobuf.Duration.getDefaultInstance() : expirationInterval_;
-      } else {
-        return expirationIntervalBuilder_.getMessage();
-      }
-    }
-    /**
-     * <pre>
-     * Indicates the amount of time that the client should consider this server
-     * list as valid. It may be considered stale after waiting this interval of
-     * time after receiving the list. If the interval is not positive, the
-     * client can assume the list is valid until the next list is received.
-     * </pre>
-     *
-     * <code>.google.protobuf.Duration expiration_interval = 3;</code>
-     */
-    public Builder setExpirationInterval(com.google.protobuf.Duration value) {
-      if (expirationIntervalBuilder_ == null) {
-        if (value == null) {
-          throw new NullPointerException();
-        }
-        expirationInterval_ = value;
-        onChanged();
-      } else {
-        expirationIntervalBuilder_.setMessage(value);
-      }
-
-      return this;
-    }
-    /**
-     * <pre>
-     * Indicates the amount of time that the client should consider this server
-     * list as valid. It may be considered stale after waiting this interval of
-     * time after receiving the list. If the interval is not positive, the
-     * client can assume the list is valid until the next list is received.
-     * </pre>
-     *
-     * <code>.google.protobuf.Duration expiration_interval = 3;</code>
-     */
-    public Builder setExpirationInterval(
-        com.google.protobuf.Duration.Builder builderForValue) {
-      if (expirationIntervalBuilder_ == null) {
-        expirationInterval_ = builderForValue.build();
-        onChanged();
-      } else {
-        expirationIntervalBuilder_.setMessage(builderForValue.build());
-      }
-
-      return this;
-    }
-    /**
-     * <pre>
-     * Indicates the amount of time that the client should consider this server
-     * list as valid. It may be considered stale after waiting this interval of
-     * time after receiving the list. If the interval is not positive, the
-     * client can assume the list is valid until the next list is received.
-     * </pre>
-     *
-     * <code>.google.protobuf.Duration expiration_interval = 3;</code>
-     */
-    public Builder mergeExpirationInterval(com.google.protobuf.Duration value) {
-      if (expirationIntervalBuilder_ == null) {
-        if (expirationInterval_ != null) {
-          expirationInterval_ =
-            com.google.protobuf.Duration.newBuilder(expirationInterval_).mergeFrom(value).buildPartial();
-        } else {
-          expirationInterval_ = value;
-        }
-        onChanged();
-      } else {
-        expirationIntervalBuilder_.mergeFrom(value);
-      }
-
-      return this;
-    }
-    /**
-     * <pre>
-     * Indicates the amount of time that the client should consider this server
-     * list as valid. It may be considered stale after waiting this interval of
-     * time after receiving the list. If the interval is not positive, the
-     * client can assume the list is valid until the next list is received.
-     * </pre>
-     *
-     * <code>.google.protobuf.Duration expiration_interval = 3;</code>
-     */
-    public Builder clearExpirationInterval() {
-      if (expirationIntervalBuilder_ == null) {
-        expirationInterval_ = null;
-        onChanged();
-      } else {
-        expirationInterval_ = null;
-        expirationIntervalBuilder_ = null;
-      }
-
-      return this;
-    }
-    /**
-     * <pre>
-     * Indicates the amount of time that the client should consider this server
-     * list as valid. It may be considered stale after waiting this interval of
-     * time after receiving the list. If the interval is not positive, the
-     * client can assume the list is valid until the next list is received.
-     * </pre>
-     *
-     * <code>.google.protobuf.Duration expiration_interval = 3;</code>
-     */
-    public com.google.protobuf.Duration.Builder getExpirationIntervalBuilder() {
-      
-      onChanged();
-      return getExpirationIntervalFieldBuilder().getBuilder();
-    }
-    /**
-     * <pre>
-     * Indicates the amount of time that the client should consider this server
-     * list as valid. It may be considered stale after waiting this interval of
-     * time after receiving the list. If the interval is not positive, the
-     * client can assume the list is valid until the next list is received.
-     * </pre>
-     *
-     * <code>.google.protobuf.Duration expiration_interval = 3;</code>
-     */
-    public com.google.protobuf.DurationOrBuilder getExpirationIntervalOrBuilder() {
-      if (expirationIntervalBuilder_ != null) {
-        return expirationIntervalBuilder_.getMessageOrBuilder();
-      } else {
-        return expirationInterval_ == null ?
-            com.google.protobuf.Duration.getDefaultInstance() : expirationInterval_;
-      }
-    }
-    /**
-     * <pre>
-     * Indicates the amount of time that the client should consider this server
-     * list as valid. It may be considered stale after waiting this interval of
-     * time after receiving the list. If the interval is not positive, the
-     * client can assume the list is valid until the next list is received.
-     * </pre>
-     *
-     * <code>.google.protobuf.Duration expiration_interval = 3;</code>
-     */
-    private com.google.protobuf.SingleFieldBuilderV3<
-        com.google.protobuf.Duration, com.google.protobuf.Duration.Builder, com.google.protobuf.DurationOrBuilder> 
-        getExpirationIntervalFieldBuilder() {
-      if (expirationIntervalBuilder_ == null) {
-        expirationIntervalBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
-            com.google.protobuf.Duration, com.google.protobuf.Duration.Builder, com.google.protobuf.DurationOrBuilder>(
-                getExpirationInterval(),
-                getParentForChildren(),
-                isClean());
-        expirationInterval_ = null;
-      }
-      return expirationIntervalBuilder_;
-    }
     public final Builder setUnknownFields(
         final com.google.protobuf.UnknownFieldSet unknownFields) {
-      return this;
+      return super.setUnknownFieldsProto3(unknownFields);
     }
 
     public final Builder mergeUnknownFields(
         final com.google.protobuf.UnknownFieldSet unknownFields) {
-      return this;
+      return super.mergeUnknownFields(unknownFields);
     }
 
 

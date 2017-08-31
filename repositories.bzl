@@ -77,7 +77,7 @@ def grpc_java_repositories(
   )
   native.bind(
     name = "gson",
-    actual = "@com_google_code_gson//jar",
+    actual = "@com_google_code_gson_gson//jar",
   )
 
 def com_google_api_grpc_google_common_protos():
@@ -96,7 +96,7 @@ def com_google_code_findbugs_jsr305():
 
 def com_google_code_gson():
   native.maven_jar(
-      name = "com_google_code_gson",
+      name = "com_google_code_gson_gson",
       artifact = "com.google.code.gson:gson:jar:2.7",
       sha1 = "751f548c85fa49f330cecbb1875893f971b33c4e",
   )
@@ -128,9 +128,9 @@ def com_google_protobuf():
   # This statement defines the @com_google_protobuf repo.
   native.http_archive(
       name = "com_google_protobuf",
-      sha256 = "df77b0e60afcd3d90b2654cd305e61ae8ae2e2281b4d6540c7093da4c4245d75",
-      strip_prefix = "protobuf-3.3.1",
-      urls = ["https://github.com/google/protobuf/archive/v3.3.1.zip"],
+      sha256 = "542703acadc3f690d998f4641e1b988f15ba57ebca05fdfb1cd9095bec007948",
+      strip_prefix = "protobuf-3.4.0",
+      urls = ["https://github.com/google/protobuf/archive/v3.4.0.zip"],
   )
 
 def com_google_protobuf_java():
@@ -138,9 +138,9 @@ def com_google_protobuf_java():
   # which is the Java proto runtime (base classes and common utilities).
   native.http_archive(
       name = "com_google_protobuf_java",
-      sha256 = "df77b0e60afcd3d90b2654cd305e61ae8ae2e2281b4d6540c7093da4c4245d75",
-      strip_prefix = "protobuf-3.3.1",
-      urls = ["https://github.com/google/protobuf/archive/v3.3.1.zip"],
+      sha256 = "542703acadc3f690d998f4641e1b988f15ba57ebca05fdfb1cd9095bec007948",
+      strip_prefix = "protobuf-3.4.0",
+      urls = ["https://github.com/google/protobuf/archive/v3.4.0.zip"],
   )
 
 def com_google_protobuf_nano_protobuf_javanano():
@@ -187,7 +187,7 @@ def io_netty_common():
 
 def io_netty_transport():
   native.maven_jar(
-      name = "io_netty_netty_netty_transport",
+      name = "io_netty_netty_transport",
       artifact = "io.netty:netty-transport:4.1.14.Final",
       sha1 = "3ed6474f1289635fc0696ec37380e20f258950a2",
   )
@@ -243,7 +243,7 @@ def io_netty_tcnative_boringssl_static():
 
 def io_opencensus_api():
   native.maven_jar(
-      name = "com_google_code_gson_gson",
+      name = "io_opencensus_opencensus_api",
       artifact = "io.opencensus:opencensus-api:0.5.1",
       sha1 = "cbd0a716a7d85ac34b83d86b13f0a6655e45c2ba",
   )
