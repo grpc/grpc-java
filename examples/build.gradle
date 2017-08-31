@@ -259,6 +259,13 @@ task errorDetails(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task grpcProxy(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.grpcproxy.GrpcProxy'
+    applicationName = 'grpc-proxy'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
 applicationDistribution.into('bin') {
     from(routeGuideServer)
     from(routeGuideClient)
@@ -288,5 +295,6 @@ applicationDistribution.into('bin') {
     from(multiplexingServer)
     from(sharingClient)
     from(errorDetails)
+    from(grpcProxy)
     fileMode = 0755
 }
