@@ -28,6 +28,7 @@ import io.grpc.Status;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.concurrent.Executor;
 import javax.annotation.Nonnull;
@@ -61,7 +62,16 @@ final class DelayedClientTransport implements ManagedClientTransport {
   private Collection<PendingStream> pendingStreams = new LinkedHashSet<PendingStream>();
 
   /**
-   * When shutdownStatus != null and pendingStreams.isEmpty(), then the transport is considered
+   * Keeps a record of pending streams for {@link #reprocess reprocessing} .
+   */
+  @GuardedBy("lock")
+  private Collection<PendingStream2> pendingStreams2 = new HashSet<PendingStream2>();
+
+  @GuardedBy("lock")
+  private Collection<ClientStream> retryOrHedgingStreams = new HashSet<ClientStream>();
+
+  /**
+   * When {@code shutdownStatus != null && !hasPendingStreams()}, then the transport is considered
    * terminated.
    */
   @GuardedBy("lock")
@@ -132,7 +142,11 @@ final class DelayedClientTransport implements ManagedClientTransport {
       synchronized (lock) {
         if (shutdownStatus == null) {
           if (lastPicker == null) {
-            return createPendingStream(args);
+            if (retryEnabled()) {
+              return createPendingStream2(args);
+            } else {
+              return createPendingStream(args);
+            }
           }
           picker = lastPicker;
           pickerVersion = lastPickerVersion;
@@ -155,7 +169,11 @@ final class DelayedClientTransport implements ManagedClientTransport {
             return new FailingClientStream(shutdownStatus);
           }
           if (pickerVersion == lastPickerVersion) {
-            return createPendingStream(args);
+            if (retryEnabled()) {
+              return createPendingStream2(args);
+            } else {
+              return createPendingStream(args);
+            }
           }
           picker = lastPicker;
           pickerVersion = lastPickerVersion;
@@ -166,6 +184,11 @@ final class DelayedClientTransport implements ManagedClientTransport {
     }
   }
 
+  // TODO: API plumbing to enable retry.
+  private boolean retryEnabled() {
+    return false;
+  }
+
   /**
    * Caller must call {@code channelExecutor.drain()} outside of lock because this method may
    * schedule tasks on channelExecutor.
@@ -174,10 +197,17 @@ final class DelayedClientTransport implements ManagedClientTransport {
   private PendingStream createPendingStream(PickSubchannelArgs args) {
     PendingStream pendingStream = new PendingStream(args);
     pendingStreams.add(pendingStream);
-    if (pendingStreams.size() == 1) {
+    if (getPendingStreamsCount() == 1) {
       channelExecutor.executeLater(reportTransportInUse);
     }
     return pendingStream;
+  }
+
+  @GuardedBy("lock")
+  private PendingStream2 createPendingStream2(PickSubchannelArgs args) {
+    PendingStream2 pendingStream2 = new PendingStream2(args);
+    pendingStreams2.add(pendingStream2);
+    return pendingStream2;
   }
 
   @Override
@@ -203,7 +233,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
             listener.transportShutdown(status);
           }
         });
-      if (pendingStreams.isEmpty() && reportTransportTerminated != null) {
+      if (!hasPendingStreams() && reportTransportTerminated != null) {
         channelExecutor.executeLater(reportTransportTerminated);
         reportTransportTerminated = null;
       }
@@ -219,17 +249,25 @@ final class DelayedClientTransport implements ManagedClientTransport {
   public final void shutdownNow(Status status) {
     shutdown(status);
     Collection<PendingStream> savedPendingStreams;
+    Collection<ClientStream> savedRetryOrHedgingStreams;
     Runnable savedReportTransportTerminated;
     synchronized (lock) {
       savedPendingStreams = pendingStreams;
+      savedRetryOrHedgingStreams = new ArrayList<ClientStream>(retryOrHedgingStreams);
       savedReportTransportTerminated = reportTransportTerminated;
       reportTransportTerminated = null;
       if (!pendingStreams.isEmpty()) {
         pendingStreams = Collections.<PendingStream>emptyList();
       }
+      if (!retryOrHedgingStreams.isEmpty()) {
+        retryOrHedgingStreams = Collections.<ClientStream>emptyList();
+      }
     }
     if (savedReportTransportTerminated != null) {
       for (PendingStream stream : savedPendingStreams) {
+        stream.cancel(status);
+      }
+      for (ClientStream stream : savedRetryOrHedgingStreams) {
         stream.cancel(status);
       }
       channelExecutor.executeLater(savedReportTransportTerminated).drain();
@@ -240,14 +278,40 @@ final class DelayedClientTransport implements ManagedClientTransport {
 
   public final boolean hasPendingStreams() {
     synchronized (lock) {
-      return !pendingStreams.isEmpty();
+      return !pendingStreams.isEmpty() || !retryOrHedgingStreams.isEmpty();
     }
   }
 
   @VisibleForTesting
   final int getPendingStreamsCount() {
     synchronized (lock) {
-      return pendingStreams.size();
+      return pendingStreams.size() + retryOrHedgingStreams.size();
+    }
+  }
+
+  final void addRetryOrHedgingStream(RetriableStream<?> retriableStream) {
+    synchronized (lock) {
+      retryOrHedgingStreams.add(retriableStream);
+      if (getPendingStreamsCount() == 1) {
+        channelExecutor.executeLater(reportTransportInUse);
+      }
+    }
+  }
+
+  final void removeRetryOrHedgingStream(RetriableStream<?> retriableStream) {
+    synchronized (lock) {
+      retryOrHedgingStreams.remove(retriableStream);
+      if (!hasPendingStreams()) {
+        channelExecutor.executeLater(reportTransportNotInUse);
+        if (shutdownStatus != null && reportTransportTerminated != null) {
+          channelExecutor.executeLater(reportTransportTerminated);
+          reportTransportTerminated = null;
+        } else {
+          // Because delayed transport is long-lived, we take this opportunity to down-size the
+          // hashmap.
+          retryOrHedgingStreams = new HashSet<ClientStream>();
+        }
+      }
     }
   }
 
@@ -263,14 +327,17 @@ final class DelayedClientTransport implements ManagedClientTransport {
    */
   final void reprocess(SubchannelPicker picker) {
     ArrayList<PendingStream> toProcess;
+    ArrayList<PendingStream2> toProcess2;
     ArrayList<PendingStream> toRemove = new ArrayList<PendingStream>();
+    ArrayList<PendingStream2> toRemove2 = new ArrayList<PendingStream2>();
     synchronized (lock) {
       lastPicker = picker;
       lastPickerVersion++;
-      if (pendingStreams.isEmpty()) {
+      if (!hasPendingStreams()) {
         return;
       }
       toProcess = new ArrayList<PendingStream>(pendingStreams);
+      toProcess2 = new ArrayList<PendingStream2>(pendingStreams2);
     }
 
     for (final PendingStream stream : toProcess) {
@@ -295,16 +362,47 @@ final class DelayedClientTransport implements ManagedClientTransport {
         toRemove.add(stream);
       }  // else: stay pending
     }
+    for (final PendingStream2 stream : toProcess2) {
+      PickResult pickResult = picker.pickSubchannel(stream.args);
+      CallOptions callOptions = stream.args.getCallOptions();
+      final ClientTransport transport =
+          GrpcUtil.getTransportFromPickResult(pickResult, callOptions.isWaitForReady());
+      if (transport != null) {
+        Executor executor = defaultAppExecutor;
+        // createRealStream may be expensive. It will start real streams on the transport. If
+        // there are pending requests, they will be serialized too, which may be expensive. Since
+        // we are now on transport thread, we need to offload the work to an executor.
+        if (callOptions.getExecutor() != null) {
+          executor = callOptions.getExecutor();
+        }
+        executor.execute(new Runnable() {
+          @Override
+          public void run() {
+            stream.createRealStream(transport);
+          }
+        });
+        toRemove2.add(stream);
+      }  // else: stay pending
+    }
 
     synchronized (lock) {
       // Between this synchronized and the previous one:
       //   - Streams may have been cancelled, which may turn pendingStreams into emptiness.
       //   - shutdown() may be called, which may turn pendingStreams into null.
-      if (pendingStreams.isEmpty()) {
+      if (!hasPendingStreams()) {
         return;
       }
       pendingStreams.removeAll(toRemove);
+      pendingStreams2.removeAll(toRemove2);
+      // Because delayed transport is long-lived, we take this opportunity to down-size the
+      // hashmap.
       if (pendingStreams.isEmpty()) {
+        pendingStreams = new LinkedHashSet<PendingStream>();
+      }
+      if (pendingStreams2.isEmpty()) {
+        pendingStreams2 = new HashSet<PendingStream2>();
+      }
+      if (!hasPendingStreams()) {
         // There may be a brief gap between delayed transport clearing in-use state, and first real
         // transport starting streams and setting in-use state.  During the gap the whole channel's
         // in-use state may be false. However, it shouldn't cause spurious switching to idleness
@@ -314,10 +412,6 @@ final class DelayedClientTransport implements ManagedClientTransport {
         if (shutdownStatus != null && reportTransportTerminated != null) {
           channelExecutor.executeLater(reportTransportTerminated);
           reportTransportTerminated = null;
-        } else {
-          // Because delayed transport is long-lived, we take this opportunity to down-size the
-          // hashmap.
-          pendingStreams = new LinkedHashSet<PendingStream>();
         }
       }
     }
@@ -356,7 +450,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
       synchronized (lock) {
         if (reportTransportTerminated != null) {
           boolean justRemovedAnElement = pendingStreams.remove(this);
-          if (pendingStreams.isEmpty() && justRemovedAnElement) {
+          if (!hasPendingStreams() && justRemovedAnElement) {
             channelExecutor.executeLater(reportTransportNotInUse);
             if (shutdownStatus != null) {
               channelExecutor.executeLater(reportTransportTerminated);
@@ -364,6 +458,36 @@ final class DelayedClientTransport implements ManagedClientTransport {
             }
           }
         }
+      }
+      channelExecutor.drain();
+    }
+  }
+
+  private final class PendingStream2 extends DelayedStream2 {
+    private final PickSubchannelArgs args;
+    private final Context context = Context.current();
+
+    private PendingStream2(PickSubchannelArgs args) {
+      this.args = args;
+    }
+
+    private void createRealStream(ClientTransport transport) {
+      ClientStream realStream;
+      Context origContext = context.attach();
+      try {
+        realStream = transport.newStream(
+            args.getMethodDescriptor(), args.getHeaders(), args.getCallOptions());
+      } finally {
+        context.detach(origContext);
+      }
+      passThrough(realStream);
+    }
+
+    @Override
+    public void cancel(Status reason) {
+      super.cancel(reason);
+      synchronized (lock) {
+        pendingStreams2.remove(this);
       }
       channelExecutor.drain();
     }
