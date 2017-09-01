@@ -1020,7 +1020,7 @@ public class ServerImplTest {
   public void messageRead_errorCancelsCall() throws Exception {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
-            executor.getScheduledExecutorService(),
+        SerializingExecutors.wrap(executor.getScheduledExecutorService()),
             executor.getScheduledExecutorService(),
             stream,
             Context.ROOT.withCancellation());
@@ -1045,14 +1045,14 @@ public class ServerImplTest {
   public void messageRead_runtimeExceptionCancelsCall() throws Exception {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
-            executor.getScheduledExecutorService(),
+            SerializingExecutors.wrap(executor.getScheduledExecutorService()),
             executor.getScheduledExecutorService(),
             stream,
             Context.ROOT.withCancellation());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
-    Throwable expectedT = new RuntimeException();
+    Throwable expectedT = new Error("expected");
     doThrow(expectedT).when(mockListener)
         .messagesAvailable(any(StreamListener.MessageProducer.class));
     // Closing the InputStream is done by the delegated listener (generally ServerCallImpl)
@@ -1070,7 +1070,7 @@ public class ServerImplTest {
   public void halfClosed_errorCancelsCall() {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
-            executor.getScheduledExecutorService(),
+        SerializingExecutors.wrap(executor.getScheduledExecutorService()),
             executor.getScheduledExecutorService(),
             stream,
             Context.ROOT.withCancellation());
@@ -1093,14 +1093,14 @@ public class ServerImplTest {
   public void halfClosed_runtimeExceptionCancelsCall() {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
-            executor.getScheduledExecutorService(),
+            SerializingExecutors.wrap(executor.getScheduledExecutorService()),
             executor.getScheduledExecutorService(),
             stream,
             Context.ROOT.withCancellation());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
-    Throwable expectedT = new RuntimeException();
+    Throwable expectedT = new Error("Expected");
     doThrow(expectedT).when(mockListener).halfClosed();
     listener.halfClosed();
     try {
@@ -1116,7 +1116,7 @@ public class ServerImplTest {
   public void onReady_errorCancelsCall() {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
-            executor.getScheduledExecutorService(),
+            SerializingExecutors.wrap(executor.getScheduledExecutorService()),
             executor.getScheduledExecutorService(),
             stream,
             Context.ROOT.withCancellation());
@@ -1139,14 +1139,14 @@ public class ServerImplTest {
   public void onReady_runtimeExceptionCancelsCall() {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
-            executor.getScheduledExecutorService(),
+            SerializingExecutors.wrap(executor.getScheduledExecutorService()),
             executor.getScheduledExecutorService(),
             stream,
             Context.ROOT.withCancellation());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
-    Throwable expectedT = new RuntimeException();
+    Throwable expectedT = new Error("Expected");
     doThrow(expectedT).when(mockListener).onReady();
     listener.onReady();
     try {

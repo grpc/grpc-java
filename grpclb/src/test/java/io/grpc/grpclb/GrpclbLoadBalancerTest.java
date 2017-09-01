@@ -71,7 +71,7 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ObjectPool;
-import io.grpc.internal.SerializingExecutor;
+import io.grpc.internal.SerializingExecutors;
 import io.grpc.stub.StreamObserver;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -80,6 +80,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
@@ -125,8 +126,8 @@ public class GrpclbLoadBalancerTest {
   private io.grpc.Server fakeLbServer;
   @Captor
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
-  private final SerializingExecutor channelExecutor =
-      new SerializingExecutor(MoreExecutors.directExecutor());
+  private final Executor channelExecutor =
+      SerializingExecutors.wrap(MoreExecutors.directExecutor());
   @Mock
   private LoadBalancer.Factory pickFirstBalancerFactory;
   @Mock

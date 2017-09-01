@@ -18,7 +18,6 @@ package io.grpc.internal;
 
 import com.google.common.base.Preconditions;
 import java.util.ArrayDeque;
-import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -31,7 +30,9 @@ import java.util.logging.Logger;
  *
  * <p>This class is not thread-safe.
  */
-class SerializeReentrantCallsDirectExecutor implements Executor {
+final class SerializeReentrantCallsDirectExecutor implements SerializingExecutor {
+
+  SerializeReentrantCallsDirectExecutor() {}
 
   private static final Logger log =
       Logger.getLogger(SerializeReentrantCallsDirectExecutor.class.getName());

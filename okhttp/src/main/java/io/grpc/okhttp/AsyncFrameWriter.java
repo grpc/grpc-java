@@ -17,7 +17,6 @@
 package io.grpc.okhttp;
 
 import com.google.common.base.Preconditions;
-import io.grpc.internal.SerializingExecutor;
 import io.grpc.okhttp.internal.framed.ErrorCode;
 import io.grpc.okhttp.internal.framed.FrameWriter;
 import io.grpc.okhttp.internal.framed.Header;
@@ -25,6 +24,7 @@ import io.grpc.okhttp.internal.framed.Settings;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.List;
+import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import okio.Buffer;
@@ -35,10 +35,10 @@ class AsyncFrameWriter implements FrameWriter {
   private Socket socket;
   // Although writes are thread-safe, we serialize them to prevent consuming many Threads that are
   // just waiting on each other.
-  private final SerializingExecutor executor;
+  private final Executor executor;
   private final OkHttpClientTransport transport;
 
-  public AsyncFrameWriter(OkHttpClientTransport transport, SerializingExecutor executor) {
+  public AsyncFrameWriter(OkHttpClientTransport transport, Executor executor) {
     this.transport = transport;
     this.executor = executor;
   }

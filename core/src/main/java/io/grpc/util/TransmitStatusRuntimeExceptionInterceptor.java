@@ -29,6 +29,7 @@ import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.internal.SerializingExecutor;
+import io.grpc.internal.SerializingExecutors;
 import java.util.concurrent.ExecutionException;
 import javax.annotation.Nullable;
 
@@ -121,8 +122,8 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
   private static class SerializingServerCall<ReqT, RespT> extends
       ForwardingServerCall.SimpleForwardingServerCall<ReqT, RespT> {
     private static final String ERROR_MSG = "Encountered error during serialized access";
-    private final SerializingExecutor serializingExecutor =
-        new SerializingExecutor(MoreExecutors.directExecutor());
+    private final SerializingExecutor executor =
+        SerializingExecutors.wrap(MoreExecutors.directExecutor());
 
     SerializingServerCall(ServerCall<ReqT, RespT> delegate) {
       super(delegate);
@@ -130,7 +131,7 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
 
     @Override
     public void sendMessage(final RespT message) {
-      serializingExecutor.execute(new Runnable() {
+      executor.execute(new Runnable() {
         @Override
         public void run() {
           SerializingServerCall.super.sendMessage(message);
@@ -140,7 +141,7 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
 
     @Override
     public void request(final int numMessages) {
-      serializingExecutor.execute(new Runnable() {
+      executor.execute(new Runnable() {
         @Override
         public void run() {
           SerializingServerCall.super.request(numMessages);
@@ -150,7 +151,7 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
 
     @Override
     public void sendHeaders(final Metadata headers) {
-      serializingExecutor.execute(new Runnable() {
+      executor.execute(new Runnable() {
         @Override
         public void run() {
           SerializingServerCall.super.sendHeaders(headers);
@@ -160,7 +161,7 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
 
     @Override
     public void close(final Status status, final Metadata trailers) {
-      serializingExecutor.execute(new Runnable() {
+      executor.execute(new Runnable() {
         @Override
         public void run() {
           SerializingServerCall.super.close(status, trailers);
@@ -171,7 +172,7 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
     @Override
     public boolean isReady() {
       final SettableFuture<Boolean> retVal = SettableFuture.create();
-      serializingExecutor.execute(new Runnable() {
+      executor.execute(new Runnable() {
         @Override
         public void run() {
           retVal.set(SerializingServerCall.super.isReady());
@@ -189,7 +190,7 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
     @Override
     public boolean isCancelled() {
       final SettableFuture<Boolean> retVal = SettableFuture.create();
-      serializingExecutor.execute(new Runnable() {
+      executor.execute(new Runnable() {
         @Override
         public void run() {
           retVal.set(SerializingServerCall.super.isCancelled());
@@ -206,7 +207,7 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
 
     @Override
     public void setMessageCompression(final boolean enabled) {
-      serializingExecutor.execute(new Runnable() {
+      executor.execute(new Runnable() {
         @Override
         public void run() {
           SerializingServerCall.super.setMessageCompression(enabled);
@@ -216,7 +217,7 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
 
     @Override
     public void setCompression(final String compressor) {
-      serializingExecutor.execute(new Runnable() {
+      executor.execute(new Runnable() {
         @Override
         public void run() {
           SerializingServerCall.super.setCompression(compressor);
@@ -227,7 +228,7 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
     @Override
     public Attributes getAttributes() {
       final SettableFuture<Attributes> retVal = SettableFuture.create();
-      serializingExecutor.execute(new Runnable() {
+      executor.execute(new Runnable() {
         @Override
         public void run() {
           retVal.set(SerializingServerCall.super.getAttributes());
@@ -246,7 +247,7 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
     @Override
     public String getAuthority() {
       final SettableFuture<String> retVal = SettableFuture.create();
-      serializingExecutor.execute(new Runnable() {
+      executor.execute(new Runnable() {
         @Override
         public void run() {
           retVal.set(SerializingServerCall.super.getAuthority());

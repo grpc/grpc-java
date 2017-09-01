@@ -43,6 +43,7 @@ import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
 import io.grpc.internal.LogId;
 import io.grpc.internal.SerializingExecutor;
+import io.grpc.internal.SerializingExecutors;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.okhttp.internal.ConnectionSpec;
@@ -192,7 +193,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     this.defaultAuthority = authority;
     this.maxMessageSize = maxMessageSize;
     this.executor = Preconditions.checkNotNull(executor, "executor");
-    serializingExecutor = new SerializingExecutor(executor);
+    serializingExecutor = SerializingExecutors.wrap(executor);
     // Client initiated streams are odd, server initiated ones are even. Server should not need to
     // use it. We start clients at 3 to avoid conflicting with HTTP negotiation.
     nextStreamId = 3;
@@ -221,7 +222,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     defaultAuthority = "notarealauthority:80";
     this.userAgent = GrpcUtil.getGrpcUserAgent("okhttp", userAgent);
     this.executor = Preconditions.checkNotNull(executor, "executor");
-    serializingExecutor = new SerializingExecutor(executor);
+    serializingExecutor = SerializingExecutors.wrap(executor);
     this.testFrameReader = Preconditions.checkNotNull(frameReader, "frameReader");
     this.testFrameWriter = Preconditions.checkNotNull(testFrameWriter, "testFrameWriter");
     this.socket = Preconditions.checkNotNull(socket, "socket");
