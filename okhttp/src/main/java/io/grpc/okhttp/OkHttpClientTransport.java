@@ -138,7 +138,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
       new HashMap<Integer, OkHttpClientStream>();
   private final Executor executor;
   // Wrap on executor, to guarantee some operations be executed serially.
-  private final SerializingExecutor serializingExecutor;
+  private final Executor serializingExecutor;
   private final int maxMessageSize;
   private int connectionUnacknowledgedBytesRead;
   private ClientFrameHandler clientFrameHandler;

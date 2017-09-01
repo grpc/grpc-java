@@ -80,6 +80,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
@@ -125,7 +126,7 @@ public class GrpclbLoadBalancerTest {
   private io.grpc.Server fakeLbServer;
   @Captor
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
-  private final SerializingExecutor channelExecutor =
+  private final Executor channelExecutor =
       new SerializingExecutor(MoreExecutors.directExecutor());
   @Mock
   private LoadBalancer.Factory pickFirstBalancerFactory;
