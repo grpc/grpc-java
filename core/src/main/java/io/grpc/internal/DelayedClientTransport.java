@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer.Factory;
 import io.grpc.Context;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -142,8 +143,12 @@ final class DelayedClientTransport implements ManagedClientTransport {
         ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
             callOptions.isWaitForReady());
         if (transport != null) {
+          Factory streamTracerFactory = pickResult.getStreamTracerFactory();
+          if (streamTracerFactory != null) {
+            callOptions = callOptions.withStreamTracerFactory(streamTracerFactory);
+          }
           return transport.newStream(
-              args.getMethodDescriptor(), args.getHeaders(), args.getCallOptions());
+              args.getMethodDescriptor(), args.getHeaders(), callOptions);
         }
         // This picker's conclusion is "buffer".  If there hasn't been a newer picker set (possible
         // race with reprocess()), we will buffer it.  Otherwise, will try with the new picker.
@@ -272,6 +277,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
       final ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
           callOptions.isWaitForReady());
       if (transport != null) {
+        final Factory streamTracerFactory = pickResult.getStreamTracerFactory();
         Executor executor = defaultAppExecutor;
         // createRealStream may be expensive. It will start real streams on the transport. If
         // there are pending requests, they will be serialized too, which may be expensive. Since
@@ -282,7 +288,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
         executor.execute(new Runnable() {
             @Override
             public void run() {
-              stream.createRealStream(transport);
+              stream.createRealStream(transport, streamTracerFactory);
             }
           });
         toRemove.add(stream);
@@ -331,12 +337,17 @@ final class DelayedClientTransport implements ManagedClientTransport {
       this.args = args;
     }
 
-    private void createRealStream(ClientTransport transport) {
+    private void createRealStream(
+        ClientTransport transport, Factory additionalStreamTracerFactory) {
       ClientStream realStream;
       Context origContext = context.attach();
+      CallOptions callOptions = args.getCallOptions();
+      if (additionalStreamTracerFactory != null) {
+        callOptions = callOptions.withStreamTracerFactory(additionalStreamTracerFactory);
+      }
       try {
         realStream = transport.newStream(
-            args.getMethodDescriptor(), args.getHeaders(), args.getCallOptions());
+            args.getMethodDescriptor(), args.getHeaders(), callOptions);
       } finally {
         context.detach(origContext);
       }

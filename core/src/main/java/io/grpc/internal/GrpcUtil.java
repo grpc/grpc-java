@@ -25,14 +25,11 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.grpc.CallOptions;
-import io.grpc.ClientStreamTracer;
 import io.grpc.InternalMetadata;
 import io.grpc.InternalMetadata.TrustedAsciiMarshaller;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.Metadata;
-import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.StreamListener.MessageProducer;
@@ -43,7 +40,6 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -581,23 +577,7 @@ public final class GrpcUtil {
       transport = null;
     }
     if (transport != null) {
-      final ClientStreamTracer.Factory streamTracerFactory = result.getStreamTracerFactory();
-      if (streamTracerFactory == null) {
-        return transport;
-      }
-      return new ClientTransport() {
-        @Override
-        public ClientStream newStream(
-            MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
-          return transport.newStream(
-              method, headers, callOptions.withStreamTracerFactory(streamTracerFactory));
-        }
-
-        @Override
-        public void ping(PingCallback callback, Executor executor) {
-          transport.ping(callback, executor);
-        }
-      };
+      return transport;
     }
     if (!result.getStatus().isOk() && !isWaitForReady) {
       return new FailingClientTransport(result.getStatus());

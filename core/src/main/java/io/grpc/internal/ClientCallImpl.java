@@ -32,6 +32,7 @@ import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
+import io.grpc.ClientStreamTracer.Factory;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.CompressorRegistry;
@@ -112,9 +113,15 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     /**
      * Returns a transport for a new call.
      *
-     * @param args object containing call arguments.
+     * @param attrs object containing call arguments.
      */
-    ClientTransport get(PickSubchannelArgs args);
+    ClientTransport get(ClientCallAttributes attrs);
+  }
+
+  interface ClientCallAttributes {
+    PickSubchannelArgs pickSubchannelArgs();
+
+    void additionalStreamTracerFactory(Factory streamTracerFactory);
   }
 
   ClientCallImpl<ReqT, RespT> setDecompressorRegistry(DecompressorRegistry decompressorRegistry) {
@@ -144,7 +151,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   }
 
   @Override
-  public void start(final Listener<RespT> observer, Metadata headers) {
+  public void start(final Listener<RespT> observer, final Metadata headers) {
     checkState(stream == null, "Already started");
     checkNotNull(observer, "observer");
     checkNotNull(headers, "headers");
@@ -202,9 +209,28 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     if (!deadlineExceeded) {
       updateTimeoutHeaders(effectiveDeadline, callOptions.getDeadline(),
           context.getDeadline(), headers);
-      ClientTransport transport = clientTransportProvider.get(
-          new PickSubchannelArgsImpl(method, headers, callOptions));
+
+      class ClientCallAttributesImpl implements ClientCallAttributes {
+        Factory streamTracerFactory;
+
+        @Override
+        public PickSubchannelArgs pickSubchannelArgs() {
+          return new PickSubchannelArgsImpl(method, headers, callOptions);
+        }
+
+        @Override
+        public void additionalStreamTracerFactory(Factory streamTracerFactory) {
+          this.streamTracerFactory = streamTracerFactory;
+        }
+      }
+
+      ClientCallAttributesImpl clientCallAttributes = new ClientCallAttributesImpl();
+      ClientTransport transport = clientTransportProvider.get(clientCallAttributes);
       Context origContext = context.attach();
+      CallOptions callOptions = this.callOptions;
+      if (clientCallAttributes.streamTracerFactory != null) {
+        callOptions = callOptions.withStreamTracerFactory(clientCallAttributes.streamTracerFactory);
+      }
       try {
         stream = transport.newStream(method, headers, callOptions);
       } finally {
