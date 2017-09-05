@@ -5,10 +5,8 @@ package io.grpc.grpclb;
 
 /**
  * <pre>
- * Contains server information. When none of the [drop_for_*] fields are true,
- * use the other fields. When drop_for_rate_limiting is true, ignore all other
- * fields. Use drop_for_load_balancing only when it is true and
- * drop_for_rate_limiting is false.
+ * Contains server information. When the drop field is not true, use the other
+ * fields.
  * </pre>
  *
  * Protobuf type {@code grpc.lb.v1.Server}
@@ -17,6 +15,7 @@ public  final class Server extends
     com.google.protobuf.GeneratedMessageV3 implements
     // @@protoc_insertion_point(message_implements:grpc.lb.v1.Server)
     ServerOrBuilder {
+private static final long serialVersionUID = 0L;
   // Use Server.newBuilder() to construct.
   private Server(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
     super(builder);
@@ -25,14 +24,13 @@ public  final class Server extends
     ipAddress_ = com.google.protobuf.ByteString.EMPTY;
     port_ = 0;
     loadBalanceToken_ = "";
-    dropForRateLimiting_ = false;
-    dropForLoadBalancing_ = false;
+    drop_ = false;
   }
 
   @java.lang.Override
   public final com.google.protobuf.UnknownFieldSet
   getUnknownFields() {
-    return com.google.protobuf.UnknownFieldSet.getDefaultInstance();
+    return this.unknownFields;
   }
   private Server(
       com.google.protobuf.CodedInputStream input,
@@ -40,6 +38,8 @@ public  final class Server extends
       throws com.google.protobuf.InvalidProtocolBufferException {
     this();
     int mutable_bitField0_ = 0;
+    com.google.protobuf.UnknownFieldSet.Builder unknownFields =
+        com.google.protobuf.UnknownFieldSet.newBuilder();
     try {
       boolean done = false;
       while (!done) {
@@ -49,7 +49,8 @@ public  final class Server extends
             done = true;
             break;
           default: {
-            if (!input.skipField(tag)) {
+            if (!parseUnknownFieldProto3(
+                input, unknownFields, extensionRegistry, tag)) {
               done = true;
             }
             break;
@@ -72,12 +73,7 @@ public  final class Server extends
           }
           case 32: {
 
-            dropForRateLimiting_ = input.readBool();
-            break;
-          }
-          case 40: {
-
-            dropForLoadBalancing_ = input.readBool();
+            drop_ = input.readBool();
             break;
           }
         }
@@ -88,6 +84,7 @@ public  final class Server extends
       throw new com.google.protobuf.InvalidProtocolBufferException(
           e).setUnfinishedMessage(this);
     } finally {
+      this.unknownFields = unknownFields.build();
       makeExtensionsImmutable();
     }
   }
@@ -137,7 +134,8 @@ public  final class Server extends
    * An opaque but printable token given to the frontend for each pick. All
    * frontend requests for that pick must include the token in its initial
    * metadata. The token is used by the backend to verify the request and to
-   * allow the backend to report load to the gRPC LB system.
+   * allow the backend to report load to the gRPC LB system. The token is also
+   * used in client stats for reporting dropped calls.
    * </pre>
    *
    * <code>string load_balance_token = 3;</code>
@@ -159,7 +157,8 @@ public  final class Server extends
    * An opaque but printable token given to the frontend for each pick. All
    * frontend requests for that pick must include the token in its initial
    * metadata. The token is used by the backend to verify the request and to
-   * allow the backend to report load to the gRPC LB system.
+   * allow the backend to report load to the gRPC LB system. The token is also
+   * used in client stats for reporting dropped calls.
    * </pre>
    *
    * <code>string load_balance_token = 3;</code>
@@ -178,32 +177,19 @@ public  final class Server extends
     }
   }
 
-  public static final int DROP_FOR_RATE_LIMITING_FIELD_NUMBER = 4;
-  private boolean dropForRateLimiting_;
+  public static final int DROP_FIELD_NUMBER = 4;
+  private boolean drop_;
   /**
    * <pre>
-   * Indicates whether this particular request should be dropped by the client
-   * for rate limiting.
+   * Indicates whether this particular request should be dropped by the client.
+   * If the request is dropped, there will be a corresponding entry in
+   * ClientStats.calls_finished_with_drop.
    * </pre>
    *
-   * <code>bool drop_for_rate_limiting = 4;</code>
+   * <code>bool drop = 4;</code>
    */
-  public boolean getDropForRateLimiting() {
-    return dropForRateLimiting_;
-  }
-
-  public static final int DROP_FOR_LOAD_BALANCING_FIELD_NUMBER = 5;
-  private boolean dropForLoadBalancing_;
-  /**
-   * <pre>
-   * Indicates whether this particular request should be dropped by the client
-   * for load balancing.
-   * </pre>
-   *
-   * <code>bool drop_for_load_balancing = 5;</code>
-   */
-  public boolean getDropForLoadBalancing() {
-    return dropForLoadBalancing_;
+  public boolean getDrop() {
+    return drop_;
   }
 
   private byte memoizedIsInitialized = -1;
@@ -227,12 +213,10 @@ public  final class Server extends
     if (!getLoadBalanceTokenBytes().isEmpty()) {
       com.google.protobuf.GeneratedMessageV3.writeString(output, 3, loadBalanceToken_);
     }
-    if (dropForRateLimiting_ != false) {
-      output.writeBool(4, dropForRateLimiting_);
+    if (drop_ != false) {
+      output.writeBool(4, drop_);
     }
-    if (dropForLoadBalancing_ != false) {
-      output.writeBool(5, dropForLoadBalancing_);
-    }
+    unknownFields.writeTo(output);
   }
 
   public int getSerializedSize() {
@@ -251,19 +235,15 @@ public  final class Server extends
     if (!getLoadBalanceTokenBytes().isEmpty()) {
       size += com.google.protobuf.GeneratedMessageV3.computeStringSize(3, loadBalanceToken_);
     }
-    if (dropForRateLimiting_ != false) {
+    if (drop_ != false) {
       size += com.google.protobuf.CodedOutputStream
-        .computeBoolSize(4, dropForRateLimiting_);
+        .computeBoolSize(4, drop_);
     }
-    if (dropForLoadBalancing_ != false) {
-      size += com.google.protobuf.CodedOutputStream
-        .computeBoolSize(5, dropForLoadBalancing_);
-    }
+    size += unknownFields.getSerializedSize();
     memoizedSize = size;
     return size;
   }
 
-  private static final long serialVersionUID = 0L;
   @java.lang.Override
   public boolean equals(final java.lang.Object obj) {
     if (obj == this) {
@@ -281,10 +261,9 @@ public  final class Server extends
         == other.getPort());
     result = result && getLoadBalanceToken()
         .equals(other.getLoadBalanceToken());
-    result = result && (getDropForRateLimiting()
-        == other.getDropForRateLimiting());
-    result = result && (getDropForLoadBalancing()
-        == other.getDropForLoadBalancing());
+    result = result && (getDrop()
+        == other.getDrop());
+    result = result && unknownFields.equals(other.unknownFields);
     return result;
   }
 
@@ -301,12 +280,9 @@ public  final class Server extends
     hash = (53 * hash) + getPort();
     hash = (37 * hash) + LOAD_BALANCE_TOKEN_FIELD_NUMBER;
     hash = (53 * hash) + getLoadBalanceToken().hashCode();
-    hash = (37 * hash) + DROP_FOR_RATE_LIMITING_FIELD_NUMBER;
+    hash = (37 * hash) + DROP_FIELD_NUMBER;
     hash = (53 * hash) + com.google.protobuf.Internal.hashBoolean(
-        getDropForRateLimiting());
-    hash = (37 * hash) + DROP_FOR_LOAD_BALANCING_FIELD_NUMBER;
-    hash = (53 * hash) + com.google.protobuf.Internal.hashBoolean(
-        getDropForLoadBalancing());
+        getDrop());
     hash = (29 * hash) + unknownFields.hashCode();
     memoizedHashCode = hash;
     return hash;
@@ -402,10 +378,8 @@ public  final class Server extends
   }
   /**
    * <pre>
-   * Contains server information. When none of the [drop_for_*] fields are true,
-   * use the other fields. When drop_for_rate_limiting is true, ignore all other
-   * fields. Use drop_for_load_balancing only when it is true and
-   * drop_for_rate_limiting is false.
+   * Contains server information. When the drop field is not true, use the other
+   * fields.
    * </pre>
    *
    * Protobuf type {@code grpc.lb.v1.Server}
@@ -449,9 +423,7 @@ public  final class Server extends
 
       loadBalanceToken_ = "";
 
-      dropForRateLimiting_ = false;
-
-      dropForLoadBalancing_ = false;
+      drop_ = false;
 
       return this;
     }
@@ -478,8 +450,7 @@ public  final class Server extends
       result.ipAddress_ = ipAddress_;
       result.port_ = port_;
       result.loadBalanceToken_ = loadBalanceToken_;
-      result.dropForRateLimiting_ = dropForRateLimiting_;
-      result.dropForLoadBalancing_ = dropForLoadBalancing_;
+      result.drop_ = drop_;
       onBuilt();
       return result;
     }
@@ -489,7 +460,7 @@ public  final class Server extends
     }
     public Builder setField(
         com.google.protobuf.Descriptors.FieldDescriptor field,
-        Object value) {
+        java.lang.Object value) {
       return (Builder) super.setField(field, value);
     }
     public Builder clearField(
@@ -502,12 +473,12 @@ public  final class Server extends
     }
     public Builder setRepeatedField(
         com.google.protobuf.Descriptors.FieldDescriptor field,
-        int index, Object value) {
+        int index, java.lang.Object value) {
       return (Builder) super.setRepeatedField(field, index, value);
     }
     public Builder addRepeatedField(
         com.google.protobuf.Descriptors.FieldDescriptor field,
-        Object value) {
+        java.lang.Object value) {
       return (Builder) super.addRepeatedField(field, value);
     }
     public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -531,12 +502,10 @@ public  final class Server extends
         loadBalanceToken_ = other.loadBalanceToken_;
         onChanged();
       }
-      if (other.getDropForRateLimiting() != false) {
-        setDropForRateLimiting(other.getDropForRateLimiting());
+      if (other.getDrop() != false) {
+        setDrop(other.getDrop());
       }
-      if (other.getDropForLoadBalancing() != false) {
-        setDropForLoadBalancing(other.getDropForLoadBalancing());
-      }
+      this.mergeUnknownFields(other.unknownFields);
       onChanged();
       return this;
     }
@@ -651,7 +620,8 @@ public  final class Server extends
      * An opaque but printable token given to the frontend for each pick. All
      * frontend requests for that pick must include the token in its initial
      * metadata. The token is used by the backend to verify the request and to
-     * allow the backend to report load to the gRPC LB system.
+     * allow the backend to report load to the gRPC LB system. The token is also
+     * used in client stats for reporting dropped calls.
      * </pre>
      *
      * <code>string load_balance_token = 3;</code>
@@ -673,7 +643,8 @@ public  final class Server extends
      * An opaque but printable token given to the frontend for each pick. All
      * frontend requests for that pick must include the token in its initial
      * metadata. The token is used by the backend to verify the request and to
-     * allow the backend to report load to the gRPC LB system.
+     * allow the backend to report load to the gRPC LB system. The token is also
+     * used in client stats for reporting dropped calls.
      * </pre>
      *
      * <code>string load_balance_token = 3;</code>
@@ -696,7 +667,8 @@ public  final class Server extends
      * An opaque but printable token given to the frontend for each pick. All
      * frontend requests for that pick must include the token in its initial
      * metadata. The token is used by the backend to verify the request and to
-     * allow the backend to report load to the gRPC LB system.
+     * allow the backend to report load to the gRPC LB system. The token is also
+     * used in client stats for reporting dropped calls.
      * </pre>
      *
      * <code>string load_balance_token = 3;</code>
@@ -716,7 +688,8 @@ public  final class Server extends
      * An opaque but printable token given to the frontend for each pick. All
      * frontend requests for that pick must include the token in its initial
      * metadata. The token is used by the backend to verify the request and to
-     * allow the backend to report load to the gRPC LB system.
+     * allow the backend to report load to the gRPC LB system. The token is also
+     * used in client stats for reporting dropped calls.
      * </pre>
      *
      * <code>string load_balance_token = 3;</code>
@@ -732,7 +705,8 @@ public  final class Server extends
      * An opaque but printable token given to the frontend for each pick. All
      * frontend requests for that pick must include the token in its initial
      * metadata. The token is used by the backend to verify the request and to
-     * allow the backend to report load to the gRPC LB system.
+     * allow the backend to report load to the gRPC LB system. The token is also
+     * used in client stats for reporting dropped calls.
      * </pre>
      *
      * <code>string load_balance_token = 3;</code>
@@ -749,95 +723,57 @@ public  final class Server extends
       return this;
     }
 
-    private boolean dropForRateLimiting_ ;
+    private boolean drop_ ;
     /**
      * <pre>
-     * Indicates whether this particular request should be dropped by the client
-     * for rate limiting.
+     * Indicates whether this particular request should be dropped by the client.
+     * If the request is dropped, there will be a corresponding entry in
+     * ClientStats.calls_finished_with_drop.
      * </pre>
      *
-     * <code>bool drop_for_rate_limiting = 4;</code>
+     * <code>bool drop = 4;</code>
      */
-    public boolean getDropForRateLimiting() {
-      return dropForRateLimiting_;
+    public boolean getDrop() {
+      return drop_;
     }
     /**
      * <pre>
-     * Indicates whether this particular request should be dropped by the client
-     * for rate limiting.
+     * Indicates whether this particular request should be dropped by the client.
+     * If the request is dropped, there will be a corresponding entry in
+     * ClientStats.calls_finished_with_drop.
      * </pre>
      *
-     * <code>bool drop_for_rate_limiting = 4;</code>
+     * <code>bool drop = 4;</code>
      */
-    public Builder setDropForRateLimiting(boolean value) {
+    public Builder setDrop(boolean value) {
       
-      dropForRateLimiting_ = value;
+      drop_ = value;
       onChanged();
       return this;
     }
     /**
      * <pre>
-     * Indicates whether this particular request should be dropped by the client
-     * for rate limiting.
+     * Indicates whether this particular request should be dropped by the client.
+     * If the request is dropped, there will be a corresponding entry in
+     * ClientStats.calls_finished_with_drop.
      * </pre>
      *
-     * <code>bool drop_for_rate_limiting = 4;</code>
+     * <code>bool drop = 4;</code>
      */
-    public Builder clearDropForRateLimiting() {
+    public Builder clearDrop() {
       
-      dropForRateLimiting_ = false;
-      onChanged();
-      return this;
-    }
-
-    private boolean dropForLoadBalancing_ ;
-    /**
-     * <pre>
-     * Indicates whether this particular request should be dropped by the client
-     * for load balancing.
-     * </pre>
-     *
-     * <code>bool drop_for_load_balancing = 5;</code>
-     */
-    public boolean getDropForLoadBalancing() {
-      return dropForLoadBalancing_;
-    }
-    /**
-     * <pre>
-     * Indicates whether this particular request should be dropped by the client
-     * for load balancing.
-     * </pre>
-     *
-     * <code>bool drop_for_load_balancing = 5;</code>
-     */
-    public Builder setDropForLoadBalancing(boolean value) {
-      
-      dropForLoadBalancing_ = value;
-      onChanged();
-      return this;
-    }
-    /**
-     * <pre>
-     * Indicates whether this particular request should be dropped by the client
-     * for load balancing.
-     * </pre>
-     *
-     * <code>bool drop_for_load_balancing = 5;</code>
-     */
-    public Builder clearDropForLoadBalancing() {
-      
-      dropForLoadBalancing_ = false;
+      drop_ = false;
       onChanged();
       return this;
     }
     public final Builder setUnknownFields(
         final com.google.protobuf.UnknownFieldSet unknownFields) {
-      return this;
+      return super.setUnknownFieldsProto3(unknownFields);
     }
 
     public final Builder mergeUnknownFields(
         final com.google.protobuf.UnknownFieldSet unknownFields) {
-      return this;
+      return super.mergeUnknownFields(unknownFields);
     }
 
 

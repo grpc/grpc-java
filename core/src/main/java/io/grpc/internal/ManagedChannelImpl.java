@@ -84,6 +84,14 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   static final Status SHUTDOWN_NOW_STATUS =
       Status.UNAVAILABLE.withDescription("Channel shutdownNow invoked");
 
+  @VisibleForTesting
+  static final Status SHUTDOWN_STATUS =
+      Status.UNAVAILABLE.withDescription("Channel shutdown invoked");
+
+  @VisibleForTesting
+  static final Status SUBCHANNEL_SHUTDOWN_STATUS =
+      Status.UNAVAILABLE.withDescription("Subchannel shutdown invoked");
+
   private final String target;
   private final NameResolver.Factory nameResolverFactory;
   private final Attributes nameResolverParams;
@@ -119,7 +127,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
   // null when channel is in idle mode.  Must be assigned from channelExecutor.
   @Nullable
-  private LoadBalancer loadBalancer;
+  private LbHelperImpl lbHelper;
 
   // Must be assigned from channelExecutor.  null if channel is in idle mode.
   @Nullable
@@ -183,9 +191,9 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
         public void transportTerminated() {
           checkState(shutdown.get(), "Channel must have been shut down");
           terminating = true;
-          if (loadBalancer != null) {
-            loadBalancer.shutdown();
-            loadBalancer = null;
+          if (lbHelper != null) {
+            lbHelper.lb.shutdown();
+            lbHelper = null;
           }
           if (nameResolver != null) {
             nameResolver.shutdown();
@@ -247,9 +255,12 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       // did not cancel idleModeTimer, both of which are bugs.
       nameResolver.shutdown();
       nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
-      loadBalancer.shutdown();
-      loadBalancer = null;
+      lbHelper.lb.shutdown();
+      lbHelper = null;
       subchannelPicker = null;
+      if (!channelStateManager.isDisabled()) {
+        channelStateManager.gotoState(IDLE);
+      }
     }
   }
 
@@ -279,15 +290,14 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       // isInUse() == false, in which case we still need to schedule the timer.
       rescheduleIdleTimer();
     }
-    if (loadBalancer != null) {
+    if (lbHelper != null) {
       return;
     }
     log.log(Level.FINE, "[{0}] Exiting idle mode", getLogId());
-    LbHelperImpl helper = new LbHelperImpl(nameResolver);
-    helper.lb = loadBalancerFactory.newLoadBalancer(helper);
-    this.loadBalancer = helper.lb;
+    lbHelper = new LbHelperImpl(nameResolver);
+    lbHelper.lb = loadBalancerFactory.newLoadBalancer(lbHelper);
 
-    NameResolverListenerImpl listener = new NameResolverListenerImpl(helper);
+    NameResolverListenerImpl listener = new NameResolverListenerImpl(lbHelper);
     try {
       nameResolver.start(listener);
     } catch (Throwable t) {
@@ -468,7 +478,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       }
     });
 
-    delayedTransport.shutdown();
+    delayedTransport.shutdown(SHUTDOWN_STATUS);
     channelExecutor.executeLater(new Runnable() {
         @Override
         public void run() {
@@ -657,7 +667,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
               // shutdown even if "terminating" is already true.  The subchannel will not be used in
               // this case, because delayed transport has terminated when "terminating" becomes
               // true, and no more requests will be sent to balancer beyond this point.
-              internalSubchannel.shutdown();
+              internalSubchannel.shutdown(SHUTDOWN_STATUS);
             }
             if (!terminated) {
               // If channel has not terminated, it will track the subchannel and block termination
@@ -679,6 +689,9 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
           new Runnable() {
             @Override
             public void run() {
+              if (LbHelperImpl.this != lbHelper) {
+                return;
+              }
               subchannelPicker = newPicker;
               delayedTransport.reprocess(newPicker);
               // It's not appropriate to report SHUTDOWN state from lb.
@@ -767,6 +780,9 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       runSerialized(new Runnable() {
           @Override
           public void run() {
+            if (LbHelperImpl.this != lbHelper) {
+              return;
+            }
             subchannelPicker = picker;
             delayedTransport.reprocess(picker);
             channelStateManager.disable();
@@ -896,7 +912,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
                   new Runnable() {
                     @Override
                     public void run() {
-                      subchannel.shutdown();
+                      subchannel.shutdown(SUBCHANNEL_SHUTDOWN_STATUS);
                     }
                   }), SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS);
           return;
@@ -904,7 +920,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       }
       // When terminating == true, no more real streams will be created. It's safe and also
       // desirable to shutdown timely.
-      subchannel.shutdown();
+      subchannel.shutdown(SHUTDOWN_STATUS);
     }
 
     @Override

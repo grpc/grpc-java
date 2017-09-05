@@ -17,7 +17,9 @@
 package io.grpc.internal;
 
 import static io.grpc.ConnectivityState.CONNECTING;
+import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
+import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static junit.framework.TestCase.assertNotSame;
 import static org.junit.Assert.assertEquals;
@@ -52,7 +54,6 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
-import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
@@ -168,12 +169,14 @@ public class ManagedChannelImplTest {
 
   private void createChannel(
       NameResolver.Factory nameResolverFactory, List<ClientInterceptor> interceptors) {
-    createChannel(nameResolverFactory, interceptors, true /* requestConnection */);
+    createChannel(
+        nameResolverFactory, interceptors, true /* requestConnection */,
+        ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE);
   }
 
   private void createChannel(
       NameResolver.Factory nameResolverFactory, List<ClientInterceptor> interceptors,
-      boolean requestConnection) {
+      boolean requestConnection, long idleTimeoutMillis) {
     class Builder extends AbstractManagedChannelImplBuilder<Builder> {
       Builder(String target) {
         super(target);
@@ -197,7 +200,7 @@ public class ManagedChannelImplTest {
         .loadBalancerFactory(mockLoadBalancerFactory)
         .userAgent(userAgent);
     builder.executorPool = executorPool;
-    builder.idleTimeoutMillis = ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE;
+    builder.idleTimeoutMillis = idleTimeoutMillis;
     channel = new ManagedChannelImpl(
         builder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         oobExecutorPool, timer.getStopwatchSupplier(), interceptors);
@@ -205,7 +208,9 @@ public class ManagedChannelImplTest {
     if (requestConnection) {
       // Force-exit the initial idle-mode
       channel.exitIdleMode();
-      assertEquals(0, timer.numPendingTasks());
+      assertEquals(
+          idleTimeoutMillis == ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE ? 0 : 1,
+          timer.numPendingTasks());
 
       ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
       verify(mockLoadBalancerFactory).newLoadBalancer(helperCaptor.capture());
@@ -317,7 +322,7 @@ public class ManagedChannelImplTest {
     when(mockPicker.pickSubchannel(
         new PickSubchannelArgsImpl(method, headers2, CallOptions.DEFAULT))).thenReturn(
         PickResult.withSubchannel(subchannel));
-    helper.updatePicker(mockPicker);
+    helper.updateBalancingState(READY, mockPicker);
 
     // First RPC, will be pending
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
@@ -375,7 +380,7 @@ public class ManagedChannelImplTest {
       SubchannelPicker picker2 = mock(SubchannelPicker.class);
       when(picker2.pickSubchannel(new PickSubchannelArgsImpl(method, headers, CallOptions.DEFAULT)))
           .thenReturn(PickResult.withSubchannel(subchannel));
-      helper.updatePicker(picker2);
+      helper.updateBalancingState(READY, picker2);
       executor.runDueTasks();
       verify(mockTransport).newStream(same(method), same(headers), same(CallOptions.DEFAULT));
       verify(mockStream).start(any(ClientStreamListener.class));
@@ -394,7 +399,11 @@ public class ManagedChannelImplTest {
     }
     // LoadBalancer should shutdown the subchannel
     subchannel.shutdown();
-    verify(mockTransport).shutdown();
+    if (shutdownNow) {
+      verify(mockTransport).shutdown(same(ManagedChannelImpl.SHUTDOWN_NOW_STATUS));
+    } else {
+      verify(mockTransport).shutdown(same(ManagedChannelImpl.SHUTDOWN_STATUS));
+    }
 
     // Killing the remaining real transport will terminate the channel
     transportListener.transportShutdown(Status.UNAVAILABLE);
@@ -410,10 +419,6 @@ public class ManagedChannelImplTest {
     verify(mockTransportFactory).close();
     verify(mockTransport, atLeast(0)).getLogId();
     verifyNoMoreInteractions(mockTransport);
-  }
-
-  @Test
-  public void shutdownNowWithMultipleOobChannels() {
   }
 
   @Test
@@ -462,7 +467,7 @@ public class ManagedChannelImplTest {
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
     assertEquals(0, callExecutor.numPendingTasks());
-    helper.updatePicker(mockPicker);
+    helper.updateBalancingState(READY, mockPicker);
 
     // Real streams are started in the call executor if they were previously buffered.
     assertEquals(1, callExecutor.runDueTasks());
@@ -606,7 +611,7 @@ public class ManagedChannelImplTest {
     assertEquals(READY, stateInfoCaptor.getValue().getState());
 
     // A typical LoadBalancer will call this once the subchannel becomes READY
-    helper.updatePicker(mockPicker);
+    helper.updateBalancingState(READY, mockPicker);
     // Delayed transport uses the app executor to create real streams.
     executor.runDueTasks();
 
@@ -689,7 +694,7 @@ public class ManagedChannelImplTest {
     SubchannelPicker picker2 = mock(SubchannelPicker.class);
     when(picker2.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withError(server2Error));
-    helper.updatePicker(picker2);
+    helper.updateBalancingState(TRANSIENT_FAILURE, picker2);
     executor.runDueTasks();
 
     // ... which fails the fail-fast call
@@ -740,18 +745,18 @@ public class ManagedChannelImplTest {
     sub1.shutdown();
     timer.forwardTime(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS - 1, TimeUnit.SECONDS);
     sub1.shutdown();
-    verify(transportInfo1.transport, never()).shutdown();
+    verify(transportInfo1.transport, never()).shutdown(any(Status.class));
     timer.forwardTime(1, TimeUnit.SECONDS);
-    verify(transportInfo1.transport).shutdown();
+    verify(transportInfo1.transport).shutdown(same(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_STATUS));
 
     // ... but not after Channel is terminating
     verify(mockLoadBalancer, never()).shutdown();
     channel.shutdown();
     verify(mockLoadBalancer).shutdown();
-    verify(transportInfo2.transport, never()).shutdown();
+    verify(transportInfo2.transport, never()).shutdown(any(Status.class));
 
     sub2.shutdown();
-    verify(transportInfo2.transport).shutdown();
+    verify(transportInfo2.transport).shutdown(same(ManagedChannelImpl.SHUTDOWN_STATUS));
   }
 
   @Test
@@ -1040,7 +1045,7 @@ public class ManagedChannelImplTest {
     transportInfo.listener.transportReady();
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
-    helper.updatePicker(mockPicker);
+    helper.updateBalancingState(READY, mockPicker);
     executor.runDueTasks();
     ArgumentCaptor<Attributes> attrsCaptor = ArgumentCaptor.forClass(Attributes.class);
     ArgumentCaptor<MetadataApplier> applierCaptor = ArgumentCaptor.forClass(MetadataApplier.class);
@@ -1102,7 +1107,7 @@ public class ManagedChannelImplTest {
 
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class))).thenReturn(
         PickResult.withSubchannel(subchannel, factory2));
-    helper.updatePicker(mockPicker);
+    helper.updateBalancingState(READY, mockPicker);
 
     CallOptions callOptions = CallOptions.DEFAULT.withStreamTracerFactory(factory1);
     ClientCall<String, Integer> call = channel.newCall(method, callOptions);
@@ -1140,7 +1145,7 @@ public class ManagedChannelImplTest {
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class))).thenReturn(
         PickResult.withSubchannel(subchannel, factory2));
 
-    helper.updatePicker(mockPicker);
+    helper.updateBalancingState(READY, mockPicker);
     assertEquals(1, executor.runDueTasks());
 
     verify(mockPicker).pickSubchannel(any(PickSubchannelArgs.class));
@@ -1156,36 +1161,38 @@ public class ManagedChannelImplTest {
   @Test
   public void getState_loadBalancerSupportsChannelState() {
     createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
-    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+    assertEquals(IDLE, channel.getState(false));
 
-    helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, mockPicker);
-    assertEquals(ConnectivityState.TRANSIENT_FAILURE, channel.getState(false));
+    helper.updateBalancingState(TRANSIENT_FAILURE, mockPicker);
+    assertEquals(TRANSIENT_FAILURE, channel.getState(false));
   }
 
   @Test
   public void getState_withRequestConnect() {
     createChannel(
-        new FakeNameResolverFactory(false), NO_INTERCEPTOR, false /* requestConnection */);
+        new FakeNameResolverFactory(false), NO_INTERCEPTOR, false /* requestConnection */,
+        ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE);
 
-    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+    assertEquals(IDLE, channel.getState(false));
     verify(mockLoadBalancerFactory, never()).newLoadBalancer(any(Helper.class));
 
     // call getState() with requestConnection = true
-    assertEquals(ConnectivityState.IDLE, channel.getState(true));
+    assertEquals(IDLE, channel.getState(true));
     ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
     verify(mockLoadBalancerFactory).newLoadBalancer(helperCaptor.capture());
     helper = helperCaptor.getValue();
 
-    helper.updateBalancingState(ConnectivityState.CONNECTING, mockPicker);
-    assertEquals(ConnectivityState.CONNECTING, channel.getState(false));
-    assertEquals(ConnectivityState.CONNECTING, channel.getState(true));
+    helper.updateBalancingState(CONNECTING, mockPicker);
+    assertEquals(CONNECTING, channel.getState(false));
+    assertEquals(CONNECTING, channel.getState(true));
     verifyNoMoreInteractions(mockLoadBalancerFactory);
   }
 
   @Test
+  @Deprecated
   public void getState_loadBalancerDoesNotSupportChannelState() {
     createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
-    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+    assertEquals(IDLE, channel.getState(false));
     helper.updatePicker(mockPicker);
 
     thrown.expect(UnsupportedOperationException.class);
@@ -1193,12 +1200,13 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  @Deprecated
   public void notifyWhenStateChanged_loadBalancerDoesNotSupportChannelState() {
     createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
-    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+    assertEquals(IDLE, channel.getState(false));
 
     Runnable onStateChanged = mock(Runnable.class);
-    channel.notifyWhenStateChanged(ConnectivityState.IDLE, onStateChanged);
+    channel.notifyWhenStateChanged(IDLE, onStateChanged);
     executor.runDueTasks();
     verify(onStateChanged, never()).run();
 
@@ -1221,21 +1229,21 @@ public class ManagedChannelImplTest {
     };
 
     createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
-    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+    assertEquals(IDLE, channel.getState(false));
 
-    channel.notifyWhenStateChanged(ConnectivityState.IDLE, onStateChanged);
+    channel.notifyWhenStateChanged(IDLE, onStateChanged);
     executor.runDueTasks();
     assertFalse(stateChanged.get());
 
     // state change from IDLE to CONNECTING
-    helper.updateBalancingState(ConnectivityState.CONNECTING, mockPicker);
+    helper.updateBalancingState(CONNECTING, mockPicker);
     // onStateChanged callback should run
     executor.runDueTasks();
     assertTrue(stateChanged.get());
 
     // clear and test form CONNECTING
     stateChanged.set(false);
-    channel.notifyWhenStateChanged(ConnectivityState.IDLE, onStateChanged);
+    channel.notifyWhenStateChanged(IDLE, onStateChanged);
     // onStateChanged callback should run immediately
     executor.runDueTasks();
     assertTrue(stateChanged.get());
@@ -1252,26 +1260,64 @@ public class ManagedChannelImplTest {
     };
 
     createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
-    assertEquals(ConnectivityState.IDLE, channel.getState(false));
-    channel.notifyWhenStateChanged(ConnectivityState.IDLE, onStateChanged);
+    assertEquals(IDLE, channel.getState(false));
+    channel.notifyWhenStateChanged(IDLE, onStateChanged);
     executor.runDueTasks();
     assertFalse(stateChanged.get());
 
     channel.shutdown();
-    assertEquals(ConnectivityState.SHUTDOWN, channel.getState(false));
+    assertEquals(SHUTDOWN, channel.getState(false));
     executor.runDueTasks();
     assertTrue(stateChanged.get());
 
     stateChanged.set(false);
-    channel.notifyWhenStateChanged(ConnectivityState.SHUTDOWN, onStateChanged);
-    helper.updateBalancingState(ConnectivityState.CONNECTING, mockPicker);
+    channel.notifyWhenStateChanged(SHUTDOWN, onStateChanged);
+    helper.updateBalancingState(CONNECTING, mockPicker);
 
-    assertEquals(ConnectivityState.SHUTDOWN, channel.getState(false));
+    assertEquals(SHUTDOWN, channel.getState(false));
     executor.runDueTasks();
     assertFalse(stateChanged.get());
   }
 
-  // TODO(zdapeng): replace usages of updatePicker() in some other tests once it's deprecated
+  @Test
+  public void stateIsIdleOnIdleTimeout() {
+    long idleTimeoutMillis = 2000L;
+    createChannel(
+        new FakeNameResolverFactory(true), NO_INTERCEPTOR, true /* request connection*/,
+        idleTimeoutMillis);
+    assertEquals(IDLE, channel.getState(false));
+
+    helper.updateBalancingState(CONNECTING, mockPicker);
+    assertEquals(CONNECTING, channel.getState(false));
+
+    timer.forwardNanos(TimeUnit.MILLISECONDS.toNanos(idleTimeoutMillis));
+    assertEquals(IDLE, channel.getState(false));
+  }
+
+  @Test
+  public void idleTimeoutAndReconnect() {
+    long idleTimeoutMillis = 2000L;
+    createChannel(
+        new FakeNameResolverFactory(true), NO_INTERCEPTOR, true /* request connection*/,
+        idleTimeoutMillis);
+
+    timer.forwardNanos(TimeUnit.MILLISECONDS.toNanos(idleTimeoutMillis));
+    assertEquals(IDLE, channel.getState(true /* request connection */));
+
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
+    // Two times of requesting connection will create loadBalancer twice.
+    verify(mockLoadBalancerFactory, times(2)).newLoadBalancer(helperCaptor.capture());
+    Helper helper2 = helperCaptor.getValue();
+
+    // Updating on the old helper (whose balancer has been shutdown) does not change the channel
+    // state.
+    helper.updateBalancingState(CONNECTING, mockPicker);
+    assertEquals(IDLE, channel.getState(false));
+
+    helper2.updateBalancingState(CONNECTING, mockPicker);
+    assertEquals(CONNECTING, channel.getState(false));
+  }
+
   @Test
   public void updateBalancingStateDoesUpdatePicker() {
     ClientStream mockStream = mock(ClientStream.class);
@@ -1314,14 +1360,14 @@ public class ManagedChannelImplTest {
   @Test
   public void updateBalancingStateWithShutdownShouldBeIgnored() {
     createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
-    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+    assertEquals(IDLE, channel.getState(false));
 
     Runnable onStateChanged = mock(Runnable.class);
-    channel.notifyWhenStateChanged(ConnectivityState.IDLE, onStateChanged);
+    channel.notifyWhenStateChanged(IDLE, onStateChanged);
 
-    helper.updateBalancingState(ConnectivityState.SHUTDOWN, mockPicker);
+    helper.updateBalancingState(SHUTDOWN, mockPicker);
 
-    assertEquals(ConnectivityState.IDLE, channel.getState(false));
+    assertEquals(IDLE, channel.getState(false));
     executor.runDueTasks();
     verify(onStateChanged, never()).run();
   }

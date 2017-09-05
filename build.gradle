@@ -10,6 +10,7 @@ buildscript {
     classpath 'com.google.gradle:osdetector-gradle-plugin:1.4.0'
     classpath 'ru.vyarus:gradle-animalsniffer-plugin:1.4.0'
     classpath 'net.ltgt.gradle:gradle-errorprone-plugin:0.0.11'
+    classpath "me.champeau.gradle:jmh-gradle-plugin:0.4.4"
   }
 }
 
@@ -21,6 +22,7 @@ subprojects {
     apply plugin: "signing"
     apply plugin: "jacoco"
 
+    apply plugin: "me.champeau.gradle.jmh"
     apply plugin: "com.google.osdetector"
     // The plugin only has an effect if a signature is specified
     apply plugin: "ru.vyarus.animalsniffer"
@@ -47,7 +49,7 @@ subprojects {
     idea.module.inheritOutputDirs = true
 
     group = "io.grpc"
-    version = "1.6.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.7.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     sourceCompatibility = 1.6
     targetCompatibility = 1.6
@@ -57,7 +59,7 @@ subprojects {
         mavenLocal()
     }
 
-    [compileJava, compileTestJava].each() {
+    [compileJava, compileTestJava, compileJmhJava].each() {
         it.options.compilerArgs += ["-Xlint:all", "-Xlint:-options", "-Xlint:-path"]
         it.options.encoding = "UTF-8"
         if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
@@ -90,10 +92,10 @@ subprojects {
         protocPluginBaseName = 'protoc-gen-grpc-java'
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
-        nettyVersion = '4.1.13.Final'
+        nettyVersion = '4.1.15.Final'
         guavaVersion = '19.0'
-        protobufVersion = '3.3.1'
-        protocVersion = '3.3.0' // TODO(carl-mastrangelo): set this from protobufVersion when versions align again
+        protobufVersion = '3.4.0'
+        protocVersion = protobufVersion
         protobufNanoVersion = '3.0.0-alpha-5'
 
         configureProtoCompilation = {
@@ -130,6 +132,7 @@ subprojects {
                       // To generate deprecated interfaces and static bindService method,
                       // turn the enable_deprecated option to true below:
                       option 'enable_deprecated=false'
+                      option 'noversion'
                     }
                   }
                 }
@@ -164,7 +167,7 @@ subprojects {
             }
           }
 
-          [compileJava, compileTestJava].each() {
+          [compileJava, compileTestJava, compileJmhJava].each() {
             // Protobuf-generated code produces some warnings.
             // https://github.com/google/protobuf/issues/2718
             it.options.compilerArgs += ["-Xlint:-cast", "-Xep:MissingOverride:OFF",
@@ -199,7 +202,7 @@ subprojects {
                 netty: "io.netty:netty-codec-http2:[${nettyVersion}]",
                 netty_epoll: "io.netty:netty-transport-native-epoll:${nettyVersion}" + epoll_suffix,
                 netty_proxy_handler: "io.netty:netty-handler-proxy:${nettyVersion}",
-                netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.5.Final',
+                netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.6.Final',
 
                 // Test dependencies.
                 junit: 'junit:junit:4.11',
@@ -226,6 +229,9 @@ subprojects {
 
         // Configuration for modules that use Jetty ALPN agent
         alpnagent libraries.jetty_alpn_agent
+
+        jmh 'org.openjdk.jmh:jmh-core:1.19',
+            'org.openjdk.jmh:jmh-generator-bytecode:1.19'
     }
 
     signing {
@@ -258,6 +264,16 @@ subprojects {
 
     checkstyleTest {
         source = fileTree(dir: "src/test", include: "**/*.java")
+    }
+
+    jmh {
+        warmupIterations = 10
+        iterations = 10
+        fork = 1
+        // None of our benchmarks need the tests, and we have pseudo-circular
+        // dependencies that break when including them. (context's testCompile
+        // depends on core; core's testCompile depends on testing)
+        includeTests = false
     }
 
     task javadocJar(type: Jar) {

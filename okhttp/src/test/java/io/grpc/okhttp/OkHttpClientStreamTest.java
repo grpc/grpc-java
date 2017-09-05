@@ -36,7 +36,6 @@ import io.grpc.internal.StatsTraceContext;
 import io.grpc.okhttp.internal.framed.ErrorCode;
 import io.grpc.okhttp.internal.framed.Header;
 import java.io.ByteArrayInputStream;
-import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -112,11 +111,11 @@ public class OkHttpClientStreamTest {
         assertTrue(Thread.holdsLock(lock));
         return null;
       }
-    }).when(transport).finishStream(1234, Status.CANCELLED, ErrorCode.CANCEL, null);
+    }).when(transport).finishStream(1234, Status.CANCELLED, true, ErrorCode.CANCEL, null);
 
     stream.cancel(Status.CANCELLED);
 
-    verify(transport).finishStream(1234, Status.CANCELLED, ErrorCode.CANCEL, null);
+    verify(transport).finishStream(1234, Status.CANCELLED, true, ErrorCode.CANCEL, null);
   }
 
   @Test
@@ -205,7 +204,9 @@ public class OkHttpClientStreamTest {
     public void onReady() {}
 
     @Override
-    public void messageRead(InputStream message) {}
+    public void messagesAvailable(MessageProducer producer) {
+      while (producer.next() != null) {}
+    }
 
     @Override
     public void headersRead(Metadata headers) {}

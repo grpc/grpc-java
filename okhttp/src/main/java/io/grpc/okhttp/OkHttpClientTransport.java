@@ -554,7 +554,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   }
 
   /**
-   * Gets the overriden authority hostname.  If the authority is overriden to be an invalid
+   * Gets the overridden authority hostname.  If the authority is overridden to be an invalid
    * authority, uri.getHost() will (rightly) return null, since the authority is no longer
    * an actual service.  This method overrides the behavior for practical reasons.  For example,
    * if an authority is in the form "invalid_authority" (note the "_"), rather than return null,
@@ -587,13 +587,13 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public void shutdown() {
+  public void shutdown(Status reason) {
     synchronized (lock) {
       if (goAwayStatus != null) {
         return;
       }
 
-      goAwayStatus = Status.UNAVAILABLE.withDescription("Transport stopped");
+      goAwayStatus = reason;
       listener.transportShutdown(goAwayStatus);
       stopIfNecessary();
     }
@@ -601,7 +601,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
 
   @Override
   public void shutdownNow(Status reason) {
-    shutdown();
+    shutdown(reason);
     synchronized (lock) {
       Iterator<Map.Entry<Integer, OkHttpClientStream>> it = streams.entrySet().iterator();
       while (it.hasNext()) {
@@ -706,10 +706,15 @@ class OkHttpClientTransport implements ConnectionClientTransport {
    *
    * @param streamId the Id of the stream.
    * @param status the final status of this stream, null means no need to report.
+   * @param stopDelivery interrupt queued messages in the deframer
    * @param errorCode reset the stream with this ErrorCode if not null.
    * @param trailers the trailers received if not null
    */
-  void finishStream(int streamId, @Nullable Status status, @Nullable ErrorCode errorCode,
+  void finishStream(
+      int streamId,
+      @Nullable Status status,
+      boolean stopDelivery,
+      @Nullable ErrorCode errorCode,
       @Nullable Metadata trailers) {
     synchronized (lock) {
       OkHttpClientStream stream = streams.remove(streamId);
@@ -718,10 +723,12 @@ class OkHttpClientTransport implements ConnectionClientTransport {
           frameWriter.rstStream(streamId, ErrorCode.CANCEL);
         }
         if (status != null) {
-          boolean isCancelled = (status.getCode() == Code.CANCELLED
-              || status.getCode() == Code.DEADLINE_EXCEEDED);
-          stream.transportState().transportReportStatus(status, isCancelled,
-              trailers != null ? trailers : new Metadata());
+          stream
+              .transportState()
+              .transportReportStatus(
+                  status,
+                  stopDelivery,
+                  trailers != null ? trailers : new Metadata());
         }
         if (!startPendingStreams()) {
           stopIfNecessary();
@@ -942,7 +949,10 @@ class OkHttpClientTransport implements ConnectionClientTransport {
 
     @Override
     public void rstStream(int streamId, ErrorCode errorCode) {
-      finishStream(streamId, toGrpcStatus(errorCode).augmentDescription("Rst Stream"), null, null);
+      Status status = toGrpcStatus(errorCode).augmentDescription("Rst Stream");
+      boolean stopDelivery =
+          (status.getCode() == Code.CANCELLED || status.getCode() == Code.DEADLINE_EXCEEDED);
+      finishStream(streamId, status, stopDelivery, null, null);
     }
 
     @Override
@@ -1035,7 +1045,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
           onError(ErrorCode.PROTOCOL_ERROR, errorMsg);
         } else {
           finishStream(streamId,
-              Status.INTERNAL.withDescription(errorMsg), ErrorCode.PROTOCOL_ERROR, null);
+              Status.INTERNAL.withDescription(errorMsg), false, ErrorCode.PROTOCOL_ERROR, null);
         }
         return;
       }

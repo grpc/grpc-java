@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-package io.grpc.context;
+package io.grpc;
 
-import io.grpc.Context;
 import io.grpc.Context.Key;
 import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -29,7 +28,7 @@ import org.openjdk.jmh.annotations.State;
 
 /** StatusBenchmark. */
 @State(Scope.Benchmark)
-public class ContextBenchmark {
+public class AttachDetachBenchmark {
 
   private final Key<Integer> key = Context.keyWithDefault("key", 9999);
   private final Context cu = Context.current().withValue(key, 8888);
