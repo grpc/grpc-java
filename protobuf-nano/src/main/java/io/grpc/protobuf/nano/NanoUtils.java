@@ -48,7 +48,7 @@ public class NanoUtils {
       @Override
       public T parse(InputStream stream) {
         try {
-          // TODO(simonma): Investigate whether we can do 0-copy here.
+          // TODO(simonma): Investigate whether we can do 0-copy here. 
           CodedInputByteBufferNano input =
               CodedInputByteBufferNano.newInstance(toByteArray(stream));
           input.setSizeLimit(Integer.MAX_VALUE);
