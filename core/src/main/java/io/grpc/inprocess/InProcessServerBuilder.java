@@ -69,14 +69,10 @@ public final class InProcessServerBuilder
   }
 
   /**
-   * Create a server builder that will bind with the given port, converted to a string.
-   *
-   * @since 1.7.0
-   * @param port the identity of the server for clients to connect to
-   * @return a new builder
+   * Always fails.  Call {@link #forName} instead.
    */
   public static InProcessServerBuilder forPort(int port) {
-    return new InProcessServerBuilder(String.valueOf(port));
+    throw new UnsupportedOperationException("call forName() instead");
   }
 
   private final String name;
