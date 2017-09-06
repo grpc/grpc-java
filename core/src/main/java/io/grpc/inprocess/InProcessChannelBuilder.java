@@ -48,6 +48,26 @@ public final class InProcessChannelBuilder extends
     return new InProcessChannelBuilder(name);
   }
 
+  /**
+   * Create a channel builder that will connect to the server with the given name.
+   *
+   * @since 1.7.0
+   * @param target the name of the in process server to connect to.
+   */
+  public static InProcessChannelBuilder forTarget(String target) {
+    return forName(target);
+  }
+
+  /**
+   * Create a channel builder that will connect to the server with the given name and port,
+   * converted into an authority.
+   *
+   * @since 1.7.0
+   */
+  public static InProcessChannelBuilder forAddress(String name, int port) {
+    return forTarget(GrpcUtil.authorityFromHostAndPort(name, port));
+  }
+
   private final String name;
 
   private InProcessChannelBuilder(String name) {

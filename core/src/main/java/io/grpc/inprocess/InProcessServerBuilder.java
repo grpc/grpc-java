@@ -68,6 +68,17 @@ public final class InProcessServerBuilder
     return new InProcessServerBuilder(name);
   }
 
+  /**
+   * Create a server builder that will bind with the given port, converted to a string.
+   *
+   * @since 1.7.0
+   * @param port the identity of the server for clients to connect to
+   * @return a new builder
+   */
+  public static InProcessServerBuilder forPort(int port) {
+    return new InProcessServerBuilder(String.valueOf(port));
+  }
+
   private final String name;
 
   private InProcessServerBuilder(String name) {
