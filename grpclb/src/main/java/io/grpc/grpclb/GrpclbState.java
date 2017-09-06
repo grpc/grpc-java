@@ -87,6 +87,11 @@ final class GrpclbState {
       public PickResult picked(Metadata headers) {
         return PickResult.withNoResult();
       }
+
+      @Override
+      public String toString() {
+        return "BUFFER_ENTRY";
+      }
     };
 
   private final LogId logId;
@@ -157,25 +162,11 @@ final class GrpclbState {
     }
     // If we don't receive server list from the balancer within the timeout, we round-robin on
     // the backend list from the resolver (aka fallback), until the balancer returns a server list.
+    fallbackBackendList = newBackendServers;
     if (fallbackTimer == null) {
       fallbackTimer =
-          timerService.schedule(
-              new Runnable() {
-                @Override
-                public void run() {
-                  helper.runSerialized(new Runnable() {
-                      @Override
-                      public void run() {
-                        fallbackTimerExpired = true;
-                        maybeUseFallbackBackends();
-                      }
-                    });
-                }
-              },
-              FALLBACK_TIMEOUT_MS,
-              TimeUnit.MILLISECONDS);
+          timerService.schedule(new FallbackModeTask(), FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     } else {
-      fallbackBackendList = newBackendServers;
       maybeUseFallbackBackends();
     }
   }
@@ -290,7 +281,14 @@ final class GrpclbState {
         }
         newSubchannelMap.put(eag, subchannel);
       }
-      newBackendList.add(new BackendEntry(subchannel, loadRecorder, backendAddr.getToken()));
+      BackendEntry entry;
+      // Only picks with tokens are reported to LoadRecorder
+      if (backendAddr.getToken() == null) {
+        entry = new BackendEntry(subchannel);
+      } else {
+        entry = new BackendEntry(subchannel, loadRecorder, backendAddr.getToken());
+      }
+      newBackendList.add(entry);
     }
 
     // Close Subchannels whose addresses have been delisted
@@ -305,6 +303,20 @@ final class GrpclbState {
     dropList = Collections.unmodifiableList(newDropList);
     backendList = Collections.unmodifiableList(newBackendList);
     maybeUpdatePicker();
+  }
+
+  @VisibleForTesting
+  class FallbackModeTask implements Runnable {
+    @Override
+    public void run() {
+      helper.runSerialized(new Runnable() {
+          @Override
+          public void run() {
+            fallbackTimerExpired = true;
+            maybeUseFallbackBackends();
+          }
+        });
+    }
   }
 
   @VisibleForTesting
@@ -634,7 +646,9 @@ final class GrpclbState {
   static final class BackendEntry implements RoundRobinEntry {
     @VisibleForTesting
     final PickResult result;
+    @Nullable
     private final GrpclbClientLoadRecorder loadRecorder;
+    @Nullable
     private final String token;
 
     BackendEntry(Subchannel subchannel, GrpclbClientLoadRecorder loadRecorder, String token) {
@@ -643,10 +657,18 @@ final class GrpclbState {
       this.token = checkNotNull(token, "token");
     }
 
+    BackendEntry(Subchannel subchannel) {
+      this.result = PickResult.withSubchannel(subchannel);
+      this.loadRecorder = null;
+      this.token = null;
+    }
+
     @Override
     public PickResult picked(Metadata headers) {
       headers.discardAll(GrpclbConstants.TOKEN_METADATA_KEY);
-      headers.put(GrpclbConstants.TOKEN_METADATA_KEY, token);
+      if (token != null) {
+        headers.put(GrpclbConstants.TOKEN_METADATA_KEY, token);
+      }
       return result;
     }
 
