@@ -180,6 +180,16 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       return getCount() <= TERMINATED;
     }
 
+    void startTerminate() {
+      assert getCount() == UNTERMINATED;
+      countDown();
+    }
+
+    void finishTerminate() {
+      assert getCount() == TERMINATING;
+      countDown();
+    }
+
     Terminator() {
       super((int) UNTERMINATED);
     }
@@ -208,8 +218,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
         @Override
         public void transportTerminated() {
           checkState(shutdown.get(), "Channel must have been shut down");
-          assert !terminator.isTerminating();
-          terminator.countDown();
+          terminator.startTerminate();
           if (lbHelper != null) {
             lbHelper.lb.shutdown();
             lbHelper = null;
@@ -595,8 +604,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     }
     if (shutdown.get() && subchannels.isEmpty() && oobChannels.isEmpty()) {
       log.log(Level.FINE, "[{0}] Terminated", getLogId());
-      assert terminator.isTerminating();
-      terminator.countDown();
+      terminator.finishTerminate();
       executorPool.returnObject(executor);
       // Release the transport factory so that it can deallocate any resources.
       transportFactory.close();
