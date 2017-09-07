@@ -223,7 +223,7 @@ subprojects {
         compile {
             // Detect Maven Enforcer's dependencyConvergence failures. We only
             // care for artifacts used as libraries by others.
-            if (!(project.name in ["grpc-benchmarks"])) {
+            if (!(project.name in ['grpc-benchmarks', 'grpc-interop-testing'])) {
                 resolutionStrategy.failOnVersionConflict()
             }
         }
