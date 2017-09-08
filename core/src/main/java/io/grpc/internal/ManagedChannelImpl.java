@@ -388,8 +388,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.oobExecutorPool = checkNotNull(oobExecutorPool, "oobExecutorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
-    this.serializer =
-        SerializingExecutors.wrapFactory(this.executor, 1);
+    this.serializer = SerializingExecutors.wrapFactory(this.executor);
     this.delayedTransport = new DelayedClientTransport(this.executor, this.channelExecutor);
     this.delayedTransport.start(delayedTransportListener);
     this.backoffPolicyProvider = backoffPolicyProvider;

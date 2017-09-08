@@ -78,7 +78,7 @@ final class OobChannel extends ManagedChannel implements WithLogId {
     this.authority = checkNotNull(authority, "authority");
     this.executorPool = checkNotNull(executorPool, "executorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
-    this.serializer = SerializingExecutors.wrapFactory(executor, 1);
+    this.serializer = SerializingExecutors.wrapFactory(executor);
     this.deadlineCancellationExecutor = checkNotNull(
         deadlineCancellationExecutor, "deadlineCancellationExecutor");
     this.delayedTransport = new DelayedClientTransport(executor, channelExecutor);

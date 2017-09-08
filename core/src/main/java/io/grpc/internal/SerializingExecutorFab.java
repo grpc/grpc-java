@@ -16,7 +16,6 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -27,62 +26,23 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * Created by notcarl on 9/1/17.
+ * Creates {@link SerializingExecutor}s.
  */
-final class ShardingSerializingExecutor implements SerializingExecutor.SerializingExecutorFactory {
-  static ShardingSerializingExecutor newInstance(Executor delegate) {
-    return newInstance(delegate, 1);
+final class SerializingExecutorFab implements SerializingExecutor.SerializingExecutorFactory {
+
+  private final Executor delegate;
+
+  static SerializingExecutorFab newInstance(Executor delegate) {
+    return new SerializingExecutorFab(delegate);
   }
 
-  static ShardingSerializingExecutor newInstance(Executor delegate, int shardCount) {
-    return new ShardingSerializingExecutor(delegate, shardCount);
-  }
-
-  private final ThreadLocalShard shardCycler;
-
-  private ShardingSerializingExecutor(Executor delegate, int shardCount) {
-    checkNotNull(delegate, "delegate");
-    checkArgument(shardCount > 0, "Invalid shard count %s", shardCount);
-    SingleSerializingExecutor[] shards = new SingleSerializingExecutor[shardCount];
-    for (int i = 0; i < shardCount; i++) {
-      shards[i] = new SingleSerializingExecutor(delegate);
-    }
-    shardCycler = new ThreadLocalShard(shards);
+  private SerializingExecutorFab(Executor delegate) {
+    this.delegate = checkNotNull(delegate, "delegate");
   }
 
   @Override
   public SingleSerializingExecutor getExecutor() {
-    return shardCycler.getNext();
-  }
-
-  /**
-   * Conveniently avoids boxing (Integer) and synchronization (AtomicInteger).  Also we don't have
-   * to call set on the ThreadLocal.
-   */
-  private static final class Int {
-    int value;
-  }
-
-  private static final class ThreadLocalShard extends ThreadLocal<Int> {
-    private final SingleSerializingExecutor[] shards;
-
-    @Override
-    protected Int initialValue() {
-      return new Int();
-    }
-
-    ThreadLocalShard(SingleSerializingExecutor[] shards) {
-      this.shards = shards;
-    }
-
-    SingleSerializingExecutor getNext() {
-      Int shardIdHolder = get();
-      int shardId = shardIdHolder.value++;
-      if (shardIdHolder.value >= shards.length) {
-        shardIdHolder.value -= shards.length;
-      }
-      return shards[shardId];
-    }
+    return new SingleSerializingExecutor(delegate);
   }
 
   @SuppressWarnings("serial")

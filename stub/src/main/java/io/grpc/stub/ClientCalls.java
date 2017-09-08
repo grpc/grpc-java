@@ -29,12 +29,12 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
+import io.grpc.internal.SerializingExecutor;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Level;
@@ -574,7 +574,7 @@ public final class ClientCalls {
     }
   }
 
-  private static final class ThreadlessExecutor implements Executor {
+  private static final class ThreadlessExecutor implements SerializingExecutor {
     private static final Logger log = Logger.getLogger(ThreadlessExecutor.class.getName());
 
     private final BlockingQueue<Runnable> queue = new LinkedBlockingQueue<Runnable>();
@@ -585,7 +585,7 @@ public final class ClientCalls {
     /**
      * Waits until there is a Runnable, then executes it and all queued Runnables after it.
      */
-    public void waitAndDrain() throws InterruptedException {
+    void waitAndDrain() throws InterruptedException {
       Runnable runnable = queue.take();
       while (runnable != null) {
         try {

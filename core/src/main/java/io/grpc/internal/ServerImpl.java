@@ -146,8 +146,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       // Start and wait for any port to actually be bound.
       transportServer.start(new ServerListenerImpl());
       executor = Preconditions.checkNotNull(executorPool.getObject(), "executor");
-      serializer =
-          SerializingExecutors.wrapFactory(executor, 1);
+      serializer = SerializingExecutors.wrapFactory(executor);
       started = true;
       return this;
     }

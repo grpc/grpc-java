@@ -22,7 +22,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
 
 import com.google.common.util.concurrent.MoreExecutors;
-import io.grpc.internal.ShardingSerializingExecutor.SingleSerializingExecutor;
+import io.grpc.internal.SerializingExecutorFab.SingleSerializingExecutor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;

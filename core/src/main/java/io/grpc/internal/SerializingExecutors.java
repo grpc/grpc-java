@@ -34,24 +34,22 @@ public final class SerializingExecutors {
     if (delegate instanceof SerializingExecutor) {
       return (SerializingExecutor) delegate;
     }
-    return wrapFactory(delegate, 1).getExecutor();
+    return wrapFactory(delegate).getExecutor();
   }
 
   /**
    * Creates a serializing executor factory.  The {@link SerializingExecutor}s crated will execute
    * all runnables on the given delegate.
    */
-  public static SerializingExecutorFactory wrapFactory(Executor delegate, int shardCount) {
-    // TODO(carl-mastrangelo): implement smarter logic about shard sizing
+  public static SerializingExecutorFactory wrapFactory(Executor delegate) {
     checkNotNull(delegate, "delegate");
     if (delegate == MoreExecutors.directExecutor()) {
       return SerializeReentrantCallsDirectExecutorFactory.INSTANCE;
     }
-    return ShardingSerializingExecutor.newInstance(delegate, shardCount);
-  }
-
-  private SerializingExecutors() {
-    throw new AssertionError();
+    if (delegate instanceof SerializingExecutor) {
+      return new EchoingSerializingExecutorFactory((SerializingExecutor) delegate);
+    }
+    return SerializingExecutorFab.newInstance(delegate);
   }
 
   private enum SerializeReentrantCallsDirectExecutorFactory implements SerializingExecutorFactory {
@@ -62,4 +60,24 @@ public final class SerializingExecutors {
       return new SerializeReentrantCallsDirectExecutor();
     }
   }
+
+  private static final class EchoingSerializingExecutorFactory
+      implements SerializingExecutorFactory {
+
+    private final SerializingExecutor delegate;
+
+    EchoingSerializingExecutorFactory(SerializingExecutor delegate) {
+      this.delegate = delegate;
+    }
+
+    @Override
+    public SerializingExecutor getExecutor() {
+      return delegate;
+    }
+  }
+
+  private SerializingExecutors() {
+    throw new AssertionError();
+  }
+
 }
