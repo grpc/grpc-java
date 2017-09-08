@@ -226,7 +226,7 @@ public final class NettyChannelBuilder
   final NettyChannelBuilder initHandler(ChannelHandler initHandler) {
     if (initHandler != null) {
       checkArgument(
-          initHandler.getClass().getAnnotation(ChannelHandler.Sharable.class) != null,
+          initHandler.getClass().isAnnotationPresent(ChannelHandler.Sharable.class),
           "initHandler must be sharable");
     }
     this.initHandler = initHandler;

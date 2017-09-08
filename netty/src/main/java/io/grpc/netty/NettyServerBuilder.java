@@ -184,7 +184,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   NettyServerBuilder initHandler(ChannelHandler initHandler) {
     if (initHandler != null) {
       checkArgument(
-          initHandler.getClass().getAnnotation(ChannelHandler.Sharable.class) != null,
+          initHandler.getClass().isAnnotationPresent(ChannelHandler.Sharable.class),
           "initHandler must be sharable");
     }
 

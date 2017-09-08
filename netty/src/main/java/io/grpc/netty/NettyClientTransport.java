@@ -221,7 +221,6 @@ class NettyClientTransport implements ConnectionClientTransport {
     }
 
     final class LifecycleChannelFutureListener implements ChannelFutureListener {
-
       private final String reason;
 
       LifecycleChannelFutureListener(String reason) {
@@ -242,8 +241,6 @@ class NettyClientTransport implements ConnectionClientTransport {
     b.handler(new ChannelInitializer<Channel>() {
       @Override
       protected void initChannel(Channel ch) throws Exception {
-        // initChannel runs as soon as the handler is added to the pipeline, but before
-
         if (initHandler != null) {
           ch.pipeline().addFirst(initHandler);
         }
@@ -251,10 +248,7 @@ class NettyClientTransport implements ConnectionClientTransport {
         ch.pipeline().addLast(negotiationHandler);
 
         // This write will have no effect, yet it will only complete once the negotiationHandler
-        // flushes any pending writes. We need it to be staged *before* the `connect` so that
-        // the channel can't have been closed yet, removing all handlers. This write will sit in the
-        // AbstractBufferingHandler's buffer, and will either be flushed on a successful connection,
-        // or failed if the connection fails.
+        // flushes any pending writes.
         ch.writeAndFlush(NettyClientHandler.NOOP_MESSAGE)
             .addListener(new LifecycleChannelFutureListener("noop write"));
       }
