@@ -124,6 +124,8 @@ class Utils {
   public static Http2Headers convertServerHeaders(Metadata headers) {
     // Discard any application supplied duplicates of the reserved headers
     headers.discardAll(CONTENT_TYPE_KEY);
+    headers.discardAll(GrpcUtil.TE_HEADER);
+    headers.discardAll(GrpcUtil.USER_AGENT_KEY);
 
     return GrpcHttp2OutboundHeaders.serverResponseHeaders(toHttp2Headers(headers));
   }

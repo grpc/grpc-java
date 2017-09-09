@@ -102,6 +102,8 @@ public class UtilsTest {
     // Intentionally being explicit here rather than relying on any pre-defined lists of headers,
     // since the goal of this test is to validate the correctness of such lists in the first place.
     metaData.put(GrpcUtil.CONTENT_TYPE_KEY, "to-be-removed");
+    metaData.put(GrpcUtil.TE_HEADER, "to-be-removed");
+    metaData.put(GrpcUtil.USER_AGENT_KEY, "to-be-removed");
     metaData.put(userKey, userValue);
 
     Http2Headers output = Utils.convertServerHeaders(metaData);
@@ -111,8 +113,7 @@ public class UtilsTest {
     }
     // 2 reserved headers, 1 user header
     assertEquals(2 + 1, headers.size());
-    assertEquals(Utils.CONTENT_TYPE_GRPC.toString(),
-        headers.get(GrpcUtil.CONTENT_TYPE_KEY.name()).toString());
+    assertEquals(Utils.CONTENT_TYPE_GRPC, headers.get(GrpcUtil.CONTENT_TYPE_KEY.name()));
   }
 
   private static void assertStatusEquals(Status expected, Status actual) {
