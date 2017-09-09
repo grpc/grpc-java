@@ -98,6 +98,12 @@ public final class GrpcUtil {
           Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER);
 
   /**
+   * {@link io.grpc.Metadata.Key} for the Transfer encoding.
+   */
+  public static final Metadata.Key<String> TE_HEADER =
+      Metadata.Key.of("te", Metadata.ASCII_STRING_MARSHALLER);
+
+  /**
    * {@link io.grpc.Metadata.Key} for the Content-Type request/response header.
    */
   public static final Metadata.Key<String> USER_AGENT_KEY =
@@ -112,12 +118,6 @@ public final class GrpcUtil {
    * The default port for SSL connections.
    */
   public static final int DEFAULT_PORT_SSL = 443;
-
-  /**
-   * {@link io.grpc.Metadata.Key} for the Transfer encoding.
-   */
-  public static final Metadata.Key<String> TE_HEADER =
-      Metadata.Key.of("te", Metadata.ASCII_STRING_MARSHALLER);
 
   /**
    * Content-Type used for GRPC-over-HTTP/2.
