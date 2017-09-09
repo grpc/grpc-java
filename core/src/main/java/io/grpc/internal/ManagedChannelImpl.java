@@ -22,6 +22,8 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.internal.GrpcUtil.getThreadFactory;
+import static java.lang.Runtime.getRuntime;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -46,18 +48,23 @@ import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
+import java.lang.ref.PhantomReference;
+import java.lang.ref.ReferenceQueue;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
+import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import javax.annotation.Nullable;
@@ -67,7 +74,7 @@ import javax.annotation.concurrent.ThreadSafe;
 /** A communication channel for making outgoing RPCs. */
 @ThreadSafe
 public final class ManagedChannelImpl extends ManagedChannel implements WithLogId {
-  private static final Logger log = Logger.getLogger(ManagedChannelImpl.class.getName());
+  static final Logger logger = Logger.getLogger(ManagedChannelImpl.class.getName());
 
   // Matching this pattern means the target string is a URI target or at least intended to be one.
   // A URI target must be an absolute hierarchical URI.
@@ -169,6 +176,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   private volatile boolean terminated;
   private final CountDownLatch terminatedLatch = new CountDownLatch(1);
 
+  private final ManagedChannelPhantom phantom;
+
   // Called from channelExecutor
   private final ManagedClientTransport.Listener delayedTransportListener =
       new ManagedClientTransport.Listener() {
@@ -249,7 +258,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
         // could cancel the timer.
         return;
       }
-      log.log(Level.FINE, "[{0}] Entering idle mode", getLogId());
+      logger.log(Level.FINE, "[{0}] Entering idle mode", getLogId());
       // nameResolver and loadBalancer are guaranteed to be non-null.  If any of them were null,
       // either the idleModeTimer ran twice without exiting the idle mode, or the task in shutdown()
       // did not cancel idleModeTimer, both of which are bugs.
@@ -293,7 +302,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     if (lbHelper != null) {
       return;
     }
-    log.log(Level.FINE, "[{0}] Exiting idle mode", getLogId());
+    logger.log(Level.FINE, "[{0}] Exiting idle mode", getLogId());
     lbHelper = new LbHelperImpl(nameResolver);
     lbHelper.lb = loadBalancerFactory.newLoadBalancer(lbHelper);
 
@@ -406,7 +415,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     this.compressorRegistry = checkNotNull(builder.compressorRegistry, "compressorRegistry");
     this.userAgent = builder.userAgent;
 
-    log.log(Level.FINE, "[{0}] Created with target {1}", new Object[] {getLogId(), target});
+    phantom = new ManagedChannelPhantom(this);
+    logger.log(Level.FINE, "[{0}] Created with target {1}", new Object[] {getLogId(), target});
   }
 
   @VisibleForTesting
@@ -460,10 +470,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
    */
   @Override
   public ManagedChannelImpl shutdown() {
-    log.log(Level.FINE, "[{0}] shutdown() called", getLogId());
+    logger.log(Level.FINE, "[{0}] shutdown() called", getLogId());
     if (!shutdown.compareAndSet(false, true)) {
       return this;
     }
+    phantom.shutdown = true;
 
     // Put gotoState(SHUTDOWN) as early into the channelExecutor's queue as possible.
     // delayedTransport.shutdown() may also add some tasks into the queue. But some things inside
@@ -485,7 +496,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
           cancelIdleTimer();
         }
       }).drain();
-    log.log(Level.FINE, "[{0}] Shutting down", getLogId());
+    logger.log(Level.FINE, "[{0}] Shutting down", getLogId());
     return this;
   }
 
@@ -496,7 +507,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
    */
   @Override
   public ManagedChannelImpl shutdownNow() {
-    log.log(Level.FINE, "[{0}] shutdownNow() called", getLogId());
+    logger.log(Level.FINE, "[{0}] shutdownNow() called", getLogId());
     shutdown();
     delayedTransport.shutdownNow(SHUTDOWN_NOW_STATUS);
     channelExecutor.executeLater(new Runnable() {
@@ -575,8 +586,9 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       return;
     }
     if (shutdown.get() && subchannels.isEmpty() && oobChannels.isEmpty()) {
-      log.log(Level.FINE, "[{0}] Terminated", getLogId());
+      logger.log(Level.FINE, "[{0}] Terminated", getLogId());
       terminated = true;
+      phantom.terminated = true;
       terminatedLatch.countDown();
       executorPool.returnObject(executor);
       // Release the transport factory so that it can deallocate any resources.
@@ -656,7 +668,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
               }
             });
       subchannel.subchannel = internalSubchannel;
-      log.log(Level.FINE, "[{0}] {1} created for {2}",
+      logger.log(Level.FINE, "[{0}] {1} created for {2}",
           new Object[] {getLogId(), internalSubchannel.getLogId(), addressGroup});
       runSerialized(new Runnable() {
           @Override
@@ -823,7 +835,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
         onError(Status.UNAVAILABLE.withDescription("NameResolver returned an empty list"));
         return;
       }
-      log.log(Level.FINE, "[{0}] resolved address: {1}, config={2}",
+      logger.log(Level.FINE, "[{0}] resolved address: {1}, config={2}",
           new Object[] {getLogId(), servers, config});
       helper.runSerialized(new Runnable() {
           @Override
@@ -834,7 +846,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
             try {
               balancer.handleResolvedAddressGroups(servers, config);
             } catch (Throwable e) {
-              log.log(
+              logger.log(
                   Level.WARNING, "[" + getLogId() + "] Unexpected exception from LoadBalancer", e);
               // It must be a bug! Push the exception back to LoadBalancer in the hope that it may
               // be propagated to the application.
@@ -848,7 +860,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     @Override
     public void onError(final Status error) {
       checkArgument(!error.isOk(), "the error status must not be OK");
-      log.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
+      logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
           new Object[] {getLogId(), error});
       channelExecutor.executeLater(new Runnable() {
           @Override
@@ -941,6 +953,73 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     @Override
     public String toString() {
       return subchannel.getLogId().toString();
+    }
+  }
+
+  @VisibleForTesting
+  static final class ManagedChannelPhantom extends PhantomReference<ManagedChannelImpl> {
+    private static final ReferenceQueue<ManagedChannelImpl> refQueue = initQueue();
+    // Retain the PhantomReferences so they don't get GC'd
+    private static final ConcurrentMap<ManagedChannelPhantom, ManagedChannelPhantom> refs =
+        new ConcurrentHashMap<ManagedChannelPhantom, ManagedChannelPhantom>();
+
+    private static ReferenceQueue<ManagedChannelImpl> initQueue() {
+      String name = "gRPC Channel Close Watcher";
+      boolean daemon = false; // Do block shutdown.
+      final class QueueCleaner implements Runnable {
+        @Override
+        public void run() {
+          cleanQueue();
+        }
+      }
+
+      try {
+        getRuntime().addShutdownHook(getThreadFactory(name, daemon).newThread(new QueueCleaner()));
+      } catch (Throwable t) {
+        logger.log(Level.SEVERE, "Unable to add Channel Phantom Watcher", t);
+      }
+      return new ReferenceQueue<ManagedChannelImpl>();
+    }
+
+    private final LogId logId;
+    private final String target;
+    private final Throwable allocationSite;
+    private volatile boolean shutdown;
+    private volatile boolean terminated;
+
+    ManagedChannelPhantom(ManagedChannelImpl chan) {
+      super(chan, refQueue);
+      allocationSite = new Throwable("Managed Channel Allocation Site");
+      logId = chan.logId;
+      target = chan.target;
+      refs.put(this, this);
+      cleanQueue();
+    }
+
+    @VisibleForTesting
+    static int cleanQueue() {
+      ManagedChannelPhantom ref;
+      int orphanedChannels = 0;
+      while ((ref = (ManagedChannelPhantom) refQueue.poll()) != null) {
+        refs.remove(ref);
+        if (!(ref.shutdown && ref.terminated)) {
+          orphanedChannels++;
+          String fmt = new StringBuilder()
+              .append("*~*~*~ Channel '{0}' for target '{1}' was not ")
+              // Prefer to complain about shutdown if neither has been called.
+              .append(!ref.shutdown ? "shutdown" : "terminated")
+              .append(" properly!!! ~*~*~*")
+              .append(System.getProperty("line.separator"))
+              .append("    Make sure to call shutdown()/shutdownNow() and awaitTermination().")
+              .toString();
+          LogRecord lr = new LogRecord(Level.SEVERE, fmt);
+          lr.setLoggerName(logger.getName());
+          lr.setParameters(new Object[]{ref.logId, ref.target});
+          lr.setThrown(ref.allocationSite);
+          logger.log(lr);
+        }
+      }
+      return orphanedChannels;
     }
   }
 }
