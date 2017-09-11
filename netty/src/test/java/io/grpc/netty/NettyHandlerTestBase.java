@@ -302,6 +302,12 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     return captureWrite(ctx);
   }
 
+  protected final ByteBuf windowUpdate(int streamId, int delta) {
+    ChannelHandlerContext ctx = newMockContext();
+    new DefaultHttp2FrameWriter().writeWindowUpdate(ctx, 0, delta, newPromise());
+    return captureWrite(ctx);
+  }
+
   protected final ChannelPromise newPromise() {
     return channel.newPromise();
   }

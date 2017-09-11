@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -64,13 +65,20 @@ public final class StatsTraceContext {
    * Factory method for the server-side.
    */
   public static StatsTraceContext newServerContext(
-      List<ServerStreamTracer.Factory> factories, String fullMethodName, Metadata headers) {
-    if (factories.isEmpty()) {
+      List<ServerStreamTracer.Factory> handlerFactories,
+      @Nullable StreamTracer transportTracer,
+      String fullMethodName,
+      Metadata headers) {
+    if (handlerFactories.isEmpty() && transportTracer == null) {
       return NOOP;
     }
-    StreamTracer[] tracers = new StreamTracer[factories.size()];
-    for (int i = 0; i < tracers.length; i++) {
-      tracers[i] = factories.get(i).newServerStreamTracer(fullMethodName, headers);
+    int tracerCount = handlerFactories.size() + (transportTracer == null ? 0 : 1);
+    StreamTracer[] tracers = new StreamTracer[tracerCount];
+    for (int i = 0; i < handlerFactories.size(); i++) {
+      tracers[i] = handlerFactories.get(i).newServerStreamTracer(fullMethodName, headers);
+    }
+    if (transportTracer != null) {
+      tracers[tracers.length - 1] = transportTracer;
     }
     return new StatsTraceContext(tracers);
   }

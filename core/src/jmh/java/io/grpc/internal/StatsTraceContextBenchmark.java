@@ -41,6 +41,7 @@ public class StatsTraceContextBenchmark {
   private final Metadata emptyMetadata = new Metadata();
   private final List<ServerStreamTracer.Factory> serverStreamTracerFactories =
       Collections.<ServerStreamTracer.Factory>emptyList();
+  private final TransportTracer transportTracer = new TransportTracer();
 
   /**
    * Javadoc comment.
@@ -60,6 +61,6 @@ public class StatsTraceContextBenchmark {
   @OutputTimeUnit(TimeUnit.NANOSECONDS)
   public StatsTraceContext newServerContext_empty() {
     return StatsTraceContext.newServerContext(
-        serverStreamTracerFactories, methodName, emptyMetadata);
+        serverStreamTracerFactories, transportTracer.getStreamTracer(), methodName, emptyMetadata);
   }
 }

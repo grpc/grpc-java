@@ -66,6 +66,7 @@ import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
+import io.grpc.internal.TransportTracer;
 import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ServerHeadersDecoder;
 import io.netty.buffer.ByteBuf;
@@ -84,6 +85,7 @@ import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
 import java.io.InputStream;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
@@ -135,6 +137,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
   private long keepAliveTimeInNanos = DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
   private long keepAliveTimeoutInNanos = DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
+  private boolean includeMockStreamTracerFactory = true;
+  private boolean enableTransportTracer = true;
+  private TransportTracer transportTracer;
 
   private class ServerTransportListenerImpl implements ServerTransportListener {
 
@@ -158,6 +163,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     assertNull("manualSetUp should not run more than once", handler());
 
     MockitoAnnotations.initMocks(this);
+    if (enableTransportTracer) {
+      transportTracer = new TransportTracer();
+    }
     when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
         .thenReturn(streamTracer);
 
@@ -207,6 +215,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   @Test
   public void streamTracerCreated() throws Exception {
+    enableTransportTracer = false;
     manualSetUp();
     createStream();
 
@@ -215,6 +224,31 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     List<StreamTracer> tracers = statsTraceCtx.getTracersForTest();
     assertEquals(1, tracers.size());
     assertSame(streamTracer, tracers.get(0));
+  }
+
+  @Test
+  public void streamTracerCreated_transportTracer() throws Exception {
+    manualSetUp();
+    createStream();
+
+    verify(streamTracerFactory).newServerStreamTracer(eq("foo/bar"), any(Metadata.class));
+    StatsTraceContext statsTraceCtx = stream.statsTraceContext();
+    List<StreamTracer> tracers = statsTraceCtx.getTracersForTest();
+    assertEquals(2, tracers.size());
+    assertSame(streamTracer, tracers.get(0));
+    assertSame(transportTracer.getStreamTracer(), tracers.get(1));
+  }
+
+  @Test
+  public void streamTracerCreated_emptyTracerFactory() throws Exception {
+    includeMockStreamTracerFactory = false;
+    manualSetUp();
+    createStream();
+
+    StatsTraceContext statsTraceCtx = stream.statsTraceContext();
+    List<StreamTracer> tracers = statsTraceCtx.getTracersForTest();
+    assertEquals(1, tracers.size());
+    assertSame(transportTracer.getStreamTracer(), tracers.get(0));
   }
 
   @Test
@@ -495,7 +529,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     keepAliveTimeoutInNanos = TimeUnit.MINUTES.toNanos(30L);
     manualSetUp();
 
+    assertEquals(0, transportTracer.getKeepAlivesSent());
     fakeClock().forwardNanos(keepAliveTimeInNanos);
+    assertEquals(1, transportTracer.getKeepAlivesSent());
 
     verifyWrite().writePing(eq(ctx()), eq(false), eq(pingBuf), any(ChannelPromise.class));
 
@@ -745,6 +781,39 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     assertTrue(!channel().isOpen());
   }
 
+  @Test
+  public void transportTracer_windowSizeDefault() throws Exception {
+    manualSetUp();
+    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, transportTracer.getRemoteFlowControlWindow());
+    assertEquals(flowControlWindow, transportTracer.getLocalFlowControlWindow());
+  }
+
+  @Test
+  public void transportTracer_windowSize() throws Exception {
+    flowControlWindow = 1048576; // 1MiB
+    manualSetUp();
+    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, transportTracer.getRemoteFlowControlWindow());
+    assertEquals(flowControlWindow, transportTracer.getLocalFlowControlWindow());
+
+    ByteBuf serializedSettings = windowUpdate(0, 1000);
+    channelRead(serializedSettings);
+    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE + 1000,
+        transportTracer.getRemoteFlowControlWindow());
+    assertEquals(flowControlWindow, transportTracer.getLocalFlowControlWindow());
+  }
+
+  @Test
+  public void transportTracer_createStream() throws Exception {
+    manualSetUp();
+    assertEquals(0, transportTracer.getStreamsStarted());
+    assertEquals(0, transportTracer.getLastStreamCreatedTimeMsec());
+
+    createStream();
+    assertEquals(1, transportTracer.getStreamsStarted());
+    assertTrue(Math.abs(System.currentTimeMillis()
+        - transportTracer.getLastStreamCreatedTimeMsec()) < 500);
+  }
+
   private void createStream() throws Exception {
     Http2Headers headers = new DefaultHttp2Headers()
         .method(HTTP_METHOD)
@@ -773,9 +842,16 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   @Override
   protected NettyServerHandler newHandler() {
+    List<ServerStreamTracer.Factory> streamTracerFactories;
+    if (includeMockStreamTracerFactory) {
+      streamTracerFactories = Arrays.asList(streamTracerFactory);
+    } else {
+      streamTracerFactories = Collections.emptyList();
+    }
     return NettyServerHandler.newHandler(
         frameReader(), frameWriter(), transportListener,
-        Arrays.asList(streamTracerFactory), maxConcurrentStreams, flowControlWindow,
+        streamTracerFactories, transportTracer,
+        maxConcurrentStreams, flowControlWindow,
         maxHeaderListSize, DEFAULT_MAX_MESSAGE_SIZE,
         keepAliveTimeInNanos, keepAliveTimeoutInNanos,
         maxConnectionIdleInNanos,

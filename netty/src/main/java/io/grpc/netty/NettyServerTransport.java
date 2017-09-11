@@ -24,6 +24,7 @@ import io.grpc.Status;
 import io.grpc.internal.LogId;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
+import io.grpc.internal.TransportTracer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.Nullable;
 
 /**
  * The Netty-based server transport.
@@ -65,10 +67,13 @@ class NettyServerTransport implements ServerTransport {
   private final boolean permitKeepAliveWithoutCalls;
   private final long permitKeepAliveTimeInNanos;
   private final List<ServerStreamTracer.Factory> streamTracerFactories;
+  private final TransportTracer transportTracer;
 
   NettyServerTransport(
       Channel channel, ProtocolNegotiator protocolNegotiator,
-      List<ServerStreamTracer.Factory> streamTracerFactories, int maxStreams,
+      List<ServerStreamTracer.Factory> streamTracerFactories,
+      TransportTracer transportTracer,
+      int maxStreams,
       int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
       long keepAliveTimeInNanos, long keepAliveTimeoutInNanos,
       long maxConnectionIdleInNanos,
@@ -78,6 +83,7 @@ class NettyServerTransport implements ServerTransport {
     this.protocolNegotiator = Preconditions.checkNotNull(protocolNegotiator, "protocolNegotiator");
     this.streamTracerFactories =
         Preconditions.checkNotNull(streamTracerFactories, "streamTracerFactories");
+    this.transportTracer = transportTracer;
     this.maxStreams = maxStreams;
     this.flowControlWindow = flowControlWindow;
     this.maxMessageSize = maxMessageSize;
@@ -168,12 +174,17 @@ class NettyServerTransport implements ServerTransport {
     }
   }
 
+  @Nullable
+  TransportTracer getTransportTracer() {
+    return transportTracer;
+  }
+
   /**
    * Creates the Netty handler to be used in the channel pipeline.
    */
   private NettyServerHandler createHandler(ServerTransportListener transportListener) {
     return NettyServerHandler.newHandler(
-        transportListener, streamTracerFactories, maxStreams,
+        transportListener, streamTracerFactories, transportTracer, maxStreams,
         flowControlWindow, maxHeaderListSize, maxMessageSize,
         keepAliveTimeInNanos, keepAliveTimeoutInNanos,
         maxConnectionIdleInNanos,
