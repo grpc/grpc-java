@@ -101,6 +101,10 @@ class OkHttpClientStream extends AbstractClientStream {
     return id;
   }
 
+  /**
+   * Returns whether the stream uses GET. This is not known until after {@link Sink#writeHeaders} is
+   * invoked.
+   */
   boolean useGet() {
     return useGet;
   }
