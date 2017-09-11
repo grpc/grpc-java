@@ -73,9 +73,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 final class GrpclbState {
   private static final Logger logger = Logger.getLogger(GrpclbState.class.getName());
 
-  // TODO(zhangkun83): use a big value that technically disables the fallback, until a real default
-  // value is decided.
-  static final long FALLBACK_TIMEOUT_MS = TimeUnit.DAYS.toMillis(365);
+  static final long FALLBACK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10);
 
   @VisibleForTesting
   static final PickResult DROP_PICK_RESULT =
@@ -339,7 +337,7 @@ final class GrpclbState {
     }
   }
 
-  class LbStream implements StreamObserver<LoadBalanceResponse> {
+  private class LbStream implements StreamObserver<LoadBalanceResponse> {
     final StreamObserver<LoadBalanceRequest> lbRequestWriter;
     final GrpclbClientLoadRecorder loadRecorder;
 
