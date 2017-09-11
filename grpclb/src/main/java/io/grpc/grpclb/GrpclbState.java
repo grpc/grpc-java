@@ -218,6 +218,7 @@ final class GrpclbState {
     checkState(lbStream == null, "previous lbStream has not been cleared yet");
     LoadBalancerGrpc.LoadBalancerStub stub = LoadBalancerGrpc.newStub(lbCommChannel);
     lbStream = new LbStream(stub);
+    lbStream.start();
 
     LoadBalanceRequest initRequest = LoadBalanceRequest.newBuilder()
         .setInitialRequest(InitialLoadBalanceRequest.newBuilder()
@@ -330,7 +331,7 @@ final class GrpclbState {
       helper.runSerialized(new Runnable() {
           @Override
           public void run() {
-            stream.loadReportTask = null;
+            stream.loadReportFuture = null;
             stream.sendLoadReport();
           }
         });
@@ -338,23 +339,25 @@ final class GrpclbState {
   }
 
   private class LbStream implements StreamObserver<LoadBalanceResponse> {
-    final StreamObserver<LoadBalanceRequest> lbRequestWriter;
     final GrpclbClientLoadRecorder loadRecorder;
-
-    final LoadReportingTask loadReportingTask;
+    final LoadBalancerGrpc.LoadBalancerStub stub;
+    StreamObserver<LoadBalanceRequest> lbRequestWriter;
 
     // These fields are only accessed from helper.runSerialized()
     boolean initialResponseReceived;
     boolean closed;
     long loadReportIntervalMillis = -1;
-    ScheduledFuture<?> loadReportTask;
+    ScheduledFuture<?> loadReportFuture;
 
     LbStream(LoadBalancerGrpc.LoadBalancerStub stub) {
+      this.stub = checkNotNull(stub, "stub");
       // Stats data only valid for current LbStream.  We do not carry over data from previous
       // stream.
       loadRecorder = new GrpclbClientLoadRecorder(time);
+    }
+
+    void start() {
       lbRequestWriter = stub.withWaitForReady().balanceLoad(this);
-      loadReportingTask = new LoadReportingTask(this);
     }
 
     @Override public void onNext(final LoadBalanceResponse response) {
@@ -404,8 +407,8 @@ final class GrpclbState {
 
     private void scheduleNextLoadReport() {
       if (loadReportIntervalMillis > 0) {
-        loadReportTask = timerService.schedule(
-            loadReportingTask, loadReportIntervalMillis, TimeUnit.MILLISECONDS);
+        loadReportFuture = timerService.schedule(
+            new LoadReportingTask(this), loadReportIntervalMillis, TimeUnit.MILLISECONDS);
       }
     }
 
@@ -499,9 +502,9 @@ final class GrpclbState {
     }
 
     private void cleanUp() {
-      if (loadReportTask != null) {
-        loadReportTask.cancel(false);
-        loadReportTask = null;
+      if (loadReportFuture != null) {
+        loadReportFuture.cancel(false);
+        loadReportFuture = null;
       }
       if (lbStream == this) {
         lbStream = null;
@@ -649,12 +652,18 @@ final class GrpclbState {
     @Nullable
     private final String token;
 
+    /**
+     * Creates a BackendEntry whose usage will be reported to load recorder.
+     */
     BackendEntry(Subchannel subchannel, GrpclbClientLoadRecorder loadRecorder, String token) {
       this.result = PickResult.withSubchannel(subchannel, loadRecorder);
       this.loadRecorder = checkNotNull(loadRecorder, "loadRecorder");
       this.token = checkNotNull(token, "token");
     }
 
+    /**
+     * Creates a BackendEntry whose usage will not be reported.
+     */
     BackendEntry(Subchannel subchannel) {
       this.result = PickResult.withSubchannel(subchannel);
       this.loadRecorder = null;
