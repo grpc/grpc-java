@@ -589,6 +589,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       logger.log(Level.FINE, "[{0}] Terminated", getLogId());
       terminated = true;
       phantom.terminated = true;
+      phantom.clear();
       terminatedLatch.countDown();
       executorPool.returnObject(executor);
       // Release the transport factory so that it can deallocate any resources.
@@ -996,12 +997,18 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       cleanQueue();
     }
 
+    @Override
+    public void clear() {
+      super.clear();
+      refs.remove(this);
+    }
+
     @VisibleForTesting
     static int cleanQueue() {
       ManagedChannelPhantom ref;
       int orphanedChannels = 0;
       while ((ref = (ManagedChannelPhantom) refQueue.poll()) != null) {
-        refs.remove(ref);
+        ref.clear(); // technically the reference is gone already.
         if (!(ref.shutdown && ref.terminated)) {
           orphanedChannels++;
           String fmt = new StringBuilder()
