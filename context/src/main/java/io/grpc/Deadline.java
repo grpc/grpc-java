@@ -31,11 +31,21 @@ import java.util.concurrent.TimeUnit;
  * passed to the various components unambiguously.
  */
 public final class Deadline implements Comparable<Deadline> {
-  private static final SystemTicker SYSTEM_TICKER = new SystemTicker();
+  /**
+   * A {@link Ticker} that returns {@code System.nanoTime()};
+   */
+  private static final Ticker SYSTEM_TICKER = new SystemTicker();
   // nanoTime has a range of just under 300 years. Only allow up to 100 years in the past or future
   // to prevent wraparound as long as process runs for less than ~100 years.
   private static final long MAX_OFFSET = TimeUnit.DAYS.toNanos(100 * 365);
   private static final long MIN_OFFSET = -MAX_OFFSET;
+
+  /**
+   * A {@link Context.Key} used to store the ticker in a context. This serves as a way to inject
+   * custom tickers into deadlines created by gRPC.
+   */
+  public static final Context.Key<Ticker> TICKER_KEY =
+      Context.keyWithDefault("deadline-ticker", SYSTEM_TICKER);
 
   /**
    * Create a deadline that will expire at the specified offset from the current system clock.
@@ -47,8 +57,14 @@ public final class Deadline implements Comparable<Deadline> {
     return after(duration, units, SYSTEM_TICKER);
   }
 
-  // For testing
-  static Deadline after(long duration, TimeUnit units, Ticker ticker) {
+  /**
+   * Creates a deadline that will expire at the specified offset from the ticker's current time.
+   * @param duration A non-negative duration.
+   * @param units The time unit for the duration.
+   * @param ticker The ticker used to determine how much time has elapsed.
+   * @return A new deadline.
+   */
+  public static Deadline after(long duration, TimeUnit units, Ticker ticker) {
     checkNotNull(units, "units");
     return new Deadline(ticker, units.toNanos(duration), true);
   }
@@ -89,7 +105,7 @@ public final class Deadline implements Comparable<Deadline> {
    * Is {@code this} deadline before another.
    */
   public boolean isBefore(Deadline other) {
-    return this.deadlineNanos - other.deadlineNanos < 0;
+    return compareTo(other) < 0;
   }
 
   /**
@@ -147,6 +163,12 @@ public final class Deadline implements Comparable<Deadline> {
 
   @Override
   public int compareTo(Deadline that) {
+    if (!ticker.equals(that.ticker)) {
+      throw new IllegalArgumentException(String.format(
+          "Comparing deadlines with different tickers is not allowed: %s and %s",
+          ticker,
+          that.ticker));
+    }
     long diff = this.deadlineNanos - that.deadlineNanos;
     if (diff < 0) {
       return -1;
@@ -157,12 +179,12 @@ public final class Deadline implements Comparable<Deadline> {
   }
 
   /** Time source representing nanoseconds since fixed but arbitrary point in time. */
-  abstract static class Ticker {
+  public interface Ticker {
     /** Returns the number of nanoseconds since this source's epoch. */
-    public abstract long read();
+    long read();
   }
 
-  private static class SystemTicker extends Ticker {
+  private static class SystemTicker implements Ticker {
     @Override
     public long read() {
       return System.nanoTime();

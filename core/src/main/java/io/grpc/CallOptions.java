@@ -127,7 +127,7 @@ public final class CallOptions {
    * now.
    */
   public CallOptions withDeadlineAfter(long duration, TimeUnit unit) {
-    return withDeadline(Deadline.after(duration, unit));
+    return withDeadline(Deadline.after(duration, unit, Deadline.TICKER_KEY.get()));
   }
 
   /**
