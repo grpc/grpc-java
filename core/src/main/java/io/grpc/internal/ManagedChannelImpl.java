@@ -63,9 +63,12 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.ConsoleHandler;
+import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
 import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
@@ -1011,22 +1014,47 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
         ref.clear(); // technically the reference is gone already.
         if (!(ref.shutdown && ref.terminated)) {
           orphanedChannels++;
-          String fmt = new StringBuilder()
-              .append("*~*~*~ Channel '{0}' for target '{1}' was not ")
-              // Prefer to complain about shutdown if neither has been called.
-              .append(!ref.shutdown ? "shutdown" : "terminated")
-              .append(" properly!!! ~*~*~*")
-              .append(System.getProperty("line.separator"))
-              .append("    Make sure to call shutdown()/shutdownNow() and awaitTermination().")
-              .toString();
-          LogRecord lr = new LogRecord(Level.SEVERE, fmt);
-          lr.setLoggerName(logger.getName());
-          lr.setParameters(new Object[]{ref.logId, ref.target});
-          lr.setThrown(ref.allocationSite);
-          logger.log(lr);
+          Level level = Level.SEVERE;
+          if (logger.isLoggable(level)) {
+            String fmt = new StringBuilder()
+                .append("*~*~*~ Channel '{0}' for target '{1}' was not ")
+                // Prefer to complain about shutdown if neither has been called.
+                .append(!ref.shutdown ? "shutdown" : "terminated")
+                .append(" properly!!! ~*~*~*")
+                .append(System.getProperty("line.separator"))
+                .append("    Make sure to call shutdown()/shutdownNow() and awaitTermination().")
+                .toString();
+            LogRecord lr = new LogRecord(level, fmt);
+            lr.setLoggerName(logger.getName());
+            lr.setParameters(new Object[]{ref.logId, ref.target});
+            lr.setThrown(ref.allocationSite);
+            if (isShuttingDown()) {
+              // Best effort log to console.
+              ConsoleHandler h = new ConsoleHandler();
+              h.setFormatter(new SimpleFormatter());
+              logger.addHandler(h);
+            }
+            logger.log(lr);
+          }
         }
       }
       return orphanedChannels;
+    }
+
+    /**
+     * If the jvm is shutting down, loggers lose all their handlers.  This checks if there is a
+     * chance that a log statement could be made.
+     */
+    static boolean isShuttingDown() {
+      Logger current = logger;
+      while (current != null) {
+        Handler[] handlers;
+        if ((handlers = current.getHandlers()) != null && handlers.length > 0) {
+          return false;
+        }
+        current = current.getParent();
+      }
+      return true;
     }
   }
 }
