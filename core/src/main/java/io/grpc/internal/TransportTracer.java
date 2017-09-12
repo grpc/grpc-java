@@ -172,10 +172,10 @@ public final class TransportTracer {
    * {@link #setRemoteFlowControlWindowPollable}. Returns -1 if no callback was registered.
    */
   public int getRemoteFlowControlWindow() {
+    if (remoteFlowControlPollable == null) {
+      return -1;
+    }
     try {
-      if (remoteFlowControlPollable == null) {
-        return -1;
-      }
       return remoteFlowControlPollable.call();
     } catch (Exception e) {
       throw new RuntimeException(e);
@@ -187,10 +187,10 @@ public final class TransportTracer {
    * {@link #setRemoteFlowControlWindowPollable}. Returns -1 if no callback was registered.
    */
   public int getLocalFlowControlWindow() {
+    if (localFlowControlPollable == null) {
+      return -1;
+    }
     try {
-      if (localFlowControlPollable == null) {
-        return -1;
-      }
       return localFlowControlPollable.call();
     } catch (Exception e) {
       throw new RuntimeException(e);
@@ -204,8 +204,9 @@ public final class TransportTracer {
   private static void updateMsecTimestamp(AtomicLong timestamp) {
     long now = System.currentTimeMillis();
     long oldVal = timestamp.get();
-    if (now > oldVal) {
-      timestamp.compareAndSet(oldVal, now);
+    while (oldVal < now && !timestamp.compareAndSet(oldVal, now)) {
+      // CAS failed, read new timestamp and maybe try again
+      oldVal = timestamp.get();
     }
   }
 }

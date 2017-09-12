@@ -64,6 +64,7 @@ import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Exception.StreamException;
+import io.netty.handler.codec.http2.Http2FlowController;
 import io.netty.handler.codec.http2.Http2FrameAdapter;
 import io.netty.handler.codec.http2.Http2FrameLogger;
 import io.netty.handler.codec.http2.Http2FrameReader;
@@ -79,6 +80,7 @@ import io.netty.handler.codec.http2.WeightedFairQueueByteDistributor;
 import io.netty.handler.logging.LogLevel;
 import io.netty.util.AsciiString;
 import io.netty.util.ReferenceCountUtil;
+import io.netty.util.concurrent.Promise;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ScheduledFuture;
@@ -108,6 +110,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   @Nullable
   private final TransportTracer transportTracer;
   private final KeepAliveEnforcer keepAliveEnforcer;
+  private final Http2Connection connection;
   private Attributes attributes;
   private Throwable connectionError;
   private boolean teWarningLogged;
@@ -166,7 +169,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       Http2FrameReader frameReader, Http2FrameWriter frameWriter,
       ServerTransportListener transportListener,
       List<ServerStreamTracer.Factory> streamTracerFactories,
-      @Nullable TransportTracer transportTracer,
+      @Nullable final TransportTracer transportTracer,
       int maxStreams,
       int flowControlWindow,
       int maxHeaderListSize,
@@ -195,25 +198,6 @@ class NettyServerHandler extends AbstractNettyHandler {
     // Create the local flow controller configured to auto-refill the connection window.
     connection.local().flowController(
         new DefaultHttp2LocalFlowController(connection, DEFAULT_WINDOW_UPDATE_RATIO, true));
-    if (transportTracer != null) {
-      transportTracer.setRemoteFlowControlWindowPollable(
-          new Callable<Integer>() {
-            @Override
-            public Integer call() throws Exception {
-              return connection.remote().flowController().windowSize(connection.connectionStream());
-            }
-          }
-      );
-      transportTracer.setLocalFlowControlWindowPollable(
-          new Callable<Integer>() {
-            @Override
-            public Integer call() throws Exception {
-              return connection.local().flowController().windowSize(connection.connectionStream());
-            }
-          }
-      );
-    }
-
     frameWriter = new WriteMonitoringFrameWriter(frameWriter, keepAliveEnforcer);
     Http2ConnectionEncoder encoder = new DefaultHttp2ConnectionEncoder(connection, frameWriter);
     Http2ConnectionDecoder decoder = new DefaultHttp2ConnectionDecoder(connection, encoder,
@@ -277,6 +261,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       };
     }
 
+    this.connection = connection;
     connection.addListener(new Http2ConnectionAdapter() {
       @Override
       public void onStreamActive(Http2Stream stream) {
@@ -367,6 +352,35 @@ class NettyServerHandler extends AbstractNettyHandler {
           keepAliveTimeInNanos, keepAliveTimeoutInNanos, true /* keepAliveDuringTransportIdle */);
       keepAliveManager.onTransportStarted();
     }
+    if (transportTracer != null) {
+      class FlowControlPollable implements Callable<Integer> {
+        private final Http2FlowController controller;
+
+        private FlowControlPollable(Http2FlowController controller) {
+          this.controller = controller;
+        }
+
+        @Override
+        public Integer call() throws Exception {
+          if (ctx.executor().inEventLoop()) {
+            return controller.windowSize(connection.connectionStream());
+          } else {
+            final Promise<Integer> promise = ctx.executor().newPromise();
+            ctx.executor().submit(new Runnable() {
+              @Override
+              public void run() {
+                promise.setSuccess(controller.windowSize(connection.connectionStream()));
+              }
+            });
+            return promise.get();
+          }
+        }
+      }
+      transportTracer.setRemoteFlowControlWindowPollable(
+          new FlowControlPollable(connection.remote().flowController()));
+      transportTracer.setLocalFlowControlWindowPollable(
+          new FlowControlPollable(connection.local().flowController()));
+    }
     super.handlerAdded(ctx);
   }
 
@@ -394,8 +408,8 @@ class NettyServerHandler extends AbstractNettyHandler {
         transportTracer.reportStreamStarted();
         transportStreamTracer = transportTracer.getStreamTracer();
       }
-      // transportTracer is passed in as a separate arg to avoid making another copy
-      // of streamTracerFactories. It is a server-wide list shared across all transports.
+      // transportTracer is passed in as a separate arg to avoid making a copy
+      // of streamTracerFactories
       StatsTraceContext statsTraceCtx =
           StatsTraceContext.newServerContext(
               streamTracerFactories, transportStreamTracer, method, metadata);
