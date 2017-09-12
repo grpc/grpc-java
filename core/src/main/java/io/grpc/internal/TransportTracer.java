@@ -36,8 +36,8 @@ public final class TransportTracer {
   private final AtomicLong messagesReceived = new AtomicLong();
   private final AtomicLong keepAlivesSent = new AtomicLong();
   private final AtomicLong lastStreamCreatedTimeMsec = new AtomicLong();
-  private AtomicLong lastMessageSentTimeMsec = new AtomicLong();
-  private AtomicLong lastMessageReceivedTimeMsec = new AtomicLong();
+  private final AtomicLong lastMessageSentTimeMsec = new AtomicLong();
+  private final AtomicLong lastMessageReceivedTimeMsec = new AtomicLong();
   private volatile Callable<Integer> localFlowControlPollable;
   private volatile Callable<Integer> remoteFlowControlPollable;
 
