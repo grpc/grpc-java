@@ -29,13 +29,13 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 @ExperimentalApi
 public final class TransportTracer {
-  private volatile long streamsStarted;
-  private volatile long streamsSucceeded;
-  private volatile long streamsFailed;
-  private volatile long messagesSent;
-  private volatile long messagesReceived;
-  private volatile long keepAlivesSent;
-  private volatile long lastStreamCreatedTimeMsec;
+  private final AtomicLong streamsStarted = new AtomicLong();
+  private final AtomicLong streamsSucceeded = new AtomicLong();
+  private final AtomicLong streamsFailed = new AtomicLong();
+  private final AtomicLong messagesSent = new AtomicLong();
+  private final AtomicLong messagesReceived = new AtomicLong();
+  private final AtomicLong keepAlivesSent = new AtomicLong();
+  private final AtomicLong lastStreamCreatedTimeMsec = new AtomicLong();
   private AtomicLong lastMessageSentTimeMsec = new AtomicLong();
   private AtomicLong lastMessageReceivedTimeMsec = new AtomicLong();
   private volatile Callable<Integer> localFlowControlPollable;
@@ -45,30 +45,22 @@ public final class TransportTracer {
     @Override
     public void streamClosed(Status status) {
       if (status.isOk()) {
-        streamsSucceeded++;
+        streamsSucceeded.incrementAndGet();
       } else {
-        streamsFailed++;
+        streamsFailed.incrementAndGet();
       }
     }
 
     @Override
     public void outboundMessage() {
-      messagesSent++;
-      long now = System.currentTimeMillis();
-      long oldVal = lastMessageSentTimeMsec.get();
-      if (now > oldVal) {
-        lastMessageSentTimeMsec.compareAndSet(oldVal, now);
-      }
+      messagesSent.incrementAndGet();
+      updateMsecTimestamp(lastMessageReceivedTimeMsec);
     }
 
     @Override
     public void inboundMessage() {
-      messagesReceived++;
-      long now = System.currentTimeMillis();
-      long oldVal = lastMessageReceivedTimeMsec.get();
-      if (now > oldVal) {
-        lastMessageReceivedTimeMsec.compareAndSet(oldVal, now);
-      }
+      messagesReceived.incrementAndGet();
+      updateMsecTimestamp(lastMessageReceivedTimeMsec);
     }
   };
 
@@ -85,15 +77,15 @@ public final class TransportTracer {
    * is sent. For servers, this happens when a header is received.
    */
   public void reportStreamStarted() {
-    streamsStarted++;
-    lastStreamCreatedTimeMsec = System.currentTimeMillis();
+    streamsStarted.incrementAndGet();
+    updateMsecTimestamp(lastStreamCreatedTimeMsec);
   }
 
   /**
    * Reports that a keep alive message was sent.
    */
   public void reportKeepAliveSent() {
-    keepAlivesSent++;
+    keepAlivesSent.incrementAndGet();
   }
 
   /**
@@ -116,49 +108,49 @@ public final class TransportTracer {
    * Returns the number of streams started on the transport.
    */
   public long getStreamsStarted() {
-    return streamsStarted;
+    return streamsStarted.get();
   }
 
   /**
    * Returns the number of streams ended successfully with an OK status.
    */
   public long getStreamsSucceeded() {
-    return streamsSucceeded;
+    return streamsSucceeded.get();
   }
 
   /**
    * Returns the number of streams completed with a non-OK status.
    */
   public long getStreamsFailed() {
-    return streamsFailed;
+    return streamsFailed.get();
   }
 
   /**
    * Returns the number of messages sent on the transport.
    */
   public long getMessagesSent() {
-    return messagesSent;
+    return messagesSent.get();
   }
 
   /**
    * Returns the number of messages received on the transport.
    */
   public long getMessagesReceived() {
-    return messagesReceived;
+    return messagesReceived.get();
   }
 
   /**
    * Returns the number of keep alive messages sent on the transport.
    */
   public long getKeepAlivesSent() {
-    return keepAlivesSent;
+    return keepAlivesSent.get();
   }
 
   /**
    * Returns the last time a stream was created as millis since Unix epoch.
    */
   public long getLastStreamCreatedTimeMsec() {
-    return lastStreamCreatedTimeMsec;
+    return lastStreamCreatedTimeMsec.get();
   }
 
   /**
@@ -202,6 +194,18 @@ public final class TransportTracer {
       return localFlowControlPollable.call();
     } catch (Exception e) {
       throw new RuntimeException(e);
+    }
+  }
+
+  /**
+   * Updates an AtomicLong representing a msec timestamp. Avoids races and only allows the value
+   * to increase.
+   */
+  private static void updateMsecTimestamp(AtomicLong timestamp) {
+    long now = System.currentTimeMillis();
+    long oldVal = timestamp.get();
+    if (now > oldVal) {
+      timestamp.compareAndSet(oldVal, now);
     }
   }
 }
