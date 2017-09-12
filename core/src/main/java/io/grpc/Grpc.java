@@ -40,4 +40,50 @@ public final class Grpc {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1710")
   public static final Attributes.Key<SSLSession> TRANSPORT_ATTR_SSL_SESSION =
           Attributes.Key.of("ssl-session");
+
+  /**
+   * The side.
+   */
+  public enum Side {
+    CLIENT,
+    SERVER
+  }
+
+  /**
+   * Convert a full method name to a tracing span name.
+   *
+   * @param side if the span is on the client-side or server-side
+   * @param fullMethodName the method name as returned by {@link
+   *                       MethodDescriptor#getFullMethodName}.
+   */
+  public static String toSpanName(Side side, String fullMethodName) {
+    String prefix;
+    switch (side) {
+      case CLIENT:
+        prefix = "Sent";
+        break;
+      case SERVER:
+        prefix = "Recv";
+        break;
+      default:
+        throw new AssertionError("Unsupported side: " + side);
+    }
+    return prefix + "." + fullMethodName.replace('/', '.');
+  }
+
+  /**
+   * Register methods so that they can be recorded by the tracing component.
+   */
+  public static void registerMethodsForTracing(String[] fullMethodNames) {
+    SampledSpanStore sampledStore = Tracing.getExportComponent().getSampledStore();
+    if (sampledStore == null) {
+      return;
+    }
+    ArrayList<String> spanNames = new ArrayList<String>(fullMethodNames.length * 2);
+    for (String method : fullMethodNames) {
+      spanNames.add(toSpanName(Side.CLIENT, method));
+      spanNames.add(toSpanName(Side.SERVER, method));
+    }
+    sampledStore.registerSpanNamesForCollection(spanNames);
+  }
 }

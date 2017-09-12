@@ -298,6 +298,22 @@ void GrpcWriteMethodDocComment(Printer* printer,
   printer->Print(" */\n");
 }
 
+static void PrintSamplingRegistration(
+    const ServiceDescriptor* service, std::map<string, string>* vars,
+    Printer* p) {
+  p->Print("// Register methods for tracing.\n");
+  p->Print("static {\n");
+  p->Indent();
+  p->Print("Grpc.registerMethodsForTracing(new String[] {\n");
+  p->Indent();
+  (*vars)["service_name"] = service->name();
+  for (int i = 0; i < service->method_count(); ++i) {
+    const MethodDescriptor* method = service->method(i);
+    (*vars)["method_name"] = method->name();
+    p->Print("
+    
+}
+
 static void PrintMethodFields(
     const ServiceDescriptor* service, std::map<string, string>* vars,
     Printer* p, ProtoFlavor flavor) {
