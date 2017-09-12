@@ -22,8 +22,6 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.internal.GrpcUtil.getThreadFactory;
-import static java.lang.Runtime.getRuntime;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -48,8 +46,10 @@ import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
-import java.lang.ref.PhantomReference;
+import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
+import java.lang.ref.SoftReference;
+import java.lang.ref.WeakReference;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -63,12 +63,9 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.ConsoleHandler;
-import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
-import java.util.logging.SimpleFormatter;
 import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
@@ -179,7 +176,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   private volatile boolean terminated;
   private final CountDownLatch terminatedLatch = new CountDownLatch(1);
 
-  private final ManagedChannelPhantom phantom;
+  private final ManagedChannelReference phantom;
 
   // Called from channelExecutor
   private final ManagedClientTransport.Listener delayedTransportListener =
@@ -418,7 +415,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     this.compressorRegistry = checkNotNull(builder.compressorRegistry, "compressorRegistry");
     this.userAgent = builder.userAgent;
 
-    phantom = new ManagedChannelPhantom(this);
+    phantom = new ManagedChannelReference(this);
     logger.log(Level.FINE, "[{0}] Created with target {1}", new Object[] {getLogId(), target});
   }
 
@@ -961,63 +958,63 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   }
 
   @VisibleForTesting
-  static final class ManagedChannelPhantom extends PhantomReference<ManagedChannelImpl> {
-    private static final ReferenceQueue<ManagedChannelImpl> refQueue = initQueue();
-    // Retain the PhantomReferences so they don't get GC'd
-    private static final ConcurrentMap<ManagedChannelPhantom, ManagedChannelPhantom> refs =
-        new ConcurrentHashMap<ManagedChannelPhantom, ManagedChannelPhantom>();
-
-    private static ReferenceQueue<ManagedChannelImpl> initQueue() {
-      String name = "gRPC Channel Close Watcher";
-      boolean daemon = false; // Do block shutdown.
-      final class QueueCleaner implements Runnable {
-        @Override
-        public void run() {
-          cleanQueue();
-        }
-      }
-
-      try {
-        getRuntime().addShutdownHook(getThreadFactory(name, daemon).newThread(new QueueCleaner()));
-      } catch (Throwable t) {
-        logger.log(Level.SEVERE, "Unable to add Channel Phantom Watcher", t);
-      }
-      return new ReferenceQueue<ManagedChannelImpl>();
-    }
+  static final class ManagedChannelReference extends WeakReference<ManagedChannelImpl> {
+    private static final ReferenceQueue<ManagedChannelImpl> refQueue =
+        new ReferenceQueue<ManagedChannelImpl>();
+    // Retain the References so they don't get GC'd
+    private static final ConcurrentMap<ManagedChannelReference, ManagedChannelReference> refs =
+        new ConcurrentHashMap<ManagedChannelReference, ManagedChannelReference>();
 
     private final LogId logId;
     private final String target;
-    private final Throwable allocationSite;
+    private final Reference<Throwable> allocationSite;
     private volatile boolean shutdown;
     private volatile boolean terminated;
 
-    ManagedChannelPhantom(ManagedChannelImpl chan) {
+    ManagedChannelReference(ManagedChannelImpl chan) {
       super(chan, refQueue);
-      allocationSite = new Throwable("Managed Channel Allocation Site");
+      allocationSite =
+          new SoftReference<Throwable>(
+              new RuntimeException("ManagedChannel allocation site"));
       logId = chan.logId;
       target = chan.target;
       refs.put(this, this);
       cleanQueue();
     }
 
+    /**
+     * This clear() is *not* called automatically by the JVM.  As this is a weak ref, the reference
+     * will be cleared automatically by the JVM, but will not be removed from {@link #refs}.
+     * We do it here to avoid this ending up on the reference queue.
+     */
     @Override
     public void clear() {
+      clearInternal();
+      // We run this here to periodically clean up the queue if at least some of the channels are
+      // being shutdown properly.
+      cleanQueue();
+    }
+
+    // avoid reentrancy
+    private void clearInternal() {
       super.clear();
       refs.remove(this);
+      allocationSite.clear();
     }
 
     @VisibleForTesting
     static int cleanQueue() {
-      ManagedChannelPhantom ref;
+      ManagedChannelReference ref;
       int orphanedChannels = 0;
-      while ((ref = (ManagedChannelPhantom) refQueue.poll()) != null) {
-        ref.clear(); // technically the reference is gone already.
+      while ((ref = (ManagedChannelReference) refQueue.poll()) != null) {
+        Throwable maybeAllocationSite = ref.allocationSite.get();
+        ref.clearInternal(); // technically the reference is gone already.
         if (!(ref.shutdown && ref.terminated)) {
           orphanedChannels++;
           Level level = Level.SEVERE;
           if (logger.isLoggable(level)) {
             String fmt = new StringBuilder()
-                .append("*~*~*~ Channel '{0}' for target '{1}' was not ")
+                .append("*~*~*~ Channel {0} for target {1} was not ")
                 // Prefer to complain about shutdown if neither has been called.
                 .append(!ref.shutdown ? "shutdown" : "terminated")
                 .append(" properly!!! ~*~*~*")
@@ -1027,34 +1024,12 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
             LogRecord lr = new LogRecord(level, fmt);
             lr.setLoggerName(logger.getName());
             lr.setParameters(new Object[]{ref.logId, ref.target});
-            lr.setThrown(ref.allocationSite);
-            if (isShuttingDown()) {
-              // Best effort log to console.
-              ConsoleHandler h = new ConsoleHandler();
-              h.setFormatter(new SimpleFormatter());
-              logger.addHandler(h);
-            }
+            lr.setThrown(maybeAllocationSite);
             logger.log(lr);
           }
         }
       }
       return orphanedChannels;
-    }
-
-    /**
-     * If the jvm is shutting down, loggers lose all their handlers.  This checks if there is a
-     * chance that a log statement could be made.
-     */
-    static boolean isShuttingDown() {
-      Logger current = logger;
-      while (current != null) {
-        Handler[] handlers;
-        if ((handlers = current.getHandlers()) != null && handlers.length > 0) {
-          return false;
-        }
-        current = current.getParent();
-      }
-      return true;
     }
   }
 }

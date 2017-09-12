@@ -74,6 +74,7 @@ import io.grpc.NameResolver;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
+import io.grpc.internal.ManagedChannelImpl.ManagedChannelReference;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -147,6 +148,7 @@ public class ManagedChannelImplTest {
   private LoadBalancer.Factory mockLoadBalancerFactory;
   @Mock
   private LoadBalancer mockLoadBalancer;
+
   @Captor
   private ArgumentCaptor<ConnectivityStateInfo> stateInfoCaptor;
   @Mock
@@ -693,6 +695,7 @@ public class ManagedChannelImplTest {
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
     subchannel.requestConnection();
+
     inOrder.verify(mockLoadBalancer).handleSubchannelState(
         same(subchannel), stateInfoCaptor.capture());
     assertEquals(CONNECTING, stateInfoCaptor.getValue().getState());
@@ -1413,7 +1416,8 @@ public class ManagedChannelImplTest {
     int remaining = unterminatedChannels;
     for (int retry = 0; retry < 3; retry++) {
       System.gc();
-      if ((remaining -= ManagedChannelImpl.ManagedChannelPhantom.cleanQueue()) <= 0) {
+      System.runFinalization();
+      if ((remaining -= ManagedChannelReference.cleanQueue()) <= 0) {
         break;
       }
       Thread.sleep(100L * (1L << retry));
@@ -1444,13 +1448,15 @@ public class ManagedChannelImplTest {
       }
     });
 
+    // TODO(carl-mastrangelo): consider using com.google.common.testing.GcFinalization instead.
     try {
       channel = null;
       // That *should* have been the last reference.  Try to reclaim it.
       boolean success = false;
       for (int retry = 0; retry < 3; retry++) {
         System.gc();
-        int orphans = ManagedChannelImpl.ManagedChannelPhantom.cleanQueue();
+        System.runFinalization();
+        int orphans = ManagedChannelReference.cleanQueue();
         if (orphans == 1) {
           success = true;
           break;
