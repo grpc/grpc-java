@@ -451,7 +451,6 @@ final class GrpclbState {
       ServerList serverList = response.getServerList();
       List<DropEntry> newDropList = new ArrayList<DropEntry>();
       List<BackendAddressGroup> newBackendAddrList = new ArrayList<BackendAddressGroup>();
-      // TODO(zhangkun83): honor expiration_interval
       // Construct the new collections. Create new Subchannels when necessary.
       for (Server server : serverList.getServersList()) {
         String token = server.getLoadBalanceToken();
