@@ -42,8 +42,20 @@ public class ManualFlowControlServer {
         final ServerCallStreamObserver<HelloReply> serverCallStreamObserver =
             (ServerCallStreamObserver<HelloReply>) responseObserver;
         serverCallStreamObserver.disableAutoInboundFlowControl();
-        // Signal the request sender to send one message.
-        serverCallStreamObserver.request(1);
+
+        // Set up a back-pressure-aware consumer for the request stream. The onReadyHandler will be invoked
+        // when the consuming side has enough buffer space to receive more messages.
+        //
+        // Note: the onReadyHandler is invoked by gRPC's internal thread pool. You can't block here or deadlocks
+        // can occur.
+        serverCallStreamObserver.setOnReadyHandler(new Runnable() {
+          @Override
+          public void run() {
+            logger.info("READY");
+            // Signal the request sender to send one message.
+            serverCallStreamObserver.request(1);
+          }
+        });
 
         // Give gRPC a StreamObserver it can write incoming requests into.
         return new StreamObserver<HelloRequest>() {
@@ -56,7 +68,7 @@ public class ManualFlowControlServer {
               logger.info("--> " + name);
 
               // Simulate server "work"
-              Thread.sleep(500);
+              Thread.sleep(100);
 
               // Send a response.
               String message = "Hello " + name;
@@ -64,8 +76,11 @@ public class ManualFlowControlServer {
               HelloReply reply = HelloReply.newBuilder().setMessage(message).build();
               responseObserver.onNext(reply);
 
-              // Signal the sender to send another request.
-              serverCallStreamObserver.request(1);
+              // Request more messages only if the consuming buffer has room to receive it
+              if (serverCallStreamObserver.isReady()) {
+                // Signal the sender to send another request.
+                serverCallStreamObserver.request(1);
+              }
 
             } catch (Throwable throwable) {
               throwable.printStackTrace();
@@ -106,6 +121,5 @@ public class ManualFlowControlServer {
       }
     });
     server.awaitTermination();
-//    pool.shutdown();
   }
 }
