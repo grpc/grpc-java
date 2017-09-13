@@ -322,20 +322,20 @@ public class CensusModulesTest {
     tracer.outboundHeaders();
 
     fakeClock.forwardTime(100, MILLISECONDS);
-    tracer.outboundMessage();
+    tracer.outboundMessage(0);
     tracer.outboundWireSize(1028);
     tracer.outboundUncompressedSize(1128);
 
     fakeClock.forwardTime(16, MILLISECONDS);
-    tracer.inboundMessage();
+    tracer.inboundMessage(0);
     tracer.inboundWireSize(33);
     tracer.inboundUncompressedSize(67);
-    tracer.outboundMessage();
+    tracer.outboundMessage(1);
     tracer.outboundWireSize(99);
     tracer.outboundUncompressedSize(865);
 
     fakeClock.forwardTime(24, MILLISECONDS);
-    tracer.inboundMessage();
+    tracer.inboundMessage(1);
     tracer.inboundWireSize(154);
     tracer.inboundUncompressedSize(552);
     tracer.streamClosed(Status.OK);
@@ -593,20 +593,20 @@ public class CensusModulesTest {
             .with(RpcConstants.RPC_SERVER_METHOD, TagValue.create(method.getFullMethodName())),
         statsCtx);
 
-    tracer.inboundMessage();
+    tracer.inboundMessage(0);
     tracer.inboundWireSize(34);
     tracer.inboundUncompressedSize(67);
 
     fakeClock.forwardTime(100, MILLISECONDS);
-    tracer.outboundMessage();
+    tracer.outboundMessage(0);
     tracer.outboundWireSize(1028);
     tracer.outboundUncompressedSize(1128);
 
     fakeClock.forwardTime(16, MILLISECONDS);
-    tracer.inboundMessage();
+    tracer.inboundMessage(1);
     tracer.inboundWireSize(154);
     tracer.inboundUncompressedSize(552);
-    tracer.outboundMessage();
+    tracer.outboundMessage(1);
     tracer.outboundWireSize(99);
     tracer.outboundUncompressedSize(865);
 
@@ -713,6 +713,7 @@ public class CensusModulesTest {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public void addAttributes(Map<String, AttributeValue> attributes) {}
 
     @Override

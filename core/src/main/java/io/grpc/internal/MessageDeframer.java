@@ -94,6 +94,7 @@ public class MessageDeframer implements Closeable, Deframer {
   private CompositeReadableBuffer unprocessed = new CompositeReadableBuffer();
   private long pendingDeliveries;
   private boolean inDelivery = false;
+  private int currentMessageSeqNo = -1;
 
   private boolean closeWhenComplete = false;
   private volatile boolean stopDelivery = false;
@@ -284,6 +285,10 @@ public class MessageDeframer implements Closeable, Deframer {
         totalBytesRead += toRead;
         nextFrame.addBuffer(unprocessed.readBytes(toRead));
       }
+      // There is no reliable way to get the uncompressed size per message when it's compressed,
+      // because the uncompressed bytes are provided through an InputStream whose total size is
+      // unknown until all bytes are read, and we don't know when it happens.
+      statsTraceCtx.inboundMessageRead(currentMessageSeqNo, -1, requiredLength);
       return true;
     } finally {
       if (totalBytesRead > 0) {
@@ -317,7 +322,8 @@ public class MessageDeframer implements Closeable, Deframer {
           .asRuntimeException();
     }
 
-    statsTraceCtx.inboundMessage();
+    currentMessageSeqNo++;
+    statsTraceCtx.inboundMessage(currentMessageSeqNo);
     // Continue reading the frame body.
     state = State.BODY;
   }
