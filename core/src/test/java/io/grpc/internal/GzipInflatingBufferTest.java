@@ -21,8 +21,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import com.google.common.io.ByteStreams;
 import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.zip.CRC32;
@@ -44,17 +44,13 @@ public class GzipInflatingBufferTest {
   private static final int GZIP_TRAILER_SIZE = 8;
   private static final int GZIP_HEADER_FLAG_INDEX = 3;
 
-  /** GZIP header magic number. */
   public static final int GZIP_MAGIC = 0x8b1f;
 
-  /*
-   * File header flags.
-   */
-  private static final int FTEXT = 1; // Extra text
-  private static final int FHCRC = 2; // Header CRC
-  private static final int FEXTRA = 4; // Extra field
-  private static final int FNAME = 8; // File name
-  private static final int FCOMMENT = 16; // File comment
+  private static final int FTEXT = 1;
+  private static final int FHCRC = 2;
+  private static final int FEXTRA = 4;
+  private static final int FNAME = 8;
+  private static final int FCOMMENT = 16;
 
   private static final int TRUNCATED_DATA_SIZE = 10;
 
@@ -67,28 +63,21 @@ public class GzipInflatingBufferTest {
   private byte[] gzippedTruncatedData;
 
   private GzipInflatingBuffer gzipInflatingBuffer;
-  private CompositeReadableBuffer outputBuffer;
 
   @Before
   public void setUp() {
     gzipInflatingBuffer = new GzipInflatingBuffer();
-    outputBuffer = new CompositeReadableBuffer();
     try {
-      InputStream inputStream = getClass().getResourceAsStream(UNCOMPRESSABLE_FILE);
+      originalData = ByteStreams.toByteArray(getClass().getResourceAsStream(UNCOMPRESSABLE_FILE));
+      truncatedData = Arrays.copyOf(originalData, TRUNCATED_DATA_SIZE);
 
-      ByteArrayOutputStream originalDataOutputStream = new ByteArrayOutputStream();
       ByteArrayOutputStream gzippedOutputStream = new ByteArrayOutputStream();
       OutputStream gzippingOutputStream = new GZIPOutputStream(gzippedOutputStream);
-
-      byte[] buffer = new byte[512];
-      int n;
-      while ((n = inputStream.read(buffer)) > 0) {
-        originalDataOutputStream.write(buffer, 0, n);
-        gzippingOutputStream.write(buffer, 0, n);
-      }
+      gzippingOutputStream.write(originalData);
       gzippingOutputStream.close();
       gzippedData = gzippedOutputStream.toByteArray();
-      originalData = originalDataOutputStream.toByteArray();
+      gzippedOutputStream.close();
+
       gzipHeader = Arrays.copyOf(gzippedData, GZIP_HEADER_MIN_SIZE);
       deflatedBytes =
           Arrays.copyOfRange(
@@ -97,13 +86,13 @@ public class GzipInflatingBufferTest {
           Arrays.copyOfRange(
               gzippedData, gzippedData.length - GZIP_TRAILER_SIZE, gzippedData.length);
 
-      truncatedData = Arrays.copyOf(originalData, TRUNCATED_DATA_SIZE);
       ByteArrayOutputStream truncatedGzippedOutputStream = new ByteArrayOutputStream();
       OutputStream smallerGzipCompressingStream =
           new GZIPOutputStream(truncatedGzippedOutputStream);
       smallerGzipCompressingStream.write(truncatedData);
       smallerGzipCompressingStream.close();
       gzippedTruncatedData = truncatedGzippedOutputStream.toByteArray();
+      truncatedGzippedOutputStream.close();
     } catch (Exception e) {
       throw new RuntimeException("Failed to set up compressed data", e);
     }
@@ -112,32 +101,56 @@ public class GzipInflatingBufferTest {
   @After
   public void tearDown() {
     gzipInflatingBuffer.close();
-    outputBuffer.close();
   }
 
   @Test
   public void gzipInflateWorks() throws Exception {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedData));
 
-    assertEquals(
-        gzippedData.length, gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer));
-    assertTrue("inflated data does not match", bufferStartsWithData(originalData));
+    byte[] b = new byte[originalData.length];
+    assertEquals(originalData.length, gzipInflatingBuffer.inflateBytes(b, 0, originalData.length));
+    assertEquals(gzippedData.length, gzipInflatingBuffer.getAndResetBytesConsumed());
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
   }
 
   @Test
   public void splitGzipStreamWorks() throws Exception {
     int initialBytes = 100;
-
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedData, 0, initialBytes));
-    assertEquals(initialBytes, gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer));
-    assertTrue("inflated bytes expected", outputBuffer.readableBytes() > 0);
+
+    byte[] b = new byte[originalData.length];
+    int n = gzipInflatingBuffer.inflateBytes(b, 0, originalData.length);
+    assertTrue("inflated bytes expected", n > 0);
+    assertEquals(initialBytes, gzipInflatingBuffer.getAndResetBytesConsumed());
 
     gzipInflatingBuffer.addGzippedBytes(
         ReadableBuffers.wrap(gzippedData, initialBytes, gzippedData.length - initialBytes));
-    assertEquals(
-        gzippedData.length - initialBytes,
-        gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer));
-    assertTrue("inflated data does not match", bufferStartsWithData(originalData));
+    int bytesRemaining = originalData.length - n;
+    assertEquals(bytesRemaining, gzipInflatingBuffer.inflateBytes(b, n, bytesRemaining));
+    assertEquals(gzippedData.length - initialBytes, gzipInflatingBuffer.getAndResetBytesConsumed());
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
+  }
+
+  @Test
+  public void inflateBytesObeysOffsetAndLength() throws Exception {
+    gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedData));
+
+    int offset = 10;
+    int length = 100;
+    byte[] b = new byte[offset + length + offset];
+    assertEquals(length, gzipInflatingBuffer.inflateBytes(b, offset, length));
+    assertTrue(
+        "bytes written before offset",
+        Arrays.equals(new byte[offset], Arrays.copyOfRange(b, 0, offset)));
+    assertTrue(
+        "inflated data does not match",
+        Arrays.equals(
+            Arrays.copyOfRange(originalData, 0, length),
+            Arrays.copyOfRange(b, offset, offset + length)));
+    assertTrue(
+        "bytes written beyond length",
+        Arrays.equals(
+            new byte[offset], Arrays.copyOfRange(b, offset + length, offset + length + offset)));
   }
 
   @Test
@@ -147,60 +160,49 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedData));
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedTruncatedData));
 
-    assertEquals(
-        gzippedData.length, gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer));
-    assertEquals(
-        gzippedTruncatedData.length,
-        gzipInflatingBuffer.inflateBytes(truncatedData.length, outputBuffer));
-    assertEquals(
-        gzippedData.length, gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer));
-    assertEquals(
-        gzippedTruncatedData.length,
-        gzipInflatingBuffer.inflateBytes(truncatedData.length, outputBuffer));
-    assertTrue("inflated data does not match", bufferStartsWithData(originalData));
-    assertTrue("inflated data does not match", bufferStartsWithData(truncatedData));
-    assertTrue("inflated data does not match", bufferStartsWithData(originalData));
-    assertTrue("inflated data does not match", bufferStartsWithData(truncatedData));
-  }
-
-  @Test
-  public void inflateBytesWithSecondRequest_doesNotOverflow() throws Exception {
-    gzipInflatingBuffer.inflateBytes(1, outputBuffer);
-    gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedData));
+    byte[] b = new byte[originalData.length];
+    assertEquals(originalData.length, gzipInflatingBuffer.inflateBytes(b, 0, originalData.length));
+    assertEquals(gzippedData.length, gzipInflatingBuffer.getAndResetBytesConsumed());
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
 
     assertEquals(
-        gzippedData.length, gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer));
-    assertTrue("inflated data does not match", bufferStartsWithData(originalData));
+        truncatedData.length, gzipInflatingBuffer.inflateBytes(b, 0, truncatedData.length));
+    assertEquals(gzippedTruncatedData.length, gzipInflatingBuffer.getAndResetBytesConsumed());
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
+
+    assertEquals(originalData.length, gzipInflatingBuffer.inflateBytes(b, 0, originalData.length));
+    assertEquals(gzippedData.length, gzipInflatingBuffer.getAndResetBytesConsumed());
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
+
+    assertEquals(
+        truncatedData.length, gzipInflatingBuffer.inflateBytes(b, 0, truncatedData.length));
+    assertEquals(gzippedTruncatedData.length, gzipInflatingBuffer.getAndResetBytesConsumed());
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
   }
 
   @Test
   public void requestingTooManyBytesStillReturnsEndOfBlock() throws Exception {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedData));
 
-    assertEquals(
-        gzippedData.length,
-        gzipInflatingBuffer.inflateBytes(2 * originalData.length, outputBuffer));
+    int len = 2 * originalData.length;
+    byte[] b = new byte[len];
+    assertEquals(originalData.length, gzipInflatingBuffer.inflateBytes(b, 0, len));
+    assertEquals(gzippedData.length, gzipInflatingBuffer.getAndResetBytesConsumed());
     assertTrue(gzipInflatingBuffer.isStalled());
-    assertTrue("inflated data does not match", bufferStartsWithData(originalData));
-  }
-
-  @Test
-  public void decreasingNumberOfBytesRequested_obeysCurrentRequestLimit() throws Exception {
-    gzipInflatingBuffer.inflateBytes(10, outputBuffer);
-    gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedTruncatedData));
-    gzipInflatingBuffer.inflateBytes(1, outputBuffer);
-
-    assertEquals(1, outputBuffer.readableBytes());
+    assertTrue(
+        "inflated data does not match",
+        Arrays.equals(originalData, Arrays.copyOf(b, originalData.length)));
   }
 
   @Test
   public void closeStopsDecompression() throws Exception {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedData));
 
-    gzipInflatingBuffer.inflateBytes(1, outputBuffer);
+    byte[] b = new byte[1];
+    gzipInflatingBuffer.inflateBytes(b, 0, 1);
     gzipInflatingBuffer.close();
     try {
-      gzipInflatingBuffer.inflateBytes(1, outputBuffer);
+      gzipInflatingBuffer.inflateBytes(b, 0, 1);
       fail("Expected IllegalStateException");
     } catch (IllegalStateException expectedException) {
       assertEquals("GzipInflatingBuffer is closed", expectedException.getMessage());
@@ -212,11 +214,13 @@ public class GzipInflatingBufferTest {
     int bytesToWithhold = 10;
 
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedData));
-    gzipInflatingBuffer.inflateBytes(originalData.length - bytesToWithhold, outputBuffer);
+
+    byte[] b = new byte[originalData.length];
+    gzipInflatingBuffer.inflateBytes(b, 0, originalData.length - bytesToWithhold);
     assertFalse("gzipInflatingBuffer is stalled", gzipInflatingBuffer.isStalled());
 
-    gzipInflatingBuffer.inflateBytes(bytesToWithhold, outputBuffer);
-    assertTrue("inflated data does not match", bufferStartsWithData(originalData));
+    gzipInflatingBuffer.inflateBytes(b, originalData.length - bytesToWithhold, bytesToWithhold);
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
     assertTrue("gzipInflatingBuffer is not stalled", gzipInflatingBuffer.isStalled());
   }
 
@@ -225,12 +229,13 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedData));
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedData));
 
-    gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer);
-    assertTrue("inflated data does not match", bufferStartsWithData(originalData));
+    byte[] b = new byte[originalData.length];
+    assertEquals(originalData.length, gzipInflatingBuffer.inflateBytes(b, 0, originalData.length));
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
     assertFalse("gzipInflatingBuffer is stalled", gzipInflatingBuffer.isStalled());
 
-    gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer);
-    assertTrue("inflated data does not match", bufferStartsWithData(originalData));
+    assertEquals(originalData.length, gzipInflatingBuffer.inflateBytes(b, 0, originalData.length));
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
     assertTrue("gzipInflatingBuffer is not stalled", gzipInflatingBuffer.isStalled());
   }
 
@@ -240,12 +245,15 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedTruncatedData));
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedTruncatedData));
 
-    gzipInflatingBuffer.inflateBytes(truncatedData.length, outputBuffer);
-    assertTrue("inflated data does not match", bufferStartsWithData(truncatedData));
+    byte[] b = new byte[truncatedData.length];
+    assertEquals(
+        truncatedData.length, gzipInflatingBuffer.inflateBytes(b, 0, truncatedData.length));
+    assertTrue("inflated data does not match", Arrays.equals(truncatedData, b));
     assertFalse("gzipInflatingBuffer is stalled", gzipInflatingBuffer.isStalled());
 
-    gzipInflatingBuffer.inflateBytes(truncatedData.length, outputBuffer);
-    assertTrue("inflated data does not match", bufferStartsWithData(truncatedData));
+    assertEquals(
+        truncatedData.length, gzipInflatingBuffer.inflateBytes(b, 0, truncatedData.length));
+    assertTrue("inflated data does not match", Arrays.equals(truncatedData, b));
     assertTrue("gzipInflatingBuffer is not stalled", gzipInflatingBuffer.isStalled());
   }
 
@@ -254,8 +262,10 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedTruncatedData));
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(new byte[1]));
 
-    gzipInflatingBuffer.inflateBytes(truncatedData.length, outputBuffer);
-    assertTrue("inflated data does not match", bufferStartsWithData(truncatedData));
+    byte[] b = new byte[truncatedData.length];
+    assertEquals(
+        truncatedData.length, gzipInflatingBuffer.inflateBytes(b, 0, truncatedData.length));
+    assertTrue("inflated data does not match", Arrays.equals(truncatedData, b));
     assertFalse("gzipInflatingBuffer is stalled", gzipInflatingBuffer.isStalled());
   }
 
@@ -264,8 +274,9 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedData));
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(new byte[1]));
 
-    gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer);
-    assertTrue("inflated data does not match", bufferStartsWithData(originalData));
+    byte[] b = new byte[originalData.length];
+    assertEquals(originalData.length, gzipInflatingBuffer.inflateBytes(b, 0, originalData.length));
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
     assertTrue("partial data expected", gzipInflatingBuffer.hasPartialData());
   }
 
@@ -273,8 +284,9 @@ public class GzipInflatingBufferTest {
   public void inflatingCompleteGzipStreamConsumesTrailer() throws Exception {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedData));
 
-    gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer);
-    assertTrue("inflated data does not match", bufferStartsWithData(originalData));
+    byte[] b = new byte[originalData.length];
+    assertEquals(originalData.length, gzipInflatingBuffer.inflateBytes(b, 0, originalData.length));
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
     assertFalse("no partial data expected", gzipInflatingBuffer.hasPartialData());
   }
 
@@ -283,13 +295,20 @@ public class GzipInflatingBufferTest {
     int bytesToWithhold = 1;
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedTruncatedData));
 
+    byte[] b = new byte[truncatedData.length];
+    assertEquals(
+        truncatedData.length - bytesToWithhold,
+        gzipInflatingBuffer.inflateBytes(b, 0, truncatedData.length - bytesToWithhold));
     assertEquals(
         gzippedTruncatedData.length - bytesToWithhold - GZIP_TRAILER_SIZE,
-        gzipInflatingBuffer.inflateBytes(truncatedData.length - bytesToWithhold, outputBuffer));
+        gzipInflatingBuffer.getAndResetBytesConsumed());
     assertEquals(
-        bytesToWithhold + GZIP_TRAILER_SIZE,
-        gzipInflatingBuffer.inflateBytes(bytesToWithhold, outputBuffer));
-    assertTrue("inflated data does not match", bufferStartsWithData(truncatedData));
+        bytesToWithhold,
+        gzipInflatingBuffer.inflateBytes(
+            b, truncatedData.length - bytesToWithhold, bytesToWithhold));
+    assertEquals(
+        bytesToWithhold + GZIP_TRAILER_SIZE, gzipInflatingBuffer.getAndResetBytesConsumed());
+    assertTrue("inflated data does not match", Arrays.equals(truncatedData, b));
   }
 
   @Test
@@ -311,40 +330,50 @@ public class GzipInflatingBufferTest {
     newHeader.write(zeroTerminatedBytes); // FCOMMENT
     byte[] headerCrc16 = getHeaderCrc16Bytes(newHeader.toByteArray());
 
-    assertEquals(0, gzipInflatingBuffer.inflateBytes(1, outputBuffer));
+    byte[] b = new byte[originalData.length];
+    assertEquals(0, gzipInflatingBuffer.inflateBytes(b, 0, 1));
+    assertEquals(0, gzipInflatingBuffer.getAndResetBytesConsumed());
 
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipHeader));
-    assertEquals(gzipHeader.length, gzipInflatingBuffer.inflateBytes(1, outputBuffer));
+    assertEquals(0, gzipInflatingBuffer.inflateBytes(b, 0, 1));
+    assertEquals(gzipHeader.length, gzipInflatingBuffer.getAndResetBytesConsumed());
 
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(fExtraLen));
-    assertEquals(fExtraLen.length, gzipInflatingBuffer.inflateBytes(1, outputBuffer));
+    assertEquals(0, gzipInflatingBuffer.inflateBytes(b, 0, 1));
+    assertEquals(fExtraLen.length, gzipInflatingBuffer.getAndResetBytesConsumed());
 
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(fExtra));
-    assertEquals(fExtra.length, gzipInflatingBuffer.inflateBytes(1, outputBuffer));
+    assertEquals(0, gzipInflatingBuffer.inflateBytes(b, 0, 1));
+    assertEquals(fExtra.length, gzipInflatingBuffer.getAndResetBytesConsumed());
 
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(zeroTerminatedBytes));
-    assertEquals(zeroTerminatedBytes.length, gzipInflatingBuffer.inflateBytes(1, outputBuffer));
+    assertEquals(0, gzipInflatingBuffer.inflateBytes(b, 0, 1));
+    assertEquals(zeroTerminatedBytes.length, gzipInflatingBuffer.getAndResetBytesConsumed());
 
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(zeroTerminatedBytes));
-    assertEquals(zeroTerminatedBytes.length, gzipInflatingBuffer.inflateBytes(1, outputBuffer));
+    assertEquals(0, gzipInflatingBuffer.inflateBytes(b, 0, 1));
+    assertEquals(zeroTerminatedBytes.length, gzipInflatingBuffer.getAndResetBytesConsumed());
 
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(headerCrc16));
-    assertEquals(headerCrc16.length, gzipInflatingBuffer.inflateBytes(1, outputBuffer));
+    assertEquals(0, gzipInflatingBuffer.inflateBytes(b, 0, 1));
+    assertEquals(headerCrc16.length, gzipInflatingBuffer.getAndResetBytesConsumed());
 
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(deflatedBytes));
-    assertEquals(
-        deflatedBytes.length, gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer));
+    assertEquals(originalData.length, gzipInflatingBuffer.inflateBytes(b, 0, originalData.length));
+    assertEquals(deflatedBytes.length, gzipInflatingBuffer.getAndResetBytesConsumed());
 
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipTrailer));
-    assertEquals(gzipTrailer.length, gzipInflatingBuffer.inflateBytes(1, outputBuffer));
+    assertEquals(0, gzipInflatingBuffer.inflateBytes(b, 0, 1));
+    assertEquals(gzipTrailer.length, gzipInflatingBuffer.getAndResetBytesConsumed());
   }
 
   @Test
-  public void wrongHeaderMagicShouldFail_onFirstTwoBytes() throws Exception {
-    byte[] headerWithWrongGzipMagic = {(byte) GZIP_MAGIC, (byte) ~(GZIP_MAGIC >> 8)};
-    gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(headerWithWrongGzipMagic));
+  public void wrongHeaderMagicShouldFail() throws Exception {
+    gzipHeader[1] = (byte) ~(GZIP_MAGIC >> 8);
+    gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipHeader));
     try {
-      gzipInflatingBuffer.inflateBytes(1, outputBuffer);
+      byte[] b = new byte[1];
+      gzipInflatingBuffer.inflateBytes(b, 0, 1);
       fail("Expected ZipException");
     } catch (ZipException expectedException) {
       assertEquals("Not in GZIP format", expectedException.getMessage());
@@ -352,13 +381,12 @@ public class GzipInflatingBufferTest {
   }
 
   @Test
-  public void wrongHeaderCompressionMethodShouldFail_onFirstThreeBytes() throws Exception {
-    byte[] headerWithWrongCompressionMethod = {
-      (byte) GZIP_MAGIC, (byte) (GZIP_MAGIC >> 8), 7 /* Should be 8 */
-    };
-    gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(headerWithWrongCompressionMethod));
+  public void wrongHeaderCompressionMethodShouldFail() throws Exception {
+    gzipHeader[2] = 7; // Should be 8
+    gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipHeader));
     try {
-      gzipInflatingBuffer.inflateBytes(1, outputBuffer);
+      byte[] b = new byte[1];
+      gzipInflatingBuffer.inflateBytes(b, 0, 1);
       fail("Expected ZipException");
     } catch (ZipException expectedException) {
       assertEquals("Unsupported compression method", expectedException.getMessage());
@@ -389,8 +417,9 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(deflatedBytes));
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipTrailer));
 
-    gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer);
-    assertTrue("inflated data does not match", bufferStartsWithData(originalData));
+    byte[] b = new byte[originalData.length];
+    gzipInflatingBuffer.inflateBytes(b, 0, originalData.length);
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
   }
 
   @Test
@@ -400,9 +429,10 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(deflatedBytes));
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipTrailer));
 
-    assertEquals(
-        gzippedData.length, gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer));
-    assertTrue("inflated data does not match", bufferStartsWithData(originalData));
+    byte[] b = new byte[originalData.length];
+    assertEquals(originalData.length, gzipInflatingBuffer.inflateBytes(b, 0, originalData.length));
+    assertEquals(gzippedData.length, gzipInflatingBuffer.getAndResetBytesConsumed());
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
   }
 
   @Test
@@ -416,8 +446,11 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(deflatedBytes));
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipTrailer));
 
-    gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer);
-    assertTrue("inflated data does not match", bufferStartsWithData(originalData));
+    byte[] b = new byte[originalData.length];
+    assertEquals(originalData.length, gzipInflatingBuffer.inflateBytes(b, 0, originalData.length));
+    assertEquals(
+        gzippedData.length + headerCrc16.length, gzipInflatingBuffer.getAndResetBytesConsumed());
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
   }
 
   @Test
@@ -430,7 +463,8 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipHeader));
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(headerCrc16));
     try {
-      gzipInflatingBuffer.inflateBytes(1, outputBuffer);
+      byte[] b = new byte[1];
+      gzipInflatingBuffer.inflateBytes(b, 0, 1);
       fail("Expected ZipException");
     } catch (ZipException expectedException) {
       assertEquals("Corrupt GZIP header", expectedException.getMessage());
@@ -451,8 +485,12 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(deflatedBytes));
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipTrailer));
 
-    gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer);
-    assertTrue("inflated data does not match", bufferStartsWithData(originalData));
+    byte[] b = new byte[originalData.length];
+    assertEquals(originalData.length, gzipInflatingBuffer.inflateBytes(b, 0, originalData.length));
+    assertEquals(
+        gzippedData.length + fExtraLen.length + fExtra.length,
+        gzipInflatingBuffer.getAndResetBytesConsumed());
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
   }
 
   @Test
@@ -465,8 +503,11 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(deflatedBytes));
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipTrailer));
 
-    gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer);
-    assertTrue("inflated data does not match", bufferStartsWithData(originalData));
+    byte[] b = new byte[originalData.length];
+    assertEquals(originalData.length, gzipInflatingBuffer.inflateBytes(b, 0, originalData.length));
+    assertEquals(
+        gzippedData.length + fExtraLen.length, gzipInflatingBuffer.getAndResetBytesConsumed());
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
   }
 
   @Test
@@ -478,7 +519,8 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipTrailer));
 
     try {
-      gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer);
+      byte[] b = new byte[originalData.length];
+      gzipInflatingBuffer.inflateBytes(b, 0, originalData.length);
       fail("Expected DataFormatException");
     } catch (DataFormatException expectedException) {
       assertTrue(
@@ -500,7 +542,8 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipTrailer));
 
     try {
-      gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer);
+      byte[] b = new byte[originalData.length];
+      gzipInflatingBuffer.inflateBytes(b, 0, originalData.length);
       fail("Expected DataFormatException");
     } catch (DataFormatException expectedException) {
       assertTrue(
@@ -523,8 +566,10 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(deflatedBytes));
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipTrailer));
 
-    gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer);
-    assertTrue("inflated data does not match", bufferStartsWithData(originalData));
+    byte[] b = new byte[originalData.length];
+    assertEquals(originalData.length, gzipInflatingBuffer.inflateBytes(b, 0, originalData.length));
+    assertEquals(gzippedData.length + len, gzipInflatingBuffer.getAndResetBytesConsumed());
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
   }
 
   @Test
@@ -535,7 +580,8 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipTrailer));
 
     try {
-      gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer);
+      byte[] b = new byte[originalData.length];
+      gzipInflatingBuffer.inflateBytes(b, 0, originalData.length);
       fail("Expected DataFormatException");
     } catch (DataFormatException expectedException) {
       assertTrue(
@@ -558,8 +604,10 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(deflatedBytes));
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipTrailer));
 
-    gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer);
-    assertTrue("inflated data does not match", bufferStartsWithData(originalData));
+    byte[] b = new byte[originalData.length];
+    assertEquals(originalData.length, gzipInflatingBuffer.inflateBytes(b, 0, originalData.length));
+    assertEquals(gzippedData.length + len, gzipInflatingBuffer.getAndResetBytesConsumed());
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
   }
 
   @Test
@@ -570,7 +618,8 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(deflatedBytes));
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipTrailer));
     try {
-      gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer);
+      byte[] b = new byte[originalData.length];
+      gzipInflatingBuffer.inflateBytes(b, 0, originalData.length);
       fail("Expected DataFormatException");
     } catch (DataFormatException expectedException) {
       assertTrue(
@@ -587,7 +636,8 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipTrailer));
 
     try {
-      gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer);
+      byte[] b = new byte[originalData.length];
+      gzipInflatingBuffer.inflateBytes(b, 0, originalData.length);
       fail("Expected ZipException");
     } catch (ZipException expectedException) {
       assertEquals("Corrupt GZIP trailer", expectedException.getMessage());
@@ -602,7 +652,8 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipTrailer));
 
     try {
-      gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer);
+      byte[] b = new byte[originalData.length];
+      gzipInflatingBuffer.inflateBytes(b, 0, originalData.length);
       fail("Expected ZipException");
     } catch (ZipException expectedException) {
       assertEquals("Corrupt GZIP trailer", expectedException.getMessage());
@@ -615,7 +666,8 @@ public class GzipInflatingBufferTest {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(new byte[10]));
 
     try {
-      gzipInflatingBuffer.inflateBytes(originalData.length, outputBuffer);
+      byte[] b = new byte[originalData.length];
+      gzipInflatingBuffer.inflateBytes(b, 0, originalData.length);
       fail("Expected DataFormatException");
     } catch (DataFormatException expectedException) {
       assertTrue(
@@ -629,11 +681,5 @@ public class GzipInflatingBufferTest {
     crc.update(headerBytes);
     byte[] headerCrc16 = {(byte) crc.getValue(), (byte) (crc.getValue() >> 8)};
     return headerCrc16;
-  }
-
-  private boolean bufferStartsWithData(byte[] data) {
-    byte[] buf = new byte[data.length];
-    outputBuffer.readBytes(buf, 0, data.length);
-    return Arrays.equals(data, buf);
   }
 }
