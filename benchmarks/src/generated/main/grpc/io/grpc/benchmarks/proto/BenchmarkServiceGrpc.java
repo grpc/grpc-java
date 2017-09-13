@@ -26,6 +26,21 @@ public final class BenchmarkServiceGrpc {
 
   public static final String SERVICE_NAME = "grpc.testing.BenchmarkService";
 
+  // Register methods for tracing.
+  static {
+    io.grpc.Grpc.registerSampledMethodsForTracing(new String[] {
+        generateFullMethodName(
+            "grpc.testing.BenchmarkService", "UnaryCall"),
+        generateFullMethodName(
+            "grpc.testing.BenchmarkService", "StreamingCall"),
+        generateFullMethodName(
+            "grpc.testing.BenchmarkService", "StreamingFromClient"),
+        generateFullMethodName(
+            "grpc.testing.BenchmarkService", "StreamingFromServer"),
+        generateFullMethodName(
+            "grpc.testing.BenchmarkService", "StreamingBothWays")});
+  }
+
   // Static method descriptors that strictly reflect the proto.
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest,

@@ -26,6 +26,13 @@ public final class HealthGrpc {
 
   public static final String SERVICE_NAME = "grpc.health.v1.Health";
 
+  // Register methods for tracing.
+  static {
+    io.grpc.Grpc.registerSampledMethodsForTracing(new String[] {
+        generateFullMethodName(
+            "grpc.health.v1.Health", "Check")});
+  }
+
   // Static method descriptors that strictly reflect the proto.
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.health.v1.HealthCheckRequest,

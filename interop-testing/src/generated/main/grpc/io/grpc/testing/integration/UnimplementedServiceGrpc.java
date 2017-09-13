@@ -30,6 +30,13 @@ public final class UnimplementedServiceGrpc {
 
   public static final String SERVICE_NAME = "grpc.testing.UnimplementedService";
 
+  // Register methods for tracing.
+  static {
+    io.grpc.Grpc.registerSampledMethodsForTracing(new String[] {
+        generateFullMethodName(
+            "grpc.testing.UnimplementedService", "UnimplementedCall")});
+  }
+
   // Static method descriptors that strictly reflect the proto.
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<com.google.protobuf.EmptyProtos.Empty,

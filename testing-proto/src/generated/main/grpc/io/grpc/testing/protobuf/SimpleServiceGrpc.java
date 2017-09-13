@@ -29,6 +29,19 @@ public final class SimpleServiceGrpc {
 
   public static final String SERVICE_NAME = "grpc.testing.SimpleService";
 
+  // Register methods for tracing.
+  static {
+    io.grpc.Grpc.registerSampledMethodsForTracing(new String[] {
+        generateFullMethodName(
+            "grpc.testing.SimpleService", "UnaryRpc"),
+        generateFullMethodName(
+            "grpc.testing.SimpleService", "ClientStreamingRpc"),
+        generateFullMethodName(
+            "grpc.testing.SimpleService", "ServerStreamingRpc"),
+        generateFullMethodName(
+            "grpc.testing.SimpleService", "BidiStreamingRpc")});
+  }
+
   // Static method descriptors that strictly reflect the proto.
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.testing.protobuf.SimpleRequest,

@@ -31,6 +31,21 @@ public final class TestServiceGrpc {
 
   public static final String SERVICE_NAME = "grpc.testing.TestService";
 
+  // Register methods for tracing.
+  static {
+    io.grpc.Grpc.registerSampledMethodsForTracing(new String[] {
+        generateFullMethodName(
+            "grpc.testing.TestService", "UnaryCall"),
+        generateFullMethodName(
+            "grpc.testing.TestService", "StreamingOutputCall"),
+        generateFullMethodName(
+            "grpc.testing.TestService", "StreamingInputCall"),
+        generateFullMethodName(
+            "grpc.testing.TestService", "FullBidiCall"),
+        generateFullMethodName(
+            "grpc.testing.TestService", "HalfBidiCall")});
+  }
+
   // Static method descriptors that strictly reflect the proto.
   private static final int ARG_IN_METHOD_UNARY_CALL = 0;
   private static final int ARG_OUT_METHOD_UNARY_CALL = 1;

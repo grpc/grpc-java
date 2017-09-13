@@ -16,7 +16,10 @@
 
 package io.grpc;
 
+import io.opencensus.trace.Tracing;
+import io.opencensus.trace.export.SampledSpanStore;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import javax.net.ssl.SSLSession;
 
 /**
@@ -44,6 +47,8 @@ public final class Grpc {
   /**
    * The side.
    */
+  //TODO(zhangkun83): create tracking issue
+  @ExperimentalApi
   public enum Side {
     CLIENT,
     SERVER
@@ -56,7 +61,9 @@ public final class Grpc {
    * @param fullMethodName the method name as returned by {@link
    *                       MethodDescriptor#getFullMethodName}.
    */
-  public static String toSpanName(Side side, String fullMethodName) {
+  //TODO(zhangkun83): create tracking issue
+  @ExperimentalApi
+  public static String makeTraceSpanName(Side side, String fullMethodName) {
     String prefix;
     switch (side) {
       case CLIENT:
@@ -72,17 +79,25 @@ public final class Grpc {
   }
 
   /**
-   * Register methods so that they can be recorded by the tracing component.
+   * Register methods whose RPCs will be sampled (stored locally and/or remotely) by the tracing
+   * component.
+   *
+   * <p>Methods that are not registered will not be sampled.
+   *
+   * <p>This method is called from generated code, thus its signature must never be changed.
+   *
+   * @param fullMethodNames fully-qualified method names as returned by
+   *        {@link MethodDescriptor#getFullMethodName}.
    */
-  public static void registerMethodsForTracing(String[] fullMethodNames) {
-    SampledSpanStore sampledStore = Tracing.getExportComponent().getSampledStore();
+  public static void registerSampledMethodsForTracing(String[] fullMethodNames) {
+    SampledSpanStore sampledStore = Tracing.getExportComponent().getSampledSpanStore();
     if (sampledStore == null) {
       return;
     }
     ArrayList<String> spanNames = new ArrayList<String>(fullMethodNames.length * 2);
     for (String method : fullMethodNames) {
-      spanNames.add(toSpanName(Side.CLIENT, method));
-      spanNames.add(toSpanName(Side.SERVER, method));
+      spanNames.add(makeTraceSpanName(Side.CLIENT, method));
+      spanNames.add(makeTraceSpanName(Side.SERVER, method));
     }
     sampledStore.registerSpanNamesForCollection(spanNames);
   }

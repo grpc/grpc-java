@@ -26,6 +26,19 @@ public final class WorkerServiceGrpc {
 
   public static final String SERVICE_NAME = "grpc.testing.WorkerService";
 
+  // Register methods for tracing.
+  static {
+    io.grpc.Grpc.registerSampledMethodsForTracing(new String[] {
+        generateFullMethodName(
+            "grpc.testing.WorkerService", "RunServer"),
+        generateFullMethodName(
+            "grpc.testing.WorkerService", "RunClient"),
+        generateFullMethodName(
+            "grpc.testing.WorkerService", "CoreCount"),
+        generateFullMethodName(
+            "grpc.testing.WorkerService", "QuitWorker")});
+  }
+
   // Static method descriptors that strictly reflect the proto.
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Control.ServerArgs,

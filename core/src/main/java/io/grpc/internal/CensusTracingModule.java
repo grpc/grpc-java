@@ -28,6 +28,8 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
+import io.grpc.Grpc;
+import io.grpc.Grpc.Side;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
@@ -110,10 +112,6 @@ final class CensusTracingModule {
     return clientInterceptor;
   }
 
-  private static String makeSpanName(String prefix, String fullMethodName) {
-    return prefix + "." + fullMethodName.replace('/', '.');
-  }
-
   @VisibleForTesting
   static Status convertStatus(io.grpc.Status grpcStatus) {
     Status status;
@@ -192,7 +190,8 @@ final class CensusTracingModule {
       checkNotNull(fullMethodName, "fullMethodName");
       this.span =
           censusTracer
-              .spanBuilderWithExplicitParent(makeSpanName("Sent", fullMethodName), parentSpan)
+              .spanBuilderWithExplicitParent(
+                  Grpc.makeTraceSpanName(Side.CLIENT, fullMethodName), parentSpan)
               .setRecordEvents(true)
               .startSpan();
     }
@@ -226,7 +225,8 @@ final class CensusTracingModule {
       checkNotNull(fullMethodName, "fullMethodName");
       this.span =
           censusTracer
-              .spanBuilderWithRemoteParent(makeSpanName("Recv", fullMethodName), remoteSpan)
+              .spanBuilderWithRemoteParent(
+                  Grpc.makeTraceSpanName(Side.SERVER, fullMethodName), remoteSpan)
               .setRecordEvents(true)
               .startSpan();
     }

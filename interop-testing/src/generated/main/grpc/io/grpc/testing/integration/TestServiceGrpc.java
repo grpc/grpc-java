@@ -30,6 +30,27 @@ public final class TestServiceGrpc {
 
   public static final String SERVICE_NAME = "grpc.testing.TestService";
 
+  // Register methods for tracing.
+  static {
+    io.grpc.Grpc.registerSampledMethodsForTracing(new String[] {
+        generateFullMethodName(
+            "grpc.testing.TestService", "EmptyCall"),
+        generateFullMethodName(
+            "grpc.testing.TestService", "UnaryCall"),
+        generateFullMethodName(
+            "grpc.testing.TestService", "CacheableUnaryCall"),
+        generateFullMethodName(
+            "grpc.testing.TestService", "StreamingOutputCall"),
+        generateFullMethodName(
+            "grpc.testing.TestService", "StreamingInputCall"),
+        generateFullMethodName(
+            "grpc.testing.TestService", "FullDuplexCall"),
+        generateFullMethodName(
+            "grpc.testing.TestService", "HalfDuplexCall"),
+        generateFullMethodName(
+            "grpc.testing.TestService", "UnimplementedCall")});
+  }
+
   // Static method descriptors that strictly reflect the proto.
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<com.google.protobuf.EmptyProtos.Empty,
