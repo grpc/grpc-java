@@ -66,8 +66,10 @@ public class ManualFlowControlClient {
             // MANY messages may be buffered, however, they haven't yet been sent to the server. The server must call
             // request() to pull a buffered message from the client.
             //
-            // Note: the onReadyHandler is invoked by gRPC's internal thread pool. You can't block here or deadlocks
-            // can occur.
+            // Note: the onReadyHandler's invocation is serialized on the same thread pool as the incoming
+            // StreamObserver'sonNext(), onError(), and onComplete() handlers. Blocking the onReadyHandler will prevent
+            // additional messages from being processed by the incoming StreamObserver. The onReadyHandler must return
+            // in a timely manor or else message processing throughput will suffer.
             requestStream.setOnReadyHandler(new Runnable() {
               // An iterator is used so we can pause and resume iteration of the request data.
               Iterator<String> iterator = names().iterator();

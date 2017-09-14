@@ -46,18 +46,24 @@ public class ManualFlowControlServer {
         // Set up a back-pressure-aware consumer for the request stream. The onReadyHandler will be invoked
         // when the consuming side has enough buffer space to receive more messages.
         //
-        // Note: the onReadyHandler is invoked by gRPC's internal thread pool. You can't block here or deadlocks
-        // can occur.
+        // Note: the onReadyHandler's invocation is serialized on the same thread pool as the incoming StreamObserver's
+        // onNext(), onError(), and onComplete() handlers. Blocking the onReadyHandler will prevent additional messages
+        // from being processed by the incoming StreamObserver. The onReadyHandler must return in a timely manor or else
+        // message processing throughput will suffer.
         serverCallStreamObserver.setOnReadyHandler(new Runnable() {
           @Override
           public void run() {
-            logger.info("READY");
-            // Signal the request sender to send one message.
-            serverCallStreamObserver.request(1);
+            if (serverCallStreamObserver.isReady()) {
+              logger.info("READY");
+              // Signal the request sender to send one message. This happens when isReady() turns true, signaling that
+              // the receive buffer has enough free space to receive more messages. Calling request() serves to prime
+              // the message pump.
+              serverCallStreamObserver.request(1);
+            }
           }
         });
 
-        // Give gRPC a StreamObserver it can write incoming requests into.
+        // Give gRPC a StreamObserver that can observe and process incoming requests.
         return new StreamObserver<HelloRequest>() {
           @Override
           public void onNext(HelloRequest request) {
@@ -76,9 +82,15 @@ public class ManualFlowControlServer {
               HelloReply reply = HelloReply.newBuilder().setMessage(message).build();
               responseObserver.onNext(reply);
 
-              // Request more messages only if the consuming buffer has room to receive it
+              // Request more messages only if the consuming buffer has room to receive it.
               if (serverCallStreamObserver.isReady()) {
-                // Signal the sender to send another request.
+                // Signal the sender to send another request. As long as isReady() stays true, the server will keep
+                // cycling through the loop of onNext() -> request()...onNext() -> request()... until either the client
+                // runs out of messages and ends the loop or the server runs out of receive buffer space.
+                //
+                // If the server runs out of buffer space, isReady() will turn false. When the receive buffer has
+                // sufficiently drained, isReady() will turn true, and the serverCallStreamObserver's onReadyHandler
+                // will be called to restart the message pump.
                 serverCallStreamObserver.request(1);
               }
 
