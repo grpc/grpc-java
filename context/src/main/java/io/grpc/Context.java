@@ -100,10 +100,9 @@ public class Context {
       new PersistentHashArrayMappedTrie<Key<?>, Object>();
 
   // Long chains of contexts are suspicious and usually indicate a misuse of Context.
-  // The threshold and interval are arbitrarily chosen.
+  // The threshold is arbitrarily chosen.
   // VisibleForTesting
-  static final int CONTEXT_DEPTH_WARN_THRESH = 200;
-  private static final int CONTEXT_WARN_INTERVAL = 20;
+  static final int CONTEXT_DEPTH_WARN_THRESH = 1000;
 
   /**
    * The logical root context which is the ultimate ancestor of all contexts. This context
@@ -1011,13 +1010,12 @@ public class Context {
    * the stack trace.
    */
   private static void validateGeneration(int generation) {
-    if (generation >= CONTEXT_DEPTH_WARN_THRESH
-        && (generation - CONTEXT_DEPTH_WARN_THRESH) % CONTEXT_WARN_INTERVAL == 0) {
+    if (generation == CONTEXT_DEPTH_WARN_THRESH) {
       log.log(
           Level.SEVERE,
-          String.format("Context ancestry chain length is abnormally long. "
+          "Context ancestry chain length is abnormally long. "
               + "This suggests an error in application code. "
-              + "length=%s", generation),
+              + "Length exceeded: " + CONTEXT_DEPTH_WARN_THRESH,
           new Exception());
     }
   }
