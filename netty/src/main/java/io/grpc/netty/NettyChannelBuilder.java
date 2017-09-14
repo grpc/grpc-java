@@ -430,6 +430,16 @@ public final class NettyChannelBuilder
     this.dynamicParamsFactory = checkNotNull(factory, "factory");
   }
 
+  @Override
+  protected void setTracingEnabled(boolean value) {
+    super.setTracingEnabled(value);
+  }
+
+  @Override
+  protected void setStatsEnabled(boolean value) {
+    super.setStatsEnabled(value);
+  }
+
   interface TransportCreationParamsFilterFactory {
     @CheckReturnValue
     TransportCreationParamsFilter create(

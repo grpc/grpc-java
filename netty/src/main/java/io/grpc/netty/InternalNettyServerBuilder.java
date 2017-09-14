@@ -34,5 +34,13 @@ public final class InternalNettyServerBuilder {
     return nsb.initHandler(initHandler);
   }
 
+  public static void setStatsEnabled(NettyServerBuilder builder, boolean value) {
+    builder.setStatsEnabled(value);
+  }
+
+  public static void setTracingEnabled(NettyServerBuilder builder, boolean value) {
+    builder.setTracingEnabled(value);
+  }
+
   private InternalNettyServerBuilder() {}
 }
