@@ -183,7 +183,7 @@ final class CensusTracingModule {
 
   private static void recordNetworkEvent(
       Span span, NetworkEvent.Type type,
-      int seqNo, long optionalUncompressedSize, long optionalWireSize) {
+      int seqNo, long optionalWireSize, long optionalUncompressedSize) {
     NetworkEvent.Builder eventBuilder = NetworkEvent.builder(type, seqNo);
     if (optionalUncompressedSize != -1) {
       eventBuilder.setUncompressedMessageSize(optionalUncompressedSize);
