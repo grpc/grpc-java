@@ -1795,7 +1795,8 @@ public abstract class AbstractInteropTest {
       assertThat(tracer.nextOutboundEvent()).isEqualTo(String.format("outboundMessage(%d)", seqNo));
       assertThat(tracer.nextOutboundEvent()).isEqualTo("outboundMessage()");
       assertThat(tracer.nextOutboundEvent()).matches(
-          String.format("outboundMessageSent\\(%d, [0-9]+, %d\\)", seqNo, msg.getSerializedSize()));
+          String.format(
+              "outboundMessageSent\\(%d, -?[0-9]+, %d\\)", seqNo, msg.getSerializedSize()));
       seqNo++;
       uncompressedSentSize += msg.getSerializedSize();
     }
@@ -1806,8 +1807,9 @@ public abstract class AbstractInteropTest {
       assertThat(tracer.nextInboundEvent()).isEqualTo(String.format("inboundMessage(%d)", seqNo));
       assertThat(tracer.nextInboundEvent()).isEqualTo("inboundMessage()");
       assertThat(tracer.nextInboundEvent()).matches(
-          String.format("inboundMessageRead\\(%d, [0-9]+, -1\\)", seqNo)); 
+          String.format("inboundMessageRead\\(%d, -?[0-9]+, -?[0-9]+\\)", seqNo)); 
       uncompressedReceivedSize += msg.getSerializedSize();
+      seqNo++;
     }
     assertNull(tracer.nextInboundEvent());
     assertEquals(uncompressedSentSize, tracer.getOutboundUncompressedSize());

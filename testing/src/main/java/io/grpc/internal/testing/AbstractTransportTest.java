@@ -742,7 +742,7 @@ public abstract class AbstractTransportTest {
     message.close();
     if (metricsExpected()) {
       assertThat(clientStreamTracer1.nextOutboundEvent())
-          .matches("outboundMessageSent\\(0, [0-9]+, [0-9]+\\)");
+          .matches("outboundMessageSent\\(0, -?[0-9]+, -?[0-9]+\\)");
       assertThat(clientStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
       assertThat(clientStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
       assertThat(serverStreamTracer1.nextInboundEvent()).isEqualTo("inboundMessage(0)");
@@ -757,7 +757,7 @@ public abstract class AbstractTransportTest {
       assertThat(serverStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
       assertThat(serverStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
       assertThat(serverStreamTracer1.nextInboundEvent())
-          .matches("inboundMessageRead\\(0, [0-9]+, [0-9]+\\)");
+          .matches("inboundMessageRead\\(0, -?[0-9]+, -?[0-9]+\\)");
     }
 
     Metadata serverHeaders = new Metadata();
@@ -789,7 +789,7 @@ public abstract class AbstractTransportTest {
     message = clientStreamMessageQueue.poll(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     if (metricsExpected()) {
       assertThat(serverStreamTracer1.nextOutboundEvent())
-          .matches("outboundMessageSent\\(0, [0-9]+, [0-9]+\\)");
+          .matches("outboundMessageSent\\(0, -?[0-9]+, -?[0-9]+\\)");
       assertThat(serverStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
       assertThat(serverStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
       assertTrue(clientStreamTracer1.getInboundHeaders());
@@ -799,7 +799,7 @@ public abstract class AbstractTransportTest {
     assertEquals("Hi. Who are you?", methodDescriptor.parseResponse(message));
     if (metricsExpected()) {
       assertThat(clientStreamTracer1.nextInboundEvent())
-          .matches("inboundMessageRead\\(0, [0-9]+, [0-9]+\\)");
+          .matches("inboundMessageRead\\(0, -?[0-9]+, -?[0-9]+\\)");
       assertThat(clientStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
       assertThat(clientStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
     }
