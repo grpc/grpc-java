@@ -943,7 +943,7 @@ public class ContextTest {
     try {
       logger.addHandler(handler);
       Context ctx = Context.current();
-      for (int i = 0; i < Context.CONTEXT_DEPTH_WARN_THRESH - 1; i++) {
+      for (int i = 0; i < Context.CONTEXT_DEPTH_WARN_THRESH ; i++) {
         assertNull(logRef.get());
         ctx = ctx.fork();
       }

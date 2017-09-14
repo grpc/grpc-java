@@ -207,7 +207,7 @@ public class Context {
   private Context(Context parent, PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries) {
     cancellableAncestor = cancellableAncestor(parent);
     this.keyValueEntries = keyValueEntries;
-    this.generation = parent == null ? 1 : parent.generation + 1;
+    this.generation = parent == null ? 0 : parent.generation + 1;
     validateGeneration(generation);
   }
 
