@@ -509,6 +509,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   public ManagedChannelImpl shutdownNow() {
     logger.log(Level.FINE, "[{0}] shutdownNow() called", getLogId());
     shutdown();
+    phantom.shutdownNow = true;
     delayedTransport.shutdownNow(SHUTDOWN_NOW_STATUS);
     channelExecutor.executeLater(new Runnable() {
         @Override
@@ -965,17 +966,26 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     private static final ConcurrentMap<ManagedChannelReference, ManagedChannelReference> refs =
         new ConcurrentHashMap<ManagedChannelReference, ManagedChannelReference>();
 
+    private static final String allocationSitePropertyName =
+        "io.grpc.ManagedChannel.enableAllocationTracking";
+
+    private static final boolean enableAllocationTracking =
+        Boolean.parseBoolean(System.getProperty(allocationSitePropertyName, "true"));
+    private static final RuntimeException missingCallSite = missingCallSite();
+
     private final LogId logId;
     private final String target;
-    private final Reference<Throwable> allocationSite;
+    private final Reference<RuntimeException> allocationSite;
     private volatile boolean shutdown;
+    private volatile boolean shutdownNow;
     private volatile boolean terminated;
 
     ManagedChannelReference(ManagedChannelImpl chan) {
       super(chan, refQueue);
-      allocationSite =
-          new SoftReference<Throwable>(
-              new RuntimeException("ManagedChannel allocation site"));
+      allocationSite = new SoftReference<RuntimeException>(
+          enableAllocationTracking
+              ? new RuntimeException("ManagedChannel allocation site")
+              : missingCallSite);
       logId = chan.logId;
       target = chan.target;
       refs.put(this, this);
@@ -1007,11 +1017,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       ManagedChannelReference ref;
       int orphanedChannels = 0;
       while ((ref = (ManagedChannelReference) refQueue.poll()) != null) {
-        Throwable maybeAllocationSite = ref.allocationSite.get();
+        RuntimeException maybeAllocationSite = ref.allocationSite.get();
         ref.clearInternal(); // technically the reference is gone already.
         if (!(ref.shutdown && ref.terminated)) {
           orphanedChannels++;
-          Level level = Level.SEVERE;
+          Level level = ref.shutdownNow ? Level.FINE : Level.SEVERE;
           if (logger.isLoggable(level)) {
             String fmt = new StringBuilder()
                 .append("*~*~*~ Channel {0} for target {1} was not ")
@@ -1030,6 +1040,14 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
         }
       }
       return orphanedChannels;
+    }
+
+    private static RuntimeException missingCallSite() {
+      RuntimeException e = new RuntimeException(
+          "ManagedChannel allocation site not recorded.  Set -D"
+              + allocationSitePropertyName + "=true to enable it");
+      e.setStackTrace(new StackTraceElement[0]);
+      return e;
     }
   }
 }
