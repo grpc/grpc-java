@@ -121,6 +121,7 @@ public class GzipInflatingBufferTest {
     byte[] b = new byte[originalData.length];
     int n = gzipInflatingBuffer.inflateBytes(b, 0, originalData.length);
     assertTrue("inflated bytes expected", n > 0);
+    assertTrue("gzipInflatingBuffer is not stalled", gzipInflatingBuffer.isStalled());
     assertEquals(initialBytes, gzipInflatingBuffer.getAndResetBytesConsumed());
 
     gzipInflatingBuffer.addGzippedBytes(
@@ -258,7 +259,7 @@ public class GzipInflatingBufferTest {
   }
 
   @Test
-  public void isStalledReturnsFalseWithPartialNextHeaderAvailable() throws Exception {
+  public void isStalledReturnsTrueWithPartialNextHeaderAvailable() throws Exception {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedTruncatedData));
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(new byte[1]));
 
@@ -266,11 +267,48 @@ public class GzipInflatingBufferTest {
     assertEquals(
         truncatedData.length, gzipInflatingBuffer.inflateBytes(b, 0, truncatedData.length));
     assertTrue("inflated data does not match", Arrays.equals(truncatedData, b));
-    assertFalse("gzipInflatingBuffer is stalled", gzipInflatingBuffer.isStalled());
+    assertTrue("gzipInflatingBuffer is not stalled", gzipInflatingBuffer.isStalled());
+    assertTrue("partial data expected", gzipInflatingBuffer.hasPartialData());
+  }
+
+  @Test
+  public void isStalledWorksWithAllHeaderFlags() throws Exception {
+    gzipHeader[GZIP_HEADER_FLAG_INDEX] =
+        (byte) (gzipHeader[GZIP_HEADER_FLAG_INDEX] | FTEXT | FHCRC | FEXTRA | FNAME | FCOMMENT);
+    int len = 1025;
+    byte[] fExtraLen = {(byte) len, (byte) (len >> 8)};
+    byte[] fExtra = new byte[len];
+    byte[] zeroTerminatedBytes = new byte[len];
+    for (int i = 0; i < len - 1; i++) {
+      zeroTerminatedBytes[i] = 1;
+    }
+    ByteArrayOutputStream newHeader = new ByteArrayOutputStream();
+    newHeader.write(gzipHeader);
+    newHeader.write(fExtraLen);
+    newHeader.write(fExtra);
+    newHeader.write(zeroTerminatedBytes); // FNAME
+    newHeader.write(zeroTerminatedBytes); // FCOMMENT
+    byte[] headerCrc16 = getHeaderCrc16Bytes(newHeader.toByteArray());
+
+    assertTrue("gzipInflatingBuffer is not stalled", gzipInflatingBuffer.isStalled());
+
+    addInTwoChunksAndVerifyIsStalled(gzipHeader);
+    addInTwoChunksAndVerifyIsStalled(fExtraLen);
+    addInTwoChunksAndVerifyIsStalled(fExtra);
+    addInTwoChunksAndVerifyIsStalled(zeroTerminatedBytes);
+    addInTwoChunksAndVerifyIsStalled(zeroTerminatedBytes);
+    addInTwoChunksAndVerifyIsStalled(headerCrc16);
+
+    byte[] b = new byte[originalData.length];
+    gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(deflatedBytes));
+    assertEquals(originalData.length, gzipInflatingBuffer.inflateBytes(b, 0, originalData.length));
+
+    addInTwoChunksAndVerifyIsStalled(gzipTrailer);
   }
 
   @Test
   public void hasPartialData() throws Exception {
+    assertFalse("no partial data expected", gzipInflatingBuffer.hasPartialData());
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedData));
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(new byte[1]));
 
@@ -674,6 +712,22 @@ public class GzipInflatingBufferTest {
           "wrong exception message",
           expectedException.getMessage().startsWith("Inflater data format exception:"));
     }
+  }
+
+  private void addInTwoChunksAndVerifyIsStalled(byte[] input) throws Exception {
+    byte[] b = new byte[1];
+
+    gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(input, 0, input.length - 1));
+    assertFalse("gzipInflatingBuffer is stalled", gzipInflatingBuffer.isStalled());
+
+    assertEquals(0, gzipInflatingBuffer.inflateBytes(b, 0, 1));
+    assertTrue("gzipInflatingBuffer is not stalled", gzipInflatingBuffer.isStalled());
+
+    gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(input, input.length - 1, 1));
+    assertFalse("gzipInflatingBuffer is stalled", gzipInflatingBuffer.isStalled());
+
+    assertEquals(0, gzipInflatingBuffer.inflateBytes(b, 0, 1));
+    assertTrue("gzipInflatingBuffer is not stalled", gzipInflatingBuffer.isStalled());
   }
 
   private byte[] getHeaderCrc16Bytes(byte[] headerBytes) {
