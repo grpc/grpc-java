@@ -239,16 +239,16 @@ final class CensusTracingModule {
 
     @Override
     public void outboundMessageSent(
-        int seqNo, long optionalUncompressedSize, long optionalWireSize) {
+        int seqNo, long optionalWireSize, long optionalUncompressedSize) {
       recordNetworkEvent(
-          span, NetworkEvent.Type.SENT, seqNo, optionalUncompressedSize, optionalWireSize);
+          span, NetworkEvent.Type.SENT, seqNo, optionalWireSize, optionalUncompressedSize);
     }
 
     @Override
     public void inboundMessageRead(
-        int seqNo, long optionalUncompressedSize, long optionalWireSize) {
+        int seqNo, long optionalWireSize, long optionalUncompressedSize) {
       recordNetworkEvent(
-          span, NetworkEvent.Type.RECV, seqNo, optionalUncompressedSize, optionalWireSize);
+          span, NetworkEvent.Type.RECV, seqNo, optionalWireSize, optionalUncompressedSize);
     }
   }
 
@@ -289,16 +289,16 @@ final class CensusTracingModule {
 
     @Override
     public void outboundMessageSent(
-        int seqNo, long optionalUncompressedSize, long optionalWireSize) {
+        int seqNo, long optionalWireSize, long optionalUncompressedSize) {
       recordNetworkEvent(
-          span, NetworkEvent.Type.SENT, seqNo, optionalUncompressedSize, optionalWireSize);
+          span, NetworkEvent.Type.SENT, seqNo, optionalWireSize, optionalUncompressedSize);
     }
 
     @Override
     public void inboundMessageRead(
-        int seqNo, long optionalUncompressedSize, long optionalWireSize) {
+        int seqNo, long optionalWireSize, long optionalUncompressedSize) {
       recordNetworkEvent(
-          span, NetworkEvent.Type.RECV, seqNo, optionalUncompressedSize, optionalWireSize);
+          span, NetworkEvent.Type.RECV, seqNo, optionalWireSize, optionalUncompressedSize);
     }
   }
 

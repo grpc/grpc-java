@@ -180,9 +180,9 @@ public final class StatsTraceContext {
    *
    * <p>Called from {@link io.grpc.internal.Framer}.
    */
-  public void outboundMessageSent(int seqNo, long optionalUncompressedSize, long optionalWireSize) {
+  public void outboundMessageSent(int seqNo, long optionalWireSize, long optionalUncompressedSize) {
     for (StreamTracer tracer : tracers) {
-      tracer.outboundMessageSent(seqNo, optionalUncompressedSize, optionalWireSize);
+      tracer.outboundMessageSent(seqNo, optionalWireSize, optionalUncompressedSize);
     }
   }
 
@@ -191,9 +191,9 @@ public final class StatsTraceContext {
    *
    * <p>Called from {@link io.grpc.internal.MessageDeframer}.
    */
-  public void inboundMessageRead(int seqNo, long optionalUncompressedSize, long optionalWireSize) {
+  public void inboundMessageRead(int seqNo, long optionalWireSize, long optionalUncompressedSize) {
     for (StreamTracer tracer : tracers) {
-      tracer.inboundMessageRead(seqNo, optionalUncompressedSize, optionalWireSize);
+      tracer.inboundMessageRead(seqNo, optionalWireSize, optionalUncompressedSize);
     }
   }
 

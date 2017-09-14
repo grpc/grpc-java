@@ -151,7 +151,7 @@ public class MessageFramer implements Framer {
     }
     statsTraceCtx.outboundUncompressedSize(written);
     statsTraceCtx.outboundWireSize(currentMessageWireSize);
-    statsTraceCtx.outboundMessageSent(currentMessageSeqNo, written, currentMessageWireSize);
+    statsTraceCtx.outboundMessageSent(currentMessageSeqNo, currentMessageWireSize, written);
   }
 
   private int writeUncompressed(InputStream message, int messageLength) throws IOException {

@@ -78,20 +78,20 @@ public abstract class StreamTracer {
    * An outbound message has been serialized and sent to the transport.
    *
    * @param seqNo the sequential number of the message within the stream, starting from 0
-   * @param optionalUncompressedSize the uncompressed serialized size of the message. -1 if unknown
    * @param optionalWireSize the wire size of the message. -1 if unknown
+   * @param optionalUncompressedSize the uncompressed serialized size of the message. -1 if unknown
    */
-  public void outboundMessageSent(int seqNo, long optionalUncompressedSize, long optionalWireSize) {
+  public void outboundMessageSent(int seqNo, long optionalWireSize, long optionalUncompressedSize) {
   }
 
   /**
    * An inbound message has been fully read from the transport.
    *
    * @param seqNo the sequential number of the message within the stream, starting from 0
-   * @param optionalUncompressedSize the uncompressed serialized size of the message. -1 if unknown
    * @param optionalWireSize the wire size of the message. -1 if unknown
+   * @param optionalUncompressedSize the uncompressed serialized size of the message. -1 if unknown
    */
-  public void inboundMessageRead(int seqNo, long optionalUncompressedSize, long optionalWireSize) {
+  public void inboundMessageRead(int seqNo, long optionalWireSize, long optionalUncompressedSize) {
   }
 
   /**
