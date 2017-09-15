@@ -172,8 +172,14 @@ class GzipInflatingBuffer implements Closeable {
   /* Number of inflated bytes per gzip stream, used to validate the gzip trailer. */
   private long expectedGzipTrailerIsize;
 
-  /** Tracks gzipped bytes consumed during {@link #inflateBytes} calls. */
+  /**
+   * Tracks gzipped bytes (including gzip metadata and deflated blocks) consumed during {@link
+   * #inflateBytes} calls.
+   */
   private int bytesConsumed = 0;
+
+  /** Tracks deflated bytes (excluding gzip metadata) consumed by the inflater. */
+  private int deflatedBytesConsumed = 0;
 
   private boolean isStalled = true;
 
@@ -227,6 +233,16 @@ class GzipInflatingBuffer implements Closeable {
     int savedBytesConsumed = bytesConsumed;
     bytesConsumed = 0;
     return savedBytesConsumed;
+  }
+
+  /**
+   * Reports bytes consumed by the inflater since the last invocation of this method, then resets
+   * the count to zero.
+   */
+  int getAndResetDeflatedBytesConsumed() {
+    int savedDeflatedBytesConsumed = deflatedBytesConsumed;
+    deflatedBytesConsumed = 0;
+    return savedDeflatedBytesConsumed;
   }
 
   /**
@@ -403,6 +419,7 @@ class GzipInflatingBuffer implements Closeable {
       int n = inflater.inflate(b, off, len);
       int bytesConsumedDelta = inflater.getTotalIn() - inflaterTotalIn;
       bytesConsumed += bytesConsumedDelta;
+      deflatedBytesConsumed += bytesConsumedDelta;
       inflaterInputStart += bytesConsumedDelta;
       crc.update(b, off, n);
 

@@ -406,6 +406,17 @@ public class GzipInflatingBufferTest {
   }
 
   @Test
+  public void getAndResetDeflatedBytesConsumedExcludesGzipMetadata() throws Exception {
+    gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedData));
+
+    byte[] b = new byte[originalData.length];
+    assertEquals(originalData.length, gzipInflatingBuffer.inflateBytes(b, 0, originalData.length));
+    assertEquals(
+        gzippedData.length - GZIP_HEADER_MIN_SIZE - GZIP_TRAILER_SIZE,
+        gzipInflatingBuffer.getAndResetDeflatedBytesConsumed());
+  }
+
+  @Test
   public void wrongHeaderMagicShouldFail() throws Exception {
     gzipHeader[1] = (byte) ~(GZIP_MAGIC >> 8);
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipHeader));
