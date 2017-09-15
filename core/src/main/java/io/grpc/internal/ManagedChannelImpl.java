@@ -46,6 +46,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
+import io.grpc.internal.SerializingExecutor.SerializingExecutorFactory;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -98,6 +99,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   private final LoadBalancer.Factory loadBalancerFactory;
   private final ClientTransportFactory transportFactory;
   private final Executor executor;
+  private final SerializingExecutorFactory serializer;
   private final ObjectPool<? extends Executor> executorPool;
   private final ObjectPool<? extends Executor> oobExecutorPool;
   private final LogId logId = LogId.allocate(getClass().getName());
@@ -386,6 +388,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.oobExecutorPool = checkNotNull(oobExecutorPool, "oobExecutorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
+    this.serializer = SerializingExecutors.wrapFactory(this.executor);
     this.delayedTransport = new DelayedClientTransport(this.executor, this.channelExecutor);
     this.delayedTransport.start(delayedTransportListener);
     this.backoffPolicyProvider = backoffPolicyProvider;
@@ -545,9 +548,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions) {
-      Executor executor = callOptions.getExecutor();
-      if (executor == null) {
-        executor = ManagedChannelImpl.this.executor;
+      SerializingExecutor executor;
+      if (callOptions.getExecutor() != null) {
+        executor = SerializingExecutors.wrap(callOptions.getExecutor());
+      } else {
+        executor = serializer.getExecutor();
       }
       return new ClientCallImpl<ReqT, RespT>(
           method,

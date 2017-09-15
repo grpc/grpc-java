@@ -28,7 +28,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
 import com.google.common.base.Objects;
-import io.grpc.internal.SerializingExecutor;
+import io.grpc.internal.SerializingExecutors;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
@@ -140,7 +140,7 @@ public class CallOptionsTest {
   public void toStringMatches_noDeadline_default() {
     String actual = allSet
         .withDeadline(null)
-        .withExecutor(new SerializingExecutor(directExecutor()))
+        .withExecutor(SerializingExecutors.wrap(directExecutor()))
         .withCallCredentials(null)
         .withMaxInboundMessageSize(44)
         .withMaxOutboundMessageSize(55)
@@ -149,7 +149,7 @@ public class CallOptionsTest {
     assertThat(actual).contains("deadline=null");
     assertThat(actual).contains("authority=authority");
     assertThat(actual).contains("callCredentials=null");
-    assertThat(actual).contains("executor=class io.grpc.internal.SerializingExecutor");
+    assertThat(actual).contains("Serializ");
     assertThat(actual).contains("compressorName=compressor");
     assertThat(actual).contains("customOptions=[[option1, value1], [option2, value2]]");
     assertThat(actual).contains("waitForReady=true");

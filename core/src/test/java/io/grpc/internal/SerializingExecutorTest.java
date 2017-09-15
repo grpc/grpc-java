@@ -22,6 +22,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
 
 import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.internal.SerializingExecutorFab.SingleSerializingExecutor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -34,7 +35,7 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class SerializingExecutorTest {
   private SingleExecutor singleExecutor = new SingleExecutor();
-  private SerializingExecutor executor = new SerializingExecutor(singleExecutor);
+  private SerializingExecutor executor = new SingleSerializingExecutor(singleExecutor);
   private List<Integer> runs = new ArrayList<Integer>();
 
   private class AddToRuns implements Runnable {
@@ -65,7 +66,7 @@ public class SerializingExecutorTest {
       }
     }
 
-    executor = new SerializingExecutor(new CoyExecutor());
+    executor = new SingleSerializingExecutor(new CoyExecutor());
     try {
       executor.execute(new AddToRuns(1));
       fail();
@@ -166,7 +167,7 @@ public class SerializingExecutorTest {
         throw ex;
       }
     });
-    executor = new SerializingExecutor(forwardingExecutor);
+    executor = new SingleSerializingExecutor(forwardingExecutor);
     try {
       executor.execute(new AddToRuns(1));
       fail("expected exception");
@@ -185,7 +186,7 @@ public class SerializingExecutorTest {
 
   @Test
   public void direct() {
-    executor = new SerializingExecutor(MoreExecutors.directExecutor());
+    executor = new SingleSerializingExecutor(MoreExecutors.directExecutor());
     executor.execute(new AddToRuns(1));
     assertEquals(Arrays.asList(1), runs);
     executor.execute(new AddToRuns(2));
@@ -196,7 +197,7 @@ public class SerializingExecutorTest {
 
   @Test
   public void testDirectReentrant() {
-    executor = new SerializingExecutor(MoreExecutors.directExecutor());
+    executor = new SingleSerializingExecutor(MoreExecutors.directExecutor());
     executor.execute(new Runnable() {
       @Override
       public void run() {

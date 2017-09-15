@@ -31,6 +31,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
+import io.grpc.internal.SerializingExecutor.SerializingExecutorFactory;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -56,6 +57,7 @@ final class OobChannel extends ManagedChannel implements WithLogId {
   private final DelayedClientTransport delayedTransport;
   private final ObjectPool<? extends Executor> executorPool;
   private final Executor executor;
+  private final SerializingExecutorFactory serializer;
   private final ScheduledExecutorService deadlineCancellationExecutor;
   private final CountDownLatch terminatedLatch = new CountDownLatch(1);
   private volatile boolean shutdown;
@@ -76,6 +78,7 @@ final class OobChannel extends ManagedChannel implements WithLogId {
     this.authority = checkNotNull(authority, "authority");
     this.executorPool = checkNotNull(executorPool, "executorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
+    this.serializer = SerializingExecutors.wrapFactory(executor);
     this.deadlineCancellationExecutor = checkNotNull(
         deadlineCancellationExecutor, "deadlineCancellationExecutor");
     this.delayedTransport = new DelayedClientTransport(executor, channelExecutor);
@@ -151,9 +154,14 @@ final class OobChannel extends ManagedChannel implements WithLogId {
   @Override
   public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
       MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
-    return new ClientCallImpl<RequestT, ResponseT>(methodDescriptor,
-        callOptions.getExecutor() == null ? executor : callOptions.getExecutor(),
-        callOptions, transportProvider, deadlineCancellationExecutor);
+    return new ClientCallImpl<RequestT, ResponseT>(
+        methodDescriptor,
+        callOptions.getExecutor() == null
+            ? serializer.getExecutor()
+            : SerializingExecutors.wrap(callOptions.getExecutor()),
+        callOptions,
+        transportProvider,
+        deadlineCancellationExecutor);
   }
 
   @Override

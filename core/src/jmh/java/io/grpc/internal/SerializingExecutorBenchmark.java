@@ -41,7 +41,7 @@ import org.openjdk.jmh.annotations.TearDown;
 public class SerializingExecutorBenchmark {
 
   private ExecutorService executorService = Executors.newSingleThreadExecutor();
-  private Executor executor = new SerializingExecutor(executorService);
+  private Executor executor = SerializingExecutors.wrap(executorService);
 
   private static class IncrRunnable implements Runnable {
     int val;

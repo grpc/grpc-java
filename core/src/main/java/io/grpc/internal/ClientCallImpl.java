@@ -46,7 +46,6 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import java.io.InputStream;
 import java.util.concurrent.CancellationException;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -62,7 +61,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private static final Logger log = Logger.getLogger(ClientCallImpl.class.getName());
 
   private final MethodDescriptor<ReqT, RespT> method;
-  private final Executor callExecutor;
+  private final SerializingExecutor callExecutor;
   private final Context context;
   private volatile ScheduledFuture<?> deadlineCancellationFuture;
   private final boolean unaryRequest;
@@ -78,16 +77,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
 
   ClientCallImpl(
-      MethodDescriptor<ReqT, RespT> method, Executor executor, CallOptions callOptions,
+      MethodDescriptor<ReqT, RespT> method, SerializingExecutor executor, CallOptions callOptions,
       ClientTransportProvider clientTransportProvider,
       ScheduledExecutorService deadlineCancellationExecutor) {
     this.method = method;
-    // If we know that the executor is a direct executor, we don't need to wrap it with a
-    // SerializingExecutor. This is purely for performance reasons.
-    // See https://github.com/grpc/grpc-java/issues/368
-    this.callExecutor = executor == directExecutor()
-        ? new SerializeReentrantCallsDirectExecutor()
-        : new SerializingExecutor(executor);
+    this.callExecutor = executor;
     // Propagate the context from the thread which initiated the call to all callbacks.
     this.context = Context.current();
     this.unaryRequest = method.getType() == MethodType.UNARY

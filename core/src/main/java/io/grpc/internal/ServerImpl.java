@@ -41,6 +41,7 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
+import io.grpc.internal.SerializingExecutor.SerializingExecutorFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -76,6 +77,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
   private final ObjectPool<? extends Executor> executorPool;
   /** Executor for application processing. Safe to read after {@link #start()}. */
   private Executor executor;
+  private SerializingExecutorFactory serializer;
   private final InternalHandlerRegistry registry;
   private final HandlerRegistry fallbackRegistry;
   private final List<ServerTransportFilter> transportFilters;
@@ -144,6 +146,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       // Start and wait for any port to actually be bound.
       transportServer.start(new ServerListenerImpl());
       executor = Preconditions.checkNotNull(executorPool.getObject(), "executor");
+      serializer = SerializingExecutors.wrapFactory(executor);
       started = true;
       return this;
     }
@@ -295,6 +298,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
         terminated = true;
         if (executor != null) {
           executor = executorPool.returnObject(executor);
+          serializer = null;
         }
         // TODO(carl-mastrangelo): move this outside the synchronized block.
         lock.notifyAll();
@@ -382,15 +386,10 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
           stream.statsTraceContext(), "statsTraceCtx not present from stream");
 
       final Context.CancellableContext context = createContext(stream, headers, statsTraceCtx);
-      final Executor wrappedExecutor;
+      final SerializingExecutor wrappedExecutor;
       // This is a performance optimization that avoids the synchronization and queuing overhead
       // that comes with SerializingExecutor.
-      if (executor == directExecutor()) {
-        wrappedExecutor = new SerializeReentrantCallsDirectExecutor();
-      } else {
-        wrappedExecutor = new SerializingExecutor(executor);
-      }
-
+      wrappedExecutor = serializer.getExecutor();
       final JumpToApplicationThreadServerStreamListener jumpListener
           = new JumpToApplicationThreadServerStreamListener(
               wrappedExecutor, executor, stream, context);
@@ -537,14 +536,14 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
    */
   @VisibleForTesting
   static final class JumpToApplicationThreadServerStreamListener implements ServerStreamListener {
-    private final Executor callExecutor;
+    private final SerializingExecutor callExecutor;
     private final Executor cancelExecutor;
     private final Context.CancellableContext context;
     private final ServerStream stream;
     // Only accessed from callExecutor.
     private ServerStreamListener listener;
 
-    public JumpToApplicationThreadServerStreamListener(Executor executor,
+    public JumpToApplicationThreadServerStreamListener(SerializingExecutor executor,
         Executor cancelExecutor, ServerStream stream, Context.CancellableContext context) {
       this.callExecutor = executor;
       this.cancelExecutor = cancelExecutor;
