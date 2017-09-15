@@ -37,6 +37,7 @@ public final class TestServiceGrpc {
           .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
           .setFullMethodName(generateFullMethodName(
               "grpc.testing.TestService", "UnaryCall"))
+          .setShouldRegisterForTracing(true)
           .setRequestMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
               io.grpc.testing.integration.Test.SimpleRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
@@ -49,6 +50,7 @@ public final class TestServiceGrpc {
           .setType(io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
           .setFullMethodName(generateFullMethodName(
               "grpc.testing.TestService", "StreamingOutputCall"))
+          .setShouldRegisterForTracing(true)
           .setRequestMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
               io.grpc.testing.integration.Test.StreamingOutputCallRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
@@ -61,6 +63,7 @@ public final class TestServiceGrpc {
           .setType(io.grpc.MethodDescriptor.MethodType.CLIENT_STREAMING)
           .setFullMethodName(generateFullMethodName(
               "grpc.testing.TestService", "StreamingInputCall"))
+          .setShouldRegisterForTracing(true)
           .setRequestMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
               io.grpc.testing.integration.Test.StreamingInputCallRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
@@ -73,6 +76,7 @@ public final class TestServiceGrpc {
           .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
           .setFullMethodName(generateFullMethodName(
               "grpc.testing.TestService", "FullBidiCall"))
+          .setShouldRegisterForTracing(true)
           .setRequestMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
               io.grpc.testing.integration.Test.StreamingOutputCallRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
@@ -85,6 +89,7 @@ public final class TestServiceGrpc {
           .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
           .setFullMethodName(generateFullMethodName(
               "grpc.testing.TestService", "HalfBidiCall"))
+          .setShouldRegisterForTracing(true)
           .setRequestMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
               io.grpc.testing.integration.Test.StreamingOutputCallRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(

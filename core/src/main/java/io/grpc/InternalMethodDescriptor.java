@@ -18,8 +18,10 @@ package io.grpc;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import io.grpc.Grpc.Side;
+
 /**
- * Accesses internal data.  Do not use this.
+ * Accesses internal data and methods.  Do not use this.
  */
 @Internal
 public final class InternalMethodDescriptor {
@@ -36,5 +38,9 @@ public final class InternalMethodDescriptor {
 
   public void setRawMethodName(MethodDescriptor<?, ?> md, Object o) {
     md.setRawMethodName(transport.ordinal(), o);
+  }
+
+  public static String generateTraceSpanName(Side side, String fullMethodName) {
+    return MethodDescriptor.generateTraceSpanName(side, fullMethodName);
   }
 }

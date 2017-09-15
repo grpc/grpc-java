@@ -19,7 +19,11 @@ package io.grpc;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Preconditions;
+import io.grpc.Grpc.Side;
+import io.opencensus.trace.Tracing;
+import io.opencensus.trace.export.SampledSpanStore;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
@@ -68,6 +72,27 @@ public final class MethodDescriptor<ReqT, RespT> {
    */
   final void setRawMethodName(int transportOrdinal, Object o) {
     rawMethodNames.lazySet(transportOrdinal, o);
+  }
+  
+  /**
+   * Convert a full method name to a tracing span name.
+   *
+   * @param side if the span is on the client-side or server-side
+   * @param fullMethodName the method name as returned by {@link #getFullMethodName}.
+   */
+  static String generateTraceSpanName(Side side, String fullMethodName) {
+    String prefix;
+    switch (side) {
+      case CLIENT:
+        prefix = "Sent";
+        break;
+      case SERVER:
+        prefix = "Recv";
+        break;
+      default:
+        throw new AssertionError("Unsupported side: " + side);
+    }
+    return prefix + "." + fullMethodName.replace('/', '.');
   }
 
   /**
@@ -443,6 +468,7 @@ public final class MethodDescriptor<ReqT, RespT> {
     private boolean idempotent;
     private boolean safe;
     private Object schemaDescriptor;
+    private boolean shouldRegisterForTracing;
 
     private Builder() {}
 
@@ -530,12 +556,32 @@ public final class MethodDescriptor<ReqT, RespT> {
     }
 
     /**
+     * Sets whether the new MethodDescriptor should be registered into the tracing system, so that
+     * RPCs on this method may be collected and stored.
+     *
+     * @since 1.7.0
+     */
+    public Builder<ReqT, RespT> setShouldRegisterForTracing(boolean value) {
+      this.shouldRegisterForTracing = value;
+      return this;
+    }
+
+    /**
      * Builds the method descriptor.
      *
      * @since 1.1.0
      */
     @CheckReturnValue
     public MethodDescriptor<ReqT, RespT> build() {
+      if (shouldRegisterForTracing) {
+        SampledSpanStore sampledStore = Tracing.getExportComponent().getSampledSpanStore();
+        if (sampledStore != null) {
+          ArrayList<String> spanNames = new ArrayList<String>(2);
+          spanNames.add(generateTraceSpanName(Side.CLIENT, fullMethodName));
+          spanNames.add(generateTraceSpanName(Side.SERVER, fullMethodName));
+          sampledStore.registerSpanNamesForCollection(spanNames);
+        }
+      }
       return new MethodDescriptor<ReqT, RespT>(
           type,
           fullMethodName,

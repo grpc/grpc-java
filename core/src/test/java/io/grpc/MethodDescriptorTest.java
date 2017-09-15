@@ -20,6 +20,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import io.grpc.Grpc.Side;
 import io.grpc.MethodDescriptor.MethodType;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -93,5 +94,13 @@ public class MethodDescriptorTest {
     MethodDescriptor<String, String> discard = descriptor.toBuilder().setSafe(true).build();
     // Never reached
     assert discard == null;
+  }
+
+  @Test
+  public void generateTraceSpanName() {
+    assertEquals(
+        "Sent.io.grpc.Foo", MethodDescriptor.generateTraceSpanName(Side.CLIENT, "io.grpc/Foo"));
+    assertEquals(
+        "Recv.io.grpc.Bar", MethodDescriptor.generateTraceSpanName(Side.SERVER, "io.grpc/Bar"));
   }
 }
