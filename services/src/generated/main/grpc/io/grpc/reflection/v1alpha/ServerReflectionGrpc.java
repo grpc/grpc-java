@@ -26,6 +26,13 @@ public final class ServerReflectionGrpc {
 
   public static final String SERVICE_NAME = "grpc.reflection.v1alpha.ServerReflection";
 
+  // Register methods for tracing.
+  static {
+    io.grpc.Grpc.registerSampledMethodsForTracing(new String[] {
+        generateFullMethodName(
+            "grpc.reflection.v1alpha.ServerReflection", "ServerReflectionInfo")});
+  }
+
   // Static method descriptors that strictly reflect the proto.
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.reflection.v1alpha.ServerReflectionRequest,

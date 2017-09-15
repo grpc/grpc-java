@@ -26,6 +26,21 @@ public final class MonitoringGrpc {
 
   public static final String SERVICE_NAME = "grpc.instrumentation.v1alpha.Monitoring";
 
+  // Register methods for tracing.
+  static {
+    io.grpc.Grpc.registerSampledMethodsForTracing(new String[] {
+        generateFullMethodName(
+            "grpc.instrumentation.v1alpha.Monitoring", "GetCanonicalRpcStats"),
+        generateFullMethodName(
+            "grpc.instrumentation.v1alpha.Monitoring", "GetStats"),
+        generateFullMethodName(
+            "grpc.instrumentation.v1alpha.Monitoring", "WatchStats"),
+        generateFullMethodName(
+            "grpc.instrumentation.v1alpha.Monitoring", "GetRequestTraces"),
+        generateFullMethodName(
+            "grpc.instrumentation.v1alpha.Monitoring", "GetCustomMonitoringData")});
+  }
+
   // Static method descriptors that strictly reflect the proto.
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<com.google.protobuf.Empty,

@@ -26,6 +26,13 @@ public final class ReflectableServiceGrpc {
 
   public static final String SERVICE_NAME = "grpc.reflection.testing.ReflectableService";
 
+  // Register methods for tracing.
+  static {
+    io.grpc.Grpc.registerSampledMethodsForTracing(new String[] {
+        generateFullMethodName(
+            "grpc.reflection.testing.ReflectableService", "Method")});
+  }
+
   // Static method descriptors that strictly reflect the proto.
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.reflection.testing.Request,

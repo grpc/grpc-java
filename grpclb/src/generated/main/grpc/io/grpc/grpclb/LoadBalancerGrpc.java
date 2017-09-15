@@ -26,6 +26,13 @@ public final class LoadBalancerGrpc {
 
   public static final String SERVICE_NAME = "grpc.lb.v1.LoadBalancer";
 
+  // Register methods for tracing.
+  static {
+    io.grpc.Grpc.registerSampledMethodsForTracing(new String[] {
+        generateFullMethodName(
+            "grpc.lb.v1.LoadBalancer", "BalanceLoad")});
+  }
+
   // Static method descriptors that strictly reflect the proto.
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.grpclb.LoadBalanceRequest,

@@ -298,6 +298,37 @@ void GrpcWriteMethodDocComment(Printer* printer,
   printer->Print(" */\n");
 }
 
+static void PrintSamplingRegistration(
+    const ServiceDescriptor* service, std::map<string, string>* vars,
+    Printer* p) {
+  p->Print("// Register methods for tracing.\n");
+  p->Print("static {\n");
+  p->Indent();
+  p->Print(
+      (*vars),
+      "$Grpc$.registerSampledMethodsForTracing(new String[] {\n");
+  p->Indent();
+  p->Indent();
+  (*vars)["service_name"] = service->name();
+  size_t method_count = service->method_count();
+  for (size_t i = 0; i < service->method_count(); ++i) {
+    const MethodDescriptor* method = service->method(i);
+    (*vars)["method_name"] = method->name();
+    p->Print(
+        (*vars),
+        "generateFullMethodName(\n"
+        "    \"$Package$$service_name$\", \"$method_name$\")");
+    if (i < method_count - 1) {
+      p->Print(",\n");
+    }
+  }
+  p->Outdent();
+  p->Outdent();
+  p->Print("});\n");
+  p->Outdent();
+  p->Print("}\n\n");
+}
+
 static void PrintMethodFields(
     const ServiceDescriptor* service, std::map<string, string>* vars,
     Printer* p, ProtoFlavor flavor) {
@@ -1086,6 +1117,7 @@ static void PrintService(const ServiceDescriptor* service,
       "public static final String SERVICE_NAME = "
       "\"$Package$$service_name$\";\n\n");
 
+  PrintSamplingRegistration(service, vars, p);
   PrintMethodFields(service, vars, p, flavor);
 
   // TODO(nmittler): Replace with WriteDocComment once included by protobuf distro.
@@ -1234,6 +1266,7 @@ void GenerateService(const ServiceDescriptor* service,
   vars["StreamObserver"] = "io.grpc.stub.StreamObserver";
   vars["Iterator"] = "java.util.Iterator";
   vars["Generated"] = "javax.annotation.Generated";
+  vars["Grpc"] = "io.grpc.Grpc";
   vars["ListenableFuture"] =
       "com.google.common.util.concurrent.ListenableFuture";
   vars["ExperimentalApi"] = "io.grpc.ExperimentalApi";

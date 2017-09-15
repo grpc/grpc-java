@@ -713,6 +713,7 @@ public class CensusModulesTest {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public void addAttributes(Map<String, AttributeValue> attributes) {}
 
     @Override
