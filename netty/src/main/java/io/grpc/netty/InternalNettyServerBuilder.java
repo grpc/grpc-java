@@ -17,7 +17,6 @@
 package io.grpc.netty;
 
 import io.grpc.Internal;
-import io.netty.channel.ChannelHandler;
 
 /**
  * Internal {@link InternalNettyServerBuilder} accessor.  This is intended for usage internal to
@@ -25,14 +24,6 @@ import io.netty.channel.ChannelHandler;
  */
 @Internal
 public final class InternalNettyServerBuilder {
-
-  /**
-   * Adds an initialization handler to the Netty child at Channel initialization time.  It must be
-   * annotated {@link ChannelHandler.Sharable}.
-   */
-  public static NettyServerBuilder initHandler(NettyServerBuilder nsb, ChannelHandler initHandler) {
-    return nsb.initHandler(initHandler);
-  }
 
   public static void setStatsEnabled(NettyServerBuilder builder, boolean value) {
     builder.setStatsEnabled(value);
