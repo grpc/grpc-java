@@ -267,7 +267,7 @@ public final class MethodDescriptor<ReqT, RespT> {
   }
 
   /**
-   * Convert a request message to an {@link InputStream}. When gRPC will close the InputStream
+   * Convert a request message to an {@link InputStream}. gRPC will close the InputStream
    * when it is done reading.
    *
    * @param requestMessage to serialize using the request {@link Marshaller}.
@@ -290,7 +290,7 @@ public final class MethodDescriptor<ReqT, RespT> {
   }
 
   /**
-   * Serialize an outgoing response message. When gRPC will close the InputStream
+   * Serialize an outgoing response message. gRPC will close the InputStream
    * when it is done reading.
    *
    * @param response the response message to serialize.
