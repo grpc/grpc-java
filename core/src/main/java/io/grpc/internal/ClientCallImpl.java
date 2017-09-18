@@ -44,6 +44,8 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
+import io.grpc.internal.RetryOrHedgingBuffer.StreamingReqBuffer;
+import io.grpc.internal.RetryOrHedgingBuffer.UnaryReqBuffer;
 import java.io.InputStream;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executor;
@@ -73,6 +75,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private boolean halfCloseCalled;
   private final ClientTransportProvider clientTransportProvider;
   private final CancellationListener cancellationListener = new ContextCancellationListener();
+  private final RetryOrHedgingBuffer<ReqT> retryBuffer;
   private ScheduledExecutorService deadlineCancellationExecutor;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
@@ -92,6 +95,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     this.context = Context.current();
     this.unaryRequest = method.getType() == MethodType.UNARY
         || method.getType() == MethodType.SERVER_STREAMING;
+    retryBuffer =
+        unaryRequest ? new UnaryReqBuffer<ReqT>(method) : new StreamingReqBuffer<ReqT>(method);
     this.callOptions = callOptions;
     this.clientTransportProvider = clientTransportProvider;
     this.deadlineCancellationExecutor = deadlineCancellationExecutor;
@@ -202,29 +207,12 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     if (!deadlineExceeded) {
       updateTimeoutHeaders(effectiveDeadline, callOptions.getDeadline(),
           context.getDeadline(), headers);
-      ClientTransport transport = clientTransportProvider.get(
-          new PickSubchannelArgsImpl(method, headers, callOptions));
-      Context origContext = context.attach();
-      try {
-        stream = transport.newStream(method, headers, callOptions);
-      } finally {
-        context.detach(origContext);
-      }
+      stream = new RetriableStream<ReqT>(
+          method, retryBuffer, compressor, decompressorRegistry, callOptions, headers,
+          clientTransportProvider, context);
     } else {
       stream = new FailingClientStream(DEADLINE_EXCEEDED);
     }
-
-    if (callOptions.getAuthority() != null) {
-      stream.setAuthority(callOptions.getAuthority());
-    }
-    if (callOptions.getMaxInboundMessageSize() != null) {
-      stream.setMaxInboundMessageSize(callOptions.getMaxInboundMessageSize());
-    }
-    if (callOptions.getMaxOutboundMessageSize() != null) {
-      stream.setMaxOutboundMessageSize(callOptions.getMaxOutboundMessageSize());
-    }
-    stream.setCompressor(compressor);
-    stream.setDecompressorRegistry(decompressorRegistry);
     stream.start(new ClientStreamListenerImpl(observer));
 
     // Delay any sources of cancellation after start(), because most of the transports are broken if
@@ -384,9 +372,16 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     checkState(!cancelCalled, "call was cancelled");
     checkState(!halfCloseCalled, "call was half-closed");
     try {
-      // TODO(notcarl): Find out if messageIs needs to be closed.
-      InputStream messageIs = method.streamRequest(message);
-      stream.writeMessage(messageIs);
+      // TODO: add the case for hedgingStream.
+      if (stream instanceof RetriableStream) {
+        @SuppressWarnings("unchecked")
+        RetriableStream<ReqT> retriableStream = ((RetriableStream<ReqT>) stream);
+        retriableStream.sendMessage(message);
+      } else {
+        // TODO(notcarl): Find out if messageIs needs to be closed.
+        InputStream messageIs = method.streamRequest(message);
+        stream.writeMessage(messageIs);
+      }
     } catch (Throwable e) {
       stream.cancel(Status.CANCELLED.withCause(e).withDescription("Failed to stream message"));
       return;
