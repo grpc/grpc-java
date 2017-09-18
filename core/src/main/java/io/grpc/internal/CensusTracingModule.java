@@ -302,7 +302,8 @@ final class CensusTracingModule {
     }
   }
 
-  private final class ServerTracerFactory extends ServerStreamTracer.Factory {
+  @VisibleForTesting
+  final class ServerTracerFactory extends ServerStreamTracer.Factory {
     @SuppressWarnings("ReferenceEquality")
     @Override
     public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
@@ -314,7 +315,8 @@ final class CensusTracingModule {
     }
   }
 
-  private class TracingClientInterceptor implements ClientInterceptor {
+  @VisibleForTesting
+  final class TracingClientInterceptor implements ClientInterceptor {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {

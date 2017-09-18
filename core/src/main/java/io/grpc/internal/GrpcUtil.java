@@ -101,6 +101,12 @@ public final class GrpcUtil {
           Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER);
 
   /**
+   * {@link io.grpc.Metadata.Key} for the Transfer encoding.
+   */
+  public static final Metadata.Key<String> TE_HEADER =
+      Metadata.Key.of("te", Metadata.ASCII_STRING_MARSHALLER);
+
+  /**
    * {@link io.grpc.Metadata.Key} for the Content-Type request/response header.
    */
   public static final Metadata.Key<String> USER_AGENT_KEY =
@@ -483,7 +489,9 @@ public final class GrpcUtil {
    */
   public static ThreadFactory getThreadFactory(String nameFormat, boolean daemon) {
     if (IS_RESTRICTED_APPENGINE) {
-      return MoreExecutors.platformThreadFactory();
+      @SuppressWarnings("BetaApi")
+      ThreadFactory factory = MoreExecutors.platformThreadFactory();
+      return factory;
     } else {
       return new ThreadFactoryBuilder()
           .setDaemon(daemon)
