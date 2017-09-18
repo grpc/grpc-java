@@ -19,7 +19,6 @@ package io.grpc;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Preconditions;
-import io.grpc.Grpc.Side;
 import io.opencensus.trace.Tracing;
 import io.opencensus.trace.export.SampledSpanStore;
 import java.io.InputStream;
@@ -77,21 +76,12 @@ public final class MethodDescriptor<ReqT, RespT> {
   /**
    * Convert a full method name to a tracing span name.
    *
-   * @param side if the span is on the client-side or server-side
+   * @param isServer {@code false} if the span is on the client-side, {@code true} if on the
+   *                 server-side
    * @param fullMethodName the method name as returned by {@link #getFullMethodName}.
    */
-  static String generateTraceSpanName(Side side, String fullMethodName) {
-    String prefix;
-    switch (side) {
-      case CLIENT:
-        prefix = "Sent";
-        break;
-      case SERVER:
-        prefix = "Recv";
-        break;
-      default:
-        throw new AssertionError("Unsupported side: " + side);
-    }
+  static String generateTraceSpanName(boolean isServer, String fullMethodName) {
+    String prefix = isServer ? "Recv" : "Sent";
     return prefix + "." + fullMethodName.replace('/', '.');
   }
 
@@ -468,7 +458,7 @@ public final class MethodDescriptor<ReqT, RespT> {
     private boolean idempotent;
     private boolean safe;
     private Object schemaDescriptor;
-    private boolean shouldRegisterForTracing;
+    private boolean registerForTracing;
 
     private Builder() {}
 
@@ -561,8 +551,8 @@ public final class MethodDescriptor<ReqT, RespT> {
      *
      * @since 1.7.0
      */
-    public Builder<ReqT, RespT> setShouldRegisterForTracing(boolean value) {
-      this.shouldRegisterForTracing = value;
+    public Builder<ReqT, RespT> setRegisterForTracing(boolean value) {
+      this.registerForTracing = value;
       return this;
     }
 
@@ -573,12 +563,12 @@ public final class MethodDescriptor<ReqT, RespT> {
      */
     @CheckReturnValue
     public MethodDescriptor<ReqT, RespT> build() {
-      if (shouldRegisterForTracing) {
+      if (registerForTracing) {
         SampledSpanStore sampledStore = Tracing.getExportComponent().getSampledSpanStore();
         if (sampledStore != null) {
           ArrayList<String> spanNames = new ArrayList<String>(2);
-          spanNames.add(generateTraceSpanName(Side.CLIENT, fullMethodName));
-          spanNames.add(generateTraceSpanName(Side.SERVER, fullMethodName));
+          spanNames.add(generateTraceSpanName(false, fullMethodName));
+          spanNames.add(generateTraceSpanName(true, fullMethodName));
           sampledStore.registerSpanNamesForCollection(spanNames);
         }
       }

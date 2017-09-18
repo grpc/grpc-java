@@ -40,11 +40,4 @@ public final class Grpc {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1710")
   public static final Attributes.Key<SSLSession> TRANSPORT_ATTR_SSL_SESSION =
           Attributes.Key.of("ssl-session");
-
-  //TODO(zhangkun83): create tracking issue
-  @ExperimentalApi
-  public enum Side {
-    CLIENT,
-    SERVER
-  }
 }

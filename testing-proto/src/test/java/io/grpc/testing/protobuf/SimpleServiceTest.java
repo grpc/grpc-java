@@ -24,7 +24,6 @@ import static io.grpc.MethodDescriptor.MethodType.UNARY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
-import io.grpc.Grpc.Side;
 import io.grpc.InternalMethodDescriptor;
 import io.grpc.MethodDescriptor;
 import io.opencensus.trace.Tracing;
@@ -73,9 +72,8 @@ public class SimpleServiceTest {
 
     ArrayList<String> expectedSpans = new ArrayList<String>();
     for (String methodName : methodNames) {
-      for (Side side : Side.values()) {
-        expectedSpans.add(InternalMethodDescriptor.generateTraceSpanName(side, methodName));
-      }
+      expectedSpans.add(InternalMethodDescriptor.generateTraceSpanName(false, methodName));
+      expectedSpans.add(InternalMethodDescriptor.generateTraceSpanName(true, methodName));
     }
 
     SampledSpanStore sampledStore = Tracing.getExportComponent().getSampledSpanStore();

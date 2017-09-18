@@ -28,7 +28,6 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
-import io.grpc.Grpc.Side;
 import io.grpc.InternalMethodDescriptor;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -191,7 +190,7 @@ final class CensusTracingModule {
       this.span =
           censusTracer
               .spanBuilderWithExplicitParent(
-                  InternalMethodDescriptor.generateTraceSpanName(Side.CLIENT, fullMethodName),
+                  InternalMethodDescriptor.generateTraceSpanName(false, fullMethodName),
                   parentSpan)
               .setRecordEvents(true)
               .startSpan();
@@ -227,7 +226,7 @@ final class CensusTracingModule {
       this.span =
           censusTracer
               .spanBuilderWithRemoteParent(
-                  InternalMethodDescriptor.generateTraceSpanName(Side.SERVER, fullMethodName),
+                  InternalMethodDescriptor.generateTraceSpanName(true, fullMethodName),
                   remoteSpan)
               .setRecordEvents(true)
               .startSpan();
