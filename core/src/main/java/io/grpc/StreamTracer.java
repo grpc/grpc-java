@@ -48,7 +48,8 @@ public abstract class StreamTracer {
    * about the message, but doesn't have further guarantee such as whether the message is serialized
    * or not.
    *
-   * @param seqNo the sequential number of the message within the stream, starting from 0
+   * @param seqNo the sequential number of the message within the stream, starting from 0.  It can
+   *              be used to correlate with {@link #outboundMessageSent} for the same message.
    */
   public void outboundMessage(int seqNo) {
   }
@@ -69,7 +70,8 @@ public abstract class StreamTracer {
    * about the message, but doesn't have further guarantee such as whether the message is
    * deserialized or not.
    *
-   * @param seqNo the sequential number of the message within the stream, starting from 0
+   * @param seqNo the sequential number of the message within the stream, starting from 0.  It can
+   *              be used to correlate with {@link #inboundMessageRead} for the same message.
    */
   public void inboundMessage(int seqNo) {
   }
@@ -77,7 +79,8 @@ public abstract class StreamTracer {
   /**
    * An outbound message has been serialized and sent to the transport.
    *
-   * @param seqNo the sequential number of the message within the stream, starting from 0
+   * @param seqNo the sequential number of the message within the stream, starting from 0.  It can
+   *              be used to correlate with {@link #outboundMessage(int)} for the same message.
    * @param optionalWireSize the wire size of the message. -1 if unknown
    * @param optionalUncompressedSize the uncompressed serialized size of the message. -1 if unknown
    */
@@ -87,7 +90,8 @@ public abstract class StreamTracer {
   /**
    * An inbound message has been fully read from the transport.
    *
-   * @param seqNo the sequential number of the message within the stream, starting from 0
+   * @param seqNo the sequential number of the message within the stream, starting from 0.  It can
+   *              be used to correlate with {@link #inboundMessage(int)} for the same message.
    * @param optionalWireSize the wire size of the message. -1 if unknown
    * @param optionalUncompressedSize the uncompressed serialized size of the message. -1 if unknown
    */
