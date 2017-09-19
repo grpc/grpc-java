@@ -194,11 +194,12 @@ class GzipInflatingBuffer implements Closeable {
 
   /**
    * Returns true when there is gzippedData that has not been input to the inflater or the inflater
-   * has not consumed all of its input.
+   * has not consumed all of its input, or all data has been consumed but we are at not at the
+   * boundary between gzip streams.
    */
   boolean hasPartialData() {
     checkState(!closed, "GzipInflatingBuffer is closed");
-    return gzipMetadataReader.readableBytes() != 0;
+    return gzipMetadataReader.readableBytes() != 0 || state != State.HEADER;
   }
 
   /**
@@ -207,10 +208,8 @@ class GzipInflatingBuffer implements Closeable {
    */
   void addGzippedBytes(ReadableBuffer buffer) {
     checkState(!closed, "GzipInflatingBuffer is closed");
-    if (buffer.readableBytes() > 0) {
-      isStalled = false;
-    }
     gzippedData.addBuffer(buffer);
+    isStalled = false;
   }
 
   @Override
@@ -246,7 +245,7 @@ class GzipInflatingBuffer implements Closeable {
   }
 
   /**
-   * Attempts to inflate {@code length} bytes of data into {@code bufferToWrite}.
+   * Attempts to inflate {@code length} bytes of data into {@code b}.
    *
    * <p>Any gzipped bytes consumed by this method will be added to the counter returned by {@link
    * #getAndResetBytesConsumed()}. This method may consume gzipped bytes without writing any data to
@@ -426,11 +425,7 @@ class GzipInflatingBuffer implements Closeable {
       if (inflater.finished()) {
         // Save bytes written to check against the trailer ISIZE
         expectedGzipTrailerIsize = (inflater.getBytesWritten() & 0xffffffffL);
-        if (gzipMetadataReader.readableBytes() <= GZIP_HEADER_MIN_SIZE + GZIP_TRAILER_SIZE) {
-          // We don't have enough bytes to begin inflating a concatenated gzip stream, drop context
-          inflater.end();
-          inflater = null;
-        }
+
         state = State.TRAILER;
       } else if (inflater.needsInput()) {
         state = State.INFLATER_NEEDS_INPUT;
@@ -447,19 +442,24 @@ class GzipInflatingBuffer implements Closeable {
     checkState(inflater != null, "inflater is null");
     checkState(inflaterInputStart == inflaterInputEnd, "inflaterInput has unconsumed bytes");
     int bytesToAdd = Math.min(gzippedData.readableBytes(), INFLATE_BUFFER_SIZE);
-    if (bytesToAdd > 0) {
-      inflaterInputStart = 0;
-      inflaterInputEnd = bytesToAdd;
-      gzippedData.readBytes(inflaterInput, inflaterInputStart, bytesToAdd);
-      inflater.setInput(inflaterInput, inflaterInputStart, bytesToAdd);
-      state = State.INFLATING;
-      return true;
-    } else {
+    if (bytesToAdd == 0) {
       return false;
     }
+    inflaterInputStart = 0;
+    inflaterInputEnd = bytesToAdd;
+    gzippedData.readBytes(inflaterInput, inflaterInputStart, bytesToAdd);
+    inflater.setInput(inflaterInput, inflaterInputStart, bytesToAdd);
+    state = State.INFLATING;
+    return true;
   }
 
   private boolean processTrailer() throws ZipException {
+    if (inflater != null
+        && gzipMetadataReader.readableBytes() <= GZIP_HEADER_MIN_SIZE + GZIP_TRAILER_SIZE) {
+      // We don't have enough bytes to begin inflating a concatenated gzip stream, drop context
+      inflater.end();
+      inflater = null;
+    }
     if (gzipMetadataReader.readableBytes() < GZIP_TRAILER_SIZE) {
       return false;
     }

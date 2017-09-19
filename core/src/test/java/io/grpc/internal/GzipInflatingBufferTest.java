@@ -319,6 +319,18 @@ public class GzipInflatingBufferTest {
   }
 
   @Test
+  public void hasPartialDataWithoutGzipTrailer() throws Exception {
+    assertFalse("no partial data expected", gzipInflatingBuffer.hasPartialData());
+    gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzipHeader));
+    gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(deflatedBytes));
+
+    byte[] b = new byte[originalData.length];
+    assertEquals(originalData.length, gzipInflatingBuffer.inflateBytes(b, 0, originalData.length));
+    assertTrue("inflated data does not match", Arrays.equals(originalData, b));
+    assertTrue("partial data expected", gzipInflatingBuffer.hasPartialData());
+  }
+
+  @Test
   public void inflatingCompleteGzipStreamConsumesTrailer() throws Exception {
     gzipInflatingBuffer.addGzippedBytes(ReadableBuffers.wrap(gzippedData));
 
