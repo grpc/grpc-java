@@ -30,6 +30,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.internal.ClientCallImpl.ClientCallAttributes;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
@@ -62,7 +63,7 @@ final class OobChannel extends ManagedChannel implements WithLogId {
 
   private final ClientTransportProvider transportProvider = new ClientTransportProvider() {
     @Override
-    public ClientTransport get(PickSubchannelArgs args) {
+    public ClientTransport get(ClientCallAttributes attrs) {
       // delayed transport's newStream() always acquires a lock, but concurrent performance doesn't
       // matter here because OOB communication should be sparse, and it's not on application RPC's
       // critical path.
