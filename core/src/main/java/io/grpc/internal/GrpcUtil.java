@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
@@ -628,6 +629,16 @@ public final class GrpcUtil {
     } catch (IOException ioException) {
       // do nothing
     }
+  }
+
+  /** Checks whether the given item exists in the iterable. */
+  static <T> boolean iterableContains(Iterable<T> iterable, T item) {
+    for (T i : iterable) {
+      if (Objects.equal(i, item)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private GrpcUtil() {}
