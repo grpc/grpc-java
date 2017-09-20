@@ -64,7 +64,7 @@ public abstract class AbstractForwardingTest<T> {
     for (Method method : delegateClass().getDeclaredMethods()) {
       if (Modifier.isStatic(method.getModifiers())
           || Modifier.isPrivate(method.getModifiers())
-          || ignoredMethods().contains(method)) {
+          || unforwardedMethods().contains(method)) {
         continue;
       }
       Class<?>[] argTypes = method.getParameterTypes();
