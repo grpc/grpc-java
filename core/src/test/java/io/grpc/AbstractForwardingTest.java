@@ -25,9 +25,11 @@ import com.google.common.base.Defaults;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.util.Collection;
+import java.util.Collections;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
 
 /**
  * An abstract base class for testing forwarding classes. This automatically checks that
@@ -35,7 +37,6 @@ import org.junit.runners.JUnit4;
  * delegate. This does NOT verify that arguments are forwarded properly. It only alerts
  * the developer if a forward method is missing.
  */
-@RunWith(JUnit4.class)
 public abstract class AbstractForwardingTest<T> {
   /**
    * Returns a mock object that can be used with {@code Mockito.verify()}.
@@ -48,12 +49,12 @@ public abstract class AbstractForwardingTest<T> {
   public abstract T forwarder();
 
   /**
-   * Returns the class of the object being forwarded. There is no easy way to find this
-   * reflectively from the value of {@link #mockDelegate()}.
-   * {@code mockDelegate().getClass().getSuperclass()} works at the moment but this would rely on
-   * mockito internals. It's easier to explicitly specify the class.
+   * Returns a collection of methods that are not expected to be forwarded. The test will skip
+   * these methods.
    */
-  public abstract Class<T> delegateClass();
+  public Collection<Method> unforwardedMethods() {
+    return Collections.emptySet();
+  }
 
   @Test
   public void methodsForwarded() throws Exception {
@@ -61,7 +62,9 @@ public abstract class AbstractForwardingTest<T> {
     assertFalse(mockingDetails(forwarder()).isMock());
 
     for (Method method : delegateClass().getDeclaredMethods()) {
-      if (Modifier.isStatic(method.getModifiers()) || Modifier.isPrivate(method.getModifiers())) {
+      if (Modifier.isStatic(method.getModifiers())
+          || Modifier.isPrivate(method.getModifiers())
+          || ignoredMethods().contains(method)) {
         continue;
       }
       Class<?>[] argTypes = method.getParameterTypes();
@@ -73,10 +76,29 @@ public abstract class AbstractForwardingTest<T> {
       try {
         method.invoke(verify(mockDelegate()), args);
       } catch (InvocationTargetException e) {
-        // Print the method name at the top to be more readable
-        throw new InvocationTargetException(
-            e, String.format("Method was not forwarded: %s", method));
+        throw new AssertionError(String.format("Method was not forwarded: %s", method));
       }
     }
+  }
+
+  /**
+   * Returns the class of the object being forwarded. There is no easy way to find this
+   * reflectively from the value of {@link #mockDelegate()}.
+   * {@code mockDelegate().getClass().getSuperclass()} works at the moment but this would rely on
+   * mockito internals. It's easier to detect it by reflection on the test class.
+   */
+  private Class<?> delegateClass() {
+    Type type = ((ParameterizedType) getClass().getGenericSuperclass()).getActualTypeArguments()[0];
+    if (type instanceof Class<?>) {
+      // The simple case, eg: AbstractForwardingTest<Foo> returns Foo
+      return (Class<?>) type;
+    } else if (type instanceof ParameterizedType) {
+      // The case where the type is also generic, eg: AbstractForwardingTest<Foo<T>> returns Foo
+      Type rawType = ((ParameterizedType) type).getRawType();
+      if (rawType instanceof Class) {
+        return (Class<?>) rawType;
+      }
+    }
+    throw new IllegalStateException("Failed to reflectively detect delegate class");
   }
 }

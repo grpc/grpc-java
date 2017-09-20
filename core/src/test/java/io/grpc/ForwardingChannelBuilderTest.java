@@ -46,14 +46,6 @@ public class ForwardingChannelBuilderTest extends AbstractForwardingTest<Managed
     return testChannelBuilder;
   }
 
-  @Override
-  public Class<ManagedChannelBuilder<?>> delegateClass() {
-    @SuppressWarnings("unchecked")
-    Class<ManagedChannelBuilder<?>> ret =
-        (Class<ManagedChannelBuilder<?>>) ((Object) ManagedChannelBuilder.class);
-    return ret;
-  }
-
   private final class TestBuilder extends ForwardingChannelBuilder<TestBuilder> {
     @Override
     protected ManagedChannelBuilder<?> delegate() {
@@ -63,7 +55,7 @@ public class ForwardingChannelBuilderTest extends AbstractForwardingTest<Managed
 
   @Test
   public void allBuilderMethodsReturnThis() throws Exception {
-    for (Method method : delegateClass().getDeclaredMethods()) {
+    for (Method method : ManagedChannel.class.getDeclaredMethods()) {
       if (Modifier.isStatic(method.getModifiers()) || Modifier.isPrivate(method.getModifiers())) {
         continue;
       }

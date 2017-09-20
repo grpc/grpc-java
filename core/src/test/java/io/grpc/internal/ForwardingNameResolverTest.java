@@ -52,11 +52,6 @@ public class ForwardingNameResolverTest extends AbstractForwardingTest<NameResol
     return forwarder;
   }
 
-  @Override
-  public Class<NameResolver> delegateClass() {
-    return NameResolver.class;
-  }
-
   @Test
   public void getServiceAuthority() {
     String auth = "example.com";

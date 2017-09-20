@@ -57,11 +57,6 @@ public class ForwardingReadableBufferTest extends AbstractForwardingTest<Readabl
     return buffer;
   }
 
-  @Override
-  public Class<ReadableBuffer> delegateClass() {
-    return ReadableBuffer.class;
-  }
-
   @Test
   public void readableBytes() {
     when(delegate.readableBytes()).thenReturn(1);

@@ -54,19 +54,12 @@ public class ForwardingServerCallListenerTest
     return forwarder;
   }
 
-  @Override
-  public Class<ServerCall.Listener<Integer>> delegateClass() {
-    @SuppressWarnings("unchecked")
-    Class<ServerCall.Listener<Integer>> ret =
-        (Class<ServerCall.Listener<Integer>>) ((Object) ServerCall.Listener.class);
-    return ret;
-  }
-
   @Test
   public void onMessage() {
-    forwarder.onMessage(1234);
+    Object o = new Object();
+    forwarder.onMessage(null);
 
-    verify(serverCallListener).onMessage(1234);
+    verify(serverCallListener).onMessage(null);
   }
 }
 
