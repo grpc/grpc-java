@@ -32,7 +32,8 @@ import org.junit.runners.JUnit4;
 /**
  * An abstract base class for testing forwarding classes. This automatically checks that
  * all public methods of the {@link #delegateClass()} are forwarded by the forwarder to the
- * delegate.
+ * delegate. This does NOT verify that arguments are forwarded properly. It only alerts
+ * the developer if a forward method is missing.
  */
 @RunWith(JUnit4.class)
 public abstract class AbstractForwardingTest<T> {

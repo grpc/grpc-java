@@ -16,13 +16,26 @@
 
 package io.grpc.internal;
 
+import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import io.grpc.AbstractForwardingTest;
+import io.grpc.Attributes;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
+import io.grpc.Status;
+import java.util.List;
+import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
+/**
+ * This class uses the AbstractForwardingTest to make sure all methods are forwarded, and then
+ * use specific test cases to make sure the values are forwarded as is. The abstract test uses
+ * nulls for args that don't have JLS default values.
+ */
 @RunWith(JUnit4.class)
 public class ForwardingNameResolverTest extends AbstractForwardingTest<NameResolver> {
   private final NameResolver delegate = mock(NameResolver.class);
@@ -42,5 +55,31 @@ public class ForwardingNameResolverTest extends AbstractForwardingTest<NameResol
   @Override
   public Class<NameResolver> delegateClass() {
     return NameResolver.class;
+  }
+
+  @Test
+  public void getServiceAuthority() {
+    String auth = "example.com";
+    when(delegate.getServiceAuthority()).thenReturn(auth);
+
+    assertEquals(auth, forwarder.getServiceAuthority());
+  }
+
+  @Test
+  public void start() {
+    NameResolver.Listener listener = new NameResolver.Listener() {
+      @Deprecated
+      @Override
+      public void onUpdate(List<io.grpc.ResolvedServerInfoGroup> servers, Attributes attributes) { }
+
+      @Override
+      public void onAddresses(List<EquivalentAddressGroup> servers, Attributes attributes) { }
+
+      @Override
+      public void onError(Status error) { }
+    };
+
+    forwarder.start(listener);
+    verify(delegate).start(listener);
   }
 }

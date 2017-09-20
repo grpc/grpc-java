@@ -16,42 +16,57 @@
 
 package io.grpc;
 
+import static org.mockito.Mockito.verify;
+
 import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener;
 import org.junit.Before;
+import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+/**
+ * This class uses the AbstractForwardingTest to make sure all methods are forwarded, and then
+ * use specific test cases to make sure the values are forwarded as is. The abstract test uses
+ * nulls for args that don't have JLS default values.
+ */
 @RunWith(JUnit4.class)
 public class ForwardingServerCallListenerTest
-    extends AbstractForwardingTest<ServerCall.Listener<Void>> {
+    extends AbstractForwardingTest<ServerCall.Listener<Integer>> {
 
-  @Mock private ServerCall.Listener<Void> serverCallListener;
-  private ForwardingServerCallListener<Void> forwarder;
+  @Mock private ServerCall.Listener<Integer> serverCallListener;
+  private ForwardingServerCallListener<Integer> forwarder;
 
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    forwarder = new SimpleForwardingServerCallListener<Void>(serverCallListener) {};
+    forwarder = new SimpleForwardingServerCallListener<Integer>(serverCallListener) {};
   }
 
   @Override
-  public ServerCall.Listener<Void> mockDelegate() {
+  public ServerCall.Listener<Integer> mockDelegate() {
     return serverCallListener;
   }
 
   @Override
-  public ServerCall.Listener<Void> forwarder() {
+  public ServerCall.Listener<Integer> forwarder() {
     return forwarder;
   }
 
   @Override
-  public Class<ServerCall.Listener<Void>> delegateClass() {
+  public Class<ServerCall.Listener<Integer>> delegateClass() {
     @SuppressWarnings("unchecked")
-    Class<ServerCall.Listener<Void>> ret =
-        (Class<ServerCall.Listener<Void>>) ((Object) ServerCall.Listener.class);
+    Class<ServerCall.Listener<Integer>> ret =
+        (Class<ServerCall.Listener<Integer>>) ((Object) ServerCall.Listener.class);
     return ret;
+  }
+
+  @Test
+  public void onMessage() {
+    forwarder.onMessage(1234);
+
+    verify(serverCallListener).onMessage(1234);
   }
 }
 
