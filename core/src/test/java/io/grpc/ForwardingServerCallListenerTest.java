@@ -16,18 +16,16 @@
 
 package io.grpc;
 
-import static org.mockito.Mockito.verify;
-
 import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener;
 import org.junit.Before;
-import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 @RunWith(JUnit4.class)
-public class ForwardingServerCallListenerTest {
+public class ForwardingServerCallListenerTest
+    extends AbstractForwardingTest<ServerCall.Listener<Void>> {
 
   @Mock private ServerCall.Listener<Void> serverCallListener;
   private ForwardingServerCallListener<Void> forwarder;
@@ -38,39 +36,22 @@ public class ForwardingServerCallListenerTest {
     forwarder = new SimpleForwardingServerCallListener<Void>(serverCallListener) {};
   }
 
-  @Test
-  public void onMessage() {
-    forwarder.onMessage(null);
-
-    verify(serverCallListener).onMessage(null);
+  @Override
+  public ServerCall.Listener<Void> mockDelegate() {
+    return serverCallListener;
   }
 
-  @Test
-  public void onHalfClose() {
-    forwarder.onHalfClose();
-
-    verify(serverCallListener).onHalfClose();
+  @Override
+  public ServerCall.Listener<Void> forwarder() {
+    return forwarder;
   }
 
-  @Test
-  public void onCancel() {
-    forwarder.onCancel();
-
-    verify(serverCallListener).onCancel();
-  }
-
-  @Test
-  public void onComplete() {
-    forwarder.onComplete();
-
-    verify(serverCallListener).onComplete();
-  }
-
-  @Test
-  public void onReady() {
-    forwarder.onReady();
-
-    verify(serverCallListener).onReady();
+  @Override
+  public Class<ServerCall.Listener<Void>> delegateClass() {
+    @SuppressWarnings("unchecked")
+    Class<ServerCall.Listener<Void>> ret =
+        (Class<ServerCall.Listener<Void>>) ((Object) ServerCall.Listener.class);
+    return ret;
   }
 }
 

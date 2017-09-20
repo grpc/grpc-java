@@ -19,7 +19,6 @@ package io.grpc;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 
 import com.google.common.base.Defaults;
 import java.lang.reflect.Method;
@@ -32,10 +31,28 @@ import org.junit.runners.JUnit4;
  * Unit tests for {@link ForwardingChannelBuilder}.
  */
 @RunWith(JUnit4.class)
-public class ForwardingChannelBuilderTest {
+public class ForwardingChannelBuilderTest extends AbstractForwardingTest<ManagedChannelBuilder<?>> {
   private final ManagedChannelBuilder<?> mockDelegate = mock(ManagedChannelBuilder.class);
 
   private final ForwardingChannelBuilder<?> testChannelBuilder = new TestBuilder();
+
+  @Override
+  public ManagedChannelBuilder<?> mockDelegate() {
+    return mockDelegate;
+  }
+
+  @Override
+  public ManagedChannelBuilder<?> forwarder() {
+    return testChannelBuilder;
+  }
+
+  @Override
+  public Class<ManagedChannelBuilder<?>> delegateClass() {
+    @SuppressWarnings("unchecked")
+    Class<ManagedChannelBuilder<?>> ret =
+        (Class<ManagedChannelBuilder<?>>) ((Object) ManagedChannelBuilder.class);
+    return ret;
+  }
 
   private final class TestBuilder extends ForwardingChannelBuilder<TestBuilder> {
     @Override
@@ -45,25 +62,8 @@ public class ForwardingChannelBuilderTest {
   }
 
   @Test
-  public void allBuilderMethodsForwarded() throws Exception {
-    for (Method method : ManagedChannelBuilder.class.getDeclaredMethods()) {
-      if (Modifier.isStatic(method.getModifiers()) || Modifier.isPrivate(method.getModifiers())) {
-        continue;
-      }
-      Class<?>[] argTypes = method.getParameterTypes();
-      Object[] args = new Object[argTypes.length];
-      for (int i = 0; i < argTypes.length; i++) {
-        args[i] = Defaults.defaultValue(argTypes[i]);
-      }
-
-      method.invoke(testChannelBuilder, args);
-      method.invoke(verify(mockDelegate), args);
-    }
-  }
-
-  @Test
   public void allBuilderMethodsReturnThis() throws Exception {
-    for (Method method : ManagedChannelBuilder.class.getDeclaredMethods()) {
+    for (Method method : delegateClass().getDeclaredMethods()) {
       if (Modifier.isStatic(method.getModifiers()) || Modifier.isPrivate(method.getModifiers())) {
         continue;
       }

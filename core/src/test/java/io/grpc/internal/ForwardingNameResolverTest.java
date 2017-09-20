@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2017, gRPC Authors All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,40 +16,31 @@
 
 package io.grpc.internal;
 
+import static org.mockito.Mockito.mock;
+
 import io.grpc.AbstractForwardingTest;
-import org.junit.Before;
+import io.grpc.NameResolver;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 
-/**
- * Tests for {@link ForwardingReadableBuffer}.
- */
 @RunWith(JUnit4.class)
-public class ForwardingReadableBufferTest extends AbstractForwardingTest<ReadableBuffer> {
-
-  @Mock private ReadableBuffer delegate;
-  private ForwardingReadableBuffer buffer;
-
-  @Before
-  public void setUp() {
-    MockitoAnnotations.initMocks(this);
-    buffer = new ForwardingReadableBuffer(delegate) {};
-  }
+public class ForwardingNameResolverTest extends AbstractForwardingTest<NameResolver> {
+  private final NameResolver delegate = mock(NameResolver.class);
+  private final NameResolver forwarder = new ForwardingNameResolver(delegate) {
+  };
 
   @Override
-  public ReadableBuffer mockDelegate() {
+  public NameResolver mockDelegate() {
     return delegate;
   }
 
   @Override
-  public ReadableBuffer forwarder() {
-    return buffer;
+  public NameResolver forwarder() {
+    return forwarder;
   }
 
   @Override
-  public Class<ReadableBuffer> delegateClass() {
-    return ReadableBuffer.class;
+  public Class<NameResolver> delegateClass() {
+    return NameResolver.class;
   }
 }
