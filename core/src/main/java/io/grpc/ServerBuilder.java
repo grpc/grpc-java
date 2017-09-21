@@ -17,6 +17,7 @@
 package io.grpc;
 
 import java.io.File;
+import java.io.InputStream;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
@@ -149,6 +150,18 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * @since 1.0.0
    */
   public abstract T useTransportSecurity(File certChain, File privateKey);
+
+  /**
+   * Makes the server use TLS.
+   *
+   * @param certChain InputStream containing the full certificate chain
+   * @param privateKey InputStream containing the private key
+   *
+   * @return this
+   * @throws UnsupportedOperationException if the server does not support TLS.
+   * @since 1.7.0
+   */
+  public abstract T useTransportSecurity(InputStream certChain, InputStream privateKey);
 
   /**
    * Set the decompression registry for use in the channel.  This is an advanced API call and

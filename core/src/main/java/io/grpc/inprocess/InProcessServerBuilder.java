@@ -22,6 +22,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.GrpcUtil;
 import java.io.File;
+import java.io.InputStream;
 import java.util.List;
 
 /**
@@ -92,6 +93,12 @@ public final class InProcessServerBuilder
 
   @Override
   public InProcessServerBuilder useTransportSecurity(File certChain, File privateKey) {
+    throw new UnsupportedOperationException("TLS not supported in InProcessServer");
+  }
+
+  @Override
+  public InProcessServerBuilder useTransportSecurity(
+      InputStream certChain, InputStream privateKey) {
     throw new UnsupportedOperationException("TLS not supported in InProcessServer");
   }
 }

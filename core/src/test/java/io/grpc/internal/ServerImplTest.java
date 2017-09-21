@@ -1248,6 +1248,11 @@ public class ServerImplTest {
     @Override public Builder useTransportSecurity(File f1, File f2)  {
       throw new UnsupportedOperationException();
     }
+
+    @Override
+    public Builder useTransportSecurity(InputStream certChain, InputStream privateKey) {
+      throw new UnsupportedOperationException("TLS not supported in InProcessServer");
+    }
   }
 
   /** Allows more precise catch blocks than plain Error to avoid catching AssertionError. */

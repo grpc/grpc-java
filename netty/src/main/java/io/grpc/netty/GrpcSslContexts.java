@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.ExperimentalApi;
+import io.grpc.internal.GrpcUtil;
 import io.netty.handler.codec.http2.Http2SecurityUtil;
 import io.netty.handler.ssl.ApplicationProtocolConfig;
 import io.netty.handler.ssl.ApplicationProtocolConfig.Protocol;
@@ -30,6 +31,7 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import java.io.File;
+import java.io.InputStream;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -107,12 +109,43 @@ public class GrpcSslContexts {
   /**
    * Creates a SslContextBuilder with ciphers and APN appropriate for gRPC.
    *
+   * @see SslContextBuilder#forServer(InputStream, InputStream)
+   * @see #configure(SslContextBuilder)
+   */
+  public static SslContextBuilder forServer(InputStream keyCertChain, InputStream key) {
+    try {
+      return configure(SslContextBuilder.forServer(keyCertChain, key));
+    } finally {
+      GrpcUtil.closeQuietly(keyCertChain);
+      GrpcUtil.closeQuietly(key);
+    }
+  }
+
+  /**
+   * Creates a SslContextBuilder with ciphers and APN appropriate for gRPC.
+   *
    * @see SslContextBuilder#forServer(File, File, String)
    * @see #configure(SslContextBuilder)
    */
   public static SslContextBuilder forServer(
       File keyCertChainFile, File keyFile, String keyPassword) {
     return configure(SslContextBuilder.forServer(keyCertChainFile, keyFile, keyPassword));
+  }
+
+  /**
+   * Creates a SslContextBuilder with ciphers and APN appropriate for gRPC.
+   *
+   * @see SslContextBuilder#forServer(InputStream, InputStream, String)
+   * @see #configure(SslContextBuilder)
+   */
+  public static SslContextBuilder forServer(
+      InputStream keyCertChain, InputStream key, String keyPassword) {
+    try {
+      return configure(SslContextBuilder.forServer(keyCertChain, key, keyPassword));
+    } finally {
+      GrpcUtil.closeQuietly(keyCertChain);
+      GrpcUtil.closeQuietly(key);
+    }
   }
 
   /**

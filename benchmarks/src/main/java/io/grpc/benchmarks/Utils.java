@@ -154,8 +154,8 @@ public final class Utils {
       builder.negotiationType(NegotiationType.TLS);
       SslContext sslContext = null;
       if (testca) {
-        File cert = TestUtils.loadCert("ca.pem");
-        SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient().trustManager(cert);
+        SslContextBuilder sslContextBuilder =
+            GrpcSslContexts.forClient().trustManager(TestUtils.loadCert("ca.pem"));
         if (transport == Transport.NETTY_NIO) {
           sslContextBuilder = GrpcSslContexts.configure(sslContextBuilder, SslProvider.JDK);
         } else {

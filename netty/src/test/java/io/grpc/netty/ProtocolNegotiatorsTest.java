@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import static com.google.common.base.Charsets.UTF_8;
+import static io.grpc.internal.testing.TestUtils.loadCert;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -49,7 +50,6 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import io.netty.handler.ssl.SupportedCipherSuiteFilter;
-import java.io.File;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.logging.Filter;
@@ -87,9 +87,7 @@ public class ProtocolNegotiatorsTest {
 
   @Before
   public void setUp() throws Exception {
-    File serverCert = TestUtils.loadCert("server1.pem");
-    File key = TestUtils.loadCert("server1.key");
-    sslContext = GrpcSslContexts.forServer(serverCert, key)
+    sslContext = GrpcSslContexts.forServer(loadCert("server1.pem"), loadCert("server1.key"))
         .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE).build();
     engine = SSLContext.getDefault().createSSLEngine();
   }
