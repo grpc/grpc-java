@@ -27,13 +27,10 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 /**
- * This class uses the AbstractForwardingTest to make sure all methods are forwarded, and then
- * use specific test cases to make sure the values are forwarded as is. The abstract test uses
- * nulls for args that don't have JLS default values.
+ * Unit tests for {@link ForwardingServerCallListener}.
  */
 @RunWith(JUnit4.class)
-public class ForwardingServerCallListenerTest
-    extends AbstractForwardingTest<ServerCall.Listener<Integer>> {
+public class ForwardingServerCallListenerTest {
 
   @Mock private ServerCall.Listener<Integer> serverCallListener;
   private ForwardingServerCallListener<Integer> forwarder;
@@ -44,22 +41,17 @@ public class ForwardingServerCallListenerTest
     forwarder = new SimpleForwardingServerCallListener<Integer>(serverCallListener) {};
   }
 
-  @Override
-  public ServerCall.Listener<Integer> mockDelegate() {
-    return serverCallListener;
-  }
-
-  @Override
-  public ServerCall.Listener<Integer> forwarder() {
-    return forwarder;
+  @Test
+  public void allMethodsForwarded() throws Exception {
+    ForwardingTestUtil.testAllMethodsForwarded(
+        ServerCall.Listener.class, serverCallListener, forwarder);
   }
 
   @Test
   public void onMessage() {
-    Object o = new Object();
-    forwarder.onMessage(null);
+    forwarder.onMessage(12345);
 
-    verify(serverCallListener).onMessage(null);
+    verify(serverCallListener).onMessage(12345);
   }
 }
 

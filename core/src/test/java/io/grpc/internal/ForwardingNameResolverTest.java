@@ -21,9 +21,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import io.grpc.AbstractForwardingTest;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.ForwardingTestUtil;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import java.util.List;
@@ -32,24 +32,17 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * This class uses the AbstractForwardingTest to make sure all methods are forwarded, and then
- * use specific test cases to make sure the values are forwarded as is. The abstract test uses
- * nulls for args that don't have JLS default values.
+ * Unit tests for {@link ForwardingNameResolver}.
  */
 @RunWith(JUnit4.class)
-public class ForwardingNameResolverTest extends AbstractForwardingTest<NameResolver> {
+public class ForwardingNameResolverTest {
   private final NameResolver delegate = mock(NameResolver.class);
   private final NameResolver forwarder = new ForwardingNameResolver(delegate) {
   };
 
-  @Override
-  public NameResolver mockDelegate() {
-    return delegate;
-  }
-
-  @Override
-  public NameResolver forwarder() {
-    return forwarder;
+  @Test
+  public void allMethodsForwarded() throws Exception {
+    ForwardingTestUtil.testAllMethodsForwarded(NameResolver.class, delegate, forwarder);
   }
 
   @Test

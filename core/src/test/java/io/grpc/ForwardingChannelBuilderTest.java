@@ -31,20 +31,10 @@ import org.junit.runners.JUnit4;
  * Unit tests for {@link ForwardingChannelBuilder}.
  */
 @RunWith(JUnit4.class)
-public class ForwardingChannelBuilderTest extends AbstractForwardingTest<ManagedChannelBuilder<?>> {
+public class ForwardingChannelBuilderTest {
   private final ManagedChannelBuilder<?> mockDelegate = mock(ManagedChannelBuilder.class);
 
   private final ForwardingChannelBuilder<?> testChannelBuilder = new TestBuilder();
-
-  @Override
-  public ManagedChannelBuilder<?> mockDelegate() {
-    return mockDelegate;
-  }
-
-  @Override
-  public ManagedChannelBuilder<?> forwarder() {
-    return testChannelBuilder;
-  }
 
   private final class TestBuilder extends ForwardingChannelBuilder<TestBuilder> {
     @Override
@@ -54,8 +44,14 @@ public class ForwardingChannelBuilderTest extends AbstractForwardingTest<Managed
   }
 
   @Test
+  public void allMethodsForwarded() throws Exception {
+    ForwardingTestUtil.testAllMethodsForwarded(
+        ManagedChannelBuilder.class, mockDelegate, testChannelBuilder);
+  }
+
+  @Test
   public void allBuilderMethodsReturnThis() throws Exception {
-    for (Method method : ManagedChannel.class.getDeclaredMethods()) {
+    for (Method method : ManagedChannelBuilder.class.getDeclaredMethods()) {
       if (Modifier.isStatic(method.getModifiers()) || Modifier.isPrivate(method.getModifiers())) {
         continue;
       }
