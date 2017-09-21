@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.ExperimentalApi;
-import io.grpc.internal.GrpcUtil;
 import io.netty.handler.codec.http2.Http2SecurityUtil;
 import io.netty.handler.ssl.ApplicationProtocolConfig;
 import io.netty.handler.ssl.ApplicationProtocolConfig.Protocol;
@@ -113,12 +112,7 @@ public class GrpcSslContexts {
    * @see #configure(SslContextBuilder)
    */
   public static SslContextBuilder forServer(InputStream keyCertChain, InputStream key) {
-    try {
-      return configure(SslContextBuilder.forServer(keyCertChain, key));
-    } finally {
-      GrpcUtil.closeQuietly(keyCertChain);
-      GrpcUtil.closeQuietly(key);
-    }
+    return configure(SslContextBuilder.forServer(keyCertChain, key));
   }
 
   /**
@@ -140,12 +134,7 @@ public class GrpcSslContexts {
    */
   public static SslContextBuilder forServer(
       InputStream keyCertChain, InputStream key, String keyPassword) {
-    try {
-      return configure(SslContextBuilder.forServer(keyCertChain, key, keyPassword));
-    } finally {
-      GrpcUtil.closeQuietly(keyCertChain);
-      GrpcUtil.closeQuietly(key);
-    }
+    return configure(SslContextBuilder.forServer(keyCertChain, key, keyPassword));
   }
 
   /**

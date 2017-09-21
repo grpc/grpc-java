@@ -624,7 +624,7 @@ public final class GrpcUtil {
   }
 
   /** Closes an InputStream, ignoring IOExceptions. */
-  public static void closeQuietly(InputStream message) {
+  static void closeQuietly(InputStream message) {
     try {
       message.close();
     } catch (IOException ioException) {

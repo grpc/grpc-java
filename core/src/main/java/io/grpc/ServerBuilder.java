@@ -161,7 +161,9 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * @throws UnsupportedOperationException if the server does not support TLS.
    * @since 1.7.0
    */
-  public abstract T useTransportSecurity(InputStream certChain, InputStream privateKey);
+  public T useTransportSecurity(InputStream certChain, InputStream privateKey) {
+    throw new UnsupportedOperationException();
+  }
 
   /**
    * Set the decompression registry for use in the channel.  This is an advanced API call and
