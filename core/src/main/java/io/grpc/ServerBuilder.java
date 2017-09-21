@@ -158,7 +158,8 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * @param privateKey InputStream containing the private key
    *
    * @return this
-   * @throws UnsupportedOperationException if the server does not support TLS.
+   * @throws UnsupportedOperationException if the server does not support TLS, or does not support
+   *         reading these files from an InputStream.
    * @since 1.7.0
    */
   public T useTransportSecurity(InputStream certChain, InputStream privateKey) {
