@@ -312,8 +312,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
         // than IDLE_MODE_DEFAULT_TIMEOUT_MILLIS (1 second).
         channelExecutor.executeLater(reportTransportNotInUse);
         if (shutdownStatus != null && reportTransportTerminated != null) {
-          channelExecutor.executeLater(reportTransportTerminated);
+          Runnable savedReportTransportTerminated = reportTransportTerminated;
           reportTransportTerminated = null;
+          channelExecutor.executeLater(savedReportTransportTerminated);
         } else {
           // Because delayed transport is long-lived, we take this opportunity to down-size the
           // hashmap.
@@ -359,8 +360,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
           if (pendingStreams.isEmpty() && justRemovedAnElement) {
             channelExecutor.executeLater(reportTransportNotInUse);
             if (shutdownStatus != null) {
-              channelExecutor.executeLater(reportTransportTerminated);
+              Runnable savedReportTransportTerminated = reportTransportTerminated;
               reportTransportTerminated = null;
+              channelExecutor.executeLater(savedReportTransportTerminated);
             }
           }
         }
