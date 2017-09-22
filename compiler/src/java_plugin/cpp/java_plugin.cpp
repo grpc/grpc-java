@@ -34,25 +34,27 @@ class JavaGrpcGenerator : public google::protobuf::compiler::CodeGenerator {
     std::vector<std::pair<string, string> > options;
     google::protobuf::compiler::ParseGeneratorParameter(parameter, &options);
 
-    java_grpc_generator::ProtoFlavor flavor =
-        java_grpc_generator::ProtoFlavor::NORMAL;
-
-    bool enable_deprecated = false;
-    bool disable_version = false;
+    java_grpc_generator::Options generatorOptions;
     for (size_t i = 0; i < options.size(); i++) {
       if (options[i].first == "nano") {
-        flavor = java_grpc_generator::ProtoFlavor::NANO;
+        generatorOptions.flavor = java_grpc_generator::ProtoFlavor::NANO;
       } else if (options[i].first == "lite") {
-        flavor = java_grpc_generator::ProtoFlavor::LITE;
+        generatorOptions.flavor = java_grpc_generator::ProtoFlavor::LITE;
       } else if (options[i].first == "enable_deprecated") {
-        enable_deprecated = options[i].second == "true";
+        generatorOptions.enable_deprecated = options[i].second == "true";
+        if (generatorOptions.enable_deprecated)
+          generatorOptions.enable_client_interfaces = true;
+      } else if (options[i].first == "enable_client_interface") {
+        generatorOptions.enable_client_interfaces = options[i].second == "true";
+      } else if (options[i].first == "java_version") {
+        generatorOptions.java_version = stoi(options[i].second);
       } else if (options[i].first == "noversion") {
-        disable_version = true;
+        generatorOptions.disable_version = true;
       }
     }
 
     string package_name = java_grpc_generator::ServiceJavaPackage(
-        file, flavor == java_grpc_generator::ProtoFlavor::NANO);
+        file, generatorOptions.flavor == java_grpc_generator::ProtoFlavor::NANO);
     string package_filename = JavaPackageToDir(package_name);
     for (int i = 0; i < file->service_count(); ++i) {
       const google::protobuf::ServiceDescriptor* service = file->service(i);
@@ -61,7 +63,7 @@ class JavaGrpcGenerator : public google::protobuf::compiler::CodeGenerator {
       std::unique_ptr<google::protobuf::io::ZeroCopyOutputStream> output(
           context->Open(filename));
       java_grpc_generator::GenerateService(
-          service, output.get(), flavor, enable_deprecated, disable_version);
+          service, output.get(), generatorOptions);
     }
     return true;
   }
