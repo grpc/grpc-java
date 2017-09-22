@@ -42,7 +42,8 @@ class JavaGrpcGenerator : public google::protobuf::compiler::CodeGenerator {
         generatorOptions.flavor = java_grpc_generator::ProtoFlavor::LITE;
       } else if (options[i].first == "enable_deprecated") {
         generatorOptions.enable_deprecated = options[i].second == "true";
-        generatorOptions.enable_client_interfaces = true;
+        if (generatorOptions.enable_deprecated)
+          generatorOptions.enable_client_interfaces = true;
       } else if (options[i].first == "enable_client_interface") {
         generatorOptions.enable_client_interfaces = options[i].second == "true";
       } else if (options[i].first == "java_version") {

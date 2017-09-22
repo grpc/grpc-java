@@ -548,11 +548,11 @@ static void PrintStub(
   } else {
     if (options.enable_client_interfaces) {
       if (interface) {
-    	if (options.enable_deprecated) {
+        if (options.enable_deprecated) {
           p->Print(
               *vars,
-	          "@$Deprecated$ ");
-    	}
+              "@$Deprecated$ ");
+        }
         p->Print(
             *vars,
            "public static interface $client_name$ {\n");
@@ -635,7 +635,7 @@ static void PrintStub(
     }
 
     if (interface && options.java_version >= JAVA_7) {
-    	p->Print("default ");
+        p->Print("default ");
     }
 
     p->Print("public ");
@@ -686,9 +686,9 @@ static void PrintStub(
     if (interface) {
       if (options.java_version >= JAVA_7) {
           p->Print(*vars,
-        		   "{\n"
-        		   "    throw new RuntimeException(\"Method $lower_method_name$ is unimplemented\");\n"
-        		   "}\n");
+                   "{\n"
+                   "    throw new RuntimeException(\"Method $lower_method_name$ is unimplemented\");\n"
+                   "}\n");
       } else {
         p->Print(";\n");
       }
@@ -799,7 +799,7 @@ static void PrintMethodHandlerClass(const ServiceDescriptor* service,
                                    std::map<string, string>* vars,
                                    Printer* p,
                                    bool generate_nano,
-								   Options& options) {
+                                   Options& options) {
   // Sort method ids based on client_streaming() so switch tables are compact.
   std::vector<const MethodDescriptor*> sorted_methods(service->method_count());
   for (int i = 0; i < service->method_count(); ++i) {
@@ -1072,8 +1072,8 @@ static void PrintBindServiceMethodBody(const ServiceDescriptor* service,
 static void PrintService(const ServiceDescriptor* service,
                          std::map<string, string>* vars,
                          Printer* p,
-						 Options& options
-						 ) {
+                         Options& options
+                         ) {
   (*vars)["service_name"] = service->name();
   (*vars)["file_name"] = service->file()->name();
   (*vars)["service_class_name"] = ServiceClassName(service);
@@ -1150,33 +1150,33 @@ static void PrintService(const ServiceDescriptor* service,
   PrintStub(service, vars, p, FUTURE_CLIENT_IMPL, generate_nano, options);
 
   if (options.enable_client_interfaces) {
-	if (options.enable_deprecated) {
+    if (options.enable_deprecated) {
       PrintDeprecatedDocComment(service, vars, p);
-	}
+    }
     PrintStub(service, vars, p, ASYNC_INTERFACE, generate_nano, options);
-	if (options.enable_deprecated) {
+    if (options.enable_deprecated) {
       PrintDeprecatedDocComment(service, vars, p);
-	}
+    }
     PrintStub(service, vars, p, BLOCKING_CLIENT_INTERFACE, generate_nano, options);
-	if (options.enable_deprecated) {
+    if (options.enable_deprecated) {
       PrintDeprecatedDocComment(service, vars, p);
-	}
+    }
     PrintStub(service, vars, p, FUTURE_CLIENT_INTERFACE, generate_nano, options);
 
-	if (options.enable_deprecated) {
+    if (options.enable_deprecated) {
       PrintDeprecatedDocComment(service, vars, p);
       p->Print(*vars, "@$Deprecated$ ");
-	}
+    }
     p->Print(
         *vars,
         "public static abstract class Abstract$service_name$"
         " extends $service_name$ImplBase {}\n\n");
 
     // static bindService method
-	if (options.enable_deprecated) {
+    if (options.enable_deprecated) {
       PrintDeprecatedDocComment(service, vars, p);
       p->Print(*vars, "@$Deprecated$ ");
-	}
+    }
     p->Print(
         *vars,
         "public static $ServerServiceDefinition$ bindService("
@@ -1230,8 +1230,8 @@ void PrintImports(Printer* p, bool generate_nano) {
 
 void GenerateService(const ServiceDescriptor* service,
                      google::protobuf::io::ZeroCopyOutputStream* out,
-					 Options& options
-					 ) {
+                     Options& options
+                     ) {
   // All non-generated classes must be referred by fully qualified names to
   // avoid collision with generated classes.
   std::map<string, string> vars;
@@ -1266,7 +1266,7 @@ void GenerateService(const ServiceDescriptor* service,
 
   Printer printer(out, '$');
   string package_name = ServiceJavaPackage(service->file(),
-		  options.flavor == ProtoFlavor::NANO);
+          options.flavor == ProtoFlavor::NANO);
   if (!package_name.empty()) {
     printer.Print(
         "package $package_name$;\n\n",
