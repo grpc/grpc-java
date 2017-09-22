@@ -39,6 +39,20 @@ enum ProtoFlavor {
   NORMAL, LITE, NANO
 };
 
+#define JAVA_6 6
+#define JAVA_7 7
+#define JAVA_8 8
+
+class Options {
+  public:
+    bool generate_nano = false;
+    bool enable_deprecated = false;
+    bool disable_version = false;
+    bool enable_client_interfaces = false;
+    int java_version = JAVA_6;
+    ProtoFlavor flavor = ProtoFlavor::NORMAL;
+};
+
 // Returns the package name of the gRPC services defined in the given file.
 string ServiceJavaPackage(const google::protobuf::FileDescriptor* file, bool nano);
 
@@ -49,9 +63,7 @@ string ServiceClassName(const google::protobuf::ServiceDescriptor* service);
 // Writes the generated service interface into the given ZeroCopyOutputStream
 void GenerateService(const google::protobuf::ServiceDescriptor* service,
                      google::protobuf::io::ZeroCopyOutputStream* out,
-                     ProtoFlavor flavor,
-                     bool enable_deprecated,
-                     bool disable_version);
+					 Options& options);
 
 }  // namespace java_grpc_generator
 

@@ -485,8 +485,7 @@ static void PrintDeprecatedDocComment(const ServiceDescriptor* service,
 static void PrintStub(
     const ServiceDescriptor* service,
     std::map<string, string>* vars,
-    Printer* p, StubType type, bool generate_nano,
-    bool enable_deprecated) {
+    Printer* p, StubType type, bool generate_nano, Options& options) {
   const string service_name = service->name();
   (*vars)["service_name"] = service_name;
   (*vars)["abstract_name"] = service_name + "ImplBase";
@@ -535,7 +534,7 @@ static void PrintStub(
     GrpcWriteServiceDocComment(p, service);
   }
   if (impl_base) {
-    if (enable_deprecated) {
+    if (options.enable_client_interfaces) {
       p->Print(
           *vars,
           "public static abstract class $abstract_name$ implements $BindableService$, "
@@ -547,11 +546,16 @@ static void PrintStub(
           "public static abstract class $abstract_name$ implements $BindableService$ {\n");
     }
   } else {
-    if (enable_deprecated) {
+    if (options.enable_client_interfaces) {
       if (interface) {
+    	if (options.enable_deprecated) {
+          p->Print(
+              *vars,
+	          "@$Deprecated$ ");
+    	}
         p->Print(
             *vars,
-            "@$Deprecated$ public static interface $client_name$ {\n");
+           "public static interface $client_name$ {\n");
       } else {
         p->Print(
             *vars,
@@ -623,12 +627,17 @@ static void PrintStub(
     // TODO(nmittler): Replace with WriteMethodDocComment once included by the protobuf distro.
     if (!interface) {
       GrpcWriteMethodDocComment(p, method);
-      if (enable_deprecated) {
+      if (options.enable_client_interfaces) {
         p->Print(
             *vars,
             "@$Override$\n");
       }
     }
+
+    if (interface && options.java_version >= JAVA_7) {
+    	p->Print("default ");
+    }
+
     p->Print("public ");
     switch (call_type) {
       case BLOCKING_CALL:
@@ -675,7 +684,14 @@ static void PrintStub(
     }
 
     if (interface) {
-      p->Print(";\n");
+      if (options.java_version >= JAVA_7) {
+          p->Print(*vars,
+        		   "{\n"
+        		   "    throw new RuntimeException(\"Method $lower_method_name$ is unimplemented\");\n"
+        		   "}\n");
+      } else {
+        p->Print(";\n");
+      }
       continue;
     }
     // Method body.
@@ -783,7 +799,7 @@ static void PrintMethodHandlerClass(const ServiceDescriptor* service,
                                    std::map<string, string>* vars,
                                    Printer* p,
                                    bool generate_nano,
-                                   bool enable_deprecated) {
+								   Options& options) {
   // Sort method ids based on client_streaming() so switch tables are compact.
   std::vector<const MethodDescriptor*> sorted_methods(service->method_count());
   for (int i = 0; i < service->method_count(); ++i) {
@@ -800,7 +816,7 @@ static void PrintMethodHandlerClass(const ServiceDescriptor* service,
         "private static final int $method_id_name$ = $method_id$;\n");
   }
   p->Print("\n");
-  if (enable_deprecated) {
+  if (options.enable_client_interfaces) {
     (*vars)["service_name"] = service->name();
   } else {
     (*vars)["service_name"] = service->name() + "ImplBase";
@@ -898,11 +914,11 @@ static void PrintMethodHandlerClass(const ServiceDescriptor* service,
 static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
                                    std::map<string, string>* vars,
                                    Printer* p,
-                                   ProtoFlavor flavor) {
+                                   Options& options) {
   (*vars)["service_name"] = service->name();
 
 
-  if (flavor == ProtoFlavor::NORMAL) {
+  if (options.flavor == ProtoFlavor::NORMAL) {
     (*vars)["proto_base_descriptor_supplier"] = service->name() + "BaseDescriptorSupplier";
     (*vars)["proto_file_descriptor_supplier"] = service->name() + "FileDescriptorSupplier";
     (*vars)["proto_method_descriptor_supplier"] = service->name() + "MethodDescriptorSupplier";
@@ -971,7 +987,7 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
       "serviceDescriptor = result = $ServiceDescriptor$.newBuilder(SERVICE_NAME)");
   p->Indent();
   p->Indent();
-  if (flavor == ProtoFlavor::NORMAL) {
+  if (options.flavor == ProtoFlavor::NORMAL) {
     p->Print(
         *vars,
         "\n.setSchemaDescriptor(new $proto_file_descriptor_supplier$())");
@@ -1056,15 +1072,14 @@ static void PrintBindServiceMethodBody(const ServiceDescriptor* service,
 static void PrintService(const ServiceDescriptor* service,
                          std::map<string, string>* vars,
                          Printer* p,
-                         ProtoFlavor flavor,
-                         bool enable_deprecated,
-                         bool disable_version) {
+						 Options& options
+						 ) {
   (*vars)["service_name"] = service->name();
   (*vars)["file_name"] = service->file()->name();
   (*vars)["service_class_name"] = ServiceClassName(service);
   (*vars)["grpc_version"] = "";
   #ifdef GRPC_VERSION
-  if (!disable_version) {
+  if (!options.disable_version) {
     (*vars)["grpc_version"] = " (version " XSTR(GRPC_VERSION) ")";
   }
   #endif
@@ -1086,7 +1101,7 @@ static void PrintService(const ServiceDescriptor* service,
       "public static final String SERVICE_NAME = "
       "\"$Package$$service_name$\";\n\n");
 
-  PrintMethodFields(service, vars, p, flavor);
+  PrintMethodFields(service, vars, p, options.flavor);
 
   // TODO(nmittler): Replace with WriteDocComment once included by protobuf distro.
   GrpcWriteDocComment(p, " Creates a new async stub that supports all call types for the service");
@@ -1128,31 +1143,43 @@ static void PrintService(const ServiceDescriptor* service,
   p->Outdent();
   p->Print("}\n\n");
 
-  bool generate_nano = flavor == ProtoFlavor::NANO;
-  PrintStub(service, vars, p, ABSTRACT_CLASS, generate_nano, enable_deprecated);
-  PrintStub(service, vars, p, ASYNC_CLIENT_IMPL, generate_nano, enable_deprecated);
-  PrintStub(service, vars, p, BLOCKING_CLIENT_IMPL, generate_nano, enable_deprecated);
-  PrintStub(service, vars, p, FUTURE_CLIENT_IMPL, generate_nano, enable_deprecated);
+  bool generate_nano = options.flavor == ProtoFlavor::NANO;
+  PrintStub(service, vars, p, ABSTRACT_CLASS, generate_nano, options);
+  PrintStub(service, vars, p, ASYNC_CLIENT_IMPL, generate_nano, options);
+  PrintStub(service, vars, p, BLOCKING_CLIENT_IMPL, generate_nano, options);
+  PrintStub(service, vars, p, FUTURE_CLIENT_IMPL, generate_nano, options);
 
-  if (enable_deprecated) {
-    PrintDeprecatedDocComment(service, vars, p);
-    PrintStub(service, vars, p, ASYNC_INTERFACE, generate_nano, true);
-    PrintDeprecatedDocComment(service, vars, p);
-    PrintStub(service, vars, p, BLOCKING_CLIENT_INTERFACE, generate_nano, true);
-    PrintDeprecatedDocComment(service, vars, p);
-    PrintStub(service, vars, p, FUTURE_CLIENT_INTERFACE, generate_nano, true);
+  if (options.enable_client_interfaces) {
+	if (options.enable_deprecated) {
+      PrintDeprecatedDocComment(service, vars, p);
+	}
+    PrintStub(service, vars, p, ASYNC_INTERFACE, generate_nano, options);
+	if (options.enable_deprecated) {
+      PrintDeprecatedDocComment(service, vars, p);
+	}
+    PrintStub(service, vars, p, BLOCKING_CLIENT_INTERFACE, generate_nano, options);
+	if (options.enable_deprecated) {
+      PrintDeprecatedDocComment(service, vars, p);
+	}
+    PrintStub(service, vars, p, FUTURE_CLIENT_INTERFACE, generate_nano, options);
 
-    PrintDeprecatedDocComment(service, vars, p);
+	if (options.enable_deprecated) {
+      PrintDeprecatedDocComment(service, vars, p);
+      p->Print(*vars, "@$Deprecated$ ");
+	}
     p->Print(
         *vars,
-        "@$Deprecated$ public static abstract class Abstract$service_name$"
+        "public static abstract class Abstract$service_name$"
         " extends $service_name$ImplBase {}\n\n");
 
     // static bindService method
-    PrintDeprecatedDocComment(service, vars, p);
+	if (options.enable_deprecated) {
+      PrintDeprecatedDocComment(service, vars, p);
+      p->Print(*vars, "@$Deprecated$ ");
+	}
     p->Print(
         *vars,
-        "@$Deprecated$ public static $ServerServiceDefinition$ bindService("
+        "public static $ServerServiceDefinition$ bindService("
         "final $service_name$ serviceImpl) {\n");
     (*vars)["instance"] = "serviceImpl";
     PrintBindServiceMethodBody(service, vars, p, generate_nano);
@@ -1160,8 +1187,8 @@ static void PrintService(const ServiceDescriptor* service,
         *vars,
         "}\n\n");
   }
-  PrintMethodHandlerClass(service, vars, p, generate_nano, enable_deprecated);
-  PrintGetServiceDescriptorMethod(service, vars, p, flavor);
+  PrintMethodHandlerClass(service, vars, p, generate_nano, options);
+  PrintGetServiceDescriptorMethod(service, vars, p, options);
   p->Outdent();
   p->Print("}\n");
 }
@@ -1203,9 +1230,8 @@ void PrintImports(Printer* p, bool generate_nano) {
 
 void GenerateService(const ServiceDescriptor* service,
                      google::protobuf::io::ZeroCopyOutputStream* out,
-                     ProtoFlavor flavor,
-                     bool enable_deprecated,
-                     bool disable_version) {
+					 Options& options
+					 ) {
   // All non-generated classes must be referred by fully qualified names to
   // avoid collision with generated classes.
   std::map<string, string> vars;
@@ -1240,20 +1266,20 @@ void GenerateService(const ServiceDescriptor* service,
 
   Printer printer(out, '$');
   string package_name = ServiceJavaPackage(service->file(),
-                                           flavor == ProtoFlavor::NANO);
+		  options.flavor == ProtoFlavor::NANO);
   if (!package_name.empty()) {
     printer.Print(
         "package $package_name$;\n\n",
         "package_name", package_name);
   }
-  PrintImports(&printer, flavor == ProtoFlavor::NANO);
+  PrintImports(&printer, options.flavor == ProtoFlavor::NANO);
 
   // Package string is used to fully qualify method names.
   vars["Package"] = service->file()->package();
   if (!vars["Package"].empty()) {
     vars["Package"].append(".");
   }
-  PrintService(service, &vars, &printer, flavor, enable_deprecated, disable_version);
+  PrintService(service, &vars, &printer, options);
 }
 
 string ServiceJavaPackage(const FileDescriptor* file, bool nano) {
