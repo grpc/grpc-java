@@ -376,6 +376,7 @@ class NettyServerHandler extends AbstractNettyHandler {
           }
         }
       }
+
       transportTracer.setRemoteFlowControlWindowPollable(
           new FlowControlPollable(connection.remote().flowController()));
       transportTracer.setLocalFlowControlWindowPollable(
