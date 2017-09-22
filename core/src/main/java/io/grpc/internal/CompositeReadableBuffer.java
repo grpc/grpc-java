@@ -33,7 +33,7 @@ import java.util.Queue;
 public class CompositeReadableBuffer extends AbstractReadableBuffer {
 
   private int readableBytes;
-  private final Queue<ReadableBuffer> buffers = new ArrayDeque<ReadableBuffer>();
+  private final Queue<ReadableBuffer> buffers = new ArrayDeque<ReadableBuffer>(2);
 
   /**
    * Adds a new {@link ReadableBuffer} at the end of the buffer list. After a buffer is added, it is
@@ -133,22 +133,36 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
     }
   }
 
-  @Override
-  public CompositeReadableBuffer readBytes(int length) {
+  /**
+   * Reads {@code length} bytes from this buffer and writes them to the destination buffer.
+   * Increments the read position by {@code length}. If the required bytes are not readable, throws
+   * {@link IndexOutOfBoundsException}.
+   *
+   * @param dest the destination buffer to receive the bytes.
+   * @param length the number of bytes to be copied.
+   * @throws IOException thrown if any error was encountered while writing to the stream.
+   * @throws IndexOutOfBoundsException if required bytes are not readable
+   */
+  public void readBytes(CompositeReadableBuffer dest, int length) {
     checkReadable(length);
     readableBytes -= length;
 
-    CompositeReadableBuffer newBuffer = new CompositeReadableBuffer();
     while (length > 0) {
       ReadableBuffer buffer = buffers.peek();
       if (buffer.readableBytes() > length) {
-        newBuffer.addBuffer(buffer.readBytes(length));
+        dest.addBuffer(buffer.readBytes(length));
         length = 0;
       } else {
-        newBuffer.addBuffer(buffers.poll());
+        dest.addBuffer(buffers.poll());
         length -= buffer.readableBytes();
       }
     }
+  }
+
+  @Override
+  public CompositeReadableBuffer readBytes(int length) {
+    CompositeReadableBuffer newBuffer = new CompositeReadableBuffer();
+    readBytes(newBuffer, length);
     return newBuffer;
   }
 
