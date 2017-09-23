@@ -61,7 +61,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLParameters;
 
 /**
  * Common {@link ProtocolNegotiator}s used by gRPC.
@@ -304,9 +303,7 @@ public final class ProtocolNegotiators {
         @Override
         public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
           SSLEngine sslEngine = sslContext.newEngine(ctx.alloc(), host, port);
-          SSLParameters sslParams = new SSLParameters();
-          sslParams.setEndpointIdentificationAlgorithm("HTTPS");
-          sslEngine.setSSLParameters(sslParams);
+          sslEngine.getSSLParameters().setEndpointIdentificationAlgorithm("HTTPS");
           ctx.pipeline().replace(this, null, new SslHandler(sslEngine, false));
         }
       };
@@ -374,6 +371,8 @@ public final class ProtocolNegotiators {
       builder.append("    Jetty ALPN");
     } else if (JettyTlsUtil.isJettyNpnConfigured()) {
       builder.append("    Jetty NPN");
+    } else if (JettyTlsUtil.isNettyJava9AlpnAvailable()) {
+      builder.append("    JDK9 ALPN");
     }
     builder.append("\n    TLS Protocol: ");
     builder.append(engine.getSession().getProtocol());
