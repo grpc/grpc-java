@@ -1430,6 +1430,17 @@ public class ManagedChannelImplTest {
 
   @Test
   public void orphanedChannelsAreLogged() throws Exception {
+    // This test relies on having a known number of orphaned channels, so first try to clean up any
+    // stray references from other test classes.
+    for (int retry = 0; retry < 3; retry++) {
+      System.gc();
+      System.runFinalization();
+      if (ManagedChannelReference.cleanQueue() == 0) {
+        break;
+      }
+      Thread.sleep(100L * (1L << retry));
+    }
+
     createChannel(
         new FakeNameResolverFactory(true),
         NO_INTERCEPTOR,
