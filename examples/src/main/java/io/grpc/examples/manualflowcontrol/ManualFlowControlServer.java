@@ -50,23 +50,26 @@ public class ManualFlowControlServer {
         // execution.
         final AtomicBoolean wasReady = new AtomicBoolean(false);
 
-        // Set up a back-pressure-aware producer for the request stream. The onReadyHandler will be invoked
+        // Set up a back-pressure-aware consumer for the request stream. The onReadyHandler will be invoked
         // when the consuming side has enough buffer space to receive more messages.
         //
-        // Note: the onReadyHandler is invoked by gRPC's message thread pool. You can't block here or deadlocks
-        // can occur.
+        // Note: the onReadyHandler's invocation is serialized on the same thread pool as the incoming StreamObserver's
+        // onNext(), onError(), and onComplete() handlers. Blocking the onReadyHandler will prevent additional messages
+        // from being processed by the incoming StreamObserver. The onReadyHandler must return in a timely manor or else
+        // message processing throughput will suffer.
         serverCallStreamObserver.setOnReadyHandler(new Runnable() {
-          @Override
           public void run() {
-            // Ensure the transport is ready and that a request(1) is still needed.
             if (serverCallStreamObserver.isReady() && wasReady.compareAndSet(false, true)) {
-              // Signal the request sender to send one message.
+              logger.info("READY");
+              // Signal the request sender to send one message. This happens when isReady() turns true, signaling that
+              // the receive buffer has enough free space to receive more messages. Calling request() serves to prime
+              // the message pump.
               serverCallStreamObserver.request(1);
             }
           }
         });
 
-        // Give gRPC a StreamObserver it can write incoming requests into.
+        // Give gRPC a StreamObserver that can observe and process incoming requests.
         return new StreamObserver<HelloRequest>() {
           @Override
           public void onNext(HelloRequest request) {
@@ -87,7 +90,13 @@ public class ManualFlowControlServer {
 
               // Check the provided ServerCallStreamObserver to see if it is still ready to accept more messages.
               if (serverCallStreamObserver.isReady()) {
-                // If so, signal the sender to send another request.
+                // Signal the sender to send another request. As long as isReady() stays true, the server will keep
+                // cycling through the loop of onNext() -> request()...onNext() -> request()... until either the client
+                // runs out of messages and ends the loop or the server runs out of receive buffer space.
+                //
+                // If the server runs out of buffer space, isReady() will turn false. When the receive buffer has
+                // sufficiently drained, isReady() will turn true, and the serverCallStreamObserver's onReadyHandler
+                // will be called to restart the message pump.
                 serverCallStreamObserver.request(1);
               } else {
                 // If not, note that back-pressure has begun.
