@@ -24,8 +24,6 @@ import io.grpc.internal.testing.AbstractTransportTest;
 import java.net.InetSocketAddress;
 import java.util.List;
 import org.junit.After;
-import org.junit.Ignore;
-import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -83,9 +81,4 @@ public class NettyTransportTest extends AbstractTransportTest {
   protected boolean metricsExpected() {
     return true;
   }
-
-  @Test
-  @Ignore("flaky")
-  @Override
-  public void flowControlPushBack() {}
 }

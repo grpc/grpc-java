@@ -16,19 +16,42 @@
 
 package io.grpc.internal.testing;
 
+import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.annotation.Nullable;
 
 /**
  * A {@link ServerStreamTracer} suitable for testing.
  */
 public class TestServerStreamTracer extends ServerStreamTracer implements TestStreamTracer {
   private final TestBaseStreamTracer delegate = new TestBaseStreamTracer();
+  protected final String fullMethodName;
+  protected final Metadata headers;
   protected final AtomicReference<ServerCall<?,?>> serverCall =
       new AtomicReference<ServerCall<?,?>>();
+
+  public TestServerStreamTracer() {
+    this(null, null);
+  }
+
+  public TestServerStreamTracer(@Nullable String fullMethodName, @Nullable Metadata headers) {
+    this.fullMethodName = fullMethodName;
+    this.headers = headers;
+  }
+
+  @Nullable
+  public String getFullMethodName() {
+    return fullMethodName;
+  }
+
+  @Nullable
+  public Metadata getHeaders() {
+    return headers;
+  }
 
   @Override
   public void await() throws InterruptedException {
