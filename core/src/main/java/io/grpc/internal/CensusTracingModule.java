@@ -73,13 +73,13 @@ final class CensusTracingModule {
         Metadata.Key.of("grpc-trace-bin", new Metadata.BinaryMarshaller<SpanContext>() {
             @Override
             public byte[] toBytes(SpanContext context) {
-              return censusPropagationBinaryFormat.toBinaryValue(context);
+              return censusPropagationBinaryFormat.toByteArray(context);
             }
 
             @Override
             public SpanContext parseBytes(byte[] serialized) {
               try {
-                return censusPropagationBinaryFormat.fromBinaryValue(serialized);
+                return censusPropagationBinaryFormat.fromByteArray(serialized);
               } catch (Exception e) {
                 logger.log(Level.FINE, "Failed to parse tracing header", e);
                 return SpanContext.INVALID;
