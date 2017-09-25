@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class TestClientStreamTracer extends ClientStreamTracer implements TestStreamTracer {
   private final TestBaseStreamTracer delegate = new TestBaseStreamTracer();
-  private final CountDownLatch outboundHeadersLatch = new CountDownLatch(1);
+  protected final CountDownLatch outboundHeadersLatch = new CountDownLatch(1);
   protected final AtomicBoolean outboundHeadersCalled = new AtomicBoolean();
   protected final AtomicBoolean inboundHeadersCalled = new AtomicBoolean();
 

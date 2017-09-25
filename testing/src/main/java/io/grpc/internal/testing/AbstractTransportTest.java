@@ -1517,7 +1517,6 @@ public abstract class AbstractTransportTest {
         fail("onReady invoked after closed");
       }
       onReadyLatch.countDown();
-      ;
     }
 
     @Override
@@ -1565,7 +1564,6 @@ public abstract class AbstractTransportTest {
         fail("onReady invoked after closed");
       }
       onReadyLatch.countDown();
-      ;
     }
 
     @Override
