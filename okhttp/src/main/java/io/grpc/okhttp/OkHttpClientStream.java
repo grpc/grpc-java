@@ -25,7 +25,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.AbstractClientStream;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2ClientStreamTransportState;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.WritableBuffer;
@@ -57,6 +56,8 @@ class OkHttpClientStream extends AbstractClientStream {
   private volatile int id = ABSENT_ID;
   private final TransportState state;
   private final Sink sink = new Sink();
+
+  private boolean useGet = false;
 
   OkHttpClientStream(
       MethodDescriptor<?, ?> method,
@@ -99,6 +100,14 @@ class OkHttpClientStream extends AbstractClientStream {
     return id;
   }
 
+  /**
+   * Returns whether the stream uses GET. This is not known until after {@link Sink#writeHeaders} is
+   * invoked.
+   */
+  boolean useGet() {
+    return useGet;
+  }
+
   @Override
   public void setAuthority(String authority) {
     this.authority = checkNotNull(authority, "authority");
@@ -114,9 +123,9 @@ class OkHttpClientStream extends AbstractClientStream {
     public void writeHeaders(Metadata metadata, byte[] payload) {
       String defaultPath = "/" + method.getFullMethodName();
       if (payload != null) {
+        useGet = true;
         defaultPath += "?" + BaseEncoding.base64().encode(payload);
       }
-      metadata.discardAll(GrpcUtil.USER_AGENT_KEY);
       synchronized (state.lock) {
         state.streamReady(metadata, defaultPath);
       }
@@ -200,7 +209,7 @@ class OkHttpClientStream extends AbstractClientStream {
 
       if (pendingData != null) {
         // Only happens when the stream has neither been started nor cancelled.
-        frameWriter.synStream(false, false, id, 0, requestHeaders);
+        frameWriter.synStream(useGet, false, id, 0, requestHeaders);
         statsTraceCtx.clientOutboundHeaders();
         requestHeaders = null;
 
@@ -346,8 +355,7 @@ class OkHttpClientStream extends AbstractClientStream {
 
     @GuardedBy("lock")
     private void streamReady(Metadata metadata, String path) {
-      requestHeaders =
-          Headers.createRequestHeaders(metadata, path, authority, userAgent);
+      requestHeaders = Headers.createRequestHeaders(metadata, path, authority, userAgent, useGet);
       transport.streamReadyToStart(OkHttpClientStream.this);
     }
   }

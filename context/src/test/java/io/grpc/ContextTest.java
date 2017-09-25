@@ -455,7 +455,7 @@ public class ContextTest {
     assertSame(current, observed);
     assertSame(current, Context.current());
 
-    final Error err = new Error();
+    final TestError err = new TestError();
     try {
       base.wrap(new Runnable() {
         @Override
@@ -464,7 +464,7 @@ public class ContextTest {
         }
       }).run();
       fail("Expected exception");
-    } catch (Error ex) {
+    } catch (TestError ex) {
       assertSame(err, ex);
     }
     assertSame(current, Context.current());
@@ -495,7 +495,7 @@ public class ContextTest {
     assertSame(current, observed);
     assertSame(current, Context.current());
 
-    final Error err = new Error();
+    final TestError err = new TestError();
     try {
       base.wrap(new Callable<Object>() {
         @Override
@@ -504,7 +504,7 @@ public class ContextTest {
         }
       }).call();
       fail("Excepted exception");
-    } catch (Error ex) {
+    } catch (TestError ex) {
       assertSame(err, ex);
     }
     assertSame(current, Context.current());
@@ -832,8 +832,7 @@ public class ContextTest {
 
   @Test
   public void storageReturnsNullTest() throws Exception {
-    Class<?> contextClass = Class.forName("io.grpc.Context");
-    Field storage = contextClass.getDeclaredField("storage");
+    Field storage = Context.class.getDeclaredField("storage");
     assertTrue(Modifier.isFinal(storage.getModifiers()));
     // use reflection to forcibly change the storage object to a test object
     storage.setAccessible(true);
@@ -922,6 +921,40 @@ public class ContextTest {
     assertNull(fork.cancellableAncestor);
   }
 
+  @Test
+  public void errorWhenAncestryLengthLong() {
+    final AtomicReference<LogRecord> logRef = new AtomicReference<LogRecord>();
+    Handler handler = new Handler() {
+      @Override
+      public void publish(LogRecord record) {
+        logRef.set(record);
+      }
+
+      @Override
+      public void flush() {
+      }
+
+      @Override
+      public void close() throws SecurityException {
+      }
+    };
+    Logger logger = Logger.getLogger(Context.class.getName());
+    try {
+      logger.addHandler(handler);
+      Context ctx = Context.current();
+      for (int i = 0; i < Context.CONTEXT_DEPTH_WARN_THRESH ; i++) {
+        assertNull(logRef.get());
+        ctx = ctx.fork();
+      }
+      ctx = ctx.fork();
+      assertNotNull(logRef.get());
+      assertNotNull(logRef.get().getThrown());
+      assertEquals(Level.SEVERE, logRef.get().getLevel());
+    } finally {
+      logger.removeHandler(handler);
+    }
+  }
+
   // UsedReflectively
   public static final class LoadMeWithStaticTestingClassLoader implements Runnable {
     @Override
@@ -953,4 +986,7 @@ public class ContextTest {
       }
     }
   }
+
+  /** Allows more precise catch blocks than plain Error to avoid catching AssertionError. */
+  private static final class TestError extends Error {}
 }

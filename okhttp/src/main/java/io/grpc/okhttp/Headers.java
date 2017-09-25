@@ -36,6 +36,7 @@ class Headers {
 
   public static final Header SCHEME_HEADER = new Header(Header.TARGET_SCHEME, "https");
   public static final Header METHOD_HEADER = new Header(Header.TARGET_METHOD, GrpcUtil.HTTP_METHOD);
+  public static final Header METHOD_GET_HEADER = new Header(Header.TARGET_METHOD, "GET");
   public static final Header CONTENT_TYPE_HEADER =
       new Header(CONTENT_TYPE_KEY.name(), GrpcUtil.CONTENT_TYPE_GRPC);
   public static final Header TE_HEADER = new Header("te", GrpcUtil.TE_TRAILERS);
@@ -45,18 +46,27 @@ class Headers {
    * creating a stream. Since this serializes the headers, this method should be called in the
    * application thread context.
    */
-  public static List<Header> createRequestHeaders(Metadata headers, String defaultPath,
-      String authority, String userAgent) {
+  public static List<Header> createRequestHeaders(
+      Metadata headers, String defaultPath, String authority, String userAgent, boolean useGet) {
     Preconditions.checkNotNull(headers, "headers");
     Preconditions.checkNotNull(defaultPath, "defaultPath");
     Preconditions.checkNotNull(authority, "authority");
+
+    // Discard any application supplied duplicates of the reserved headers
+    headers.discardAll(GrpcUtil.CONTENT_TYPE_KEY);
+    headers.discardAll(GrpcUtil.TE_HEADER);
+    headers.discardAll(GrpcUtil.USER_AGENT_KEY);
 
     // 7 is the number of explicit add calls below.
     List<Header> okhttpHeaders = new ArrayList<Header>(7 + InternalMetadata.headerCount(headers));
 
     // Set GRPC-specific headers.
     okhttpHeaders.add(SCHEME_HEADER);
-    okhttpHeaders.add(METHOD_HEADER);
+    if (useGet) {
+      okhttpHeaders.add(METHOD_GET_HEADER);
+    } else {
+      okhttpHeaders.add(METHOD_HEADER);
+    }
 
     okhttpHeaders.add(new Header(Header.TARGET_AUTHORITY, authority));
     String path = defaultPath;

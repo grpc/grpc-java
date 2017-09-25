@@ -4,9 +4,21 @@ dependencies {
     compile project(':grpc-context'),
             libraries.guava,
             libraries.errorprone,
-            libraries.jsr305,
-            libraries.instrumentation_api,
-            libraries.opencensus_api
+            libraries.jsr305
+    compile (libraries.instrumentation_api) {
+        // prefer 2.0.19 from libraries instead of 2.0.11
+        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+        // we'll always be more up-to-date
+        exclude group: 'io.grpc', module: 'grpc-context'
+    }
+    compile (libraries.opencensus_api) {
+        // prefer 3.0.0 from libraries instead of 3.0.1
+        exclude group: 'com.google.code.findbugs', module: 'jsr305'
+        // prefer 2.0.19 from libraries instead of 2.0.11
+        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+        // we'll always be more up-to-date
+        exclude group: 'io.grpc', module: 'grpc-context'
+    }
 
     testCompile project(':grpc-testing')
 

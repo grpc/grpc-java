@@ -161,12 +161,12 @@ final class CensusStatsModule {
     }
 
     @Override
-    public void inboundMessage() {
+    public void inboundMessage(int seqNo) {
       inboundMessageCount.incrementAndGet();
     }
 
     @Override
-    public void outboundMessage() {
+    public void outboundMessage(int seqNo) {
       outboundMessageCount.incrementAndGet();
     }
   }
@@ -282,12 +282,12 @@ final class CensusStatsModule {
     }
 
     @Override
-    public void inboundMessage() {
+    public void inboundMessage(int seqNo) {
       inboundMessageCount.incrementAndGet();
     }
 
     @Override
-    public void outboundMessage() {
+    public void outboundMessage(int seqNo) {
       outboundMessageCount.incrementAndGet();
     }
 
@@ -322,14 +322,12 @@ final class CensusStatsModule {
       }
       StatsContext ctx = firstNonNull(parentCtx, statsCtxFactory.getDefault());
       ctx
-          .with(
-              RpcConstants.RPC_SERVER_METHOD, TagValue.create(fullMethodName),
-              RpcConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
+          .with(RpcConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
           .record(builder.build());
     }
 
     @Override
-    public <ReqT, RespT> Context filterContext(Context context) {
+    public Context filterContext(Context context) {
       if (parentCtx != statsCtxFactory.getDefault()) {
         return context.withValue(STATS_CONTEXT_KEY, parentCtx);
       }
@@ -337,18 +335,21 @@ final class CensusStatsModule {
     }
   }
 
-  private final class ServerTracerFactory extends ServerStreamTracer.Factory {
+  @VisibleForTesting
+  final class ServerTracerFactory extends ServerStreamTracer.Factory {
     @Override
     public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
       StatsContext parentCtx = headers.get(statsHeader);
       if (parentCtx == null) {
         parentCtx = statsCtxFactory.getDefault();
       }
+      parentCtx = parentCtx.with(RpcConstants.RPC_SERVER_METHOD, TagValue.create(fullMethodName));
       return new ServerTracer(fullMethodName, parentCtx);
     }
   }
 
-  private class StatsClientInterceptor implements ClientInterceptor {
+  @VisibleForTesting
+  final class StatsClientInterceptor implements ClientInterceptor {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {

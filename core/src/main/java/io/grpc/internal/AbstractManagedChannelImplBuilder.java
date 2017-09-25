@@ -25,7 +25,6 @@ import com.google.instrumentation.stats.Stats;
 import com.google.instrumentation.stats.StatsContextFactory;
 import io.grpc.Attributes;
 import io.grpc.ClientInterceptor;
-import io.grpc.ClientStreamTracer;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
@@ -55,6 +54,14 @@ import javax.annotation.Nullable;
 public abstract class AbstractManagedChannelImplBuilder
         <T extends AbstractManagedChannelImplBuilder<T>> extends ManagedChannelBuilder<T> {
   private static final String DIRECT_ADDRESS_SCHEME = "directaddress";
+
+  public static ManagedChannelBuilder<?> forAddress(String name, int port) {
+    throw new UnsupportedOperationException("Subclass failed to hide static factory");
+  }
+
+  public static ManagedChannelBuilder<?> forTarget(String target) {
+    throw new UnsupportedOperationException("Subclass failed to hide static factory");
+  }
 
   /**
    * An idle timeout larger than this would disable idle mode.
@@ -111,6 +118,8 @@ public abstract class AbstractManagedChannelImplBuilder
 
   LoadBalancer.Factory loadBalancerFactory = DEFAULT_LOAD_BALANCER_FACTORY;
 
+  boolean fullStreamDecompression;
+
   DecompressorRegistry decompressorRegistry = DEFAULT_DECOMPRESSOR_REGISTRY;
 
   CompressorRegistry compressorRegistry = DEFAULT_COMPRESSOR_REGISTRY;
@@ -135,6 +144,9 @@ public abstract class AbstractManagedChannelImplBuilder
   protected final int maxInboundMessageSize() {
     return maxInboundMessageSize;
   }
+
+  private boolean statsEnabled = true;
+  private boolean tracingEnabled = true;
 
   @Nullable
   private StatsContextFactory statsFactory;
@@ -218,6 +230,12 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   @Override
+  public final T enableFullStreamDecompression() {
+    this.fullStreamDecompression = true;
+    return thisT();
+  }
+
+  @Override
   public final T decompressorRegistry(DecompressorRegistry registry) {
     if (registry != null) {
       this.decompressorRegistry = registry;
@@ -272,15 +290,17 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   /**
-   * Indicates whether this transport will record stats with {@link ClientStreamTracer}.
-   *
-   * <p>By default it returns {@code true}.  If the transport doesn't record stats, it may override
-   * this method to return {@code false} so that the builder won't install the Census interceptor.
-   *
-   * <p>If it returns true when it shouldn't be, Census will receive incomplete stats.
+   * Disable or enable stats features.  Enabled by default.
    */
-  protected boolean recordsStats() {
-    return true;
+  protected void setStatsEnabled(boolean value) {
+    statsEnabled = value;
+  }
+
+  /**
+   * Disable or enable tracing features.  Enabled by default.
+   */
+  protected void setTracingEnabled(boolean value) {
+    tracingEnabled = value;
   }
 
   @VisibleForTesting
@@ -309,10 +329,11 @@ public abstract class AbstractManagedChannelImplBuilder
         getEffectiveInterceptors());
   }
 
-  private List<ClientInterceptor> getEffectiveInterceptors() {
+  @VisibleForTesting
+  final List<ClientInterceptor> getEffectiveInterceptors() {
     List<ClientInterceptor> effectiveInterceptors =
         new ArrayList<ClientInterceptor>(this.interceptors);
-    if (recordsStats()) {
+    if (statsEnabled) {
       StatsContextFactory statsCtxFactory =
           this.statsFactory != null ? this.statsFactory : Stats.getStatsContextFactory();
       if (statsCtxFactory != null) {
@@ -323,10 +344,12 @@ public abstract class AbstractManagedChannelImplBuilder
         effectiveInterceptors.add(0, censusStats.getClientInterceptor());
       }
     }
-    CensusTracingModule censusTracing =
-        new CensusTracingModule(Tracing.getTracer(),
-            Tracing.getPropagationComponent().getBinaryFormat());
-    effectiveInterceptors.add(0, censusTracing.getClientInterceptor());
+    if (tracingEnabled) {
+      CensusTracingModule censusTracing =
+          new CensusTracingModule(Tracing.getTracer(),
+              Tracing.getPropagationComponent().getBinaryFormat());
+      effectiveInterceptors.add(0, censusTracing.getClientInterceptor());
+    }
     return effectiveInterceptors;
   }
 

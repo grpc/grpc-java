@@ -190,7 +190,7 @@ subprojects {
                 google_auth_credentials: 'com.google.auth:google-auth-library-credentials:0.4.0',
                 okhttp: 'com.squareup.okhttp:okhttp:2.5.0',
                 okio: 'com.squareup.okio:okio:1.6.0',
-                opencensus_api: 'io.opencensus:opencensus-api:0.5.1',
+                opencensus_api: 'io.opencensus:opencensus-api:0.6.0',
                 instrumentation_api: 'com.google.instrumentation:instrumentation-api:0.4.3',
                 protobuf: "com.google.protobuf:protobuf-java:${protobufVersion}",
                 protobuf_lite: "com.google.protobuf:protobuf-lite:3.0.1",
@@ -221,11 +221,20 @@ subprojects {
     // Define a separate configuration for managing the dependency on Jetty ALPN agent.
     configurations {
         alpnagent
+
+        compile {
+            // Detect Maven Enforcer's dependencyConvergence failures. We only
+            // care for artifacts used as libraries by others.
+            if (!(project.name in ['grpc-benchmarks', 'grpc-interop-testing'])) {
+                resolutionStrategy.failOnVersionConflict()
+            }
+        }
     }
 
     dependencies {
         testCompile libraries.junit,
-                    libraries.mockito
+                    libraries.mockito,
+                    libraries.truth
 
         // Configuration for modules that use Jetty ALPN agent
         alpnagent libraries.jetty_alpn_agent

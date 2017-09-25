@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
@@ -43,6 +44,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
+import java.util.Collection;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -82,6 +84,18 @@ public final class GrpcUtil {
   public static final Metadata.Key<byte[]> MESSAGE_ACCEPT_ENCODING_KEY =
       InternalMetadata.keyOf(GrpcUtil.MESSAGE_ACCEPT_ENCODING, new AcceptEncodingMarshaller());
 
+  /**
+   * {@link io.grpc.Metadata.Key} for the stream's content encoding header.
+   */
+  public static final Metadata.Key<String> CONTENT_ENCODING_KEY =
+      Metadata.Key.of(GrpcUtil.CONTENT_ENCODING, Metadata.ASCII_STRING_MARSHALLER);
+
+  /**
+   * {@link io.grpc.Metadata.Key} for the stream's accepted content encoding header.
+   */
+  public static final Metadata.Key<byte[]> CONTENT_ACCEPT_ENCODING_KEY =
+      InternalMetadata.keyOf(GrpcUtil.CONTENT_ACCEPT_ENCODING, new AcceptEncodingMarshaller());
+
   private static final class AcceptEncodingMarshaller implements TrustedAsciiMarshaller<byte[]> {
     @Override
     public byte[] toAsciiString(byte[] value) {
@@ -99,6 +113,12 @@ public final class GrpcUtil {
    */
   public static final Metadata.Key<String> CONTENT_TYPE_KEY =
           Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER);
+
+  /**
+   * {@link io.grpc.Metadata.Key} for the Transfer encoding.
+   */
+  public static final Metadata.Key<String> TE_HEADER =
+      Metadata.Key.of("te", Metadata.ASCII_STRING_MARSHALLER);
 
   /**
    * {@link io.grpc.Metadata.Key} for the Content-Type request/response header.
@@ -145,6 +165,16 @@ public final class GrpcUtil {
    * The accepted message encodings (i.e. compression) that can be used in the stream.
    */
   public static final String MESSAGE_ACCEPT_ENCODING = "grpc-accept-encoding";
+
+  /**
+   * The content-encoding used to compress the full gRPC stream.
+   */
+  public static final String CONTENT_ENCODING = "content-encoding";
+
+  /**
+   * The accepted content-encodings that can be used to compress the full gRPC stream.
+   */
+  public static final String CONTENT_ACCEPT_ENCODING = "accept-encoding";
 
   /**
    * The default maximum uncompressed size (in bytes) for inbound messages. Defaults to 4 MiB.
@@ -483,7 +513,9 @@ public final class GrpcUtil {
    */
   public static ThreadFactory getThreadFactory(String nameFormat, boolean daemon) {
     if (IS_RESTRICTED_APPENGINE) {
-      return MoreExecutors.platformThreadFactory();
+      @SuppressWarnings("BetaApi")
+      ThreadFactory factory = MoreExecutors.platformThreadFactory();
+      return factory;
     } else {
       return new ThreadFactoryBuilder()
           .setDaemon(daemon)
@@ -620,6 +652,30 @@ public final class GrpcUtil {
     } catch (IOException ioException) {
       // do nothing
     }
+  }
+
+  /**
+   * Checks whether the given item exists in the iterable.  This is copied from Guava Collect's
+   * {@code Iterables.contains()} because Guava Collect is not Android-friendly thus core can't
+   * depend on it.
+   */
+  static <T> boolean iterableContains(Iterable<T> iterable, T item) {
+    if (iterable instanceof Collection) {
+      Collection<?> collection = (Collection<?>) iterable;
+      try {
+        return collection.contains(item);
+      } catch (NullPointerException e) {
+        return false;
+      } catch (ClassCastException e) {
+        return false;
+      }
+    }
+    for (T i : iterable) {
+      if (Objects.equal(i, item)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private GrpcUtil() {}
