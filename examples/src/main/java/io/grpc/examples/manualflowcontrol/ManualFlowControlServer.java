@@ -26,6 +26,7 @@ import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
 public class ManualFlowControlServer {
@@ -42,8 +43,28 @@ public class ManualFlowControlServer {
         final ServerCallStreamObserver<HelloReply> serverCallStreamObserver =
             (ServerCallStreamObserver<HelloReply>) responseObserver;
         serverCallStreamObserver.disableAutoInboundFlowControl();
-        // Signal the request sender to send one message.
-        serverCallStreamObserver.request(1);
+
+        // Guard against spurious onReady() calls caused by a race between onNext() and onReady(). If the transport
+        // toggles isReady() from false to true while onNext() is executing, but before onNext() checks isReady(),
+        // request(1) would be called twice - once by onNext() and once by the onReady() scheduled during onNext()'s
+        // execution.
+        final AtomicBoolean wasReady = new AtomicBoolean(false);
+
+        // Set up a back-pressure-aware producer for the request stream. The onReadyHandler will be invoked
+        // when the consuming side has enough buffer space to receive more messages.
+        //
+        // Note: the onReadyHandler is invoked by gRPC's message thread pool. You can't block here or deadlocks
+        // can occur.
+        serverCallStreamObserver.setOnReadyHandler(new Runnable() {
+          @Override
+          public void run() {
+            // Ensure the transport is ready and that a request(1) is still needed.
+            if (serverCallStreamObserver.isReady() && wasReady.compareAndSet(false, true)) {
+              // Signal the request sender to send one message.
+              serverCallStreamObserver.request(1);
+            }
+          }
+        });
 
         // Give gRPC a StreamObserver it can write incoming requests into.
         return new StreamObserver<HelloRequest>() {
@@ -56,7 +77,7 @@ public class ManualFlowControlServer {
               logger.info("--> " + name);
 
               // Simulate server "work"
-              Thread.sleep(500);
+              Thread.sleep(100);
 
               // Send a response.
               String message = "Hello " + name;
@@ -64,9 +85,14 @@ public class ManualFlowControlServer {
               HelloReply reply = HelloReply.newBuilder().setMessage(message).build();
               responseObserver.onNext(reply);
 
-              // Signal the sender to send another request.
-              serverCallStreamObserver.request(1);
-
+              // Check the provided ServerCallStreamObserver to see if it is still ready to accept more messages.
+              if (serverCallStreamObserver.isReady()) {
+                // If so, signal the sender to send another request.
+                serverCallStreamObserver.request(1);
+              } else {
+                // If not, note that back-pressure has begun.
+                wasReady.set(false);
+              }
             } catch (Throwable throwable) {
               throwable.printStackTrace();
               responseObserver.onError(Status.UNKNOWN.withCause(throwable).asException());
@@ -106,6 +132,5 @@ public class ManualFlowControlServer {
       }
     });
     server.awaitTermination();
-//    pool.shutdown();
   }
 }
