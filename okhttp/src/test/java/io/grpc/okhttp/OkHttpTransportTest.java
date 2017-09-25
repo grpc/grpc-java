@@ -26,8 +26,6 @@ import io.grpc.netty.NettyServerBuilder;
 import java.net.InetSocketAddress;
 import java.util.List;
 import org.junit.After;
-import org.junit.Ignore;
-import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -83,10 +81,4 @@ public class OkHttpTransportTest extends AbstractTransportTest {
   protected boolean metricsExpected() {
     return true;
   }
-
-  // TODO(ejona): Flaky/Broken
-  @Test
-  @Ignore
-  @Override
-  public void flowControlPushBack() {}
 }
