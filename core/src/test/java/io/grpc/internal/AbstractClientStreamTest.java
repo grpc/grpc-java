@@ -16,8 +16,10 @@
 
 package io.grpc.internal;
 
+import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
@@ -25,6 +27,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import io.grpc.Attributes;
 import io.grpc.Codec;
@@ -183,7 +186,75 @@ public class AbstractClientStreamTest {
   }
 
   @Test
-  public void inboundHeadersReceived_acceptsGzipEncoding() {
+  public void inboundHeadersReceived_acceptsGzipContentEncoding() {
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
+    stream.start(mockListener);
+    Metadata headers = new Metadata();
+    headers.put(GrpcUtil.CONTENT_ENCODING_KEY, "gzip");
+
+    stream.setFullStreamDecompression(true);
+    stream.transportState().inboundHeadersReceived(headers);
+
+    verify(mockListener).headersRead(headers);
+  }
+
+  @Test
+  // https://tools.ietf.org/html/rfc7231#section-3.1.2.1
+  public void inboundHeadersReceived_contentEncodingIsCaseInsensitive() {
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
+    stream.start(mockListener);
+    Metadata headers = new Metadata();
+    headers.put(GrpcUtil.CONTENT_ENCODING_KEY, "gZIp");
+
+    stream.setFullStreamDecompression(true);
+    stream.transportState().inboundHeadersReceived(headers);
+
+    verify(mockListener).headersRead(headers);
+  }
+
+  @Test
+  public void inboundHeadersReceived_failsOnUnrecognizedContentEncoding() {
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
+    stream.start(mockListener);
+    Metadata headers = new Metadata();
+    headers.put(GrpcUtil.CONTENT_ENCODING_KEY, "not-a-real-compression-method");
+
+    stream.setFullStreamDecompression(true);
+    stream.transportState().inboundHeadersReceived(headers);
+
+    verifyNoMoreInteractions(mockListener);
+    Throwable t = ((BaseTransportState) stream.transportState()).getDeframeFailedCause();
+    assertEquals(Status.INTERNAL.getCode(), Status.fromThrowable(t).getCode());
+    assertTrue(
+        "unexpected deframe failed description",
+        Status.fromThrowable(t)
+            .getDescription()
+            .startsWith("Can't find full stream decompressor for"));
+  }
+
+  @Test
+  public void inboundHeadersReceived_disallowsContentAndMessageEncoding() {
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
+    stream.start(mockListener);
+    Metadata headers = new Metadata();
+    headers.put(GrpcUtil.CONTENT_ENCODING_KEY, "gzip");
+    headers.put(GrpcUtil.MESSAGE_ENCODING_KEY, new Codec.Gzip().getMessageEncoding());
+
+    stream.setFullStreamDecompression(true);
+    stream.transportState().inboundHeadersReceived(headers);
+
+    verifyNoMoreInteractions(mockListener);
+    Throwable t = ((BaseTransportState) stream.transportState()).getDeframeFailedCause();
+    assertEquals(Status.INTERNAL.getCode(), Status.fromThrowable(t).getCode());
+    assertTrue(
+        "unexpected deframe failed description",
+        Status.fromThrowable(t)
+            .getDescription()
+            .equals("Full stream and gRPC message encoding cannot both be set"));
+  }
+
+  @Test
+  public void inboundHeadersReceived_acceptsGzipMessageEncoding() {
     AbstractClientStream stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(mockListener);
     Metadata headers = new Metadata();
@@ -194,7 +265,7 @@ public class AbstractClientStreamTest {
   }
 
   @Test
-  public void inboundHeadersReceived_acceptsIdentityEncoding() {
+  public void inboundHeadersReceived_acceptsIdentityMessageEncoding() {
     AbstractClientStream stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
     stream.start(mockListener);
     Metadata headers = new Metadata();
@@ -202,6 +273,23 @@ public class AbstractClientStreamTest {
 
     stream.transportState().inboundHeadersReceived(headers);
     verify(mockListener).headersRead(headers);
+  }
+
+  @Test
+  public void inboundHeadersReceived_failsOnUnrecognizedMessageEncoding() {
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, statsTraceCtx);
+    stream.start(mockListener);
+    Metadata headers = new Metadata();
+    headers.put(GrpcUtil.MESSAGE_ENCODING_KEY, "not-a-real-compression-method");
+
+    stream.transportState().inboundHeadersReceived(headers);
+
+    verifyNoMoreInteractions(mockListener);
+    Throwable t = ((BaseTransportState) stream.transportState()).getDeframeFailedCause();
+    assertEquals(Status.INTERNAL.getCode(), Status.fromThrowable(t).getCode());
+    assertTrue(
+        "unexpected deframe failed description",
+        Status.fromThrowable(t).getDescription().startsWith("Can't find decompressor for"));
   }
 
   @Test
@@ -239,7 +327,11 @@ public class AbstractClientStreamTest {
     // GET requests don't have BODY.
     verify(sink, never())
         .writeFrame(any(WritableBuffer.class), any(Boolean.class), any(Boolean.class));
-    assertEquals(1, tracer.getOutboundMessageCount());
+    assertThat(tracer.nextOutboundEvent()).isEqualTo("outboundMessage(0)");
+    assertThat(tracer.nextOutboundEvent()).isEqualTo("outboundMessage()");
+    assertThat(tracer.nextOutboundEvent()).matches("outboundMessageSent\\(0, [0-9]+, [0-9]+\\)");
+    assertNull(tracer.nextOutboundEvent());
+    assertNull(tracer.nextInboundEvent());
     assertEquals(1, tracer.getOutboundWireSize());
     assertEquals(1, tracer.getOutboundUncompressedSize());
   }
@@ -308,12 +400,21 @@ public class AbstractClientStreamTest {
   }
 
   private static class BaseTransportState extends AbstractClientStream.TransportState {
+    private Throwable deframeFailedCause;
+
+    private Throwable getDeframeFailedCause() {
+      return deframeFailedCause;
+    }
+
     public BaseTransportState(StatsTraceContext statsTraceCtx) {
       super(DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx);
     }
 
     @Override
-    public void deframeFailed(Throwable cause) {}
+    public void deframeFailed(Throwable cause) {
+      assertNull("deframeFailed already called", deframeFailedCause);
+      deframeFailedCause = cause;
+    }
 
     @Override
     public void bytesRead(int processedBytes) {}
