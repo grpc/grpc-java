@@ -16,20 +16,44 @@
 
 package io.grpc.internal.testing;
 
+import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.annotation.Nullable;
 
 /**
  * A {@link ClientStreamTracer} suitable for testing.
  */
 public class TestClientStreamTracer extends ClientStreamTracer implements TestStreamTracer {
   private final TestBaseStreamTracer delegate = new TestBaseStreamTracer();
+  protected final CallOptions callOptions;
+  protected final Metadata headers;
   protected final CountDownLatch outboundHeadersLatch = new CountDownLatch(1);
   protected final AtomicBoolean outboundHeadersCalled = new AtomicBoolean();
   protected final AtomicBoolean inboundHeadersCalled = new AtomicBoolean();
+
+  public TestClientStreamTracer() {
+    this(null, null);
+  }
+
+  public TestClientStreamTracer(@Nullable CallOptions callOptions, @Nullable Metadata headers) {
+    this.callOptions = callOptions;
+    this.headers = headers;
+  }
+
+  @Nullable
+  public CallOptions getCallOptions() {
+    return callOptions;
+  }
+
+  @Nullable
+  public Metadata getHeaders() {
+    return headers;
+  }
 
   @Override
   public void await() throws InterruptedException {
