@@ -416,11 +416,13 @@ publicApiSubprojects.each { name ->
             onlyModified = true
             // This task should fail if there are incompatible changes
             failOnModification = true
+            ignoreMissingClasses = true
+
             // Also break on source incompatible changes, not just binary.
             // Eg adding abstract method to public class.
-            ignoreMissingClasses = true
             // TODO(zpencer): enable after japicmp-gradle-plugin/pull/14
             // breakOnSourceIncompatibility = true
+
             packageExcludes = ['io.grpc.internal']
             htmlOutputFile = file("$buildDir/reports/japi.html")
         }
