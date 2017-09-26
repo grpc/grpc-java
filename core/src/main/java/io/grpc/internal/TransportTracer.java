@@ -52,13 +52,13 @@ public final class TransportTracer {
     }
 
     @Override
-    public void outboundMessage() {
+    public void outboundMessage(int seqNo) {
       messagesSent.incrementAndGet();
       updateMsecTimestamp(lastMessageReceivedTimeMsec);
     }
 
     @Override
-    public void inboundMessage() {
+    public void inboundMessage(int seqNo) {
       messagesReceived.incrementAndGet();
       updateMsecTimestamp(lastMessageReceivedTimeMsec);
     }
