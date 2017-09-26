@@ -16,6 +16,7 @@
 
 package io.grpc;
 
+import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
@@ -657,8 +658,35 @@ public class Context {
    * cancelled and which will propagate cancellation to its descendants. To avoid leaking memory,
    * every CancellableContext must have a defined lifetime, after which it is guaranteed to be
    * cancelled.
+   *
+   * <p>This class must be cleaned up by either calling {@link #close} or {@link #cancel}.
+   * {@link #close} is equivalent to calling {@code cancel(null)}. It is safe to call the methods
+   * more than once, but only the first call will have any effect.
+   *
+   * <p>Blocking code can use the try-with-resources idiom:
+   * <pre>
+   * {@code
+   *
+   *   try (CancellableContext c = Context.current()
+   *       .withDeadlineAfter(100, TimeUnit.MILLISECONDS, executor)) {
+   *     Context toRestore = c.attach();
+   *     try {
+   *       // do some blocking work
+   *     } catch (SomeException e) {
+   *       // Optional: use the caught exception as the cancellation cause.
+   *       // Otherwise the try-with-resources will always call cancel(null) as a part of close().
+   *       c.cancel(e);
+   *     } finally {
+   *       c.detach(toRestore);
+   *     }
+   *   }
+   * }
+   * </pre>
+   *
+   * Asynchronous code will have to manually track the end of the CancellableContext's lifetime,
+   * and call either {@link #cancel} or {@link #close} at that time.
    */
-  public static final class CancellableContext extends Context {
+  public static final class CancellableContext extends Context implements Closeable {
 
     private final Deadline deadline;
     private final Context uncancellableSurrogate;
@@ -739,7 +767,8 @@ public class Context {
 
     /**
      * Cancel this context and optionally provide a cause (can be {@code null}) for the
-     * cancellation. This will trigger notification of listeners.
+     * cancellation. This will trigger notification of listeners. It is safe to call this method
+     * multiple times. Only the first call will have any effect.
      *
      * @return {@code true} if this context cancelled the context and notified listeners,
      *    {@code false} if the context was already cancelled.
@@ -810,6 +839,14 @@ public class Context {
     @Override
     boolean canBeCancelled() {
       return true;
+    }
+
+    /**
+     * Cleans up this object by calling {@code cancel(null)}.
+     */
+    @Override
+    public void close() {
+      cancel(null);
     }
   }
 
