@@ -192,7 +192,7 @@ applications to interact with it directly.
 ### Transport
 
 The Transport layer does the heavy lifting of putting and taking bytes off the
-wire. The interfaces to it are abstract just enough to allow plugging in of
+wire. The interfaces to it are abstracted just enough to allow plugging in of
 different implementations. Transports are modeled as `Stream` factories. The
 variation in interface between a server Stream and a client Stream exists to
 codify their differing semantics for cancellation and error reporting.
