@@ -368,7 +368,7 @@ subprojects {
 
 // Run with: ./gradlew japicmp --continue
 def baselineGrpcVersion = '1.6.1'
-List<String> publicApiSubprojects = [
+def publicApiSubprojects = [
         ":grpc-auth",
         ":grpc-context",
         ":grpc-core",
