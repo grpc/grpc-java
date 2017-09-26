@@ -209,7 +209,7 @@ def io_netty_codec_socks():
 def io_netty_codec_http():
   native.maven_jar(
       name = "io_netty_netty_codec_http",
-      artifact = "io.netty:netty-codec-http:4.1.14.Final",
+      artifact = "io.netty:netty-codec-http:4.1.16.Final",
       sha1 = "d64312378b438dfdad84267c599a053327c6f02a",
   )
 
