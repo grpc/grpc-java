@@ -369,17 +369,17 @@ subprojects {
 // Run with: ./gradlew japicmp --continue
 def baselineGrpcVersion = '1.6.1'
 def publicApiSubprojects = [
-        ":grpc-auth",
-        ":grpc-context",
-        ":grpc-core",
-        ":grpc-grpclb",
-        ":grpc-netty",
-        ":grpc-okhttp",
-        ":grpc-protobuf",
-        ":grpc-protobuf-lite",
-        ":grpc-protobuf-nano",
-        ":grpc-stub",
-        ":grpc-testing",
+        ':grpc-auth',
+        ':grpc-context',
+        ':grpc-core',
+        ':grpc-grpclb',
+        ':grpc-netty',
+        ':grpc-okhttp',
+        ':grpc-protobuf',
+        ':grpc-protobuf-lite',
+        ':grpc-protobuf-nano',
+        ':grpc-stub',
+        ':grpc-testing',
 ]
 
 publicApiSubprojects.each { name ->
