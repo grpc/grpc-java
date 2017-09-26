@@ -33,7 +33,7 @@ public class InProcessTransportTest extends AbstractTransportTest {
 
   @Override
   protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
-    return new InProcessServer(TRANSPORT_NAME, GrpcUtil.TIMER_SERVICE);
+    return new InProcessServer(TRANSPORT_NAME, GrpcUtil.TIMER_SERVICE, streamTracerFactories);
   }
 
   @Override
@@ -50,12 +50,5 @@ public class InProcessTransportTest extends AbstractTransportTest {
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     return new InProcessTransport(TRANSPORT_NAME, testAuthority(server));
-  }
-
-  @Override
-  protected boolean metricsExpected() {
-    // TODO(zhangkun83): InProcessTransport doesn't record metrics for now
-    // (https://github.com/grpc/grpc-java/issues/2284)
-    return false;
   }
 }

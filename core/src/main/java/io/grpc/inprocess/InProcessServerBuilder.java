@@ -84,10 +84,7 @@ public final class InProcessServerBuilder
   @Override
   protected InProcessServer buildTransportServer(
       List<ServerStreamTracer.Factory> streamTracerFactories) {
-    // TODO(zhangkun83): InProcessTransport by-passes framer and deframer, thus message sizses are
-    // not counted.  Therefore, we disable stats for now.
-    // (https://github.com/grpc/grpc-java/issues/2284)
-    return new InProcessServer(name, GrpcUtil.TIMER_SERVICE);
+    return new InProcessServer(name, GrpcUtil.TIMER_SERVICE, streamTracerFactories);
   }
 
   @Override

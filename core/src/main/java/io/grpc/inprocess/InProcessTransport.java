@@ -26,6 +26,7 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
@@ -75,6 +76,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   private Status shutdownStatus;
   @GuardedBy("this")
   private Set<InProcessStream> streams = new HashSet<InProcessStream>();
+  @GuardedBy("this")
+  private List<ServerStreamTracer.Factory> serverStreamTracerFactories;
 
   public InProcessTransport(String name, String authority) {
     this.name = name;
@@ -89,6 +92,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
     if (server != null) {
       serverSchedulerPool = server.getScheduledExecutorServicePool();
       serverScheduler = serverSchedulerPool.getObject();
+      serverStreamTracerFactories = server.getStreamTracerFactories();
       // Must be semi-initialized; past this point, can begin receiving requests
       serverTransportListener = server.register(this);
     }
@@ -232,8 +236,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   }
 
   private class InProcessStream {
-    private final InProcessServerStream serverStream = new InProcessServerStream();
-    private final InProcessClientStream clientStream = new InProcessClientStream();
+    private final InProcessClientStream clientStream;
+    private final InProcessServerStream serverStream;
     private final Metadata headers;
     private final MethodDescriptor<?, ?> method;
     private volatile String authority;
@@ -242,6 +246,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       this.method = checkNotNull(method, "method");
       this.headers = checkNotNull(headers, "headers");
       this.authority = authority;
+      this.clientStream = new InProcessClientStream(callOptions, headers);
+      this.serverStream = new InProcessServerStream(method, headers);
     }
 
     // Can be called multiple times due to races on both client and server closing at same time.
@@ -258,6 +264,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
     }
 
     private class InProcessServerStream implements ServerStream {
+      final StatsTraceContext statsTraceCtx;
       @GuardedBy("this")
       private ClientStreamListener clientStreamListener;
       @GuardedBy("this")
@@ -272,6 +279,13 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       // Only is intended to prevent double-close when client cancels.
       @GuardedBy("this")
       private boolean closed;
+      @GuardedBy("this")
+      private int outboundSeqNo;
+
+      InProcessServerStream(MethodDescriptor<?, ?> method, Metadata headers) {
+        statsTraceCtx = StatsTraceContext.newServerContext(
+            serverStreamTracerFactories, method.getFullMethodName(), headers);
+      }
 
       private synchronized void setListener(ClientStreamListener listener) {
         clientStreamListener = listener;
@@ -316,6 +330,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         }
         if (clientReceiveQueue.isEmpty() && clientNotifyStatus != null) {
           closed = true;
+          clientStream.statsTraceCtx.streamClosed(clientNotifyStatus);
           clientStreamListener.closed(clientNotifyStatus, clientNotifyTrailers);
         }
         boolean nowReady = clientRequested > 0;
@@ -331,6 +346,11 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         if (closed) {
           return;
         }
+        statsTraceCtx.outboundMessage(outboundSeqNo);
+        statsTraceCtx.outboundMessageSent(outboundSeqNo, -1, -1);
+        clientStream.statsTraceCtx.inboundMessage(outboundSeqNo);
+        clientStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
+        outboundSeqNo++;
         StreamListener.MessageProducer producer = new SingleMessageProducer(message);
         if (clientRequested > 0) {
           clientRequested--;
@@ -368,6 +388,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           }
           if (clientReceiveQueue.isEmpty()) {
             closed = true;
+            clientStream.statsTraceCtx.streamClosed(status);
             clientStreamListener.closed(status, trailers);
           } else {
             clientNotifyStatus = status;
@@ -404,6 +425,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
             }
           }
         }
+        clientStream.statsTraceCtx.streamClosed(status);
         clientStreamListener.closed(status, new Metadata());
         return true;
       }
@@ -430,14 +452,12 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       @Override
       public StatsTraceContext statsTraceContext() {
-        // TODO(zhangkun83): InProcessTransport by-passes framer and deframer, thus message sizses
-        // are not counted.  Therefore Stats is currently disabled.
-        // (https://github.com/grpc/grpc-java/issues/2284)
-        return StatsTraceContext.NOOP;
+        return statsTraceCtx;
       }
     }
 
     private class InProcessClientStream implements ClientStream {
+      final StatsTraceContext statsTraceCtx;
       @GuardedBy("this")
       private ServerStreamListener serverStreamListener;
       @GuardedBy("this")
@@ -450,6 +470,12 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       // Only is intended to prevent double-close when server closes.
       @GuardedBy("this")
       private boolean closed;
+      @GuardedBy("this")
+      private int outboundSeqNo;
+
+      InProcessClientStream(CallOptions callOptions, Metadata headers) {
+        statsTraceCtx = StatsTraceContext.newClientContext(callOptions, headers);
+      }
 
       private synchronized void setListener(ServerStreamListener listener) {
         this.serverStreamListener = listener;
@@ -500,6 +526,11 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         if (closed) {
           return;
         }
+        statsTraceCtx.outboundMessage(outboundSeqNo);
+        statsTraceCtx.outboundMessageSent(outboundSeqNo, -1, -1);
+        serverStream.statsTraceCtx.inboundMessage(outboundSeqNo);
+        serverStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
+        outboundSeqNo++;
         StreamListener.MessageProducer producer = new SingleMessageProducer(message);
         if (serverRequested > 0) {
           serverRequested--;
@@ -547,6 +578,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
             }
           }
         }
+        serverStream.statsTraceCtx.streamClosed(reason);
         serverStreamListener.closed(reason);
         return true;
       }
@@ -576,6 +608,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         serverStream.setListener(listener);
 
         synchronized (InProcessTransport.this) {
+          statsTraceCtx.clientOutboundHeaders();
           streams.add(InProcessTransport.InProcessStream.this);
           if (streams.size() == 1) {
             clientTransportListener.transportInUse(true);
