@@ -33,6 +33,7 @@ import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -784,34 +785,46 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   @Test
   public void transportTracer_windowSizeDefault() throws Exception {
     manualSetUp();
-    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, transportTracer.getRemoteFlowControlWindow());
-    assertEquals(flowControlWindow, transportTracer.getLocalFlowControlWindow());
+    TransportTracer.FlowControlWindows windows = transportTracer.getFlowControlWindows();
+    assertNotNull(windows);
+    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, windows.remoteBytes);
+    assertEquals(flowControlWindow, windows.localBytes);
   }
 
   @Test
   public void transportTracer_windowSize() throws Exception {
     flowControlWindow = 1048576; // 1MiB
     manualSetUp();
-    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, transportTracer.getRemoteFlowControlWindow());
-    assertEquals(flowControlWindow, transportTracer.getLocalFlowControlWindow());
+    {
+      TransportTracer.FlowControlWindows windows = transportTracer.getFlowControlWindows();
+      assertNotNull(windows);
+      assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, windows.remoteBytes);
+      assertEquals(flowControlWindow, windows.localBytes);
+    }
 
-    ByteBuf serializedSettings = windowUpdate(0, 1000);
-    channelRead(serializedSettings);
-    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE + 1000,
-        transportTracer.getRemoteFlowControlWindow());
-    assertEquals(flowControlWindow, transportTracer.getLocalFlowControlWindow());
+    {
+      ByteBuf serializedSettings = windowUpdate(0, 1000);
+      channelRead(serializedSettings);
+      TransportTracer.FlowControlWindows windows = transportTracer.getFlowControlWindows();
+      assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE + 1000,
+          windows.remoteBytes);
+      assertEquals(flowControlWindow, windows.localBytes);
+    }
   }
 
   @Test
   public void transportTracer_createStream() throws Exception {
     manualSetUp();
     assertEquals(0, transportTracer.getStreamsStarted());
-    assertEquals(0, transportTracer.getLastStreamCreatedTimeMsec());
+    assertEquals(0, transportTracer.getLastStreamCreatedTimeNanos());
 
     createStream();
     assertEquals(1, transportTracer.getStreamsStarted());
-    assertTrue(Math.abs(System.currentTimeMillis()
-        - transportTracer.getLastStreamCreatedTimeMsec()) < 500);
+    assertTrue(
+        Math.abs(
+            System.currentTimeMillis()
+                - TimeUnit.NANOSECONDS.toMillis(transportTracer.getLastStreamCreatedTimeNanos()))
+            < 500);
   }
 
   private void createStream() throws Exception {

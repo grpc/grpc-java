@@ -82,7 +82,7 @@ import io.netty.util.AsciiString;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.Promise;
 import java.util.List;
-import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -353,34 +353,41 @@ class NettyServerHandler extends AbstractNettyHandler {
       keepAliveManager.onTransportStarted();
     }
     if (transportTracer != null) {
-      class FlowControlPollable implements Callable<Integer> {
-        private final Http2FlowController controller;
-
-        private FlowControlPollable(Http2FlowController controller) {
-          this.controller = controller;
-        }
+      final class NettyFlowControlReader implements TransportTracer.FlowControlReader {
+        private final Http2FlowController local = connection.local().flowController();
+        private final Http2FlowController remote = connection.remote().flowController();
 
         @Override
-        public Integer call() throws Exception {
+        public TransportTracer.FlowControlWindows read() {
           if (ctx.executor().inEventLoop()) {
-            return controller.windowSize(connection.connectionStream());
+            return new TransportTracer.FlowControlWindows(
+                local.windowSize(connection.connectionStream()),
+                remote.windowSize(connection.connectionStream()));
           } else {
-            final Promise<Integer> promise = ctx.executor().newPromise();
+            final Promise<TransportTracer.FlowControlWindows> promise =
+                ctx.executor().newPromise();
             ctx.executor().submit(new Runnable() {
               @Override
               public void run() {
-                promise.setSuccess(controller.windowSize(connection.connectionStream()));
+                TransportTracer.FlowControlWindows result =
+                    new TransportTracer.FlowControlWindows(
+                        local.windowSize(connection.connectionStream()),
+                        remote.windowSize(connection.connectionStream()));
+                promise.setSuccess(result);
               }
             });
-            return promise.get();
+            try {
+              return promise.get();
+            } catch (InterruptedException e) {
+              throw new RuntimeException(e);
+            } catch (ExecutionException e) {
+              throw new RuntimeException(e);
+            }
           }
         }
       }
 
-      transportTracer.setRemoteFlowControlWindowPollable(
-          new FlowControlPollable(connection.remote().flowController()));
-      transportTracer.setLocalFlowControlWindowPollable(
-          new FlowControlPollable(connection.local().flowController()));
+      transportTracer.setFlowControlWindowReader(new NettyFlowControlReader());
     }
     super.handlerAdded(ctx);
   }

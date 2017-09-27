@@ -16,48 +16,68 @@
 
 package io.grpc.internal;
 
+import com.google.common.base.Preconditions;
 import io.grpc.Status;
 import io.grpc.StreamTracer;
-import java.util.concurrent.Callable;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
+import javax.annotation.Nullable;
 
 /**
  * A class for gathering statistics about a transport. This is an experimental feature.
  */
 public final class TransportTracer {
+  private static final AtomicLongFieldUpdater<TransportTracer> STREAMS_SUCCEEDED_UPDATER =
+      AtomicLongFieldUpdater.newUpdater(TransportTracer.class, "streamsSucceeded");
+  private static final AtomicLongFieldUpdater<TransportTracer> STREAMS_FAILED_UPDATER =
+      AtomicLongFieldUpdater.newUpdater(TransportTracer.class, "streamsFailed");
+  private static final AtomicLongFieldUpdater<TransportTracer> MESSAGES_SENT_UPDATER =
+      AtomicLongFieldUpdater.newUpdater(TransportTracer.class, "messagesSent");
+  private static final AtomicLongFieldUpdater<TransportTracer> MESSAGES_RECEIVED_UPDATER =
+      AtomicLongFieldUpdater.newUpdater(TransportTracer.class, "messagesReceived");
+  private static final AtomicLongFieldUpdater<TransportTracer> KEEPALIVES_SENT_UPDATER =
+      AtomicLongFieldUpdater.newUpdater(TransportTracer.class, "keepAlivesSent");
+  private static final AtomicLongFieldUpdater<TransportTracer> LAST_MESSAGE_SENT_TIME_UPDATER =
+      AtomicLongFieldUpdater.newUpdater(TransportTracer.class, "lastMessageSentTimeNnaos");
+  private static final AtomicLongFieldUpdater<TransportTracer> LAST_MESSAGE_RECEIVED_TIME_UPDATER =
+      AtomicLongFieldUpdater.newUpdater(TransportTracer.class, "lastMessageReceivedTimeNanos");
+
   // streamsStarted happens serially, so a volatile is sufficient
   private volatile long streamsStarted;
-  private long lastStreamCreatedTimeMsec;
-  private final AtomicLong streamsSucceeded = new AtomicLong();
-  private final AtomicLong streamsFailed = new AtomicLong();
-  private final AtomicLong messagesSent = new AtomicLong();
-  private final AtomicLong messagesReceived = new AtomicLong();
-  private final AtomicLong keepAlivesSent = new AtomicLong();
-  private final AtomicLong lastMessageSentTimeMsec = new AtomicLong();
-  private final AtomicLong lastMessageReceivedTimeMsec = new AtomicLong();
-  private volatile Callable<Integer> localFlowControlPollable;
-  private volatile Callable<Integer> remoteFlowControlPollable;
+  // Maintain a separate unsynchronized counter to avoid reading from the volatile
+  private long streamsStartedInternal;
+
+  private volatile long lastStreamCreatedTimeNanos;
+  private volatile long streamsSucceeded;
+  private volatile long streamsFailed;
+  private volatile long messagesSent;
+  private volatile long messagesReceived;
+  private volatile long keepAlivesSent;
+  private volatile long lastMessageSentTimeNnaos;
+  private volatile long lastMessageReceivedTimeNanos;
+  // Default implementation just returns nulls
+  private volatile FlowControlReader flowControlWindowReader;
 
   private final StreamTracer streamTracer = new StreamTracer() {
     @Override
     public void streamClosed(Status status) {
       if (status.isOk()) {
-        streamsSucceeded.incrementAndGet();
+        STREAMS_SUCCEEDED_UPDATER.getAndIncrement(TransportTracer.this);
       } else {
-        streamsFailed.incrementAndGet();
+        STREAMS_FAILED_UPDATER.getAndIncrement(TransportTracer.this);
       }
     }
 
     @Override
     public void outboundMessage(int seqNo) {
-      messagesSent.incrementAndGet();
-      updateMsecTimestamp(lastMessageSentTimeMsec);
+      MESSAGES_SENT_UPDATER.getAndIncrement(TransportTracer.this);
+      updateNanoTimestamp(LAST_MESSAGE_SENT_TIME_UPDATER);
     }
 
     @Override
     public void inboundMessage(int seqNo) {
-      messagesReceived.incrementAndGet();
-      updateMsecTimestamp(lastMessageReceivedTimeMsec);
+      MESSAGES_RECEIVED_UPDATER.getAndIncrement(TransportTracer.this);
+      updateNanoTimestamp(LAST_MESSAGE_RECEIVED_TIME_UPDATER);
     }
   };
 
@@ -75,33 +95,25 @@ public final class TransportTracer {
    * only one thread, but the resulting stats may be read from any thread.
    */
   public void reportStreamStarted() {
-    // @SuppressWarnings is not allowed on an increment statement, using another var here.
-    long newStreamsStarted = streamsStarted + 1;
-    streamsStarted = newStreamsStarted;
-    lastStreamCreatedTimeMsec = System.currentTimeMillis();
+    streamsStartedInternal++;
+    streamsStarted = streamsStartedInternal;
+    lastStreamCreatedTimeNanos = TimeUnit.MILLISECONDS.toNanos(System.currentTimeMillis());
   }
 
   /**
    * Reports that a keep alive message was sent.
    */
   public void reportKeepAliveSent() {
-    keepAlivesSent.incrementAndGet();
+    KEEPALIVES_SENT_UPDATER.getAndIncrement(this);
   }
 
   /**
-   * Registers a {@code Callable<Integer>} that can be used to poll for the remote flow control
-   * window size.
+   * Registers a {@link FlowControlReader} that can be used to read the local and remote flow
+   * control window sizes.
    */
-  public void setRemoteFlowControlWindowPollable(Callable<Integer> remoteFlowControllPollable) {
-    this.remoteFlowControlPollable = remoteFlowControllPollable;
-  }
-
-  /**
-   * Registers a {@code Callable<Integer>} that can be used to poll for the local flow control
-   * window size.
-   */
-  public void setLocalFlowControlWindowPollable(Callable<Integer> localFlowControllPollable) {
-    this.localFlowControlPollable = localFlowControllPollable;
+  public void setFlowControlWindowReader(FlowControlReader flowControlWindowReader) {
+    Preconditions.checkNotNull(flowControlWindowReader);
+    this.flowControlWindowReader = flowControlWindowReader;
   }
 
   /**
@@ -115,98 +127,105 @@ public final class TransportTracer {
    * Returns the number of streams ended successfully with an OK status.
    */
   public long getStreamsSucceeded() {
-    return streamsSucceeded.get();
+    return streamsSucceeded;
   }
 
   /**
    * Returns the number of streams completed with a non-OK status.
    */
   public long getStreamsFailed() {
-    return streamsFailed.get();
+    return streamsFailed;
   }
 
   /**
    * Returns the number of messages sent on the transport.
    */
   public long getMessagesSent() {
-    return messagesSent.get();
+    return messagesSent;
   }
 
   /**
    * Returns the number of messages received on the transport.
    */
   public long getMessagesReceived() {
-    return messagesReceived.get();
+    return messagesReceived;
   }
 
   /**
    * Returns the number of keep alive messages sent on the transport.
    */
   public long getKeepAlivesSent() {
-    return keepAlivesSent.get();
+    return keepAlivesSent;
   }
 
   /**
    * Returns the last time a stream was created as millis since Unix epoch.
    */
-  public long getLastStreamCreatedTimeMsec() {
-    return lastStreamCreatedTimeMsec;
+  public long getLastStreamCreatedTimeNanos() {
+    return lastStreamCreatedTimeNanos;
   }
 
   /**
    * Returns the last time a message was sent as millis since Unix epoch.
    */
-  public long getLastMessageSentTimeMsec() {
-    return lastMessageSentTimeMsec.get();
+  public long getLastMessageSentTimeNanos() {
+    return lastMessageSentTimeNnaos;
   }
 
   /**
    * Returns the last time a message was received as millis since Unix epoch.
    */
-  public long getLastMessageReceivedTimeMsec() {
-    return lastMessageReceivedTimeMsec.get();
+  public long getLastMessageReceivedTimeNanos() {
+    return lastMessageReceivedTimeNanos;
   }
 
   /**
    * Returns the remote flow control window as reported by the callback of
-   * {@link #setRemoteFlowControlWindowPollable}. Returns -1 if no callback was registered.
+   * {@link #setFlowControlWindowReader}. Returns null if no callback was registered.
+   * This call may block.
    */
-  public int getRemoteFlowControlWindow() {
-    if (remoteFlowControlPollable == null) {
-      return -1;
+  @Nullable
+  public FlowControlWindows getFlowControlWindows() {
+    // Copy value to local variable to avoid unnecessary volatile reads
+    FlowControlReader reader = this.flowControlWindowReader;
+    if (reader == null) {
+      return null;
     }
-    try {
-      return remoteFlowControlPollable.call();
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
+    return reader.read();
   }
 
   /**
-   * Returns the local flow control window as reported by the callback of
-   * {@link #setRemoteFlowControlWindowPollable}. Returns -1 if no callback was registered.
-   */
-  public int getLocalFlowControlWindow() {
-    if (localFlowControlPollable == null) {
-      return -1;
-    }
-    try {
-      return localFlowControlPollable.call();
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  /**
-   * Updates an AtomicLong representing a msec timestamp. Avoids races and only allows the value
+   * Updates a field representing a nano timestamp. Avoids races and only allows the value
    * to increase.
    */
-  private static void updateMsecTimestamp(AtomicLong timestamp) {
-    long now = System.currentTimeMillis();
-    long oldVal = timestamp.get();
-    while (oldVal < now && !timestamp.compareAndSet(oldVal, now)) {
+  private void updateNanoTimestamp(AtomicLongFieldUpdater<TransportTracer> tsFieldUpdater) {
+    long now = TimeUnit.MILLISECONDS.toNanos(System.currentTimeMillis());
+    long oldVal = tsFieldUpdater.get(this);
+    while (oldVal < now && !tsFieldUpdater.compareAndSet(this, oldVal, now)) {
       // CAS failed, read new timestamp and maybe try again
-      oldVal = timestamp.get();
+      oldVal = tsFieldUpdater.get(this);
     }
+  }
+
+  /**
+   * A container that holds the local and remote flow control window sizes. Typically readers
+   * are interested in both values, so we return both at the same time to reduce overhead.
+   */
+  public static final class FlowControlWindows {
+    public final int remoteBytes;
+    public final int localBytes;
+
+    public FlowControlWindows(int localBytes, int remoteBytes) {
+      this.localBytes = localBytes;
+      this.remoteBytes = remoteBytes;
+    }
+  }
+
+  /**
+   * An interface for reading the local and remote flow control windows of the transport.
+   * Implementations may block.
+   */
+  public interface FlowControlReader {
+    FlowControlWindows read();
   }
 }

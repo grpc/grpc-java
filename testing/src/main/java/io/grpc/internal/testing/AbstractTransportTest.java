@@ -1395,12 +1395,13 @@ public abstract class AbstractTransportTest {
       clientStream.start(clientStreamListener);
 
       assertEquals(0, serverListener.transportTracer.getStreamsStarted());
-      assertEquals(0, serverListener.transportTracer.getLastStreamCreatedTimeMsec());
+      assertEquals(0, serverListener.transportTracer.getLastStreamCreatedTimeNanos());
       @SuppressWarnings("unused")
       StreamCreation serverStreamCreation
           = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
       assertEquals(1, serverListener.transportTracer.getStreamsStarted());
-      firstTimestamp = serverListener.transportTracer.getLastStreamCreatedTimeMsec();
+      firstTimestamp = TimeUnit.NANOSECONDS.toMillis(
+          serverListener.transportTracer.getLastStreamCreatedTimeNanos());
       assertThat(
           System.currentTimeMillis() - firstTimestamp)
           .isAtMost(50L);
@@ -1420,10 +1421,11 @@ public abstract class AbstractTransportTest {
       StreamCreation serverStreamCreation
           = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
       assertEquals(2, serverListener.transportTracer.getStreamsStarted());
-      assertTrue(serverListener.transportTracer.getLastStreamCreatedTimeMsec() > firstTimestamp);
+      assertTrue(serverListener.transportTracer.getLastStreamCreatedTimeNanos() > firstTimestamp);
       assertThat(
           System.currentTimeMillis()
-              - serverListener.transportTracer.getLastStreamCreatedTimeMsec())
+              - TimeUnit.NANOSECONDS.toMillis(
+                  serverListener.transportTracer.getLastStreamCreatedTimeNanos()))
           .isAtMost(50L);
 
       ServerStream serverStream = serverStreamCreation.stream;
@@ -1503,7 +1505,7 @@ public abstract class AbstractTransportTest {
     }
 
     assertEquals(0, serverListener.transportTracer.getMessagesReceived());
-    assertEquals(0, serverListener.transportTracer.getLastMessageReceivedTimeMsec());
+    assertEquals(0, serverListener.transportTracer.getLastMessageReceivedTimeNanos());
     serverStream.request(1);
     clientStream.writeMessage(methodDescriptor.streamRequest("request"));
     clientStream.flush();
@@ -1512,7 +1514,8 @@ public abstract class AbstractTransportTest {
     assertEquals(1, serverListener.transportTracer.getMessagesReceived());
     assertThat(
         System.currentTimeMillis()
-            - serverListener.transportTracer.getLastMessageReceivedTimeMsec())
+            - TimeUnit.NANOSECONDS.toMillis(
+                serverListener.transportTracer.getLastMessageReceivedTimeNanos()))
         .isAtMost(50L);
 
     serverStream.close(Status.OK, new Metadata());
@@ -1538,7 +1541,7 @@ public abstract class AbstractTransportTest {
     }
 
     assertEquals(0, serverListener.transportTracer.getMessagesSent());
-    assertEquals(0, serverListener.transportTracer.getLastMessageSentTimeMsec());
+    assertEquals(0, serverListener.transportTracer.getLastMessageSentTimeNanos());
     clientStream.request(1);
     serverStream.writeHeaders(new Metadata());
     serverStream.writeMessage(methodDescriptor.streamResponse("response"));
@@ -1547,7 +1550,8 @@ public abstract class AbstractTransportTest {
     assertEquals(1, serverListener.transportTracer.getMessagesSent());
     assertThat(
         System.currentTimeMillis()
-            - serverListener.transportTracer.getLastMessageSentTimeMsec())
+            - TimeUnit.NANOSECONDS.toMillis(
+                serverListener.transportTracer.getLastMessageSentTimeNanos()))
         .isAtMost(50L);
 
     serverStream.close(Status.OK, new Metadata());
