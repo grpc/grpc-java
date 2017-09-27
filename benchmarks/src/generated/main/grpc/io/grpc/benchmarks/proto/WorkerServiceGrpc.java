@@ -213,6 +213,11 @@ public final class WorkerServiceGrpc {
       return new WorkerServiceStub(channel, callOptions);
     }
 
+    @java.lang.Override
+    public boolean isAsyncStub() {
+      return true;
+    }
+
     /**
      * <pre>
      * Start server with specified workload.
@@ -286,6 +291,11 @@ public final class WorkerServiceGrpc {
       return new WorkerServiceBlockingStub(channel, callOptions);
     }
 
+    @java.lang.Override
+    public boolean isBlockingStub() {
+      return true;
+    }
+
     /**
      * <pre>
      * Just return the core count - unary call
@@ -323,6 +333,11 @@ public final class WorkerServiceGrpc {
     protected WorkerServiceFutureStub build(io.grpc.Channel channel,
         io.grpc.CallOptions callOptions) {
       return new WorkerServiceFutureStub(channel, callOptions);
+    }
+
+    @java.lang.Override
+    public boolean isFutureStub() {
+      return true;
     }
 
     /**

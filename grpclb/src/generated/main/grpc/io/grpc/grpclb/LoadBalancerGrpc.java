@@ -110,6 +110,11 @@ public final class LoadBalancerGrpc {
       return new LoadBalancerStub(channel, callOptions);
     }
 
+    @java.lang.Override
+    public boolean isAsyncStub() {
+      return true;
+    }
+
     /**
      * <pre>
      * Bidirectional rpc to get a list of servers.
@@ -139,6 +144,11 @@ public final class LoadBalancerGrpc {
         io.grpc.CallOptions callOptions) {
       return new LoadBalancerBlockingStub(channel, callOptions);
     }
+
+    @java.lang.Override
+    public boolean isBlockingStub() {
+      return true;
+    }
   }
 
   /**
@@ -157,6 +167,11 @@ public final class LoadBalancerGrpc {
     protected LoadBalancerFutureStub build(io.grpc.Channel channel,
         io.grpc.CallOptions callOptions) {
       return new LoadBalancerFutureStub(channel, callOptions);
+    }
+
+    @java.lang.Override
+    public boolean isFutureStub() {
+      return true;
     }
   }
 

@@ -207,4 +207,28 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   public final S withMaxOutboundMessageSize(int maxSize) {
     return build(channel, callOptions.withMaxOutboundMessageSize(maxSize));
   }
+
+  /**
+   * Returns if this stub is a Blocking Style Stub
+   * @return boolean
+   */
+  public boolean isBlockingStub() {
+    return false;
+  }
+
+  /**
+   * Returns if this stub is a ListenableFuture-style Stub
+   * @return boolean
+   */
+  public boolean isFutureStub() {
+    return false;
+  }
+
+  /**
+   * Returns if this stub is a Async Stub
+   * @return boolean
+   */
+  public boolean isAsyncStub() {
+    return false;
+  }
 }

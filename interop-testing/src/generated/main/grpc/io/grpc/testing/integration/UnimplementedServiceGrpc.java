@@ -122,6 +122,11 @@ public final class UnimplementedServiceGrpc {
       return new UnimplementedServiceStub(channel, callOptions);
     }
 
+    @java.lang.Override
+    public boolean isAsyncStub() {
+      return true;
+    }
+
     /**
      * <pre>
      * A call that no server should implement
@@ -156,6 +161,11 @@ public final class UnimplementedServiceGrpc {
       return new UnimplementedServiceBlockingStub(channel, callOptions);
     }
 
+    @java.lang.Override
+    public boolean isBlockingStub() {
+      return true;
+    }
+
     /**
      * <pre>
      * A call that no server should implement
@@ -187,6 +197,11 @@ public final class UnimplementedServiceGrpc {
     protected UnimplementedServiceFutureStub build(io.grpc.Channel channel,
         io.grpc.CallOptions callOptions) {
       return new UnimplementedServiceFutureStub(channel, callOptions);
+    }
+
+    @java.lang.Override
+    public boolean isFutureStub() {
+      return true;
     }
 
     /**

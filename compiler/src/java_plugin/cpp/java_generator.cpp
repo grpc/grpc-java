@@ -494,6 +494,7 @@ static void PrintStub(
   (*vars)["abstract_name"] = service_name + "ImplBase";
   string stub_name = service_name;
   string client_name = service_name;
+  string stub_type = "";
   CallType call_type;
   bool impl_base = false;
   bool interface = false;
@@ -505,6 +506,7 @@ static void PrintStub(
     case ASYNC_CLIENT_IMPL:
       call_type = ASYNC_CALL;
       stub_name += "Stub";
+      stub_type += "AsyncStub";
       break;
     case BLOCKING_CLIENT_INTERFACE:
       interface = true;
@@ -513,6 +515,7 @@ static void PrintStub(
       call_type = BLOCKING_CALL;
       stub_name += "BlockingStub";
       client_name += "BlockingClient";
+      stub_type += "BlockingStub";
       break;
     case FUTURE_CLIENT_INTERFACE:
       interface = true;
@@ -521,6 +524,7 @@ static void PrintStub(
       call_type = FUTURE_CALL;
       stub_name += "FutureStub";
       client_name += "FutureClient";
+      stub_type += "FutureStub";
       break;
     case ASYNC_INTERFACE:
       call_type = ASYNC_CALL;
@@ -531,6 +535,7 @@ static void PrintStub(
   }
   (*vars)["stub_name"] = stub_name;
   (*vars)["client_name"] = client_name;
+  (*vars)["stub_type"] = stub_type;
 
   // Class head
   if (!interface) {
@@ -594,6 +599,16 @@ static void PrintStub(
     p->Print(
         *vars,
         "return new $stub_name$(channel, callOptions);\n");
+    p->Outdent();
+    p->Print("}\n\n");
+    p->Print(
+      *vars,
+      "@$Override$\n"
+      "public boolean is$stub_type$() {\n");
+    p->Indent();
+    p->Print(
+      *vars,
+      "return true;\n");
     p->Outdent();
     p->Print("}\n");
   }

@@ -349,6 +349,11 @@ public final class TestServiceGrpc {
       return new TestServiceStub(channel, callOptions);
     }
 
+    @java.lang.Override
+    public boolean isAsyncStub() {
+      return true;
+    }
+
     /**
      * <pre>
      * One empty request followed by one empty response.
@@ -470,6 +475,11 @@ public final class TestServiceGrpc {
       return new TestServiceBlockingStub(channel, callOptions);
     }
 
+    @java.lang.Override
+    public boolean isBlockingStub() {
+      return true;
+    }
+
     /**
      * <pre>
      * One empty request followed by one empty response.
@@ -546,6 +556,11 @@ public final class TestServiceGrpc {
     protected TestServiceFutureStub build(io.grpc.Channel channel,
         io.grpc.CallOptions callOptions) {
       return new TestServiceFutureStub(channel, callOptions);
+    }
+
+    @java.lang.Override
+    public boolean isFutureStub() {
+      return true;
     }
 
     /**

@@ -142,6 +142,11 @@ public final class MetricsServiceGrpc {
       return new MetricsServiceStub(channel, callOptions);
     }
 
+    @java.lang.Override
+    public boolean isAsyncStub() {
+      return true;
+    }
+
     /**
      * <pre>
      * Returns the values of all the gauges that are currently being maintained by
@@ -184,6 +189,11 @@ public final class MetricsServiceGrpc {
       return new MetricsServiceBlockingStub(channel, callOptions);
     }
 
+    @java.lang.Override
+    public boolean isBlockingStub() {
+      return true;
+    }
+
     /**
      * <pre>
      * Returns the values of all the gauges that are currently being maintained by
@@ -223,6 +233,11 @@ public final class MetricsServiceGrpc {
     protected MetricsServiceFutureStub build(io.grpc.Channel channel,
         io.grpc.CallOptions callOptions) {
       return new MetricsServiceFutureStub(channel, callOptions);
+    }
+
+    @java.lang.Override
+    public boolean isFutureStub() {
+      return true;
     }
 
     /**

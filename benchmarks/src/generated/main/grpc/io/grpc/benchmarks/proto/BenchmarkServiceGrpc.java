@@ -240,6 +240,11 @@ public final class BenchmarkServiceGrpc {
       return new BenchmarkServiceStub(channel, callOptions);
     }
 
+    @java.lang.Override
+    public boolean isAsyncStub() {
+      return true;
+    }
+
     /**
      * <pre>
      * One request followed by one response.
@@ -320,6 +325,11 @@ public final class BenchmarkServiceGrpc {
       return new BenchmarkServiceBlockingStub(channel, callOptions);
     }
 
+    @java.lang.Override
+    public boolean isBlockingStub() {
+      return true;
+    }
+
     /**
      * <pre>
      * One request followed by one response.
@@ -360,6 +370,11 @@ public final class BenchmarkServiceGrpc {
     protected BenchmarkServiceFutureStub build(io.grpc.Channel channel,
         io.grpc.CallOptions callOptions) {
       return new BenchmarkServiceFutureStub(channel, callOptions);
+    }
+
+    @java.lang.Override
+    public boolean isFutureStub() {
+      return true;
     }
 
     /**

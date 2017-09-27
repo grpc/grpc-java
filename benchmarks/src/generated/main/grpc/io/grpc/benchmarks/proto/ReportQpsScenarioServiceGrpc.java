@@ -110,6 +110,11 @@ public final class ReportQpsScenarioServiceGrpc {
       return new ReportQpsScenarioServiceStub(channel, callOptions);
     }
 
+    @java.lang.Override
+    public boolean isAsyncStub() {
+      return true;
+    }
+
     /**
      * <pre>
      * Report results of a QPS test benchmark scenario.
@@ -140,6 +145,11 @@ public final class ReportQpsScenarioServiceGrpc {
       return new ReportQpsScenarioServiceBlockingStub(channel, callOptions);
     }
 
+    @java.lang.Override
+    public boolean isBlockingStub() {
+      return true;
+    }
+
     /**
      * <pre>
      * Report results of a QPS test benchmark scenario.
@@ -167,6 +177,11 @@ public final class ReportQpsScenarioServiceGrpc {
     protected ReportQpsScenarioServiceFutureStub build(io.grpc.Channel channel,
         io.grpc.CallOptions callOptions) {
       return new ReportQpsScenarioServiceFutureStub(channel, callOptions);
+    }
+
+    @java.lang.Override
+    public boolean isFutureStub() {
+      return true;
     }
 
     /**

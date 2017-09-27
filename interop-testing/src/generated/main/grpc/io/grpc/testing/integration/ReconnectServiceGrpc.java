@@ -144,6 +144,11 @@ public final class ReconnectServiceGrpc {
       return new ReconnectServiceStub(channel, callOptions);
     }
 
+    @java.lang.Override
+    public boolean isAsyncStub() {
+      return true;
+    }
+
     /**
      */
     public void start(com.google.protobuf.EmptyProtos.Empty request,
@@ -182,6 +187,11 @@ public final class ReconnectServiceGrpc {
       return new ReconnectServiceBlockingStub(channel, callOptions);
     }
 
+    @java.lang.Override
+    public boolean isBlockingStub() {
+      return true;
+    }
+
     /**
      */
     public com.google.protobuf.EmptyProtos.Empty start(com.google.protobuf.EmptyProtos.Empty request) {
@@ -216,6 +226,11 @@ public final class ReconnectServiceGrpc {
     protected ReconnectServiceFutureStub build(io.grpc.Channel channel,
         io.grpc.CallOptions callOptions) {
       return new ReconnectServiceFutureStub(channel, callOptions);
+    }
+
+    @java.lang.Override
+    public boolean isFutureStub() {
+      return true;
     }
 
     /**
