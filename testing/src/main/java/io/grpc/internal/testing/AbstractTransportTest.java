@@ -1422,11 +1422,9 @@ public abstract class AbstractTransportTest {
           = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
       assertEquals(2, serverListener.transportTracer.getStreamsStarted());
       assertTrue(serverListener.transportTracer.getLastStreamCreatedTimeNanos() > firstTimestamp);
-      assertThat(
-          System.currentTimeMillis()
-              - TimeUnit.NANOSECONDS.toMillis(
-                  serverListener.transportTracer.getLastStreamCreatedTimeNanos()))
-          .isAtMost(50L);
+      long secondTimestamp = TimeUnit.NANOSECONDS.toMillis(
+          serverListener.transportTracer.getLastStreamCreatedTimeNanos());)
+      assertThat(System.currentTimeMillis() - secondTimestamp).isAtMost(50L);
 
       ServerStream serverStream = serverStreamCreation.stream;
       serverStream.close(Status.OK, new Metadata());
@@ -1512,11 +1510,9 @@ public abstract class AbstractTransportTest {
     clientStream.halfClose();
     verifyMessageCountAndClose(serverStreamListener.messageQueue, 1);
     assertEquals(1, serverListener.transportTracer.getMessagesReceived());
-    assertThat(
-        System.currentTimeMillis()
-            - TimeUnit.NANOSECONDS.toMillis(
-                serverListener.transportTracer.getLastMessageReceivedTimeNanos()))
-        .isAtMost(50L);
+    long timestamp = TimeUnit.NANOSECONDS.toMillis(
+        serverListener.transportTracer.getLastMessageReceivedTimeNanos());
+    assertThat(System.currentTimeMillis() - timestamp).isAtMost(50L);
 
     serverStream.close(Status.OK, new Metadata());
     client.shutdown(Status.UNAVAILABLE);
@@ -1548,11 +1544,9 @@ public abstract class AbstractTransportTest {
     serverStream.flush();
     verifyMessageCountAndClose(clientStreamListener.messageQueue, 1);
     assertEquals(1, serverListener.transportTracer.getMessagesSent());
-    assertThat(
-        System.currentTimeMillis()
-            - TimeUnit.NANOSECONDS.toMillis(
-                serverListener.transportTracer.getLastMessageSentTimeNanos()))
-        .isAtMost(50L);
+    long timestamp = TimeUnit.NANOSECONDS.toMillis(
+        serverListener.transportTracer.getLastMessageSentTimeNanos());
+    assertThat(System.currentTimeMillis() - timestamp).isAtMost(50L);
 
     serverStream.close(Status.OK, new Metadata());
     client.shutdown(Status.UNAVAILABLE);

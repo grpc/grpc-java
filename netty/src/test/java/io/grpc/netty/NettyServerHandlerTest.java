@@ -820,11 +820,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     createStream();
     assertEquals(1, transportTracer.getStreamsStarted());
-    assertTrue(
-        Math.abs(
-            System.currentTimeMillis()
-                - TimeUnit.NANOSECONDS.toMillis(transportTracer.getLastStreamCreatedTimeNanos()))
-            < 500);
+    long tsMsec = TimeUnit.NANOSECONDS.toMillis(transportTracer.getLastStreamCreatedTimeNanos());
+    assertTrue(Math.abs(System.currentTimeMillis() - tsMsec) < 100);
   }
 
   private void createStream() throws Exception {
