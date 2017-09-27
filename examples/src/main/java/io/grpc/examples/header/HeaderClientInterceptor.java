@@ -41,25 +41,38 @@ public class HeaderClientInterceptor implements ClientInterceptor {
   @Override
   public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(MethodDescriptor<ReqT, RespT> method,
       CallOptions callOptions, Channel next) {
-    return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+    ClientCall<ReqT, RespT> clientCall = next.newCall(method, callOptions);
 
-      @Override
-      public void start(Listener<RespT> responseListener, Metadata headers) {
-        /* put custom header */
-        headers.put(CUSTOM_HEADER_KEY, "customRequestValue");
-        super.start(new SimpleForwardingClientCallListener<RespT>(responseListener) {
+    // Decorate the ClientCall that will be registered in the outbound path. In this example we
+    // are only interested in overriding the start() method, which is the place to intercept the
+    // inbound ClientCall.Listener.
+    SimpleForwardingClientCall<ReqT, RespT> decoratedClientCall =
+        new SimpleForwardingClientCall<ReqT, RespT>(clientCall) {
           @Override
-          public void onHeaders(Metadata headers) {
-            /**
-             * if you don't need receive header from server,
-             * you can use {@link io.grpc.stub.MetadataUtils#attachHeaders}
-             * directly to send header
-             */
-            logger.info("header received from server:" + headers);
-            super.onHeaders(headers);
+          public void start(Listener<RespT> responseListener, Metadata headers) {
+            /* put custom header */
+            headers.put(CUSTOM_HEADER_KEY, "customRequestValue");
+
+            // Decorate the Listener before passing it into grpc.
+            // Note that because the inbound and outbound handlers are independent,
+            // it is not safe for the ClientCall (outbound) and ClientCall.Listener (inbound)
+            // to interact here without synchronization.
+            SimpleForwardingClientCallListener<RespT> decoratedListener =
+                new SimpleForwardingClientCallListener<RespT>(responseListener) {
+                  @Override
+                  public void onHeaders(Metadata headers) {
+                    /**
+                     * if you don't need receive header from server,
+                     * you can use {@link MetadataUtils#attachHeaders}
+                     * directly to send header
+                     */
+                    logger.info("header received from server:" + headers);
+                    super.onHeaders(headers);
+                  }
+                };
+            super.start(decoratedListener, headers);
           }
-        }, headers);
-      }
-    };
+        };
+    return decoratedClientCall;
   }
 }

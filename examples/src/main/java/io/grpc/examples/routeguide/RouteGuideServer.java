@@ -27,7 +27,9 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
+import io.grpc.stub.StreamObservers;
 import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -144,6 +146,9 @@ public class RouteGuideServer {
       int top = max(request.getLo().getLatitude(), request.getHi().getLatitude());
       int bottom = min(request.getLo().getLatitude(), request.getHi().getLatitude());
 
+      // This example is a bit contrived, but demonstrates how to use flow control to
+      // avoid sending too many responses on the network all at once.
+      List<Feature> inRectangle = new ArrayList<Feature>();
       for (Feature feature : features) {
         if (!RouteGuideUtil.exists(feature)) {
           continue;
@@ -152,10 +157,15 @@ public class RouteGuideServer {
         int lat = feature.getLocation().getLatitude();
         int lon = feature.getLocation().getLongitude();
         if (lon >= left && lon <= right && lat >= bottom && lat <= top) {
-          responseObserver.onNext(feature);
+          inRectangle.add(feature);
         }
       }
-      responseObserver.onCompleted();
+
+      // It is safe make this cast in generated stubs
+      ServerCallStreamObserver<Feature> observer =
+          (ServerCallStreamObserver<Feature>) responseObserver;
+      // copyWithFlowControl is a utility that uses ServerCallStreamObserver#setOnReadyHandler
+      StreamObservers.copyWithFlowControl(inRectangle, observer);
     }
 
     /**

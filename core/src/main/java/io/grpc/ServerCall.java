@@ -45,8 +45,8 @@ public abstract class ServerCall<ReqT, RespT> {
    * <p>Any contexts are guaranteed to arrive before any messages, which are guaranteed before half
    * close, which is guaranteed before completion.
    *
-   * <p>Implementations are free to block for extended periods of time. Implementations are not
-   * required to be thread-safe.
+   * <p>Implementations are free to block for extended periods of time because the callback runs
+   * on the application supplied thread pool. Implementations are not required to be thread-safe.
    */
   // TODO(ejona86): We need to decide what to do in the case of server closing with non-cancellation
   // before client half closes. It may be that we treat such a case as an error. If we permit such
