@@ -23,11 +23,10 @@ import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import javax.annotation.concurrent.GuardedBy;
+import java.util.HashSet;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -36,17 +35,31 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
+
+  private static final AtomicLongFieldUpdater<GrpclbClientLoadRecorder> callsStartedUpdater =
+      AtomicLongFieldUpdater.newUpdater(GrpclbClientLoadRecorder.class, "callsStarted");
+  private static final AtomicLongFieldUpdater<GrpclbClientLoadRecorder> callsFinishedUpdater =
+      AtomicLongFieldUpdater.newUpdater(GrpclbClientLoadRecorder.class, "callsFinished");
+  private static final AtomicLongFieldUpdater<GrpclbClientLoadRecorder> callsFailedToSendUpdater =
+      AtomicLongFieldUpdater.newUpdater(GrpclbClientLoadRecorder.class, "callsFailedToSend");
+  private static final AtomicLongFieldUpdater<GrpclbClientLoadRecorder>
+      callsFinishedKnownReceivedUpdater =
+          AtomicLongFieldUpdater.newUpdater(
+              GrpclbClientLoadRecorder.class, "callsFinishedKnownReceived");
+
   private final TimeProvider time;
-  private final AtomicLong callsStarted = new AtomicLong();
-  private final AtomicLong callsFinished = new AtomicLong();
+  @SuppressWarnings("unused")
+  private volatile long callsStarted;
+  @SuppressWarnings("unused")
+  private volatile long callsFinished;
 
   // Specific finish types
-  // Access to it should be protected by lock.  Contention is not an issue for these counts, because
-  // normally only a small portion of all RPCs are dropped.
-  @GuardedBy("this")
-  private HashMap<String, AtomicLong> callsDroppedPerToken = new HashMap<String, AtomicLong>();
-  private final AtomicLong callsFailedToSend = new AtomicLong();
-  private final AtomicLong callsFinishedKnownReceived = new AtomicLong();
+  private final ConcurrentMap<String, Long> callsDroppedPerToken =
+      new ConcurrentHashMap<String, Long>();
+  @SuppressWarnings("unused")
+  private volatile long callsFailedToSend;
+  @SuppressWarnings("unused")
+  private volatile long callsFinishedKnownReceived;
 
   GrpclbClientLoadRecorder(TimeProvider time) {
     this.time = checkNotNull(time, "time provider");
@@ -54,7 +67,7 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
 
   @Override
   public ClientStreamTracer newClientStreamTracer(CallOptions callOptions, Metadata headers) {
-    callsStarted.incrementAndGet();
+    callsStartedUpdater.getAndIncrement(this);
     return new StreamTracer();
   }
 
@@ -62,18 +75,15 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
    * Records that a request has been dropped as instructed by the remote balancer.
    */
   void recordDroppedRequest(String token) {
-    callsStarted.incrementAndGet();
-    callsFinished.incrementAndGet();
+    callsStartedUpdater.getAndIncrement(this);
+    callsFinishedUpdater.getAndIncrement(this);
 
-    synchronized (this) {
-      AtomicLong count = callsDroppedPerToken.get(token);
-      if (count == null) {
-        count = new AtomicLong(1);
-        callsDroppedPerToken.put(token, count);
-      } else {
-        count.incrementAndGet();
+    Long oldCallsDropped;
+    do {
+      if ((oldCallsDropped = callsDroppedPerToken.get(token)) == null) {
+        callsDroppedPerToken.putIfAbsent(token, (oldCallsDropped = 0L));
       }
-    }
+    } while (!callsDroppedPerToken.replace(token, oldCallsDropped, oldCallsDropped + 1L));
   }
 
   /**
@@ -83,52 +93,51 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
     ClientStats.Builder statsBuilder =
         ClientStats.newBuilder()
         .setTimestamp(Timestamps.fromMillis(time.currentTimeMillis()))
-        .setNumCallsStarted(callsStarted.getAndSet(0))
-        .setNumCallsFinished(callsFinished.getAndSet(0))
-        .setNumCallsFinishedWithClientFailedToSend(callsFailedToSend.getAndSet(0))
-        .setNumCallsFinishedKnownReceived(callsFinishedKnownReceived.getAndSet(0));
-    HashMap<String, AtomicLong> savedCallsDroppedPerToken;
-    synchronized (this) {
-      savedCallsDroppedPerToken = callsDroppedPerToken;
-      callsDroppedPerToken = new HashMap<String, AtomicLong>();
-    }
-    for (Map.Entry<String, AtomicLong> dropCount : savedCallsDroppedPerToken.entrySet()) {
-      statsBuilder.addCallsFinishedWithDrop(
-          ClientStatsPerToken.newBuilder()
-              .setLoadBalanceToken(dropCount.getKey())
-              .setNumCalls(dropCount.getValue().get())
-              .build());
+        .setNumCallsStarted(callsStartedUpdater.getAndSet(this, 0))
+        .setNumCallsFinished(callsFinishedUpdater.getAndSet(this, 0))
+        .setNumCallsFinishedWithClientFailedToSend(callsFailedToSendUpdater.getAndSet(this, 0))
+        .setNumCallsFinishedKnownReceived(callsFinishedKnownReceivedUpdater.getAndSet(this, 0));
+
+    for (String key : new HashSet<String>(callsDroppedPerToken.keySet())) {
+      Long dropCount = callsDroppedPerToken.remove(key);
+      if (dropCount != null) {
+        statsBuilder.addCallsFinishedWithDrop(
+            ClientStatsPerToken.newBuilder()
+                .setLoadBalanceToken(key)
+                .setNumCalls(dropCount)
+                .build());
+      }
     }
     return statsBuilder.build();
   }
 
   private class StreamTracer extends ClientStreamTracer {
-    final AtomicBoolean headersSent = new AtomicBoolean();
-    final AtomicBoolean anythingReceived = new AtomicBoolean();
+    private volatile boolean headersSent;
+    private volatile boolean anythingReceived;
 
     @Override
     public void outboundHeaders() {
-      headersSent.set(true);
+      headersSent = true;
     }
 
     @Override
     public void inboundHeaders() {
-      anythingReceived.set(true);
+      anythingReceived = true;
     }
 
     @Override
     public void inboundMessage(int seqNo) {
-      anythingReceived.set(true);
+      anythingReceived = true;
     }
 
     @Override
     public void streamClosed(Status status) {
-      callsFinished.incrementAndGet();
-      if (!headersSent.get()) {
-        callsFailedToSend.incrementAndGet();
+      callsFinishedUpdater.getAndIncrement(GrpclbClientLoadRecorder.this);
+      if (!headersSent) {
+        callsFailedToSendUpdater.getAndIncrement(GrpclbClientLoadRecorder.this);
       }
-      if (anythingReceived.get()) {
-        callsFinishedKnownReceived.incrementAndGet();
+      if (anythingReceived) {
+        callsFinishedKnownReceivedUpdater.getAndIncrement(GrpclbClientLoadRecorder.this);
       }
     }
   }
