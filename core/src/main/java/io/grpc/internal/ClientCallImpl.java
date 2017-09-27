@@ -78,7 +78,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private boolean halfCloseCalled;
   private final ClientTransportProvider clientTransportProvider;
   private final CancellationListener cancellationListener = new ContextCancellationListener();
-  private final RetryOrHedgingBuffer<ReqT> retryBuffer;
   private ScheduledExecutorService deadlineCancellationExecutor;
   private boolean fullStreamDecompression;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
@@ -99,7 +98,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     this.context = Context.current();
     this.unaryRequest = method.getType() == MethodType.UNARY
         || method.getType() == MethodType.SERVER_STREAMING;
-    retryBuffer = new RetryOrHedgingBuffer<ReqT>(method);
     this.callOptions = callOptions;
     this.clientTransportProvider = clientTransportProvider;
     this.deadlineCancellationExecutor = deadlineCancellationExecutor;
@@ -228,8 +226,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
           context.getDeadline(), headers);
       if (retryEnabled()) {
         stream = new RetriableStream<ReqT>(
-            method, retryBuffer, compressor, decompressorRegistry, callOptions, headers,
-            clientTransportProvider, context, fullStreamDecompression);
+            method, callOptions, headers, clientTransportProvider, context);
       } else {
         ClientTransport transport = clientTransportProvider.get(
             new PickSubchannelArgsImpl(method, headers, callOptions));
@@ -239,23 +236,23 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         } finally {
           context.detach(origContext);
         }
-        if (callOptions.getAuthority() != null) {
-          stream.setAuthority(callOptions.getAuthority());
-        }
-        if (callOptions.getMaxInboundMessageSize() != null) {
-          stream.setMaxInboundMessageSize(callOptions.getMaxInboundMessageSize());
-        }
-        if (callOptions.getMaxOutboundMessageSize() != null) {
-          stream.setMaxOutboundMessageSize(callOptions.getMaxOutboundMessageSize());
-        }
-        stream.setCompressor(compressor);
-        stream.setFullStreamDecompression(fullStreamDecompression);
-        stream.setDecompressorRegistry(decompressorRegistry);
       }
     } else {
       stream = new FailingClientStream(DEADLINE_EXCEEDED);
     }
 
+    if (callOptions.getAuthority() != null) {
+      stream.setAuthority(callOptions.getAuthority());
+    }
+    if (callOptions.getMaxInboundMessageSize() != null) {
+      stream.setMaxInboundMessageSize(callOptions.getMaxInboundMessageSize());
+    }
+    if (callOptions.getMaxOutboundMessageSize() != null) {
+      stream.setMaxOutboundMessageSize(callOptions.getMaxOutboundMessageSize());
+    }
+    stream.setCompressor(compressor);
+    stream.setFullStreamDecompression(fullStreamDecompression);
+    stream.setDecompressorRegistry(decompressorRegistry);
     stream.start(new ClientStreamListenerImpl(observer));
 
     // Delay any sources of cancellation after start(), because most of the transports are broken if

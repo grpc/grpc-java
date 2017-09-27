@@ -17,11 +17,13 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.Substream.Progress.CANCELLED;
 import static io.grpc.internal.Substream.Progress.COMPLETED;
 
 import io.grpc.ClientCall;
 import io.grpc.Compressor;
+import io.grpc.DecompressorRegistry;
 import io.grpc.MethodDescriptor;
 import io.grpc.internal.Substream.Progress;
 import java.util.ArrayList;
@@ -31,6 +33,13 @@ import javax.annotation.concurrent.ThreadSafe;
 /** A storage for buffering messages that could be used for retry or hedging. */
 @ThreadSafe
 final class RetryOrHedgingBuffer<ReqT> {
+  private static final BufferEntry START_ENTRY =
+      new BufferEntry() {
+        @Override
+        public void runWith(Substream substream) {
+          substream.start();
+        }
+      };
   private static final BufferEntry HALF_CLOSE_ENTRY =
       new BufferEntry() {
         @Override
@@ -56,19 +65,11 @@ final class RetryOrHedgingBuffer<ReqT> {
     this.method = method;
   }
 
-  boolean enqueueStart() {
+  /** Enqueues the start stream operation. This is called only one time. */
+  void enqueueStart() {
     synchronized (lock) {
-      if (committed) {
-        return false;
-      }
-      buffer.add(
-          new BufferEntry() {
-            @Override
-            public void runWith(Substream substream) {
-              substream.start();
-            }
-          });
-      return true;
+      checkState(!committed, "The RPC shouldn't be committed before start");
+      buffer.add(START_ENTRY);
     }
   }
 
@@ -147,6 +148,34 @@ final class RetryOrHedgingBuffer<ReqT> {
       }
       buffer.add(FLUSH_ENTRY);
       return true;
+    }
+  }
+
+  /** This must be called before enqueueStart. */
+  void enqueueAuthority(final String authority) {
+    synchronized (lock) {
+      checkState(!committed, "The RPC shouldn't be committed before start");
+      buffer.add(
+          new BufferEntry() {
+            @Override
+            public void runWith(Substream substream) {
+              substream.clientStream().setAuthority(authority);
+            }
+          });
+    }
+  }
+
+  /** This must be called before enqueueStart. */
+  void enqueueDecompressorRegistry(final DecompressorRegistry decompressorRegistry) {
+    synchronized (lock) {
+      checkState(!committed, "The RPC shouldn't be committed before start");
+      buffer.add(
+          new BufferEntry() {
+            @Override
+            public void runWith(Substream substream) {
+              substream.clientStream().setDecompressorRegistry(decompressorRegistry);
+            }
+          });
     }
   }
 

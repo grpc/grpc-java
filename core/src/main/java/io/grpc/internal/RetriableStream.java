@@ -16,7 +16,6 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.Substream.Progress.CANCELLED;
 import static io.grpc.internal.Substream.Progress.START;
 
@@ -43,14 +42,11 @@ final class RetriableStream<ReqT> implements ClientStream {
       Context.<RetryOrHedgingBuffer<?>>key("buffer");
   private final MethodDescriptor<ReqT, ?> method;
   private final RetryOrHedgingBuffer<ReqT> buffer;
-  private final Compressor compressor;
-  private final DecompressorRegistry decompressorRegistry;
   private final CallOptions callOptions;
   private final Metadata headers;
   private final ClientTransportProvider clientTransportProvider;
   private final DelayedClientTransport delayedClientTransport;
   private final Context context;
-  private final boolean fullStreamDecompression;
   /** Lock for synchronizing {@link #retry()} and {@link #cancel(Status)}. */
   private final Object lock = new Object();
   /** No need to synchronize its callbacks b/c no hedging involved. */
@@ -61,30 +57,23 @@ final class RetriableStream<ReqT> implements ClientStream {
 
   RetriableStream(
       MethodDescriptor<ReqT, ?> method,
-      RetryOrHedgingBuffer<ReqT> buffer,
-      Compressor compressor,
-      DecompressorRegistry decompressorRegistry,
       CallOptions callOptions,
       Metadata headers,
       ClientTransportProvider clientTransportProvider,
-      Context context,
-      boolean fullStreamDecompression) {
+      Context context) {
     this.method = method;
-    this.buffer = buffer;
-    this.compressor = compressor;
-    this.decompressorRegistry = decompressorRegistry;
+    buffer = new RetryOrHedgingBuffer<ReqT>(method);
     this.callOptions = callOptions;
     this.headers = headers;
     this.clientTransportProvider = clientTransportProvider;
     delayedClientTransport = clientTransportProvider.getDelayedTransport();
     this.context = context;
-    this.fullStreamDecompression = fullStreamDecompression;
+
+    // This is the first RPC attempt.
+    substream = new RetrySubstream();
   }
 
-  /**
-   * Requests if committed, or buffers it first and then requests on the current
-   * substream.
-   */
+  /** Requests if committed, or buffers it first and then requests on the current substream. */
   @Override
   public void request(int numMessages) {
     if (buffer.enqueueRequest(numMessages)) {
@@ -95,12 +84,13 @@ final class RetriableStream<ReqT> implements ClientStream {
   }
 
   /**
-   * Do not use it. Use {@link #sendMessage(ReqT)} instead because we don't use InputStream for
-   * buffering.
+   * Do not use it directly. Use {@link #sendMessage(ReqT)} instead because we don't use InputStream
+   * for buffering.
    */
   @Override
   public void writeMessage(InputStream message) {
-    throw new UnsupportedOperationException("unsupported");
+    // TODO(notcarl): Find out if streamRequest needs to be closed.
+    clientStream().writeMessage(message);
   }
 
   /**
@@ -111,8 +101,7 @@ final class RetriableStream<ReqT> implements ClientStream {
     if (buffer.enqueueMessage(message)) {
       buffer.resume(substream);
     } else {
-      // TODO(notcarl): Find out if streamRequest needs to be closed.
-      clientStream().writeMessage(method.streamRequest(message));
+      writeMessage(method.streamRequest(message));
     }
   }
 
@@ -197,13 +186,12 @@ final class RetriableStream<ReqT> implements ClientStream {
 
   @Override
   public void setAuthority(String authority) {
-    throw new IllegalStateException("setAuthority() may only be called when starting a substream");
+    buffer.enqueueAuthority(authority);
   }
 
   @Override
   public void setDecompressorRegistry(DecompressorRegistry decompressorRegistry) {
-    throw new IllegalStateException(
-        "setDecompressorRegistry() may only be called when starting a substream");
+    buffer.enqueueDecompressorRegistry(decompressorRegistry);
   }
 
   /**
@@ -232,17 +220,13 @@ final class RetriableStream<ReqT> implements ClientStream {
     }
   }
 
-  /**
-   * Starts the first PRC attempt, and in the mean time also buffer the task.
-   */
+  /** Starts the first PRC attempt, and in the mean time also buffer the task. */
   @Override
   public void start(ClientStreamListener masterListener) {
     this.masterListener = masterListener;
     delayedClientTransport.addRetryOrHedgingStream(this);
-    // This is the first RPC attempt.
-    substream = new RetrySubstream();
 
-    checkState(buffer.enqueueStart(), "The RPC shouldn't be committed before start");
+    buffer.enqueueStart();
     buffer.resume(substream);
   }
 
@@ -312,18 +296,6 @@ final class RetriableStream<ReqT> implements ClientStream {
 
     @Override
     public void start() {
-      if (callOptions.getAuthority() != null) {
-        stream.setAuthority(callOptions.getAuthority());
-      }
-      if (callOptions.getMaxInboundMessageSize() != null) {
-        stream.setMaxInboundMessageSize(callOptions.getMaxInboundMessageSize());
-      }
-      if (callOptions.getMaxOutboundMessageSize() != null) {
-        stream.setMaxOutboundMessageSize(callOptions.getMaxOutboundMessageSize());
-      }
-      stream.setCompressor(compressor);
-      stream.setFullStreamDecompression(fullStreamDecompression);
-      stream.setDecompressorRegistry(decompressorRegistry);
       stream.start(new RetrySublistener());
       if (cancelled()) {
         // In case this is the orphan sub created in retry().
