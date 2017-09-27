@@ -38,7 +38,7 @@ public final class TransportTracer {
   private static final AtomicLongFieldUpdater<TransportTracer> KEEPALIVES_SENT_UPDATER =
       AtomicLongFieldUpdater.newUpdater(TransportTracer.class, "keepAlivesSent");
   private static final AtomicLongFieldUpdater<TransportTracer> LAST_MESSAGE_SENT_TIME_UPDATER =
-      AtomicLongFieldUpdater.newUpdater(TransportTracer.class, "lastMessageSentTimeNnaos");
+      AtomicLongFieldUpdater.newUpdater(TransportTracer.class, "lastMessageSentTimeNanos");
   private static final AtomicLongFieldUpdater<TransportTracer> LAST_MESSAGE_RECEIVED_TIME_UPDATER =
       AtomicLongFieldUpdater.newUpdater(TransportTracer.class, "lastMessageReceivedTimeNanos");
 
@@ -48,12 +48,19 @@ public final class TransportTracer {
   private long streamsStartedInternal;
 
   private volatile long lastStreamCreatedTimeNanos;
+  @SuppressWarnings("unused") // used via updater
   private volatile long streamsSucceeded;
+  @SuppressWarnings("unused") // used via updater
   private volatile long streamsFailed;
+  @SuppressWarnings("unused") // used via updater
   private volatile long messagesSent;
+  @SuppressWarnings("unused") // used via updater
   private volatile long messagesReceived;
+  @SuppressWarnings("unused") // used via updater
   private volatile long keepAlivesSent;
-  private volatile long lastMessageSentTimeNnaos;
+  @SuppressWarnings("unused") // used via updater
+  private volatile long lastMessageSentTimeNanos;
+  @SuppressWarnings("unused") // used via updater
   private volatile long lastMessageReceivedTimeNanos;
   // Default implementation just returns nulls
   private volatile FlowControlReader flowControlWindowReader;
@@ -169,7 +176,7 @@ public final class TransportTracer {
    * Returns the last time a message was sent as millis since Unix epoch.
    */
   public long getLastMessageSentTimeNanos() {
-    return lastMessageSentTimeNnaos;
+    return lastMessageSentTimeNanos;
   }
 
   /**
