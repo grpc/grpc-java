@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import io.grpc.Status;
 import java.util.concurrent.ScheduledExecutorService;
+import javax.annotation.Nullable;
 
 /** An inbound connection. */
 public interface ServerTransport extends WithLogId {
@@ -42,4 +43,10 @@ public interface ServerTransport extends WithLogId {
    * outstanding tasks are cancelled when the transport terminates.
    */
   ScheduledExecutorService getScheduledExecutorService();
+
+  /**
+   * Returns the tracer object that reports stats for this transport.
+   */
+  @Nullable
+  TransportTracer getTransportTracer();
 }

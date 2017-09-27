@@ -80,8 +80,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
   private boolean permitKeepAliveWithoutCalls;
   private long permitKeepAliveTimeInNanos = TimeUnit.MINUTES.toNanos(5);
-  // transportTracer is experimental and is never enabled at the moment
-  private final boolean enableTransportTracer = false;
+  private boolean enableTransportTracer = false;
 
   /**
    * Creates a server builder that will bind to the given port.
@@ -378,6 +377,11 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    */
   public NettyServerBuilder permitKeepAliveWithoutCalls(boolean permit) {
     permitKeepAliveWithoutCalls = permit;
+    return this;
+  }
+
+  NettyServerBuilder enableTransportTracer(boolean enabled) {
+    enableTransportTracer = enabled;
     return this;
   }
 

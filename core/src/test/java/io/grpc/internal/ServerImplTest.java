@@ -78,6 +78,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -1242,6 +1243,12 @@ public class ServerImplTest {
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
       return timer.getScheduledExecutorService();
+    }
+
+    @Nullable
+    @Override
+    public TransportTracer getTransportTracer() {
+      return null;
     }
   }
 

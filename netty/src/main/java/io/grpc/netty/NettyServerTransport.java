@@ -174,8 +174,9 @@ class NettyServerTransport implements ServerTransport {
     }
   }
 
+  @Override
   @Nullable
-  TransportTracer getTransportTracer() {
+  public TransportTracer getTransportTracer() {
     return transportTracer;
   }
 

@@ -41,6 +41,7 @@ import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
+import io.grpc.internal.TransportTracer;
 import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -215,6 +216,13 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   @Override
   public ScheduledExecutorService getScheduledExecutorService() {
     return serverScheduler;
+  }
+
+  @Nullable
+  @Override
+  public TransportTracer getTransportTracer() {
+    // TODO(zpencer): add transport tracing to in-process server
+    return null;
   }
 
   private synchronized void notifyShutdown(Status s) {

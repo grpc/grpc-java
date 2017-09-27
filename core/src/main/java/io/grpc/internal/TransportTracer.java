@@ -16,26 +16,23 @@
 
 package io.grpc.internal;
 
-import io.grpc.ExperimentalApi;
 import io.grpc.Status;
 import io.grpc.StreamTracer;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicLong;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A class for gathering statistics about a transport. This is an experimental feature.
  */
-@ThreadSafe
-@ExperimentalApi
 public final class TransportTracer {
-  private final AtomicLong streamsStarted = new AtomicLong();
+  // streamsStarted happens serially, so a volatile is sufficient
+  private volatile long streamsStarted;
+  private long lastStreamCreatedTimeMsec;
   private final AtomicLong streamsSucceeded = new AtomicLong();
   private final AtomicLong streamsFailed = new AtomicLong();
   private final AtomicLong messagesSent = new AtomicLong();
   private final AtomicLong messagesReceived = new AtomicLong();
   private final AtomicLong keepAlivesSent = new AtomicLong();
-  private final AtomicLong lastStreamCreatedTimeMsec = new AtomicLong();
   private final AtomicLong lastMessageSentTimeMsec = new AtomicLong();
   private final AtomicLong lastMessageReceivedTimeMsec = new AtomicLong();
   private volatile Callable<Integer> localFlowControlPollable;
@@ -54,7 +51,7 @@ public final class TransportTracer {
     @Override
     public void outboundMessage(int seqNo) {
       messagesSent.incrementAndGet();
-      updateMsecTimestamp(lastMessageReceivedTimeMsec);
+      updateMsecTimestamp(lastMessageSentTimeMsec);
     }
 
     @Override
@@ -74,11 +71,14 @@ public final class TransportTracer {
 
   /**
    * Called by the transport to report a stream has started. For clients, this happens when a header
-   * is sent. For servers, this happens when a header is received.
+   * is sent. For servers, this happens when a header is received. This method must be called from
+   * only one thread, but the resulting stats may be read from any thread.
    */
   public void reportStreamStarted() {
-    streamsStarted.incrementAndGet();
-    updateMsecTimestamp(lastStreamCreatedTimeMsec);
+    // @SuppressWarnings is not allowed on an increment statement, using another var here.
+    long newStreamsStarted = streamsStarted + 1;
+    streamsStarted = newStreamsStarted;
+    lastStreamCreatedTimeMsec = System.currentTimeMillis();
   }
 
   /**
@@ -108,7 +108,7 @@ public final class TransportTracer {
    * Returns the number of streams started on the transport.
    */
   public long getStreamsStarted() {
-    return streamsStarted.get();
+    return streamsStarted;
   }
 
   /**
@@ -150,7 +150,7 @@ public final class TransportTracer {
    * Returns the last time a stream was created as millis since Unix epoch.
    */
   public long getLastStreamCreatedTimeMsec() {
-    return lastStreamCreatedTimeMsec.get();
+    return lastStreamCreatedTimeMsec;
   }
 
   /**

@@ -62,6 +62,7 @@ import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
+import io.grpc.internal.TransportTracer;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -1370,6 +1371,189 @@ public abstract class AbstractTransportTest {
     doPingPong(serverListener);
   }
 
+  // Not all transports support the tracer yet
+  protected boolean haveTransportTracer() {
+    return false;
+  }
+
+  @Test
+  public void transportTracer_streams_started() throws Exception {
+    server.start(serverListener);
+    client = newClientTransport(server);
+    runIfNotNull(client.start(mock(ManagedClientTransport.Listener.class)));
+    MockServerTransportListener serverTransportListener
+        = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    if (!haveTransportTracer()) {
+      return;
+    }
+
+    // start first stream
+    long firstTimestamp;
+    {
+      ClientStream clientStream = client.newStream(methodDescriptor, new Metadata(), callOptions);
+      ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
+      clientStream.start(clientStreamListener);
+
+      assertEquals(0, serverListener.transportTracer.getStreamsStarted());
+      assertEquals(0, serverListener.transportTracer.getLastStreamCreatedTimeMsec());
+      @SuppressWarnings("unused")
+      StreamCreation serverStreamCreation
+          = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertEquals(1, serverListener.transportTracer.getStreamsStarted());
+      firstTimestamp = serverListener.transportTracer.getLastStreamCreatedTimeMsec();
+      assertThat(
+          System.currentTimeMillis() - firstTimestamp)
+          .isAtMost(50L);
+
+      ServerStream serverStream = serverStreamCreation.stream;
+      serverStream.close(Status.OK, new Metadata());
+    }
+
+    // start second stream
+    {
+      ClientStream clientStream = client.newStream(methodDescriptor, new Metadata(), callOptions);
+      ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
+      clientStream.start(clientStreamListener);
+
+      assertEquals(1, serverListener.transportTracer.getStreamsStarted());
+      @SuppressWarnings("unused")
+      StreamCreation serverStreamCreation
+          = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertEquals(2, serverListener.transportTracer.getStreamsStarted());
+      assertTrue(serverListener.transportTracer.getLastStreamCreatedTimeMsec() > firstTimestamp);
+      assertThat(
+          System.currentTimeMillis()
+              - serverListener.transportTracer.getLastStreamCreatedTimeMsec())
+          .isAtMost(50L);
+
+      ServerStream serverStream = serverStreamCreation.stream;
+      serverStream.close(Status.OK, new Metadata());
+    }
+    client.shutdown(Status.UNAVAILABLE);
+  }
+
+  @Test
+  public void transportTracer_streamEnded_ok() throws Exception {
+    server.start(serverListener);
+    client = newClientTransport(server);
+    runIfNotNull(client.start(mock(ManagedClientTransport.Listener.class)));
+    ClientStream clientStream = client.newStream(methodDescriptor, new Metadata(), callOptions);
+    ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
+    clientStream.start(clientStreamListener);
+    MockServerTransportListener serverTransportListener
+        = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    StreamCreation serverStreamCreation
+        = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    ServerStream serverStream = serverStreamCreation.stream;
+    if (!haveTransportTracer()) {
+      return;
+    }
+
+    assertEquals(0, serverListener.transportTracer.getStreamsSucceeded());
+    serverStream.close(Status.OK, new Metadata());
+    assertEquals(0, serverListener.transportTracer.getStreamsFailed());
+    assertEquals(1, serverListener.transportTracer.getStreamsSucceeded());
+
+    serverStream.close(Status.OK, new Metadata());
+    client.shutdown(Status.UNAVAILABLE);
+  }
+
+  @Test
+  public void transportTracer_streamEnded_nonOk() throws Exception {
+    server.start(serverListener);
+    client = newClientTransport(server);
+    runIfNotNull(client.start(mock(ManagedClientTransport.Listener.class)));
+    ClientStream clientStream = client.newStream(methodDescriptor, new Metadata(), callOptions);
+    ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
+    clientStream.start(clientStreamListener);
+    MockServerTransportListener serverTransportListener
+        = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    StreamCreation serverStreamCreation
+        = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    ServerStream serverStream = serverStreamCreation.stream;
+    if (!haveTransportTracer()) {
+      return;
+    }
+
+    assertEquals(0, serverListener.transportTracer.getStreamsFailed());
+    serverStream.close(Status.UNKNOWN, new Metadata());
+    assertEquals(1, serverListener.transportTracer.getStreamsFailed());
+    assertEquals(0, serverListener.transportTracer.getStreamsSucceeded());
+
+    serverStream.close(Status.OK, new Metadata());
+    client.shutdown(Status.UNAVAILABLE);
+  }
+
+  @Test
+  public void transportTracer_receive_msg() throws Exception {
+    server.start(serverListener);
+    client = newClientTransport(server);
+    runIfNotNull(client.start(mock(ManagedClientTransport.Listener.class)));
+    ClientStream clientStream = client.newStream(methodDescriptor, new Metadata(), callOptions);
+    ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
+    clientStream.start(clientStreamListener);
+    MockServerTransportListener serverTransportListener
+        = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    StreamCreation serverStreamCreation
+        = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    ServerStream serverStream = serverStreamCreation.stream;
+    ServerStreamListenerBase serverStreamListener = serverStreamCreation.listener;
+    if (!haveTransportTracer()) {
+      return;
+    }
+
+    assertEquals(0, serverListener.transportTracer.getMessagesReceived());
+    assertEquals(0, serverListener.transportTracer.getLastMessageReceivedTimeMsec());
+    serverStream.request(1);
+    clientStream.writeMessage(methodDescriptor.streamRequest("request"));
+    clientStream.flush();
+    clientStream.halfClose();
+    verifyMessageCountAndClose(serverStreamListener.messageQueue, 1);
+    assertEquals(1, serverListener.transportTracer.getMessagesReceived());
+    assertThat(
+        System.currentTimeMillis()
+            - serverListener.transportTracer.getLastMessageReceivedTimeMsec())
+        .isAtMost(50L);
+
+    serverStream.close(Status.OK, new Metadata());
+    client.shutdown(Status.UNAVAILABLE);
+  }
+
+  @Test
+  public void transportTracer_send_msg() throws Exception {
+    server.start(serverListener);
+    client = newClientTransport(server);
+    runIfNotNull(client.start(mock(ManagedClientTransport.Listener.class)));
+    ClientStream clientStream = client.newStream(methodDescriptor, new Metadata(), callOptions);
+    ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
+    clientStream.start(clientStreamListener);
+    MockServerTransportListener serverTransportListener
+        = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    StreamCreation serverStreamCreation
+        = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    ServerStream serverStream = serverStreamCreation.stream;
+    ServerStreamListenerBase serverStreamListener = serverStreamCreation.listener;
+    if (!haveTransportTracer()) {
+      return;
+    }
+
+    assertEquals(0, serverListener.transportTracer.getMessagesSent());
+    assertEquals(0, serverListener.transportTracer.getLastMessageSentTimeMsec());
+    clientStream.request(1);
+    serverStream.writeHeaders(new Metadata());
+    serverStream.writeMessage(methodDescriptor.streamResponse("response"));
+    serverStream.flush();
+    verifyMessageCountAndClose(clientStreamListener.messageQueue, 1);
+    assertEquals(1, serverListener.transportTracer.getMessagesSent());
+    assertThat(
+        System.currentTimeMillis()
+            - serverListener.transportTracer.getLastMessageSentTimeMsec())
+        .isAtMost(50L);
+
+    serverStream.close(Status.OK, new Metadata());
+    client.shutdown(Status.UNAVAILABLE);
+  }
+
   /**
    * Helper that simply does an RPC. It can be used similar to a sleep for negative testing: to give
    * time for actions _not_ to happen. Since it is based on doing an actual RPC with actual
@@ -1447,11 +1631,13 @@ public abstract class AbstractTransportTest {
     public final BlockingQueue<MockServerTransportListener> listeners
         = new LinkedBlockingQueue<MockServerTransportListener>();
     private final SettableFuture<?> shutdown = SettableFuture.create();
+    private TransportTracer transportTracer;
 
     @Override
     public ServerTransportListener transportCreated(ServerTransport transport) {
       MockServerTransportListener listener = new MockServerTransportListener(transport);
       listeners.add(listener);
+      transportTracer = transport.getTransportTracer();
       return listener;
     }
 
