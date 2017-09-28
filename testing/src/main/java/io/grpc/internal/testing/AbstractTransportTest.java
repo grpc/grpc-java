@@ -121,7 +121,7 @@ public abstract class AbstractTransportTest {
   protected abstract String testAuthority(InternalServer server);
 
   /**
-   * Returns true if the transport reports message sizes to StreamTracers.
+   * Returns true (which is default) if the transport reports message sizes to StreamTracers.
    */
   protected boolean sizesReported() {
     return true;
@@ -957,7 +957,7 @@ public abstract class AbstractTransportTest {
     assertEquals(Lists.newArrayList(trailers.getAll(binaryKey)),
         Lists.newArrayList(metadataCaptor.getValue().getAll(binaryKey)));
     assertTrue(clientStreamTracer1.getOutboundHeaders());
-    assertSame(statusCaptor.getValue(), clientStreamTracer1.getStatus());
+    assertStatusEquals(strippedStatus, clientStreamTracer1.getStatus());
     assertStatusEquals(status, serverStreamTracer1.getStatus());
   }
 
