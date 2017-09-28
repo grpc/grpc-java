@@ -1390,15 +1390,14 @@ public abstract class AbstractTransportTest {
     // start first stream
     long firstTimestamp;
     {
-      ClientStream clientStream = client.newStream(methodDescriptor, new Metadata(), callOptions);
-      ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
-      clientStream.start(clientStreamListener);
-
       {
         TransportTracer.Stats before = serverTransportListener.transport.getTransportStats();
         assertEquals(0, before.streamsStarted);
         assertEquals(0, before.lastStreamCreatedTimeNanos);
       }
+      ClientStream clientStream = client.newStream(methodDescriptor, new Metadata(), callOptions);
+      ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
+      clientStream.start(clientStreamListener);
       StreamCreation serverStreamCreation = serverTransportListener
           .takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
       {
@@ -1414,14 +1413,13 @@ public abstract class AbstractTransportTest {
 
     // start second stream
     {
-      ClientStream clientStream = client.newStream(methodDescriptor, new Metadata(), callOptions);
-      ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
-      clientStream.start(clientStreamListener);
-
       {
         TransportTracer.Stats before = serverTransportListener.transport.getTransportStats();
         assertEquals(1, before.streamsStarted);
       }
+      ClientStream clientStream = client.newStream(methodDescriptor, new Metadata(), callOptions);
+      ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
+      clientStream.start(clientStreamListener);
       StreamCreation serverStreamCreation = serverTransportListener
           .takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
       {
