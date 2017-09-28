@@ -79,6 +79,9 @@ public final class InProcessServerBuilder
 
   private InProcessServerBuilder(String name) {
     this.name = Preconditions.checkNotNull(name, "name");
+    // In-process transport should not record its traffic to the stats module.
+    // https://github.com/grpc/grpc-java/issues/2284
+    setRecordStats(false);
   }
 
   @Override

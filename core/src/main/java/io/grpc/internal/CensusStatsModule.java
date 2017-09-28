@@ -76,13 +76,15 @@ final class CensusStatsModule {
   private final StatsClientInterceptor clientInterceptor = new StatsClientInterceptor();
   private final ServerTracerFactory serverTracerFactory = new ServerTracerFactory();
   private final boolean propagateTags;
+  private final boolean recordStats;
 
   CensusStatsModule(
       final StatsContextFactory statsCtxFactory, Supplier<Stopwatch> stopwatchSupplier,
-      boolean propagateTags) {
+      boolean propagateTags, boolean recordStats) {
     this.statsCtxFactory = checkNotNull(statsCtxFactory, "statsCtxFactory");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.propagateTags = propagateTags;
+    this.recordStats = recordStats;
     this.statsHeader =
         Metadata.Key.of("grpc-tags-bin", new Metadata.BinaryMarshaller<StatsContext>() {
             @Override
@@ -212,6 +214,9 @@ final class CensusStatsModule {
       if (!callEnded.compareAndSet(false, true)) {
         return;
       }
+      if (!recordStats) {
+        return;
+      }
       stopwatch.stop();
       long roundtripNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       ClientTracer tracer = streamTracer.get();
@@ -300,6 +305,9 @@ final class CensusStatsModule {
     @Override
     public void streamClosed(Status status) {
       if (!streamClosed.compareAndSet(false, true)) {
+        return;
+      }
+      if (!recordStats) {
         return;
       }
       stopwatch.stop();

@@ -190,7 +190,8 @@ public class CensusModulesTest {
         .thenReturn(binarySpanContext);
     when(mockTracingPropagationHandler.fromBinaryValue(any(byte[].class)))
         .thenReturn(fakeClientSpanContext);
-    censusStats = new CensusStatsModule(statsCtxFactory, fakeClock.getStopwatchSupplier(), true);
+    censusStats =
+        new CensusStatsModule(statsCtxFactory, fakeClock.getStopwatchSupplier(), true, true);
     censusTracing = new CensusTracingModule(tracer, mockTracingPropagationHandler);
   }
 
@@ -455,23 +456,33 @@ public class CensusModulesTest {
   }
 
   @Test
-  public void statsHeadersPropagateTags() {
-    subtestStatsHeadersPropagateTags(true);
+  public void statsHeadersPropagateTags_record() {
+    subtestStatsHeadersPropagateTags(true, true);
   }
 
   @Test
-  public void statsHeadersNotPropagateTags() {
-    subtestStatsHeadersPropagateTags(false);
+  public void statsHeadersPropagateTags_notRecord() {
+    subtestStatsHeadersPropagateTags(true, false);
   }
 
-  private void subtestStatsHeadersPropagateTags(boolean propagate) {
+  @Test
+  public void statsHeadersNotPropagateTags_record() {
+    subtestStatsHeadersPropagateTags(false, true);
+  }
+
+  @Test
+  public void statsHeadersNotPropagateTags_notRecord() {
+    subtestStatsHeadersPropagateTags(false, false);
+  }
+
+  private void subtestStatsHeadersPropagateTags(boolean propagate, boolean recordStats) {
     // EXTRA_TAG is propagated by the FakeStatsContextFactory. Note that not all tags are
     // propagated.  The StatsContextFactory decides which tags are to propagated.  gRPC facilitates
     // the propagation by putting them in the headers.
     StatsContext clientCtx = statsCtxFactory.getDefault().with(
         StatsTestUtils.EXTRA_TAG, TagValue.create("extra-tag-value-897"));
-    CensusStatsModule census =
-        new CensusStatsModule(statsCtxFactory, fakeClock.getStopwatchSupplier(), propagate);
+    CensusStatsModule census = new CensusStatsModule(
+        statsCtxFactory, fakeClock.getStopwatchSupplier(), propagate, recordStats);
     Metadata headers = new Metadata();
     CensusStatsModule.ClientCallTracer callTracer =
         census.newClientCallTracer(clientCtx, method.getFullMethodName());
@@ -498,31 +509,39 @@ public class CensusModulesTest {
     // Verifies that the server tracer records the status with the propagated tag
     serverTracer.streamClosed(Status.OK);
 
-    StatsTestUtils.MetricsRecord serverRecord = statsCtxFactory.pollRecord();
-    assertNotNull(serverRecord);
-    assertNoClientContent(serverRecord);
-    TagValue serverMethodTag = serverRecord.tags.get(RpcConstants.RPC_SERVER_METHOD);
-    assertEquals(method.getFullMethodName(), serverMethodTag.toString());
-    TagValue serverStatusTag = serverRecord.tags.get(RpcConstants.RPC_STATUS);
-    assertEquals(Status.Code.OK.toString(), serverStatusTag.toString());
-    assertNull(serverRecord.getMetric(RpcConstants.RPC_SERVER_ERROR_COUNT));
-    TagValue serverPropagatedTag = serverRecord.tags.get(StatsTestUtils.EXTRA_TAG);
-    assertEquals("extra-tag-value-897", serverPropagatedTag.toString());
+    if (recordStats) {
+      StatsTestUtils.MetricsRecord serverRecord = statsCtxFactory.pollRecord();
+      assertNotNull(serverRecord);
+      assertNoClientContent(serverRecord);
+      TagValue serverMethodTag = serverRecord.tags.get(RpcConstants.RPC_SERVER_METHOD);
+      assertEquals(method.getFullMethodName(), serverMethodTag.toString());
+      TagValue serverStatusTag = serverRecord.tags.get(RpcConstants.RPC_STATUS);
+      assertEquals(Status.Code.OK.toString(), serverStatusTag.toString());
+      assertNull(serverRecord.getMetric(RpcConstants.RPC_SERVER_ERROR_COUNT));
+      TagValue serverPropagatedTag = serverRecord.tags.get(StatsTestUtils.EXTRA_TAG);
+      assertEquals("extra-tag-value-897", serverPropagatedTag.toString());
+    }
 
     // Verifies that the client tracer factory uses clientCtx, which includes the custom tags, to
     // record stats.
     callTracer.callEnded(Status.OK);
 
-    StatsTestUtils.MetricsRecord clientRecord = statsCtxFactory.pollRecord();
-    assertNotNull(clientRecord);
-    assertNoServerContent(clientRecord);
-    TagValue clientMethodTag = clientRecord.tags.get(RpcConstants.RPC_CLIENT_METHOD);
-    assertEquals(method.getFullMethodName(), clientMethodTag.toString());
-    TagValue clientStatusTag = clientRecord.tags.get(RpcConstants.RPC_STATUS);
-    assertEquals(Status.Code.OK.toString(), clientStatusTag.toString());
-    assertNull(clientRecord.getMetric(RpcConstants.RPC_CLIENT_ERROR_COUNT));
-    TagValue clientPropagatedTag = clientRecord.tags.get(StatsTestUtils.EXTRA_TAG);
-    assertEquals("extra-tag-value-897", clientPropagatedTag.toString());
+    if (recordStats) {
+      StatsTestUtils.MetricsRecord clientRecord = statsCtxFactory.pollRecord();
+      assertNotNull(clientRecord);
+      assertNoServerContent(clientRecord);
+      TagValue clientMethodTag = clientRecord.tags.get(RpcConstants.RPC_CLIENT_METHOD);
+      assertEquals(method.getFullMethodName(), clientMethodTag.toString());
+      TagValue clientStatusTag = clientRecord.tags.get(RpcConstants.RPC_STATUS);
+      assertEquals(Status.Code.OK.toString(), clientStatusTag.toString());
+      assertNull(clientRecord.getMetric(RpcConstants.RPC_CLIENT_ERROR_COUNT));
+      TagValue clientPropagatedTag = clientRecord.tags.get(StatsTestUtils.EXTRA_TAG);
+      assertEquals("extra-tag-value-897", clientPropagatedTag.toString());
+    }
+
+    if (!recordStats) {
+      assertNull(statsCtxFactory.pollRecord());
+    }
   }
 
   @Test

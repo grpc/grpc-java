@@ -67,6 +67,9 @@ public final class InProcessChannelBuilder extends
   private InProcessChannelBuilder(String name) {
     super(new InProcessSocketAddress(name), "localhost");
     this.name = Preconditions.checkNotNull(name, "name");
+    // In-process transport should not record its traffic to the stats module.
+    // https://github.com/grpc/grpc-java/issues/2284
+    setRecordStats(false);
   }
 
   @Override
