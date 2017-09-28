@@ -19,6 +19,7 @@ package io.grpc.testing.integration;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.instrumentation.stats.ContextUtils.STATS_CONTEXT_KEY;
 import static io.grpc.testing.integration.Messages.PayloadType.COMPRESSABLE;
+import static io.opencensus.trace.unsafe.ContextUtils.CONTEXT_SPAN_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -1329,7 +1330,9 @@ public abstract class AbstractInteropTest {
       }
       assertTrue("tag not found", tagFound);
 
-      // TODO(zhangkun83): test for span propagation
+      Span span = CONTEXT_SPAN_KEY.get(serverCtx);
+      assertNotNull(span);
+      assertEquals(clientParentSpan.getContext().getTraceId(), span.getContext().getTraceId());
     } finally {
       ctx.detach(origCtx);
     }
