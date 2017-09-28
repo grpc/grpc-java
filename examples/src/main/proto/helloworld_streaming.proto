@@ -1,4 +1,4 @@
-// Copyright 2016, gRPC Authors
+// Copyright 2015, gRPC Authors
 // All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,12 +12,19 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+syntax = "proto3";
 
-namespace java io.grpc.thrift
+option java_multiple_files = true;
+option java_package = "io.grpc.examples.helloworld";
+option java_outer_classname = "HelloWorldStreamingProto";
+option objc_class_prefix = "HLWS";
 
-struct Message {
-	1:i32 i,
-	2:bool b,
-	3:string s,
-	4:list<i32> l
+import "helloworld.proto";
+
+package helloworld;
+
+// The greeting service definition.
+service StreamingGreeter {
+  // Streams a many greetings
+  rpc SayHelloStreaming (stream HelloRequest) returns (stream HelloReply) {}
 }

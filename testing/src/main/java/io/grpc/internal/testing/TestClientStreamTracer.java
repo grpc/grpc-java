@@ -18,6 +18,7 @@ package io.grpc.internal.testing;
 
 import io.grpc.ClientStreamTracer;
 import io.grpc.Status;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -26,6 +27,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class TestClientStreamTracer extends ClientStreamTracer implements TestStreamTracer {
   private final TestBaseStreamTracer delegate = new TestBaseStreamTracer();
+  protected final CountDownLatch outboundHeadersLatch = new CountDownLatch(1);
   protected final AtomicReference<Throwable> outboundHeadersCalled =
       new AtomicReference<Throwable>();
   protected final AtomicReference<Throwable> inboundHeadersCalled =
@@ -53,6 +55,16 @@ public class TestClientStreamTracer extends ClientStreamTracer implements TestSt
    */
   public boolean getOutboundHeaders() {
     return outboundHeadersCalled.get() != null;
+  }
+
+  /**
+   * Allow tests to await the outbound header event, which depending on the test case may be
+   * necessary (e.g., if we test for a Netty client's outbound headers upon receiving the start of
+   * stream on the server side, the tracer won't know that headers were sent until a channel future
+   * executes).
+   */
+  public boolean awaitOutboundHeaders(int timeout, TimeUnit unit) throws Exception {
+    return outboundHeadersLatch.await(timeout, unit);
   }
 
   @Override
@@ -160,6 +172,7 @@ public class TestClientStreamTracer extends ClientStreamTracer implements TestSt
           "outboundHeaders called more than once",
           new Exception("second stack", outboundHeadersCalled.get()));
     }
+    outboundHeadersLatch.countDown();
   }
 
   @Override

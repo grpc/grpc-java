@@ -273,8 +273,7 @@ public class StatsTestUtils {
     }
 
     @Override
-    @SuppressWarnings("deprecation")
-    public void addAttributes(Map<String, AttributeValue> attributes) {}
+    public void putAttributes(Map<String, AttributeValue> attributes) {}
 
     @Override
     public void addAnnotation(String description, Map<String, AttributeValue> attributes) {}

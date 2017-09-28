@@ -69,10 +69,10 @@ import io.opencensus.trace.SpanBuilder;
 import io.opencensus.trace.SpanContext;
 import io.opencensus.trace.Tracer;
 import io.opencensus.trace.propagation.BinaryFormat;
+import io.opencensus.trace.propagation.SpanContextParseException;
 import io.opencensus.trace.unsafe.ContextUtils;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.text.ParseException;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
@@ -177,9 +177,9 @@ public class CensusModulesTest {
     when(spyServerSpanBuilder.startSpan()).thenReturn(spyServerSpan);
     when(tracer.spanBuilderWithRemoteParent(anyString(), any(SpanContext.class)))
         .thenReturn(spyServerSpanBuilder);
-    when(mockTracingPropagationHandler.toBinaryValue(any(SpanContext.class)))
+    when(mockTracingPropagationHandler.toByteArray(any(SpanContext.class)))
         .thenReturn(binarySpanContext);
-    when(mockTracingPropagationHandler.fromBinaryValue(any(byte[].class)))
+    when(mockTracingPropagationHandler.fromByteArray(any(byte[].class)))
         .thenReturn(fakeClientSpanContext);
     censusStats =
         new CensusStatsModule(statsCtxFactory, fakeClock.getStopwatchSupplier(), true, true);
@@ -571,7 +571,7 @@ public class CensusModulesTest {
     Metadata headers = new Metadata();
     callTracer.newClientStreamTracer(CallOptions.DEFAULT, headers);
 
-    verify(mockTracingPropagationHandler).toBinaryValue(same(fakeClientSpanContext));
+    verify(mockTracingPropagationHandler).toByteArray(same(fakeClientSpanContext));
     verifyNoMoreInteractions(mockTracingPropagationHandler);
     verify(tracer).spanBuilderWithExplicitParent(
         eq("Sent.package1.service2.method3"), same(fakeClientParentSpan));
@@ -582,7 +582,7 @@ public class CensusModulesTest {
     ServerStreamTracer serverTracer =
         censusTracing.getServerTracerFactory().newServerStreamTracer(
             method.getFullMethodName(), headers);
-    verify(mockTracingPropagationHandler).fromBinaryValue(same(binarySpanContext));
+    verify(mockTracingPropagationHandler).fromByteArray(same(binarySpanContext));
     verify(tracer).spanBuilderWithRemoteParent(
         eq("Recv.package1.service2.method3"), same(spyClientSpan.getContext()));
     verify(spyServerSpanBuilder).setRecordEvents(eq(true));
@@ -600,8 +600,8 @@ public class CensusModulesTest {
     assertSame(spyClientSpan.getContext(), headers.get(censusTracing.tracingHeader));
 
     // Make BinaryPropagationHandler always throw when parsing the header
-    when(mockTracingPropagationHandler.fromBinaryValue(any(byte[].class)))
-        .thenThrow(new ParseException("Malformed header", 0));
+    when(mockTracingPropagationHandler.fromByteArray(any(byte[].class)))
+        .thenThrow(new SpanContextParseException("Malformed header"));
 
     headers = new Metadata();
     assertNull(headers.get(censusTracing.tracingHeader));
