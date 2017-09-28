@@ -17,6 +17,7 @@
 package io.grpc.testing.integration;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.instrumentation.stats.ContextUtils.STATS_CONTEXT_KEY;
 import static io.grpc.testing.integration.Messages.PayloadType.COMPRESSABLE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -40,6 +41,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.instrumentation.stats.RpcConstants;
 import com.google.instrumentation.stats.StatsContextFactory;
+import com.google.instrumentation.stats.TagKey;
 import com.google.instrumentation.stats.TagValue;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.ByteString;
@@ -66,8 +68,11 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.testing.StatsTestUtils.FakeStatsContext;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsContextFactory;
 import io.grpc.internal.testing.StatsTestUtils.MetricsRecord;
+import io.grpc.internal.testing.StatsTestUtils.MockableSpan;
+import io.grpc.internal.testing.StatsTestUtils;
 import io.grpc.internal.testing.TestClientStreamTracer;
 import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.internal.testing.TestStreamTracer;
@@ -88,6 +93,8 @@ import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
+import io.opencensus.trace.Span;
+import io.opencensus.trace.unsafe.ContextUtils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.cert.Certificate;
@@ -97,6 +104,8 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -128,6 +137,8 @@ public abstract class AbstractInteropTest {
       new AtomicReference<ServerCall<?, ?>>();
   private static final AtomicReference<Metadata> requestHeadersCapture =
       new AtomicReference<Metadata>();
+  private static final AtomicReference<Context> contextCapture =
+      new AtomicReference<Context>();
   private static ScheduledExecutorService testServiceExecutor;
   private static Server server;
   private static final FakeStatsContextFactory clientStatsCtxFactory =
@@ -178,6 +189,7 @@ public abstract class AbstractInteropTest {
     List<ServerInterceptor> allInterceptors = ImmutableList.<ServerInterceptor>builder()
         .add(TestUtils.recordServerCallInterceptor(serverCallCapture))
         .add(TestUtils.recordRequestHeadersInterceptor(requestHeadersCapture))
+        .add(TestUtils.recordContextInterceptor(contextCapture))
         .addAll(TestServiceImpl.interceptors())
         .add(interceptors)
         .build();
@@ -1287,6 +1299,40 @@ public abstract class AbstractInteropTest {
         Arrays.equals(trailingBytes, trailersCapture.get().get(Util.ECHO_TRAILING_METADATA_KEY)));
     assertMetrics("grpc.testing.TestService/FullDuplexCall", Status.Code.OK,
         Collections.singleton(streamingRequest), Collections.singleton(goldenStreamingResponse));
+  }
+
+  @Test(timeout = 10000)
+  public void censusContextsPropagated() {
+    Span clientParentSpan = MockableSpan.generateRandomSpan(new Random());
+    Context ctx =
+        Context.ROOT.withValues(
+            STATS_CONTEXT_KEY,
+            clientStatsCtxFactory.getDefault().with(
+                StatsTestUtils.EXTRA_TAG, TagValue.create("extra value")),
+            ContextUtils.CONTEXT_SPAN_KEY,
+            clientParentSpan);
+    Context origCtx = ctx.attach();
+    try {
+      blockingStub.unaryCall(SimpleRequest.getDefaultInstance());
+      Context serverCtx = contextCapture.get();
+      assertNotNull(serverCtx);
+
+      FakeStatsContext statsCtx = (FakeStatsContext) STATS_CONTEXT_KEY.get(serverCtx);
+      assertNotNull(statsCtx);
+      Map<TagKey, TagValue> tags = statsCtx.getTags();
+      boolean tagFound = false;
+      for (Map.Entry<TagKey, TagValue> tag : tags.entrySet()) {
+        if (tag.getKey().equals(StatsTestUtils.EXTRA_TAG)) {
+          assertEquals(TagValue.create("extra value"), tag.getValue());
+          tagFound = true;
+        }
+      }
+      assertTrue("tag not found", tagFound);
+
+      // TODO(zhangkun83): test for span propagation
+    } finally {
+      ctx.detach(origCtx);
+    }
   }
 
   @Test(timeout = 10000)
