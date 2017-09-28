@@ -18,7 +18,6 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.Status;

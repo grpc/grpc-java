@@ -38,6 +38,9 @@ public final class TransportTracer {
   private long lastMessageReceivedTimeNanos;
   private FlowControlReader flowControlWindowReader;
 
+  /**
+   * Returns a read only set of current stats.
+   */
   public Stats getStats() {
     return new Stats(
         streamsStarted,
@@ -67,10 +70,10 @@ public final class TransportTracer {
    */
   void reportStreamClosed(Status status) {
     if (status.isOk()) {
-        streamsSucceeded++;
-      } else {
-        streamsFailed++;
-      }
+      streamsSucceeded++;
+    } else {
+      streamsFailed++;
+    }
   }
 
   /**
@@ -85,9 +88,9 @@ public final class TransportTracer {
    * Reports that a message was successfully received.
    */
   void reportMessageReceived() {
-      messagesReceived++;
-      lastMessageReceivedTimeNanos = currentTimeNanos();
-    }
+    messagesReceived++;
+    lastMessageReceivedTimeNanos = currentTimeNanos();
+  }
 
   /**
    * Reports that a keep alive message was sent.
@@ -167,7 +170,7 @@ public final class TransportTracer {
       this.lastMessageReceivedTimeNanos = lastMessageReceivedTimeNanos;
       if (flowControlReader == null) {
         this.localFlowControlWindow = -1;
-      this.remoteFlowControlWindow = -1;
+        this.remoteFlowControlWindow = -1;
       } else {
         FlowControlWindows windows = flowControlReader.read();
         this.localFlowControlWindow = windows.localBytes;

@@ -1425,7 +1425,7 @@ public abstract class AbstractTransportTest {
       StreamCreation serverStreamCreation = serverTransportListener
           .takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
       {
-         TransportTracer.Stats after = serverTransportListener.transport.getTransportStats();
+        TransportTracer.Stats after = serverTransportListener.transport.getTransportStats();
         assertEquals(2, after.streamsStarted);
         assertTrue(after.lastStreamCreatedTimeNanos > firstTimestamp);
         long secondTimestamp = TimeUnit.NANOSECONDS.toMillis(after.lastStreamCreatedTimeNanos);
