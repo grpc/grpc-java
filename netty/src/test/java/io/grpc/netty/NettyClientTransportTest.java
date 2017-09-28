@@ -103,7 +103,6 @@ public class NettyClientTransportTest {
   private final List<NettyClientTransport> transports = new ArrayList<NettyClientTransport>();
   private final NioEventLoopGroup group = new NioEventLoopGroup(1);
   private final EchoServerListener serverListener = new EchoServerListener();
-  private final boolean serverTransportTracerEnabled = false;
   private Runnable tooManyPingsRunnable = new Runnable() {
     // Throwing is useless in this method, because Netty doesn't propagate the exception
     @Override public void run() {}
@@ -556,8 +555,7 @@ public class NettyClientTransportTest {
     server = new NettyServer(
         TestUtils.testServerAddress(0),
         NioServerSocketChannel.class, group, group, negotiator,
-        Collections.<ServerStreamTracer.Factory>emptyList(),
-        serverTransportTracerEnabled, maxStreamsPerConnection,
+        Collections.<ServerStreamTracer.Factory>emptyList(), maxStreamsPerConnection,
         DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE, maxHeaderListSize,
         DEFAULT_SERVER_KEEPALIVE_TIME_NANOS, DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS,
         MAX_CONNECTION_IDLE_NANOS_DISABLED,

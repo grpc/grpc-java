@@ -218,9 +218,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
     return serverScheduler;
   }
 
-  @Nullable
   @Override
-  public TransportTracer getTransportTracer() {
+  public TransportTracer.Stats getTransportStats() {
     // TODO(zpencer): add transport tracing to in-process server
     return null;
   }

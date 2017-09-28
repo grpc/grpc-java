@@ -42,7 +42,6 @@ public class NettyServerTest {
         null, // no event group
         new ProtocolNegotiators.PlaintextNegotiator(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
-        false, // enableTransportTracer
         1, // ignore
         1, // ignore
         1, // ignore
@@ -78,7 +77,6 @@ public class NettyServerTest {
         null, // no event group
         new ProtocolNegotiators.PlaintextNegotiator(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
-        false, // enableTransportTracer
         1, // ignore
         1, // ignore
         1, // ignore

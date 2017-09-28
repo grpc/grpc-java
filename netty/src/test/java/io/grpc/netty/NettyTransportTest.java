@@ -57,7 +57,6 @@ public class NettyTransportTest extends AbstractTransportTest {
     return NettyServerBuilder
         .forPort(0)
         .flowControlWindow(65 * 1024)
-        .enableTransportTracer(true)
         .buildTransportServer(streamTracerFactories);
   }
 
@@ -68,7 +67,6 @@ public class NettyTransportTest extends AbstractTransportTest {
     return NettyServerBuilder
         .forPort(port)
         .flowControlWindow(65 * 1024)
-        .enableTransportTracer(true)
         .buildTransportServer(streamTracerFactories);
   }
 

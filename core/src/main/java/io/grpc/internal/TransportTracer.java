@@ -18,82 +18,38 @@ package io.grpc.internal;
 
 import com.google.common.base.Preconditions;
 import io.grpc.Status;
-import io.grpc.StreamTracer;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLongFieldUpdater;
-import javax.annotation.Nullable;
+import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * A class for gathering statistics about a transport. This is an experimental feature.
+ * Can only be called from the transport thread.
  */
+@NotThreadSafe
 public final class TransportTracer {
-  private static final AtomicLongFieldUpdater<TransportTracer> STREAMS_SUCCEEDED_UPDATER =
-      AtomicLongFieldUpdater.newUpdater(TransportTracer.class, "streamsSucceeded");
-  private static final AtomicLongFieldUpdater<TransportTracer> STREAMS_FAILED_UPDATER =
-      AtomicLongFieldUpdater.newUpdater(TransportTracer.class, "streamsFailed");
-  private static final AtomicLongFieldUpdater<TransportTracer> MESSAGES_SENT_UPDATER =
-      AtomicLongFieldUpdater.newUpdater(TransportTracer.class, "messagesSent");
-  private static final AtomicLongFieldUpdater<TransportTracer> MESSAGES_RECEIVED_UPDATER =
-      AtomicLongFieldUpdater.newUpdater(TransportTracer.class, "messagesReceived");
-  private static final AtomicLongFieldUpdater<TransportTracer> KEEPALIVES_SENT_UPDATER =
-      AtomicLongFieldUpdater.newUpdater(TransportTracer.class, "keepAlivesSent");
-  private static final AtomicLongFieldUpdater<TransportTracer> LAST_MESSAGE_SENT_TIME_UPDATER =
-      AtomicLongFieldUpdater.newUpdater(TransportTracer.class, "lastMessageSentTimeNanos");
-  private static final AtomicLongFieldUpdater<TransportTracer> LAST_MESSAGE_RECEIVED_TIME_UPDATER =
-      AtomicLongFieldUpdater.newUpdater(TransportTracer.class, "lastMessageReceivedTimeNanos");
+  private long streamsStarted;
+  private long lastStreamCreatedTimeNanos;
+  private long streamsSucceeded;
+  private long streamsFailed;
+  private long messagesSent;
+  private long messagesReceived;
+  private long keepAlivesSent;
+  private long lastMessageSentTimeNanos;
+  private long lastMessageReceivedTimeNanos;
+  private FlowControlReader flowControlWindowReader;
 
-  // streamsStarted happens serially, so a volatile is sufficient
-  private volatile long streamsStarted;
-  // Maintain a separate unsynchronized counter to avoid reading from the volatile
-  private long streamsStartedInternal;
-
-  private volatile long lastStreamCreatedTimeNanos;
-  @SuppressWarnings("unused") // used via updater
-  private volatile long streamsSucceeded;
-  @SuppressWarnings("unused") // used via updater
-  private volatile long streamsFailed;
-  @SuppressWarnings("unused") // used via updater
-  private volatile long messagesSent;
-  @SuppressWarnings("unused") // used via updater
-  private volatile long messagesReceived;
-  @SuppressWarnings("unused") // used via updater
-  private volatile long keepAlivesSent;
-  @SuppressWarnings("unused") // used via updater
-  private volatile long lastMessageSentTimeNanos;
-  @SuppressWarnings("unused") // used via updater
-  private volatile long lastMessageReceivedTimeNanos;
-  // Default implementation just returns nulls
-  private volatile FlowControlReader flowControlWindowReader;
-
-  private final StreamTracer streamTracer = new StreamTracer() {
-    @Override
-    public void streamClosed(Status status) {
-      if (status.isOk()) {
-        STREAMS_SUCCEEDED_UPDATER.getAndIncrement(TransportTracer.this);
-      } else {
-        STREAMS_FAILED_UPDATER.getAndIncrement(TransportTracer.this);
-      }
-    }
-
-    @Override
-    public void outboundMessage(int seqNo) {
-      MESSAGES_SENT_UPDATER.getAndIncrement(TransportTracer.this);
-      updateNanoTimestamp(LAST_MESSAGE_SENT_TIME_UPDATER);
-    }
-
-    @Override
-    public void inboundMessage(int seqNo) {
-      MESSAGES_RECEIVED_UPDATER.getAndIncrement(TransportTracer.this);
-      updateNanoTimestamp(LAST_MESSAGE_RECEIVED_TIME_UPDATER);
-    }
-  };
-
-  /**
-   * Returns a {@link StreamTracer} that can be installed on each stream created on the transport.
-   * The stats of each stream will be aggregated together on this TransportTracer.
-   */
-  public StreamTracer getStreamTracer() {
-    return streamTracer;
+  public Stats getStats() {
+    return new Stats(
+        streamsStarted,
+        lastStreamCreatedTimeNanos,
+        streamsSucceeded,
+        streamsFailed,
+        messagesSent,
+        messagesReceived,
+        keepAlivesSent,
+        lastMessageSentTimeNanos,
+        lastMessageReceivedTimeNanos,
+        flowControlWindowReader);
   }
 
   /**
@@ -101,17 +57,43 @@ public final class TransportTracer {
    * is sent. For servers, this happens when a header is received. This method must be called from
    * only one thread, but the resulting stats may be read from any thread.
    */
-  public void reportStreamStarted() {
-    streamsStartedInternal++;
-    streamsStarted = streamsStartedInternal;
-    lastStreamCreatedTimeNanos = TimeUnit.MILLISECONDS.toNanos(System.currentTimeMillis());
+  void reportStreamStarted() {
+    streamsStarted++;
+    lastStreamCreatedTimeNanos = currentTimeNanos();
   }
+
+  /**
+   * Reports that a stream closed with the specified Status.
+   */
+  void reportStreamClosed(Status status) {
+    if (status.isOk()) {
+        streamsSucceeded++;
+      } else {
+        streamsFailed++;
+      }
+  }
+
+  /**
+   * Reports that a message was successfully sent.
+   */
+  void reportMessageSent() {
+    messagesSent++;
+    lastMessageSentTimeNanos = currentTimeNanos();
+  }
+
+  /**
+   * Reports that a message was successfully received.
+   */
+  void reportMessageReceived() {
+      messagesReceived++;
+      lastMessageReceivedTimeNanos = currentTimeNanos();
+    }
 
   /**
    * Reports that a keep alive message was sent.
    */
   public void reportKeepAliveSent() {
-    KEEPALIVES_SENT_UPDATER.getAndIncrement(this);
+    keepAlivesSent++;
   }
 
   /**
@@ -124,99 +106,7 @@ public final class TransportTracer {
   }
 
   /**
-   * Returns the number of streams started on the transport.
-   */
-  public long getStreamsStarted() {
-    return streamsStarted;
-  }
-
-  /**
-   * Returns the number of streams ended successfully with an OK status.
-   */
-  public long getStreamsSucceeded() {
-    return streamsSucceeded;
-  }
-
-  /**
-   * Returns the number of streams completed with a non-OK status.
-   */
-  public long getStreamsFailed() {
-    return streamsFailed;
-  }
-
-  /**
-   * Returns the number of messages sent on the transport.
-   */
-  public long getMessagesSent() {
-    return messagesSent;
-  }
-
-  /**
-   * Returns the number of messages received on the transport.
-   */
-  public long getMessagesReceived() {
-    return messagesReceived;
-  }
-
-  /**
-   * Returns the number of keep alive messages sent on the transport.
-   */
-  public long getKeepAlivesSent() {
-    return keepAlivesSent;
-  }
-
-  /**
-   * Returns the last time a stream was created as millis since Unix epoch.
-   */
-  public long getLastStreamCreatedTimeNanos() {
-    return lastStreamCreatedTimeNanos;
-  }
-
-  /**
-   * Returns the last time a message was sent as millis since Unix epoch.
-   */
-  public long getLastMessageSentTimeNanos() {
-    return lastMessageSentTimeNanos;
-  }
-
-  /**
-   * Returns the last time a message was received as millis since Unix epoch.
-   */
-  public long getLastMessageReceivedTimeNanos() {
-    return lastMessageReceivedTimeNanos;
-  }
-
-  /**
-   * Returns the remote flow control window as reported by the callback of
-   * {@link #setFlowControlWindowReader}. Returns null if no callback was registered.
-   * This call may block.
-   */
-  @Nullable
-  public FlowControlWindows getFlowControlWindows() {
-    // Copy value to local variable to avoid unnecessary volatile reads
-    FlowControlReader reader = this.flowControlWindowReader;
-    if (reader == null) {
-      return null;
-    }
-    return reader.read();
-  }
-
-  /**
-   * Updates a field representing a nano timestamp. Avoids races and only allows the value
-   * to increase.
-   */
-  private void updateNanoTimestamp(AtomicLongFieldUpdater<TransportTracer> tsFieldUpdater) {
-    long now = TimeUnit.MILLISECONDS.toNanos(System.currentTimeMillis());
-    long oldVal = tsFieldUpdater.get(this);
-    while (oldVal < now && !tsFieldUpdater.compareAndSet(this, oldVal, now)) {
-      // CAS failed, read new timestamp and maybe try again
-      oldVal = tsFieldUpdater.get(this);
-    }
-  }
-
-  /**
-   * A container that holds the local and remote flow control window sizes. Typically readers
-   * are interested in both values, so we return both at the same time to reduce overhead.
+   * A container that holds the local and remote flow control window sizes.
    */
   public static final class FlowControlWindows {
     public final int remoteBytes;
@@ -230,9 +120,59 @@ public final class TransportTracer {
 
   /**
    * An interface for reading the local and remote flow control windows of the transport.
-   * Implementations may block.
    */
   public interface FlowControlReader {
     FlowControlWindows read();
+  }
+
+  private static long currentTimeNanos() {
+    return TimeUnit.MILLISECONDS.toNanos(System.currentTimeMillis());
+  }
+
+  /**
+   * A read only container of stats from the transport tracer.
+   */
+  public static final class Stats {
+    public final long streamsStarted;
+    public final long lastStreamCreatedTimeNanos;
+    public final long streamsSucceeded;
+    public final long streamsFailed;
+    public final long messagesSent;
+    public final long messagesReceived;
+    public final long keepAlivesSent;
+    public final long lastMessageSentTimeNanos;
+    public final long lastMessageReceivedTimeNanos;
+    public final int localFlowControlWindow;
+    public final int remoteFlowControlWindow;
+
+    private Stats(
+        long streamsStarted,
+        long lastStreamCreatedTimeNanos,
+        long streamsSucceeded,
+        long streamsFailed,
+        long messagesSent,
+        long messagesReceived,
+        long keepAlivesSent,
+        long lastMessageSentTimeNanos,
+        long lastMessageReceivedTimeNanos,
+        FlowControlReader flowControlReader) {
+      this.streamsStarted = streamsStarted;
+      this.lastStreamCreatedTimeNanos = lastStreamCreatedTimeNanos;
+      this.streamsSucceeded = streamsSucceeded;
+      this.streamsFailed = streamsFailed;
+      this.messagesSent = messagesSent;
+      this.messagesReceived = messagesReceived;
+      this.keepAlivesSent = keepAlivesSent;
+      this.lastMessageSentTimeNanos = lastMessageSentTimeNanos;
+      this.lastMessageReceivedTimeNanos = lastMessageReceivedTimeNanos;
+      if (flowControlReader == null) {
+        this.localFlowControlWindow = -1;
+      this.remoteFlowControlWindow = -1;
+      } else {
+        FlowControlWindows windows = flowControlReader.read();
+        this.localFlowControlWindow = windows.localBytes;
+        this.remoteFlowControlWindow = windows.remoteBytes;
+      }
+    }
   }
 }

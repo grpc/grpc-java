@@ -80,7 +80,6 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
   private boolean permitKeepAliveWithoutCalls;
   private long permitKeepAliveTimeInNanos = TimeUnit.MINUTES.toNanos(5);
-  private boolean enableTransportTracer = false;
 
   /**
    * Creates a server builder that will bind to the given port.
@@ -380,11 +379,6 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     return this;
   }
 
-  NettyServerBuilder enableTransportTracer(boolean enabled) {
-    enableTransportTracer = enabled;
-    return this;
-  }
-
   @Override
   @CheckReturnValue
   protected NettyServer buildTransportServer(
@@ -396,24 +390,12 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     }
 
     return new NettyServer(
-        address,
-        channelType,
-        bossEventLoopGroup,
-        workerEventLoopGroup,
-        negotiator,
-        streamTracerFactories,
-        enableTransportTracer,
-        maxConcurrentCallsPerConnection,
-        flowControlWindow,
-        maxMessageSize,
-        maxHeaderListSize,
-        keepAliveTimeInNanos,
-        keepAliveTimeoutInNanos,
+        address, channelType, bossEventLoopGroup, workerEventLoopGroup,
+        negotiator, streamTracerFactories, maxConcurrentCallsPerConnection, flowControlWindow,
+        maxMessageSize, maxHeaderListSize, keepAliveTimeInNanos, keepAliveTimeoutInNanos,
         maxConnectionIdleInNanos,
-        maxConnectionAgeInNanos,
-        maxConnectionAgeGraceInNanos,
-        permitKeepAliveWithoutCalls,
-        permitKeepAliveTimeInNanos);
+        maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
+        permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos);
   }
 
   @Override

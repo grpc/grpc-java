@@ -29,8 +29,10 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
+import io.netty.util.concurrent.Promise;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -71,9 +73,7 @@ class NettyServerTransport implements ServerTransport {
 
   NettyServerTransport(
       Channel channel, ProtocolNegotiator protocolNegotiator,
-      List<ServerStreamTracer.Factory> streamTracerFactories,
-      TransportTracer transportTracer,
-      int maxStreams,
+      List<ServerStreamTracer.Factory> streamTracerFactories, int maxStreams,
       int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
       long keepAliveTimeInNanos, long keepAliveTimeoutInNanos,
       long maxConnectionIdleInNanos,
@@ -83,7 +83,6 @@ class NettyServerTransport implements ServerTransport {
     this.protocolNegotiator = Preconditions.checkNotNull(protocolNegotiator, "protocolNegotiator");
     this.streamTracerFactories =
         Preconditions.checkNotNull(streamTracerFactories, "streamTracerFactories");
-    this.transportTracer = transportTracer;
     this.maxStreams = maxStreams;
     this.flowControlWindow = flowControlWindow;
     this.maxMessageSize = maxMessageSize;
@@ -95,6 +94,7 @@ class NettyServerTransport implements ServerTransport {
     this.maxConnectionAgeGraceInNanos = maxConnectionAgeGraceInNanos;
     this.permitKeepAliveWithoutCalls = permitKeepAliveWithoutCalls;
     this.permitKeepAliveTimeInNanos = permitKeepAliveTimeInNanos;
+    this.transportTracer = new TransportTracer();
   }
 
   public void start(ServerTransportListener listener) {
@@ -176,8 +176,25 @@ class NettyServerTransport implements ServerTransport {
 
   @Override
   @Nullable
-  public TransportTracer getTransportTracer() {
-    return transportTracer;
+  public TransportTracer.Stats getTransportStats() {
+    if (channel.eventLoop().inEventLoop()) {
+      // This is necessary, otherwise we will block forever on the promise in the else case
+      return transportTracer.getStats();
+    }
+    final Promise<TransportTracer.Stats> promise = channel.eventLoop().newPromise();
+    channel.eventLoop().execute(new Runnable() {
+      @Override
+      public void run() {
+        promise.setSuccess(transportTracer.getStats());
+      }
+    });
+    try {
+      return promise.get();
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
+    } catch (ExecutionException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   /**

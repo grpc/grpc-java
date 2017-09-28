@@ -26,7 +26,6 @@ import io.grpc.internal.InternalServer;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.SharedResourceHolder;
-import io.grpc.internal.TransportTracer;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -73,34 +72,22 @@ class NettyServer implements InternalServer {
   private final long permitKeepAliveTimeInNanos;
   private final ReferenceCounted eventLoopReferenceCounter = new EventLoopReferenceCounter();
   private final List<ServerStreamTracer.Factory> streamTracerFactories;
-  private final boolean enableTransportTracer;
 
   NettyServer(
-      SocketAddress address,
-      Class<? extends ServerChannel> channelType,
-      @Nullable EventLoopGroup bossGroup,
-      @Nullable EventLoopGroup workerGroup,
-      ProtocolNegotiator protocolNegotiator,
-      List<ServerStreamTracer.Factory> streamTracerFactories,
-      boolean enableTransportTracer,
-      int maxStreamsPerConnection,
-      int flowControlWindow,
-      int maxMessageSize,
-      int maxHeaderListSize,
-      long keepAliveTimeInNanos,
-      long keepAliveTimeoutInNanos,
+      SocketAddress address, Class<? extends ServerChannel> channelType,
+      @Nullable EventLoopGroup bossGroup, @Nullable EventLoopGroup workerGroup,
+      ProtocolNegotiator protocolNegotiator, List<ServerStreamTracer.Factory> streamTracerFactories,
+      int maxStreamsPerConnection, int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
+      long keepAliveTimeInNanos, long keepAliveTimeoutInNanos,
       long maxConnectionIdleInNanos,
-      long maxConnectionAgeInNanos,
-      long maxConnectionAgeGraceInNanos,
-      boolean permitKeepAliveWithoutCalls,
-      long permitKeepAliveTimeInNanos) {
+      long maxConnectionAgeInNanos, long maxConnectionAgeGraceInNanos,
+      boolean permitKeepAliveWithoutCalls, long permitKeepAliveTimeInNanos) {
     this.address = address;
     this.channelType = checkNotNull(channelType, "channelType");
     this.bossGroup = bossGroup;
     this.workerGroup = workerGroup;
     this.protocolNegotiator = checkNotNull(protocolNegotiator, "protocolNegotiator");
     this.streamTracerFactories = checkNotNull(streamTracerFactories, "streamTracerFactories");
-    this.enableTransportTracer = enableTransportTracer;
     this.usingSharedBossGroup = bossGroup == null;
     this.usingSharedWorkerGroup = workerGroup == null;
     this.maxStreamsPerConnection = maxStreamsPerConnection;
@@ -152,25 +139,15 @@ class NettyServer implements InternalServer {
           maxConnectionAgeInNanos =
               (long) ((.9D + Math.random() * .2D) * maxConnectionAgeInNanos);
         }
-        TransportTracer transportTracer = enableTransportTracer ? new TransportTracer() : null;
 
         NettyServerTransport transport =
             new NettyServerTransport(
-                ch,
-                protocolNegotiator,
-                streamTracerFactories,
-                transportTracer,
-                maxStreamsPerConnection,
-                flowControlWindow,
-                maxMessageSize,
-                maxHeaderListSize,
-                keepAliveTimeInNanos,
-                keepAliveTimeoutInNanos,
+                ch, protocolNegotiator, streamTracerFactories, maxStreamsPerConnection,
+                flowControlWindow, maxMessageSize, maxHeaderListSize,
+                keepAliveTimeInNanos, keepAliveTimeoutInNanos,
                 maxConnectionIdleInNanos,
-                maxConnectionAgeInNanos,
-                maxConnectionAgeGraceInNanos,
-                permitKeepAliveWithoutCalls,
-                permitKeepAliveTimeInNanos);
+                maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
+                permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos);
         ServerTransportListener transportListener;
         // This is to order callbacks on the listener, not to guard access to channel.
         synchronized (NettyServer.this) {

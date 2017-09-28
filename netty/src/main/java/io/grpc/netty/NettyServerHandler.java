@@ -35,7 +35,6 @@ import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
-import io.grpc.StreamTracer;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.LogExceptionRunnable;
@@ -80,9 +79,7 @@ import io.netty.handler.codec.http2.WeightedFairQueueByteDistributor;
 import io.netty.handler.logging.LogLevel;
 import io.netty.util.AsciiString;
 import io.netty.util.ReferenceCountUtil;
-import io.netty.util.concurrent.Promise;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -107,10 +104,8 @@ class NettyServerHandler extends AbstractNettyHandler {
   private final long maxConnectionAgeInNanos;
   private final long maxConnectionAgeGraceInNanos;
   private final List<ServerStreamTracer.Factory> streamTracerFactories;
-  @Nullable
   private final TransportTracer transportTracer;
   private final KeepAliveEnforcer keepAliveEnforcer;
-  private final Http2Connection connection;
   private Attributes attributes;
   private Throwable connectionError;
   private boolean teWarningLogged;
@@ -126,7 +121,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   static NettyServerHandler newHandler(
       ServerTransportListener transportListener,
       List<ServerStreamTracer.Factory> streamTracerFactories,
-      @Nullable TransportTracer transportTracer,
+      TransportTracer transportTracer,
       int maxStreams,
       int flowControlWindow,
       int maxHeaderListSize,
@@ -169,7 +164,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       Http2FrameReader frameReader, Http2FrameWriter frameWriter,
       ServerTransportListener transportListener,
       List<ServerStreamTracer.Factory> streamTracerFactories,
-      @Nullable final TransportTracer transportTracer,
+      TransportTracer transportTracer,
       int maxStreams,
       int flowControlWindow,
       int maxHeaderListSize,
@@ -225,7 +220,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       final Http2Connection connection,
       ServerTransportListener transportListener,
       List<ServerStreamTracer.Factory> streamTracerFactories,
-      @Nullable TransportTracer transportTracer,
+      TransportTracer transportTracer,
       Http2ConnectionDecoder decoder,
       Http2ConnectionEncoder encoder,
       Http2Settings settings,
@@ -261,7 +256,6 @@ class NettyServerHandler extends AbstractNettyHandler {
       };
     }
 
-    this.connection = connection;
     connection.addListener(new Http2ConnectionAdapter() {
       @Override
       public void onStreamActive(Http2Stream stream) {
@@ -296,7 +290,19 @@ class NettyServerHandler extends AbstractNettyHandler {
     streamKey = encoder.connection().newKey();
     this.transportListener = checkNotNull(transportListener, "transportListener");
     this.streamTracerFactories = checkNotNull(streamTracerFactories, "streamTracerFactories");
-    this.transportTracer = transportTracer;
+    this.transportTracer = checkNotNull(transportTracer, "transportTracer");
+
+    transportTracer.setFlowControlWindowReader(new TransportTracer.FlowControlReader() {
+      private final Http2FlowController local = connection.local().flowController();
+      private final Http2FlowController remote = connection.remote().flowController();
+
+      @Override
+      public TransportTracer.FlowControlWindows read() {
+        return new TransportTracer.FlowControlWindows(
+            local.windowSize(connection.connectionStream()),
+            remote.windowSize(connection.connectionStream()));
+      }
+    });
 
     // Set the frame listener on the decoder.
     decoder().frameListener(new FrameListener());
@@ -352,43 +358,6 @@ class NettyServerHandler extends AbstractNettyHandler {
           keepAliveTimeInNanos, keepAliveTimeoutInNanos, true /* keepAliveDuringTransportIdle */);
       keepAliveManager.onTransportStarted();
     }
-    if (transportTracer != null) {
-      final class NettyFlowControlReader implements TransportTracer.FlowControlReader {
-        private final Http2FlowController local = connection.local().flowController();
-        private final Http2FlowController remote = connection.remote().flowController();
-
-        @Override
-        public TransportTracer.FlowControlWindows read() {
-          if (ctx.executor().inEventLoop()) {
-            return new TransportTracer.FlowControlWindows(
-                local.windowSize(connection.connectionStream()),
-                remote.windowSize(connection.connectionStream()));
-          } else {
-            final Promise<TransportTracer.FlowControlWindows> promise =
-                ctx.executor().newPromise();
-            ctx.executor().submit(new Runnable() {
-              @Override
-              public void run() {
-                TransportTracer.FlowControlWindows result =
-                    new TransportTracer.FlowControlWindows(
-                        local.windowSize(connection.connectionStream()),
-                        remote.windowSize(connection.connectionStream()));
-                promise.setSuccess(result);
-              }
-            });
-            try {
-              return promise.get();
-            } catch (InterruptedException e) {
-              throw new RuntimeException(e);
-            } catch (ExecutionException e) {
-              throw new RuntimeException(e);
-            }
-          }
-        }
-      }
-
-      transportTracer.setFlowControlWindowReader(new NettyFlowControlReader());
-    }
     super.handlerAdded(ctx);
   }
 
@@ -411,22 +380,24 @@ class NettyServerHandler extends AbstractNettyHandler {
       Http2Stream http2Stream = requireHttp2Stream(streamId);
 
       Metadata metadata = Utils.convertHeaders(headers);
-      StreamTracer transportStreamTracer = null;
-      if (transportTracer != null) {
-        transportTracer.reportStreamStarted();
-        transportStreamTracer = transportTracer.getStreamTracer();
-      }
-      // transportTracer is passed in as a separate arg to avoid making a copy
-      // of streamTracerFactories
       StatsTraceContext statsTraceCtx =
-          StatsTraceContext.newServerContext(
-              streamTracerFactories, transportStreamTracer, method, metadata);
+          StatsTraceContext.newServerContext(streamTracerFactories, method, metadata);
 
       NettyServerStream.TransportState state = new NettyServerStream.TransportState(
-          this, ctx.channel().eventLoop(), http2Stream, maxMessageSize, statsTraceCtx);
+          this,
+          ctx.channel().eventLoop(),
+          http2Stream,
+          maxMessageSize,
+          statsTraceCtx,
+          transportTracer);
       String authority = getOrUpdateAuthority((AsciiString)headers.authority());
-      NettyServerStream stream = new NettyServerStream(ctx.channel(), state, attributes,
-          authority, statsTraceCtx);
+      NettyServerStream stream = new NettyServerStream(
+          ctx.channel(),
+          state,
+          attributes,
+          authority,
+          statsTraceCtx,
+          transportTracer);
       transportListener.streamCreated(stream, method, metadata);
       state.onStreamAllocated();
       http2Stream.setProperty(streamKey, state);

@@ -76,13 +76,17 @@ public abstract class AbstractServerStream extends AbstractStream
 
   private final MessageFramer framer;
   private final StatsTraceContext statsTraceCtx;
+  private final TransportTracer transportTracer;
   private boolean outboundClosed;
   private boolean headersSent;
 
-  protected AbstractServerStream(WritableBufferAllocator bufferAllocator,
-      StatsTraceContext statsTraceCtx) {
+  protected AbstractServerStream(
+      WritableBufferAllocator bufferAllocator,
+      StatsTraceContext statsTraceCtx,
+      TransportTracer transportTracer) {
     this.statsTraceCtx = Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
-    framer = new MessageFramer(this, bufferAllocator, statsTraceCtx);
+    this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
+    framer = new MessageFramer(this, bufferAllocator, statsTraceCtx, transportTracer);
   }
 
   @Override
@@ -126,6 +130,7 @@ public abstract class AbstractServerStream extends AbstractStream
     if (!outboundClosed) {
       outboundClosed = true;
       statsTraceCtx.streamClosed(status);
+      transportTracer.reportStreamClosed(status);
       endOfMessages();
       addStatusToTrailers(trailers, status);
       abstractServerStreamSink().writeTrailers(trailers, headersSent);
@@ -181,15 +186,20 @@ public abstract class AbstractServerStream extends AbstractStream
     private boolean listenerClosed;
     private ServerStreamListener listener;
     private final StatsTraceContext statsTraceCtx;
+    private final TransportTracer transportTracer;
 
     private boolean endOfStream = false;
     private boolean deframerClosed = false;
     private boolean immediateCloseRequested = false;
     private Runnable deframerClosedTask;
 
-    protected TransportState(int maxMessageSize, StatsTraceContext statsTraceCtx) {
-      super(maxMessageSize, statsTraceCtx);
+    protected TransportState(
+        int maxMessageSize,
+        StatsTraceContext statsTraceCtx,
+        TransportTracer transportTracer) {
+      super(maxMessageSize, statsTraceCtx, transportTracer);
       this.statsTraceCtx = Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
+      this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
     }
 
     /**
@@ -204,6 +214,7 @@ public abstract class AbstractServerStream extends AbstractStream
     @Override
     public final void onStreamAllocated() {
       super.onStreamAllocated();
+      transportTracer.reportStreamStarted();
     }
 
     @Override
@@ -309,6 +320,7 @@ public abstract class AbstractServerStream extends AbstractStream
         // If status is OK, close() is guaranteed to be called which should decide the final status
         if (!newStatus.isOk()) {
           statsTraceCtx.streamClosed(newStatus);
+          transportTracer.reportStreamClosed(newStatus);
         }
         listenerClosed = true;
         onStreamDeallocated();

@@ -138,8 +138,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
   private long keepAliveTimeInNanos = DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
   private long keepAliveTimeoutInNanos = DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
-  private boolean includeMockStreamTracerFactory = true;
-  private boolean enableTransportTracer = true;
   private TransportTracer transportTracer;
 
   private class ServerTransportListenerImpl implements ServerTransportListener {
@@ -164,9 +162,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     assertNull("manualSetUp should not run more than once", handler());
 
     MockitoAnnotations.initMocks(this);
-    if (enableTransportTracer) {
-      transportTracer = new TransportTracer();
-    }
+    transportTracer = new TransportTracer();
     when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
         .thenReturn(streamTracer);
 
@@ -216,7 +212,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   @Test
   public void streamTracerCreated() throws Exception {
-    enableTransportTracer = false;
     manualSetUp();
     createStream();
 
@@ -225,31 +220,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     List<StreamTracer> tracers = statsTraceCtx.getTracersForTest();
     assertEquals(1, tracers.size());
     assertSame(streamTracer, tracers.get(0));
-  }
-
-  @Test
-  public void streamTracerCreated_transportTracer() throws Exception {
-    manualSetUp();
-    createStream();
-
-    verify(streamTracerFactory).newServerStreamTracer(eq("foo/bar"), any(Metadata.class));
-    StatsTraceContext statsTraceCtx = stream.statsTraceContext();
-    List<StreamTracer> tracers = statsTraceCtx.getTracersForTest();
-    assertEquals(2, tracers.size());
-    assertSame(streamTracer, tracers.get(0));
-    assertSame(transportTracer.getStreamTracer(), tracers.get(1));
-  }
-
-  @Test
-  public void streamTracerCreated_emptyTracerFactory() throws Exception {
-    includeMockStreamTracerFactory = false;
-    manualSetUp();
-    createStream();
-
-    StatsTraceContext statsTraceCtx = stream.statsTraceContext();
-    List<StreamTracer> tracers = statsTraceCtx.getTracersForTest();
-    assertEquals(1, tracers.size());
-    assertSame(transportTracer.getStreamTracer(), tracers.get(0));
   }
 
   @Test
@@ -530,9 +500,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     keepAliveTimeoutInNanos = TimeUnit.MINUTES.toNanos(30L);
     manualSetUp();
 
-    assertEquals(0, transportTracer.getKeepAlivesSent());
+    assertEquals(0, transportTracer.getStats().keepAlivesSent);
     fakeClock().forwardNanos(keepAliveTimeInNanos);
-    assertEquals(1, transportTracer.getKeepAlivesSent());
+    assertEquals(1, transportTracer.getStats().keepAlivesSent);
 
     verifyWrite().writePing(eq(ctx()), eq(false), eq(pingBuf), any(ChannelPromise.class));
 
@@ -785,10 +755,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   @Test
   public void transportTracer_windowSizeDefault() throws Exception {
     manualSetUp();
-    TransportTracer.FlowControlWindows windows = transportTracer.getFlowControlWindows();
-    assertNotNull(windows);
-    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, windows.remoteBytes);
-    assertEquals(flowControlWindow, windows.localBytes);
+    TransportTracer.Stats stats = transportTracer.getStats();
+    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, stats.remoteFlowControlWindow);
+    assertEquals(flowControlWindow, stats.localFlowControlWindow);
   }
 
   @Test
@@ -796,32 +765,19 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     flowControlWindow = 1048576; // 1MiB
     manualSetUp();
     {
-      TransportTracer.FlowControlWindows windows = transportTracer.getFlowControlWindows();
-      assertNotNull(windows);
-      assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, windows.remoteBytes);
-      assertEquals(flowControlWindow, windows.localBytes);
+      TransportTracer.Stats stats = transportTracer.getStats();
+      assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, stats.remoteFlowControlWindow);
+      assertEquals(flowControlWindow, stats.localFlowControlWindow);
     }
 
     {
       ByteBuf serializedSettings = windowUpdate(0, 1000);
       channelRead(serializedSettings);
-      TransportTracer.FlowControlWindows windows = transportTracer.getFlowControlWindows();
+      TransportTracer.Stats stats = transportTracer.getStats();
       assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE + 1000,
-          windows.remoteBytes);
-      assertEquals(flowControlWindow, windows.localBytes);
+          stats.remoteFlowControlWindow);
+      assertEquals(flowControlWindow, stats.localFlowControlWindow);
     }
-  }
-
-  @Test
-  public void transportTracer_createStream() throws Exception {
-    manualSetUp();
-    assertEquals(0, transportTracer.getStreamsStarted());
-    assertEquals(0, transportTracer.getLastStreamCreatedTimeNanos());
-
-    createStream();
-    assertEquals(1, transportTracer.getStreamsStarted());
-    long tsMsec = TimeUnit.NANOSECONDS.toMillis(transportTracer.getLastStreamCreatedTimeNanos());
-    assertTrue(Math.abs(System.currentTimeMillis() - tsMsec) < 100);
   }
 
   private void createStream() throws Exception {
@@ -852,15 +808,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   @Override
   protected NettyServerHandler newHandler() {
-    List<ServerStreamTracer.Factory> streamTracerFactories;
-    if (includeMockStreamTracerFactory) {
-      streamTracerFactories = Arrays.asList(streamTracerFactory);
-    } else {
-      streamTracerFactories = Collections.emptyList();
-    }
     return NettyServerHandler.newHandler(
         frameReader(), frameWriter(), transportListener,
-        streamTracerFactories, transportTracer,
+        Arrays.asList(streamTracerFactory), transportTracer,
         maxConcurrentStreams, flowControlWindow,
         maxHeaderListSize, DEFAULT_MAX_MESSAGE_SIZE,
         keepAliveTimeInNanos, keepAliveTimeoutInNanos,

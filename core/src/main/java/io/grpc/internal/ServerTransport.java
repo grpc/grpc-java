@@ -45,8 +45,8 @@ public interface ServerTransport extends WithLogId {
   ScheduledExecutorService getScheduledExecutorService();
 
   /**
-   * Returns the tracer object that reports stats for this transport.
+   * Returns the transport level stats.
    */
   @Nullable
-  TransportTracer getTransportTracer();
+  TransportTracer.Stats getTransportStats();
 }
