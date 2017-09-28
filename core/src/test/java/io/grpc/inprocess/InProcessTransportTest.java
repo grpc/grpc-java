@@ -51,4 +51,11 @@ public class InProcessTransportTest extends AbstractTransportTest {
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     return new InProcessTransport(TRANSPORT_NAME, testAuthority(server));
   }
+
+  @Override
+  protected boolean sizesReported() {
+    // TODO(zhangkun83): InProcessTransport doesn't record metrics for now
+    // (https://github.com/grpc/grpc-java/issues/2284)
+    return false;
+  }
 }

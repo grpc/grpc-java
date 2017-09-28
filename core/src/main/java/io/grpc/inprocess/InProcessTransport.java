@@ -129,14 +129,18 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       final MethodDescriptor<?, ?> method, final Metadata headers, final CallOptions callOptions) {
     if (shutdownStatus != null) {
       final Status capturedStatus = shutdownStatus;
+      final StatsTraceContext statsTraceCtx =
+          StatsTraceContext.newClientContext(callOptions, headers);
       return new NoopClientStream() {
         @Override
         public void start(ClientStreamListener listener) {
+          statsTraceCtx.clientOutboundHeaders();
+          statsTraceCtx.streamClosed(capturedStatus);
           listener.closed(capturedStatus, new Metadata());
         }
       };
     }
-    return new InProcessStream(method, headers, authority).clientStream;
+    return new InProcessStream(method, headers, callOptions, authority).clientStream;
   }
 
   @Override
@@ -242,7 +246,9 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
     private final MethodDescriptor<?, ?> method;
     private volatile String authority;
 
-    private InProcessStream(MethodDescriptor<?, ?> method, Metadata headers, String authority) {
+    private InProcessStream(
+        MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+        String authority) {
       this.method = checkNotNull(method, "method");
       this.headers = checkNotNull(headers, "headers");
       this.authority = authority;
@@ -376,6 +382,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         if (closed) {
           return;
         }
+        clientStream.statsTraceCtx.clientInboundHeaders();
         clientStreamListener.headersRead(headers);
       }
 
@@ -388,6 +395,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           }
           if (clientReceiveQueue.isEmpty()) {
             closed = true;
+            serverStream.statsTraceCtx.streamClosed(status);
             clientStream.statsTraceCtx.streamClosed(status);
             clientStreamListener.closed(status, trailers);
           } else {
@@ -425,6 +433,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
             }
           }
         }
+        serverStream.statsTraceCtx.streamClosed(stripCause(status));
         clientStream.statsTraceCtx.streamClosed(status);
         clientStreamListener.closed(status, new Metadata());
         return true;
@@ -578,7 +587,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
             }
           }
         }
-        serverStream.statsTraceCtx.streamClosed(reason);
         serverStreamListener.closed(reason);
         return true;
       }
