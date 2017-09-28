@@ -369,8 +369,8 @@ public class MessageFramerTest {
     {
       TransportTracer.Stats after = transportTracer.getStats();
       assertEquals(1, after.messagesSent);
-      assertThat(System.currentTimeMillis()
-          - TimeUnit.NANOSECONDS.toMillis(after.lastMessageSentTimeNanos)).isLessThan(50L);
+      long timestamp = TimeUnit.NANOSECONDS.toMillis(after.lastMessageSentTimeNanos);
+      assertThat(System.currentTimeMillis() - timestamp).isAtMost(50L);
     }
   }
 

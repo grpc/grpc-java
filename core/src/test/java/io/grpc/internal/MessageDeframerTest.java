@@ -331,8 +331,8 @@ public class MessageDeframerTest {
       {
         TransportTracer.Stats after = transportTracer.getStats();
         assertEquals(1, after.messagesReceived);
-        assertThat(System.currentTimeMillis()
-            - TimeUnit.NANOSECONDS.toMillis(after.lastMessageReceivedTimeNanos)).isAtMost(50L);
+        long timestamp = TimeUnit.NANOSECONDS.toMillis(after.lastMessageReceivedTimeNanos);
+        assertThat(System.currentTimeMillis() - timestamp).isAtMost(50L);
       }
     }
   }

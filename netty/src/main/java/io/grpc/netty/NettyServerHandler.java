@@ -524,11 +524,6 @@ class NettyServerHandler extends AbstractNettyHandler {
     return serverWriteQueue;
   }
 
-  @Nullable
-  TransportTracer getTransportTracer() {
-    return transportTracer;
-  }
-
   /**
    * Handler for commands sent from the stream.
    */
