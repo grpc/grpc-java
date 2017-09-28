@@ -37,7 +37,7 @@ public final class ForwardingTestUtil {
    * methods.
    */
   public static <T> void testAllMethodsForwarded(
-      Class<?> delegateClass,
+      Class<T> delegateClass,
       T mockDelegate,
       T forwarder) throws Exception {
     testMethodsForwarded(delegateClass, mockDelegate, forwarder, Collections.<Method>emptySet());
@@ -55,7 +55,7 @@ public final class ForwardingTestUtil {
    * @param skippedMethods A collection of methods that are skipped by the test.
    */
   public static <T> void testMethodsForwarded(
-      Class<?> delegateClass,
+      Class<T> delegateClass,
       T mockDelegate,
       T forwarder,
       Collection<Method> skippedMethods) throws Exception {
