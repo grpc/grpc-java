@@ -329,10 +329,8 @@ public abstract class AbstractInteropTest {
 
     assertEquals(goldenResponse, blockingStub.unaryCall(request));
 
-    if (metricsExpected()) {
-      assertMetrics("grpc.testing.TestService/UnaryCall", Status.Code.OK,
-          Collections.singleton(request), Collections.singleton(goldenResponse));
-    }
+    assertMetrics("grpc.testing.TestService/UnaryCall", Status.Code.OK,
+        Collections.singleton(request), Collections.singleton(goldenResponse));
   }
 
   /**
@@ -366,28 +364,22 @@ public abstract class AbstractInteropTest {
     } catch (StatusRuntimeException e) {
       assertEquals(Status.INVALID_ARGUMENT.getCode(), e.getStatus().getCode());
     }
-    if (metricsExpected()) {
-      assertMetrics("grpc.testing.TestService/UnaryCall", Status.Code.INVALID_ARGUMENT);
-    }
+    assertMetrics("grpc.testing.TestService/UnaryCall", Status.Code.INVALID_ARGUMENT);
 
     assertEquals(
         goldenResponse, blockingStub.withCompression("gzip").unaryCall(expectCompressedRequest));
-    if (metricsExpected()) {
-      assertMetrics(
-          "grpc.testing.TestService/UnaryCall",
-          Status.Code.OK,
-          Collections.singleton(expectCompressedRequest),
-          Collections.singleton(goldenResponse));
-    }
+    assertMetrics(
+        "grpc.testing.TestService/UnaryCall",
+        Status.Code.OK,
+        Collections.singleton(expectCompressedRequest),
+        Collections.singleton(goldenResponse));
 
     assertEquals(goldenResponse, blockingStub.unaryCall(expectUncompressedRequest));
-    if (metricsExpected()) {
-      assertMetrics(
-          "grpc.testing.TestService/UnaryCall",
-          Status.Code.OK,
-          Collections.singleton(expectUncompressedRequest),
-          Collections.singleton(goldenResponse));
-    }
+    assertMetrics(
+        "grpc.testing.TestService/UnaryCall",
+        Status.Code.OK,
+        Collections.singleton(expectUncompressedRequest),
+        Collections.singleton(goldenResponse));
   }
 
   /**
@@ -417,22 +409,18 @@ public abstract class AbstractInteropTest {
             .build();
 
     assertEquals(goldenResponse, blockingStub.unaryCall(responseShouldBeCompressed));
-    if (metricsExpected()) {
-      assertMetrics(
-          "grpc.testing.TestService/UnaryCall",
-          Status.Code.OK,
-          Collections.singleton(responseShouldBeCompressed),
-          Collections.singleton(goldenResponse));
-    }
+    assertMetrics(
+        "grpc.testing.TestService/UnaryCall",
+        Status.Code.OK,
+        Collections.singleton(responseShouldBeCompressed),
+        Collections.singleton(goldenResponse));
 
     assertEquals(goldenResponse, blockingStub.unaryCall(responseShouldBeUncompressed));
-    if (metricsExpected()) {
-      assertMetrics(
-          "grpc.testing.TestService/UnaryCall",
-          Status.Code.OK,
-          Collections.singleton(responseShouldBeUncompressed),
-          Collections.singleton(goldenResponse));
-    }
+    assertMetrics(
+        "grpc.testing.TestService/UnaryCall",
+        Status.Code.OK,
+        Collections.singleton(responseShouldBeUncompressed),
+        Collections.singleton(goldenResponse));
   }
 
   @Test(timeout = 10000)
@@ -726,9 +714,7 @@ public abstract class AbstractInteropTest {
     assertEquals(Status.Code.CANCELLED,
                  Status.fromThrowable(responseObserver.getError()).getCode());
 
-    if (metricsExpected()) {
-      assertMetrics("grpc.testing.TestService/FullDuplexCall", Status.Code.CANCELLED);
-    }
+    assertMetrics("grpc.testing.TestService/FullDuplexCall", Status.Code.CANCELLED);
   }
 
   @Test(timeout = 10000)
@@ -766,10 +752,8 @@ public abstract class AbstractInteropTest {
       assertEquals("comparison failed at index " + ix, expectedSize, length);
     }
 
-    if (metricsExpected()) {
-      assertMetrics("grpc.testing.TestService/FullDuplexCall", Status.Code.OK, requests,
-          recorder.getValues());
-    }
+    assertMetrics("grpc.testing.TestService/FullDuplexCall", Status.Code.OK, requests,
+        recorder.getValues());
   }
 
   @Test(timeout = 10000)
@@ -1014,8 +998,9 @@ public abstract class AbstractInteropTest {
     } catch (StatusRuntimeException ex) {
       assertEquals(Status.DEADLINE_EXCEEDED.getCode(), ex.getStatus().getCode());
     }
+
+    assertMetrics("grpc.testing.TestService/EmptyCall", Status.Code.OK);
     if (metricsExpected()) {
-      assertMetrics("grpc.testing.TestService/EmptyCall", Status.Code.OK);
       // Stream may not have been created before deadline is exceeded, thus we don't test the tracer
       // stats.
       MetricsRecord clientRecord = clientStatsCtxFactory.pollRecord(5, TimeUnit.SECONDS);
@@ -1047,8 +1032,8 @@ public abstract class AbstractInteropTest {
     recorder.awaitCompletion();
     assertEquals(Status.DEADLINE_EXCEEDED.getCode(),
         Status.fromThrowable(recorder.getError()).getCode());
+    assertMetrics("grpc.testing.TestService/EmptyCall", Status.Code.OK);
     if (metricsExpected()) {
-      assertMetrics("grpc.testing.TestService/EmptyCall", Status.Code.OK);
       // Stream may not have been created when deadline is exceeded, thus we don't check tracer
       // stats.
       MetricsRecord clientRecord = clientStatsCtxFactory.pollRecord(5, TimeUnit.SECONDS);
@@ -1091,9 +1076,8 @@ public abstract class AbstractInteropTest {
     } catch (StatusRuntimeException ex) {
       assertEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus().getCode());
     }
+    assertMetrics("grpc.testing.TestService/EmptyCall", Status.Code.OK);
     if (metricsExpected()) {
-      assertMetrics("grpc.testing.TestService/EmptyCall", Status.Code.OK);
-
       MetricsRecord clientRecord = clientStatsCtxFactory.pollRecord(5, TimeUnit.SECONDS);
       checkTags(
           clientRecord, false, "grpc.testing.TestService/EmptyCall",
@@ -1275,10 +1259,8 @@ public abstract class AbstractInteropTest {
         headersCapture.get().get(Util.ECHO_INITIAL_METADATA_KEY));
     assertTrue(
         Arrays.equals(trailingBytes, trailersCapture.get().get(Util.ECHO_TRAILING_METADATA_KEY)));
-    if (metricsExpected()) {
-      assertMetrics("grpc.testing.TestService/UnaryCall", Status.Code.OK,
-          Collections.singleton(request), Collections.singleton(goldenResponse));
-    }
+    assertMetrics("grpc.testing.TestService/UnaryCall", Status.Code.OK,
+        Collections.singleton(request), Collections.singleton(goldenResponse));
 
     // Test FullDuplexCall
     metadata = new Metadata();
@@ -1303,10 +1285,8 @@ public abstract class AbstractInteropTest {
         headersCapture.get().get(Util.ECHO_INITIAL_METADATA_KEY));
     assertTrue(
         Arrays.equals(trailingBytes, trailersCapture.get().get(Util.ECHO_TRAILING_METADATA_KEY)));
-    if (metricsExpected()) {
-      assertMetrics("grpc.testing.TestService/FullDuplexCall", Status.Code.OK,
-          Collections.singleton(streamingRequest), Collections.singleton(goldenStreamingResponse));
-    }
+    assertMetrics("grpc.testing.TestService/FullDuplexCall", Status.Code.OK,
+        Collections.singleton(streamingRequest), Collections.singleton(goldenStreamingResponse));
   }
 
   @Test(timeout = 10000)
@@ -1332,9 +1312,7 @@ public abstract class AbstractInteropTest {
       assertEquals(Status.UNKNOWN.getCode(), e.getStatus().getCode());
       assertEquals(errorMessage, e.getStatus().getDescription());
     }
-    if (metricsExpected()) {
-      assertMetrics("grpc.testing.TestService/UnaryCall", Status.Code.UNKNOWN);
-    }
+    assertMetrics("grpc.testing.TestService/UnaryCall", Status.Code.UNKNOWN);
 
     // Test FullDuplexCall
     @SuppressWarnings("unchecked")
@@ -1350,9 +1328,7 @@ public abstract class AbstractInteropTest {
     assertEquals(Status.UNKNOWN.getCode(), Status.fromThrowable(captor.getValue()).getCode());
     assertEquals(errorMessage, Status.fromThrowable(captor.getValue()).getDescription());
     verifyNoMoreInteractions(responseObserver);
-    if (metricsExpected()) {
-      assertMetrics("grpc.testing.TestService/FullDuplexCall", Status.Code.UNKNOWN);
-    }
+    assertMetrics("grpc.testing.TestService/FullDuplexCall", Status.Code.UNKNOWN);
   }
 
   /** Sends an rpc to an unimplemented method within TestService. */
@@ -1365,10 +1341,8 @@ public abstract class AbstractInteropTest {
       assertEquals(Status.UNIMPLEMENTED.getCode(), e.getStatus().getCode());
     }
 
-    if (metricsExpected()) {
-      assertClientMetrics("grpc.testing.TestService/UnimplementedCall",
-          Status.Code.UNIMPLEMENTED);
-    }
+    assertClientMetrics("grpc.testing.TestService/UnimplementedCall",
+        Status.Code.UNIMPLEMENTED);
   }
 
   /** Sends an rpc to an unimplemented service on the server. */
@@ -1383,10 +1357,8 @@ public abstract class AbstractInteropTest {
       assertEquals(Status.UNIMPLEMENTED.getCode(), e.getStatus().getCode());
     }
 
-    if (metricsExpected()) {
-      assertMetrics("grpc.testing.UnimplementedService/UnimplementedCall",
-          Status.Code.UNIMPLEMENTED);
-    }
+    assertMetrics("grpc.testing.UnimplementedService/UnimplementedCall",
+        Status.Code.UNIMPLEMENTED);
   }
 
   /** Start a fullDuplexCall which the server will not respond, and verify the deadline expires. */
@@ -1685,14 +1657,18 @@ public abstract class AbstractInteropTest {
     }
     assertEquals(code, tracer.getStatus().getCode());
 
-    // CensusStreamTracerModule records final status in interceptor, which is guaranteed to be done
-    // before application receives status.
-    MetricsRecord clientRecord = clientStatsCtxFactory.pollRecord();
-    checkTags(clientRecord, false, method, code);
-
     if (requests != null && responses != null) {
       checkTracerMetrics(tracer, requests, responses);
-      checkCensusMetrics(clientRecord, false, requests, responses);
+    }
+    if (metricsExpected()) {
+      // CensusStreamTracerModule records final status in interceptor, which is guaranteed to be
+      // done before application receives status.
+      MetricsRecord clientRecord = clientStatsCtxFactory.pollRecord();
+      checkTags(clientRecord, false, method, code);
+
+      if (requests != null && responses != null) {
+        checkCensusMetrics(clientRecord, false, requests, responses);
+      }
     }
   }
 
@@ -1704,39 +1680,42 @@ public abstract class AbstractInteropTest {
       Collection<? extends MessageLite> requests, Collection<? extends MessageLite> responses) {
     AssertionError checkFailure = null;
     boolean passed = false;
-    // Because the server doesn't restart between tests, it may still be processing the requests
-    // from the previous tests when a new test starts, thus the test may see metrics from previous
-    // tests.  The best we can do here is to exhaust all records and find one that matches the given
-    // conditions.
-    while (true) {
-      MetricsRecord serverRecord;
-      try {
-        // On the server, the stats is finalized in ServerStreamListener.closed(), which can be run
-        // after the client receives the final status.  So we use a timeout.
-        serverRecord = serverStatsCtxFactory.pollRecord(5, TimeUnit.SECONDS);
-      } catch (InterruptedException e) {
-        throw new RuntimeException(e);
-      }
-      if (serverRecord == null) {
-        break;
-      }
-      try {
-        checkTags(serverRecord, true, method, code);
-        if (requests != null && responses != null) {
-          checkCensusMetrics(serverRecord, true, requests, responses);
+
+    if (metricsExpected()) {
+      // Because the server doesn't restart between tests, it may still be processing the requests
+      // from the previous tests when a new test starts, thus the test may see metrics from previous
+      // tests.  The best we can do here is to exhaust all records and find one that matches the
+      // given conditions.
+      while (true) {
+        MetricsRecord serverRecord;
+        try {
+          // On the server, the stats is finalized in ServerStreamListener.closed(), which can be
+          // run after the client receives the final status.  So we use a timeout.
+          serverRecord = serverStatsCtxFactory.pollRecord(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
         }
-        passed = true;
-        break;
-      } catch (AssertionError e) {
-        // May be the fallout from a previous test, continue trying
-        checkFailure = e;
+        if (serverRecord == null) {
+          break;
+        }
+        try {
+          checkTags(serverRecord, true, method, code);
+          if (requests != null && responses != null) {
+            checkCensusMetrics(serverRecord, true, requests, responses);
+          }
+          passed = true;
+          break;
+        } catch (AssertionError e) {
+          // May be the fallout from a previous test, continue trying
+          checkFailure = e;
+        }
       }
-    }
-    if (!passed) {
-      if (checkFailure == null) {
-        throw new AssertionError("No record found");
+      if (!passed) {
+        if (checkFailure == null) {
+          throw new AssertionError("No record found");
+        }
+        throw checkFailure;
       }
-      throw checkFailure;
     }
 
     // Use the same trick to check ServerStreamTracer records
@@ -1789,7 +1768,7 @@ public abstract class AbstractInteropTest {
     assertEquals(status.toString(), statusTag.toString());
   }
 
-  private static void checkTracerMetrics(
+  private void checkTracerMetrics(
       TestStreamTracer tracer,
       Collection<? extends MessageLite> sentMessages,
       Collection<? extends MessageLite> receivedMessages) {
@@ -1799,8 +1778,7 @@ public abstract class AbstractInteropTest {
       assertThat(tracer.nextOutboundEvent()).isEqualTo(String.format("outboundMessage(%d)", seqNo));
       assertThat(tracer.nextOutboundEvent()).isEqualTo("outboundMessage()");
       assertThat(tracer.nextOutboundEvent()).matches(
-          String.format(
-              "outboundMessageSent\\(%d, -?[0-9]+, %d\\)", seqNo, msg.getSerializedSize()));
+          String.format("outboundMessageSent\\(%d, -?[0-9]+, -?[0-9]+\\)", seqNo));
       seqNo++;
       uncompressedSentSize += msg.getSerializedSize();
     }
@@ -1816,8 +1794,10 @@ public abstract class AbstractInteropTest {
       seqNo++;
     }
     assertNull(tracer.nextInboundEvent());
-    assertEquals(uncompressedSentSize, tracer.getOutboundUncompressedSize());
-    assertEquals(uncompressedReceivedSize, tracer.getInboundUncompressedSize());
+    if (metricsExpected()) {
+      assertEquals(uncompressedSentSize, tracer.getOutboundUncompressedSize());
+      assertEquals(uncompressedReceivedSize, tracer.getInboundUncompressedSize());
+    }
   }
 
   private static void checkCensusMetrics(MetricsRecord record, boolean server,
