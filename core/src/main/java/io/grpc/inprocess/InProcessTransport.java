@@ -388,23 +388,22 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       @Override
       public void close(Status status, Metadata trailers) {
-        status = stripCause(status);
+        Status clientStatus = stripCause(status);
         synchronized (this) {
           if (closed) {
             return;
           }
           if (clientReceiveQueue.isEmpty()) {
             closed = true;
-            serverStream.statsTraceCtx.streamClosed(status);
-            clientStream.statsTraceCtx.streamClosed(status);
-            clientStreamListener.closed(status, trailers);
+            clientStream.statsTraceCtx.streamClosed(clientStatus);
+            clientStreamListener.closed(clientStatus, trailers);
           } else {
-            clientNotifyStatus = status;
+            clientNotifyStatus = clientStatus;
             clientNotifyTrailers = trailers;
           }
         }
 
-        clientStream.serverClosed(Status.OK);
+        clientStream.serverClosed(Status.OK, status);
         streamClosed();
       }
 
@@ -413,11 +412,11 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         if (!internalCancel(Status.CANCELLED.withDescription("server cancelled stream"))) {
           return;
         }
-        clientStream.serverClosed(status);
+        clientStream.serverClosed(status, status);
         streamClosed();
       }
 
-      private synchronized boolean internalCancel(Status status) {
+      private synchronized boolean internalCancel(Status clientStatus) {
         if (closed) {
           return false;
         }
@@ -433,9 +432,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
             }
           }
         }
-        serverStream.statsTraceCtx.streamClosed(stripCause(status));
-        clientStream.statsTraceCtx.streamClosed(status);
-        clientStreamListener.closed(status, new Metadata());
+        clientStream.statsTraceCtx.streamClosed(clientStatus);
+        clientStreamListener.closed(clientStatus, new Metadata());
         return true;
       }
 
@@ -526,8 +524,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         return !previouslyReady && nowReady;
       }
 
-      private void serverClosed(Status status) {
-        internalCancel(status);
+      private void serverClosed(Status serverListenerStatus, Status serverTracerStatus) {
+        internalCancel(serverListenerStatus, serverTracerStatus);
       }
 
       @Override
@@ -563,14 +561,16 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       // Must be thread-safe for shutdownNow()
       @Override
       public void cancel(Status reason) {
-        if (!internalCancel(stripCause(reason))) {
+        Status serverStatus = stripCause(reason);
+        if (!internalCancel(serverStatus, serverStatus)) {
           return;
         }
         serverStream.clientCancelled(reason);
         streamClosed();
       }
 
-      private synchronized boolean internalCancel(Status reason) {
+      private synchronized boolean internalCancel(
+          Status serverListenerStatus, Status serverTracerStatus) {
         if (closed) {
           return false;
         }
@@ -587,7 +587,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
             }
           }
         }
-        serverStreamListener.closed(reason);
+        serverStream.statsTraceCtx.streamClosed(serverTracerStatus);
+        serverStreamListener.closed(serverListenerStatus);
         return true;
       }
 

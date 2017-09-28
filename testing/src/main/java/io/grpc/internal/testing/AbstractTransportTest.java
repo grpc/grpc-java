@@ -39,7 +39,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.base.Objects;
@@ -65,7 +64,6 @@ import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
-import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -419,9 +417,9 @@ public abstract class AbstractTransportTest {
     verify(mockServerStreamListener, timeout(TIMEOUT_MS)).closed(statusCaptor.capture());
     assertFalse(statusCaptor.getValue().isOk());
     assertTrue(clientStreamTracer1.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
-    assertSame(status, clientStreamTracer1.getStatus());
+    assertStatusEquals(status, clientStreamTracer1.getStatus());
     assertTrue(serverStreamTracer1.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
-    assertSame(statusCaptor.getValue(), serverStreamTracer1.getStatus());
+    assertStatusEquals(statusCaptor.getValue(), serverStreamTracer1.getStatus());
   }
 
   @Test
@@ -454,9 +452,9 @@ public abstract class AbstractTransportTest {
         .closed(statusCaptor.capture(), any(Metadata.class));
     assertFalse(statusCaptor.getValue().isOk());
     assertTrue(clientStreamTracer1.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
-    assertSame(statusCaptor.getValue(), clientStreamTracer1.getStatus());
+    assertStatusEquals(statusCaptor.getValue(), clientStreamTracer1.getStatus());
     assertTrue(serverStreamTracer1.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
-    assertSame(shutdownStatus, serverStreamTracer1.getStatus());
+    assertStatusEquals(shutdownStatus, serverStreamTracer1.getStatus());
 
     // Generally will be same status provided to shutdownNow, but InProcessTransport can't
     // differentiate between client and server shutdownNow. The status is not really used on
@@ -871,8 +869,8 @@ public abstract class AbstractTransportTest {
     assertEquals(status.getDescription(), statusCaptor.getValue().getDescription());
     assertTrue(clientStreamTracer1.getOutboundHeaders());
     assertTrue(clientStreamTracer1.getInboundHeaders());
-    assertSame(statusCaptor.getValue(), clientStreamTracer1.getStatus());
-    assertSame(status, serverStreamTracer1.getStatus());
+    assertStatusEquals(status, clientStreamTracer1.getStatus());
+    assertStatusEquals(status, serverStreamTracer1.getStatus());
   }
 
   @Test
@@ -920,7 +918,7 @@ public abstract class AbstractTransportTest {
     assertTrue(clientStreamTracer1.getOutboundHeaders());
     assertTrue(clientStreamTracer1.getInboundHeaders());
     assertStatusEquals(strippedStatus, clientStreamTracer1.getStatus());
-    assertStatusEquals(strippedStatus, serverStreamTracer1.getStatus());
+    assertStatusEquals(status, serverStreamTracer1.getStatus());
   }
 
   @Test
@@ -960,7 +958,7 @@ public abstract class AbstractTransportTest {
         Lists.newArrayList(metadataCaptor.getValue().getAll(binaryKey)));
     assertTrue(clientStreamTracer1.getOutboundHeaders());
     assertSame(statusCaptor.getValue(), clientStreamTracer1.getStatus());
-    assertStatusEquals(strippedStatus, serverStreamTracer1.getStatus());
+    assertStatusEquals(status, serverStreamTracer1.getStatus());
   }
 
   @Test
@@ -979,19 +977,17 @@ public abstract class AbstractTransportTest {
     ServerStream serverStream = serverStreamCreation.stream;
     ServerStreamListener mockServerStreamListener = serverStreamCreation.listener;
 
-    Status status =
-        Status.INTERNAL.withDescription("I'm not listening").withCause(new Exception());
+    Status strippedStatus = Status.INTERNAL.withDescription("I'm not listening");
+    Status status = strippedStatus.withCause(new Exception());
     serverStream.close(status, new Metadata());
     verify(mockServerStreamListener, timeout(TIMEOUT_MS)).closed(statusCaptor.capture());
     assertCodeEquals(Status.OK, statusCaptor.getValue());
     verify(mockClientStreamListener, timeout(TIMEOUT_MS))
         .closed(statusCaptor.capture(), any(Metadata.class));
-    assertEquals(status.getCode(), statusCaptor.getValue().getCode());
-    assertEquals(status.getDescription(), statusCaptor.getValue().getDescription());
-    assertNull(statusCaptor.getValue().getCause());
+    assertStatusEquals(strippedStatus, statusCaptor.getValue());
     assertTrue(clientStreamTracer1.getOutboundHeaders());
-    assertSame(statusCaptor.getValue(), clientStreamTracer1.getStatus());
-    assertSame(status, serverStreamTracer1.getStatus());
+    assertStatusEquals(strippedStatus, clientStreamTracer1.getStatus());
+    assertStatusEquals(status, serverStreamTracer1.getStatus());
   }
 
   @Test
@@ -1155,9 +1151,9 @@ public abstract class AbstractTransportTest {
     verify(clientStreamTracerFactory).newClientStreamTracer(
         any(CallOptions.class), any(Metadata.class));
     assertTrue(clientStreamTracer1.getOutboundHeaders());
-    assertSame(statusCaptor.getValue(), clientStreamTracer1.getStatus());
+    assertStatusEquals(statusCaptor.getValue(), clientStreamTracer1.getStatus());
     verify(serverStreamTracerFactory).newServerStreamTracer(anyString(), any(Metadata.class));
-    assertSame(status, serverStreamTracer1.getStatus());
+    assertStatusEquals(status, serverStreamTracer1.getStatus());
 
     // Second cancellation shouldn't trigger additional callbacks
     reset(mockServerStreamListener);
@@ -1170,6 +1166,13 @@ public abstract class AbstractTransportTest {
 
   @Test
   public void flowControlPushBack() throws Exception {
+    // This test tries to create more streams than the number of distinctive stream tracers that the
+    // mock factory will return.  This causes the last stream tracer to be returned for more than
+    // one streams, resulting in duplicate callbacks.  Since we don't care the stream tracers in
+    // this test, we just disable the check.
+    clientStreamTracer2.setFailDuplicateCallbacks(false);
+    serverStreamTracer2.setFailDuplicateCallbacks(false);
+
     server.start(serverListener);
     client = newClientTransport(server);
     runIfNotNull(client.start(mockClientTransportListener));
