@@ -57,58 +57,6 @@ public final class MethodDescriptor<ReqT, RespT> {
   // Not referenced to break the dependency.
   private final AtomicReferenceArray<Object> rawMethodNames = new AtomicReferenceArray<Object>(1);
 
-  private static final ReferenceQueue<MethodDescriptor<?, ?>> unregisteredQueue =
-      new ReferenceQueue<MethodDescriptor<?, ?>>();
-  private static final Collection<WeakReference<MethodDescriptor<?, ?>>> unregistered =
-      new LinkedList<WeakReference<MethodDescriptor<?, ?>>>();
-
-  private static volatile RegisterCallback registerCallback;
-
-  interface RegisterCallback {
-    void onBuild(MethodDescriptor<?, ?> md);
-  }
-
-  static synchronized void setRegisterCallback(RegisterCallback registerCallback) {
-    checkState(MethodDescriptor.registerCallback == null, "callback already present");
-    MethodDescriptor.registerCallback = checkNotNull(registerCallback, "registerCallback");
-    for (WeakReference<MethodDescriptor<?, ?>> mdRef : unregistered) {
-      MethodDescriptor<?, ?> md = mdRef.get();
-      if (md != null) {
-        mdRef.clear();
-        registerCallback.onBuild(md);
-      }
-    }
-    drainUnregisteredQueue();
-  }
-
-  private void registerForTracing() {
-    RegisterCallback reg;
-    if ((reg = registerCallback) == null) {
-      synchronized (MethodDescriptor.class) {
-        if ((reg = registerCallback) == null) {
-          unregistered.add(new WeakReference<MethodDescriptor<?, ?>>(this, unregisteredQueue));
-          drainUnregisteredQueue();
-          return;
-        }
-      }
-    }
-    reg.onBuild(this);
-  }
-
-  static synchronized void drainUnregisteredQueue() {
-    boolean found = false;
-    while (unregisteredQueue.poll() != null) {
-      found = true;
-    }
-    if (found) {
-      Iterator<WeakReference<MethodDescriptor<?, ?>>> it = unregistered.iterator();
-      while (it.hasNext()) {
-        if (it.next().get() == null) {
-          it.remove();
-        }
-      }
-    }
-  }
 
   /**
    * Gets the cached "raw" method name for this Method Descriptor.  The raw name is transport
@@ -293,7 +241,7 @@ public final class MethodDescriptor<ReqT, RespT> {
     Preconditions.checkArgument(!safe || type == MethodType.UNARY,
         "Only unary methods can be specified safe");
     if (registerForTracing) {
-      registerForTracing();
+      Registrations.registerForTracing(this);
     }
   }
 
@@ -623,6 +571,69 @@ public final class MethodDescriptor<ReqT, RespT> {
           idempotent,
           safe,
           registerForTracing);
+    }
+  }
+
+  static final class Registrations {
+
+    private static final ReferenceQueue<MethodDescriptor<?, ?>> droppedMethodDescriptors =
+        new ReferenceQueue<MethodDescriptor<?, ?>>();
+    private static final Collection<WeakReference<MethodDescriptor<?, ?>>> pendingRegistrations =
+        new LinkedList<WeakReference<MethodDescriptor<?, ?>>>();
+
+    private static volatile RegisterForTracingCallback registerCallback;
+
+    interface RegisterForTracingCallback {
+      void onRegister(MethodDescriptor<?, ?> md);
+    }
+
+    /**
+     * Sets a callback for method descriptor builds.  Called for descriptors with
+     * {@link MethodDescriptor#registerForTracing} set.
+     *
+     * @param registerCallback the callback to handle descriptor registration.
+     */
+    static synchronized void setRegisterCallback(RegisterForTracingCallback registerCallback) {
+      checkState(Registrations.registerCallback == null, "callback already present");
+      Registrations.registerCallback = checkNotNull(registerCallback, "registerCallback");
+      for (WeakReference<MethodDescriptor<?, ?>> mdRef : pendingRegistrations) {
+        MethodDescriptor<?, ?> md = mdRef.get();
+        if (md != null) {
+          mdRef.clear();
+          registerCallback.onRegister(md);
+        }
+      }
+      drainUnregisteredQueue();
+    }
+
+    private static synchronized void drainUnregisteredQueue() {
+      boolean found = false;
+      while (droppedMethodDescriptors.poll() != null) {
+        found = true;
+      }
+      if (found) {
+        Iterator<WeakReference<MethodDescriptor<?, ?>>> it = pendingRegistrations.iterator();
+        while (it.hasNext()) {
+          if (it.next().get() == null) {
+            it.remove();
+          }
+        }
+      }
+    }
+
+    private static void registerForTracing(MethodDescriptor<?, ?> md) {
+      RegisterForTracingCallback reg;
+      if ((reg = registerCallback) == null) {
+        synchronized (MethodDescriptor.class) {
+          if ((reg = registerCallback) == null) {
+            pendingRegistrations.add(
+                new WeakReference<MethodDescriptor<?, ?>>(md, droppedMethodDescriptors));
+            drainUnregisteredQueue();
+            return;
+          }
+        }
+      }
+      reg.onRegister(md);
     }
   }
 }

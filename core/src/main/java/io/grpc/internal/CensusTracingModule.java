@@ -29,7 +29,7 @@ import io.grpc.Context;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.InternalMethodDescriptor;
-import io.grpc.InternalMethodDescriptor.RegisterCallback;
+import io.grpc.InternalMethodDescriptor.RegisterForTracingCallback;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
@@ -73,9 +73,9 @@ final class CensusTracingModule {
   private static final boolean isRegistered = registerCensusTracer();
 
   private static boolean registerCensusTracer() {
-    InternalMethodDescriptor.setRegisterCallback(new RegisterCallback() {
+    InternalMethodDescriptor.setRegisterCallback(new RegisterForTracingCallback() {
       @Override
-      public void onBuild(MethodDescriptor<?, ?> md) {
+      public void onRegister(MethodDescriptor<?, ?> md) {
         SampledSpanStore sampledStore = Tracing.getExportComponent().getSampledSpanStore();
         if (sampledStore != null) {
           List<String> spanNames = new ArrayList<String>(2);
