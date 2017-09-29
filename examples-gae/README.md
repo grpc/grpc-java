@@ -29,12 +29,12 @@ Running the example locally
 ```
 
 For Gradle:
-```
+```bash
 $ ./gradlew appengineRun
 ```
 
 For Maven:
-```
+```bash
 mvn appengine:devserver
 ```
 
@@ -52,12 +52,12 @@ $ gcloud config set project PROJECT_ID
 ```
 
 For Gradle:
-```
+```bash
 $ ./gradlew appengineDeploy
 ```
 
 For Maven:
-```
+```bash
 # Update appengine-web.xml and change YOUR-PROJECT-ID and YOUR-VERSION-ID
 
 $ mvn appengine:update
