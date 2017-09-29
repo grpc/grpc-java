@@ -17,12 +17,15 @@
 package io.grpc;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.base.Preconditions;
-import io.opencensus.trace.Tracing;
-import io.opencensus.trace.export.SampledSpanStore;
 import java.io.InputStream;
-import java.util.ArrayList;
+import java.lang.ref.ReferenceQueue;
+import java.lang.ref.WeakReference;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
@@ -48,10 +51,64 @@ public final class MethodDescriptor<ReqT, RespT> {
   private final @Nullable Object schemaDescriptor;
   private final boolean idempotent;
   private final boolean safe;
+  private final boolean registerForTracing;
 
   // Must be set to InternalKnownTransport.values().length
   // Not referenced to break the dependency.
   private final AtomicReferenceArray<Object> rawMethodNames = new AtomicReferenceArray<Object>(1);
+
+  private static final ReferenceQueue<MethodDescriptor<?, ?>> unregisteredQueue =
+      new ReferenceQueue<MethodDescriptor<?, ?>>();
+  private static final Collection<WeakReference<MethodDescriptor<?, ?>>> unregistered =
+      new LinkedList<WeakReference<MethodDescriptor<?, ?>>>();
+
+  private static volatile RegisterCallback registerCallback;
+
+  interface RegisterCallback {
+    void onBuild(MethodDescriptor<?, ?> md);
+  }
+
+  static synchronized void setRegisterCallback(RegisterCallback registerCallback) {
+    checkState(MethodDescriptor.registerCallback == null, "callback already present");
+    MethodDescriptor.registerCallback = checkNotNull(registerCallback, "registerCallback");
+    for (WeakReference<MethodDescriptor<?, ?>> mdRef : unregistered) {
+      MethodDescriptor<?, ?> md = mdRef.get();
+      if (md != null) {
+        mdRef.clear();
+        registerCallback.onBuild(md);
+      }
+    }
+    drainUnregisteredQueue();
+  }
+
+  private void registerForTracing() {
+    RegisterCallback reg;
+    if ((reg = registerCallback) == null) {
+      synchronized (MethodDescriptor.class) {
+        if ((reg = registerCallback) == null) {
+          unregistered.add(new WeakReference<MethodDescriptor<?, ?>>(this, unregisteredQueue));
+          drainUnregisteredQueue();
+          return;
+        }
+      }
+    }
+    reg.onBuild(this);
+  }
+
+  static synchronized void drainUnregisteredQueue() {
+    boolean found = false;
+    while (unregisteredQueue.poll() != null) {
+      found = true;
+    }
+    if (found) {
+      Iterator<WeakReference<MethodDescriptor<?, ?>>> it = unregistered.iterator();
+      while (it.hasNext()) {
+        if (it.next().get() == null) {
+          it.remove();
+        }
+      }
+    }
+  }
 
   /**
    * Gets the cached "raw" method name for this Method Descriptor.  The raw name is transport
@@ -71,18 +128,6 @@ public final class MethodDescriptor<ReqT, RespT> {
    */
   final void setRawMethodName(int transportOrdinal, Object o) {
     rawMethodNames.lazySet(transportOrdinal, o);
-  }
-  
-  /**
-   * Convert a full method name to a tracing span name.
-   *
-   * @param isServer {@code false} if the span is on the client-side, {@code true} if on the
-   *                 server-side
-   * @param fullMethodName the method name as returned by {@link #getFullMethodName}.
-   */
-  static String generateTraceSpanName(boolean isServer, String fullMethodName) {
-    String prefix = isServer ? "Recv" : "Sent";
-    return prefix + "." + fullMethodName.replace('/', '.');
   }
 
   /**
@@ -224,7 +269,7 @@ public final class MethodDescriptor<ReqT, RespT> {
       Marshaller<RequestT> requestMarshaller,
       Marshaller<ResponseT> responseMarshaller) {
     return new MethodDescriptor<RequestT, ResponseT>(
-        type, fullMethodName, requestMarshaller, responseMarshaller, null, false, false);
+        type, fullMethodName, requestMarshaller, responseMarshaller, null, false, false, false);
   }
 
   private MethodDescriptor(
@@ -234,7 +279,8 @@ public final class MethodDescriptor<ReqT, RespT> {
       Marshaller<RespT> responseMarshaller,
       Object schemaDescriptor,
       boolean idempotent,
-      boolean safe) {
+      boolean safe,
+      boolean registerForTracing) {
 
     this.type = Preconditions.checkNotNull(type, "type");
     this.fullMethodName = Preconditions.checkNotNull(fullMethodName, "fullMethodName");
@@ -243,8 +289,12 @@ public final class MethodDescriptor<ReqT, RespT> {
     this.schemaDescriptor = schemaDescriptor;
     this.idempotent = idempotent;
     this.safe = safe;
+    this.registerForTracing = registerForTracing;
     Preconditions.checkArgument(!safe || type == MethodType.UNARY,
         "Only unary methods can be specified safe");
+    if (registerForTracing) {
+      registerForTracing();
+    }
   }
 
   /**
@@ -441,7 +491,8 @@ public final class MethodDescriptor<ReqT, RespT> {
         .setType(type)
         .setFullMethodName(fullMethodName)
         .setIdempotent(idempotent)
-        .setSafe(safe);
+        .setSafe(safe)
+        .setRegisterForTracing(registerForTracing);
   }
 
   /**
@@ -563,15 +614,6 @@ public final class MethodDescriptor<ReqT, RespT> {
      */
     @CheckReturnValue
     public MethodDescriptor<ReqT, RespT> build() {
-      if (registerForTracing) {
-        SampledSpanStore sampledStore = Tracing.getExportComponent().getSampledSpanStore();
-        if (sampledStore != null) {
-          ArrayList<String> spanNames = new ArrayList<String>(2);
-          spanNames.add(generateTraceSpanName(false, fullMethodName));
-          spanNames.add(generateTraceSpanName(true, fullMethodName));
-          sampledStore.registerSpanNamesForCollection(spanNames);
-        }
-      }
       return new MethodDescriptor<ReqT, RespT>(
           type,
           fullMethodName,
@@ -579,7 +621,8 @@ public final class MethodDescriptor<ReqT, RespT> {
           responseMarshaller,
           schemaDescriptor,
           idempotent,
-          safe);
+          safe,
+          registerForTracing);
     }
   }
 }
