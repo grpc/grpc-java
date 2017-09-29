@@ -17,6 +17,36 @@ java_grpc_library(
 )
 
 proto_library(
+    name = "helloworld_streaming_proto",
+    srcs = [
+        ":helloworld.proto",
+        "src/main/proto/helloworld_streaming.proto",
+    ],
+)
+
+java_proto_library(
+    name = "helloworld_streaming_java_proto",
+    deps = [":helloworld_streaming_proto"],
+)
+
+java_grpc_library(
+    name = "helloworld_streaming_java_grpc",
+    srcs = [":helloworld_streaming_proto"],
+    deps = [":helloworld_streaming_java_proto"],
+)
+
+# Work around the problem that proto_library's import path must be relative WORKSPACE path,
+# that is, in helloworld_streaming.proto file, 'import "helloworld.proto"' does not work for Bazel.
+# If 'import "src/main/proto/helloworld.proto"', that works for Bazel, but Gradle and Maven
+# would fail.
+genrule(
+    name = "cp_helloworld_proto_to_root_output_dir",
+    srcs = ["src/main/proto/helloworld.proto"],
+    outs = [":helloworld.proto"],
+    cmd = "cp $(location src/main/proto/helloworld.proto) $(location helloworld.proto)",
+)
+
+proto_library(
     name = "route_guide_proto",
     srcs = ["src/main/proto/route_guide.proto"],
 )
@@ -44,6 +74,8 @@ java_library(
     deps = [
         ":helloworld_java_grpc",
         ":helloworld_java_proto",
+        ":helloworld_streaming_java_grpc",
+        ":helloworld_streaming_java_proto",
         ":route_guide_java_grpc",
         ":route_guide_java_proto",
         "@com_google_api_grpc_proto_google_common_protos//jar",
@@ -91,6 +123,26 @@ java_binary(
     name = "route-guide-server",
     testonly = 1,
     main_class = "io.grpc.examples.routeguide.RouteGuideServer",
+    runtime_deps = [
+        ":examples",
+        "@grpc_java//netty",
+    ],
+)
+
+java_binary(
+    name = "manual-flow-control-client",
+    testonly = 1,
+    main_class = "io.grpc.examples.manualflowcontrol.ManualFlowControlClient",
+    runtime_deps = [
+        ":examples",
+        "@grpc_java//netty",
+    ],
+)
+
+java_binary(
+    name = "manual-flow-control-server",
+    testonly = 1,
+    main_class = "io.grpc.examples.manualflowcontrol.ManualFlowControlServer",
     runtime_deps = [
         ":examples",
         "@grpc_java//netty",
