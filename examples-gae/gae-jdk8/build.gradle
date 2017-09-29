@@ -47,7 +47,7 @@ dependencies {
   compile "io.grpc:grpc-protobuf:${grpcVersion}"
   compile "io.grpc:grpc-stub:${grpcVersion}"
   compile 'io.netty:netty-tcnative-boringssl-static:2.0.5.Final'
-  // We want the gRPC and service definitions but NOT grpc-netty
+  // This particular example will require knowledge of the interop test gRPC service
   compile "io.grpc:grpc-interop-testing:${grpcVersion}"
 }
 

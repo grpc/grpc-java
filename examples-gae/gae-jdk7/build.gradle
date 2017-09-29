@@ -48,7 +48,7 @@ dependencies {
   compile "io.grpc:grpc-stub:${grpcVersion}"
   // This particular example will require knowledge of the interop test gRPC service
   compile("io.grpc:grpc-interop-testing:${grpcVersion}") {
-    // We want the gRPC and service definitions but NOT grpc-netty for jdk7
+    // We do not want this transitive dep
      exclude group: 'io.grpc', module: 'grpc-netty'
   }
 }
