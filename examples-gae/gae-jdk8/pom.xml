@@ -1,0 +1,83 @@
+<!--
+Copyright 2017 Google Inc.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+<!-- [START pom] -->
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <packaging>war</packaging>
+  <version>1.0-SNAPSHOT</version>
+  <groupId>com.example.appengine</groupId>
+  <artifactId>appengine-helloworld</artifactId>
+  <properties>
+    <grpc.version>1.8.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
+  </properties>
+  <dependencies>
+    <!--Deps needed by all gRPC apps in GAE-->
+    <dependency>
+      <groupId>javax.servlet</groupId>
+      <artifactId>servlet-api</artifactId>
+      <version>2.5</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-netty</artifactId>
+      <version>${grpc.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-okhttp</artifactId>
+      <version>${grpc.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-protobuf</artifactId>
+      <version>${grpc.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-stub</artifactId>
+      <version>${grpc.version}</version>
+    </dependency>
+    <!--This particular example will require knowledge of the interop test gRPC service-->
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-interop-testing</artifactId>
+      <version>${grpc.version}</version>
+    </dependency>
+  </dependencies>
+  <build>
+    <!-- for hot reload of the web application -->
+    <outputDirectory>${project.build.directory}/${project.build.finalName}/WEB-INF/classes</outputDirectory>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <version>3.3</version>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <source>1.7</source>
+          <target>1.7</target>
+        </configuration>
+      </plugin>
+      <!-- Parent POM defines ${appengine.sdk.version} (updates frequently). -->
+      <plugin>
+        <groupId>com.google.appengine</groupId>
+        <artifactId>appengine-maven-plugin</artifactId>
+        <version>1.9.57</version>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+<!-- [END pom] -->

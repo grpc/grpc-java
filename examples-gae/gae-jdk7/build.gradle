@@ -1,0 +1,74 @@
+// Copyright 2017 Google Inc.
+//
+//  Licensed under the Apache License, Version 2.0 (the "License");
+//  you may not use this file except in compliance with the License.
+//  You may obtain a copy of the License at
+//
+//        http://www.apache.org/licenses/LICENSE-2.0
+//
+//  Unless required by applicable law or agreed to in writing, software
+//  distributed under the License is distributed on an "AS IS" BASIS,
+//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//  See the License for the specific language governing permissions and
+//  limitations under the License.
+// [START gradle]
+buildscript {    // Configuration for building
+  repositories {
+    jcenter()    // Bintray's repository - a fast Maven Central mirror & more
+    mavenCentral()
+  }
+  dependencies {
+    classpath 'com.google.cloud.tools:appengine-gradle-plugin:+'    // latest App Engine Gradle tasks
+  }
+}
+
+repositories {   // repositories for Jar's you access in your code
+  mavenLocal()
+  maven {
+    url 'https://maven-central.storage.googleapis.com'             // Google's mirror of Maven Central
+//   url 'https://oss.sonatype.org/content/repositories/snapshots' // SNAPSHOT Repository (if needed)
+  }
+  jcenter()
+  mavenCentral()
+}
+
+apply plugin: 'java'                              // standard Java tasks
+apply plugin: 'war'                               // standard Web Archive plugin
+apply plugin: 'com.google.cloud.tools.appengine'  // App Engine tasks
+
+def grpcVersion = '1.8.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+
+dependencies {
+  providedCompile group: 'javax.servlet', name: 'servlet-api', version:'2.5'
+  compile 'com.google.appengine:appengine:+'
+  // Deps needed by all gRPC apps in GAE
+  compile "com.google.api.grpc:proto-google-common-protos:0.1.9"
+  compile "io.grpc:grpc-okhttp:${grpcVersion}"
+  compile "io.grpc:grpc-protobuf:${grpcVersion}"
+  compile "io.grpc:grpc-stub:${grpcVersion}"
+  // This particular example will require knowledge of the interop test gRPC service
+  compile("io.grpc:grpc-interop-testing:${grpcVersion}") {
+    // We want the gRPC and service definitions but NOT grpc-netty for jdk7
+     exclude group: 'io.grpc', module: 'grpc-netty'
+  }
+}
+
+// [START model]
+appengine {  // App Engine tasks configuration
+  run {      // local (dev_appserver) configuration (standard environments only)
+    port = 8080                 // default
+  }
+
+  deploy {   // deploy configuration
+    stopPreviousVersion = true  // default - stop the current version
+    promote = true              // default - & make this the current version
+  }
+}
+// [END model]
+
+group = 'com.example.appengine'   // Generated output GroupId
+version = '1.0-SNAPSHOT'          // Version in generated output
+
+sourceCompatibility = 1.7
+targetCompatibility = 1.7
+// [END gradle]
