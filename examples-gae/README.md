@@ -24,6 +24,9 @@ Running the example locally
 ===========================
 
 ```bash
+# From the root gRPC Java directory, install the current snapshot to local .m2
+./gradlew install
+
 # cd into either the jdk7 or jdk8 example
 # Make sure gcloud is in your $PATH
 ```
