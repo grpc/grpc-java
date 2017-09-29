@@ -28,17 +28,17 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 /**
- * This server communicates with {@code grpc-test.sandbox.googleapis.com}, which is a server
+ * This servlet communicates with {@code grpc-test.sandbox.googleapis.com}, which is a server
  * managed by the gRPC team. For more information, see
  * <a href="https://github.com/grpc/grpc/blob/master/doc/interop-test-descriptions.md">
  *   Interoperability Test Case Descriptions</a>.
  */
 @SuppressWarnings("serial")
-public class HelloServlet extends HttpServlet {
+public final class HelloServlet extends HttpServlet {
   @Override
   public void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-    ManagedChannel channel = ManagedChannelBuilder
-        .forAddress("grpc-test.sandbox.googleapis.com", 443).build();
+    ManagedChannel channel =
+        ManagedChannelBuilder.forAddress("grpc-test.sandbox.googleapis.com", 443).build();
     int desiredResponseSize = 12345;
     TestServiceGrpc.TestServiceBlockingStub blockingStub = TestServiceGrpc.newBlockingStub(channel);
     SimpleResponse simpleResponse = blockingStub.unaryCall(

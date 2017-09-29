@@ -28,13 +28,13 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 /**
- * This server communicates with {@code grpc-test.sandbox.googleapis.com}, which is a server
+ * This servlet communicates with {@code grpc-test.sandbox.googleapis.com}, which is a server
  * managed by the gRPC team. For more information, see
  * <a href="https://github.com/grpc/grpc/blob/master/doc/interop-test-descriptions.md">
  *   Interoperability Test Case Descriptions</a>.
  */
 @SuppressWarnings("serial")
-public class HelloServlet extends HttpServlet {
+public final class HelloServlet extends HttpServlet {
   // For GAE+jdk8: creating a long lived channel is supported.
   private final ManagedChannel channel;
 
