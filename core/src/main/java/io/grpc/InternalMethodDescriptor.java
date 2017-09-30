@@ -42,6 +42,6 @@ public final class InternalMethodDescriptor {
       MethodDescriptor.Registrations.RegisterForTracingCallback {}
 
   public static void setRegisterCallback(RegisterForTracingCallback registerCallback) {
-    MethodDescriptor.Registrations.setRegisterCallback(registerCallback);
+    MethodDescriptor.Registrations.setRegisterForTracingCallback(registerCallback);
   }
 }

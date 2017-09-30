@@ -51,6 +51,9 @@ public final class MethodDescriptor<ReqT, RespT> {
   private final @Nullable Object schemaDescriptor;
   private final boolean idempotent;
   private final boolean safe;
+  // This field is not exposed, since the result would be misleading.  Setting this value to true,
+  // ensures that the method is traced, but false means that it might still be traced, due to
+  // another descriptor tracing the same name.
   private final boolean registerForTracing;
 
   // Must be set to InternalKnownTransport.values().length
@@ -589,11 +592,13 @@ public final class MethodDescriptor<ReqT, RespT> {
 
     /**
      * Sets a callback for method descriptor builds.  Called for descriptors with
-     * {@link MethodDescriptor#registerForTracing} set.
+     * {@link MethodDescriptor#registerForTracing} set.  This should only be called by
+     * {@link io.grpc.internal.CensusTracingModule} since it will only work for one invocation.
      *
      * @param registerCallback the callback to handle descriptor registration.
      */
-    static synchronized void setRegisterCallback(RegisterForTracingCallback registerCallback) {
+    static synchronized void setRegisterForTracingCallback(
+        RegisterForTracingCallback registerCallback) {
       checkState(Registrations.registerCallback == null, "callback already present");
       Registrations.registerCallback = checkNotNull(registerCallback, "registerCallback");
       for (WeakReference<MethodDescriptor<?, ?>> mdRef : pendingRegistrations) {
@@ -603,10 +608,10 @@ public final class MethodDescriptor<ReqT, RespT> {
           registerCallback.onRegister(md);
         }
       }
-      drainUnregisteredQueue();
+      drainDroppedMethodDescriptors();
     }
 
-    private static synchronized void drainUnregisteredQueue() {
+    private static synchronized void drainDroppedMethodDescriptors() {
       boolean found = false;
       while (droppedMethodDescriptors.poll() != null) {
         found = true;
@@ -628,7 +633,7 @@ public final class MethodDescriptor<ReqT, RespT> {
           if ((reg = registerCallback) == null) {
             pendingRegistrations.add(
                 new WeakReference<MethodDescriptor<?, ?>>(md, droppedMethodDescriptors));
-            drainUnregisteredQueue();
+            drainDroppedMethodDescriptors();
             return;
           }
         }
