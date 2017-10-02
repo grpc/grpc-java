@@ -408,4 +408,10 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     }
     return this;
   }
+
+  @Override
+  public NettyServerBuilder usePlainTextUpgrade() {
+    protocolNegotiator = ProtocolNegotiators.serverPlaintextUpgrade();
+    return this;
+  }
 }

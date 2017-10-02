@@ -110,6 +110,11 @@ public class AbstractServerImplBuilderTest {
     public Builder useTransportSecurity(File certChain, File privateKey) {
       throw new UnsupportedOperationException();
     }
+
+    @Override
+    public Builder usePlainTextUpgrade() {
+      throw new UnsupportedOperationException();
+    }
   }
 
 }

@@ -40,8 +40,14 @@ import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.HttpClientCodec;
 import io.netty.handler.codec.http.HttpClientUpgradeHandler;
 import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpServerCodec;
+import io.netty.handler.codec.http.HttpServerUpgradeHandler;
+import io.netty.handler.codec.http.HttpServerUpgradeHandler.UpgradeCodec;
 import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http2.CleartextHttp2ServerUpgradeHandler;
 import io.netty.handler.codec.http2.Http2ClientUpgradeCodec;
+import io.netty.handler.codec.http2.Http2CodecUtil;
+import io.netty.handler.codec.http2.Http2ServerUpgradeCodec;
 import io.netty.handler.proxy.HttpProxyHandler;
 import io.netty.handler.proxy.ProxyConnectionEvent;
 import io.netty.handler.proxy.ProxyHandler;
@@ -98,6 +104,47 @@ public final class ProtocolNegotiators {
         }
 
         return new PlaintextHandler();
+      }
+    };
+  }
+
+  /**
+   * Create a server plaintextUpgrade handler for gRPC.
+   */
+  public static ProtocolNegotiator serverPlaintextUpgrade() {
+    return new ProtocolNegotiator() {
+      public Handler newHandler(final GrpcHttp2ConnectionHandler handler) {
+        class PlaintextUpgradeHandler extends ChannelHandlerAdapter implements Handler {
+          PlaintextUpgradeHandler() {
+          }
+
+          public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+
+            final HttpServerUpgradeHandler.UpgradeCodecFactory upgradeCodecFactory = new HttpServerUpgradeHandler.UpgradeCodecFactory() {
+              @Override
+              public UpgradeCodec newUpgradeCodec(CharSequence protocol) {
+                if (AsciiString.contentEquals(Http2CodecUtil.HTTP_UPGRADE_PROTOCOL_NAME, protocol)) {
+                    return new Http2ServerUpgradeCodec(handler);
+                  } else {
+                    return null;
+                  }
+              }
+            };
+
+            HttpServerCodec sourceCodec = new HttpServerCodec();
+            HttpServerUpgradeHandler upgradeCodec = new HttpServerUpgradeHandler(sourceCodec, upgradeCodecFactory);
+            CleartextHttp2ServerUpgradeHandler upgrader = new
+                CleartextHttp2ServerUpgradeHandler(sourceCodec, upgradeCodec, handler);
+            handler.handleProtocolNegotiationCompleted(Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress()).build());
+            ctx.channel().pipeline().replace(this, (String)null, upgrader);
+          }
+
+          public AsciiString scheme() {
+            return Utils.HTTP;
+          }
+        }
+
+        return new PlaintextUpgradeHandler();
       }
     };
   }

@@ -94,4 +94,9 @@ public final class InProcessServerBuilder
   public InProcessServerBuilder useTransportSecurity(File certChain, File privateKey) {
     throw new UnsupportedOperationException("TLS not supported in InProcessServer");
   }
+
+  @Override
+  public InProcessServerBuilder usePlainTextUpgrade() {
+    throw new UnsupportedOperationException("CleartextUpgrade not supported in InProcessServer");
+  }
 }

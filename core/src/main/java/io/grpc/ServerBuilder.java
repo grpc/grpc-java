@@ -143,12 +143,19 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    *
    * @param certChain file containing the full certificate chain
    * @param privateKey file containing the private key
-   *
    * @return this
    * @throws UnsupportedOperationException if the server does not support TLS.
    * @since 1.0.0
    */
   public abstract T useTransportSecurity(File certChain, File privateKey);
+
+  /**
+   * Makes the server use CleartextUpgrade.
+   *
+   * @return this
+   * @throws UnsupportedOperationException if the server does not support CleartextUpgrade.
+   */
+  public abstract T usePlainTextUpgrade();
 
   /**
    * Set the decompression registry for use in the channel.  This is an advanced API call and
