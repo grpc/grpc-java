@@ -146,5 +146,18 @@ public final class OkHttpClientInteropServlet extends HttpServlet {
       // Server-side metrics won't be found because the server is running remotely.
       return false;
     }
+
+    // grpc-test.sandbox.googleapis.com does not support these tests
+    @Override
+    public void customMetadata() { }
+
+    @Override
+    public void statusCodeAndMessage() { }
+
+    @Override
+    public void exchangeMetadataUnaryCall() { }
+
+    @Override
+    public void exchangeMetadataStreamingCall() { }
   }
 }

@@ -86,7 +86,7 @@ task runInteropTestRemote(dependsOn: 'appengineDeploy') {
     def appName = getAppName()
     def client = new com.squareup.okhttp.OkHttpClient()
     // The '?jdk8' argument is ignored by the server, it exists only to tag the request log entry
-    client.setReadTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+    client.setReadTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
     def request = new com.squareup.okhttp.Request.Builder()
             .url("http://${appName}.appspot.com/long_lived_channel?jdk8").build()
     def result1 = client.newCall(request).execute()
