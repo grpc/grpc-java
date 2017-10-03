@@ -18,7 +18,6 @@ package io.grpc;
 
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
@@ -125,7 +124,7 @@ public class WithCancellableContext implements Closeable {
         ListenableFuture<T> originalFuture = cancellableContext.call(asyncCallable);
 
         // Ensure that the CancellableContext is cancelled before notifying proxyFuture
-        Futures.addCallback(
+        addCallback(
             originalFuture,
             new FutureCallback<T>() {
               @Override
