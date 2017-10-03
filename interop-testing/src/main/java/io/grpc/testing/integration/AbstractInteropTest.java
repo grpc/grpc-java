@@ -103,7 +103,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
@@ -1214,7 +1213,7 @@ public abstract class AbstractInteropTest {
     final ArrayBlockingQueue<StreamingOutputCallResponse> responses =
         new ArrayBlockingQueue<StreamingOutputCallResponse>(3);
     final SettableFuture<Void> completed = SettableFuture.create();
-    final AtomicBoolean errorSeen = new AtomicBoolean();
+    final SettableFuture<Void> errorSeen = SettableFuture.create();
     StreamObserver<StreamingOutputCallResponse> responseObserver =
         new StreamObserver<StreamingOutputCallResponse>() {
 
@@ -1225,7 +1224,7 @@ public abstract class AbstractInteropTest {
 
           @Override
           public void onError(Throwable t) {
-            errorSeen.set(true);
+            errorSeen.set(null);
           }
 
           @Override
@@ -1250,7 +1249,7 @@ public abstract class AbstractInteropTest {
     assertFalse(completed.isDone());
     requestObserver.onCompleted();
     completed.get(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
-    assertFalse(errorSeen.get());
+    assertFalse(errorSeen.isDone());
   }
 
   @Test(timeout = 10000)
