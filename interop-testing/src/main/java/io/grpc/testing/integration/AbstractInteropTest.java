@@ -103,7 +103,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
@@ -1214,11 +1213,7 @@ public abstract class AbstractInteropTest {
     final ArrayBlockingQueue<StreamingOutputCallResponse> responses =
         new ArrayBlockingQueue<StreamingOutputCallResponse>(3);
     final SettableFuture<Void> completed = SettableFuture.create();
-<<<<<<< HEAD
     final SettableFuture<Void> errorSeen = SettableFuture.create();
-=======
-    final AtomicBoolean errorSeen = new AtomicBoolean();
->>>>>>> gae-interop-testing: add GAE interop tests
     StreamObserver<StreamingOutputCallResponse> responseObserver =
         new StreamObserver<StreamingOutputCallResponse>() {
 
@@ -1229,11 +1224,7 @@ public abstract class AbstractInteropTest {
 
           @Override
           public void onError(Throwable t) {
-<<<<<<< HEAD
             errorSeen.set(null);
-=======
-            errorSeen.set(true);
->>>>>>> gae-interop-testing: add GAE interop tests
           }
 
           @Override
@@ -1258,11 +1249,7 @@ public abstract class AbstractInteropTest {
     assertFalse(completed.isDone());
     requestObserver.onCompleted();
     completed.get(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
-<<<<<<< HEAD
     assertFalse(errorSeen.isDone());
-=======
-    assertFalse(errorSeen.get());
->>>>>>> gae-interop-testing: add GAE interop tests
   }
 
   @Test(timeout = 10000)
