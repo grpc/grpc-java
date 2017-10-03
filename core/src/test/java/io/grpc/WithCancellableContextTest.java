@@ -239,6 +239,8 @@ public class WithCancellableContextTest {
               throw new FakeException();
             }
           });
+      // should not be reached
+      Assert.fail();
     } finally {
       assertTrue(cancellableContext.isCancelled());
     }
@@ -255,6 +257,8 @@ public class WithCancellableContextTest {
             }
           }
       );
+      // should not be reached
+      Assert.fail();
     } finally {
       assertTrue(cancellableContext.isCancelled());
     }

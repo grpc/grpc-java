@@ -59,7 +59,14 @@ public class WithCancellableContext implements Closeable {
   }
 
   /**
-   * Gets a {@link CancellableContextApplier} for the supplied context, which can be used
+   * Gets a {@link CancellableContextApplier}.
+   */
+  public static CancellableContextApplier with(Context.CancellableContext c) {
+    return new CancellableContextApplier(c);
+  }
+
+  /**
+   * An wrapper for the supplied context, which can be used
    * to apply a unit of work inside the CancellableContext, and cancelling the context when done.
    *
    * <p>Usage:
@@ -73,10 +80,6 @@ public class WithCancellableContext implements Closeable {
    * // original context automatically restored and cancellableContext automatically cancelled
    * }</pre>
    */
-  public static CancellableContextApplier with(Context.CancellableContext c) {
-    return new CancellableContextApplier(c);
-  }
-
   public static class CancellableContextApplier {
     private final Context.CancellableContext cancellableContext;
 
