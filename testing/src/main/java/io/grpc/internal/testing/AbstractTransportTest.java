@@ -1433,7 +1433,6 @@ public abstract class AbstractTransportTest {
       ServerStream serverStream = serverStreamCreation.stream;
       serverStream.close(Status.OK, new Metadata());
     }
-    client.shutdown(Status.UNAVAILABLE);
   }
 
   @Test
@@ -1463,8 +1462,6 @@ public abstract class AbstractTransportTest {
       assertEquals(1, after.streamsSucceeded);
       assertEquals(0, after.streamsFailed);
     }
-
-    client.shutdown(Status.UNAVAILABLE);
   }
 
   @Test
@@ -1494,8 +1491,6 @@ public abstract class AbstractTransportTest {
       assertEquals(1, after.streamsFailed);
       assertEquals(0, after.streamsSucceeded);
     }
-
-    client.shutdown(Status.UNAVAILABLE);
   }
 
   @Test
@@ -1534,7 +1529,6 @@ public abstract class AbstractTransportTest {
     }
 
     serverStream.close(Status.OK, new Metadata());
-    client.shutdown(Status.UNAVAILABLE);
   }
 
   @Test
@@ -1572,7 +1566,6 @@ public abstract class AbstractTransportTest {
     }
 
     serverStream.close(Status.OK, new Metadata());
-    client.shutdown(Status.UNAVAILABLE);
   }
 
   /**
