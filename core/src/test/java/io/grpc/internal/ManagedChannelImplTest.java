@@ -123,7 +123,7 @@ public class ManagedChannelImplTest {
           .setResponseMarshaller(new IntegerMarshaller())
           .build();
   private static final Attributes.Key<String> SUBCHANNEL_ATTR_KEY =
-      Attributes.Key.of("subchannel-attr-key");
+      Attributes.Key.of("subchannel-attr-key", String.class);
   private static int unterminatedChannels;
   private final String serviceName = "fake.example.com";
   private final String authority = serviceName;

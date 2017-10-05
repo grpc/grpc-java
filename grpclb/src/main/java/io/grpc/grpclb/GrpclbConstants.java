@@ -38,14 +38,14 @@ public final class GrpclbConstants {
    * An attribute of a name resolution result, designating the LB policy.
    */
   public static final Attributes.Key<LbPolicy> ATTR_LB_POLICY =
-      Attributes.Key.of("io.grpc.grpclb.lbPolicy");
+      Attributes.Key.of("io.grpc.grpclb.lbPolicy", LbPolicy.class);
 
   /**
    * The naming authority of an LB server address.  It is an address-group-level attribute, present
    * when the address group is a LoadBalancer.
    */
   public static final Attributes.Key<String> ATTR_LB_ADDR_AUTHORITY =
-      Attributes.Key.of("io.grpc.grpclb.lbAddrAuthority");
+      Attributes.Key.of("io.grpc.grpclb.lbAddrAuthority", String.class);
 
   /**
    * The opaque token given by the remote balancer for each returned server address.  The client

@@ -92,7 +92,7 @@ public abstract class AbstractTransportTest {
   private static final int TIMEOUT_MS = 1000;
 
   private static final Attributes.Key<String> ADDITIONAL_TRANSPORT_ATTR_KEY =
-      Attributes.Key.of("additional-attr");
+      Attributes.Key.of("additional-attr", String.class);
 
   /**
    * Returns a new server that when started will be able to be connected to from the client. Each

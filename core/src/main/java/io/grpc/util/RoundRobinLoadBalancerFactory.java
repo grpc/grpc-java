@@ -82,8 +82,10 @@ public class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
         new HashMap<EquivalentAddressGroup, Subchannel>();
 
     @VisibleForTesting
+    @SuppressWarnings("unchecked")
     static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
-        Attributes.Key.of("state-info");
+        (Attributes.Key<AtomicReference<ConnectivityStateInfo>>)
+            (Attributes.Key) Attributes.Key.of("state-info", AtomicReference.class);
 
     RoundRobinLoadBalancer(Helper helper) {
       this.helper = checkNotNull(helper, "helper");

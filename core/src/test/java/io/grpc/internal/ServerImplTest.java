@@ -489,9 +489,9 @@ public class ServerImplTest {
   @Test
   public void transportFilters() throws Exception {
     final SocketAddress remoteAddr = mock(SocketAddress.class);
-    final Attributes.Key<String> key1 = Attributes.Key.of("test-key1");
-    final Attributes.Key<String> key2 = Attributes.Key.of("test-key2");
-    final Attributes.Key<String> key3 = Attributes.Key.of("test-key3");
+    final Attributes.Key<String> key1 = Attributes.Key.of("test-key1", String.class);
+    final Attributes.Key<String> key2 = Attributes.Key.of("test-key2", String.class);
+    final Attributes.Key<String> key3 = Attributes.Key.of("test-key3", String.class);
     final AtomicReference<Attributes> filter1TerminationCallbackArgument =
         new AtomicReference<Attributes>();
     final AtomicReference<Attributes> filter2TerminationCallbackArgument =
