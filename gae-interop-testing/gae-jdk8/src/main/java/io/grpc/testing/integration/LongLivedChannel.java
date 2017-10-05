@@ -19,7 +19,7 @@ import javax.servlet.http.HttpServletResponse;
  * <a href="https://github.com/grpc/grpc/blob/master/doc/interop-test-descriptions.md">
  *   Interoperability Test Case Descriptions</a>.
  */
-public class LongLivedChannel extends HttpServlet {
+public final class LongLivedChannel extends HttpServlet {
   private static final String INTEROP_TEST_ADDRESS = "grpc-test.sandbox.googleapis.com:443";
   private final ManagedChannel channel =
       ManagedChannelBuilder.forTarget(INTEROP_TEST_ADDRESS).build();
