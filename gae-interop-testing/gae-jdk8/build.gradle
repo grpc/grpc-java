@@ -11,6 +11,8 @@
 //  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
+description = 'gRPC: gae interop testing (jdk8)'
+
 buildscript {    // Configuration for building
   repositories {
     jcenter()    // Bintray's repository - a fast Maven Central mirror & more
@@ -35,18 +37,16 @@ apply plugin: 'java'                              // standard Java tasks
 apply plugin: 'war'                               // standard Web Archive plugin
 apply plugin: 'com.google.cloud.tools.appengine'  // App Engine tasks
 
-def grpcVersion = '1.8.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-
 dependencies {
   providedCompile group: 'javax.servlet', name: 'servlet-api', version:'2.5'
   compile 'com.google.appengine:appengine:+'
   // Deps needed by all gRPC apps in GAE
-  compile "com.google.api.grpc:proto-google-common-protos:0.1.9"
-  compile "io.grpc:grpc-netty:${grpcVersion}"
-  compile "io.grpc:grpc-protobuf:${grpcVersion}"
-  compile "io.grpc:grpc-stub:${grpcVersion}"
-  compile 'io.netty:netty-tcnative-boringssl-static:2.0.5.Final'
-  compile "io.grpc:grpc-interop-testing:${grpcVersion}"
+  compile libraries.google_api_protos
+  compile project(":grpc-okhttp")
+  compile project(":grpc-protobuf")
+  compile project(":grpc-stub")
+  compile (project(":grpc-interop-testing"))
+  compile libraries.netty_tcnative
 }
 
 // [START model]

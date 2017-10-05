@@ -73,8 +73,6 @@ would be used to create all `v0.7` tags (e.g. `v0.7.0`, `v0.7.1`).
      examples/pom.xml
      examples/android/helloworld/app/build.gradle
      examples/android/routeguide/app/build.gradle
-     gae-interop-testing/gae-jdk7/build.gradle
-     gae-interop-testing/gae-jdk8/build.gradle
      )
    $ git checkout -b v$MAJOR.$MINOR.x master
    $ git push upstream v$MAJOR.$MINOR.x

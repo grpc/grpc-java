@@ -18,19 +18,18 @@ Prerequisites
   # Associate this codebase with a GAE project
   $ gcloud config set project PROJECT_ID
   ```
-- Build and install gRPC
-  ```bash
-  # cd into root directory for gRPC Java
-  $ ./gradlew install
-  ```
 
 Running the tests in GAE
 ==========================
 
 You can run the gradle task to execute the interop tests.
 ```bash
-# cd int either gae-jdk7 or gae-jdk8
+# cd into either gae-jdk7 or gae-jdk8
 $ ./gradlew runInteropTestRemote
+
+# Or run one of these from the root gRPC Java directory:
+$ ./gradlew :grpc-gae-interop-testing-jdk7:runInteropTestRemote
+$ ./gradlew :grpc-gae-interop-testing-jdk8:runInteropTestRemote
 ```
 
 Optional:
