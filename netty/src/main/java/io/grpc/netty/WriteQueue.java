@@ -29,29 +29,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * A queue of pending writes to a {@link Channel} that is flushed as a single unit.
  */
-class WriteQueue {
+class WriteQueue implements Runnable {
 
   // Dequeue in chunks, so we don't have to acquire the queue's log too often.
   @VisibleForTesting
-  static final int DEQUE_CHUNK_SIZE = 128;
-
-  /**
-   * {@link Runnable} used to schedule work onto the tail of the event loop.
-   */
-  private final Runnable later = new Runnable() {
-    @Override
-    public void run() {
-      flush();
-    }
-  };
+  static final int FLUSH_LIMIT = 128;
 
   private final Channel channel;
-  private final Queue<QueuedCommand> queue;
+  private final Queue<QueuedCommand> queue = new ConcurrentLinkedQueue<QueuedCommand>();
   private final AtomicBoolean scheduled = new AtomicBoolean();
 
   public WriteQueue(Channel channel) {
     this.channel = Preconditions.checkNotNull(channel, "channel");
-    queue = new ConcurrentLinkedQueue<QueuedCommand>();
   }
 
   /**
@@ -62,7 +51,7 @@ class WriteQueue {
       // Add the queue to the tail of the event loop so writes will be executed immediately
       // inside the event loop. Note DO NOT do channel.write outside the event loop as
       // it will not wake up immediately without a flush.
-      channel.eventLoop().execute(later);
+      channel.eventLoop().execute(this);
     }
   }
 
@@ -97,6 +86,7 @@ class WriteQueue {
       scheduleFlush();
     }
     return promise;
+
   }
 
   /**
@@ -115,26 +105,31 @@ class WriteQueue {
    * Process the queue of commands and dispatch them to the stream. This method is only
    * called in the event loop
    */
-  private void flush() {
+  @Override
+  @SuppressWarnings("ShortCircuitBoolean")
+  public void run() {
+    int writes = 0;
+    QueuedCommand cmd;
+    boolean wasWritable = channel.isWritable();
     try {
-      QueuedCommand cmd;
-      int i = 0;
-      boolean flushedOnce = false;
-      while ((cmd = queue.poll()) != null) {
-        cmd.run(channel);
-        if (++i == DEQUE_CHUNK_SIZE) {
-          i = 0;
-          // Flush each chunk so we are releasing buffers periodically. In theory this loop
-          // might never end as new events are continuously added to the queue, if we never
-          // flushed in that case we would be guaranteed to OOM.
-          channel.flush();
-          flushedOnce = true;
+      do {
+        while ((cmd = queue.poll()) != null) {
+          cmd.run(channel);
+          // There are two reasons to leave the loop:
+          // 1.  The channel's writability changed.
+          // 2.  We've done a lot of writes.
+          // Either way, we want to try another flush.  Use the non shortcircuiting | operator to
+          // make sure
+          if ((wasWritable != (wasWritable = channel.isWritable())) | (++writes == FLUSH_LIMIT)) {
+            // Always reset buffered writes, even in the good case.  We may have just exited the
+            // bad flush state, so we need to reset the counter.
+            writes = 0;
+            break;
+          }
         }
-      }
-      // Must flush at least once, even if there were no writes.
-      if (i != 0 || !flushedOnce) {
         channel.flush();
-      }
+        wasWritable = channel.isWritable();
+      } while (cmd != null);
     } finally {
       // Mark the write as done, if the queue is non-empty after marking trigger a new write.
       scheduled.set(false);

@@ -16,130 +16,101 @@
 
 package io.grpc.netty;
 
+import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isA;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
-import io.grpc.netty.WriteQueue.QueuedCommand;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
-import io.netty.channel.EventLoop;
+import io.netty.channel.embedded.EmbeddedChannel;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.junit.Before;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.Mock;
-import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 @RunWith(JUnit4.class)
 public class WriteQueueTest {
+  private final EmbeddedChannel channel = new EmbeddedChannel();
 
-  private final Object lock = new Object();
-
-  @Mock
-  public Channel channel;
-
-  @Mock
-  public ChannelPromise promise;
-
-  private long writeCalledNanos;
-  private long flushCalledNanos = writeCalledNanos;
-
-  /**
-   * Set up for test.
-   */
-  @Before
-  public void setUp() throws Exception {
-    MockitoAnnotations.initMocks(this);
-    when(channel.newPromise()).thenReturn(promise);
-
-    EventLoop eventLoop = Mockito.mock(EventLoop.class);
-    doAnswer(new Answer<Void>() {
-      @Override
-      public Void answer(InvocationOnMock invocation) throws Throwable {
-        Runnable r = (Runnable) invocation.getArguments()[0];
-        r.run();
-        return null;
-      }
-    }).when(eventLoop).execute(any(Runnable.class));
-    when(eventLoop.inEventLoop()).thenReturn(true);
-    when(channel.eventLoop()).thenReturn(eventLoop);
-
-    when(channel.flush()).thenAnswer(new Answer<Channel>() {
-      @Override
-      public Channel answer(InvocationOnMock invocation) throws Throwable {
-        synchronized (lock) {
-          flushCalledNanos = System.nanoTime();
-          if (flushCalledNanos == writeCalledNanos) {
-            flushCalledNanos += 1;
-          }
-        }
-        return channel;
-      }
-    });
-
-    when(channel.write(any(QueuedCommand.class), eq(promise))).thenAnswer(
-        new Answer<ChannelFuture>() {
-          @Override
-          public ChannelFuture answer(InvocationOnMock invocation) throws Throwable {
-            synchronized (lock) {
-              writeCalledNanos = System.nanoTime();
-              if (writeCalledNanos == flushCalledNanos) {
-                writeCalledNanos += 1;
-              }
-            }
-            return promise;
-          }
-        });
-  }
+  private Recorder recorder;
 
   @Test
   public void singleWriteShouldWork() {
+    channel.pipeline().addLast(recorder = new Recorder());
+    CuteCommand cmd = new CuteCommand();
     WriteQueue queue = new WriteQueue(channel);
-    queue.enqueue(new CuteCommand(), true);
 
-    verify(channel).write(isA(QueuedCommand.class), eq(promise));
-    verify(channel).flush();
+    queue.enqueue(cmd, true);
+    channel.runPendingTasks();
+
+    assertThat(recorder.msgs).containsExactly(cmd);
+    assertThat(recorder.flushes).isEqualTo(1);
   }
 
   @Test
   public void multipleWritesShouldBeBatched() {
+    channel.pipeline().addLast(recorder = new Recorder());
     WriteQueue queue = new WriteQueue(channel);
+    List<CuteCommand> cmds = new ArrayList<CuteCommand>();
     for (int i = 0; i < 5; i++) {
-      queue.enqueue(new CuteCommand(), false);
+      cmds.add(new CuteCommand());
+      queue.enqueue(cmds.get(i), false);
     }
-    queue.scheduleFlush();
 
-    verify(channel, times(5)).write(isA(QueuedCommand.class), eq(promise));
-    verify(channel).flush();
+    queue.scheduleFlush();
+    channel.runPendingTasks();
+
+    assertThat(recorder.msgs).containsExactlyElementsIn(cmds).inOrder();
+    assertThat(recorder.flushes).isEqualTo(1);
   }
 
   @Test
   public void maxWritesBeforeFlushShouldBeEnforced() {
+    channel.pipeline().addLast(recorder = new Recorder());
     WriteQueue queue = new WriteQueue(channel);
-    int writes = WriteQueue.DEQUE_CHUNK_SIZE + 10;
+    List<CuteCommand> cmds = new ArrayList<CuteCommand>();
+    channel.unsafe().outboundBuffer().setUserDefinedWritability(1, false);
+    int writes = WriteQueue.FLUSH_LIMIT + 10;
     for (int i = 0; i < writes; i++) {
-      queue.enqueue(new CuteCommand(), false);
+      cmds.add(new CuteCommand());
+      queue.enqueue(cmds.get(i), false);
     }
-    queue.scheduleFlush();
 
-    verify(channel, times(writes)).write(isA(QueuedCommand.class), eq(promise));
-    verify(channel, times(2)).flush();
+    channel.isWritable();
+    queue.scheduleFlush();
+    channel.runPendingTasks();
+
+    assertThat(recorder.msgs).containsExactlyElementsIn(cmds);
+    assertThat(recorder.flushes).isEqualTo(2);
   }
 
-  @Test(timeout = 10000)
+  @Test
   public void concurrentWriteAndFlush() throws Throwable {
+    final AtomicLong lastWriteNanos = new AtomicLong();
+    final AtomicLong lastFlushNanos = new AtomicLong();
+
+    channel.pipeline().addLast(recorder = new Recorder() {
+      @Override
+      public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
+          throws Exception {
+        lastWriteNanos.set(System.nanoTime());
+        super.write(ctx, msg, promise);
+      }
+
+      @Override
+      public void flush(ChannelHandlerContext ctx) throws Exception {
+        lastFlushNanos.set(System.nanoTime());
+        super.flush(ctx);
+      }
+    });
+    channel.unsafe().outboundBuffer().setUserDefinedWritability(1, false);
     final WriteQueue queue = new WriteQueue(channel);
     final CountDownLatch flusherStarted = new CountDownLatch(1);
     final AtomicBoolean doneWriting = new AtomicBoolean();
@@ -149,23 +120,23 @@ public class WriteQueueTest {
         flusherStarted.countDown();
         while (!doneWriting.get()) {
           queue.scheduleFlush();
+          channel.runPendingTasks();
           assertFlushCalledAfterWrites();
         }
         // No more writes, so this flush should drain all writes from the queue
         queue.scheduleFlush();
+        channel.runPendingTasks();
         assertFlushCalledAfterWrites();
       }
 
       void assertFlushCalledAfterWrites() {
-        synchronized (lock) {
-          if (flushCalledNanos - writeCalledNanos <= 0) {
+          if (lastFlushNanos.get() - lastWriteNanos.get() <= 0) {
             fail("flush must be called after all writes");
           }
-        }
       }
     });
 
-    class ExceptionHandler implements Thread.UncaughtExceptionHandler {
+    final class ExceptionHandler implements Thread.UncaughtExceptionHandler {
       private Throwable throwable;
 
       @Override
@@ -184,19 +155,40 @@ public class WriteQueueTest {
     flusher.setUncaughtExceptionHandler(exHandler);
 
     flusher.start();
-    flusherStarted.await();
-    int writes = 10 * WriteQueue.DEQUE_CHUNK_SIZE;
+    assertTrue(flusherStarted.await(5, TimeUnit.SECONDS));
+    int writes = 10 * WriteQueue.FLUSH_LIMIT;
     for (int i = 0; i < writes; i++) {
       queue.enqueue(new CuteCommand(), false);
     }
     doneWriting.set(true);
-    flusher.join();
+    flusher.join(TimeUnit.SECONDS.toMillis(5));
+    assertFalse("couldn't join thread", flusher.isAlive());
 
     exHandler.checkException();
-    verify(channel, times(writes)).write(isA(CuteCommand.class), eq(promise));
+    assertThat(recorder.msgs).hasSize(writes);
   }
 
   static class CuteCommand extends WriteQueue.AbstractQueuedCommand {
 
+  }
+
+  private static class Recorder extends ChannelOutboundHandlerAdapter {
+    final List<Object> msgs = new ArrayList<Object>();
+    final List<Object> promises = new ArrayList<Object>();
+    int flushes;
+
+    @Override
+    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
+        throws Exception {
+      super.write(ctx, msg, promise);
+      msgs.add(msg);
+      promises.add(promise);
+    }
+
+    @Override
+    public void flush(ChannelHandlerContext ctx) throws Exception {
+      super.flush(ctx);
+      flushes++;
+    }
   }
 }
