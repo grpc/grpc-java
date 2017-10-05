@@ -34,7 +34,6 @@ public final class ServerReflectionGrpc {
           .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
           .setFullMethodName(generateFullMethodName(
               "grpc.reflection.v1alpha.ServerReflection", "ServerReflectionInfo"))
-          .setRegisterForTracing(true)
           .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.reflection.v1alpha.ServerReflectionRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
