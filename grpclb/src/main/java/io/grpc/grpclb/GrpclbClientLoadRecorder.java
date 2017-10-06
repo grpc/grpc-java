@@ -23,9 +23,10 @@ import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import java.util.HashSet;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -53,9 +54,12 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
   @SuppressWarnings("unused")
   private volatile long callsFinished;
 
+  private static final class LongHolder {
+    long num;
+  }
+
   // Specific finish types
-  private final ConcurrentMap<String, Long> callsDroppedPerToken =
-      new ConcurrentHashMap<String, Long>();
+  private Map<String, LongHolder> callsDroppedPerToken = new HashMap<String, LongHolder>(1);
   @SuppressWarnings("unused")
   private volatile long callsFailedToSend;
   @SuppressWarnings("unused")
@@ -78,12 +82,13 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
     callsStartedUpdater.getAndIncrement(this);
     callsFinishedUpdater.getAndIncrement(this);
 
-    Long oldCallsDropped;
-    do {
-      if ((oldCallsDropped = callsDroppedPerToken.get(token)) == null) {
-        callsDroppedPerToken.putIfAbsent(token, (oldCallsDropped = 0L));
+    synchronized (this) {
+      LongHolder holder;
+      if ((holder = callsDroppedPerToken.get(token)) == null) {
+        callsDroppedPerToken.put(token, (holder = new LongHolder()));
       }
-    } while (!callsDroppedPerToken.replace(token, oldCallsDropped, oldCallsDropped + 1L));
+      holder.num++;
+    }
   }
 
   /**
@@ -98,15 +103,19 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
         .setNumCallsFinishedWithClientFailedToSend(callsFailedToSendUpdater.getAndSet(this, 0))
         .setNumCallsFinishedKnownReceived(callsFinishedKnownReceivedUpdater.getAndSet(this, 0));
 
-    for (String key : new HashSet<String>(callsDroppedPerToken.keySet())) {
-      Long dropCount = callsDroppedPerToken.remove(key);
-      if (dropCount != null) {
-        statsBuilder.addCallsFinishedWithDrop(
-            ClientStatsPerToken.newBuilder()
-                .setLoadBalanceToken(key)
-                .setNumCalls(dropCount)
-                .build());
+    Map<String, LongHolder> localCallsDroppedPerToken = Collections.emptyMap();
+    synchronized (this) {
+      if (!callsDroppedPerToken.isEmpty()) {
+        localCallsDroppedPerToken = callsDroppedPerToken;
+        callsDroppedPerToken = new HashMap<String, LongHolder>(localCallsDroppedPerToken.size());
       }
+    }
+    for (Entry<String, LongHolder> entry : localCallsDroppedPerToken.entrySet()) {
+      statsBuilder.addCallsFinishedWithDrop(
+          ClientStatsPerToken.newBuilder()
+              .setLoadBalanceToken(entry.getKey())
+              .setNumCalls(entry.getValue().num)
+              .build());
     }
     return statsBuilder.build();
   }
