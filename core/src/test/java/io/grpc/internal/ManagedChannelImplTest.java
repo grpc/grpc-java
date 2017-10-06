@@ -654,22 +654,22 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void testFailFastRpcFailFromErrorFromBalancer() {
+  public void failFastRpcFailFromErrorFromBalancer() {
     subtestFailRpcFromBalancer(false, false, true);
   }
 
   @Test
-  public void testFailFastRpcFailFromDropFromBalancer() {
+  public void failFastRpcFailFromDropFromBalancer() {
     subtestFailRpcFromBalancer(false, true, true);
   }
 
   @Test
-  public void testWaitForReadyRpcImmuneFromErrorFromBalancer() {
+  public void waitForReadyRpcImmuneFromErrorFromBalancer() {
     subtestFailRpcFromBalancer(true, false, false);
   }
 
   @Test
-  public void testWaitForReadyRpcFailFromDropFromBalancer() {
+  public void waitForReadyRpcFailFromDropFromBalancer() {
     subtestFailRpcFromBalancer(true, true, true);
   }
 
