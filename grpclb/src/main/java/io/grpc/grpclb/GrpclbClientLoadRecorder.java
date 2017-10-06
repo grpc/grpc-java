@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
+import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -59,6 +60,7 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
   }
 
   // Specific finish types
+  @GuardedBy("this")
   private Map<String, LongHolder> callsDroppedPerToken = new HashMap<String, LongHolder>(1);
   @SuppressWarnings("unused")
   private volatile long callsFailedToSend;
