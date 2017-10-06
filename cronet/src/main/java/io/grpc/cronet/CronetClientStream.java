@@ -17,9 +17,10 @@
 package io.grpc.cronet;
 
 import static io.grpc.internal.GrpcUtil.CONTENT_TYPE_KEY;
+import static io.grpc.internal.GrpcUtil.TE_HEADER;
 import static io.grpc.internal.GrpcUtil.USER_AGENT_KEY;
 
-// TODO(ericgribkoff): Change from android.util.Log to java logging.
+// TODO(ericgribkoff): Consider changing from android.util.Log to java logging.
 import android.util.Log;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -66,7 +67,8 @@ class CronetClientStream extends AbstractClientStream {
   private final Metadata headers;
   private final CronetClientTransport transport;
   private final Runnable startCallback;
-  private final boolean idempotent;
+  @VisibleForTesting
+  final boolean idempotent;
   private BidirectionalStream stream;
   private final boolean delayRequestHeader;
   private final Object annotation;
@@ -83,6 +85,7 @@ class CronetClientStream extends AbstractClientStream {
       Runnable startCallback,
       Object lock,
       int maxMessageSize,
+      boolean alwaysUsePut,
       MethodDescriptor<?, ?> method,
       StatsTraceContext statsTraceCtx,
       CallOptions callOptions) {
@@ -93,11 +96,10 @@ class CronetClientStream extends AbstractClientStream {
     this.headers = Preconditions.checkNotNull(headers, "headers");
     this.transport = Preconditions.checkNotNull(transport, "transport");
     this.startCallback = Preconditions.checkNotNull(startCallback, "startCallback");
-    this.idempotent = (method.isIdempotent()
-        || CronetClientTransport.enableIdempotencyForAllCronetStreams);
+    this.idempotent = method.isIdempotent() || alwaysUsePut;
     // Only delay flushing header for unary rpcs.
     this.delayRequestHeader = (method.getType() == MethodDescriptor.MethodType.UNARY);
-    this.annotation = callOptions.getOption(CronetClientTransport.CRONET_ANNOTATION_KEY);
+    this.annotation = callOptions.getOption(CronetCallOptions.CRONET_ANNOTATION_KEY);
     this.state = new TransportState(maxMessageSize, statsTraceCtx, lock);
   }
 
@@ -294,10 +296,11 @@ class CronetClientStream extends AbstractClientStream {
 
   // TODO(ericgribkoff): move header related method to a common place like GrpcUtil.
   private static boolean isApplicationHeader(String key) {
-    // Don't allow HTTP/2 pseudo headers or content-type to be added by the application.
-    return (!key.startsWith(":")
-        && !CONTENT_TYPE_KEY.name().equalsIgnoreCase(key))
-        && !USER_AGENT_KEY.name().equalsIgnoreCase(key);
+    // Don't allow reserved non HTTP/2 pseudo headers to be added
+    // HTTP/2 headers can not be created as keys because Header.Key disallows the ':' character.
+    return !CONTENT_TYPE_KEY.name().equalsIgnoreCase(key)
+        && !USER_AGENT_KEY.name().equalsIgnoreCase(key)
+        && !TE_HEADER.name().equalsIgnoreCase(key);
   }
 
   private void setGrpcHeaders(BidirectionalStream.Builder builder) {

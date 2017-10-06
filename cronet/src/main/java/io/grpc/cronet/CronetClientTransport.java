@@ -41,25 +41,6 @@ import javax.annotation.concurrent.GuardedBy;
  * A cronet-based {@link ConnectionClientTransport} implementation.
  */
 class CronetClientTransport implements ConnectionClientTransport, WithLogId {
-  /**
-   * Note: this flag is only for experimental use. We may remove this in the future.
-   * Turning on this flag will cause all grpc requests going out through cronet to use PUT instead
-   * of POST.
-   * If needed, this must be set before creating any grpc channels and should not be changed
-   * afterwards.
-   */
-  public static boolean enableIdempotencyForAllCronetStreams = false;
-
-  /**
-   * Used for attaching annotation objects to cronet streams. When the stream finishes, the user can
-   * get cronet metrics from {@link org.chromium.net.RequestFinishedInfo.Listener} with the same
-   * annotation object.
-   *
-   * The Object must not be null.
-   */
-  public static final CallOptions.Key<Object> CRONET_ANNOTATION_KEY =
-      CallOptions.Key.of("cronet-annotation", null);
-
   private final LogId logId = LogId.allocate(getClass().getName());
   private final InetSocketAddress address;
   private final String authority;
@@ -71,6 +52,7 @@ class CronetClientTransport implements ConnectionClientTransport, WithLogId {
       new HashSet<CronetClientStream>();
   private final Executor executor;
   private final int maxMessageSize;
+  private final boolean alwaysUsePut;
   // Indicates the transport is in go-away state: no new streams will be processed,
   // but existing streams may continue.
   @GuardedBy("lock")
@@ -88,12 +70,19 @@ class CronetClientTransport implements ConnectionClientTransport, WithLogId {
   private boolean started;
   private StreamBuilderFactory streamFactory;
 
-  CronetClientTransport(StreamBuilderFactory streamFactory, InetSocketAddress address,
-      String authority, @Nullable String userAgent, Executor executor, int maxMessageSize) {
+  CronetClientTransport(
+      StreamBuilderFactory streamFactory,
+      InetSocketAddress address,
+      String authority,
+      @Nullable String userAgent,
+      Executor executor,
+      int maxMessageSize,
+      boolean alwaysUsePut) {
     this.address = Preconditions.checkNotNull(address, "address");
     this.authority = authority;
     this.userAgent = GrpcUtil.getGrpcUserAgent("cronet", userAgent);
     this.maxMessageSize = maxMessageSize;
+    this.alwaysUsePut = alwaysUsePut;
     this.executor = Preconditions.checkNotNull(executor, "executor");
     this.streamFactory = Preconditions.checkNotNull(streamFactory, "streamFactory");
   }
@@ -107,11 +96,11 @@ class CronetClientTransport implements ConnectionClientTransport, WithLogId {
     final String defaultPath = "/" + method.getFullMethodName();
     final String url = "https://" + authority + defaultPath;
 
-    final StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(callOptions, headers);
+    StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(callOptions, headers);
     class StartCallback implements Runnable {
       final CronetClientStream clientStream = new CronetClientStream(
           url, userAgent, executor, headers, CronetClientTransport.this, this, lock, maxMessageSize,
-          method, statsTraceCtx, callOptions);
+          alwaysUsePut, method, statsTraceCtx, callOptions);
 
       @Override
       public void run() {

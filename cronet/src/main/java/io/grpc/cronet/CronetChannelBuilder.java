@@ -19,6 +19,7 @@ package io.grpc.cronet;
 import static com.google.common.base.Preconditions.checkArgument;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
@@ -72,6 +73,22 @@ public class CronetChannelBuilder extends
     return new CronetChannelBuilder(host, port, streamFactory);
   }
 
+  /**
+   * Always fails.  Call {@link #forAddress(String, int, CronetEngine)} instead.
+   */
+  public static CronetChannelBuilder forTarget(String target) {
+    throw new UnsupportedOperationException("call forAddress() instead");
+  }
+
+  /**
+   * Always fails.  Call {@link #forAddress(String, int, CronetEngine)} instead.
+   */
+  public static CronetChannelBuilder forAddress(String name, int port) {
+    throw new UnsupportedOperationException("call forAddress(String, int, CronetEngine) instead");
+  }
+
+  private boolean alwaysUsePut = false;
+
   private int maxMessageSize = DEFAULT_MAX_MESSAGE_SIZE;
 
   private StreamBuilderFactory streamFactory;
@@ -84,21 +101,20 @@ public class CronetChannelBuilder extends
   }
 
   /**
-   * @deprecated this is a no-op now.
-   * TODO(ericgribkoff): remove this method once no longer used.
-   */
-  @Deprecated
-  public final CronetChannelBuilder transportExecutor(@Nullable Executor transportExecutor) {
-    return this;
-  }
-
-  /**
    * Sets the maximum message size allowed to be received on the channel. If not called,
    * defaults to {@link io.grpc.internal.GrpcUtil#DEFAULT_MAX_MESSAGE_SIZE}.
    */
   public final CronetChannelBuilder maxMessageSize(int maxMessageSize) {
     checkArgument(maxMessageSize >= 0, "maxMessageSize must be >= 0");
     this.maxMessageSize = maxMessageSize;
+    return this;
+  }
+
+  /**
+   * Sets the Cronet channel to always use PUT instead of POST. Defaults to false.
+   */
+  public final CronetChannelBuilder alwaysUsePut(boolean enable) {
+    this.alwaysUsePut = enable;
     return this;
   }
 
@@ -113,7 +129,7 @@ public class CronetChannelBuilder extends
   @Override
   protected final ClientTransportFactory buildTransportFactory() {
     return new CronetTransportFactory(streamFactory, MoreExecutors.directExecutor(),
-        maxMessageSize);
+        maxMessageSize, alwaysUsePut);
   }
 
   @Override
@@ -122,16 +138,22 @@ public class CronetChannelBuilder extends
         .set(NameResolver.Factory.PARAMS_DEFAULT_PORT, GrpcUtil.DEFAULT_PORT_SSL).build();
   }
 
-  private static class CronetTransportFactory implements ClientTransportFactory {
+  @VisibleForTesting
+  static class CronetTransportFactory implements ClientTransportFactory {
     private final ScheduledExecutorService timeoutService =
         SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
     private final Executor executor;
     private final int maxMessageSize;
+    private final boolean alwaysUsePut;
     private final StreamBuilderFactory streamFactory;
 
-    private CronetTransportFactory(StreamBuilderFactory streamFactory, Executor executor,
-                                   int maxMessageSize) {
+    private CronetTransportFactory(
+        StreamBuilderFactory streamFactory,
+        Executor executor,
+        int maxMessageSize,
+        boolean alwaysUsePut) {
       this.maxMessageSize = maxMessageSize;
+      this.alwaysUsePut = alwaysUsePut;
       this.streamFactory = streamFactory;
       this.executor = Preconditions.checkNotNull(executor, "executor");
     }
@@ -141,7 +163,7 @@ public class CronetChannelBuilder extends
         @Nullable String userAgent) {
       InetSocketAddress inetSocketAddr = (InetSocketAddress) addr;
       return new CronetClientTransport(streamFactory, inetSocketAddr, authority, userAgent,
-          executor, maxMessageSize);
+          executor, maxMessageSize, alwaysUsePut);
     }
 
     @Override
