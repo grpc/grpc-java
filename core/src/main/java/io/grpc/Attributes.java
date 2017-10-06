@@ -20,7 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Objects;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -160,7 +160,7 @@ public final class Attributes {
 
     private Map<Key<?>, Object> data(int size) {
       if (newdata == null) {
-        newdata = new HashMap<Key<?>, Object>(size);
+        newdata = new IdentityHashMap<Key<?>, Object>(size);
       }
       return newdata;
     }
