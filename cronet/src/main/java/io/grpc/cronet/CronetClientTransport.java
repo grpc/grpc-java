@@ -96,7 +96,8 @@ class CronetClientTransport implements ConnectionClientTransport, WithLogId {
     final String defaultPath = "/" + method.getFullMethodName();
     final String url = "https://" + authority + defaultPath;
 
-    StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(callOptions, headers);
+    final StatsTraceContext statsTraceCtx =
+        StatsTraceContext.newClientContext(callOptions, headers);
     class StartCallback implements Runnable {
       final CronetClientStream clientStream = new CronetClientStream(
           url, userAgent, executor, headers, CronetClientTransport.this, this, lock, maxMessageSize,
