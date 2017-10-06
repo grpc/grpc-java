@@ -61,6 +61,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
 import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
 import io.grpc.ServerStreamTracer;
@@ -190,7 +191,7 @@ public abstract class AbstractInteropTest {
     List<ServerInterceptor> allInterceptors = ImmutableList.<ServerInterceptor>builder()
         .add(TestUtils.recordServerCallInterceptor(serverCallCapture))
         .add(TestUtils.recordRequestHeadersInterceptor(requestHeadersCapture))
-        .add(TestUtils.recordContextInterceptor(contextCapture))
+        .add(recordContextInterceptor(contextCapture))
         .addAll(TestServiceImpl.interceptors())
         .add(interceptors)
         .build();
@@ -1888,5 +1889,19 @@ public abstract class AbstractInteropTest {
       assertNotNull(record.getMetric(RpcConstants.RPC_CLIENT_REQUEST_BYTES));
       assertNotNull(record.getMetric(RpcConstants.RPC_CLIENT_RESPONSE_BYTES));
     }
+  }
+
+  private static ServerInterceptor recordContextInterceptor(
+      final AtomicReference<Context> contextCapture) {
+    return new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+          ServerCall<ReqT, RespT> call,
+          Metadata requestHeaders,
+          ServerCallHandler<ReqT, RespT> next) {
+        contextCapture.set(Context.current());
+        return next.startCall(call, requestHeaders);
+      }
+    };
   }
 }

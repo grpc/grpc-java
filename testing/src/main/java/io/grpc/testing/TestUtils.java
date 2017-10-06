@@ -16,7 +16,6 @@
 
 package io.grpc.testing;
 
-import io.grpc.Context;
 import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -87,23 +86,6 @@ public class TestUtils {
           Metadata requestHeaders,
           ServerCallHandler<ReqT, RespT> next) {
         serverCallCapture.set(call);
-        return next.startCall(call, requestHeaders);
-      }
-    };
-  }
-
-  /**
-   * Capture the context seen by the server.  Useful for testing context propagation.
-   */
-  public static ServerInterceptor recordContextInterceptor(
-      final AtomicReference<Context> contextCapture) {
-    return new ServerInterceptor() {
-      @Override
-      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-          ServerCall<ReqT, RespT> call,
-          Metadata requestHeaders,
-          ServerCallHandler<ReqT, RespT> next) {
-        contextCapture.set(Context.current());
         return next.startCall(call, requestHeaders);
       }
     };
