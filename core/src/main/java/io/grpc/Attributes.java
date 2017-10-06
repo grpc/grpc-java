@@ -22,6 +22,7 @@ import com.google.common.base.Objects;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
@@ -65,14 +66,14 @@ public final class Attributes {
    */
   public static Builder newBuilder(Attributes base) {
     checkNotNull(base, "base");
-    return new Builder(new HashMap<Key<?>, Object>(base.data));
+    return new Builder(base);
   }
 
   /**
    * Create a new builder.
    */
   public static Builder newBuilder() {
-    return new Builder(new HashMap<Key<?>, Object>());
+    return new Builder(EMPTY);
   }
 
   /**
@@ -149,20 +150,28 @@ public final class Attributes {
    * The helper class to build an Attributes instance.
    */
   public static final class Builder {
-    private final Map<Key<?>, Object> data;
+    private Attributes base;
+    private Map<Key<?>, Object> newdata;
 
-    private Builder(Map<Key<?>, Object> data) {
-      assert data != null;
-      this.data = data;
+    private Builder(Attributes base) {
+      assert base != null;
+      this.base = base;
+    }
+
+    private Map<Key<?>, Object> data(int size) {
+      if (newdata == null) {
+        newdata = new HashMap<Key<?>, Object>(size);
+      }
+      return newdata;
     }
 
     public <T> Builder set(Key<T> key, T value) {
-      data.put(key, value);
+      data(1).put(key, value);
       return this;
     }
 
     public <T> Builder setAll(Attributes other) {
-      data.putAll(other.data);
+      data(other.data.size()).putAll(other.data);
       return this;
     }
 
@@ -170,7 +179,16 @@ public final class Attributes {
      * Build the attributes.
      */
     public Attributes build() {
-      return new Attributes(new HashMap<Key<?>, Object>(data));
+      if (newdata != null) {
+        for (Entry<Key<?>, Object> entry : base.data.entrySet()) {
+          if (!newdata.containsKey(entry.getKey())) {
+            newdata.put(entry.getKey(), entry.getValue());
+          }
+        }
+        base = new Attributes(newdata);
+        newdata = null;
+      }
+      return base;
     }
   }
 }
