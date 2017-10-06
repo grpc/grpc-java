@@ -95,13 +95,14 @@ public class ContextTest {
   @After
   public void tearDown() throws Exception {
     scheduler.shutdown();
+    assertEquals(Context.ROOT, Context.current());
   }
 
   @Test
   public void defaultContext() throws Exception {
     final SettableFuture<Context> contextOfNewThread = SettableFuture.create();
     Context contextOfThisThread = Context.ROOT.withValue(PET, "dog");
-    contextOfThisThread.attach();
+    Context toRestore = contextOfThisThread.attach();
     new Thread(new Runnable() {
       @Override
       public void run() {
@@ -111,16 +112,22 @@ public class ContextTest {
     assertNotNull(contextOfNewThread.get(5, TimeUnit.SECONDS));
     assertNotSame(contextOfThisThread, contextOfNewThread.get());
     assertSame(contextOfThisThread, Context.current());
+    contextOfThisThread.detach(toRestore);
   }
 
   @Test
   public void rootCanBeAttached() {
     Context fork = Context.ROOT.fork();
-    fork.attach();
-    Context.ROOT.attach();
+    Context toRestore1 = fork.attach();
+    Context toRestore2 = Context.ROOT.attach();
     assertTrue(Context.ROOT.isCurrent());
-    fork.attach();
+
+    Context toRestore3 = fork.attach();
     assertTrue(fork.isCurrent());
+
+    fork.detach(toRestore3);
+    Context.ROOT.detach(toRestore2);
+    fork.detach(toRestore1);
   }
 
   @Test
@@ -225,14 +232,14 @@ public class ContextTest {
     Context base = Context.current().withValues(PET, "dog", COLOR, "blue");
     Context child = base.withValues(PET, "cat", FOOD, "cheese", FAVORITE, fav);
 
-    child.attach();
+    Context toRestore = child.attach();
 
     assertEquals("cat", PET.get());
     assertEquals("cheese", FOOD.get());
     assertEquals("blue", COLOR.get());
     assertEquals(fav, FAVORITE.get());
 
-    base.attach();
+    child.detach(toRestore);
   }
 
   @Test
@@ -241,7 +248,7 @@ public class ContextTest {
     Context base = Context.current().withValues(PET, "dog", COLOR, "blue");
     Context child = base.withValues(PET, "cat", FOOD, "cheese", FAVORITE, fav, LUCKY, 7);
 
-    child.attach();
+    Context toRestore = child.attach();
 
     assertEquals("cat", PET.get());
     assertEquals("cheese", FOOD.get());
@@ -249,7 +256,7 @@ public class ContextTest {
     assertEquals(fav, FAVORITE.get());
     assertEquals(7, (int) LUCKY.get());
 
-    base.attach();
+    child.detach(toRestore);
   }
 
   @Test
@@ -389,7 +396,7 @@ public class ContextTest {
   public void cancellableContextIsAttached() {
     Context.CancellableContext base = Context.current().withValue(FOOD, "fish").withCancellation();
     assertFalse(base.isCurrent());
-    base.attach();
+    Context toRestore = base.attach();
 
     Context attached = Context.current();
     assertSame("fish", FOOD.get());
@@ -406,7 +413,7 @@ public class ContextTest {
     assertSame(t, attached.cancellationCause());
     assertSame(attached, listenerNotifedContext);
 
-    Context.ROOT.attach();
+    base.detach(toRestore);
   }
 
   @Test
@@ -919,6 +926,88 @@ public class ContextTest {
     Context.CancellableContext cancellable = Context.current().withCancellation();
     Context fork = cancellable.fork();
     assertNull(fork.cancellableAncestor);
+  }
+
+  @Test
+  public void cancellableContext_runAndCancel() throws Exception {
+    final Object favorite = new Object();
+    final Context.CancellableContext cancellableContext =
+        Context.current().withValue(FAVORITE, favorite).withCancellation();
+    cancellableContext.runAndCancel(new Runnable() {
+      @Override
+      public void run() {
+        // Context.current() always returns an uncancellable surrogate, so it doesn't make sense to
+        // check that the current context is a CancellableContext. So let's just make sure it looks
+        // equivalent to the expected context.
+        assertSame(favorite, FAVORITE.get());
+        assertFalse(cancellableContext.isCancelled());
+        assertFalse(Context.current().isCancelled());
+      }
+    });
+    assertTrue(cancellableContext.isCancelled());
+    assertNull(cancellableContext.cancellationCause());
+  }
+
+  @Test(expected = TestError.class)
+  public void cancellableContext_runAndCancel_throws() {
+    Object favorite = new Object();
+    Context.CancellableContext cancellableContext =
+        Context.current().withValue(FAVORITE, favorite).withCancellation();
+    try {
+      cancellableContext.runAndCancel(
+          new Runnable() {
+            @Override
+            public void run() {
+              throw new TestError();
+            }
+          });
+      fail("should not be reached");
+    } finally {
+      assertTrue(cancellableContext.isCancelled());
+      assertNull(cancellableContext.cancellationCause());
+    }
+  }
+
+  @Test
+  public void cancellableContext_callAndCancel() throws Exception {
+    final Object favorite = new Object();
+    final Context.CancellableContext cancellableContext =
+        Context.current().withValue(FAVORITE, favorite).withCancellation();
+    cancellableContext.callAndCancel(new Callable<Void>() {
+      @Override
+      public Void call() throws Exception {
+        // Context.current() always returns an uncancellable surrogate, so it doesn't make sense to
+        // check that the current context is a CancellableContext. So let's just make sure it looks
+        // equivalent to the expected context.
+        assertSame(favorite, FAVORITE.get());
+        assertFalse(cancellableContext.isCancelled());
+        assertFalse(Context.current().isCancelled());
+        return null;
+      }
+    });
+    assertTrue(cancellableContext.isCancelled());
+    assertNull(cancellableContext.cancellationCause());
+  }
+
+  @Test(expected = TestError.class)
+  public void cancellableContext_callAndCancel_throws() throws Exception {
+    Object favorite = new Object();
+    Context.CancellableContext cancellableContext =
+        Context.current().withValue(FAVORITE, favorite).withCancellation();
+    try {
+      cancellableContext.callAndCancel(
+          new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+              throw new TestError();
+            }
+          }
+      );
+      fail("should not be reached");
+    } finally {
+      assertTrue(cancellableContext.isCancelled());
+      assertNull(cancellableContext.cancellationCause());
+    }
   }
 
   @Test

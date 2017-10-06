@@ -811,6 +811,32 @@ public class Context {
     boolean canBeCancelled() {
       return true;
     }
+
+    /**
+     * Runs the specified Runnable in this CancellableContext, and then cancels the context when
+     * done with a {@code null} cause.
+     */
+    public void runAndCancel(Runnable runnable) {
+      Context toRestore = attach();
+      try {
+        runnable.run();
+      } finally {
+        detachAndCancel(toRestore, null);
+      }
+    }
+
+    /**
+     * Runs the specified Callable in this CancellableContext, and then cancels the context with
+     * a {@code null} cause before returning the return value.
+     */
+    public <T> T callAndCancel(Callable<T> callable) throws Exception {
+      Context toRestore = attach();
+      try {
+        return callable.call();
+      } finally {
+        detachAndCancel(toRestore, null);
+      }
+    }
   }
 
   /**
