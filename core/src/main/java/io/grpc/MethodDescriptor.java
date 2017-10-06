@@ -19,10 +19,7 @@ package io.grpc;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Preconditions;
-import io.opencensus.trace.Tracing;
-import io.opencensus.trace.export.SampledSpanStore;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
@@ -71,18 +68,6 @@ public final class MethodDescriptor<ReqT, RespT> {
    */
   final void setRawMethodName(int transportOrdinal, Object o) {
     rawMethodNames.lazySet(transportOrdinal, o);
-  }
-  
-  /**
-   * Convert a full method name to a tracing span name.
-   *
-   * @param isServer {@code false} if the span is on the client-side, {@code true} if on the
-   *                 server-side
-   * @param fullMethodName the method name as returned by {@link #getFullMethodName}.
-   */
-  static String generateTraceSpanName(boolean isServer, String fullMethodName) {
-    String prefix = isServer ? "Recv" : "Sent";
-    return prefix + "." + fullMethodName.replace('/', '.');
   }
 
   /**
@@ -458,7 +443,6 @@ public final class MethodDescriptor<ReqT, RespT> {
     private boolean idempotent;
     private boolean safe;
     private Object schemaDescriptor;
-    private boolean registerForTracing;
 
     private Builder() {}
 
@@ -546,32 +530,12 @@ public final class MethodDescriptor<ReqT, RespT> {
     }
 
     /**
-     * Sets whether the new MethodDescriptor should be registered into the tracing system, so that
-     * RPCs on this method may be collected and stored.
-     *
-     * @since 1.7.0
-     */
-    public Builder<ReqT, RespT> setRegisterForTracing(boolean value) {
-      this.registerForTracing = value;
-      return this;
-    }
-
-    /**
      * Builds the method descriptor.
      *
      * @since 1.1.0
      */
     @CheckReturnValue
     public MethodDescriptor<ReqT, RespT> build() {
-      if (registerForTracing) {
-        SampledSpanStore sampledStore = Tracing.getExportComponent().getSampledSpanStore();
-        if (sampledStore != null) {
-          ArrayList<String> spanNames = new ArrayList<String>(2);
-          spanNames.add(generateTraceSpanName(false, fullMethodName));
-          spanNames.add(generateTraceSpanName(true, fullMethodName));
-          sampledStore.registerSpanNamesForCollection(spanNames);
-        }
-      }
       return new MethodDescriptor<ReqT, RespT>(
           type,
           fullMethodName,
