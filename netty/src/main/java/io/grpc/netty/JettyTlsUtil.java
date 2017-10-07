@@ -96,6 +96,7 @@ final class JettyTlsUtil {
     }
     return jettyNpnUnavailabilityCause;
   }
+
   /**
    * Indicates whether Netty Java 9 ALPN is available.
    */
