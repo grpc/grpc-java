@@ -16,10 +16,39 @@
 
 package io.grpc.netty;
 
+import java.lang.reflect.Method;
+import java.security.AccessController;
+import java.security.PrivilegedExceptionAction;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
+
 /**
  * Utility class for determining support for Jetty TLS ALPN/NPN.
  */
 final class JettyTlsUtil {
+  private static final boolean HAS_JAVA9_ALPN;
+
+  static {
+    Method getApplicationProtocol;
+    try {
+      SSLContext context = SSLContext.getInstance("TLS");
+      context.init(null, null, null);
+      SSLEngine engine = context.createSSLEngine();
+      getApplicationProtocol =
+          AccessController.doPrivileged(new PrivilegedExceptionAction<Method>() {
+            @Override
+            public Method run() throws Exception {
+              return SSLEngine.class.getMethod("getApplicationProtocol");
+            }
+          });
+      getApplicationProtocol.invoke(engine);
+    } catch (Throwable t) {
+      getApplicationProtocol = null;
+    }
+    HAS_JAVA9_ALPN = getApplicationProtocol != null;
+  }
+
   private JettyTlsUtil() {
   }
 
@@ -67,4 +96,17 @@ final class JettyTlsUtil {
     }
     return jettyNpnUnavailabilityCause;
   }
+
+  /**
+   * Indicates whether Netty Java 9 ALPN is available.
+   */
+  static boolean isNettyJava9AlpnAvailable() {
+    try {
+      Class.forName("io.netty.handler.ssl.Java9SslEngine");
+      return HAS_JAVA9_ALPN;
+    } catch (ClassNotFoundException e) {
+      return false;
+    }
+  }
+
 }
