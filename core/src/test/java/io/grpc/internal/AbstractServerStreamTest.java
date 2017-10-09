@@ -298,7 +298,7 @@ public class AbstractServerStreamTest {
   public void close_sendsTrailers() {
     Metadata trailers = new Metadata();
     stream.close(Status.INTERNAL, trailers);
-    verify(sink).writeTrailers(any(Metadata.class), eq(false));
+    verify(sink).writeTrailers(any(Metadata.class), eq(false), eq(Status.INTERNAL));
   }
 
   @Test
@@ -309,9 +309,10 @@ public class AbstractServerStreamTest {
     trailers.put(InternalStatus.CODE_KEY, Status.OK);
     trailers.put(InternalStatus.MESSAGE_KEY, "Everything's super.");
 
-    stream.close(Status.INTERNAL.withDescription("bad"), trailers);
+    Status closeStatus = Status.INTERNAL.withDescription("bad");
+    stream.close(closeStatus, trailers);
 
-    verify(sink).writeTrailers(metadataCaptor.capture(), eq(false));
+    verify(sink).writeTrailers(metadataCaptor.capture(), eq(false), eq(closeStatus));
     assertEquals(
         Status.Code.INTERNAL, metadataCaptor.getValue().get(InternalStatus.CODE_KEY).getCode());
     assertEquals("bad", metadataCaptor.getValue().get(InternalStatus.MESSAGE_KEY));

@@ -19,24 +19,25 @@ package io.grpc.internal;
 import com.google.common.base.Preconditions;
 import io.grpc.Status;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * A class for gathering statistics about a transport. This is an experimental feature.
- * Can only be called from the transport thread.
+ * Can only be called from the transport thread unless otherwise noted.
  */
-@NotThreadSafe
 public final class TransportTracer {
   private long streamsStarted;
   private long lastStreamCreatedTimeNanos;
   private long streamsSucceeded;
   private long streamsFailed;
-  private long messagesSent;
-  private long messagesReceived;
   private long keepAlivesSent;
-  private long lastMessageSentTimeNanos;
-  private long lastMessageReceivedTimeNanos;
   private FlowControlReader flowControlWindowReader;
+
+  // TODO(zpencer): msg sent can piggyback on framer's writequeue and avoid syncing the update
+  private final LongCounter messagesSent = LongCounterFactory.create();
+  private volatile long lastMessageSentTimeNanos;
+  // deframing happens on the application thread, and there's no easy way to avoid synchronization
+  private final LongCounter messagesReceived = LongCounterFactory.create();
+  private volatile long lastMessageReceivedTimeNanos;
 
   /**
    * Returns a read only set of current stats.
@@ -47,8 +48,8 @@ public final class TransportTracer {
         lastStreamCreatedTimeNanos,
         streamsSucceeded,
         streamsFailed,
-        messagesSent,
-        messagesReceived,
+        messagesSent.value(),
+        messagesReceived.value(),
         keepAlivesSent,
         lastMessageSentTimeNanos,
         lastMessageReceivedTimeNanos,
@@ -57,10 +58,9 @@ public final class TransportTracer {
 
   /**
    * Called by the transport to report a stream has started. For clients, this happens when a header
-   * is sent. For servers, this happens when a header is received. This method must be called from
-   * only one thread, but the resulting stats may be read from any thread.
+   * is sent. For servers, this happens when a header is received.
    */
-  void reportStreamStarted() {
+  public void reportStreamStarted() {
     streamsStarted++;
     lastStreamCreatedTimeNanos = currentTimeNanos();
   }
@@ -68,7 +68,7 @@ public final class TransportTracer {
   /**
    * Reports that a stream closed with the specified Status.
    */
-  void reportStreamClosed(Status status) {
+  public void reportStreamClosed(Status status) {
     if (status.isOk()) {
       streamsSucceeded++;
     } else {
@@ -77,18 +77,18 @@ public final class TransportTracer {
   }
 
   /**
-   * Reports that a message was successfully sent.
+   * Reports that a message was successfully sent. This method is thread safe.
    */
-  void reportMessageSent() {
-    messagesSent++;
+  public void reportMessageSent() {
+    messagesSent.add(1);
     lastMessageSentTimeNanos = currentTimeNanos();
   }
 
   /**
-   * Reports that a message was successfully received.
+   * Reports that a message was successfully received. This method is thread safe.
    */
-  void reportMessageReceived() {
-    messagesReceived++;
+  public void reportMessageReceived() {
+    messagesReceived.add(1);
     lastMessageReceivedTimeNanos = currentTimeNanos();
   }
 
@@ -104,8 +104,7 @@ public final class TransportTracer {
    * control window sizes.
    */
   public void setFlowControlWindowReader(FlowControlReader flowControlWindowReader) {
-    Preconditions.checkNotNull(flowControlWindowReader);
-    this.flowControlWindowReader = flowControlWindowReader;
+    this.flowControlWindowReader = Preconditions.checkNotNull(flowControlWindowReader);
   }
 
   /**
@@ -133,7 +132,7 @@ public final class TransportTracer {
   }
 
   /**
-   * A read only container of stats from the transport tracer.
+   * A read only copy of stats from the transport tracer.
    */
   public static final class Stats {
     public final long streamsStarted;

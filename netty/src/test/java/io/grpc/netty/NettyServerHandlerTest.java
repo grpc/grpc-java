@@ -553,7 +553,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     createStream();
     Http2Headers headers = Utils.convertServerHeaders(new Metadata());
     ChannelFuture future = enqueue(
-        new SendResponseHeadersCommand(stream.transportState(), headers, false));
+        SendResponseHeadersCommand.createHeaders(stream.transportState(), headers));
     future.get();
     ByteBuf payload = handler().ctx().alloc().buffer(8);
     payload.writeLong(1);

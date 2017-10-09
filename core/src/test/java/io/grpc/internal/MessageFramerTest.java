@@ -354,26 +354,6 @@ public class MessageFramerTest {
     checkStats(0, 0);
   }
 
-  @Test
-  public void transportTracer_messageSent() {
-    {
-      TransportTracer.Stats before = transportTracer.getStats();
-      assertEquals(0, before.messagesSent);
-      assertEquals(0, before.lastMessageSentTimeNanos);
-    }
-    allocator = new BytesWritableBufferAllocator(100, Integer.MAX_VALUE);
-    framer = new MessageFramer(sink, allocator, statsTraceCtx, transportTracer)
-        .setMessageCompression(true);
-    writeKnownLength(framer, new byte[1000]);
-    framer.flush();
-    {
-      TransportTracer.Stats after = transportTracer.getStats();
-      assertEquals(1, after.messagesSent);
-      long timestamp = TimeUnit.NANOSECONDS.toMillis(after.lastMessageSentTimeNanos);
-      assertThat(System.currentTimeMillis() - timestamp).isAtMost(50L);
-    }
-  }
-
   private static WritableBuffer toWriteBuffer(byte[] data) {
     return toWriteBufferWithMinSize(data, 0);
   }
@@ -414,6 +394,16 @@ public class MessageFramerTest {
     assertNull(tracer.nextInboundEvent());
     assertEquals(expectedWireSize, tracer.getOutboundWireSize());
     assertEquals(expectedUncompressedSize, tracer.getOutboundUncompressedSize());
+
+    TransportTracer.Stats transportStats = transportTracer.getStats();
+    assertEquals(count, transportStats.messagesSent);
+    long transportSentMsgMs = TimeUnit.NANOSECONDS.toMillis(
+        transportStats.lastMessageSentTimeNanos);
+    if (count > 0) {
+      assertThat(System.currentTimeMillis() - transportSentMsgMs).isAtMost(50L);
+    } else {
+      assertEquals(0, transportSentMsgMs);
+    }
   }
 
   static class ByteWritableBuffer implements WritableBuffer {

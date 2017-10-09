@@ -102,8 +102,10 @@ class NettyServerStream extends AbstractServerStream {
 
     @Override
     public void writeHeaders(Metadata headers) {
-      writeQueue.enqueue(new SendResponseHeadersCommand(transportState(),
-          Utils.convertServerHeaders(headers), false),
+      writeQueue.enqueue(
+          SendResponseHeadersCommand.createHeaders(
+              transportState(),
+              Utils.convertServerHeaders(headers)),
           true);
     }
 
@@ -130,10 +132,11 @@ class NettyServerStream extends AbstractServerStream {
     }
 
     @Override
-    public void writeTrailers(Metadata trailers, boolean headersSent) {
+    public void writeTrailers(Metadata trailers, boolean headersSent, Status status) {
       Http2Headers http2Trailers = Utils.convertTrailers(trailers, headersSent);
       writeQueue.enqueue(
-          new SendResponseHeadersCommand(transportState(), http2Trailers, true), true);
+          SendResponseHeadersCommand.createTrailers(transportState(), http2Trailers, status),
+          true);
     }
 
     @Override

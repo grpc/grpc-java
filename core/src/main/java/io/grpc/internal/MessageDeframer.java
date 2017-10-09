@@ -395,6 +395,9 @@ public class MessageDeframer implements Closeable, Deframer {
 
     currentMessageSeqNo++;
     statsTraceCtx.inboundMessage(currentMessageSeqNo);
+    if (transportTracer != null) {
+      transportTracer.reportMessageReceived();
+    }
     // Continue reading the frame body.
     state = State.BODY;
   }
@@ -407,9 +410,6 @@ public class MessageDeframer implements Closeable, Deframer {
     // because the uncompressed bytes are provided through an InputStream whose total size is
     // unknown until all bytes are read, and we don't know when it happens.
     statsTraceCtx.inboundMessageRead(currentMessageSeqNo, inboundBodyWireSize, -1);
-    if (transportTracer != null) {
-      transportTracer.reportMessageReceived();
-    }
     inboundBodyWireSize = 0;
     InputStream stream = compressedFlag ? getCompressedBody() : getUncompressedBody();
     nextFrame = null;

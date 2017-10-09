@@ -56,8 +56,9 @@ public abstract class AbstractServerStream extends AbstractStream
      *
      * @param trailers metadata to be sent to the end point
      * @param headersSent {@code true} if response headers have already been sent.
+     * @param status the status that the call ended with
      */
-    void writeTrailers(Metadata trailers, boolean headersSent);
+    void writeTrailers(Metadata trailers, boolean headersSent, Status status);
 
     /**
      * Requests up to the given number of messages from the call to be delivered. This should end up
@@ -130,10 +131,9 @@ public abstract class AbstractServerStream extends AbstractStream
     if (!outboundClosed) {
       outboundClosed = true;
       statsTraceCtx.streamClosed(status);
-      transportTracer.reportStreamClosed(status);
       endOfMessages();
       addStatusToTrailers(trailers, status);
-      abstractServerStreamSink().writeTrailers(trailers, headersSent);
+      abstractServerStreamSink().writeTrailers(trailers, headersSent, status);
     }
   }
 
@@ -197,9 +197,12 @@ public abstract class AbstractServerStream extends AbstractStream
         int maxMessageSize,
         StatsTraceContext statsTraceCtx,
         TransportTracer transportTracer) {
-      super(maxMessageSize, statsTraceCtx, transportTracer);
+      super(
+          maxMessageSize,
+          statsTraceCtx,
+          Preconditions.checkNotNull(transportTracer, "transportTracer"));
       this.statsTraceCtx = Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
-      this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
+      this.transportTracer = transportTracer;
     }
 
     /**
@@ -320,7 +323,6 @@ public abstract class AbstractServerStream extends AbstractStream
         // If status is OK, close() is guaranteed to be called which should decide the final status
         if (!newStatus.isOk()) {
           statsTraceCtx.streamClosed(newStatus);
-          transportTracer.reportStreamClosed(newStatus);
         }
         listenerClosed = true;
         onStreamDeallocated();
