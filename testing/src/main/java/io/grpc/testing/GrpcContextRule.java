@@ -17,9 +17,12 @@
 package io.grpc.testing;
 
 import io.grpc.Context;
+import org.junit.Assert;
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
+
+import java.util.logging.Logger;
 
 /**
  * {@code GrpcContextRule} is a JUnit {@link TestRule} that forcibly resets the gRPC
@@ -29,14 +32,31 @@ import org.junit.runners.model.Statement;
  * accidental leakage of context state between tests.
  */
 public class GrpcContextRule implements TestRule {
+  private static final Logger log = Logger.getLogger(GrpcContextRule.class.getName());
+  private boolean failOnLeak;
+
+  public GrpcContextRule failIfTestLeaksContext() {
+    failOnLeak = true;
+    return this;
+  }
+
   @Override
-  public Statement apply(final Statement base, Description description) {
+  public Statement apply(final Statement base, final Description description) {
     return new Statement() {
       @Override
       public void evaluate() throws Throwable {
         // Reset the gRPC context between test executions
         Context.ROOT.attach();
         base.evaluate();
+        if (Context.current() != Context.ROOT) {
+          if (failOnLeak) {
+            Assert.fail("Test is leaking context state between tests! Ensure proper " +
+                    "attach()/detach() pairing.");
+          } else {
+            log.severe("Unit test " + description.getDisplayName() + " is leaking context " +
+                    "state between tests! Ensure proper attach()/detach() pairing.");
+          }
+        }
       }
     };
   }
