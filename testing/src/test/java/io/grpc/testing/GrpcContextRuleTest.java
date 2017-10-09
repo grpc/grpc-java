@@ -27,12 +27,11 @@ public class GrpcContextRuleTest {
     ctx.withValue(key, "value").attach();
 
     ctx = Context.current();
-    System.out.println(key.get());
+    assertThat(key.get()).isNotEmpty();
   }
 
   @Test
   public void verifyEmptyContext() {
-    Context ctx = Context.current();
-    assertThat(key.get(ctx)).isNull();
+    assertThat(key.get()).isNull();
   }
 }

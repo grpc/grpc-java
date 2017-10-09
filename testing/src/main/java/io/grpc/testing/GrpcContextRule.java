@@ -11,18 +11,22 @@ import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 
+/**
+ * {@code GrpcContextRule} is a JUnit {@link TestRule} that forcibly resets the gRPC
+ * {@link Context} to {@link Context#ROOT} between every unit test.
+ *
+ * <p>This rule makes it easier to correctly implement correct unit tests by preventing the
+ * accidental leakage of context state between tests.
+ */
 public class GrpcContextRule implements TestRule {
   @Override
   public Statement apply(final Statement base, Description description) {
     return new Statement() {
       @Override
       public void evaluate() throws Throwable {
-        Context previous = Context.ROOT.attach();
-        try {
-          base.evaluate();
-        } finally {
-          Context.ROOT.detach(previous);
-        }
+        // Reset the gRPC context between test executions
+        Context.ROOT.attach();
+        base.evaluate();
       }
     };
   }
