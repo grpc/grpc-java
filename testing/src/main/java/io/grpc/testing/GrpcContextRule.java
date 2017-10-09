@@ -50,11 +50,11 @@ public class GrpcContextRule implements TestRule {
         base.evaluate();
         if (Context.current() != Context.ROOT) {
           if (failOnLeak) {
-            Assert.fail("Test is leaking context state between tests! Ensure proper " +
-                    "attach()/detach() pairing.");
+            Assert.fail("Test is leaking context state between tests! Ensure proper "
+                    + "attach()/detach() pairing.");
           } else {
-            log.severe("Unit test " + description.getDisplayName() + " is leaking context " +
-                    "state between tests! Ensure proper attach()/detach() pairing.");
+            log.severe("Unit test " + description.getDisplayName() + " is leaking context "
+                    + "state between tests! Ensure proper attach()/detach() pairing.");
           }
         }
       }
