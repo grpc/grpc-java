@@ -156,7 +156,7 @@ public class GrpcSslContexts {
         if (JettyTlsUtil.isJettyNpnConfigured()) {
           return NPN;
         }
-        if (JettyTlsUtil.isNettyJava9AlpnAvailable()) {
+        if (JettyTlsUtil.isJava9AlpnAvailable()) {
           return ALPN;
         }
         // Use the ALPN cause since it is prefered.

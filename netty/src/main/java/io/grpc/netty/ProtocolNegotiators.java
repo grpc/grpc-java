@@ -374,7 +374,7 @@ public final class ProtocolNegotiators {
       builder.append("    Jetty ALPN");
     } else if (JettyTlsUtil.isJettyNpnConfigured()) {
       builder.append("    Jetty NPN");
-    } else if (JettyTlsUtil.isNettyJava9AlpnAvailable()) {
+    } else if (JettyTlsUtil.isJava9AlpnAvailable()) {
       builder.append("    JDK9 ALPN");
     }
     builder.append("\n    TLS Protocol: ");

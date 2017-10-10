@@ -27,26 +27,29 @@ import javax.net.ssl.SSLEngine;
  * Utility class for determining support for Jetty TLS ALPN/NPN.
  */
 final class JettyTlsUtil {
-  private static final boolean HAS_JAVA9_ALPN;
 
-  static {
-    Method getApplicationProtocol;
-    try {
-      SSLContext context = SSLContext.getInstance("TLS");
-      context.init(null, null, null);
-      SSLEngine engine = context.createSSLEngine();
-      getApplicationProtocol =
-          AccessController.doPrivileged(new PrivilegedExceptionAction<Method>() {
-            @Override
-            public Method run() throws Exception {
-              return SSLEngine.class.getMethod("getApplicationProtocol");
-            }
-          });
-      getApplicationProtocol.invoke(engine);
-    } catch (Throwable t) {
-      getApplicationProtocol = null;
+  private static class Java9AlpnUnavailabilityCauseHolder {
+
+    static {
+      try {
+        SSLContext context = SSLContext.getInstance("TLS");
+        context.init(null, null, null);
+        SSLEngine engine = context.createSSLEngine();
+        Method getApplicationProtocol =
+            AccessController.doPrivileged(new PrivilegedExceptionAction<Method>() {
+              @Override
+              public Method run() throws Exception {
+                return SSLEngine.class.getMethod("getApplicationProtocol");
+              }
+            });
+        getApplicationProtocol.invoke(engine);
+        cause = null;
+      } catch (Throwable t) {
+        cause = t;
+      }
     }
-    HAS_JAVA9_ALPN = getApplicationProtocol != null;
+
+    private static Throwable cause;
   }
 
   private JettyTlsUtil() {
@@ -98,15 +101,14 @@ final class JettyTlsUtil {
   }
 
   /**
-   * Indicates whether Netty Java 9 ALPN is available.
+   * Indicates whether Java 9 ALPN is available.
    */
-  static boolean isNettyJava9AlpnAvailable() {
-    try {
-      Class.forName("io.netty.handler.ssl.Java9SslEngine");
-      return HAS_JAVA9_ALPN;
-    } catch (ClassNotFoundException e) {
-      return false;
-    }
+  static boolean isJava9AlpnAvailable() {
+    return getJava9AlpnUnavailabilityCause() == null;
+  }
+
+  static Throwable getJava9AlpnUnavailabilityCause() {
+    return Java9AlpnUnavailabilityCauseHolder.cause;
   }
 
 }
