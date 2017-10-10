@@ -185,6 +185,7 @@ public final class NettyChannelBuilder
       GrpcSslContexts.ensureAlpnAndH2Enabled(sslContext.applicationProtocolNegotiator());
     }
     this.sslContext = sslContext;
+    this.negotiationType = NegotiationType.TLS;
     return this;
   }
 

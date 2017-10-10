@@ -23,17 +23,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.instrumentation.stats.Stats;
 import com.google.instrumentation.stats.StatsContextFactory;
-import io.grpc.Attributes;
-import io.grpc.ClientInterceptor;
-import io.grpc.CompressorRegistry;
-import io.grpc.DecompressorRegistry;
-import io.grpc.EquivalentAddressGroup;
-import io.grpc.LoadBalancer;
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
-import io.grpc.NameResolver;
-import io.grpc.NameResolverProvider;
-import io.grpc.PickFirstBalancerFactory;
+import io.grpc.*;
+import io.netty.handler.ssl.SslContext;
 import io.opencensus.trace.Tracing;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -45,6 +36,7 @@ import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
+import javax.net.ssl.SSLSocketFactory;
 
 /**
  * The base class for channel builders.
@@ -127,6 +119,7 @@ public abstract class AbstractManagedChannelImplBuilder
   long idleTimeoutMillis = IDLE_MODE_DEFAULT_TIMEOUT_MILLIS;
 
   private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
+
 
   /**
    * Sets the maximum message size allowed for a single gRPC frame. If an inbound messages
@@ -301,6 +294,16 @@ public abstract class AbstractManagedChannelImplBuilder
    */
   protected void setTracingEnabled(boolean value) {
     tracingEnabled = value;
+  }
+
+  @Override
+  public T sslContext(SslContext sslContext) {
+    throw new UnsupportedOperationException("Should be implemented by NettyChannelBuilder");
+  }
+
+  @Override
+  public T sslSocketFactory(SSLSocketFactory factory) {
+    throw new UnsupportedOperationException("Should be implemented by OkHttpChannelBuilder");
   }
 
   @VisibleForTesting

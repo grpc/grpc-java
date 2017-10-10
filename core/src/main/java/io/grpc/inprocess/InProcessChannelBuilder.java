@@ -24,6 +24,9 @@ import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
+import io.netty.handler.ssl.SslContext;
+
+import javax.net.ssl.SSLSocketFactory;
 import java.net.SocketAddress;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -84,6 +87,22 @@ public final class InProcessChannelBuilder extends
    */
   @Override
   public InProcessChannelBuilder usePlaintext(boolean skipNegotiation) {
+    return this;
+  }
+
+  /**
+   * Does nothing.
+   */
+  @Override
+  public InProcessChannelBuilder sslContext(SslContext sslContext) {
+    return this;
+  }
+
+  /**
+   * Does nothing.
+   */
+  @Override
+  public InProcessChannelBuilder sslSocketFactory(SSLSocketFactory factory) {
     return this;
   }
 

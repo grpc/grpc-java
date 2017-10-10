@@ -16,6 +16,9 @@
 
 package io.grpc;
 
+import io.netty.handler.ssl.SslContext;
+
+import javax.net.ssl.SSLSocketFactory;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -159,6 +162,11 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1772")
   public abstract T usePlaintext(boolean skipNegotiation);
+
+  public abstract T sslContext(SslContext sslContext);
+
+  public abstract T sslSocketFactory(SSLSocketFactory factory);
+
 
   /**
    * Provides a custom {@link NameResolver.Factory} for the channel. If this method is not called,
