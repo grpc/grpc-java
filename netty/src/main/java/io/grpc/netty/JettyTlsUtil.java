@@ -28,9 +28,17 @@ import javax.net.ssl.SSLEngine;
  */
 final class JettyTlsUtil {
 
+  private JettyTlsUtil() {
+  }
+
+  private static Throwable jettyAlpnUnavailabilityCause;
+  private static Throwable jettyNpnUnavailabilityCause;
+
   private static class Java9AlpnUnavailabilityCauseHolder {
 
-    static {
+    static final Throwable cause = checkAlpnAvailability();
+
+    static Throwable checkAlpnAvailability() {
       try {
         SSLContext context = SSLContext.getInstance("TLS");
         context.init(null, null, null);
@@ -43,20 +51,13 @@ final class JettyTlsUtil {
               }
             });
         getApplicationProtocol.invoke(engine);
-        cause = null;
+        return null;
       } catch (Throwable t) {
-        cause = t;
+        return t;
       }
     }
 
-    private static Throwable cause;
   }
-
-  private JettyTlsUtil() {
-  }
-
-  private static Throwable jettyAlpnUnavailabilityCause;
-  private static Throwable jettyNpnUnavailabilityCause;
 
   /**
    * Indicates whether or not the Jetty ALPN jar is installed in the boot classloader.
