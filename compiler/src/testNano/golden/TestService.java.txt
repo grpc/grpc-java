@@ -23,7 +23,7 @@ import java.io.IOException;
  * </pre>
  */
 @javax.annotation.Generated(
-    value = "by gRPC proto compiler (version 1.7.0)",
+    value = "by gRPC proto compiler (version 1.7.1-SNAPSHOT)",
     comments = "Source: test.proto")
 public final class TestServiceGrpc {
 
