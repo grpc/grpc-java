@@ -374,6 +374,13 @@ public class TestServiceClient {
       // Server is a separate process.
       return false;
     }
+
+    @Override
+    protected boolean metricsExpected() {
+      // Exact message size doesn't match when testing with Go servers:
+      // https://github.com/grpc/grpc-go/issues/1572
+      return false;
+    }
   }
 
   private static String validTestCasesHelpText() {
