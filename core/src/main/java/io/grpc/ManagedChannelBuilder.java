@@ -163,6 +163,15 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1772")
   public abstract T usePlaintext(boolean skipNegotiation);
 
+  /**
+   * Makes the client use TLS.
+   *
+   * @return this
+   * @throws UnsupportedOperationException if transport security is not supported.
+   * @since 1.0.0
+   */
+  public abstract T useTransportSecurity();
+
   public abstract T sslContext(SslContext sslContext);
 
   public abstract T sslSocketFactory(SSLSocketFactory factory);

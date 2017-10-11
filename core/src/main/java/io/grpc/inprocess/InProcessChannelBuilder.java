@@ -91,6 +91,13 @@ public final class InProcessChannelBuilder extends
   }
 
   /**
+   * Does nothing
+   */
+  public InProcessChannelBuilder useTransportSecurity() {
+    return this;
+  }
+
+  /**
    * Does nothing.
    */
   @Override
