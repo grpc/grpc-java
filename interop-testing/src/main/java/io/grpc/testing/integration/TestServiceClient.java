@@ -379,6 +379,7 @@ public class TestServiceClient {
     protected boolean metricsExpected() {
       // Exact message size doesn't match when testing with Go servers:
       // https://github.com/grpc/grpc-go/issues/1572
+      // TODO(zhangkun83): remove this override once the said issue is fixed.
       return false;
     }
   }
