@@ -460,7 +460,7 @@ public class ManagedChannelImplTest {
     subchannel1.requestConnection();
     subchannel2.requestConnection();
     verify(mockTransportFactory, times(2)).newClientTransport(
-        any(SocketAddress.class), any(String.class), any(String.class));
+        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class));
     MockClientTransportInfo transportInfo1 = transports.poll();
     MockClientTransportInfo transportInfo2 = transports.poll();
 

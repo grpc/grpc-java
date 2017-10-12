@@ -16,6 +16,8 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Supplier;
 import java.net.Authenticator;
@@ -68,6 +70,10 @@ class ProxyDetectorImpl implements ProxyDetector {
         }
       };
 
+  /**
+   * @deprecated Use the standard Java proxy configuration instead with flags such as:
+   *     -Dhttps.proxyHost=HOST -Dhttps.proxyPort=PORT
+   */
   @Deprecated
   private static final String GRPC_PROXY_ENV_VAR = "GRPC_PROXY_EXP";
   // Do not hard code a ProxySelector because the global default ProxySelector can change
@@ -77,7 +83,6 @@ class ProxyDetectorImpl implements ProxyDetector {
 
   // We want an HTTPS proxy, which operates on the entire data stream (See IETF rfc2817).
   static final String PROXY_SCHEME = "https";
-  static final String URI_FORMAT = PROXY_SCHEME + "://%s";
 
   /**
    * A proxy selector that uses the global {@link ProxySelector#getDefault()} and
@@ -92,8 +97,8 @@ class ProxyDetectorImpl implements ProxyDetector {
       Supplier<ProxySelector> proxySelector,
       AuthenticationProvider authenticationProvider,
       @Nullable String proxyEnvString) {
-    this.proxySelector = proxySelector;
-    this.authenticationProvider = authenticationProvider;
+    this.proxySelector = checkNotNull(proxySelector);
+    this.authenticationProvider = checkNotNull(authenticationProvider);
     if (proxyEnvString != null) {
       override = new ProxyParameters(overrideProxy(proxyEnvString), null, null);
     } else {
@@ -114,8 +119,6 @@ class ProxyDetectorImpl implements ProxyDetector {
   }
 
   private ProxyParameters detectProxy(InetSocketAddress targetAddr) {
-    String hostPort =
-        GrpcUtil.authorityFromHostAndPort(targetAddr.getHostName(), targetAddr.getPort());
     URI uri;
     try {
       uri = new URI(

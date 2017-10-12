@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
 import java.net.InetSocketAddress;
 import javax.annotation.Nullable;
 
@@ -32,7 +33,7 @@ public final class ProxyParameters {
       InetSocketAddress proxyAddress,
       @Nullable String username,
       @Nullable String password) {
-    this.proxyAddress = proxyAddress;
+    this.proxyAddress = Preconditions.checkNotNull(proxyAddress);
     this.username = username;
     this.password = password;
   }
