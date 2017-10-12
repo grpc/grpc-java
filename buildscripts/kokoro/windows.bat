@@ -42,4 +42,6 @@ for /r %%F in (TEST-*.xml) do (
 )
 @echo on
 
+cmd.exe /C "%WORKSPACE%\gradlew.bat :grpc-gae-interop-testing-jdk8:runInteropTestRemote"
+
 exit %GRADLEEXIT%
