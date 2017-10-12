@@ -272,10 +272,6 @@ public abstract class AbstractInteropTest {
     if (channel != null) {
       channel.shutdown();
     }
-    if (!metricsExpected()) {
-      assertNull(clientStatsCtxFactory.pollRecord());
-      assertNull(serverStatsCtxFactory.pollRecord());
-    }
   }
 
   protected abstract ManagedChannel createChannel();
