@@ -1341,6 +1341,9 @@ public abstract class AbstractInteropTest {
 
   @Test(timeout = 10000)
   public void censusContextsPropagated() {
+    if (!serverInProcess()) {
+      return;
+    }
     Span clientParentSpan = MockableSpan.generateRandomSpan(new Random());
     Context ctx =
         Context.ROOT.withValues(
