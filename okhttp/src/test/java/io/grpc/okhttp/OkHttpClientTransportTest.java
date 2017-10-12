@@ -27,6 +27,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
@@ -34,6 +35,7 @@ import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
+import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -43,6 +45,8 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
+import com.google.common.base.Stopwatch;
+import com.google.common.base.Supplier;
 import com.google.common.base.Ticker;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Futures;
@@ -112,9 +116,9 @@ public class OkHttpClientTransportTest {
   private static final String ERROR_MESSAGE = "simulated error";
   // The gRPC header length, which includes 1 byte compression flag and 4 bytes message length.
   private static final int HEADER_LENGTH = 5;
+  private static final Status SHUTDOWN_REASON = Status.UNAVAILABLE.withDescription("for test");
 
-  @Rule
-  public Timeout globalTimeout = new Timeout(10 * 1000);
+  @Rule public final Timeout globalTimeout = Timeout.seconds(10);
 
   @Mock
   private FrameWriter frameWriter;
@@ -165,15 +169,30 @@ public class OkHttpClientTransportTest {
   private void startTransport(int startId, @Nullable Runnable connectingCallback,
       boolean waitingForConnected, int maxMessageSize, String userAgent) throws Exception {
     connectedFuture = SettableFuture.create();
-    Ticker ticker = new Ticker() {
+    final Ticker ticker = new Ticker() {
       @Override
       public long read() {
         return nanoTime;
       }
     };
-    clientTransport = new OkHttpClientTransport(userAgent, executor, frameReader,
-        frameWriter, startId, new MockSocket(frameReader), ticker, connectingCallback,
-        connectedFuture, maxMessageSize, tooManyPingsRunnable);
+    Supplier<Stopwatch> stopwatchSupplier = new Supplier<Stopwatch>() {
+      @Override
+      public Stopwatch get() {
+        return Stopwatch.createUnstarted(ticker);
+      }
+    };
+    clientTransport = new OkHttpClientTransport(
+        userAgent,
+        executor,
+        frameReader,
+        frameWriter,
+        startId,
+        new MockSocket(frameReader),
+        stopwatchSupplier,
+        connectingCallback,
+        connectedFuture,
+        maxMessageSize,
+        tooManyPingsRunnable);
     clientTransport.start(transportListener);
     if (waitingForConnected) {
       connectedFuture.get(TIME_OUT_MS, TimeUnit.MILLISECONDS);
@@ -700,10 +719,10 @@ public class OkHttpClientTransportTest {
         clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream2.start(listener2);
     assertEquals(2, activeStreamCount());
-    clientTransport.shutdown();
+    clientTransport.shutdown(SHUTDOWN_REASON);
 
     assertEquals(2, activeStreamCount());
-    verify(transportListener).transportShutdown(isA(Status.class));
+    verify(transportListener).transportShutdown(same(SHUTDOWN_REASON));
 
     stream1.cancel(Status.CANCELLED);
     stream2.cancel(Status.CANCELLED);
@@ -912,7 +931,7 @@ public class OkHttpClientTransportTest {
     stream.start(listener);
     waitForStreamPending(1);
 
-    clientTransport.shutdown();
+    clientTransport.shutdown(SHUTDOWN_REASON);
     setMaxConcurrentStreams(1);
     verify(frameWriter, timeout(TIME_OUT_MS))
         .synStream(anyBoolean(), anyBoolean(), eq(3), anyInt(), anyListHeader());
@@ -1261,20 +1280,18 @@ public class OkHttpClientTransportTest {
     clientTransport.ping(callback, MoreExecutors.directExecutor());
     assertEquals(0, callback.invocationCount);
 
-    clientTransport.shutdown();
+    clientTransport.shutdown(SHUTDOWN_REASON);
     // ping failed on channel shutdown
     assertEquals(1, callback.invocationCount);
     assertTrue(callback.failureCause instanceof StatusException);
-    assertEquals(Status.Code.UNAVAILABLE,
-        ((StatusException) callback.failureCause).getStatus().getCode());
+    assertSame(SHUTDOWN_REASON, ((StatusException) callback.failureCause).getStatus());
 
     // now that handler is in terminal state, all future pings fail immediately
     callback = new PingCallbackImpl();
     clientTransport.ping(callback, MoreExecutors.directExecutor());
     assertEquals(1, callback.invocationCount);
     assertTrue(callback.failureCause instanceof StatusException);
-    assertEquals(Status.Code.UNAVAILABLE,
-        ((StatusException) callback.failureCause).getStatus().getCode());
+    assertSame(SHUTDOWN_REASON, ((StatusException) callback.failureCause).getStatus());
     shutdownAndVerify();
   }
 
@@ -1354,7 +1371,7 @@ public class OkHttpClientTransportTest {
     OkHttpClientStream stream =
         clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
-    clientTransport.shutdown();
+    clientTransport.shutdown(SHUTDOWN_REASON);
     allowTransportConnected();
 
     // The new stream should be failed, but not the pending stream.
@@ -1758,10 +1775,13 @@ public class OkHttpClientTransportTest {
     }
 
     @Override
-    public void messageRead(InputStream message) {
-      String msg = getContent(message);
-      if (msg != null) {
-        messages.add(msg);
+    public void messagesAvailable(MessageProducer producer) {
+      InputStream inputStream;
+      while ((inputStream = producer.next()) != null) {
+        String msg = getContent(inputStream);
+        if (msg != null) {
+          messages.add(msg);
+        }
       }
     }
 
@@ -1843,7 +1863,7 @@ public class OkHttpClientTransportTest {
   }
 
   private void shutdownAndVerify() {
-    clientTransport.shutdown();
+    clientTransport.shutdown(SHUTDOWN_REASON);
     assertEquals(0, activeStreamCount());
     try {
       verify(frameWriter, timeout(TIME_OUT_MS)).close();

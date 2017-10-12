@@ -25,7 +25,6 @@ import com.google.instrumentation.stats.Stats;
 import com.google.instrumentation.stats.StatsContextFactory;
 import io.grpc.Attributes;
 import io.grpc.ClientInterceptor;
-import io.grpc.ClientStreamTracer;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
@@ -55,6 +54,14 @@ import javax.annotation.Nullable;
 public abstract class AbstractManagedChannelImplBuilder
         <T extends AbstractManagedChannelImplBuilder<T>> extends ManagedChannelBuilder<T> {
   private static final String DIRECT_ADDRESS_SCHEME = "directaddress";
+
+  public static ManagedChannelBuilder<?> forAddress(String name, int port) {
+    throw new UnsupportedOperationException("Subclass failed to hide static factory");
+  }
+
+  public static ManagedChannelBuilder<?> forTarget(String target) {
+    throw new UnsupportedOperationException("Subclass failed to hide static factory");
+  }
 
   /**
    * An idle timeout larger than this would disable idle mode.
@@ -113,6 +120,8 @@ public abstract class AbstractManagedChannelImplBuilder
 
   LoadBalancer.Factory loadBalancerFactory = DEFAULT_LOAD_BALANCER_FACTORY;
 
+  boolean fullStreamDecompression;
+
   DecompressorRegistry decompressorRegistry = DEFAULT_DECOMPRESSOR_REGISTRY;
 
   CompressorRegistry compressorRegistry = DEFAULT_COMPRESSOR_REGISTRY;
@@ -121,14 +130,12 @@ public abstract class AbstractManagedChannelImplBuilder
 
   private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 
-  private boolean enableTracing;
-
   /**
    * Sets the maximum message size allowed for a single gRPC frame. If an inbound messages
    * larger than this limit is received it will not be processed and the RPC will fail with
    * RESOURCE_EXHAUSTED.
    */
-  // Can be overriden by subclasses.
+  // Can be overridden by subclasses.
   @Override
   public T maxInboundMessageSize(int max) {
     checkArgument(max >= 0, "negative max");
@@ -139,6 +146,10 @@ public abstract class AbstractManagedChannelImplBuilder
   protected final int maxInboundMessageSize() {
     return maxInboundMessageSize;
   }
+
+  private boolean statsEnabled = true;
+  private boolean recordStats = true;
+  private boolean tracingEnabled = true;
 
   @Nullable
   private StatsContextFactory statsFactory;
@@ -222,6 +233,12 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   @Override
+  public final T enableFullStreamDecompression() {
+    this.fullStreamDecompression = true;
+    return thisT();
+  }
+
+  @Override
   public final T decompressorRegistry(DecompressorRegistry registry) {
     if (registry != null) {
       this.decompressorRegistry = registry;
@@ -276,15 +293,25 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   /**
-   * Indicates whether this transport will record stats with {@link ClientStreamTracer}.
-   *
-   * <p>By default it returns {@code true}.  If the transport doesn't record stats, it may override
-   * this method to return {@code false} so that the builder won't install the Census interceptor.
-   *
-   * <p>If it returns true when it shouldn't be, Census will receive incomplete stats.
+   * Disable or enable stats features.  Enabled by default.
    */
-  protected boolean recordsStats() {
-    return true;
+  protected void setStatsEnabled(boolean value) {
+    statsEnabled = value;
+  }
+
+  /**
+   * Disable or enable stats recording.  Effective only if {@link #setStatsEnabled} is set to true.
+   * Enabled by default.
+   */
+  protected void setRecordStats(boolean value) {
+    recordStats = value;
+  }
+
+  /**
+   * Disable or enable tracing features.  Enabled by default.
+   */
+  protected void setTracingEnabled(boolean value) {
+    tracingEnabled = value;
   }
 
   @VisibleForTesting
@@ -301,15 +328,6 @@ public abstract class AbstractManagedChannelImplBuilder
     return GrpcUtil.checkAuthority(authority);
   }
 
-  /**
-   * Set it to true to record traces and propagate tracing information on the wire.  This will be
-   * deleted assuming always enabled once the instrumentation-java wire format is stabilized.
-   */
-  @Deprecated
-  public void setEnableTracing(boolean enabled) {
-    this.enableTracing = enabled;
-  }
-
   @Override
   public ManagedChannel build() {
     return new ManagedChannelImpl(
@@ -323,21 +341,22 @@ public abstract class AbstractManagedChannelImplBuilder
         proxyDetector);
   }
 
-  private List<ClientInterceptor> getEffectiveInterceptors() {
+  @VisibleForTesting
+  final List<ClientInterceptor> getEffectiveInterceptors() {
     List<ClientInterceptor> effectiveInterceptors =
         new ArrayList<ClientInterceptor>(this.interceptors);
-    if (recordsStats()) {
+    if (statsEnabled) {
       StatsContextFactory statsCtxFactory =
           this.statsFactory != null ? this.statsFactory : Stats.getStatsContextFactory();
       if (statsCtxFactory != null) {
         CensusStatsModule censusStats =
-            new CensusStatsModule(statsCtxFactory, GrpcUtil.STOPWATCH_SUPPLIER, true);
+            new CensusStatsModule(statsCtxFactory, GrpcUtil.STOPWATCH_SUPPLIER, true, recordStats);
         // First interceptor runs last (see ClientInterceptors.intercept()), so that no
         // other interceptor can override the tracer factory we set in CallOptions.
         effectiveInterceptors.add(0, censusStats.getClientInterceptor());
       }
     }
-    if (enableTracing) {
+    if (tracingEnabled) {
       CensusTracingModule censusTracing =
           new CensusTracingModule(Tracing.getTracer(),
               Tracing.getPropagationComponent().getBinaryFormat());

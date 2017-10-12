@@ -18,7 +18,7 @@ import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
 /**
  */
 @javax.annotation.Generated(
-    value = "by gRPC proto compiler (version 1.6.0-SNAPSHOT)",
+    value = "by gRPC proto compiler",
     comments = "Source: services.proto")
 public final class WorkerServiceGrpc {
 
@@ -34,10 +34,12 @@ public final class WorkerServiceGrpc {
           .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
           .setFullMethodName(generateFullMethodName(
               "grpc.testing.WorkerService", "RunServer"))
+          .setRegisterForTracing(true)
           .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Control.ServerArgs.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Control.ServerStatus.getDefaultInstance()))
+          .setSchemaDescriptor(new WorkerServiceMethodDescriptorSupplier("RunServer"))
           .build();
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Control.ClientArgs,
@@ -46,10 +48,12 @@ public final class WorkerServiceGrpc {
           .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
           .setFullMethodName(generateFullMethodName(
               "grpc.testing.WorkerService", "RunClient"))
+          .setRegisterForTracing(true)
           .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Control.ClientArgs.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Control.ClientStatus.getDefaultInstance()))
+          .setSchemaDescriptor(new WorkerServiceMethodDescriptorSupplier("RunClient"))
           .build();
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Control.CoreRequest,
@@ -58,10 +62,12 @@ public final class WorkerServiceGrpc {
           .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
           .setFullMethodName(generateFullMethodName(
               "grpc.testing.WorkerService", "CoreCount"))
+          .setRegisterForTracing(true)
           .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Control.CoreRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Control.CoreResponse.getDefaultInstance()))
+          .setSchemaDescriptor(new WorkerServiceMethodDescriptorSupplier("CoreCount"))
           .build();
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static final io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Control.Void,
@@ -70,10 +76,12 @@ public final class WorkerServiceGrpc {
           .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
           .setFullMethodName(generateFullMethodName(
               "grpc.testing.WorkerService", "QuitWorker"))
+          .setRegisterForTracing(true)
           .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Control.Void.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.benchmarks.proto.Control.Void.getDefaultInstance()))
+          .setSchemaDescriptor(new WorkerServiceMethodDescriptorSupplier("QuitWorker"))
           .build();
 
   /**
@@ -392,10 +400,38 @@ public final class WorkerServiceGrpc {
     }
   }
 
-  private static final class WorkerServiceDescriptorSupplier implements io.grpc.protobuf.ProtoFileDescriptorSupplier {
+  private static abstract class WorkerServiceBaseDescriptorSupplier
+      implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
+    WorkerServiceBaseDescriptorSupplier() {}
+
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.benchmarks.proto.Services.getDescriptor();
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.ServiceDescriptor getServiceDescriptor() {
+      return getFileDescriptor().findServiceByName("WorkerService");
+    }
+  }
+
+  private static final class WorkerServiceFileDescriptorSupplier
+      extends WorkerServiceBaseDescriptorSupplier {
+    WorkerServiceFileDescriptorSupplier() {}
+  }
+
+  private static final class WorkerServiceMethodDescriptorSupplier
+      extends WorkerServiceBaseDescriptorSupplier
+      implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
+    private final String methodName;
+
+    WorkerServiceMethodDescriptorSupplier(String methodName) {
+      this.methodName = methodName;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.MethodDescriptor getMethodDescriptor() {
+      return getServiceDescriptor().findMethodByName(methodName);
     }
   }
 
@@ -408,7 +444,7 @@ public final class WorkerServiceGrpc {
         result = serviceDescriptor;
         if (result == null) {
           serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
-              .setSchemaDescriptor(new WorkerServiceDescriptorSupplier())
+              .setSchemaDescriptor(new WorkerServiceFileDescriptorSupplier())
               .addMethod(METHOD_RUN_SERVER)
               .addMethod(METHOD_RUN_CLIENT)
               .addMethod(METHOD_CORE_COUNT)

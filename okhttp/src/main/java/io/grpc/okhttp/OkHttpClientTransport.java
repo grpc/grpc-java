@@ -22,7 +22,7 @@ import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
-import com.google.common.base.Ticker;
+import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.SettableFuture;
 import com.squareup.okhttp.Credentials;
 import com.squareup.okhttp.HttpUrl;
@@ -124,7 +124,8 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   private final String defaultAuthority;
   private final String userAgent;
   private final Random random = new Random();
-  private final Ticker ticker;
+  // Returns new unstarted stopwatches
+  private final Supplier<Stopwatch> stopwatchFactory;
   private Listener listener;
   private FrameReader testFrameReader;
   private AsyncFrameWriter frameWriter;
@@ -199,7 +200,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     this.sslSocketFactory = sslSocketFactory;
     this.hostnameVerifier = hostnameVerifier;
     this.connectionSpec = Preconditions.checkNotNull(connectionSpec, "connectionSpec");
-    this.ticker = Ticker.systemTicker();
+    this.stopwatchFactory = GrpcUtil.STOPWATCH_SUPPLIER;
     this.userAgent = GrpcUtil.getGrpcUserAgent("okhttp", userAgent);
     this.proxyAddress = proxyAddress;
     this.proxyUsername = proxyUsername;
@@ -212,10 +213,18 @@ class OkHttpClientTransport implements ConnectionClientTransport {
    * Create a transport connected to a fake peer for test.
    */
   @VisibleForTesting
-  OkHttpClientTransport(String userAgent, Executor executor, FrameReader frameReader,
-      FrameWriter testFrameWriter, int nextStreamId, Socket socket, Ticker ticker,
-      @Nullable Runnable connectingCallback, SettableFuture<Void> connectedFuture,
-      int maxMessageSize, Runnable tooManyPingsRunnable) {
+  OkHttpClientTransport(
+      String userAgent,
+      Executor executor,
+      FrameReader frameReader,
+      FrameWriter testFrameWriter,
+      int nextStreamId,
+      Socket socket,
+      Supplier<Stopwatch> stopwatchFactory,
+      @Nullable Runnable connectingCallback,
+      SettableFuture<Void> connectedFuture,
+      int maxMessageSize,
+      Runnable tooManyPingsRunnable) {
     address = null;
     this.maxMessageSize = maxMessageSize;
     defaultAuthority = "notarealauthority:80";
@@ -226,7 +235,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     this.testFrameWriter = Preconditions.checkNotNull(testFrameWriter, "testFrameWriter");
     this.socket = Preconditions.checkNotNull(socket, "socket");
     this.nextStreamId = nextStreamId;
-    this.ticker = ticker;
+    this.stopwatchFactory = stopwatchFactory;
     this.connectionSpec = null;
     this.connectingCallback = connectingCallback;
     this.connectedFuture = Preconditions.checkNotNull(connectedFuture, "connectedFuture");
@@ -271,7 +280,9 @@ class OkHttpClientTransport implements ConnectionClientTransport {
       } else {
         // set outstanding operation and then write the ping after releasing lock
         data = random.nextLong();
-        p = ping = new Http2Ping(data, Stopwatch.createStarted(ticker));
+        Stopwatch stopwatch = stopwatchFactory.get();
+        stopwatch.start();
+        p = ping = new Http2Ping(data, stopwatch);
         writePing = true;
       }
     }
@@ -315,8 +326,8 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     setInUse();
     stream.transportState().start(nextStreamId);
     // For unary and server streaming, there will be a data frame soon, no need to flush the header.
-    if (stream.getType() != MethodType.UNARY
-        && stream.getType() != MethodType.SERVER_STREAMING) {
+    if ((stream.getType() != MethodType.UNARY && stream.getType() != MethodType.SERVER_STREAMING)
+        || stream.useGet()) {
       frameWriter.flush();
     }
     if (nextStreamId >= Integer.MAX_VALUE - 2) {
@@ -554,7 +565,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   }
 
   /**
-   * Gets the overriden authority hostname.  If the authority is overriden to be an invalid
+   * Gets the overridden authority hostname.  If the authority is overridden to be an invalid
    * authority, uri.getHost() will (rightly) return null, since the authority is no longer
    * an actual service.  This method overrides the behavior for practical reasons.  For example,
    * if an authority is in the form "invalid_authority" (note the "_"), rather than return null,
@@ -587,13 +598,13 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public void shutdown() {
+  public void shutdown(Status reason) {
     synchronized (lock) {
       if (goAwayStatus != null) {
         return;
       }
 
-      goAwayStatus = Status.UNAVAILABLE.withDescription("Transport stopped");
+      goAwayStatus = reason;
       listener.transportShutdown(goAwayStatus);
       stopIfNecessary();
     }
@@ -601,7 +612,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
 
   @Override
   public void shutdownNow(Status reason) {
-    shutdown();
+    shutdown(reason);
     synchronized (lock) {
       Iterator<Map.Entry<Integer, OkHttpClientStream>> it = streams.entrySet().iterator();
       while (it.hasNext()) {
@@ -706,10 +717,15 @@ class OkHttpClientTransport implements ConnectionClientTransport {
    *
    * @param streamId the Id of the stream.
    * @param status the final status of this stream, null means no need to report.
+   * @param stopDelivery interrupt queued messages in the deframer
    * @param errorCode reset the stream with this ErrorCode if not null.
    * @param trailers the trailers received if not null
    */
-  void finishStream(int streamId, @Nullable Status status, @Nullable ErrorCode errorCode,
+  void finishStream(
+      int streamId,
+      @Nullable Status status,
+      boolean stopDelivery,
+      @Nullable ErrorCode errorCode,
       @Nullable Metadata trailers) {
     synchronized (lock) {
       OkHttpClientStream stream = streams.remove(streamId);
@@ -718,10 +734,12 @@ class OkHttpClientTransport implements ConnectionClientTransport {
           frameWriter.rstStream(streamId, ErrorCode.CANCEL);
         }
         if (status != null) {
-          boolean isCancelled = (status.getCode() == Code.CANCELLED
-              || status.getCode() == Code.DEADLINE_EXCEEDED);
-          stream.transportState().transportReportStatus(status, isCancelled,
-              trailers != null ? trailers : new Metadata());
+          stream
+              .transportState()
+              .transportReportStatus(
+                  status,
+                  stopDelivery,
+                  trailers != null ? trailers : new Metadata());
         }
         if (!startPendingStreams()) {
           stopIfNecessary();
@@ -942,7 +960,10 @@ class OkHttpClientTransport implements ConnectionClientTransport {
 
     @Override
     public void rstStream(int streamId, ErrorCode errorCode) {
-      finishStream(streamId, toGrpcStatus(errorCode).augmentDescription("Rst Stream"), null, null);
+      Status status = toGrpcStatus(errorCode).augmentDescription("Rst Stream");
+      boolean stopDelivery =
+          (status.getCode() == Code.CANCELLED || status.getCode() == Code.DEADLINE_EXCEEDED);
+      finishStream(streamId, status, stopDelivery, null, null);
     }
 
     @Override
@@ -1035,7 +1056,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
           onError(ErrorCode.PROTOCOL_ERROR, errorMsg);
         } else {
           finishStream(streamId,
-              Status.INTERNAL.withDescription(errorMsg), ErrorCode.PROTOCOL_ERROR, null);
+              Status.INTERNAL.withDescription(errorMsg), false, ErrorCode.PROTOCOL_ERROR, null);
         }
         return;
       }

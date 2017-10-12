@@ -31,8 +31,10 @@ import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isNull;
 import static org.mockito.Matchers.same;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
@@ -57,31 +59,23 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.testing.StatsTestUtils;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsContextFactory;
+import io.grpc.internal.testing.StatsTestUtils.MockableSpan;
 import io.grpc.testing.GrpcServerRule;
-import io.opencensus.trace.Annotation;
-import io.opencensus.trace.AttributeValue;
 import io.opencensus.trace.EndSpanOptions;
-import io.opencensus.trace.Link;
 import io.opencensus.trace.NetworkEvent;
-import io.opencensus.trace.Sampler;
+import io.opencensus.trace.NetworkEvent.Type;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.SpanBuilder;
 import io.opencensus.trace.SpanContext;
-import io.opencensus.trace.SpanId;
-import io.opencensus.trace.TraceId;
-import io.opencensus.trace.TraceOptions;
 import io.opencensus.trace.Tracer;
 import io.opencensus.trace.propagation.BinaryFormat;
+import io.opencensus.trace.propagation.SpanContextParseException;
 import io.opencensus.trace.unsafe.ContextUtils;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.text.ParseException;
-import java.util.EnumSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
-import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -90,6 +84,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -166,6 +161,8 @@ public class CensusModulesTest {
   private ArgumentCaptor<ClientCall.Listener<String>> clientCallListenerCaptor;
   @Captor
   private ArgumentCaptor<Status> statusCaptor;
+  @Captor
+  private ArgumentCaptor<NetworkEvent> networkEventCaptor;
 
   private CensusStatsModule censusStats;
   private CensusTracingModule censusTracing;
@@ -180,11 +177,12 @@ public class CensusModulesTest {
     when(spyServerSpanBuilder.startSpan()).thenReturn(spyServerSpan);
     when(tracer.spanBuilderWithRemoteParent(anyString(), any(SpanContext.class)))
         .thenReturn(spyServerSpanBuilder);
-    when(mockTracingPropagationHandler.toBinaryValue(any(SpanContext.class)))
+    when(mockTracingPropagationHandler.toByteArray(any(SpanContext.class)))
         .thenReturn(binarySpanContext);
-    when(mockTracingPropagationHandler.fromBinaryValue(any(byte[].class)))
+    when(mockTracingPropagationHandler.fromByteArray(any(byte[].class)))
         .thenReturn(fakeClientSpanContext);
-    censusStats = new CensusStatsModule(statsCtxFactory, fakeClock.getStopwatchSupplier(), true);
+    censusStats =
+        new CensusStatsModule(statsCtxFactory, fakeClock.getStopwatchSupplier(), true, true);
     censusTracing = new CensusTracingModule(tracer, mockTracingPropagationHandler);
   }
 
@@ -322,20 +320,20 @@ public class CensusModulesTest {
     tracer.outboundHeaders();
 
     fakeClock.forwardTime(100, MILLISECONDS);
-    tracer.outboundMessage();
+    tracer.outboundMessage(0);
     tracer.outboundWireSize(1028);
     tracer.outboundUncompressedSize(1128);
 
     fakeClock.forwardTime(16, MILLISECONDS);
-    tracer.inboundMessage();
+    tracer.inboundMessage(0);
     tracer.inboundWireSize(33);
     tracer.inboundUncompressedSize(67);
-    tracer.outboundMessage();
+    tracer.outboundMessage(1);
     tracer.outboundWireSize(99);
     tracer.outboundUncompressedSize(865);
 
     fakeClock.forwardTime(24, MILLISECONDS);
-    tracer.inboundMessage();
+    tracer.inboundMessage(1);
     tracer.inboundWireSize(154);
     tracer.inboundUncompressedSize(552);
     tracer.streamClosed(Status.OK);
@@ -372,11 +370,32 @@ public class CensusModulesTest {
         eq("Sent.package1.service2.method3"), isNull(Span.class));
     verify(spyClientSpan, never()).end(any(EndSpanOptions.class));
 
+    clientStreamTracer.outboundMessage(0);
+    clientStreamTracer.outboundMessageSent(0, 882, -1);
+    clientStreamTracer.inboundMessage(0);
+    clientStreamTracer.outboundMessage(1);
+    clientStreamTracer.outboundMessageSent(1, -1, 27);
+    clientStreamTracer.inboundMessageRead(0, 255, 90);
+
     clientStreamTracer.streamClosed(Status.OK);
     callTracer.callEnded(Status.OK);
 
-    verify(spyClientSpan).end(
+    InOrder inOrder = inOrder(spyClientSpan);
+    inOrder.verify(spyClientSpan, times(3)).addNetworkEvent(networkEventCaptor.capture());
+    List<NetworkEvent> events = networkEventCaptor.getAllValues();
+    assertEquals(
+        NetworkEvent.builder(Type.SENT, 0).setCompressedMessageSize(882).build(), events.get(0));
+    assertEquals(
+        NetworkEvent.builder(Type.SENT, 1).setUncompressedMessageSize(27).build(), events.get(1));
+    assertEquals(
+        NetworkEvent.builder(Type.RECV, 0)
+            .setCompressedMessageSize(255)
+            .setUncompressedMessageSize(90)
+            .build(),
+        events.get(2));
+    inOrder.verify(spyClientSpan).end(
         EndSpanOptions.builder().setStatus(io.opencensus.trace.Status.OK).build());
+    verifyNoMoreInteractions(spyClientSpan);
     verifyNoMoreInteractions(tracer);
   }
 
@@ -424,27 +443,37 @@ public class CensusModulesTest {
                 io.opencensus.trace.Status.DEADLINE_EXCEEDED
                     .withDescription("3 seconds"))
             .build());
-    verify(spyClientSpan, never()).end();
+    verifyNoMoreInteractions(spyClientSpan);
   }
 
   @Test
-  public void statsHeadersPropagateTags() {
-    subtestStatsHeadersPropagateTags(true);
+  public void statsHeadersPropagateTags_record() {
+    subtestStatsHeadersPropagateTags(true, true);
   }
 
   @Test
-  public void statsHeadersNotPropagateTags() {
-    subtestStatsHeadersPropagateTags(false);
+  public void statsHeadersPropagateTags_notRecord() {
+    subtestStatsHeadersPropagateTags(true, false);
   }
 
-  private void subtestStatsHeadersPropagateTags(boolean propagate) {
+  @Test
+  public void statsHeadersNotPropagateTags_record() {
+    subtestStatsHeadersPropagateTags(false, true);
+  }
+
+  @Test
+  public void statsHeadersNotPropagateTags_notRecord() {
+    subtestStatsHeadersPropagateTags(false, false);
+  }
+
+  private void subtestStatsHeadersPropagateTags(boolean propagate, boolean recordStats) {
     // EXTRA_TAG is propagated by the FakeStatsContextFactory. Note that not all tags are
     // propagated.  The StatsContextFactory decides which tags are to propagated.  gRPC facilitates
     // the propagation by putting them in the headers.
     StatsContext clientCtx = statsCtxFactory.getDefault().with(
         StatsTestUtils.EXTRA_TAG, TagValue.create("extra-tag-value-897"));
-    CensusStatsModule census =
-        new CensusStatsModule(statsCtxFactory, fakeClock.getStopwatchSupplier(), propagate);
+    CensusStatsModule census = new CensusStatsModule(
+        statsCtxFactory, fakeClock.getStopwatchSupplier(), propagate, recordStats);
     Metadata headers = new Metadata();
     CensusStatsModule.ClientCallTracer callTracer =
         census.newClientCallTracer(clientCtx, method.getFullMethodName());
@@ -464,36 +493,46 @@ public class CensusModulesTest {
     // propagated tags.
     Context serverContext = serverTracer.filterContext(Context.ROOT);
     // It also put clientCtx in the Context seen by the call handler
-    assertEquals(clientCtx, STATS_CONTEXT_KEY.get(serverContext));
+    assertEquals(
+        clientCtx.with(RpcConstants.RPC_SERVER_METHOD, TagValue.create(method.getFullMethodName())),
+        STATS_CONTEXT_KEY.get(serverContext));
 
     // Verifies that the server tracer records the status with the propagated tag
     serverTracer.streamClosed(Status.OK);
 
-    StatsTestUtils.MetricsRecord serverRecord = statsCtxFactory.pollRecord();
-    assertNotNull(serverRecord);
-    assertNoClientContent(serverRecord);
-    TagValue serverMethodTag = serverRecord.tags.get(RpcConstants.RPC_SERVER_METHOD);
-    assertEquals(method.getFullMethodName(), serverMethodTag.toString());
-    TagValue serverStatusTag = serverRecord.tags.get(RpcConstants.RPC_STATUS);
-    assertEquals(Status.Code.OK.toString(), serverStatusTag.toString());
-    assertNull(serverRecord.getMetric(RpcConstants.RPC_SERVER_ERROR_COUNT));
-    TagValue serverPropagatedTag = serverRecord.tags.get(StatsTestUtils.EXTRA_TAG);
-    assertEquals("extra-tag-value-897", serverPropagatedTag.toString());
+    if (recordStats) {
+      StatsTestUtils.MetricsRecord serverRecord = statsCtxFactory.pollRecord();
+      assertNotNull(serverRecord);
+      assertNoClientContent(serverRecord);
+      TagValue serverMethodTag = serverRecord.tags.get(RpcConstants.RPC_SERVER_METHOD);
+      assertEquals(method.getFullMethodName(), serverMethodTag.toString());
+      TagValue serverStatusTag = serverRecord.tags.get(RpcConstants.RPC_STATUS);
+      assertEquals(Status.Code.OK.toString(), serverStatusTag.toString());
+      assertNull(serverRecord.getMetric(RpcConstants.RPC_SERVER_ERROR_COUNT));
+      TagValue serverPropagatedTag = serverRecord.tags.get(StatsTestUtils.EXTRA_TAG);
+      assertEquals("extra-tag-value-897", serverPropagatedTag.toString());
+    }
 
     // Verifies that the client tracer factory uses clientCtx, which includes the custom tags, to
     // record stats.
     callTracer.callEnded(Status.OK);
 
-    StatsTestUtils.MetricsRecord clientRecord = statsCtxFactory.pollRecord();
-    assertNotNull(clientRecord);
-    assertNoServerContent(clientRecord);
-    TagValue clientMethodTag = clientRecord.tags.get(RpcConstants.RPC_CLIENT_METHOD);
-    assertEquals(method.getFullMethodName(), clientMethodTag.toString());
-    TagValue clientStatusTag = clientRecord.tags.get(RpcConstants.RPC_STATUS);
-    assertEquals(Status.Code.OK.toString(), clientStatusTag.toString());
-    assertNull(clientRecord.getMetric(RpcConstants.RPC_CLIENT_ERROR_COUNT));
-    TagValue clientPropagatedTag = clientRecord.tags.get(StatsTestUtils.EXTRA_TAG);
-    assertEquals("extra-tag-value-897", clientPropagatedTag.toString());
+    if (recordStats) {
+      StatsTestUtils.MetricsRecord clientRecord = statsCtxFactory.pollRecord();
+      assertNotNull(clientRecord);
+      assertNoServerContent(clientRecord);
+      TagValue clientMethodTag = clientRecord.tags.get(RpcConstants.RPC_CLIENT_METHOD);
+      assertEquals(method.getFullMethodName(), clientMethodTag.toString());
+      TagValue clientStatusTag = clientRecord.tags.get(RpcConstants.RPC_STATUS);
+      assertEquals(Status.Code.OK.toString(), clientStatusTag.toString());
+      assertNull(clientRecord.getMetric(RpcConstants.RPC_CLIENT_ERROR_COUNT));
+      TagValue clientPropagatedTag = clientRecord.tags.get(StatsTestUtils.EXTRA_TAG);
+      assertEquals("extra-tag-value-897", clientPropagatedTag.toString());
+    }
+
+    if (!recordStats) {
+      assertNull(statsCtxFactory.pollRecord());
+    }
   }
 
   @Test
@@ -532,7 +571,7 @@ public class CensusModulesTest {
     Metadata headers = new Metadata();
     callTracer.newClientStreamTracer(CallOptions.DEFAULT, headers);
 
-    verify(mockTracingPropagationHandler).toBinaryValue(same(fakeClientSpanContext));
+    verify(mockTracingPropagationHandler).toByteArray(same(fakeClientSpanContext));
     verifyNoMoreInteractions(mockTracingPropagationHandler);
     verify(tracer).spanBuilderWithExplicitParent(
         eq("Sent.package1.service2.method3"), same(fakeClientParentSpan));
@@ -543,7 +582,7 @@ public class CensusModulesTest {
     ServerStreamTracer serverTracer =
         censusTracing.getServerTracerFactory().newServerStreamTracer(
             method.getFullMethodName(), headers);
-    verify(mockTracingPropagationHandler).fromBinaryValue(same(binarySpanContext));
+    verify(mockTracingPropagationHandler).fromByteArray(same(binarySpanContext));
     verify(tracer).spanBuilderWithRemoteParent(
         eq("Recv.package1.service2.method3"), same(spyClientSpan.getContext()));
     verify(spyServerSpanBuilder).setRecordEvents(eq(true));
@@ -561,8 +600,8 @@ public class CensusModulesTest {
     assertSame(spyClientSpan.getContext(), headers.get(censusTracing.tracingHeader));
 
     // Make BinaryPropagationHandler always throw when parsing the header
-    when(mockTracingPropagationHandler.fromBinaryValue(any(byte[].class)))
-        .thenThrow(new ParseException("Malformed header", 0));
+    when(mockTracingPropagationHandler.fromByteArray(any(byte[].class)))
+        .thenThrow(new SpanContextParseException("Malformed header"));
 
     headers = new Metadata();
     assertNull(headers.get(censusTracing.tracingHeader));
@@ -585,22 +624,26 @@ public class CensusModulesTest {
         tracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
 
     Context filteredContext = tracer.filterContext(Context.ROOT);
-    assertNull(STATS_CONTEXT_KEY.get(filteredContext));
+    StatsContext statsCtx = STATS_CONTEXT_KEY.get(filteredContext);
+    assertEquals(
+        statsCtxFactory.getDefault()
+            .with(RpcConstants.RPC_SERVER_METHOD, TagValue.create(method.getFullMethodName())),
+        statsCtx);
 
-    tracer.inboundMessage();
+    tracer.inboundMessage(0);
     tracer.inboundWireSize(34);
     tracer.inboundUncompressedSize(67);
 
     fakeClock.forwardTime(100, MILLISECONDS);
-    tracer.outboundMessage();
+    tracer.outboundMessage(0);
     tracer.outboundWireSize(1028);
     tracer.outboundUncompressedSize(1128);
 
     fakeClock.forwardTime(16, MILLISECONDS);
-    tracer.inboundMessage();
+    tracer.inboundMessage(1);
     tracer.inboundWireSize(154);
     tracer.inboundUncompressedSize(552);
-    tracer.outboundMessage();
+    tracer.outboundMessage(1);
     tracer.outboundWireSize(99);
     tracer.outboundUncompressedSize(865);
 
@@ -642,12 +685,33 @@ public class CensusModulesTest {
     assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));
 
     verify(spyServerSpan, never()).end(any(EndSpanOptions.class));
+
+    serverStreamTracer.outboundMessage(0);
+    serverStreamTracer.outboundMessageSent(0, 882, -1);
+    serverStreamTracer.inboundMessage(0);
+    serverStreamTracer.outboundMessage(1);
+    serverStreamTracer.outboundMessageSent(1, -1, 27);
+    serverStreamTracer.inboundMessageRead(0, 255, 90);
+
     serverStreamTracer.streamClosed(Status.CANCELLED);
 
-    verify(spyServerSpan).end(
+    InOrder inOrder = inOrder(spyServerSpan);
+    inOrder.verify(spyServerSpan, times(3)).addNetworkEvent(networkEventCaptor.capture());
+    List<NetworkEvent> events = networkEventCaptor.getAllValues();
+    assertEquals(
+        NetworkEvent.builder(Type.SENT, 0).setCompressedMessageSize(882).build(), events.get(0));
+    assertEquals(
+        NetworkEvent.builder(Type.SENT, 1).setUncompressedMessageSize(27).build(), events.get(1));
+    assertEquals(
+        NetworkEvent.builder(Type.RECV, 0)
+            .setCompressedMessageSize(255)
+            .setUncompressedMessageSize(90)
+            .build(),
+        events.get(2));
+    inOrder.verify(spyServerSpan).end(
         EndSpanOptions.builder()
             .setStatus(io.opencensus.trace.Status.CANCELLED).build());
-    verify(spyServerSpan, never()).end();
+    verifyNoMoreInteractions(spyServerSpan);
   }
 
   @Test
@@ -669,6 +733,15 @@ public class CensusModulesTest {
       assertEquals(grpcCode.toString(), tracingStatus.getCanonicalCode().toString());
       assertEquals(grpcStatus.getDescription(), tracingStatus.getDescription());
     }
+  }
+
+
+  @Test
+  public void generateTraceSpanName() {
+    assertEquals(
+        "Sent.io.grpc.Foo", CensusTracingModule.generateTraceSpanName(false, "io.grpc/Foo"));
+    assertEquals(
+        "Recv.io.grpc.Bar", CensusTracingModule.generateTraceSpanName(true, "io.grpc/Bar"));
   }
 
   private static void assertNoServerContent(StatsTestUtils.MetricsRecord record) {
@@ -693,68 +766,5 @@ public class CensusModulesTest {
     assertNull(record.getMetric(RpcConstants.RPC_CLIENT_SERVER_ELAPSED_TIME));
     assertNull(record.getMetric(RpcConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES));
     assertNull(record.getMetric(RpcConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
-  }
-
-  // TODO(bdrutu): Remove this class after OpenCensus releases support for this class.
-  private static class MockableSpan extends Span {
-    private static MockableSpan generateRandomSpan(Random random) {
-      return new MockableSpan(
-          SpanContext.create(
-              TraceId.generateRandomId(random),
-              SpanId.generateRandomId(random),
-              TraceOptions.DEFAULT),
-          null);
-    }
-
-    @Override
-    public void addAttributes(Map<String, AttributeValue> attributes) {}
-
-    @Override
-    public void addAnnotation(String description, Map<String, AttributeValue> attributes) {}
-
-    @Override
-    public void addAnnotation(Annotation annotation) {}
-
-    @Override
-    public void addNetworkEvent(NetworkEvent networkEvent) {}
-
-    @Override
-    public void addLink(Link link) {}
-
-    @Override
-    public void end(EndSpanOptions options) {}
-
-    private MockableSpan(SpanContext context, @Nullable EnumSet<Options> options) {
-      super(context, options);
-    }
-
-    /**
-     * Mockable implementation for the {@link SpanBuilder} class.
-     *
-     * <p>Not {@code final} to allow easy mocking.
-     *
-     */
-    public static class Builder extends SpanBuilder {
-
-      @Override
-      public SpanBuilder setSampler(Sampler sampler) {
-        return this;
-      }
-
-      @Override
-      public SpanBuilder setParentLinks(List<Span> parentLinks) {
-        return this;
-      }
-
-      @Override
-      public SpanBuilder setRecordEvents(boolean recordEvents) {
-        return this;
-      }
-
-      @Override
-      public Span startSpan() {
-        return null;
-      }
-    }
   }
 }

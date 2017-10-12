@@ -21,7 +21,6 @@ import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Ticker;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
@@ -144,7 +143,8 @@ class NettyClientTransport implements ConnectionClientTransport {
     }
     StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(callOptions, headers);
     return new NettyClientStream(
-        new NettyClientStream.TransportState(handler, maxMessageSize, statsTraceCtx) {
+        new NettyClientStream.TransportState(handler, channel.eventLoop(), maxMessageSize,
+            statsTraceCtx) {
           @Override
           protected Status statusFromFailedFuture(ChannelFuture f) {
             return NettyClientTransport.this.statusFromFailedFuture(f);
@@ -166,8 +166,13 @@ class NettyClientTransport implements ConnectionClientTransport {
           keepAliveWithoutCalls);
     }
 
-    handler = NettyClientHandler.newHandler(lifecycleManager, keepAliveManager, flowControlWindow,
-        maxHeaderListSize, Ticker.systemTicker(), tooManyPingsRunnable);
+    handler = NettyClientHandler.newHandler(
+        lifecycleManager,
+        keepAliveManager,
+        flowControlWindow,
+        maxHeaderListSize,
+        GrpcUtil.STOPWATCH_SUPPLIER,
+        tooManyPingsRunnable);
     NettyHandlerSettings.setAutoWindow(handler);
 
     negotiationHandler = negotiator.newHandler(handler);
@@ -215,10 +220,11 @@ class NettyClientTransport implements ConnectionClientTransport {
     }
     // Start the write queue as soon as the channel is constructed
     handler.startWriteQueue(channel);
-    // Start the connection operation to the server.
-    channel.connect(address);
     // This write will have no effect, yet it will only complete once the negotiationHandler
-    // flushes any pending writes.
+    // flushes any pending writes. We need it to be staged *before* the `connect` so that
+    // the channel can't have been closed yet, removing all handlers. This write will sit in the
+    // AbstractBufferingHandler's buffer, and will either be flushed on a successful connection,
+    // or failed if the connection fails.
     channel.writeAndFlush(NettyClientHandler.NOOP_MESSAGE).addListener(new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
@@ -229,15 +235,8 @@ class NettyClientTransport implements ConnectionClientTransport {
         }
       }
     });
-    // Handle transport shutdown when the channel is closed.
-    channel.closeFuture().addListener(new ChannelFutureListener() {
-      @Override
-      public void operationComplete(ChannelFuture future) throws Exception {
-        // Typically we should have noticed shutdown before this point.
-        lifecycleManager.notifyTerminated(
-            Status.INTERNAL.withDescription("Connection closed with unknown cause"));
-      }
-    });
+    // Start the connection operation to the server.
+    channel.connect(address);
 
     if (keepAliveManager != null) {
       keepAliveManager.onTransportStarted();
@@ -247,24 +246,31 @@ class NettyClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public void shutdown() {
+  public void shutdown(Status reason) {
     // start() could have failed
     if (channel == null) {
       return;
     }
     // Notifying of termination is automatically done when the channel closes.
     if (channel.isOpen()) {
-      Status status
-          = Status.UNAVAILABLE.withDescription("Channel requested transport to shut down");
-      handler.getWriteQueue().enqueue(new GracefulCloseCommand(status), true);
+      handler.getWriteQueue().enqueue(new GracefulCloseCommand(reason), true);
     }
   }
 
   @Override
-  public void shutdownNow(Status reason) {
+  public void shutdownNow(final Status reason) {
     // Notifying of termination is automatically done when the channel closes.
     if (channel != null && channel.isOpen()) {
-      handler.getWriteQueue().enqueue(new ForcefulCloseCommand(reason), true);
+      handler.getWriteQueue().enqueue(new Runnable() {
+        @Override
+        public void run() {
+          lifecycleManager.notifyShutdown(reason);
+          // Call close() directly since negotiation may not have completed, such that a write would
+          // be queued.
+          channel.close();
+          channel.write(new ForcefulCloseCommand(reason));
+        }
+      }, true);
     }
   }
 

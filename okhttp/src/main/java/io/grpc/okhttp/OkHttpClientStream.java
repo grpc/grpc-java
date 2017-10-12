@@ -25,7 +25,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.AbstractClientStream;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2ClientStreamTransportState;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.WritableBuffer;
@@ -57,6 +56,8 @@ class OkHttpClientStream extends AbstractClientStream {
   private volatile int id = ABSENT_ID;
   private final TransportState state;
   private final Sink sink = new Sink();
+
+  private boolean useGet = false;
 
   OkHttpClientStream(
       MethodDescriptor<?, ?> method,
@@ -99,6 +100,14 @@ class OkHttpClientStream extends AbstractClientStream {
     return id;
   }
 
+  /**
+   * Returns whether the stream uses GET. This is not known until after {@link Sink#writeHeaders} is
+   * invoked.
+   */
+  boolean useGet() {
+    return useGet;
+  }
+
   @Override
   public void setAuthority(String authority) {
     this.authority = checkNotNull(authority, "authority");
@@ -114,9 +123,9 @@ class OkHttpClientStream extends AbstractClientStream {
     public void writeHeaders(Metadata metadata, byte[] payload) {
       String defaultPath = "/" + method.getFullMethodName();
       if (payload != null) {
+        useGet = true;
         defaultPath += "?" + BaseEncoding.base64().encode(payload);
       }
-      metadata.discardAll(GrpcUtil.USER_AGENT_KEY);
       synchronized (state.lock) {
         state.streamReady(metadata, defaultPath);
       }
@@ -150,7 +159,7 @@ class OkHttpClientStream extends AbstractClientStream {
     @Override
     public void cancel(Status reason) {
       synchronized (state.lock) {
-        state.cancel(reason, null);
+        state.cancel(reason, true, null);
       }
     }
   }
@@ -200,7 +209,7 @@ class OkHttpClientStream extends AbstractClientStream {
 
       if (pendingData != null) {
         // Only happens when the stream has neither been started nor cancelled.
-        frameWriter.synStream(false, false, id, 0, requestHeaders);
+        frameWriter.synStream(useGet, false, id, 0, requestHeaders);
         statsTraceCtx.clientOutboundHeaders();
         requestHeaders = null;
 
@@ -227,18 +236,18 @@ class OkHttpClientStream extends AbstractClientStream {
 
     @GuardedBy("lock")
     @Override
-    protected void http2ProcessingFailed(Status status, Metadata trailers) {
-      cancel(status, trailers);
+    protected void http2ProcessingFailed(Status status, boolean stopDelivery, Metadata trailers) {
+      cancel(status, stopDelivery, trailers);
     }
 
-    @GuardedBy("lock")
     @Override
-    protected void deframeFailed(Throwable cause) {
-      http2ProcessingFailed(Status.fromThrowable(cause), new Metadata());
+    @GuardedBy("lock")
+    public void deframeFailed(Throwable cause) {
+      http2ProcessingFailed(Status.fromThrowable(cause), true, new Metadata());
     }
 
-    @GuardedBy("lock")
     @Override
+    @GuardedBy("lock")
     public void bytesRead(int processedBytes) {
       processedWindow -= processedBytes;
       if (processedWindow <= WINDOW_UPDATE_THRESHOLD) {
@@ -249,6 +258,21 @@ class OkHttpClientStream extends AbstractClientStream {
       }
     }
 
+    @Override
+    @GuardedBy("lock")
+    public void deframerClosed(boolean hasPartialMessageIgnored) {
+      onEndOfStream();
+      super.deframerClosed(hasPartialMessageIgnored);
+    }
+
+    @Override
+    @GuardedBy("lock")
+    public void runOnTransportThread(final Runnable r) {
+      synchronized (lock) {
+        r.run();
+      }
+    }
+
     /**
      * Must be called with holding the transport lock.
      */
@@ -256,7 +280,6 @@ class OkHttpClientStream extends AbstractClientStream {
     public void transportHeadersReceived(List<Header> headers, boolean endOfStream) {
       if (endOfStream) {
         transportTrailersReceived(Utils.convertTrailers(headers));
-        onEndOfStream();
       } else {
         transportHeadersReceived(Utils.convertHeaders(headers));
       }
@@ -274,13 +297,10 @@ class OkHttpClientStream extends AbstractClientStream {
       if (window < 0) {
         frameWriter.rstStream(id(), ErrorCode.FLOW_CONTROL_ERROR);
         transport.finishStream(id(), Status.INTERNAL.withDescription(
-            "Received data size exceeded our receiving window size"), null, null);
+            "Received data size exceeded our receiving window size"), false, null, null);
         return;
       }
       super.transportDataReceived(new OkHttpReadableBuffer(frame), endOfStream);
-      if (endOfStream) {
-        onEndOfStream();
-      }
     }
 
     @GuardedBy("lock")
@@ -288,15 +308,14 @@ class OkHttpClientStream extends AbstractClientStream {
       if (!framer().isClosed()) {
         // If server's end-of-stream is received before client sends end-of-stream, we just send a
         // reset to server to fully close the server side stream.
-        transport.finishStream(id(), null, ErrorCode.CANCEL, null);
+        transport.finishStream(id(), null, false, ErrorCode.CANCEL, null);
       } else {
-        transport.finishStream(id(), null, null, null);
+        transport.finishStream(id(), null, false, null, null);
       }
     }
 
-
     @GuardedBy("lock")
-    private void cancel(Status reason, Metadata trailers) {
+    private void cancel(Status reason, boolean stopDelivery, Metadata trailers) {
       if (cancelSent) {
         return;
       }
@@ -314,7 +333,7 @@ class OkHttpClientStream extends AbstractClientStream {
       } else {
         // If pendingData is null, start must have already been called, which means synStream has
         // been called as well.
-        transport.finishStream(id(), reason, ErrorCode.CANCEL, trailers);
+        transport.finishStream(id(), reason, stopDelivery, ErrorCode.CANCEL, trailers);
       }
     }
 
@@ -336,8 +355,7 @@ class OkHttpClientStream extends AbstractClientStream {
 
     @GuardedBy("lock")
     private void streamReady(Metadata metadata, String path) {
-      requestHeaders =
-          Headers.createRequestHeaders(metadata, path, authority, userAgent);
+      requestHeaders = Headers.createRequestHeaders(metadata, path, authority, userAgent, useGet);
       transport.streamReadyToStart(OkHttpClientStream.this);
     }
   }

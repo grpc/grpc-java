@@ -80,11 +80,6 @@ public class OkHttpTransportTest extends AbstractTransportTest {
         null /* proxy */);
   }
 
-  @Override
-  protected boolean metricsExpected() {
-    return true;
-  }
-
   // TODO(ejona): Flaky/Broken
   @Test
   @Ignore

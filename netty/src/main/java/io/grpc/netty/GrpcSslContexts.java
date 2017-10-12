@@ -25,7 +25,6 @@ import io.netty.handler.ssl.ApplicationProtocolConfig;
 import io.netty.handler.ssl.ApplicationProtocolConfig.Protocol;
 import io.netty.handler.ssl.ApplicationProtocolConfig.SelectedListenerFailureBehavior;
 import io.netty.handler.ssl.ApplicationProtocolConfig.SelectorFailureBehavior;
-import io.netty.handler.ssl.ApplicationProtocolNegotiator;
 import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
@@ -38,6 +37,7 @@ import java.util.List;
 /**
  * Utility for configuring SslContext for gRPC.
  */
+@SuppressWarnings("deprecation")
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1784")
 public class GrpcSslContexts {
   private GrpcSslContexts() {}
@@ -156,25 +156,26 @@ public class GrpcSslContexts {
         if (JettyTlsUtil.isJettyNpnConfigured()) {
           return NPN;
         }
-        throw new IllegalArgumentException("Jetty ALPN/NPN has not been properly configured.");
+        // Use the ALPN cause since it is prefered.
+        throw new IllegalArgumentException(
+            "Jetty ALPN/NPN has not been properly configured.",
+            JettyTlsUtil.getJettyAlpnUnavailabilityCause());
       }
       case OPENSSL: {
         if (!OpenSsl.isAvailable()) {
-          throw new IllegalArgumentException("OpenSSL is not installed on the system.");
+          throw new IllegalArgumentException(
+              "OpenSSL is not installed on the system.", OpenSsl.unavailabilityCause());
         }
-
-        if (OpenSsl.isAlpnSupported()) {
-          return NPN_AND_ALPN;
-        } else {
-          return NPN;
-        }
+        return OpenSsl.isAlpnSupported() ? NPN_AND_ALPN : NPN;
       }
       default:
         throw new IllegalArgumentException("Unsupported provider: " + provider);
     }
   }
 
-  static void ensureAlpnAndH2Enabled(ApplicationProtocolNegotiator alpnNegotiator) {
+  @SuppressWarnings("deprecation")
+  static void ensureAlpnAndH2Enabled(
+      io.netty.handler.ssl.ApplicationProtocolNegotiator alpnNegotiator) {
     checkArgument(alpnNegotiator != null, "ALPN must be configured");
     checkArgument(alpnNegotiator.protocols() != null && !alpnNegotiator.protocols().isEmpty(),
         "ALPN must be enabled and list HTTP/2 as a supported protocol.");

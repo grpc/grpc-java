@@ -21,7 +21,7 @@ import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
  * </pre>
  */
 @javax.annotation.Generated(
-    value = "by gRPC proto compiler (version 1.6.0-SNAPSHOT)",
+    value = "by gRPC proto compiler",
     comments = "Source: io/grpc/reflection/testing/dynamic_reflection_test.proto")
 public final class AnotherDynamicServiceGrpc {
 
@@ -37,10 +37,12 @@ public final class AnotherDynamicServiceGrpc {
           .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
           .setFullMethodName(generateFullMethodName(
               "grpc.reflection.testing.AnotherDynamicService", "Method"))
+          .setRegisterForTracing(true)
           .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.reflection.testing.DynamicRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.reflection.testing.DynamicReply.getDefaultInstance()))
+          .setSchemaDescriptor(new AnotherDynamicServiceMethodDescriptorSupplier("Method"))
           .build();
 
   /**
@@ -233,10 +235,38 @@ public final class AnotherDynamicServiceGrpc {
     }
   }
 
-  private static final class AnotherDynamicServiceDescriptorSupplier implements io.grpc.protobuf.ProtoFileDescriptorSupplier {
+  private static abstract class AnotherDynamicServiceBaseDescriptorSupplier
+      implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
+    AnotherDynamicServiceBaseDescriptorSupplier() {}
+
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.reflection.testing.DynamicReflectionTestProto.getDescriptor();
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.ServiceDescriptor getServiceDescriptor() {
+      return getFileDescriptor().findServiceByName("AnotherDynamicService");
+    }
+  }
+
+  private static final class AnotherDynamicServiceFileDescriptorSupplier
+      extends AnotherDynamicServiceBaseDescriptorSupplier {
+    AnotherDynamicServiceFileDescriptorSupplier() {}
+  }
+
+  private static final class AnotherDynamicServiceMethodDescriptorSupplier
+      extends AnotherDynamicServiceBaseDescriptorSupplier
+      implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
+    private final String methodName;
+
+    AnotherDynamicServiceMethodDescriptorSupplier(String methodName) {
+      this.methodName = methodName;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.MethodDescriptor getMethodDescriptor() {
+      return getServiceDescriptor().findMethodByName(methodName);
     }
   }
 
@@ -249,7 +279,7 @@ public final class AnotherDynamicServiceGrpc {
         result = serviceDescriptor;
         if (result == null) {
           serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
-              .setSchemaDescriptor(new AnotherDynamicServiceDescriptorSupplier())
+              .setSchemaDescriptor(new AnotherDynamicServiceFileDescriptorSupplier())
               .addMethod(METHOD_METHOD)
               .build();
         }

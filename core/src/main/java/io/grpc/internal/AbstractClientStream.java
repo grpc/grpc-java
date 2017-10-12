@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static io.grpc.internal.GrpcUtil.CONTENT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -117,6 +118,11 @@ public abstract class AbstractClientStream extends AbstractStream
   }
 
   @Override
+  public final void setFullStreamDecompression(boolean fullStreamDecompression) {
+    transportState().setFullStreamDecompression(fullStreamDecompression);
+  }
+
+  @Override
   public final void setDecompressorRegistry(DecompressorRegistry decompressorRegistry) {
     transportState().setDecompressorRegistry(decompressorRegistry);
   }
@@ -182,9 +188,11 @@ public abstract class AbstractClientStream extends AbstractStream
     private final StatsTraceContext statsTraceCtx;
     private boolean listenerClosed;
     private ClientStreamListener listener;
+    private boolean fullStreamDecompression;
     private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
 
-    private Runnable deliveryStalledTask;
+    private boolean deframerClosed = false;
+    private Runnable deframerClosedTask;
 
     /**
      * Whether the stream is closed from the transport's perspective. This can differ from {@link
@@ -195,6 +203,10 @@ public abstract class AbstractClientStream extends AbstractStream
     protected TransportState(int maxMessageSize, StatsTraceContext statsTraceCtx) {
       super(maxMessageSize, statsTraceCtx);
       this.statsTraceCtx = Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
+    }
+
+    private void setFullStreamDecompression(boolean fullStreamDecompression) {
+      this.fullStreamDecompression = fullStreamDecompression;
     }
 
     private void setDecompressorRegistry(DecompressorRegistry decompressorRegistry) {
@@ -210,16 +222,12 @@ public abstract class AbstractClientStream extends AbstractStream
     }
 
     @Override
-    public final void deliveryStalled() {
-      if (deliveryStalledTask != null) {
-        deliveryStalledTask.run();
-        deliveryStalledTask = null;
+    public void deframerClosed(boolean hasPartialMessageIgnored) {
+      deframerClosed = true;
+      if (deframerClosedTask != null) {
+        deframerClosedTask.run();
+        deframerClosedTask = null;
       }
-    }
-
-    @Override
-    public final void endOfStream() {
-      deliveryStalled();
     }
 
     @Override
@@ -236,17 +244,43 @@ public abstract class AbstractClientStream extends AbstractStream
       Preconditions.checkState(!statusReported, "Received headers on closed stream");
       statsTraceCtx.clientInboundHeaders();
 
-      Decompressor decompressor = Codec.Identity.NONE;
-      String encoding = headers.get(MESSAGE_ENCODING_KEY);
-      if (encoding != null) {
-        decompressor = decompressorRegistry.lookupDecompressor(encoding);
-        if (decompressor == null) {
-          deframeFailed(Status.INTERNAL.withDescription(
-              String.format("Can't find decompressor for %s", encoding)).asRuntimeException());
+      boolean compressedStream = false;
+      String streamEncoding = headers.get(CONTENT_ENCODING_KEY);
+      if (fullStreamDecompression && streamEncoding != null) {
+        if (streamEncoding.equalsIgnoreCase("gzip")) {
+          setFullStreamDecompressor(new GzipInflatingBuffer());
+          compressedStream = true;
+        } else if (!streamEncoding.equalsIgnoreCase("identity")) {
+          deframeFailed(
+              Status.INTERNAL
+                  .withDescription(
+                      String.format("Can't find full stream decompressor for %s", streamEncoding))
+                  .asRuntimeException());
           return;
         }
       }
-      setDecompressor(decompressor);
+
+      String messageEncoding = headers.get(MESSAGE_ENCODING_KEY);
+      if (messageEncoding != null) {
+        Decompressor decompressor = decompressorRegistry.lookupDecompressor(messageEncoding);
+        if (decompressor == null) {
+          deframeFailed(
+              Status.INTERNAL
+                  .withDescription(String.format("Can't find decompressor for %s", messageEncoding))
+                  .asRuntimeException());
+          return;
+        } else if (decompressor != Codec.Identity.NONE) {
+          if (compressedStream) {
+            deframeFailed(
+                Status.INTERNAL
+                    .withDescription(
+                        String.format("Full stream and gRPC message encoding cannot both be set"))
+                    .asRuntimeException());
+            return;
+          }
+          setDecompressor(decompressor);
+        }
+      }
 
       listener().headersRead(headers);
     }
@@ -266,7 +300,7 @@ public abstract class AbstractClientStream extends AbstractStream
         }
 
         needToCloseFrame = false;
-        deframe(frame, false);
+        deframe(frame);
       } finally {
         if (needToCloseFrame) {
           frame.close();
@@ -314,18 +348,18 @@ public abstract class AbstractClientStream extends AbstractStream
       statusReported = true;
       onStreamDeallocated();
 
-      // If not stopping delivery, then we must wait until the deframer is stalled (i.e., it has no
-      // complete messages to deliver).
-      if (stopDelivery || isDeframerStalled()) {
-        deliveryStalledTask = null;
+      if (deframerClosed) {
+        deframerClosedTask = null;
         closeListener(status, trailers);
       } else {
-        deliveryStalledTask = new Runnable() {
-          @Override
-          public void run() {
-            closeListener(status, trailers);
-          }
-        };
+        deframerClosedTask =
+            new Runnable() {
+              @Override
+              public void run() {
+                closeListener(status, trailers);
+              }
+            };
+        closeDeframer(stopDelivery);
       }
     }
 
@@ -337,7 +371,6 @@ public abstract class AbstractClientStream extends AbstractStream
     private void closeListener(Status status, Metadata trailers) {
       if (!listenerClosed) {
         listenerClosed = true;
-        closeDeframer();
         statsTraceCtx.streamClosed(status);
         listener().closed(status, trailers);
       }
@@ -363,7 +396,8 @@ public abstract class AbstractClientStream extends AbstractStream
       } catch (java.io.IOException ex) {
         throw new RuntimeException(ex);
       }
-      statsTraceCtx.outboundMessage();
+      statsTraceCtx.outboundMessage(0);
+      statsTraceCtx.outboundMessageSent(0, payload.length, payload.length);
       statsTraceCtx.outboundUncompressedSize(payload.length);
       // NB(zhangkun83): this is not accurate, because the underlying transport will probably encode
       // it using e.g., base64.  However, we are not supposed to know such detail here.

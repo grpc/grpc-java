@@ -22,13 +22,14 @@ import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static io.grpc.Contexts.statusFromCancelled;
 import static io.grpc.Status.DEADLINE_EXCEEDED;
+import static io.grpc.internal.GrpcUtil.CONTENT_ACCEPT_ENCODING_KEY;
+import static io.grpc.internal.GrpcUtil.CONTENT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
@@ -46,6 +47,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import java.io.InputStream;
+import java.nio.charset.Charset;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -61,6 +63,8 @@ import javax.annotation.Nullable;
 final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   private static final Logger log = Logger.getLogger(ClientCallImpl.class.getName());
+  private static final byte[] FULL_STREAM_DECOMPRESSION_ENCODINGS
+      = "gzip".getBytes(Charset.forName("US-ASCII"));
 
   private final MethodDescriptor<ReqT, RespT> method;
   private final Executor callExecutor;
@@ -75,6 +79,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private final ClientTransportProvider clientTransportProvider;
   private final CancellationListener cancellationListener = new ContextCancellationListener();
   private ScheduledExecutorService deadlineCancellationExecutor;
+  private boolean fullStreamDecompression;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
 
@@ -117,6 +122,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     ClientTransport get(PickSubchannelArgs args);
   }
 
+  ClientCallImpl<ReqT, RespT> setFullStreamDecompression(boolean fullStreamDecompression) {
+    this.fullStreamDecompression = fullStreamDecompression;
+    return this;
+  }
+
   ClientCallImpl<ReqT, RespT> setDecompressorRegistry(DecompressorRegistry decompressorRegistry) {
     this.decompressorRegistry = decompressorRegistry;
     return this;
@@ -129,7 +139,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   @VisibleForTesting
   static void prepareHeaders(
-      Metadata headers, DecompressorRegistry decompressorRegistry, Compressor compressor) {
+      Metadata headers,
+      DecompressorRegistry decompressorRegistry,
+      Compressor compressor,
+      boolean fullStreamDecompression) {
     headers.discardAll(MESSAGE_ENCODING_KEY);
     if (compressor != Codec.Identity.NONE) {
       headers.put(MESSAGE_ENCODING_KEY, compressor.getMessageEncoding());
@@ -141,11 +154,18 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     if (advertisedEncodings.length != 0) {
       headers.put(MESSAGE_ACCEPT_ENCODING_KEY, advertisedEncodings);
     }
+
+    headers.discardAll(CONTENT_ENCODING_KEY);
+    headers.discardAll(CONTENT_ACCEPT_ENCODING_KEY);
+    if (fullStreamDecompression) {
+      headers.put(CONTENT_ACCEPT_ENCODING_KEY, FULL_STREAM_DECOMPRESSION_ENCODINGS);
+    }
   }
 
   @Override
   public void start(final Listener<RespT> observer, Metadata headers) {
     checkState(stream == null, "Already started");
+    checkState(!cancelCalled, "call was cancelled");
     checkNotNull(observer, "observer");
     checkNotNull(headers, "headers");
 
@@ -195,7 +215,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       compressor = Codec.Identity.NONE;
     }
 
-    prepareHeaders(headers, decompressorRegistry, compressor);
+    prepareHeaders(headers, decompressorRegistry, compressor, fullStreamDecompression);
 
     Deadline effectiveDeadline = effectiveDeadline();
     boolean deadlineExceeded = effectiveDeadline != null && effectiveDeadline.isExpired();
@@ -224,6 +244,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       stream.setMaxOutboundMessageSize(callOptions.getMaxOutboundMessageSize());
     }
     stream.setCompressor(compressor);
+    stream.setFullStreamDecompression(fullStreamDecompression);
     stream.setDecompressorRegistry(decompressorRegistry);
     stream.start(new ClientStreamListenerImpl(observer));
 
@@ -336,7 +357,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   @Override
   public void request(int numMessages) {
-    Preconditions.checkState(stream != null, "Not started");
+    checkState(stream != null, "Not started");
     checkArgument(numMessages >= 0, "Number requested must be non-negative");
     stream.request(numMessages);
   }
@@ -371,18 +392,18 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   @Override
   public void halfClose() {
-    Preconditions.checkState(stream != null, "Not started");
-    Preconditions.checkState(!cancelCalled, "call was cancelled");
-    Preconditions.checkState(!halfCloseCalled, "call already half-closed");
+    checkState(stream != null, "Not started");
+    checkState(!cancelCalled, "call was cancelled");
+    checkState(!halfCloseCalled, "call already half-closed");
     halfCloseCalled = true;
     stream.halfClose();
   }
 
   @Override
   public void sendMessage(ReqT message) {
-    Preconditions.checkState(stream != null, "Not started");
-    Preconditions.checkState(!cancelCalled, "call was cancelled");
-    Preconditions.checkState(!halfCloseCalled, "call was half-closed");
+    checkState(stream != null, "Not started");
+    checkState(!cancelCalled, "call was cancelled");
+    checkState(!halfCloseCalled, "call was half-closed");
     try {
       // TODO(notcarl): Find out if messageIs needs to be closed.
       InputStream messageIs = method.streamRequest(message);
@@ -427,7 +448,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     private boolean closed;
 
     public ClientStreamListenerImpl(Listener<RespT> observer) {
-      this.observer = Preconditions.checkNotNull(observer, "observer");
+      this.observer = checkNotNull(observer, "observer");
     }
 
     @Override
@@ -457,24 +478,32 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
 
     @Override
-    public void messageRead(final InputStream message) {
-      class MessageRead extends ContextRunnable {
-        MessageRead() {
+    public void messagesAvailable(final MessageProducer producer) {
+      class MessagesAvailable extends ContextRunnable {
+        MessagesAvailable() {
           super(context);
         }
 
         @Override
         public final void runInContext() {
+          if (closed) {
+            GrpcUtil.closeQuietly(producer);
+            return;
+          }
+
+          InputStream message;
           try {
-            if (closed) {
-              return;
-            }
-            try {
-              observer.onMessage(method.parseResponse(message));
-            } finally {
+            while ((message = producer.next()) != null) {
+              try {
+                observer.onMessage(method.parseResponse(message));
+              } catch (Throwable t) {
+                GrpcUtil.closeQuietly(message);
+                throw t;
+              }
               message.close();
             }
           } catch (Throwable t) {
+            GrpcUtil.closeQuietly(producer);
             Status status =
                 Status.CANCELLED.withCause(t).withDescription("Failed to read message.");
             stream.cancel(status);
@@ -483,7 +512,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         }
       }
 
-      callExecutor.execute(new MessageRead());
+      callExecutor.execute(new MessagesAvailable());
     }
 
     /**

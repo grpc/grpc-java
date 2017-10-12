@@ -18,7 +18,7 @@ import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
 /**
  */
 @javax.annotation.Generated(
-    value = "by gRPC proto compiler (version 1.6.0-SNAPSHOT)",
+    value = "by gRPC proto compiler",
     comments = "Source: load_balancer.proto")
 public final class LoadBalancerGrpc {
 
@@ -34,10 +34,12 @@ public final class LoadBalancerGrpc {
           .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
           .setFullMethodName(generateFullMethodName(
               "grpc.lb.v1.LoadBalancer", "BalanceLoad"))
+          .setRegisterForTracing(true)
           .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.grpclb.LoadBalanceRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.grpclb.LoadBalanceResponse.getDefaultInstance()))
+          .setSchemaDescriptor(new LoadBalancerMethodDescriptorSupplier("BalanceLoad"))
           .build();
 
   /**
@@ -196,10 +198,38 @@ public final class LoadBalancerGrpc {
     }
   }
 
-  private static final class LoadBalancerDescriptorSupplier implements io.grpc.protobuf.ProtoFileDescriptorSupplier {
+  private static abstract class LoadBalancerBaseDescriptorSupplier
+      implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
+    LoadBalancerBaseDescriptorSupplier() {}
+
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.grpclb.LoadBalancerProto.getDescriptor();
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.ServiceDescriptor getServiceDescriptor() {
+      return getFileDescriptor().findServiceByName("LoadBalancer");
+    }
+  }
+
+  private static final class LoadBalancerFileDescriptorSupplier
+      extends LoadBalancerBaseDescriptorSupplier {
+    LoadBalancerFileDescriptorSupplier() {}
+  }
+
+  private static final class LoadBalancerMethodDescriptorSupplier
+      extends LoadBalancerBaseDescriptorSupplier
+      implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
+    private final String methodName;
+
+    LoadBalancerMethodDescriptorSupplier(String methodName) {
+      this.methodName = methodName;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.MethodDescriptor getMethodDescriptor() {
+      return getServiceDescriptor().findMethodByName(methodName);
     }
   }
 
@@ -212,7 +242,7 @@ public final class LoadBalancerGrpc {
         result = serviceDescriptor;
         if (result == null) {
           serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
-              .setSchemaDescriptor(new LoadBalancerDescriptorSupplier())
+              .setSchemaDescriptor(new LoadBalancerFileDescriptorSupplier())
               .addMethod(METHOD_BALANCE_LOAD)
               .build();
         }

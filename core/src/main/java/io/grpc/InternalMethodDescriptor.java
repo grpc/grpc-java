@@ -19,7 +19,7 @@ package io.grpc;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
- * Accesses internal data.  Do not use this.
+ * Accesses internal data and methods.  Do not use this.
  */
 @Internal
 public final class InternalMethodDescriptor {
@@ -36,5 +36,12 @@ public final class InternalMethodDescriptor {
 
   public void setRawMethodName(MethodDescriptor<?, ?> md, Object o) {
     md.setRawMethodName(transport.ordinal(), o);
+  }
+
+  public interface RegisterForTracingCallback extends
+      MethodDescriptor.Registrations.RegisterForTracingCallback {}
+
+  public static void setRegisterCallback(RegisterForTracingCallback registerCallback) {
+    MethodDescriptor.Registrations.setRegisterForTracingCallback(registerCallback);
   }
 }

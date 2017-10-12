@@ -32,6 +32,7 @@ import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 
@@ -43,6 +44,8 @@ public class ProtoLiteUtils {
 
   private static volatile ExtensionRegistryLite globalRegistry =
       ExtensionRegistryLite.getEmptyRegistry();
+
+  private static final int BUF_SIZE = 8192;
 
   /**
    * Sets the global registry for proto marshalling shared across all servers and clients.
@@ -128,12 +131,19 @@ public class ProtoLiteUtils {
                 buf = new byte[size];
                 bufs.set(new WeakReference<byte[]>(buf));
               }
-              int chunkSize;
-              int position = 0;
-              while ((chunkSize = stream.read(buf, position, size - position)) != -1) {
-                position += chunkSize;
+
+              int remaining = size;
+              while (remaining > 0) {
+                int position = size - remaining;
+                int count = stream.read(buf, position, remaining);
+                if (count == -1) {
+                  break;
+                }
+                remaining -= count;
               }
-              if (size != position) {
+
+              if (remaining != 0) {
+                int position = size - remaining;
                 throw new RuntimeException("size inaccurate: " + size + " != " + position);
               }
               cis = CodedInputStream.newInstance(buf, 0, size);
@@ -193,6 +203,24 @@ public class ProtoLiteUtils {
         }
       }
     };
+  }
+
+  /** Copies the data from input stream to output stream. */
+  static long copy(InputStream from, OutputStream to) throws IOException {
+    // Copied from guava com.google.common.io.ByteStreams because its API is unstable (beta)
+    checkNotNull(from);
+    checkNotNull(to);
+    byte[] buf = new byte[BUF_SIZE];
+    long total = 0;
+    while (true) {
+      int r = from.read(buf);
+      if (r == -1) {
+        break;
+      }
+      to.write(buf, 0, r);
+      total += r;
+    }
+    return total;
   }
 
   private ProtoLiteUtils() {

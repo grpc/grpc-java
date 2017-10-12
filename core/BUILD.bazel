@@ -11,8 +11,9 @@ java_library(
         "//context",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_errorprone_error_prone_annotations//jar",
-        "@com_google_guava//jar",
-        "@com_google_instrumentation_api//jar",
+        "@com_google_guava_guava//jar",
+        "@com_google_instrumentation_instrumentation_api//jar",
+        "@io_opencensus_opencensus_api//jar",
     ],
 )
 
@@ -23,10 +24,10 @@ java_library(
     ]),
     visibility = ["//visibility:public"],
     deps = [
-        ":internal",
         ":core",
+        ":internal",
         "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava//jar",
+        "@com_google_guava_guava//jar",
     ],
 )
 
@@ -41,9 +42,9 @@ java_library(
         "//context",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_errorprone_error_prone_annotations//jar",
-        "@com_google_guava//jar",
-        "@com_google_instrumentation_api//jar",
-        "@io_opencensus_api//jar",
+        "@com_google_guava_guava//jar",
+        "@com_google_instrumentation_instrumentation_api//jar",
+        "@io_opencensus_opencensus_api//jar",
     ],
 )
 
@@ -57,6 +58,6 @@ java_library(
         ":core",
         ":internal",
         "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava//jar",
+        "@com_google_guava_guava//jar",
     ],
 )

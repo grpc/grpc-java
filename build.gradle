@@ -10,6 +10,8 @@ buildscript {
     classpath 'com.google.gradle:osdetector-gradle-plugin:1.4.0'
     classpath 'ru.vyarus:gradle-animalsniffer-plugin:1.4.0'
     classpath 'net.ltgt.gradle:gradle-errorprone-plugin:0.0.11'
+    classpath "me.champeau.gradle:jmh-gradle-plugin:0.4.4"
+    classpath 'me.champeau.gradle:japicmp-gradle-plugin:0.2.5'
   }
 }
 
@@ -21,6 +23,7 @@ subprojects {
     apply plugin: "signing"
     apply plugin: "jacoco"
 
+    apply plugin: "me.champeau.gradle.jmh"
     apply plugin: "com.google.osdetector"
     // The plugin only has an effect if a signature is specified
     apply plugin: "ru.vyarus.animalsniffer"
@@ -47,7 +50,7 @@ subprojects {
     idea.module.inheritOutputDirs = true
 
     group = "io.grpc"
-    version = "1.6.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.8.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     sourceCompatibility = 1.6
     targetCompatibility = 1.6
@@ -55,9 +58,12 @@ subprojects {
     repositories {
         mavenCentral()
         mavenLocal()
+        maven {
+          url "https://oss.sonatype.org/content/repositories/snapshots/"
+        }
     }
 
-    [compileJava, compileTestJava].each() {
+    [compileJava, compileTestJava, compileJmhJava].each() {
         it.options.compilerArgs += ["-Xlint:all", "-Xlint:-options", "-Xlint:-path"]
         it.options.encoding = "UTF-8"
         if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
@@ -90,10 +96,10 @@ subprojects {
         protocPluginBaseName = 'protoc-gen-grpc-java'
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
-        nettyVersion = '4.1.14.Final'
+        nettyVersion = '4.1.16.Final'
         guavaVersion = '19.0'
-        protobufVersion = '3.3.1'
-        protocVersion = '3.3.0' // TODO(carl-mastrangelo): set this from protobufVersion when versions align again
+        protobufVersion = '3.4.0'
+        protocVersion = protobufVersion
         protobufNanoVersion = '3.0.0-alpha-5'
 
         configureProtoCompilation = {
@@ -127,9 +133,7 @@ subprojects {
                   task.inputs.file "${rootProject.projectDir}/build.gradle"
                   task.plugins {
                     grpc {
-                      // To generate deprecated interfaces and static bindService method,
-                      // turn the enable_deprecated option to true below:
-                      option 'enable_deprecated=false'
+                      option 'noversion'
                     }
                   }
                 }
@@ -164,7 +168,7 @@ subprojects {
             }
           }
 
-          [compileJava, compileTestJava].each() {
+          [compileJava, compileTestJava, compileJmhJava].each() {
             // Protobuf-generated code produces some warnings.
             // https://github.com/google/protobuf/issues/2718
             it.options.compilerArgs += ["-Xlint:-cast", "-Xep:MissingOverride:OFF",
@@ -187,7 +191,8 @@ subprojects {
                 google_auth_credentials: 'com.google.auth:google-auth-library-credentials:0.4.0',
                 okhttp: 'com.squareup.okhttp:okhttp:2.5.0',
                 okio: 'com.squareup.okio:okio:1.6.0',
-                opencensus_api: 'io.opencensus:opencensus-api:0.5.1',
+                opencensus_api: 'io.opencensus:opencensus-api:0.7.0',
+                opencensus_impl: 'io.opencensus:opencensus-impl:0.7.0',
                 instrumentation_api: 'com.google.instrumentation:instrumentation-api:0.4.3',
                 protobuf: "com.google.protobuf:protobuf-java:${protobufVersion}",
                 protobuf_lite: "com.google.protobuf:protobuf-lite:3.0.1",
@@ -199,10 +204,10 @@ subprojects {
                 netty: "io.netty:netty-codec-http2:[${nettyVersion}]",
                 netty_epoll: "io.netty:netty-transport-native-epoll:${nettyVersion}" + epoll_suffix,
                 netty_proxy_handler: "io.netty:netty-handler-proxy:${nettyVersion}",
-                netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.5.Final',
+                netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.6.Final',
 
                 // Test dependencies.
-                junit: 'junit:junit:4.11',
+                junit: 'junit:junit:4.12',
                 mockito: 'org.mockito:mockito-core:1.9.5',
                 truth: 'com.google.truth:truth:0.28',
 
@@ -218,14 +223,26 @@ subprojects {
     // Define a separate configuration for managing the dependency on Jetty ALPN agent.
     configurations {
         alpnagent
+
+        compile {
+            // Detect Maven Enforcer's dependencyConvergence failures. We only
+            // care for artifacts used as libraries by others.
+            if (!(project.name in ['grpc-benchmarks', 'grpc-interop-testing'])) {
+                resolutionStrategy.failOnVersionConflict()
+            }
+        }
     }
 
     dependencies {
         testCompile libraries.junit,
-                    libraries.mockito
+                    libraries.mockito,
+                    libraries.truth
 
         // Configuration for modules that use Jetty ALPN agent
         alpnagent libraries.jetty_alpn_agent
+
+        jmh 'org.openjdk.jmh:jmh-core:1.19',
+            'org.openjdk.jmh:jmh-generator-bytecode:1.19'
     }
 
     signing {
@@ -260,6 +277,16 @@ subprojects {
         source = fileTree(dir: "src/test", include: "**/*.java")
     }
 
+    jmh {
+        warmupIterations = 10
+        iterations = 10
+        fork = 1
+        // None of our benchmarks need the tests, and we have pseudo-circular
+        // dependencies that break when including them. (context's testCompile
+        // depends on core; core's testCompile depends on testing)
+        includeTests = false
+    }
+
     task javadocJar(type: Jar) {
         classifier = 'javadoc'
         from javadoc
@@ -291,7 +318,7 @@ subprojects {
         repository(url: stagingUrl, configureAuth)
         snapshotRepository(url: 'https://oss.sonatype.org/content/repositories/snapshots/', configureAuth)
     }
-    uploadArchives.onlyIf { !name.contains("thrift") }
+    uploadArchives.onlyIf { !name.contains("grpc-gae-interop-testing") }
 
     [
       install.repositories.mavenInstaller,
@@ -328,7 +355,7 @@ subprojects {
             }
         }
         if (!(project.name in
-            ["grpc-stub", "grpc-protobuf", "grpc-protobuf-lite", "grpc-protobuf-nano", "grpc-thrift"])) {
+            ["grpc-stub", "grpc-protobuf", "grpc-protobuf-lite", "grpc-protobuf-nano"])) {
           def core = pom.dependencies.find {dep -> dep.artifactId == 'grpc-core'}
           if (core != null) {
             // Depend on specific version of grpc-core because internal package is unstable
@@ -346,5 +373,72 @@ subprojects {
             showStackTraces true
         }
         maxHeapSize = '1500m'
+    }
+}
+
+// Run with: ./gradlew japicmp --continue
+def baselineGrpcVersion = '1.6.1'
+def publicApiSubprojects = [
+        ':grpc-auth',
+        ':grpc-context',
+        ':grpc-core',
+        ':grpc-grpclb',
+        ':grpc-netty',
+        ':grpc-okhttp',
+        ':grpc-protobuf',
+        ':grpc-protobuf-lite',
+        ':grpc-protobuf-nano',
+        ':grpc-stub',
+        ':grpc-testing',
+]
+
+publicApiSubprojects.each { name ->
+    project(":$name") {
+        apply plugin: 'me.champeau.gradle.japicmp'
+
+        // Get the baseline version's jar for this subproject
+        File baselineArtifact = null
+        // Use a detached configuration, otherwise the current version's jar will take precedence
+        // over the baseline jar.
+        // A necessary hack, the intuitive thing does NOT work:
+        // https://discuss.gradle.org/t/is-the-default-configuration-leaking-into-independent-configurations/2088/6
+        def oldGroup = project.group
+        try {
+            project.group = 'virtual_group_for_japicmp'
+            String depModule = "io.grpc:${project.name}:${baselineGrpcVersion}@jar"
+            String depJar = "${project.name}-${baselineGrpcVersion}.jar"
+            Configuration configuration = configurations.detachedConfiguration(
+                    dependencies.create(depModule)
+            )
+            baselineArtifact = files(configuration.files).filter {
+                it.name.equals(depJar)
+            }.singleFile
+        } finally {
+            project.group = oldGroup
+        }
+
+        // Add a japicmp task that compares the current .jar with baseline .jar
+        task japicmp(type: me.champeau.gradle.japicmp.JapicmpTask, dependsOn: jar) {
+            oldClasspath = files(baselineArtifact)
+            newClasspath = files(jar.archivePath)
+            onlyBinaryIncompatibleModified = false
+            // Be quiet about things that did not change
+            onlyModified = true
+            // This task should fail if there are incompatible changes
+            failOnModification = true
+            ignoreMissingClasses = true
+            htmlOutputFile = file("$buildDir/reports/japi.html")
+
+            packageExcludes = ['io.grpc.internal']
+
+            // Also break on source incompatible changes, not just binary.
+            // Eg adding abstract method to public class.
+            // TODO(zpencer): enable after japicmp-gradle-plugin/pull/14
+            // breakOnSourceIncompatibility = true
+
+            // Ignore any classes or methods marked @ExperimentalApi
+            // TODO(zpencer): enable after japicmp-gradle-plugin/pull/15
+            // annotationExcludes = ['@io.grpc.ExperimentalApi']
+        }
     }
 }

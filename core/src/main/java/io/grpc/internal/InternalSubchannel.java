@@ -139,6 +139,10 @@ final class InternalSubchannel implements WithLogId {
 
   private final ProxyDetector proxyDetector;
 
+  @GuardedBy("lock")
+  private Status shutdownReason;
+
+
   InternalSubchannel(EquivalentAddressGroup addressGroup, String authority, String userAgent,
       BackoffPolicy.Provider backoffPolicyProvider,
       ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
@@ -307,11 +311,13 @@ final class InternalSubchannel implements WithLogId {
       channelExecutor.drain();
     }
     if (savedTransport != null) {
-      savedTransport.shutdown();
+      savedTransport.shutdown(
+          Status.UNAVAILABLE.withDescription(
+              "InternalSubchannel closed transport due to address change"));
     }
   }
 
-  public void shutdown() {
+  public void shutdown(Status reason) {
     ManagedClientTransport savedActiveTransport;
     ConnectionClientTransport savedPendingTransport;
     try {
@@ -319,6 +325,7 @@ final class InternalSubchannel implements WithLogId {
         if (state.getState() == SHUTDOWN) {
           return;
         }
+        shutdownReason = reason;
         gotoNonErrorState(SHUTDOWN);
         savedActiveTransport = activeTransport;
         savedPendingTransport = pendingTransport;
@@ -337,10 +344,10 @@ final class InternalSubchannel implements WithLogId {
       channelExecutor.drain();
     }
     if (savedActiveTransport != null) {
-      savedActiveTransport.shutdown();
+      savedActiveTransport.shutdown(reason);
     }
     if (savedPendingTransport != null) {
-      savedPendingTransport.shutdown();
+      savedPendingTransport.shutdown(reason);
     }
   }
 
@@ -365,7 +372,7 @@ final class InternalSubchannel implements WithLogId {
   }
 
   void shutdownNow(Status reason) {
-    shutdown();
+    shutdown(reason);
     Collection<ManagedClientTransport> transportsCopy;
     try {
       synchronized (lock) {
@@ -429,12 +436,12 @@ final class InternalSubchannel implements WithLogId {
         log.log(Level.FINE, "[{0}] {1} for {2} is ready",
             new Object[] {logId, transport.getLogId(), address});
       }
-      ConnectivityState savedState;
+      Status savedShutdownReason;
       try {
         synchronized (lock) {
-          savedState = state.getState();
+          savedShutdownReason = shutdownReason;
           reconnectPolicy = null;
-          if (savedState == SHUTDOWN) {
+          if (savedShutdownReason != null) {
             // activeTransport should have already been set to null by shutdown(). We keep it null.
             Preconditions.checkState(activeTransport == null,
                 "Unexpected non-null activeTransport");
@@ -447,8 +454,8 @@ final class InternalSubchannel implements WithLogId {
       } finally {
         channelExecutor.drain();
       }
-      if (savedState == SHUTDOWN) {
-        transport.shutdown();
+      if (savedShutdownReason != null) {
+        transport.shutdown(savedShutdownReason);
       }
     }
 

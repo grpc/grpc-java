@@ -19,6 +19,7 @@ package io.grpc.testing.integration;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Files;
 import io.grpc.ManagedChannel;
+import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcSslContexts;
@@ -80,6 +81,7 @@ public class TestServiceClient {
   private String defaultServiceAccount;
   private String serviceAccountKeyFile;
   private String oauthScope;
+  private boolean fullStreamDecompression;
 
   private Tester tester = new Tester();
 
@@ -130,6 +132,8 @@ public class TestServiceClient {
         serviceAccountKeyFile = value;
       } else if ("oauth_scope".equals(key)) {
         oauthScope = value;
+      } else if ("full_stream_decompression".equals(key)) {
+        fullStreamDecompression = Boolean.parseBoolean(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -158,6 +162,8 @@ public class TestServiceClient {
           + "\n  --service_account_key_file  Path to service account json key file."
             + c.serviceAccountKeyFile
           + "\n  --oauth_scope               Scope for OAuth tokens. Default " + c.oauthScope
+          + "\n  --full_stream_decompression Enable full-stream decompression. Default "
+            + c.fullStreamDecompression
       );
       System.exit(1);
     }
@@ -311,6 +317,7 @@ public class TestServiceClient {
   private class Tester extends AbstractInteropTest {
     @Override
     protected ManagedChannel createChannel() {
+      AbstractManagedChannelImplBuilder<?> builder;
       if (!useOkHttp) {
         SslContext sslContext = null;
         if (useTestCa) {
@@ -321,20 +328,23 @@ public class TestServiceClient {
             throw new RuntimeException(ex);
           }
         }
-        NettyChannelBuilder builder =
+        NettyChannelBuilder nettyBuilder =
             NettyChannelBuilder.forAddress(serverHost, serverPort)
                 .flowControlWindow(65 * 1024)
                 .negotiationType(useTls ? NegotiationType.TLS : NegotiationType.PLAINTEXT)
                 .sslContext(sslContext);
         if (serverHostOverride != null) {
-          builder.overrideAuthority(serverHostOverride);
+          nettyBuilder.overrideAuthority(serverHostOverride);
         }
-        return builder.build();
+        if (fullStreamDecompression) {
+          nettyBuilder.enableFullStreamDecompression();
+        }
+        builder = nettyBuilder;
       } else {
-        OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress(serverHost, serverPort);
+        OkHttpChannelBuilder okBuilder = OkHttpChannelBuilder.forAddress(serverHost, serverPort);
         if (serverHostOverride != null) {
           // Force the hostname to match the cert the server uses.
-          builder.overrideAuthority(
+          okBuilder.overrideAuthority(
               GrpcUtil.authorityFromHostAndPort(serverHostOverride, serverPort));
         }
         if (useTls) {
@@ -343,20 +353,25 @@ public class TestServiceClient {
                 ? TestUtils.newSslSocketFactoryForCa(Platform.get().getProvider(),
                     TestUtils.loadCert("ca.pem"))
                 : (SSLSocketFactory) SSLSocketFactory.getDefault();
-            builder.sslSocketFactory(factory);
+            okBuilder.sslSocketFactory(factory);
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
         } else {
-          builder.usePlaintext(true);
+          okBuilder.usePlaintext(true);
         }
-        return builder.build();
+        if (fullStreamDecompression) {
+          okBuilder.enableFullStreamDecompression();
+        }
+        builder = okBuilder;
       }
+      io.grpc.internal.TestingAccessor.setStatsContextFactory(builder, getClientStatsFactory());
+      return builder.build();
     }
 
     @Override
-    protected boolean metricsExpected() {
-      // Server-side metrics won't be found, because server is a separate process.
+    protected boolean serverInProcess() {
+      // Server is a separate process.
       return false;
     }
   }

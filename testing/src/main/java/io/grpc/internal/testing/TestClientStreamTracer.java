@@ -18,16 +18,20 @@ package io.grpc.internal.testing;
 
 import io.grpc.ClientStreamTracer;
 import io.grpc.Status;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * A {@link ClientStreamTracer} suitable for testing.
  */
 public class TestClientStreamTracer extends ClientStreamTracer implements TestStreamTracer {
   private final TestBaseStreamTracer delegate = new TestBaseStreamTracer();
-  protected final AtomicBoolean outboundHeadersCalled = new AtomicBoolean();
-  protected final AtomicBoolean inboundHeadersCalled = new AtomicBoolean();
+  protected final CountDownLatch outboundHeadersLatch = new CountDownLatch(1);
+  protected final AtomicReference<Throwable> outboundHeadersCalled =
+      new AtomicReference<Throwable>();
+  protected final AtomicReference<Throwable> inboundHeadersCalled =
+      new AtomicReference<Throwable>();
 
   @Override
   public void await() throws InterruptedException {
@@ -43,19 +47,24 @@ public class TestClientStreamTracer extends ClientStreamTracer implements TestSt
    * Returns if {@link ClientStreamTracer#inboundHeaders} has been called.
    */
   public boolean getInboundHeaders() {
-    return inboundHeadersCalled.get();
+    return inboundHeadersCalled.get() != null;
   }
 
   /**
    * Returns if {@link ClientStreamTracer#outboundHeaders} has been called.
    */
   public boolean getOutboundHeaders() {
-    return outboundHeadersCalled.get();
+    return outboundHeadersCalled.get() != null;
   }
 
-  @Override
-  public int getInboundMessageCount() {
-    return delegate.getInboundMessageCount();
+  /**
+   * Allow tests to await the outbound header event, which depending on the test case may be
+   * necessary (e.g., if we test for a Netty client's outbound headers upon receiving the start of
+   * stream on the server side, the tracer won't know that headers were sent until a channel future
+   * executes).
+   */
+  public boolean awaitOutboundHeaders(int timeout, TimeUnit unit) throws Exception {
+    return outboundHeadersLatch.await(timeout, unit);
   }
 
   @Override
@@ -74,11 +83,6 @@ public class TestClientStreamTracer extends ClientStreamTracer implements TestSt
   }
 
   @Override
-  public int getOutboundMessageCount() {
-    return delegate.getOutboundMessageCount();
-  }
-
-  @Override
   public long getOutboundWireSize() {
     return delegate.getOutboundWireSize();
   }
@@ -86,6 +90,21 @@ public class TestClientStreamTracer extends ClientStreamTracer implements TestSt
   @Override
   public long getOutboundUncompressedSize() {
     return delegate.getOutboundUncompressedSize();
+  }
+
+  @Override
+  public void setFailDuplicateCallbacks(boolean fail) {
+    delegate.setFailDuplicateCallbacks(fail);
+  }
+
+  @Override
+  public String nextOutboundEvent() {
+    return delegate.nextOutboundEvent();
+  }
+
+  @Override
+  public String nextInboundEvent() {
+    return delegate.nextInboundEvent();
   }
 
   @Override
@@ -114,27 +133,55 @@ public class TestClientStreamTracer extends ClientStreamTracer implements TestSt
   }
 
   @Override
+  @SuppressWarnings("deprecation")
   public void inboundMessage() {
     delegate.inboundMessage();
   }
 
   @Override
+  public void inboundMessage(int seqNo) {
+    delegate.inboundMessage(seqNo);
+  }
+
+  @Override
+  @SuppressWarnings("deprecation")
   public void outboundMessage() {
     delegate.outboundMessage();
   }
 
   @Override
+  public void outboundMessage(int seqNo) {
+    delegate.outboundMessage(seqNo);
+  }
+
+  @Override
+  public void outboundMessageSent(int seqNo, long optionalWireSize, long optionalUncompressedSize) {
+    delegate.outboundMessageSent(seqNo, optionalWireSize, optionalUncompressedSize);
+  }
+
+  @Override
+  public void inboundMessageRead(int seqNo, long optionalWireSize, long optionalUncompressedSize) {
+    delegate.inboundMessageRead(seqNo, optionalWireSize, optionalUncompressedSize);
+  }
+
+  @Override
   public void outboundHeaders() {
-    if (!outboundHeadersCalled.compareAndSet(false, true)
+    if (!outboundHeadersCalled.compareAndSet(null, new Exception("first stack"))
         && delegate.failDuplicateCallbacks.get()) {
-      throw new AssertionError("outboundHeaders called more than once");
+      throw new AssertionError(
+          "outboundHeaders called more than once",
+          new Exception("second stack", outboundHeadersCalled.get()));
     }
+    outboundHeadersLatch.countDown();
   }
 
   @Override
   public void inboundHeaders() {
-    if (!inboundHeadersCalled.compareAndSet(false, true) && delegate.failDuplicateCallbacks.get()) {
-      throw new AssertionError("inboundHeaders called more than once");
+    if (!inboundHeadersCalled.compareAndSet(null, new Exception("first stack"))
+        && delegate.failDuplicateCallbacks.get()) {
+      throw new AssertionError(
+          "inboundHeaders called more than once",
+          new Exception("second stack", inboundHeadersCalled.get()));
     }
   }
 }

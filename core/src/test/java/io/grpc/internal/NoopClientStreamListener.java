@@ -18,14 +18,13 @@ package io.grpc.internal;
 
 import io.grpc.Metadata;
 import io.grpc.Status;
-import java.io.InputStream;
 
 /**
  * No-op base class for testing.
  */
 class NoopClientStreamListener implements ClientStreamListener {
   @Override
-  public void messageRead(InputStream message) {}
+  public void messagesAvailable(MessageProducer producer) {}
 
   @Override
   public void onReady() {}

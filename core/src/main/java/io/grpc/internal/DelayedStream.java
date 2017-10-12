@@ -303,6 +303,17 @@ class DelayedStream implements ClientStream {
   }
 
   @Override
+  public void setFullStreamDecompression(final boolean fullStreamDecompression) {
+    delayOrExecute(
+        new Runnable() {
+          @Override
+          public void run() {
+            realStream.setFullStreamDecompression(fullStreamDecompression);
+          }
+        });
+  }
+
+  @Override
   public void setDecompressorRegistry(final DecompressorRegistry decompressorRegistry) {
     checkNotNull(decompressorRegistry, "decompressorRegistry");
     delayOrExecute(new Runnable() {
@@ -362,14 +373,14 @@ class DelayedStream implements ClientStream {
     }
 
     @Override
-    public void messageRead(final InputStream message) {
+    public void messagesAvailable(final MessageProducer producer) {
       if (passThrough) {
-        realListener.messageRead(message);
+        realListener.messagesAvailable(producer);
       } else {
         delayOrExecute(new Runnable() {
           @Override
           public void run() {
-            realListener.messageRead(message);
+            realListener.messagesAvailable(producer);
           }
         });
       }

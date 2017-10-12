@@ -80,11 +80,6 @@ public class NettyTransportTest extends AbstractTransportTest {
         null /* proxy */);
   }
 
-  @Override
-  protected boolean metricsExpected() {
-    return true;
-  }
-
   @Test
   @Ignore("flaky")
   @Override

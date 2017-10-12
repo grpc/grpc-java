@@ -27,6 +27,7 @@ import io.grpc.internal.ProxyParameters;
 import io.grpc.internal.SharedResourceHolder;
 import java.net.SocketAddress;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Builder for a channel that issues in-process requests. Clients identify the in-process server by
@@ -49,11 +50,28 @@ public final class InProcessChannelBuilder extends
     return new InProcessChannelBuilder(name);
   }
 
+  /**
+   * Always fails.  Call {@link #forName} instead.
+   */
+  public static InProcessChannelBuilder forTarget(String target) {
+    throw new UnsupportedOperationException("call forName() instead");
+  }
+
+  /**
+   * Always fails.  Call {@link #forName} instead.
+   */
+  public static InProcessChannelBuilder forAddress(String name, int port) {
+    throw new UnsupportedOperationException("call forName() instead");
+  }
+
   private final String name;
 
   private InProcessChannelBuilder(String name) {
     super(new InProcessSocketAddress(name), "localhost");
     this.name = Preconditions.checkNotNull(name, "name");
+    // In-process transport should not record its traffic to the stats module.
+    // https://github.com/grpc/grpc-java/issues/2284
+    setRecordStats(false);
   }
 
   @Override
@@ -70,19 +88,28 @@ public final class InProcessChannelBuilder extends
     return this;
   }
 
+  /** Does nothing. */
   @Override
-  @Internal
-  protected ClientTransportFactory buildTransportFactory() {
-    return new InProcessClientTransportFactory(name);
+  public InProcessChannelBuilder keepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
+    return this;
+  }
+
+  /** Does nothing. */
+  @Override
+  public InProcessChannelBuilder keepAliveTimeout(long keepAliveTimeout, TimeUnit timeUnit) {
+    return this;
+  }
+
+  /** Does nothing. */
+  @Override
+  public InProcessChannelBuilder keepAliveWithoutCalls(boolean enable) {
+    return this;
   }
 
   @Override
   @Internal
-  protected boolean recordsStats() {
-    // TODO(zhangkun83): InProcessTransport by-passes framer and deframer, thus message sizses are
-    // not counted.  Therefore, we disable stats for now.
-    // (https://github.com/grpc/grpc-java/issues/2284)
-    return false;
+  protected ClientTransportFactory buildTransportFactory() {
+    return new InProcessClientTransportFactory(name);
   }
 
   /**

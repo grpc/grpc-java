@@ -28,17 +28,24 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
+import io.grpc.InternalMethodDescriptor;
+import io.grpc.InternalMethodDescriptor.RegisterForTracingCallback;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
 import io.grpc.StreamTracer;
 import io.opencensus.trace.EndSpanOptions;
+import io.opencensus.trace.NetworkEvent;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.SpanContext;
 import io.opencensus.trace.Status;
 import io.opencensus.trace.Tracer;
+import io.opencensus.trace.Tracing;
+import io.opencensus.trace.export.SampledSpanStore;
 import io.opencensus.trace.propagation.BinaryFormat;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -56,14 +63,34 @@ import javax.annotation.Nullable;
  */
 final class CensusTracingModule {
   private static final Logger logger = Logger.getLogger(CensusTracingModule.class.getName());
-  // TODO(zhangkun83): record NetworkEvent to Span for each message
-  private static final ClientStreamTracer noopClientTracer = new ClientStreamTracer() {};
+  private static final AtomicIntegerFieldUpdater<ClientCallTracer> callEndedUpdater =
+      AtomicIntegerFieldUpdater.newUpdater(ClientCallTracer.class, "callEnded");
+  private static final AtomicIntegerFieldUpdater<ServerTracer> streamClosedUpdater =
+      AtomicIntegerFieldUpdater.newUpdater(ServerTracer.class, "streamClosed");
 
   private final Tracer censusTracer;
   @VisibleForTesting
   final Metadata.Key<SpanContext> tracingHeader;
   private final TracingClientInterceptor clientInterceptor = new TracingClientInterceptor();
   private final ServerTracerFactory serverTracerFactory = new ServerTracerFactory();
+
+  private static final boolean isRegistered = registerCensusTracer();
+
+  private static boolean registerCensusTracer() {
+    InternalMethodDescriptor.setRegisterCallback(new RegisterForTracingCallback() {
+      @Override
+      public void onRegister(MethodDescriptor<?, ?> md) {
+        SampledSpanStore sampledStore = Tracing.getExportComponent().getSampledSpanStore();
+        if (sampledStore != null) {
+          List<String> spanNames = new ArrayList<String>(2);
+          spanNames.add(generateTraceSpanName(false, md.getFullMethodName()));
+          spanNames.add(generateTraceSpanName(true, md.getFullMethodName()));
+          sampledStore.registerSpanNamesForCollection(spanNames);
+        }
+      }
+    });
+    return true;
+  }
 
   CensusTracingModule(
       Tracer censusTracer, final BinaryFormat censusPropagationBinaryFormat) {
@@ -73,13 +100,13 @@ final class CensusTracingModule {
         Metadata.Key.of("grpc-trace-bin", new Metadata.BinaryMarshaller<SpanContext>() {
             @Override
             public byte[] toBytes(SpanContext context) {
-              return censusPropagationBinaryFormat.toBinaryValue(context);
+              return censusPropagationBinaryFormat.toByteArray(context);
             }
 
             @Override
             public SpanContext parseBytes(byte[] serialized) {
               try {
-                return censusPropagationBinaryFormat.fromBinaryValue(serialized);
+                return censusPropagationBinaryFormat.fromByteArray(serialized);
               } catch (Exception e) {
                 logger.log(Level.FINE, "Failed to parse tracing header", e);
                 return SpanContext.INVALID;
@@ -108,10 +135,6 @@ final class CensusTracingModule {
    */
   ClientInterceptor getClientInterceptor() {
     return clientInterceptor;
-  }
-
-  private static String makeSpanName(String prefix, String fullMethodName) {
-    return prefix + "." + fullMethodName.replace('/', '.');
   }
 
   @VisibleForTesting
@@ -182,17 +205,32 @@ final class CensusTracingModule {
     return EndSpanOptions.builder().setStatus(convertStatus(status)).build();
   }
 
+  private static void recordNetworkEvent(
+      Span span, NetworkEvent.Type type,
+      int seqNo, long optionalWireSize, long optionalUncompressedSize) {
+    NetworkEvent.Builder eventBuilder = NetworkEvent.builder(type, seqNo);
+    if (optionalUncompressedSize != -1) {
+      eventBuilder.setUncompressedMessageSize(optionalUncompressedSize);
+    }
+    if (optionalWireSize != -1) {
+      eventBuilder.setCompressedMessageSize(optionalWireSize);
+    }
+    span.addNetworkEvent(eventBuilder.build());
+  }
+
   @VisibleForTesting
   final class ClientCallTracer extends ClientStreamTracer.Factory {
+    volatile int callEnded;
 
-    private final AtomicBoolean callEnded = new AtomicBoolean(false);
     private final Span span;
 
     ClientCallTracer(@Nullable Span parentSpan, String fullMethodName) {
       checkNotNull(fullMethodName, "fullMethodName");
       this.span =
           censusTracer
-              .spanBuilderWithExplicitParent(makeSpanName("Sent", fullMethodName), parentSpan)
+              .spanBuilderWithExplicitParent(
+                  generateTraceSpanName(false, fullMethodName),
+                  parentSpan)
               .setRecordEvents(true)
               .startSpan();
     }
@@ -201,7 +239,7 @@ final class CensusTracingModule {
     public ClientStreamTracer newClientStreamTracer(CallOptions callOptions, Metadata headers) {
       headers.discardAll(tracingHeader);
       headers.put(tracingHeader, span.getContext());
-      return noopClientTracer;
+      return new ClientTracer(span);
     }
 
     /**
@@ -211,22 +249,47 @@ final class CensusTracingModule {
      * is a no-op.
      */
     void callEnded(io.grpc.Status status) {
-      if (!callEnded.compareAndSet(false, true)) {
+      if (callEndedUpdater.getAndSet(this, 1) != 0) {
         return;
       }
       span.end(createEndSpanOptions(status));
     }
   }
 
+  private static final class ClientTracer extends ClientStreamTracer {
+    private final Span span;
+
+    ClientTracer(Span span) {
+      this.span = checkNotNull(span, "span");
+    }
+
+    @Override
+    public void outboundMessageSent(
+        int seqNo, long optionalWireSize, long optionalUncompressedSize) {
+      recordNetworkEvent(
+          span, NetworkEvent.Type.SENT, seqNo, optionalWireSize, optionalUncompressedSize);
+    }
+
+    @Override
+    public void inboundMessageRead(
+        int seqNo, long optionalWireSize, long optionalUncompressedSize) {
+      recordNetworkEvent(
+          span, NetworkEvent.Type.RECV, seqNo, optionalWireSize, optionalUncompressedSize);
+    }
+  }
+
+
   private final class ServerTracer extends ServerStreamTracer {
     private final Span span;
-    private final AtomicBoolean streamClosed = new AtomicBoolean(false);
+    volatile int streamClosed;
 
     ServerTracer(String fullMethodName, @Nullable SpanContext remoteSpan) {
       checkNotNull(fullMethodName, "fullMethodName");
       this.span =
           censusTracer
-              .spanBuilderWithRemoteParent(makeSpanName("Recv", fullMethodName), remoteSpan)
+              .spanBuilderWithRemoteParent(
+                  generateTraceSpanName(true, fullMethodName),
+                  remoteSpan)
               .setRecordEvents(true)
               .startSpan();
     }
@@ -239,7 +302,7 @@ final class CensusTracingModule {
      */
     @Override
     public void streamClosed(io.grpc.Status status) {
-      if (!streamClosed.compareAndSet(false, true)) {
+      if (streamClosedUpdater.getAndSet(this, 1) != 0) {
         return;
       }
       span.end(createEndSpanOptions(status));
@@ -252,9 +315,24 @@ final class CensusTracingModule {
       // inherit from the parent Context.
       return context.withValue(CONTEXT_SPAN_KEY, span);
     }
+
+    @Override
+    public void outboundMessageSent(
+        int seqNo, long optionalWireSize, long optionalUncompressedSize) {
+      recordNetworkEvent(
+          span, NetworkEvent.Type.SENT, seqNo, optionalWireSize, optionalUncompressedSize);
+    }
+
+    @Override
+    public void inboundMessageRead(
+        int seqNo, long optionalWireSize, long optionalUncompressedSize) {
+      recordNetworkEvent(
+          span, NetworkEvent.Type.RECV, seqNo, optionalWireSize, optionalUncompressedSize);
+    }
   }
 
-  private final class ServerTracerFactory extends ServerStreamTracer.Factory {
+  @VisibleForTesting
+  final class ServerTracerFactory extends ServerStreamTracer.Factory {
     @SuppressWarnings("ReferenceEquality")
     @Override
     public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
@@ -266,7 +344,8 @@ final class CensusTracingModule {
     }
   }
 
-  private class TracingClientInterceptor implements ClientInterceptor {
+  @VisibleForTesting
+  final class TracingClientInterceptor implements ClientInterceptor {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
@@ -294,4 +373,19 @@ final class CensusTracingModule {
       };
     }
   }
+
+  /**
+   * Convert a full method name to a tracing span name.
+   *
+   * @param isServer {@code false} if the span is on the client-side, {@code true} if on the
+   *                 server-side
+   * @param fullMethodName the method name as returned by
+   *        {@link MethodDescriptor#getFullMethodName}.
+   */
+  @VisibleForTesting
+  static String generateTraceSpanName(boolean isServer, String fullMethodName) {
+    String prefix = isServer ? "Recv" : "Sent";
+    return prefix + "." + fullMethodName.replace('/', '.');
+  }
+
 }

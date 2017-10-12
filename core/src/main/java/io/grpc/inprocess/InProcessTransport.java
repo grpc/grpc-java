@@ -26,6 +26,7 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
@@ -39,6 +40,7 @@ import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
+import io.grpc.internal.StreamListener;
 import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -50,6 +52,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.CheckReturnValue;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -73,6 +76,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   private Status shutdownStatus;
   @GuardedBy("this")
   private Set<InProcessStream> streams = new HashSet<InProcessStream>();
+  @GuardedBy("this")
+  private List<ServerStreamTracer.Factory> serverStreamTracerFactories;
 
   public InProcessTransport(String name, String authority) {
     this.name = name;
@@ -87,6 +92,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
     if (server != null) {
       serverSchedulerPool = server.getScheduledExecutorServicePool();
       serverScheduler = serverSchedulerPool.getObject();
+      serverStreamTracerFactories = server.getStreamTracerFactories();
       // Must be semi-initialized; past this point, can begin receiving requests
       serverTransportListener = server.register(this);
     }
@@ -123,14 +129,18 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       final MethodDescriptor<?, ?> method, final Metadata headers, final CallOptions callOptions) {
     if (shutdownStatus != null) {
       final Status capturedStatus = shutdownStatus;
+      final StatsTraceContext statsTraceCtx =
+          StatsTraceContext.newClientContext(callOptions, headers);
       return new NoopClientStream() {
         @Override
         public void start(ClientStreamListener listener) {
+          statsTraceCtx.clientOutboundHeaders();
+          statsTraceCtx.streamClosed(capturedStatus);
           listener.closed(capturedStatus, new Metadata());
         }
       };
     }
-    return new InProcessStream(method, headers, authority).clientStream;
+    return new InProcessStream(method, headers, callOptions, authority).clientStream;
   }
 
   @Override
@@ -154,16 +164,21 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   }
 
   @Override
-  public synchronized void shutdown() {
+  public synchronized void shutdown(Status reason) {
     // Can be called multiple times: once for ManagedClientTransport, once for ServerTransport.
     if (shutdown) {
       return;
     }
-    shutdownStatus = Status.UNAVAILABLE.withDescription("transport was requested to shut down");
-    notifyShutdown(shutdownStatus);
+    shutdownStatus = reason;
+    notifyShutdown(reason);
     if (streams.isEmpty()) {
       notifyTerminated();
     }
+  }
+
+  @Override
+  public synchronized void shutdown() {
+    shutdown(Status.UNAVAILABLE.withDescription("InProcessTransport shutdown by the server-side"));
   }
 
   @Override
@@ -171,7 +186,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
     checkNotNull(reason, "reason");
     List<InProcessStream> streamsCopy;
     synchronized (this) {
-      shutdown();
+      shutdown(reason);
       if (terminated) {
         return;
       }
@@ -225,16 +240,20 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   }
 
   private class InProcessStream {
-    private final InProcessServerStream serverStream = new InProcessServerStream();
-    private final InProcessClientStream clientStream = new InProcessClientStream();
+    private final InProcessClientStream clientStream;
+    private final InProcessServerStream serverStream;
     private final Metadata headers;
     private final MethodDescriptor<?, ?> method;
     private volatile String authority;
 
-    private InProcessStream(MethodDescriptor<?, ?> method, Metadata headers, String authority) {
+    private InProcessStream(
+        MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+        String authority) {
       this.method = checkNotNull(method, "method");
       this.headers = checkNotNull(headers, "headers");
       this.authority = authority;
+      this.clientStream = new InProcessClientStream(callOptions, headers);
+      this.serverStream = new InProcessServerStream(method, headers);
     }
 
     // Can be called multiple times due to races on both client and server closing at same time.
@@ -251,12 +270,14 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
     }
 
     private class InProcessServerStream implements ServerStream {
+      final StatsTraceContext statsTraceCtx;
       @GuardedBy("this")
       private ClientStreamListener clientStreamListener;
       @GuardedBy("this")
       private int clientRequested;
       @GuardedBy("this")
-      private ArrayDeque<InputStream> clientReceiveQueue = new ArrayDeque<InputStream>();
+      private ArrayDeque<StreamListener.MessageProducer> clientReceiveQueue =
+          new ArrayDeque<StreamListener.MessageProducer>();
       @GuardedBy("this")
       private Status clientNotifyStatus;
       @GuardedBy("this")
@@ -264,6 +285,13 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       // Only is intended to prevent double-close when client cancels.
       @GuardedBy("this")
       private boolean closed;
+      @GuardedBy("this")
+      private int outboundSeqNo;
+
+      InProcessServerStream(MethodDescriptor<?, ?> method, Metadata headers) {
+        statsTraceCtx = StatsTraceContext.newServerContext(
+            serverStreamTracerFactories, method.getFullMethodName(), headers);
+      }
 
       private synchronized void setListener(ClientStreamListener listener) {
         clientStreamListener = listener;
@@ -300,7 +328,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         clientRequested += numMessages;
         while (clientRequested > 0 && !clientReceiveQueue.isEmpty()) {
           clientRequested--;
-          clientStreamListener.messageRead(clientReceiveQueue.poll());
+          clientStreamListener.messagesAvailable(clientReceiveQueue.poll());
         }
         // Attempt being reentrant-safe
         if (closed) {
@@ -308,6 +336,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         }
         if (clientReceiveQueue.isEmpty() && clientNotifyStatus != null) {
           closed = true;
+          clientStream.statsTraceCtx.streamClosed(clientNotifyStatus);
           clientStreamListener.closed(clientNotifyStatus, clientNotifyTrailers);
         }
         boolean nowReady = clientRequested > 0;
@@ -323,11 +352,17 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         if (closed) {
           return;
         }
+        statsTraceCtx.outboundMessage(outboundSeqNo);
+        statsTraceCtx.outboundMessageSent(outboundSeqNo, -1, -1);
+        clientStream.statsTraceCtx.inboundMessage(outboundSeqNo);
+        clientStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
+        outboundSeqNo++;
+        StreamListener.MessageProducer producer = new SingleMessageProducer(message);
         if (clientRequested > 0) {
           clientRequested--;
-          clientStreamListener.messageRead(message);
+          clientStreamListener.messagesAvailable(producer);
         } else {
-          clientReceiveQueue.add(message);
+          clientReceiveQueue.add(producer);
         }
       }
 
@@ -347,26 +382,28 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         if (closed) {
           return;
         }
+        clientStream.statsTraceCtx.clientInboundHeaders();
         clientStreamListener.headersRead(headers);
       }
 
       @Override
       public void close(Status status, Metadata trailers) {
-        status = stripCause(status);
+        Status clientStatus = stripCause(status);
         synchronized (this) {
           if (closed) {
             return;
           }
           if (clientReceiveQueue.isEmpty()) {
             closed = true;
-            clientStreamListener.closed(status, trailers);
+            clientStream.statsTraceCtx.streamClosed(clientStatus);
+            clientStreamListener.closed(clientStatus, trailers);
           } else {
-            clientNotifyStatus = status;
+            clientNotifyStatus = clientStatus;
             clientNotifyTrailers = trailers;
           }
         }
 
-        clientStream.serverClosed(Status.OK);
+        clientStream.serverClosed(Status.OK, status);
         streamClosed();
       }
 
@@ -375,30 +412,34 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         if (!internalCancel(Status.CANCELLED.withDescription("server cancelled stream"))) {
           return;
         }
-        clientStream.serverClosed(status);
+        clientStream.serverClosed(status, status);
         streamClosed();
       }
 
-      private synchronized boolean internalCancel(Status status) {
+      private synchronized boolean internalCancel(Status clientStatus) {
         if (closed) {
           return false;
         }
         closed = true;
-        InputStream stream;
-        while ((stream = clientReceiveQueue.poll()) != null) {
-          try {
-            stream.close();
-          } catch (Throwable t) {
-            log.log(Level.WARNING, "Exception closing stream", t);
+        StreamListener.MessageProducer producer;
+        while ((producer = clientReceiveQueue.poll()) != null) {
+          InputStream message;
+          while ((message = producer.next()) != null) {
+            try {
+              message.close();
+            } catch (Throwable t) {
+              log.log(Level.WARNING, "Exception closing stream", t);
+            }
           }
         }
-        clientStreamListener.closed(status, new Metadata());
+        clientStream.statsTraceCtx.streamClosed(clientStatus);
+        clientStreamListener.closed(clientStatus, new Metadata());
         return true;
       }
 
       @Override
       public void setMessageCompression(boolean enable) {
-         // noop
+        // noop
       }
 
       @Override
@@ -418,25 +459,30 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       @Override
       public StatsTraceContext statsTraceContext() {
-        // TODO(zhangkun83): InProcessTransport by-passes framer and deframer, thus message sizses
-        // are not counted.  Therefore Stats is currently disabled.
-        // (https://github.com/grpc/grpc-java/issues/2284)
-        return StatsTraceContext.NOOP;
+        return statsTraceCtx;
       }
     }
 
     private class InProcessClientStream implements ClientStream {
+      final StatsTraceContext statsTraceCtx;
       @GuardedBy("this")
       private ServerStreamListener serverStreamListener;
       @GuardedBy("this")
       private int serverRequested;
       @GuardedBy("this")
-      private ArrayDeque<InputStream> serverReceiveQueue = new ArrayDeque<InputStream>();
+      private ArrayDeque<StreamListener.MessageProducer> serverReceiveQueue =
+          new ArrayDeque<StreamListener.MessageProducer>();
       @GuardedBy("this")
       private boolean serverNotifyHalfClose;
       // Only is intended to prevent double-close when server closes.
       @GuardedBy("this")
       private boolean closed;
+      @GuardedBy("this")
+      private int outboundSeqNo;
+
+      InProcessClientStream(CallOptions callOptions, Metadata headers) {
+        statsTraceCtx = StatsTraceContext.newClientContext(callOptions, headers);
+      }
 
       private synchronized void setListener(ServerStreamListener listener) {
         this.serverStreamListener = listener;
@@ -468,7 +514,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         serverRequested += numMessages;
         while (serverRequested > 0 && !serverReceiveQueue.isEmpty()) {
           serverRequested--;
-          serverStreamListener.messageRead(serverReceiveQueue.poll());
+          serverStreamListener.messagesAvailable(serverReceiveQueue.poll());
         }
         if (serverReceiveQueue.isEmpty() && serverNotifyHalfClose) {
           serverNotifyHalfClose = false;
@@ -478,8 +524,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         return !previouslyReady && nowReady;
       }
 
-      private void serverClosed(Status status) {
-        internalCancel(status);
+      private void serverClosed(Status serverListenerStatus, Status serverTracerStatus) {
+        internalCancel(serverListenerStatus, serverTracerStatus);
       }
 
       @Override
@@ -487,11 +533,17 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         if (closed) {
           return;
         }
+        statsTraceCtx.outboundMessage(outboundSeqNo);
+        statsTraceCtx.outboundMessageSent(outboundSeqNo, -1, -1);
+        serverStream.statsTraceCtx.inboundMessage(outboundSeqNo);
+        serverStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
+        outboundSeqNo++;
+        StreamListener.MessageProducer producer = new SingleMessageProducer(message);
         if (serverRequested > 0) {
           serverRequested--;
-          serverStreamListener.messageRead(message);
+          serverStreamListener.messagesAvailable(producer);
         } else {
-          serverReceiveQueue.add(message);
+          serverReceiveQueue.add(producer);
         }
       }
 
@@ -509,27 +561,34 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       // Must be thread-safe for shutdownNow()
       @Override
       public void cancel(Status reason) {
-        if (!internalCancel(stripCause(reason))) {
+        Status serverStatus = stripCause(reason);
+        if (!internalCancel(serverStatus, serverStatus)) {
           return;
         }
         serverStream.clientCancelled(reason);
         streamClosed();
       }
 
-      private synchronized boolean internalCancel(Status reason) {
+      private synchronized boolean internalCancel(
+          Status serverListenerStatus, Status serverTracerStatus) {
         if (closed) {
           return false;
         }
         closed = true;
-        InputStream stream;
-        while ((stream = serverReceiveQueue.poll()) != null) {
-          try {
-            stream.close();
-          } catch (Throwable t) {
-            log.log(Level.WARNING, "Exception closing stream", t);
+
+        StreamListener.MessageProducer producer;
+        while ((producer = serverReceiveQueue.poll()) != null) {
+          InputStream message;
+          while ((message = producer.next()) != null) {
+            try {
+              message.close();
+            } catch (Throwable t) {
+              log.log(Level.WARNING, "Exception closing stream", t);
+            }
           }
         }
-        serverStreamListener.closed(reason);
+        serverStream.statsTraceCtx.streamClosed(serverTracerStatus);
+        serverStreamListener.closed(serverListenerStatus);
         return true;
       }
 
@@ -558,6 +617,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         serverStream.setListener(listener);
 
         synchronized (InProcessTransport.this) {
+          statsTraceCtx.clientOutboundHeaders();
           streams.add(InProcessTransport.InProcessStream.this);
           if (streams.size() == 1) {
             clientTransportListener.transportInUse(true);
@@ -573,6 +633,9 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       @Override
       public void setCompressor(Compressor compressor) {}
+
+      @Override
+      public void setFullStreamDecompression(boolean fullStreamDecompression) {}
 
       @Override
       public void setDecompressorRegistry(DecompressorRegistry decompressorRegistry) {}
@@ -599,5 +662,21 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
     return Status
         .fromCodeValue(status.getCode().value())
         .withDescription(status.getDescription());
+  }
+
+  private static class SingleMessageProducer implements StreamListener.MessageProducer {
+    private InputStream message;
+
+    private SingleMessageProducer(InputStream message) {
+      this.message = message;
+    }
+
+    @Nullable
+    @Override
+    public InputStream next() {
+      InputStream messageToReturn = message;
+      message = null;
+      return messageToReturn;
+    }
   }
 }

@@ -18,7 +18,7 @@ import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
 /**
  */
 @javax.annotation.Generated(
-    value = "by gRPC proto compiler (version 1.6.0-SNAPSHOT)",
+    value = "by gRPC proto compiler",
     comments = "Source: io/grpc/reflection/v1alpha/reflection.proto")
 public final class ServerReflectionGrpc {
 
@@ -34,10 +34,12 @@ public final class ServerReflectionGrpc {
           .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
           .setFullMethodName(generateFullMethodName(
               "grpc.reflection.v1alpha.ServerReflection", "ServerReflectionInfo"))
+          .setRegisterForTracing(true)
           .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.reflection.v1alpha.ServerReflectionRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.reflection.v1alpha.ServerReflectionResponse.getDefaultInstance()))
+          .setSchemaDescriptor(new ServerReflectionMethodDescriptorSupplier("ServerReflectionInfo"))
           .build();
 
   /**
@@ -198,10 +200,38 @@ public final class ServerReflectionGrpc {
     }
   }
 
-  private static final class ServerReflectionDescriptorSupplier implements io.grpc.protobuf.ProtoFileDescriptorSupplier {
+  private static abstract class ServerReflectionBaseDescriptorSupplier
+      implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
+    ServerReflectionBaseDescriptorSupplier() {}
+
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.reflection.v1alpha.ServerReflectionProto.getDescriptor();
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.ServiceDescriptor getServiceDescriptor() {
+      return getFileDescriptor().findServiceByName("ServerReflection");
+    }
+  }
+
+  private static final class ServerReflectionFileDescriptorSupplier
+      extends ServerReflectionBaseDescriptorSupplier {
+    ServerReflectionFileDescriptorSupplier() {}
+  }
+
+  private static final class ServerReflectionMethodDescriptorSupplier
+      extends ServerReflectionBaseDescriptorSupplier
+      implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
+    private final String methodName;
+
+    ServerReflectionMethodDescriptorSupplier(String methodName) {
+      this.methodName = methodName;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.MethodDescriptor getMethodDescriptor() {
+      return getServiceDescriptor().findMethodByName(methodName);
     }
   }
 
@@ -214,7 +244,7 @@ public final class ServerReflectionGrpc {
         result = serviceDescriptor;
         if (result == null) {
           serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
-              .setSchemaDescriptor(new ServerReflectionDescriptorSupplier())
+              .setSchemaDescriptor(new ServerReflectionFileDescriptorSupplier())
               .addMethod(METHOD_SERVER_REFLECTION_INFO)
               .build();
         }

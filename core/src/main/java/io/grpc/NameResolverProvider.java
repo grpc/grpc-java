@@ -71,10 +71,21 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
     return Collections.unmodifiableList(list);
   }
 
+  /**
+   * Loads service providers for the {@link NameResolverProvider} service using
+   * {@link ServiceLoader}.
+   */
   @VisibleForTesting
   public static Iterable<NameResolverProvider> getCandidatesViaServiceLoader(
       ClassLoader classLoader) {
-    return ServiceLoader.load(NameResolverProvider.class, classLoader);
+    Iterable<NameResolverProvider> i
+        = ServiceLoader.load(NameResolverProvider.class, classLoader);
+    // Attempt to load using the context class loader and ServiceLoader.
+    // This allows frameworks like http://aries.apache.org/modules/spi-fly.html to plug in.
+    if (!i.iterator().hasNext()) {
+      i = ServiceLoader.load(NameResolverProvider.class);
+    }
+    return i;
   }
 
   /**
@@ -124,7 +135,9 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
 
   private static boolean isAndroid() {
     try {
-      Class.forName("android.app.Application", /*initialize=*/ false, null);
+      // Specify a class loader instead of null because we may be running under Robolectric
+      Class.forName("android.app.Application", /*initialize=*/ false,
+          NameResolverProvider.class.getClassLoader());
       return true;
     } catch (Exception e) {
       // If Application isn't loaded, it might as well not be Android.

@@ -70,7 +70,14 @@ public abstract class ManagedChannelProvider {
   @VisibleForTesting
   public static Iterable<ManagedChannelProvider> getCandidatesViaServiceLoader(
       ClassLoader classLoader) {
-    return ServiceLoader.load(ManagedChannelProvider.class, classLoader);
+    Iterable<ManagedChannelProvider> i
+        = ServiceLoader.load(ManagedChannelProvider.class, classLoader);
+    // Attempt to load using the context class loader and ServiceLoader.
+    // This allows frameworks like http://aries.apache.org/modules/spi-fly.html to plug in.
+    if (!i.iterator().hasNext()) {
+      i = ServiceLoader.load(ManagedChannelProvider.class);
+    }
+    return i;
   }
 
   /**
@@ -125,7 +132,9 @@ public abstract class ManagedChannelProvider {
    */
   protected static boolean isAndroid() {
     try {
-      Class.forName("android.app.Application", /*initialize=*/ false, null);
+      // Specify a class loader instead of null because we may be running under Robolectric
+      Class.forName("android.app.Application", /*initialize=*/ false,
+          ManagedChannelProvider.class.getClassLoader());
       return true;
     } catch (Exception e) {
       // If Application isn't loaded, it might as well not be Android.

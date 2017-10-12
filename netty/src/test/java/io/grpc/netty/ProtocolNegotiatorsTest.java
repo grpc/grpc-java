@@ -44,6 +44,7 @@ import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
+import io.netty.handler.proxy.ProxyConnectException;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
@@ -62,6 +63,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -72,6 +74,8 @@ public class ProtocolNegotiatorsTest {
   private static final Runnable NOOP_RUNNABLE = new Runnable() {
     @Override public void run() {}
   };
+
+  @Rule public final Timeout globalTimeout = Timeout.seconds(5);
 
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
@@ -302,7 +306,7 @@ public class ProtocolNegotiatorsTest {
         ProtocolNegotiators.plaintext()));
   }
 
-  @Test(timeout = 5000)
+  @Test
   public void httpProxy_completes() throws Exception {
     DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
     // ProxyHandler is incompatible with EmbeddedChannel because when channelRegistered() is called
@@ -364,6 +368,60 @@ public class ProtocolNegotiatorsTest {
     assertEquals(golden, preface);
 
     channel.close();
+  }
+
+  @Test
+  public void httpProxy_500() throws Exception {
+    DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
+    // ProxyHandler is incompatible with EmbeddedChannel because when channelRegistered() is called
+    // the channel is already active.
+    LocalAddress proxy = new LocalAddress("httpProxy_500");
+    SocketAddress host = InetSocketAddress.createUnresolved("specialHost", 314);
+
+    ChannelInboundHandler mockHandler = mock(ChannelInboundHandler.class);
+    Channel serverChannel = new ServerBootstrap().group(elg).channel(LocalServerChannel.class)
+        .childHandler(mockHandler)
+        .bind(proxy).sync().channel();
+
+    ProtocolNegotiator nego =
+        ProtocolNegotiators.httpProxy(proxy, null, null, ProtocolNegotiators.plaintext());
+    ChannelHandler handler = nego.newHandler(grpcHandler);
+    Channel channel = new Bootstrap().group(elg).channel(LocalChannel.class).handler(handler)
+        .register().sync().channel();
+    pipeline = channel.pipeline();
+    // Wait for initialization to complete
+    channel.eventLoop().submit(NOOP_RUNNABLE).sync();
+    // The grpcHandler must be in the pipeline, but we don't actually want it during our test
+    // because it will consume all events since it is a mock. We only use it because it is required
+    // to construct the Handler.
+    pipeline.remove(grpcHandler);
+    channel.connect(host).sync();
+    serverChannel.close();
+    ArgumentCaptor<ChannelHandlerContext> contextCaptor =
+        ArgumentCaptor.forClass(ChannelHandlerContext.class);
+    Mockito.verify(mockHandler).channelActive(contextCaptor.capture());
+    ChannelHandlerContext serverContext = contextCaptor.getValue();
+
+    final String golden = "isThisThingOn?";
+    ChannelFuture negotiationFuture = channel.writeAndFlush(bb(golden, channel));
+
+    // Wait for sending initial request to complete
+    channel.eventLoop().submit(NOOP_RUNNABLE).sync();
+    ArgumentCaptor<Object> objectCaptor = ArgumentCaptor.forClass(Object.class);
+    Mockito.verify(mockHandler)
+        .channelRead(any(ChannelHandlerContext.class), objectCaptor.capture());
+    ByteBuf request = (ByteBuf) objectCaptor.getValue();
+    request.release();
+
+    assertFalse(negotiationFuture.isDone());
+    String response = "HTTP/1.1 500 OMG\r\nContent-Length: 4\r\n\r\noops";
+    serverContext.writeAndFlush(bb(response, serverContext.channel())).sync();
+    thrown.expect(ProxyConnectException.class);
+    try {
+      negotiationFuture.sync();
+    } finally {
+      channel.close();
+    }
   }
 
   private static ByteBuf bb(String s, Channel c) {
