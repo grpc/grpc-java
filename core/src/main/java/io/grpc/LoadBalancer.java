@@ -106,10 +106,8 @@ public abstract class LoadBalancer {
    * @param servers the resolved server addresses, never empty.
    * @param attributes extra metadata from naming system.
    */
-  public void handleResolvedAddressGroups(
-      List<EquivalentAddressGroup> servers, Attributes attributes) {
-    throw new UnsupportedOperationException();
-  }
+  public abstract void handleResolvedAddressGroups(
+      List<EquivalentAddressGroup> servers, Attributes attributes);
 
   /**
    * Handles an error from the name resolution system.
@@ -420,8 +418,10 @@ public abstract class LoadBalancer {
      * @throws IllegalArgumentException if {@code subchannel} was not returned from {@link
      *     #createSubchannel}
      */
-    public abstract void updateSubchannelAddresses(
-        Subchannel subchannel, EquivalentAddressGroup addrs);
+    public void updateSubchannelAddresses(
+        Subchannel subchannel, EquivalentAddressGroup addrs) {
+      throw new UnsupportedOperationException();
+    }
 
     /**
      * Out-of-band channel for LoadBalancer’s own RPC needs, e.g., talking to an external
