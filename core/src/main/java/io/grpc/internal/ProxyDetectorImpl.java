@@ -21,12 +21,14 @@ import com.google.common.base.Supplier;
 import java.net.Authenticator;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.MalformedURLException;
 import java.net.PasswordAuthentication;
 import java.net.Proxy;
 import java.net.ProxySelector;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URL;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -43,9 +45,18 @@ class ProxyDetectorImpl implements ProxyDetector {
     @Override
     public PasswordAuthentication requestPasswordAuthentication(
         String host, InetAddress addr, int port, String protocol, String prompt, String scheme) {
+      URL url = null;
+      try {
+        url = new URL(protocol, host, "");
+      } catch (MalformedURLException e) {
+        // let url be null
+        log.log(
+            Level.WARNING,
+            String.format("failed to create URL for Authenticator: %s %s", protocol, host));
+      }
       // TODO(spencerfang): consider using java.security.AccessController here
       return Authenticator.requestPasswordAuthentication(
-          host, addr, port, protocol, prompt, scheme);
+          host, addr, port, protocol, prompt, scheme, url, Authenticator.RequestorType.PROXY);
     }
   };
   private static final Supplier<ProxySelector> DEFAULT_PROXY_SELECTOR =
@@ -107,10 +118,17 @@ class ProxyDetectorImpl implements ProxyDetector {
         GrpcUtil.authorityFromHostAndPort(targetAddr.getHostName(), targetAddr.getPort());
     URI uri;
     try {
-      uri = new URI(String.format(URI_FORMAT, hostPort));
+      uri = new URI(
+          PROXY_SCHEME,
+          null, /* userInfo */
+          targetAddr.getHostName(),
+          targetAddr.getPort(),
+          null, /* path */
+          null, /* query */
+          null /* fragment */);
     } catch (final URISyntaxException e) {
       log.log(
-          Level.SEVERE,
+          Level.WARNING,
           "Failed to construct URI for proxy lookup, proceeding without proxy",
           e);
       return null;
@@ -126,12 +144,15 @@ class ProxyDetectorImpl implements ProxyDetector {
       return null;
     }
     InetSocketAddress proxyAddr = (InetSocketAddress) proxy.address();
+    // The prompt string should be the realm as returned by the server.
+    // We don't have it because we are avoiding the full handshake.
+    String promptString = "";
     PasswordAuthentication auth = authenticationProvider.requestPasswordAuthentication(
-        proxyAddr.getHostName(),
+        GrpcUtil.getHost(proxyAddr),
         proxyAddr.getAddress(),
         proxyAddr.getPort(),
         PROXY_SCHEME,
-        "proxy authentication required by gRPC",
+        promptString,
         null);
 
     if (auth == null) {
