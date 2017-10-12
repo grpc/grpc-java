@@ -16,9 +16,10 @@
 
 package io.grpc;
 
-import io.netty.handler.ssl.SslContext;
 
+import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLSocketFactory;
+import java.io.File;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -168,13 +169,19 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *
    * @return this
    * @throws UnsupportedOperationException if transport security is not supported.
-   * @since 1.0.0
    */
   public abstract T useTransportSecurity();
 
-  public abstract T sslContext(SslContext sslContext);
-
-  public abstract T sslSocketFactory(SSLSocketFactory factory);
+  /**
+   *
+   * Trusted certificates for verifying the remote endpoint's certificate. The file should
+   * contain an X.509 certificate collection in PEM format. {@code null} uses the system default.
+   *
+   * @param trustCertCollectionFile
+   * @return this
+   * @throws  SSLException if there is an error loading the trust file
+   */
+  public abstract T trustStore(File trustCertCollectionFile) throws SSLException;
 
 
   /**

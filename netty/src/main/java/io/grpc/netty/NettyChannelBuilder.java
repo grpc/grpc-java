@@ -42,6 +42,8 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.ssl.SslContext;
+
+import java.io.File;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.HashMap;
@@ -175,8 +177,18 @@ public final class NettyChannelBuilder
   }
 
   /**
+   * Trust Store to be used instead of system default.
+   * @throws SSLException
+   */
+  @Override
+  public NettyChannelBuilder trustStore(File trustCertCollectionFile) throws SSLException {
+    return sslContext(GrpcSslContexts.forClient().trustManager(trustCertCollectionFile).build());
+  }
+
+  /**
    * SSL/TLS context to use instead of the system default. It must have been configured with {@link
    * GrpcSslContexts}, but options could have been overridden.
+   * Also sets the {@link NegotiationType} to TLS.
    */
   public NettyChannelBuilder sslContext(SslContext sslContext) {
     if (sslContext != null) {

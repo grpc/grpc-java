@@ -27,6 +27,7 @@ import io.grpc.internal.SharedResourceHolder;
 import io.netty.handler.ssl.SslContext;
 
 import javax.net.ssl.SSLSocketFactory;
+import java.io.File;
 import java.net.SocketAddress;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -101,15 +102,7 @@ public final class InProcessChannelBuilder extends
    * Does nothing.
    */
   @Override
-  public InProcessChannelBuilder sslContext(SslContext sslContext) {
-    return this;
-  }
-
-  /**
-   * Does nothing.
-   */
-  @Override
-  public InProcessChannelBuilder sslSocketFactory(SSLSocketFactory factory) {
+  public InProcessChannelBuilder trustStore(File trustCertCollectionFile) {
     return this;
   }
 

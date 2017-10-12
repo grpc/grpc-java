@@ -38,6 +38,8 @@ import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.okhttp.internal.Platform;
+
+import java.io.File;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.GeneralSecurityException;
@@ -49,10 +51,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
-import javax.net.ssl.HostnameVerifier;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSocketFactory;
-import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.*;
 
 /** Convenience class for building channels with the OkHttp transport. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1785")
@@ -308,6 +307,15 @@ public class OkHttpChannelBuilder extends
   public final OkHttpChannelBuilder useTransportSecurity() {
     negotiationType(NegotiationType.TLS);
     return this;
+  }
+
+  /**
+   * Trust Store to be used instead of system default.
+   * @throws SSLException
+   */
+  @Override
+  public final OkHttpChannelBuilder trustStore(File trustCertCollectionFile) throws SSLException {
+    throw new UnsupportedOperationException("Use sslSocketFactory method instead");
   }
 
   @Override
