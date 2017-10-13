@@ -24,9 +24,7 @@ import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
-import io.netty.handler.ssl.SslContext;
 
-import javax.net.ssl.SSLSocketFactory;
 import java.io.File;
 import java.net.SocketAddress;
 import java.util.concurrent.ScheduledExecutorService;
@@ -92,8 +90,9 @@ public final class InProcessChannelBuilder extends
   }
 
   /**
-   * Does nothing
+   * Does nothing.
    */
+  @Override
   public InProcessChannelBuilder useTransportSecurity() {
     return this;
   }

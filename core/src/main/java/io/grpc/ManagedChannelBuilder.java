@@ -16,13 +16,14 @@
 
 package io.grpc;
 
-
-import javax.net.ssl.SSLException;
-import javax.net.ssl.SSLSocketFactory;
 import java.io.File;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+
+import javax.net.ssl.SSLException;
+
+
 
 /**
  * A builder for {@link ManagedChannel} instances.
@@ -173,11 +174,10 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T useTransportSecurity();
 
   /**
-   *
    * Trusted certificates for verifying the remote endpoint's certificate. The file should
    * contain an X.509 certificate collection in PEM format. {@code null} uses the system default.
    *
-   * @param trustCertCollectionFile
+   * @param trustCertCollectionFile Path to file containing trust cert chain
    * @return this
    * @throws  SSLException if there is an error loading the trust file
    */

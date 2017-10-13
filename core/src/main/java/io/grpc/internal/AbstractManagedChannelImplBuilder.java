@@ -23,11 +23,20 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.instrumentation.stats.Stats;
 import com.google.instrumentation.stats.StatsContextFactory;
-import io.grpc.*;
-import io.netty.handler.ssl.SslContext;
+
+import io.grpc.Attributes;
+import io.grpc.ClientInterceptor;
+import io.grpc.CompressorRegistry;
+import io.grpc.DecompressorRegistry;
+import io.grpc.EquivalentAddressGroup;
+import io.grpc.LoadBalancer;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
+import io.grpc.NameResolver;
+import io.grpc.NameResolverProvider;
+import io.grpc.PickFirstBalancerFactory;
 import io.opencensus.trace.Tracing;
 
-import java.io.File;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -38,7 +47,6 @@ import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
-import javax.net.ssl.SSLSocketFactory;
 
 /**
  * The base class for channel builders.
