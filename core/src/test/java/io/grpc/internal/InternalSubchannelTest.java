@@ -884,6 +884,58 @@ public class InternalSubchannelTest {
         eq(addr1), eq(AUTHORITY), eq(USER_AGENT), eq(proxy));
   }
 
+  @Test
+  public void networkAvailableMovesToConnectingAndCancelsScheduledReconnect() throws Exception {
+    SocketAddress addr = mock(SocketAddress.class);
+    createInternalSubchannel(addr);
+
+    // Move into TRANSIENT_FAILURE to schedule reconnect
+    internalSubchannel.obtainActiveTransport();
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
+    verify(mockTransportFactory).newClientTransport(addr, AUTHORITY, USER_AGENT, NO_PROXY);
+    MockClientTransportInfo transportInfo = transports.poll();
+    transportInfo.listener.transportShutdown(Status.UNAVAILABLE);
+    transportInfo.listener.transportTerminated();
+
+    assertExactCallbackInvokes("onStateChange:" + UNAVAILABLE_STATE);
+
+    // Save the reconnectTask
+    FakeClock.ScheduledTask reconnectTask = null;
+    for (FakeClock.ScheduledTask task : fakeClock.getPendingTasks()) {
+      if (task.command.toString().contains("EndOfCurrentBackoff")) {
+        assertNull("There shouldn't be more than one reconnectTask", reconnectTask);
+        assertFalse(task.isDone());
+        reconnectTask = task;
+      }
+    }
+    assertNotNull("There should be at least one reconnectTask", reconnectTask);
+
+    // Call reconnectNow() and move out of TRANSIENT_FAILURE (this allows verifying that
+    // reconnectTask.command.run() is a no-op)
+    internalSubchannel.networkAvailable();
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
+    transports.poll().listener.transportReady();
+    assertExactCallbackInvokes("onStateChange:READY");
+    assertEquals(READY, internalSubchannel.getState());
+
+    assertTrue(reconnectTask.isCancelled());
+
+    // Simulate a race between cancel and the task scheduler. Should be a no-op
+    reconnectTask.command.run();
+    assertNoCallbackInvoke();
+  }
+
+  @Test
+  public void networkAvailableIsNoOpOnIdleTransport() throws Exception {
+    SocketAddress addr = mock(SocketAddress.class);
+    createInternalSubchannel(addr);
+    assertEquals(IDLE, internalSubchannel.getState());
+
+    internalSubchannel.networkAvailable();
+
+    assertNoCallbackInvoke();
+  }
+
   private void createInternalSubchannel(SocketAddress ... addrs) {
     createInternalSubChannelWithProxy(ProxyDetector.NOOP_INSTANCE, addrs);
   }
