@@ -77,7 +77,7 @@ public abstract class NameResolver {
      * port number.
      */
     public static final Attributes.Key<Integer> PARAMS_DEFAULT_PORT =
-        Attributes.Key.of("params-default-port");
+        Attributes.Key.of("params-default-port", Integer.class);
 
     /**
      * Creates a {@link NameResolver} for the given target URI, or {@code null} if the given URI

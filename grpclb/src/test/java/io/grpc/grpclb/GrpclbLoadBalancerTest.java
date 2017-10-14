@@ -100,7 +100,7 @@ import org.mockito.stubbing.Answer;
 @RunWith(JUnit4.class)
 public class GrpclbLoadBalancerTest {
   private static final Attributes.Key<String> RESOLUTION_ATTR =
-      Attributes.Key.of("resolution-attr");
+      Attributes.Key.of("resolution-attr", String.class);
   private static final String SERVICE_AUTHORITY = "api.google.com";
   private static final FakeClock.TaskFilter LOAD_REPORTING_TASK_FILTER =
       new FakeClock.TaskFilter() {

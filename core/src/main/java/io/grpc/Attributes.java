@@ -49,7 +49,9 @@ public final class Attributes {
   @SuppressWarnings("unchecked")
   @Nullable
   public <T> T get(Key<T> key) {
-    return (T) data.get(key);
+    Object value = data.get(key);
+    assert value == null || key.clz.isAssignableFrom(value.getClass());
+    return (T) value;
   }
 
   /**
@@ -82,15 +84,31 @@ public final class Attributes {
    */
   @Immutable
   public static final class Key<T> {
+    private final Class<T> clz;
     private final String name;
 
-    private Key(String name) {
-      this.name = name;
+    @SuppressWarnings("unchecked")
+    private Key(String name, Class<T> clz) {
+      this.name = checkNotNull(name, "name");
+      this.clz = clz != null ? clz : (Class<T>) Object.class;
     }
 
     @Override
     public String toString() {
-      return name;
+      return name + " for " + clz.getName();
+    }
+
+    /**
+     * Factory method for creating instances of {@link Key}.
+     *
+     * @param name the name of Key. Name collision, won't cause key collision.
+     * @param clz the class type of the value identified by this key.
+     * @param <T> Key type
+     * @since 1.8.0
+     * @return Key object
+     */
+    public static <T> Key<T> of(String name, Class<T> clz) {
+      return new Key<T>(name, checkNotNull(clz, "clz"));
     }
 
     /**
@@ -98,10 +116,12 @@ public final class Attributes {
      *
      * @param name the name of Key. Name collision, won't cause key collision.
      * @param <T> Key type
+     * @deprecated prefer using {@link #of(String, Class)}
      * @return Key object
      */
+    @Deprecated
     public static <T> Key<T> of(String name) {
-      return new Key<T>(name);
+      return new Key<T>(name, null);
     }
   }
 

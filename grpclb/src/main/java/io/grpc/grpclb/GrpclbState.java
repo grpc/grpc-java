@@ -98,8 +98,11 @@ final class GrpclbState {
   private final TimeProvider time;
   private final ScheduledExecutorService timerService;
 
+  @SuppressWarnings("unchecked")
   private static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
-      Attributes.Key.of("io.grpc.grpclb.GrpclbLoadBalancer.stateInfo");
+      (Attributes.Key<AtomicReference<ConnectivityStateInfo>>)
+          (Attributes.Key) Attributes.Key.of(
+              "io.grpc.grpclb.GrpclbLoadBalancer.stateInfo", AtomicReference.class);
 
   // Once set, never go back to null.
   @Nullable

@@ -26,7 +26,7 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link Attributes}. */
 @RunWith(JUnit4.class)
 public class AttributesTest {
-  private static final Attributes.Key<String> YOLO_KEY = Attributes.Key.of("yolo");
+  private static final Attributes.Key<String> YOLO_KEY = Attributes.Key.of("yolo", String.class);
 
   @Test
   public void buildAttributes() {
@@ -40,7 +40,7 @@ public class AttributesTest {
     Attributes attrs = Attributes.newBuilder()
         .set(YOLO_KEY, "To be?")
         .set(YOLO_KEY, "Or not to be?")
-        .set(Attributes.Key.of("yolo"), "I'm not a duplicate")
+        .set(Attributes.Key.of("yolo", String.class), "I'm not a duplicate")
         .build();
     assertSame("Or not to be?", attrs.get(YOLO_KEY));
     assertEquals(2, attrs.keys().size());
@@ -49,5 +49,13 @@ public class AttributesTest {
   @Test
   public void empty() {
     assertEquals(0, Attributes.EMPTY.keys().size());
+  }
+
+  @Test
+  public void subClass() {
+    Attributes.Key<Number> myKey = Attributes.Key.of("swag", Number.class);
+    Attributes attrs = Attributes.newBuilder().set(myKey, 1).build();
+    assertSame(1, attrs.get(myKey));
+    assertEquals(1, attrs.keys().size());
   }
 }

@@ -868,7 +868,7 @@ public class ClientCallImplTest {
         method, MoreExecutors.directExecutor(), baseCallOptions, provider,
         deadlineCancellationExecutor);
     Attributes attrs =
-        Attributes.newBuilder().set(Key.<String>of("fake key"), "fake value").build();
+        Attributes.newBuilder().set(Key.of("fake key", String.class), "fake value").build();
     when(stream.getAttributes()).thenReturn(attrs);
 
     assertNotEquals(attrs, call.getAttributes());
