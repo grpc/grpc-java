@@ -641,7 +641,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
     // Must be called from channelExecutor
     private void handleInternalSubchannelState(ConnectivityStateInfo newState) {
-      if ((newState.getState() == TRANSIENT_FAILURE || newState.getState() == IDLE)) {
+      if (newState.getState() == TRANSIENT_FAILURE || newState.getState() == IDLE) {
         nr.refresh();
       }
     }
