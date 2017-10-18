@@ -30,6 +30,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyObject;
 import static org.mockito.Matchers.anyString;
@@ -124,7 +125,6 @@ public class ManagedChannelImplTest {
           .build();
   private static final Attributes.Key<String> SUBCHANNEL_ATTR_KEY =
       Attributes.Key.of("subchannel-attr-key");
-  private static int unterminatedChannels;
   private final String serviceName = "fake.example.com";
   private final String authority = serviceName;
   private final String userAgent = "userAgent";
@@ -249,17 +249,13 @@ public class ManagedChannelImplTest {
     // would ignore any time-sensitive tasks, e.g., back-off and the idle timer.
     assertTrue(timer.getDueTasks() + " should be empty", timer.getDueTasks().isEmpty());
     assertEquals(executor.getPendingTasks() + " should be empty", 0, executor.numPendingTasks());
-    helper = null; // helper retains a ref to the channel
     if (channel != null) {
       channel.shutdownNow();
       if (!channel.isTerminated()) {
-        // Since there are no real transports in this test, if shutdownNow doesn't result in
-        // termination, then it will never happen.  It would be very cumbersome to make all the
-        // tests in this file clean up fully after themselves, so instead just keep track of how
-        // many don't.  This is used to see how many should be ignored in the phantom cleanup.
-        unterminatedChannels++;
+        // Ensure the transports in this test clean up properly. Otherwise, the stray reference can
+        // break the orphanedChannelsAreLogged cleanup tests.
+        fail("Channel not properly terminated");
       }
-      channel = null;
     }
   }
 
@@ -701,6 +697,10 @@ public class ManagedChannelImplTest {
     // The bad transport was never used.
     verify(badTransportInfo.transport, times(0)).newStream(any(MethodDescriptor.class),
         any(Metadata.class), any(CallOptions.class));
+
+    channel.shutdownNow();
+    badTransportInfo.listener.transportTerminated();
+    goodTransportInfo.listener.transportTerminated();
   }
 
   @Test
@@ -850,6 +850,9 @@ public class ManagedChannelImplTest {
         .newStream(any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class));
     verify(transportInfo2.transport, times(0))
         .newStream(any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class));
+
+    transportInfo1.listener.transportTerminated();
+    transportInfo2.listener.transportTerminated();
   }
 
   @Test
@@ -1242,6 +1245,9 @@ public class ManagedChannelImplTest {
     assertEquals("testValue", testKey.get(newStreamContexts.poll()));
 
     assertNull(testKey.get());
+
+    channel.shutdownNow();
+    transportInfo.listener.transportTerminated();
   }
 
   @Test
@@ -1275,6 +1281,9 @@ public class ManagedChannelImplTest {
     // The factories are safely not stubbed because we do not expect any usage of them.
     verifyZeroInteractions(factory1);
     verifyZeroInteractions(factory2);
+
+    channel.shutdownNow();
+    transportInfo.listener.transportTerminated();
   }
 
   @Test
@@ -1310,6 +1319,9 @@ public class ManagedChannelImplTest {
     // The factories are safely not stubbed because we do not expect any usage of them.
     verifyZeroInteractions(factory1);
     verifyZeroInteractions(factory2);
+
+    channel.shutdownNow();
+    transportInfo.listener.transportTerminated();
   }
 
   @Test
@@ -1479,6 +1491,11 @@ public class ManagedChannelImplTest {
     executor.runDueTasks();
     verify(mockTransport).newStream(same(method), any(Metadata.class), any(CallOptions.class));
     verify(mockStream).start(any(ClientStreamListener.class));
+
+    channel.shutdownNow();
+    transportListener.transportTerminated();
+    MockClientTransportInfo secondTransportInfo = transports.poll();
+    secondTransportInfo.listener.transportTerminated();
   }
 
   @Test
@@ -1498,16 +1515,16 @@ public class ManagedChannelImplTest {
 
   @Test
   public void orphanedChannelsAreLogged() throws Exception {
-    int remaining = unterminatedChannels;
+    // This test relies on having a known number of orphaned channels, so first try to clean up any
+    // stray references from other test classes.
     for (int retry = 0; retry < 3; retry++) {
       System.gc();
       System.runFinalization();
-      if ((remaining -= ManagedChannelReference.cleanQueue()) <= 0) {
+      if (ManagedChannelReference.cleanQueue() == 0) {
         break;
       }
       Thread.sleep(100L * (1L << retry));
     }
-    assertThat(remaining).isAtMost(0);
 
     createChannel(
         new FakeNameResolverFactory(true),
