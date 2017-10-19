@@ -39,6 +39,8 @@ import java.util.logging.Logger;
  */
 class NettyServerTransport implements ServerTransport {
   private static final Logger log = Logger.getLogger(NettyServerTransport.class.getName());
+  private static final Logger connectionLog = Logger.getLogger(
+      String.format("%s.connections", NettyServerTransport.class.getName()));
   // Some exceptions are not very useful and add too much noise to the log
   private static final ImmutableList<String> QUIET_ERRORS = ImmutableList.of(
       "Connection reset by peer",
@@ -156,7 +158,7 @@ class NettyServerTransport implements ServerTransport {
 
   private void notifyTerminated(Throwable t) {
     if (t != null) {
-      log.log(getLogLevel(t), "Transport failed", t);
+      connectionLog.log(getLogLevel(t), "Transport failed", t);
     }
     if (!terminated) {
       terminated = true;
