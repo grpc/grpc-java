@@ -39,7 +39,6 @@ import io.grpc.benchmarks.qps.AsyncServer;
 import io.grpc.internal.testing.TestUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
-import java.io.File;
 import java.lang.management.ManagementFactory;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -115,9 +114,8 @@ final class LoadServer {
       }
     }
     if (config.hasSecurityParams()) {
-      File cert = TestUtils.loadCert("server1.pem");
-      File key = TestUtils.loadCert("server1.key");
-      serverBuilder.useTransportSecurity(cert, key);
+      serverBuilder.useTransportSecurity(
+          TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"));
     }
     benchmarkService = new AsyncServer.BenchmarkServiceImpl();
     if (config.getServerType() == Control.ServerType.ASYNC_GENERIC_SERVER) {

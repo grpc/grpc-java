@@ -17,13 +17,8 @@
 package io.grpc.internal.testing;
 
 import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
@@ -99,30 +94,12 @@ public class TestUtils {
   }
 
   /**
-   * Saves a file from the classpath resources in src/main/resources/certs as a file on the
-   * filesystem.
+   * Creates an InputStream for the classpath resource in src/main/resources/certs.
    *
    * @param name  name of a file in src/main/resources/certs.
    */
-  public static File loadCert(String name) throws IOException {
-    InputStream
-        in = new BufferedInputStream(TestUtils.class.getResourceAsStream("/certs/" + name));
-    File tmpFile = File.createTempFile(name, "");
-    tmpFile.deleteOnExit();
-
-    OutputStream os = new BufferedOutputStream(new FileOutputStream(tmpFile));
-    try {
-      int b;
-      while ((b = in.read()) != -1) {
-        os.write(b);
-      }
-      os.flush();
-    } finally {
-      in.close();
-      os.close();
-    }
-
-    return tmpFile;
+  public static InputStream loadCert(String name) throws IOException {
+    return new BufferedInputStream(TestUtils.class.getResourceAsStream("/certs/" + name));
   }
 
   /**
@@ -146,12 +123,11 @@ public class TestUtils {
    * Creates an SSLSocketFactory which contains {@code certChainFile} as its only root certificate.
    */
   public static SSLSocketFactory newSslSocketFactoryForCa(Provider provider,
-                                                          File certChainFile) throws Exception {
+                                                          InputStream certChain) throws Exception {
     KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
     ks.load(null, null);
     CertificateFactory cf = CertificateFactory.getInstance("X.509");
-    X509Certificate cert = (X509Certificate) cf.generateCertificate(
-        new BufferedInputStream(new FileInputStream(certChainFile)));
+    X509Certificate cert = (X509Certificate) cf.generateCertificate(certChain);
     X500Principal principal = cert.getSubjectX500Principal();
     ks.setCertificateEntry(principal.getName("RFC2253"), cert);
 

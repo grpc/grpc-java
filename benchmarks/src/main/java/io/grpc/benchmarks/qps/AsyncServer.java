@@ -37,7 +37,6 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.util.concurrent.DefaultThreadFactory;
-import java.io.File;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.concurrent.ForkJoinPool;
@@ -99,9 +98,8 @@ public class AsyncServer {
       System.out.println("Using fake CA for TLS certificate.\n"
           + "Run the Java client with --tls --testca");
 
-      File cert = TestUtils.loadCert("server1.pem");
-      File key = TestUtils.loadCert("server1.key");
-      SslContextBuilder sslContextBuilder = GrpcSslContexts.forServer(cert, key);
+      SslContextBuilder sslContextBuilder = GrpcSslContexts.forServer(
+          TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"));
       if (config.transport == ServerConfiguration.Transport.NETTY_NIO) {
         sslContextBuilder = GrpcSslContexts.configure(sslContextBuilder, SslProvider.JDK);
       } else {

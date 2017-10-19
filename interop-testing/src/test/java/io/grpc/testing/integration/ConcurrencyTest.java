@@ -16,6 +16,8 @@
 
 package io.grpc.testing.integration;
 
+import static io.grpc.internal.testing.TestUtils.loadCert;
+
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.ManagedChannel;
@@ -32,7 +34,6 @@ import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
-import java.io.File;
 import java.io.IOException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
@@ -187,17 +188,15 @@ public class ConcurrencyTest {
    * Creates and starts a new {@link TestServiceImpl} server.
    */
   private Server newServer() throws CertificateException, IOException {
-    File serverCertChainFile = TestUtils.loadCert("server1.pem");
-    File serverPrivateKeyFile = TestUtils.loadCert("server1.key");
     X509Certificate[] serverTrustedCaCerts = {
       TestUtils.loadX509Cert("ca.pem")
     };
 
     SslContext sslContext =
-        GrpcSslContexts.forServer(serverCertChainFile, serverPrivateKeyFile)
-                       .trustManager(serverTrustedCaCerts)
-                       .clientAuth(ClientAuth.REQUIRE)
-                       .build();
+        GrpcSslContexts.forServer(loadCert("server1.pem"), loadCert("server1.key"))
+            .trustManager(serverTrustedCaCerts)
+            .clientAuth(ClientAuth.REQUIRE)
+            .build();
 
     return NettyServerBuilder.forPort(0)
         .sslContext(sslContext)
@@ -207,17 +206,15 @@ public class ConcurrencyTest {
   }
 
   private ManagedChannel newClientChannel() throws CertificateException, IOException {
-    File clientCertChainFile = TestUtils.loadCert("client.pem");
-    File clientPrivateKeyFile = TestUtils.loadCert("client.key");
     X509Certificate[] clientTrustedCaCerts = {
       TestUtils.loadX509Cert("ca.pem")
     };
 
     SslContext sslContext =
         GrpcSslContexts.forClient()
-                       .keyManager(clientCertChainFile, clientPrivateKeyFile)
-                       .trustManager(clientTrustedCaCerts)
-                       .build();
+            .keyManager(loadCert("client.pem"), loadCert("client.key"))
+            .trustManager(clientTrustedCaCerts)
+            .build();
 
     return NettyChannelBuilder.forAddress("localhost", server.getPort())
         .overrideAuthority(TestUtils.TEST_SERVER_HOST)

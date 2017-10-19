@@ -22,6 +22,7 @@ import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 import static io.grpc.internal.GrpcUtil.USER_AGENT_KEY;
+import static io.grpc.internal.testing.TestUtils.loadCert;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
@@ -70,7 +71,6 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import io.netty.util.AsciiString;
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -520,8 +520,8 @@ public class NettyClientTransportTest {
   }
 
   private ProtocolNegotiator newNegotiator() throws IOException {
-    File clientCert = TestUtils.loadCert("ca.pem");
-    SslContext clientContext = GrpcSslContexts.forClient().trustManager(clientCert)
+    SslContext clientContext = GrpcSslContexts.forClient()
+        .trustManager(loadCert("ca.pem"))
         .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE).build();
     return ProtocolNegotiators.tls(clientContext, authority);
   }
@@ -573,9 +573,7 @@ public class NettyClientTransportTest {
 
   private static SslContext createSslContext() {
     try {
-      File serverCert = TestUtils.loadCert("server1.pem");
-      File key = TestUtils.loadCert("server1.key");
-      return GrpcSslContexts.forServer(serverCert, key)
+      return GrpcSslContexts.forServer(loadCert("server1.pem"), loadCert("server1.key"))
           .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE).build();
     } catch (IOException ex) {
       throw new RuntimeException(ex);
