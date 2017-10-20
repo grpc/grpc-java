@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import com.google.common.annotations.VisibleForTesting;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -23,18 +24,45 @@ import java.util.concurrent.atomic.AtomicLong;
  * {@link AtomicLong} objects. Do not instantiate directly, instead use {@link LongCounterFactory}.
  */
 final class ShardedAtomicLongCounter implements LongCounter {
-  private final AtomicLong[] counters;
+  final AtomicLong[] counters;
+  final int mask;
 
-  ShardedAtomicLongCounter(int numShards) {
+  /**
+   * Accepts a hint on how many shards should be created. The actual number of shards may differ.
+   */
+  ShardedAtomicLongCounter(int numShardsHint) {
+    int numShards = forcePower2(numShardsHint);
     counters = new AtomicLong[numShards];
     for (int i = 0; i < numShards; i++) {
       counters[i] = new AtomicLong();
     }
+    mask = numShards - 1;
+  }
+
+  /**
+   * Force the shard size to a power of 2, with a reasonable ceiling value.
+   * Let's avoid clever bit twiddling and keep it simple.
+   */
+  static int forcePower2(int numShardsHint) {
+    if (numShardsHint >= 64) {
+      return 64;
+    } else if (numShardsHint >= 32) {
+      return 32;
+    } else if (numShardsHint >= 16) {
+      return 16;
+    } else {
+      return 8;
+    }
+  }
+
+  @VisibleForTesting
+  int getCounterIdx(int hashCode) {
+    return hashCode & mask;
   }
 
   @Override
   public void add(long delta) {
-    counters[(int) (Thread.currentThread().getId() % counters.length)].getAndAdd(delta);
+    counters[getCounterIdx(Thread.currentThread().hashCode())].getAndAdd(delta);
   }
 
   @Override

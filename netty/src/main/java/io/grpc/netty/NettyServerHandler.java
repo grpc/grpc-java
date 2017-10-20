@@ -292,18 +292,6 @@ class NettyServerHandler extends AbstractNettyHandler {
     this.streamTracerFactories = checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.transportTracer = checkNotNull(transportTracer, "transportTracer");
 
-    transportTracer.setFlowControlWindowReader(new TransportTracer.FlowControlReader() {
-      private final Http2FlowController local = connection.local().flowController();
-      private final Http2FlowController remote = connection.remote().flowController();
-
-      @Override
-      public TransportTracer.FlowControlWindows read() {
-        return new TransportTracer.FlowControlWindows(
-            local.windowSize(connection.connectionStream()),
-            remote.windowSize(connection.connectionStream()));
-      }
-    });
-
     // Set the frame listener on the decoder.
     decoder().frameListener(new FrameListener());
   }
@@ -358,6 +346,25 @@ class NettyServerHandler extends AbstractNettyHandler {
           keepAliveTimeInNanos, keepAliveTimeoutInNanos, true /* keepAliveDuringTransportIdle */);
       keepAliveManager.onTransportStarted();
     }
+
+
+    if (transportTracer != null) {
+      assert encoder().connection().equals(decoder().connection());
+      final Http2Connection connection = encoder().connection();
+      transportTracer.setFlowControlWindowReader(new TransportTracer.FlowControlReader() {
+        private final Http2FlowController local = connection.local().flowController();
+        private final Http2FlowController remote = connection.remote().flowController();
+
+        @Override
+        public TransportTracer.FlowControlWindows read() {
+          assert ctx.executor().inEventLoop();
+          return new TransportTracer.FlowControlWindows(
+              local.windowSize(connection.connectionStream()),
+              remote.windowSize(connection.connectionStream()));
+        }
+      });
+    }
+
     super.handlerAdded(ctx);
   }
 
