@@ -24,8 +24,6 @@
     <grpc.version>1.8.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
   </properties>
   <dependencies>
-    <!--Deps needed by all gRPC apps in GAE-->
-    <!--appengine SDK required for jdk7-->
     <dependency>
       <groupId>com.google.appengine</groupId>
       <artifactId>appengine-api-1.0-sdk</artifactId>
@@ -36,16 +34,6 @@
       <artifactId>servlet-api</artifactId>
       <version>2.5</version>
       <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>io.grpc</groupId>
-      <artifactId>grpc-netty</artifactId>
-      <version>${grpc.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>io.netty</groupId>
-      <artifactId>netty-tcnative-boringssl-static</artifactId>
-      <version>2.0.6.Final</version>
     </dependency>
     <dependency>
       <groupId>io.grpc</groupId>
@@ -61,6 +49,11 @@
       <groupId>io.grpc</groupId>
       <artifactId>grpc-stub</artifactId>
       <version>${grpc.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.api.grpc</groupId>
+      <artifactId>proto-google-common-protos</artifactId>
+      <version>0.1.9</version>
     </dependency>
   </dependencies>
   <build>

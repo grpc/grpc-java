@@ -51,7 +51,7 @@ public final class HelloServlet extends HttpServlet {
     resp.setContentType("text/plain");
     int responseSize = simpleResponse.getPayload().getBody().size();
     if (responseSize == desiredResponseSize) {
-      resp.getWriter().println("jdk8: success");
+      resp.getWriter().println("Hello world! Sanity check passed for jdk8!");
     } else {
       resp.getWriter().println(
           String.format(

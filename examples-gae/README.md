@@ -68,5 +68,5 @@ $ mvn appengine:update
 
 Point your browser to the address printed in the gradle output, and verify the success message.
 
-Tip: To run a specific deployment version, prepend the version identifier in the front of the
-URL.
+Tip: To run a specific deployment version, prepend the version identifier in the front of the URL:
+  http://<version>.<application.appspot.com/
