@@ -69,8 +69,10 @@ $ VERSION_FILES=(
   examples/pom.xml
   examples/android/helloworld/app/build.gradle
   examples/android/routeguide/app/build.gradle
-  examples-gae/gae-jdk8/pom.xml
-  examples-gae/gae-jdk8/build.gradle
+  examples/google-app-engine/gae-jdk7/pom.xml
+  examples/google-app-engine/gae-jdk7/build.gradle
+  examples/google-app-engine/gae-jdk8/pom.xml
+  examples/google-app-engine/gae-jdk8/build.gradle
   )
 ```
 
