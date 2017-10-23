@@ -66,7 +66,9 @@ public class ProxyDetectorImplTest {
 
   @Test
   public void override_hostPort() throws Exception {
-    final String overrideHostWithPort = "override:1234";
+    final String overrideHost = "override";
+    final int overridePort = 1234;
+    final String overrideHostWithPort = overrideHost + ":" + overridePort;
     ProxyDetectorImpl proxyDetector = new ProxyDetectorImpl(
         proxySelectorSupplier,
         authenticator,
