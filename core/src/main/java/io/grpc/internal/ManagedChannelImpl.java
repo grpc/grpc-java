@@ -958,10 +958,10 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     private static final ConcurrentMap<ManagedChannelReference, ManagedChannelReference> refs =
         new ConcurrentHashMap<ManagedChannelReference, ManagedChannelReference>();
 
-    private static final String allocationSitePropertyName =
+    private static final String ALLOCATION_SITE_PROPERTY_NAME =
         "io.grpc.ManagedChannel.enableAllocationTracking";
 
-    private static final boolean enableAllocationTracking =
+    private static final boolean ENABLE_ALLOCATION_TRACKING =
         Boolean.parseBoolean(System.getProperty(allocationSitePropertyName, "true"));
     private static final RuntimeException missingCallSite = missingCallSite();
 
