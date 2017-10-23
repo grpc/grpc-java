@@ -962,7 +962,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
         "io.grpc.ManagedChannel.enableAllocationTracking";
 
     private static final boolean ENABLE_ALLOCATION_TRACKING =
-        Boolean.parseBoolean(System.getProperty(allocationSitePropertyName, "true"));
+        Boolean.parseBoolean(System.getProperty(ALLOCATION_SITE_PROPERTY_NAME, "true"));
     private static final RuntimeException missingCallSite = missingCallSite();
 
     private final LogId logId;
@@ -975,7 +975,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     ManagedChannelReference(ManagedChannelImpl chan) {
       super(chan, refQueue);
       allocationSite = new SoftReference<RuntimeException>(
-          enableAllocationTracking
+          ENABLE_ALLOCATION_TRACKING
               ? new RuntimeException("ManagedChannel allocation site")
               : missingCallSite);
       logId = chan.logId;
@@ -1037,7 +1037,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     private static RuntimeException missingCallSite() {
       RuntimeException e = new RuntimeException(
           "ManagedChannel allocation site not recorded.  Set -D"
-              + allocationSitePropertyName + "=true to enable it");
+              + ALLOCATION_SITE_PROPERTY_NAME + "=true to enable it");
       e.setStackTrace(new StackTraceElement[0]);
       return e;
     }
