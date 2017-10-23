@@ -23,7 +23,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * Unit tests for ShardedAtomicLongCounter
+ * Unit tests for ShardedAtomicLongCounter.
  */
 @RunWith(JUnit4.class)
 public class ShardedAtomicLongCounterTest {
