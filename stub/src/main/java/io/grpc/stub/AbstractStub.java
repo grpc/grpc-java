@@ -124,7 +124,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   /**
    * Returns a new stub with the given executor that is to be used instead of the default one
    * specified with {@link ManagedChannelBuilder#executor}. Note that setting this option may not
-   * take effect for blocking unary calls.
+   * take effect for blocking calls.
    *
    * @since 1.8.0
    */
