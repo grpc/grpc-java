@@ -683,7 +683,7 @@ public class Context {
    * }
    * </pre>
    *
-   * Asynchronous code will have to manually track the end of the CancellableContext's lifetime,
+   * <p>Asynchronous code will have to manually track the end of the CancellableContext's lifetime,
    * and call either {@link #cancel} or {@link #close} at that time.
    */
   public static final class CancellableContext extends Context implements Closeable {
