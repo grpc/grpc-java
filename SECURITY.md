@@ -306,6 +306,8 @@ If you have both `io.grpc:grpc-netty` and `io.grpc:grpc-okhttp`, you may also ha
 
 If you have both `netty-codec-http2` and `netty-tcnative-boringssl-static` dependencies, then check the versions carefully. These versions could've been overridden by dependency management from another BOM. You would receive the "ALPN is not configured properly" exception if there are using incompatible versions.
 
+If you have other `netty` dependencies, such as `netty-all`, that are pulled in from other libraries, then ultimately you should make sure only one `netty` dependency is used to avoid classpath conflict. The easiest way is to exclude transitive Netty dependencies from all the immediate dependencies, e.g., in Maven use `<exclusions>`, and then add an explict Netty dependency in your project along with the corresponding `tcnative` versions. See the versions table below.
+
 If you are using `musl` libc (e.g., with Alpine Linux), then `netty-tcnative-boringssl-static` won't work either. There are several alternatives:
  - Use [netty-tcnative-alpine] (https://github.com/pires/netty-tcnative-alpine)
  - Use a distribution w/ `glibc`
