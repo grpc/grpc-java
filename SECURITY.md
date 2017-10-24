@@ -306,7 +306,9 @@ If you have both `io.grpc:grpc-netty` and `io.grpc:grpc-okhttp`, you may also ha
 
 If you have both `netty-codec-http2` and `netty-tcnative-boringssl-static` dependencies, then check the versions carefully. These versions could've been overridden by dependency management from another BOM. You would receive the "ALPN is not configured properly" exception if there are using incompatible versions.
 
-Also, some of the `netty-tcnative-boringssl-static` versions conflicts with embedded Tomcat runtime.
+If you are using `musl` libc (e.g., with Alpine Linux), then `netty-tcnative-boringssl-static` won't work either.
+
+If you are running inside of an embedded Tomcat runtime (e.g., Spring Boot), then some versions of `netty-tcnative-boringssl-static` will have conflicts and won't work.
 
 Below are known to work version combinations:
 
@@ -330,10 +332,9 @@ Find the dependency tree (e.g., `mvn dependency:tree`), and look for versions of
 
 If you don't have `grpc-okhttp`, you should add it as a dependency.
 
-If you have both `io.grpc:grpc-netty` and `io.grpc:grpc-okhttp`, you may also have issues. Remove `grpc-netty` if are on Android.
+If you have both `io.grpc:grpc-netty` and `io.grpc:grpc-okhttp`, you may also have issues. Remove `grpc-netty` if you are on Android.
 
 If you have `okhttp` version below 2.5.0, or, if you have okhttp 3.x, then it may not work with gRPC.
-
 
 Below are known to work version combinations:
 
