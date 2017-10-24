@@ -292,29 +292,61 @@ If you received an error message "ALPN is not configured properly", it most like
  - or that there is a classpath conflict
  - or that a wrong version is used due to dependency management.
 
-For example, in your project, find the dependency tree (e.g., `mvn dependency:tree`), and look for versions of:
+### Netty
+If you aren't using gRPC on Android devices, you are most likely using `grpc-netty` transport.
+
+Find the dependency tree (e.g., `mvn dependency:tree`), and look for versions of:
  - `io.grpc:grpc-netty`
  - `io.netty:netty-codec-http2`
  - `io.netty:netty-tcnative-boringssl-static:jar` 
 
 If `netty-tcnative-boringssl-static` is missing, then you either need to add it as a dependency, or use alternative methods of providing ALPN capability by reading the *Transport Security (TLS)* section carefully.
 
+If you have both `io.grpc:grpc-netty` and `io.grpc:grpc-okhttp`, you may also have issues. Remove `grpc-okhttp` if you are not on Android.
+
 If you have both `netty-codec-http2` and `netty-tcnative-boringssl-static` dependencies, then check the versions carefully. These versions could've been overridden by dependency management from another BOM. You would receive the "ALPN is not configured properly" exception if there are using incompatible versions.
 
 Also, some of the `netty-tcnative-boringssl-static` versions conflicts with embedded Tomcat runtime.
 
-Below are known to work version pairings:
+Below are known to work version combinations:
 
-grpc-netty version | netty-code-http2 version | netty-tcnative-boringssl-static version | Conflicts w/ Tomcat
------------------- | ------------------------ | --------------------------------------- | -------------------
-1.0.0.Final        | 4.1.3.Final              | 1.1.33.Fork19                           | Yes
-1.1.0.Final        | 4.1.8.Final              | 1.1.33.Fork26                           | Yes
-1.2.0.Final        | 4.1.8.Final              | 1.1.33.Fork26                           | Yes
-1.3.0.Final        | 4.1.8.Final              | 1.1.33.Fork26                           | Yes
-1.4.0.Final        | 4.1.11.Final             | 2.0.1.Final                             | No
-1.5.0.Final        | 4.1.12.Final             | 2.0.5.Final                             | No
-1.6.1.Final        | 4.1.14.Final             | 2.0.5.Final                             | No
-1.7.0.Final        | 4.1.16.Final             | 2.0.6.Final                             | No
+grpc-netty version | netty-code-http2 version | netty-tcnative-boringssl-static version | Conflicts w/ Embedded Tomcat
+------------------ | ------------------------ | --------------------------------------- | ----------------------------
+1.0.0              | 4.1.3.Final              | 1.1.33.Fork19                           | Yes
+1.1.0              | 4.1.8.Final              | 1.1.33.Fork26                           | Yes
+1.2.0              | 4.1.8.Final              | 1.1.33.Fork26                           | Yes
+1.3.0              | 4.1.8.Final              | 1.1.33.Fork26                           | Yes
+1.4.0              | 4.1.11.Final             | 2.0.1.Final                             | No
+1.5.0              | 4.1.12.Final             | 2.0.5.Final                             | No
+1.6.1              | 4.1.14.Final             | 2.0.5.Final                             | No
+1.7.0              | 4.1.16.Final             | 2.0.6.Final                             | No
+
+### OkHttp
+If you are using gRPC on Android devices, you are most likely using `grpc-netty` transport.
+
+Find the dependency tree (e.g., `mvn dependency:tree`), and look for versions of:
+ - `io.grpc:grpc-okhttp`
+ - `com.squareup.okhttp:okhttp`
+
+If you don't have `grpc-okhttp`, you should add it as a dependency.
+
+If you have both `io.grpc:grpc-netty` and `io.grpc:grpc-okhttp`, you may also have issues. Remove `grpc-netty` if are on Android.
+
+If you have `okhttp` version below 2.5.0, or, if you have okhttp 3.x, then it may not work with gRPC.
+
+
+Below are known to work version combinations:
+
+grpc-okhttp version | okhttp version 
+------------------- | --------------
+1.0.0               | 2.5.0
+1.1.0               | 2.5.0
+1.2.0               | 2.5.0
+1.3.0               | 2.5.0
+1.4.0               | 2.5.0
+1.5.0               | 2.5.0
+1.6.1               | 2.5.0
+1.7.0               | 2.5.0
 
 # gRPC over plaintext
 
