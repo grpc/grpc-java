@@ -287,7 +287,7 @@ public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<RespT> c
 
 ## Troubleshooting
 
-If you received an error message "ALPN is not configured properly", it most likely means that:
+If you received an error message "ALPN is not configured properly" or "Jetty ALPN/NPN has not been properly configured", it most likely means that:
  - ALPN related dependencies are either not present in the classpath
  - or that there is a classpath conflict
  - or that a wrong version is used due to dependency management.
