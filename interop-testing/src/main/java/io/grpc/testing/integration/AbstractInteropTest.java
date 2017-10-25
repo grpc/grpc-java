@@ -194,7 +194,7 @@ public abstract class AbstractInteropTest {
     testServiceExecutor = Executors.newScheduledThreadPool(2);
 
     List<ServerInterceptor> allInterceptors = ImmutableList.<ServerInterceptor>builder()
-        .add(TestUtils.recordServerCallInterceptor(serverCallCapture))
+        .add(io.grpc.internal.testing.TestUtils.recordServerCallInterceptor(serverCallCapture))
         .add(TestUtils.recordRequestHeadersInterceptor(requestHeadersCapture))
         .add(recordContextInterceptor(contextCapture))
         .addAll(TestServiceImpl.interceptors())
