@@ -55,14 +55,12 @@ import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
-import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
 import io.grpc.ServerCall;
-import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
@@ -72,11 +70,11 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.testing.StatsTestUtils;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsContext;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsContextFactory;
 import io.grpc.internal.testing.StatsTestUtils.MetricsRecord;
 import io.grpc.internal.testing.StatsTestUtils.MockableSpan;
+import io.grpc.internal.testing.StatsTestUtils;
 import io.grpc.internal.testing.TestClientStreamTracer;
 import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.internal.testing.TestStreamTracer;
@@ -111,13 +109,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
@@ -204,7 +199,6 @@ public abstract class AbstractInteropTest {
         .add(recordContextInterceptor(contextCapture))
         .addAll(TestServiceImpl.interceptors())
         .add(interceptors)
-        .add(dynamicServerInterceptor)
         .build();
 
     builder
@@ -257,25 +251,6 @@ public abstract class AbstractInteropTest {
       };
 
   /**
-   * Be able to add whatever ServerInterceptor you like dynamically for individual tests.
-   */
-  protected static final AtomicReference<ServerInterceptor> dynamicServerInterceptorRef
-      = new AtomicReference<ServerInterceptor>();
-  private static final ServerInterceptor dynamicServerInterceptor = new ServerInterceptor() {
-    @Override
-    public <ReqT, RespT> Listener<ReqT> interceptCall(
-        final ServerCall<ReqT, RespT> call,
-        final Metadata headers,
-        final ServerCallHandler<ReqT, RespT> next) {
-      ServerInterceptor serverInterceptor = dynamicServerInterceptorRef.get();
-      if (serverInterceptor != null) {
-        return serverInterceptor.interceptCall(call, headers, next);
-      }
-      return next.startCall(call, headers);
-    }
-  };
-
-  /**
    * Must be called by the subclass setup method if overridden.
    */
   @Before
@@ -289,7 +264,6 @@ public abstract class AbstractInteropTest {
     clientStatsCtxFactory.rolloverRecords();
     serverStatsCtxFactory.rolloverRecords();
     serverStreamTracers.clear();
-    dynamicServerInterceptorRef.set(null);
   }
 
   /** Clean up. */
@@ -1444,72 +1418,6 @@ public abstract class AbstractInteropTest {
     assertEquals(errorMessage, Status.fromThrowable(captor.getValue()).getDescription());
     verifyNoMoreInteractions(responseObserver);
     assertStatsTrace("grpc.testing.TestService/FullDuplexCall", Status.Code.UNKNOWN);
-  }
-
-  @Test
-  public void statusCodeAndMessage_withLatchedCallExecutor() {
-    final CountDownLatch latch = new CountDownLatch(1);
-    final AtomicBoolean latchTimeout = new AtomicBoolean();
-    final AtomicBoolean serverCallOnClose = new AtomicBoolean();
-    ServerInterceptor serverCallOnCloseInterceptor = new ServerInterceptor() {
-      @Override
-      public <ReqT, RespT> Listener<ReqT> interceptCall(
-          ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-        return next.startCall(
-            new SimpleForwardingServerCall<ReqT, RespT>(call) {
-              @Override
-              public void close(Status status, Metadata trailers) {
-                serverCallOnClose.set(true);
-                delegate().close(status, trailers);
-              }
-            },
-            headers);
-      }
-    };
-    dynamicServerInterceptorRef.set(serverCallOnCloseInterceptor);
-    Executor latchedExecutor =
-        new Executor() {
-          @Override
-          public void execute(Runnable command) {
-            command.run();
-            if (serverCallOnClose.get()) {
-              try {
-                latch.await(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
-              } catch (InterruptedException ignorable) {
-                latch.countDown();
-                latchTimeout.set(true);
-              }
-            }
-          }
-        };
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(latchedExecutor);
-    Channel channel =
-        ClientInterceptors.intercept(this.channel, tracerSetupInterceptor);
-    ClientCall<SimpleRequest, SimpleResponse> call =
-        channel.newCall(TestServiceGrpc.METHOD_UNARY_CALL, callOptions);
-
-    int errorCode = 2;
-    String errorMessage = "test status message";
-    EchoStatus responseStatus = EchoStatus.newBuilder()
-        .setCode(errorCode)
-        .setMessage(errorMessage)
-        .build();
-    SimpleRequest simpleRequest = SimpleRequest.newBuilder()
-        .setResponseStatus(responseStatus)
-        .build();
-
-    try {
-      ClientCalls.blockingUnaryCall(call, simpleRequest);
-      fail();
-    } catch (StatusRuntimeException e) {
-      assertEquals(Status.Code.UNKNOWN, e.getStatus().getCode());
-      assertEquals(errorMessage, e.getStatus().getDescription());
-    } finally {
-      latch.countDown();
-    }
-
-    assertServerStatsTrace("grpc.testing.TestService/UnaryCall", Status.Code.UNKNOWN, null, null);
-    assertFalse(latchTimeout.get());
   }
 
   /** Sends an rpc to an unimplemented method within TestService. */
