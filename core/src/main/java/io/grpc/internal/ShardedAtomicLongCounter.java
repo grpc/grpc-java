@@ -17,14 +17,14 @@
 package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicLongArray;
 
 /**
  * An implementation of {@link LongCounter} that works by sharded across an array of
  * {@link AtomicLong} objects. Do not instantiate directly, instead use {@link LongCounterFactory}.
  */
 final class ShardedAtomicLongCounter implements LongCounter {
-  final AtomicLong[] counters;
+  final AtomicLongArray counters;
   final int mask;
 
   /**
@@ -32,10 +32,7 @@ final class ShardedAtomicLongCounter implements LongCounter {
    */
   ShardedAtomicLongCounter(int numShardsHint) {
     int numShards = forcePower2(numShardsHint);
-    counters = new AtomicLong[numShards];
-    for (int i = 0; i < numShards; i++) {
-      counters[i] = new AtomicLong();
-    }
+    counters = new AtomicLongArray(numShards);
     mask = numShards - 1;
   }
 
@@ -62,14 +59,14 @@ final class ShardedAtomicLongCounter implements LongCounter {
 
   @Override
   public void add(long delta) {
-    counters[getCounterIdx(Thread.currentThread().hashCode())].getAndAdd(delta);
+    counters.addAndGet(getCounterIdx(Thread.currentThread().hashCode()), delta);
   }
 
   @Override
   public long value() {
     long val = 0;
-    for (AtomicLong counter : counters) {
-      val += counter.get();
+    for (int i = 0; i < counters.length(); i++) {
+      val += counters.get(i);
     }
     return val;
   }

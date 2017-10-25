@@ -111,10 +111,10 @@ public final class TransportTracer {
    * A container that holds the local and remote flow control window sizes.
    */
   public static final class FlowControlWindows {
-    public final int remoteBytes;
-    public final int localBytes;
+    public final long remoteBytes;
+    public final long localBytes;
 
-    public FlowControlWindows(int localBytes, int remoteBytes) {
+    public FlowControlWindows(long localBytes, long remoteBytes) {
       this.localBytes = localBytes;
       this.remoteBytes = remoteBytes;
     }
@@ -144,8 +144,8 @@ public final class TransportTracer {
     public final long keepAlivesSent;
     public final long lastMessageSentTimeNanos;
     public final long lastMessageReceivedTimeNanos;
-    public final int localFlowControlWindow;
-    public final int remoteFlowControlWindow;
+    public final long localFlowControlWindow;
+    public final long remoteFlowControlWindow;
 
     private Stats(
         long streamsStarted,

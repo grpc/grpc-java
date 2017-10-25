@@ -29,11 +29,14 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
-import io.netty.util.concurrent.Promise;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -181,18 +184,22 @@ class NettyServerTransport implements ServerTransport {
       // This is necessary, otherwise we will block forever on the promise in the else case
       return transportTracer.getStats();
     }
-    final Promise<TransportTracer.Stats> promise = channel.eventLoop().newPromise();
-    channel.eventLoop().execute(new Runnable() {
-      @Override
-      public void run() {
-        promise.setSuccess(transportTracer.getStats());
-      }
-    });
+    final Future<TransportTracer.Stats> future = channel.eventLoop().submit(
+        new Callable<TransportTracer.Stats>() {
+          @Override
+          public TransportTracer.Stats call() throws Exception {
+            return transportTracer.getStats();
+          }
+        });
     try {
-      return promise.get();
+      // Arbitrarily chosen timeout to avoid blocking forever
+      return future.get(1, TimeUnit.MINUTES);
     } catch (InterruptedException e) {
+      Thread.interrupted();
       throw new RuntimeException(e);
     } catch (ExecutionException e) {
+      throw new RuntimeException(e);
+    } catch (TimeoutException e) {
       throw new RuntimeException(e);
     }
   }

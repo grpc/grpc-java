@@ -16,6 +16,7 @@
 
 package io.grpc.netty;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import io.grpc.Status;
 import io.netty.handler.codec.http2.Http2Headers;
@@ -79,6 +80,6 @@ class SendResponseHeadersCommand extends WriteQueue.AbstractQueuedCommand {
 
   @Override
   public int hashCode() {
-    return stream.hashCode();
+    return Objects.hashCode(stream, headers, status);
   }
 }
