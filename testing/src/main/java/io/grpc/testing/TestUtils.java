@@ -180,6 +180,15 @@ public class TestUtils {
   }
 
   /**
+   * Returns the given certificate resource in src/main/resources/certs/ as an {@code InputStream}.
+   *
+   * @param name name of a file in src/main/resources/certs/, e.g., {@code "ca.key"}.
+   */
+  public static InputStream loadCertFromResource(String name) throws IOException {
+    return TestUtils.class.getResourceAsStream("/certs/" + name);
+  }
+
+  /**
    * Loads an X.509 certificate from the classpath resources in src/main/resources/certs.
    *
    * @param fileName  name of a file in src/main/resources/certs.
