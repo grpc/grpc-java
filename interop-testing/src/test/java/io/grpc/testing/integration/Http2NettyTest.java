@@ -35,7 +35,7 @@ import org.junit.runners.JUnit4;
  * Integration tests for GRPC over HTTP2 using the Netty framework.
  */
 @RunWith(JUnit4.class)
-public class Http2NettyTest extends MoreInteropTests {
+public class Http2NettyTest extends AbstractInteropTest {
 
   /** Starts the server with HTTPS. */
   @BeforeClass

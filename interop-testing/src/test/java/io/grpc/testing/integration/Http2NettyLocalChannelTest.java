@@ -32,7 +32,7 @@ import org.junit.runners.JUnit4;
  * Run transport tests over the Netty in-process channel.
  */
 @RunWith(JUnit4.class)
-public class Http2NettyLocalChannelTest extends MoreInteropTests {
+public class Http2NettyLocalChannelTest extends AbstractInteropTest {
 
   /** Start server. */
   @BeforeClass
