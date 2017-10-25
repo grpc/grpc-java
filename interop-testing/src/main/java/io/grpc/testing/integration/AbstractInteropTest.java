@@ -1446,13 +1446,6 @@ public abstract class AbstractInteropTest {
     assertStatsTrace("grpc.testing.TestService/FullDuplexCall", Status.Code.UNKNOWN);
   }
 
-  /**
-   * The test should be launched with the default Server and Channel executor. The test uses a
-   * custom call executor with a latch, which can block the thread that has just called {@link
-   * io.grpc.internal.ClientStreamListener#closed} when the server sends out failure status to the
-   * client, letting the client exception handling task win the race with the blocked thread's later
-   * tasks that are being held off by the latch.
-   */
   @Test
   public void statusCodeAndMessage_withLatchedCallExecutor() {
     final CountDownLatch latch = new CountDownLatch(1);
@@ -1478,13 +1471,9 @@ public abstract class AbstractInteropTest {
         new Executor() {
           @Override
           public void execute(Runnable command) {
-
-            command.run(); // The client thread will get the failure status by future.get()
-
+            command.run();
             if (serverCallOnClose.get()) {
               try {
-                // Blocks the current thread, and let the thread that is calling future.get() win
-                // the race.
                 latch.await(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
               } catch (InterruptedException ignorable) {
                 latch.countDown();
@@ -1516,7 +1505,7 @@ public abstract class AbstractInteropTest {
       assertEquals(Status.Code.UNKNOWN, e.getStatus().getCode());
       assertEquals(errorMessage, e.getStatus().getDescription());
     } finally {
-      latch.countDown(); // Release the latch after exception handling is done.
+      latch.countDown();
     }
 
     assertServerStatsTrace("grpc.testing.TestService/UnaryCall", Status.Code.UNKNOWN, null, null);
