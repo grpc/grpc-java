@@ -55,7 +55,6 @@ import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
-import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
@@ -111,13 +110,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
@@ -247,7 +243,7 @@ public abstract class AbstractInteropTest {
           return tracer;
         }
       };
-  private final ClientInterceptor tracerSetupInterceptor = new ClientInterceptor() {
+  final ClientInterceptor tracerSetupInterceptor = new ClientInterceptor() {
         @Override
         public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
             MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
@@ -1446,83 +1442,6 @@ public abstract class AbstractInteropTest {
     assertStatsTrace("grpc.testing.TestService/FullDuplexCall", Status.Code.UNKNOWN);
   }
 
-  /**
-   * The test should be launched with the default Server and Channel executor. The test uses a
-   * custom call executor with a latch, which can block the thread that has just called {@link
-   * io.grpc.internal.ClientStreamListener#closed} when the server sends out failure status to the
-   * client, letting the client exception handling task win the race with the blocked thread's later
-   * tasks that are being held off by the latch.
-   */
-  @Test
-  public void statusCodeAndMessage_withLatchedCallExecutor() {
-    final CountDownLatch latch = new CountDownLatch(1);
-    final AtomicBoolean latchTimeout = new AtomicBoolean();
-    final AtomicBoolean serverCallOnClose = new AtomicBoolean();
-    ServerInterceptor serverCallOnCloseInterceptor = new ServerInterceptor() {
-      @Override
-      public <ReqT, RespT> Listener<ReqT> interceptCall(
-          ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-        return next.startCall(
-            new SimpleForwardingServerCall<ReqT, RespT>(call) {
-              @Override
-              public void close(Status status, Metadata trailers) {
-                serverCallOnClose.set(true);
-                delegate().close(status, trailers);
-              }
-            },
-            headers);
-      }
-    };
-    dynamicServerInterceptorRef.set(serverCallOnCloseInterceptor);
-    Executor latchedExecutor =
-        new Executor() {
-          @Override
-          public void execute(Runnable command) {
-
-            command.run(); // The client thread will get the failure status by future.get()
-
-            if (serverCallOnClose.get()) {
-              try {
-                // Blocks the current thread, and let the thread that is calling future.get() win
-                // the race.
-                latch.await(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
-              } catch (InterruptedException ignorable) {
-                latch.countDown();
-                latchTimeout.set(true);
-              }
-            }
-          }
-        };
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(latchedExecutor);
-    Channel channel =
-        ClientInterceptors.intercept(this.channel, tracerSetupInterceptor);
-    ClientCall<SimpleRequest, SimpleResponse> call =
-        channel.newCall(TestServiceGrpc.METHOD_UNARY_CALL, callOptions);
-
-    int errorCode = 2;
-    String errorMessage = "test status message";
-    EchoStatus responseStatus = EchoStatus.newBuilder()
-        .setCode(errorCode)
-        .setMessage(errorMessage)
-        .build();
-    SimpleRequest simpleRequest = SimpleRequest.newBuilder()
-        .setResponseStatus(responseStatus)
-        .build();
-
-    try {
-      ClientCalls.blockingUnaryCall(call, simpleRequest);
-      fail();
-    } catch (StatusRuntimeException e) {
-      assertEquals(Status.Code.UNKNOWN, e.getStatus().getCode());
-      assertEquals(errorMessage, e.getStatus().getDescription());
-    } finally {
-      latch.countDown(); // Release the latch after exception handling is done.
-    }
-
-    assertServerStatsTrace("grpc.testing.TestService/UnaryCall", Status.Code.UNKNOWN, null, null);
-    assertFalse(latchTimeout.get());
-  }
-
   /** Sends an rpc to an unimplemented method within TestService. */
   @Test
   public void unimplementedMethod() {
@@ -1864,7 +1783,7 @@ public abstract class AbstractInteropTest {
   }
 
   @SuppressWarnings("AssertionFailureIgnored") // Failure is checked in the end by the passed flag.
-  private void assertServerStatsTrace(String method, Status.Code code,
+  void assertServerStatsTrace(String method, Status.Code code,
       Collection<? extends MessageLite> requests, Collection<? extends MessageLite> responses) {
     if (!serverInProcess()) {
       return;

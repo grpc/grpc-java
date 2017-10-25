@@ -60,7 +60,7 @@ import org.junit.runners.JUnit4;
  * Tests that compression is turned on.
  */
 @RunWith(JUnit4.class)
-public class TransportCompressionTest extends AbstractInteropTest {
+public class TransportCompressionTest extends MoreInteropTests {
 
   // Masquerade as identity.
   private static final Fzip FZIPPER = new Fzip("gzip", new Codec.Gzip());

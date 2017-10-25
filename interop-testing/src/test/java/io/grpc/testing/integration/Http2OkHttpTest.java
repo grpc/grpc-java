@@ -52,7 +52,7 @@ import org.junit.runners.JUnit4;
  * Integration tests for GRPC over Http2 using the OkHttp framework.
  */
 @RunWith(JUnit4.class)
-public class Http2OkHttpTest extends AbstractInteropTest {
+public class Http2OkHttpTest extends MoreInteropTests {
 
   private static final String BAD_HOSTNAME = "I.am.a.bad.hostname";
 

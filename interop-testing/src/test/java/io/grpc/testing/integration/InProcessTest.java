@@ -26,7 +26,7 @@ import org.junit.runners.JUnit4;
 
 /** Unit tests for {@link io.grpc.inprocess}. */
 @RunWith(JUnit4.class)
-public class InProcessTest extends AbstractInteropTest {
+public class InProcessTest extends MoreInteropTests {
 
   private static final String SERVER_NAME = "test";
 
