@@ -16,7 +16,15 @@
 
 package io.grpc.testing;
 
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Context;
+
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.logging.Logger;
 import org.junit.Assert;
 import org.junit.rules.TestRule;
@@ -32,7 +40,29 @@ import org.junit.runners.model.Statement;
  */
 public class GrpcContextRule implements TestRule {
   private static final Logger log = Logger.getLogger(GrpcContextRule.class.getName());
+  private final Context root;
   private boolean failOnLeak;
+
+  public GrpcContextRule() {
+    // Context storage implementations can define an alternative root context for threads with with no attached context.
+    // To capture this, create a virgin thread and extract its context. Use that context in lieu of Context.ROOT.
+    // While paranoid, this prevents contexts leaked by other tests classes from poisoning Context.current().
+    ListeningExecutorService executorService = MoreExecutors.listeningDecorator(Executors.newSingleThreadExecutor());
+    try {
+      root = executorService.submit(new Callable<Context>() {
+        @Override
+        public Context call() throws Exception {
+          return Context.current();
+        }
+      }).get();
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
+    } catch (ExecutionException e) {
+      throw new RuntimeException(e);
+    } finally {
+      executorService.shutdown();
+    }
+  }
 
   public GrpcContextRule failIfTestLeaksContext() {
     failOnLeak = true;
@@ -45,10 +75,10 @@ public class GrpcContextRule implements TestRule {
       @Override
       public void evaluate() throws Throwable {
         // Reset the gRPC context between test executions
-        Context prev = Context.ROOT.attach();
+        Context prev = root.attach();
         try {
           base.evaluate();
-          if (Context.current() != Context.ROOT) {
+          if (Context.current() != root) {
             if (failOnLeak) {
               Assert.fail("Test is leaking context state between tests! Ensure proper "
                       + "attach()/detach() pairing.");
@@ -58,7 +88,7 @@ public class GrpcContextRule implements TestRule {
             }
           }
         } finally {
-          Context.ROOT.detach(prev);
+          root.detach(prev);
         }
       }
     };
