@@ -34,7 +34,7 @@ public final class MetricsServiceGrpc {
           .setType(io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
           .setFullMethodName(generateFullMethodName(
               "grpc.testing.MetricsService", "GetAllGauges"))
-          .setRegisterForTracing(true)
+          .setSampledToLocalTracing(true)
           .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.testing.integration.Metrics.EmptyMessage.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
@@ -48,7 +48,7 @@ public final class MetricsServiceGrpc {
           .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
           .setFullMethodName(generateFullMethodName(
               "grpc.testing.MetricsService", "GetGauge"))
-          .setRegisterForTracing(true)
+          .setSampledToLocalTracing(true)
           .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
               io.grpc.testing.integration.Metrics.GaugeRequest.getDefaultInstance()))
           .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
