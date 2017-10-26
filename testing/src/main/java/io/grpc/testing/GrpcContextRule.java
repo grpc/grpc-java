@@ -16,14 +16,11 @@
 
 package io.grpc.testing;
 
-import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Context;
-
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Logger;
 import org.junit.Assert;
@@ -43,11 +40,16 @@ public class GrpcContextRule implements TestRule {
   private final Context root;
   private boolean failOnLeak;
 
+  /**
+   * Instantiate a new {@code GrpcContextRule}.
+   */
   public GrpcContextRule() {
-    // Context storage implementations can define an alternative root context for threads with with no attached context.
-    // To capture this, create a virgin thread and extract its context. Use that context in lieu of Context.ROOT.
-    // While paranoid, this prevents contexts leaked by other tests classes from poisoning Context.current().
-    ListeningExecutorService executorService = MoreExecutors.listeningDecorator(Executors.newSingleThreadExecutor());
+    // Context storage implementations can define an alternative root context for threads with with
+    // no attached context. To capture this, create a virgin thread and extract its context. Use
+    // that context in lieu of Context.ROOT. While paranoid, this prevents contexts leaked by other
+    // tests classes from poisoning Context.current().
+    ListeningExecutorService executorService = MoreExecutors.listeningDecorator(
+        Executors.newSingleThreadExecutor());
     try {
       root = executorService.submit(new Callable<Context>() {
         @Override
