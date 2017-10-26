@@ -76,12 +76,8 @@ public class NettyTransportTest extends AbstractTransportTest {
     return clientFactory.newClientTransport(
         new InetSocketAddress("localhost", port),
         testAuthority(server),
-        null /* agent */);
-  }
-
-  @Override
-  protected boolean metricsExpected() {
-    return true;
+        null /* agent */,
+        null /* proxy */);
   }
 
   @Test

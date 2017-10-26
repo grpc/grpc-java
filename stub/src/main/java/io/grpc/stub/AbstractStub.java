@@ -18,6 +18,7 @@ package io.grpc.stub;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.errorprone.annotations.DoNotMock;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -26,6 +27,7 @@ import io.grpc.ClientInterceptors;
 import io.grpc.Deadline;
 import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannelBuilder;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
@@ -42,6 +44,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * @param <S> the concrete type of this stub.
  */
 @ThreadSafe
+@DoNotMock
 public abstract class AbstractStub<S extends AbstractStub<S>> {
   private final Channel channel;
   private final CallOptions callOptions;
@@ -116,6 +119,18 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    */
   public final S withDeadlineAfter(long duration, TimeUnit unit) {
     return build(channel, callOptions.withDeadlineAfter(duration, unit));
+  }
+
+  /**
+   * Returns a new stub with the given executor that is to be used instead of the default one
+   * specified with {@link ManagedChannelBuilder#executor}. Note that setting this option may not
+   * take effect for blocking calls.
+   *
+   * @since 1.8.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3605")
+  public final S withExecutor(Executor executor) {
+    return build(channel, callOptions.withExecutor(executor));
   }
 
   /**

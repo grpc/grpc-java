@@ -52,7 +52,6 @@ import java.lang.ref.SoftReference;
 import java.lang.ref.WeakReference;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -133,6 +132,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
   // Only null after channel is terminated. Must be assigned from the channelExecutor.
   private NameResolver nameResolver;
+
+  private final ProxyDetector proxyDetector;
 
   // null when channel is in idle mode.  Must be assigned from channelExecutor.
   @Nullable
@@ -387,7 +388,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       BackoffPolicy.Provider backoffPolicyProvider,
       ObjectPool<? extends Executor> oobExecutorPool,
       Supplier<Stopwatch> stopwatchSupplier,
-      List<ClientInterceptor> interceptors) {
+      List<ClientInterceptor> interceptors,
+      ProxyDetector proxyDetector) {
     this.target = checkNotNull(builder.target, "target");
     this.nameResolverFactory = builder.getNameResolverFactory();
     this.nameResolverParams = checkNotNull(builder.getNameResolverParams(), "nameResolverParams");
@@ -417,6 +419,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     this.decompressorRegistry = checkNotNull(builder.decompressorRegistry, "decompressorRegistry");
     this.compressorRegistry = checkNotNull(builder.compressorRegistry, "compressorRegistry");
     this.userAgent = builder.userAgent;
+    this.proxyDetector = proxyDetector;
 
     phantom = new ManagedChannelReference(this);
     logger.log(Level.FINE, "[{0}] Created with target {1}", new Object[] {getLogId(), target});
@@ -636,6 +639,13 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       this.nr = checkNotNull(nr, "NameResolver");
     }
 
+    // Must be called from channelExecutor
+    private void handleInternalSubchannelState(ConnectivityStateInfo newState) {
+      if (newState.getState() == TRANSIENT_FAILURE || newState.getState() == IDLE) {
+        nr.refresh();
+      }
+    }
+
     @Override
     public AbstractSubchannel createSubchannel(
         EquivalentAddressGroup addressGroup, Attributes attrs) {
@@ -657,10 +667,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
               @Override
               void onStateChange(InternalSubchannel is, ConnectivityStateInfo newState) {
-                if ((newState.getState() == TRANSIENT_FAILURE || newState.getState() == IDLE)) {
-                  nr.refresh();
+                handleInternalSubchannelState(newState);
+                // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
+                if (LbHelperImpl.this == ManagedChannelImpl.this.lbHelper) {
+                  lb.handleSubchannelState(subchannel, newState);
                 }
-                lb.handleSubchannelState(subchannel, newState);
               }
 
               @Override
@@ -672,7 +683,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
               void onNotInUse(InternalSubchannel is) {
                 inUseStateAggregator.updateObjectInUse(is, false);
               }
-            });
+            },
+            proxyDetector);
       subchannel.subchannel = internalSubchannel;
       logger.log(Level.FINE, "[{0}] {1} created for {2}",
           new Object[] {getLogId(), internalSubchannel.getLogId(), addressGroup});
@@ -750,9 +762,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
             @Override
             void onStateChange(InternalSubchannel is, ConnectivityStateInfo newState) {
+              handleInternalSubchannelState(newState);
               oobChannel.handleSubchannelStateChange(newState);
             }
-          });
+          },
+          proxyDetector);
       oobChannel.setSubchannel(internalSubchannel);
       runSerialized(new Runnable() {
           @Override
@@ -791,22 +805,6 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     public void runSerialized(Runnable task) {
       channelExecutor.executeLater(task).drain();
     }
-
-    @Deprecated
-    @Override
-    public void updatePicker(final SubchannelPicker picker) {
-      runSerialized(new Runnable() {
-          @Override
-          public void run() {
-            if (LbHelperImpl.this != lbHelper) {
-              return;
-            }
-            subchannelPicker = picker;
-            delayedTransport.reprocess(picker);
-            channelStateManager.disable();
-          }
-        });
-    }
   }
 
   @Override
@@ -823,18 +821,6 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       this.helper = helperImpl;
     }
 
-    @Deprecated
-    @Override
-    public void onUpdate(
-        final List<io.grpc.ResolvedServerInfoGroup> servers, final Attributes config) {
-      ArrayList<EquivalentAddressGroup> eags =
-          new ArrayList<EquivalentAddressGroup>(servers.size());
-      for (io.grpc.ResolvedServerInfoGroup infoGroup : servers) {
-        eags.add(infoGroup.toEquivalentAddressGroup());
-      }
-      onAddresses(eags, config);
-    }
-
     @Override
     public void onAddresses(final List<EquivalentAddressGroup> servers, final Attributes config) {
       if (servers.isEmpty()) {
@@ -846,7 +832,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       helper.runSerialized(new Runnable() {
           @Override
           public void run() {
-            if (terminated) {
+            // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
+            if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
               return;
             }
             try {
@@ -871,7 +858,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       channelExecutor.executeLater(new Runnable() {
           @Override
           public void run() {
-            if (terminated) {
+            // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
+            if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
               return;
             }
             balancer.handleNameResolutionError(error);
@@ -970,11 +958,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     private static final ConcurrentMap<ManagedChannelReference, ManagedChannelReference> refs =
         new ConcurrentHashMap<ManagedChannelReference, ManagedChannelReference>();
 
-    private static final String allocationSitePropertyName =
+    private static final String ALLOCATION_SITE_PROPERTY_NAME =
         "io.grpc.ManagedChannel.enableAllocationTracking";
 
-    private static final boolean enableAllocationTracking =
-        Boolean.parseBoolean(System.getProperty(allocationSitePropertyName, "true"));
+    private static final boolean ENABLE_ALLOCATION_TRACKING =
+        Boolean.parseBoolean(System.getProperty(ALLOCATION_SITE_PROPERTY_NAME, "true"));
     private static final RuntimeException missingCallSite = missingCallSite();
 
     private final LogId logId;
@@ -987,7 +975,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     ManagedChannelReference(ManagedChannelImpl chan) {
       super(chan, refQueue);
       allocationSite = new SoftReference<RuntimeException>(
-          enableAllocationTracking
+          ENABLE_ALLOCATION_TRACKING
               ? new RuntimeException("ManagedChannel allocation site")
               : missingCallSite);
       logId = chan.logId;
@@ -1049,7 +1037,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     private static RuntimeException missingCallSite() {
       RuntimeException e = new RuntimeException(
           "ManagedChannel allocation site not recorded.  Set -D"
-              + allocationSitePropertyName + "=true to enable it");
+              + ALLOCATION_SITE_PROPERTY_NAME + "=true to enable it");
       e.setStackTrace(new StackTraceElement[0]);
       return e;
     }

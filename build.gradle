@@ -133,9 +133,6 @@ subprojects {
                   task.inputs.file "${rootProject.projectDir}/build.gradle"
                   task.plugins {
                     grpc {
-                      // To generate deprecated interfaces and static bindService method,
-                      // turn the enable_deprecated option to true below:
-                      option 'enable_deprecated=false'
                       option 'noversion'
                     }
                   }
@@ -210,12 +207,12 @@ subprojects {
                 netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.6.Final',
 
                 // Test dependencies.
-                junit: 'junit:junit:4.11',
+                junit: 'junit:junit:4.12',
                 mockito: 'org.mockito:mockito-core:1.9.5',
                 truth: 'com.google.truth:truth:0.28',
 
                 // Benchmark dependencies
-                hdrhistogram: 'org.hdrhistogram:HdrHistogram:2.1.8',
+                hdrhistogram: 'org.hdrhistogram:HdrHistogram:2.1.10',
                 math: 'org.apache.commons:commons-math3:3.6',
 
                 // Jetty ALPN dependencies
@@ -321,6 +318,7 @@ subprojects {
         repository(url: stagingUrl, configureAuth)
         snapshotRepository(url: 'https://oss.sonatype.org/content/repositories/snapshots/', configureAuth)
     }
+    uploadArchives.onlyIf { !name.contains("grpc-gae-interop-testing") }
 
     [
       install.repositories.mavenInstaller,

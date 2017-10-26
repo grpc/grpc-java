@@ -116,6 +116,8 @@ public abstract class AbstractManagedChannelImplBuilder
   String authorityOverride;
 
 
+  private ProxyDetector proxyDetector = ProxyDetector.DEFAULT_INSTANCE;
+
   LoadBalancer.Factory loadBalancerFactory = DEFAULT_LOAD_BALANCER_FACTORY;
 
   boolean fullStreamDecompression;
@@ -146,6 +148,7 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   private boolean statsEnabled = true;
+  private boolean recordStats = true;
   private boolean tracingEnabled = true;
 
   @Nullable
@@ -297,6 +300,14 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   /**
+   * Disable or enable stats recording.  Effective only if {@link #setStatsEnabled} is set to true.
+   * Enabled by default.
+   */
+  protected void setRecordStats(boolean value) {
+    recordStats = value;
+  }
+
+  /**
    * Disable or enable tracing features.  Enabled by default.
    */
   protected void setTracingEnabled(boolean value) {
@@ -326,7 +337,8 @@ public abstract class AbstractManagedChannelImplBuilder
         new ExponentialBackoffPolicy.Provider(),
         SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
         GrpcUtil.STOPWATCH_SUPPLIER,
-        getEffectiveInterceptors());
+        getEffectiveInterceptors(),
+        proxyDetector);
   }
 
   @VisibleForTesting
@@ -338,7 +350,7 @@ public abstract class AbstractManagedChannelImplBuilder
           this.statsFactory != null ? this.statsFactory : Stats.getStatsContextFactory();
       if (statsCtxFactory != null) {
         CensusStatsModule censusStats =
-            new CensusStatsModule(statsCtxFactory, GrpcUtil.STOPWATCH_SUPPLIER, true);
+            new CensusStatsModule(statsCtxFactory, GrpcUtil.STOPWATCH_SUPPLIER, true, recordStats);
         // First interceptor runs last (see ClientInterceptors.intercept()), so that no
         // other interceptor can override the tracer factory we set in CallOptions.
         effectiveInterceptors.add(0, censusStats.getClientInterceptor());

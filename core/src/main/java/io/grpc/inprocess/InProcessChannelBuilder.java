@@ -23,6 +23,7 @@ import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.ProxyParameters;
 import io.grpc.internal.SharedResourceHolder;
 import java.net.SocketAddress;
 import java.util.concurrent.ScheduledExecutorService;
@@ -68,10 +69,9 @@ public final class InProcessChannelBuilder extends
   private InProcessChannelBuilder(String name) {
     super(new InProcessSocketAddress(name), "localhost");
     this.name = Preconditions.checkNotNull(name, "name");
-    // TODO(zhangkun83): InProcessTransport by-passes framer and deframer, thus message sizses are
-    // not counted.  Therefore, we disable stats for now.
-    // (https://github.com/grpc/grpc-java/issues/2284)
-    setStatsEnabled(false);
+    // In-process transport should not record its traffic to the stats module.
+    // https://github.com/grpc/grpc-java/issues/2284
+    setRecordStats(false);
   }
 
   @Override
@@ -129,7 +129,7 @@ public final class InProcessChannelBuilder extends
 
     @Override
     public ConnectionClientTransport newClientTransport(
-        SocketAddress addr, String authority, String userAgent) {
+        SocketAddress addr, String authority, String userAgent, ProxyParameters proxy) {
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
       }

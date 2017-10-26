@@ -124,10 +124,12 @@ public class ManagedChannelImplTest {
           .build();
   private static final Attributes.Key<String> SUBCHANNEL_ATTR_KEY =
       Attributes.Key.of("subchannel-attr-key");
+  private static final long RECONNECT_BACKOFF_INTERVAL_NANOS = 1;
   private static int unterminatedChannels;
   private final String serviceName = "fake.example.com";
   private final String authority = serviceName;
   private final String userAgent = "userAgent";
+  private final ProxyParameters noProxy = null;
   private final String target = "fake://" + serviceName;
   private URI expectedUri;
   private final SocketAddress socketAddress = new SocketAddress() {};
@@ -213,7 +215,7 @@ public class ManagedChannelImplTest {
     checkState(channel == null);
     channel = new ManagedChannelImpl(
         builder, mockTransportFactory, new FakeBackoffPolicyProvider(),
-        oobExecutorPool, timer.getStopwatchSupplier(), interceptors);
+        oobExecutorPool, timer.getStopwatchSupplier(), interceptors, ProxyDetector.NOOP_INSTANCE);
 
     if (requestConnection) {
       // Force-exit the initial idle-mode
@@ -328,7 +330,7 @@ public class ManagedChannelImplTest {
     Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
     subchannel.requestConnection();
     verify(mockTransportFactory).newClientTransport(
-        any(SocketAddress.class), any(String.class), any(String.class));
+        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class));
     MockClientTransportInfo transportInfo = transports.poll();
     ConnectionClientTransport mockTransport = transportInfo.transport;
     verify(mockTransport).start(any(ManagedClientTransport.Listener.class));
@@ -349,7 +351,7 @@ public class ManagedChannelImplTest {
     // First RPC, will be pending
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     verify(mockTransportFactory).newClientTransport(
-        any(SocketAddress.class), any(String.class), any(String.class));
+        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class));
     call.start(mockCallListener, headers);
 
     verify(mockTransport, never())
@@ -437,10 +439,56 @@ public class ManagedChannelImplTest {
     verifyNoMoreInteractions(oobExecutorPool);
 
     verify(mockTransportFactory).newClientTransport(
-        any(SocketAddress.class), any(String.class), any(String.class));
+        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class));
     verify(mockTransportFactory).close();
     verify(mockTransport, atLeast(0)).getLogId();
     verifyNoMoreInteractions(mockTransport);
+  }
+
+  @Test
+  public void noMoreCallbackAfterLoadBalancerShutdown() {
+    FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory(true);
+    Status resolutionError = Status.UNAVAILABLE.withDescription("Resolution failed");
+    createChannel(nameResolverFactory, NO_INTERCEPTOR);
+
+    FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
+    verify(mockLoadBalancerFactory).newLoadBalancer(any(Helper.class));
+    verify(mockLoadBalancer).handleResolvedAddressGroups(
+        eq(Arrays.asList(addressGroup)), eq(Attributes.EMPTY));
+
+    Subchannel subchannel1 = helper.createSubchannel(addressGroup, Attributes.EMPTY);
+    Subchannel subchannel2 = helper.createSubchannel(addressGroup, Attributes.EMPTY);
+    subchannel1.requestConnection();
+    subchannel2.requestConnection();
+    verify(mockTransportFactory, times(2)).newClientTransport(
+        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class));
+    MockClientTransportInfo transportInfo1 = transports.poll();
+    MockClientTransportInfo transportInfo2 = transports.poll();
+
+    // LoadBalancer receives all sorts of callbacks
+    transportInfo1.listener.transportReady();
+    verify(mockLoadBalancer, times(2))
+        .handleSubchannelState(same(subchannel1), stateInfoCaptor.capture());
+    assertSame(CONNECTING, stateInfoCaptor.getAllValues().get(0).getState());
+    assertSame(READY, stateInfoCaptor.getAllValues().get(1).getState());
+
+    verify(mockLoadBalancer)
+        .handleSubchannelState(same(subchannel2), stateInfoCaptor.capture());
+    assertSame(CONNECTING, stateInfoCaptor.getValue().getState());
+
+    resolver.listener.onError(resolutionError);
+    verify(mockLoadBalancer).handleNameResolutionError(resolutionError);
+
+    verifyNoMoreInteractions(mockLoadBalancer);
+
+    channel.shutdown();
+    verify(mockLoadBalancer).shutdown();
+
+    // No more callback should be delivered to LoadBalancer after it's shut down
+    transportInfo2.listener.transportReady();
+    resolver.listener.onError(resolutionError);
+    resolver.resolved();
+    verifyNoMoreInteractions(mockLoadBalancer);
   }
 
   @Test
@@ -476,10 +524,10 @@ public class ManagedChannelImplTest {
     // Make the transport available
     Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
     verify(mockTransportFactory, never()).newClientTransport(
-        any(SocketAddress.class), any(String.class), any(String.class));
+        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class));
     subchannel.requestConnection();
     verify(mockTransportFactory).newClientTransport(
-        any(SocketAddress.class), any(String.class), any(String.class));
+        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class));
     MockClientTransportInfo transportInfo = transports.poll();
     ConnectionClientTransport mockTransport = transportInfo.transport;
     ManagedClientTransport.Listener transportListener = transportInfo.listener;
@@ -619,9 +667,11 @@ public class ManagedChannelImplTest {
 
     // The channel will starts with the first address (badAddress)
     verify(mockTransportFactory)
-        .newClientTransport(same(badAddress), any(String.class), any(String.class));
+        .newClientTransport(same(badAddress), any(String.class), any(String.class),
+            any(ProxyParameters.class));
     verify(mockTransportFactory, times(0))
-          .newClientTransport(same(goodAddress), any(String.class), any(String.class));
+          .newClientTransport(same(goodAddress), any(String.class), any(String.class),
+              any(ProxyParameters.class));
 
     MockClientTransportInfo badTransportInfo = transports.poll();
     // Which failed to connect
@@ -630,7 +680,8 @@ public class ManagedChannelImplTest {
 
     // The channel then try the second address (goodAddress)
     verify(mockTransportFactory)
-          .newClientTransport(same(goodAddress), any(String.class), any(String.class));
+          .newClientTransport(same(goodAddress), any(String.class), any(String.class),
+              any(ProxyParameters.class));
     MockClientTransportInfo goodTransportInfo = transports.poll();
     when(goodTransportInfo.transport.newStream(
             any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class)))
@@ -651,6 +702,65 @@ public class ManagedChannelImplTest {
     // The bad transport was never used.
     verify(badTransportInfo.transport, times(0)).newStream(any(MethodDescriptor.class),
         any(Metadata.class), any(CallOptions.class));
+  }
+
+  @Test
+  public void failFastRpcFailFromErrorFromBalancer() {
+    subtestFailRpcFromBalancer(false, false, true);
+  }
+
+  @Test
+  public void failFastRpcFailFromDropFromBalancer() {
+    subtestFailRpcFromBalancer(false, true, true);
+  }
+
+  @Test
+  public void waitForReadyRpcImmuneFromErrorFromBalancer() {
+    subtestFailRpcFromBalancer(true, false, false);
+  }
+
+  @Test
+  public void waitForReadyRpcFailFromDropFromBalancer() {
+    subtestFailRpcFromBalancer(true, true, true);
+  }
+
+  private void subtestFailRpcFromBalancer(boolean waitForReady, boolean drop, boolean shouldFail) {
+    createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+
+    // This call will be buffered by the channel, thus involve delayed transport
+    CallOptions callOptions = CallOptions.DEFAULT;
+    if (waitForReady) {
+      callOptions = callOptions.withWaitForReady();
+    } else {
+      callOptions = callOptions.withoutWaitForReady();
+    }
+    ClientCall<String, Integer> call1 = channel.newCall(method, callOptions);
+    call1.start(mockCallListener, new Metadata());
+
+    SubchannelPicker picker = mock(SubchannelPicker.class);
+    Status status = Status.UNAVAILABLE.withDescription("for test");
+
+    when(picker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(drop ? PickResult.withDrop(status) : PickResult.withError(status));
+    helper.updateBalancingState(READY, picker);
+
+    executor.runDueTasks();
+    if (shouldFail) {
+      verify(mockCallListener).onClose(same(status), any(Metadata.class));
+    } else {
+      verifyZeroInteractions(mockCallListener);
+    }
+
+    // This call doesn't involve delayed transport
+    ClientCall<String, Integer> call2 = channel.newCall(method, callOptions);
+    call2.start(mockCallListener2, new Metadata());
+
+    executor.runDueTasks();
+    if (shouldFail) {
+      verify(mockCallListener2).onClose(same(status), any(Metadata.class));
+    } else {
+      verifyZeroInteractions(mockCallListener2);
+    }
   }
 
   /**
@@ -702,15 +812,18 @@ public class ManagedChannelImplTest {
 
     // Connecting to server1, which will fail
     verify(mockTransportFactory)
-        .newClientTransport(same(addr1), any(String.class), any(String.class));
+        .newClientTransport(same(addr1), any(String.class), any(String.class),
+            any(ProxyParameters.class));
     verify(mockTransportFactory, times(0))
-        .newClientTransport(same(addr2), any(String.class), any(String.class));
+        .newClientTransport(same(addr2), any(String.class), any(String.class),
+            any(ProxyParameters.class));
     MockClientTransportInfo transportInfo1 = transports.poll();
     transportInfo1.listener.transportShutdown(Status.UNAVAILABLE);
 
     // Connecting to server2, which will fail too
     verify(mockTransportFactory)
-        .newClientTransport(same(addr2), any(String.class), any(String.class));
+        .newClientTransport(same(addr2), any(String.class), any(String.class),
+            any(ProxyParameters.class));
     MockClientTransportInfo transportInfo2 = transports.poll();
     Status server2Error = Status.UNAVAILABLE.withDescription("Server2 failed to connect");
     transportInfo2.listener.transportShutdown(server2Error);
@@ -758,20 +871,22 @@ public class ManagedChannelImplTest {
 
     // requestConnection()
     verify(mockTransportFactory, never()).newClientTransport(
-        any(SocketAddress.class), any(String.class), any(String.class));
+        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class));
     sub1.requestConnection();
-    verify(mockTransportFactory).newClientTransport(socketAddress, authority, userAgent);
+    verify(mockTransportFactory).newClientTransport(socketAddress, authority, userAgent, noProxy);
     MockClientTransportInfo transportInfo1 = transports.poll();
     assertNotNull(transportInfo1);
 
     sub2.requestConnection();
-    verify(mockTransportFactory, times(2)).newClientTransport(socketAddress, authority, userAgent);
+    verify(mockTransportFactory, times(2)).newClientTransport(socketAddress, authority, userAgent,
+        noProxy);
     MockClientTransportInfo transportInfo2 = transports.poll();
     assertNotNull(transportInfo2);
 
     sub1.requestConnection();
     sub2.requestConnection();
-    verify(mockTransportFactory, times(2)).newClientTransport(socketAddress, authority, userAgent);
+    verify(mockTransportFactory, times(2)).newClientTransport(socketAddress, authority, userAgent,
+        noProxy);
 
     // shutdown() has a delay
     sub1.shutdown();
@@ -839,7 +954,7 @@ public class ManagedChannelImplTest {
     sub2.shutdown();
     assertTrue(channel.isTerminated());
     verify(mockTransportFactory, never()).newClientTransport(any(SocketAddress.class), anyString(),
-        anyString());
+        anyString(), any(ProxyParameters.class));
   }
 
   @Test
@@ -854,7 +969,7 @@ public class ManagedChannelImplTest {
     // Therefore, channel is terminated without relying on LoadBalancer to shutdown subchannels.
     assertTrue(channel.isTerminated());
     verify(mockTransportFactory, never()).newClientTransport(any(SocketAddress.class), anyString(),
-        anyString());
+        anyString(), any(ProxyParameters.class));
   }
 
   @Test
@@ -872,7 +987,8 @@ public class ManagedChannelImplTest {
     Metadata headers = new Metadata();
     ClientCall<String, Integer> call = oob1.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, headers);
-    verify(mockTransportFactory).newClientTransport(socketAddress, "oob1authority", userAgent);
+    verify(mockTransportFactory).newClientTransport(socketAddress, "oob1authority", userAgent,
+        noProxy);
     MockClientTransportInfo transportInfo = transports.poll();
     assertNotNull(transportInfo);
 
@@ -893,7 +1009,7 @@ public class ManagedChannelImplTest {
         oob1.newCall(method, CallOptions.DEFAULT.withWaitForReady());
     call3.start(mockCallListener3, headers);
     verify(mockTransportFactory, times(2)).newClientTransport(
-        socketAddress, "oob1authority", userAgent);
+        socketAddress, "oob1authority", userAgent, noProxy);
     transportInfo = transports.poll();
     assertNotNull(transportInfo);
 
@@ -998,7 +1114,7 @@ public class ManagedChannelImplTest {
     assertTrue(oob2.isTerminated());
     assertTrue(channel.isTerminated());
     verify(mockTransportFactory, never()).newClientTransport(any(SocketAddress.class), anyString(),
-        anyString());
+        anyString(), any(ProxyParameters.class));
   }
 
   @Test
@@ -1013,7 +1129,50 @@ public class ManagedChannelImplTest {
     // Channel's shutdownNow() will call shutdownNow() on all subchannels and oobchannels.
     // Therefore, channel is terminated without relying on LoadBalancer to shutdown oobchannels.
     verify(mockTransportFactory, never()).newClientTransport(any(SocketAddress.class), anyString(),
-        anyString());
+        anyString(), any(ProxyParameters.class));
+  }
+
+  @Test
+  public void refreshNameResolutionWhenSubchannelConnectionFailed() {
+    subtestRefreshNameResolutionWhenConnectionFailed(false);
+  }
+
+  @Test
+  public void refreshNameResolutionWhenOobChannelConnectionFailed() {
+    subtestRefreshNameResolutionWhenConnectionFailed(true);
+  }
+
+  private void subtestRefreshNameResolutionWhenConnectionFailed(boolean isOobChannel) {
+    FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory(true);
+    createChannel(nameResolverFactory, NO_INTERCEPTOR);
+    FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
+
+    if (isOobChannel) {
+      OobChannel oobChannel = (OobChannel) helper.createOobChannel(addressGroup, "oobAuthority");
+      oobChannel.getSubchannel().requestConnection();
+    } else {
+      Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
+      subchannel.requestConnection();
+    }
+    
+    MockClientTransportInfo transportInfo = transports.poll();
+    assertNotNull(transportInfo);
+
+    // Transport closed when connecting
+    assertEquals(0, resolver.refreshCalled);
+    transportInfo.listener.transportShutdown(Status.UNAVAILABLE);
+    assertEquals(1, resolver.refreshCalled);
+
+    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS);
+    transportInfo = transports.poll();
+    assertNotNull(transportInfo);
+
+    transportInfo.listener.transportReady();
+
+    // Transport closed when ready
+    assertEquals(1, resolver.refreshCalled);
+    transportInfo.listener.transportShutdown(Status.UNAVAILABLE);
+    assertEquals(2, resolver.refreshCalled);
   }
 
   @Test
@@ -1063,7 +1222,7 @@ public class ManagedChannelImplTest {
     Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
     subchannel.requestConnection();
     verify(mockTransportFactory).newClientTransport(
-        same(socketAddress), eq(authority), eq(userAgent));
+        same(socketAddress), eq(authority), eq(userAgent), eq(noProxy));
     MockClientTransportInfo transportInfo = transports.poll();
     final ConnectionClientTransport transport = transportInfo.transport;
     when(transport.getAttributes()).thenReturn(Attributes.EMPTY);
@@ -1225,36 +1384,6 @@ public class ManagedChannelImplTest {
     assertEquals(CONNECTING, channel.getState(false));
     assertEquals(CONNECTING, channel.getState(true));
     verifyNoMoreInteractions(mockLoadBalancerFactory);
-  }
-
-  @Test
-  @Deprecated
-  public void getState_loadBalancerDoesNotSupportChannelState() {
-    createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
-    assertEquals(IDLE, channel.getState(false));
-    helper.updatePicker(mockPicker);
-
-    thrown.expect(UnsupportedOperationException.class);
-    channel.getState(false);
-  }
-
-  @Test
-  @Deprecated
-  public void notifyWhenStateChanged_loadBalancerDoesNotSupportChannelState() {
-    createChannel(new FakeNameResolverFactory(false), NO_INTERCEPTOR);
-    assertEquals(IDLE, channel.getState(false));
-
-    Runnable onStateChanged = mock(Runnable.class);
-    channel.notifyWhenStateChanged(IDLE, onStateChanged);
-    executor.runDueTasks();
-    verify(onStateChanged, never()).run();
-
-    helper.updatePicker(mockPicker);
-    executor.runDueTasks();
-
-    verify(onStateChanged).run();
-    thrown.expect(UnsupportedOperationException.class);
-    channel.getState(false);
   }
 
   @Test
@@ -1485,7 +1614,7 @@ public class ManagedChannelImplTest {
       return new BackoffPolicy() {
         @Override
         public long nextBackoffNanos() {
-          return 1;
+          return RECONNECT_BACKOFF_INTERVAL_NANOS;
         }
       };
     }
@@ -1536,6 +1665,7 @@ public class ManagedChannelImplTest {
     private class FakeNameResolver extends NameResolver {
       Listener listener;
       boolean shutdown;
+      int refreshCalled;
 
       @Override public String getServiceAuthority() {
         return expectedUri.getAuthority();
@@ -1546,6 +1676,10 @@ public class ManagedChannelImplTest {
         if (resolvedAtStart) {
           resolved();
         }
+      }
+
+      @Override public void refresh() {
+        refreshCalled++;
       }
 
       void resolved() {

@@ -20,11 +20,15 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Iterables;
@@ -37,6 +41,7 @@ import io.grpc.internal.DnsNameResolver.ResolutionResults;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -51,7 +56,9 @@ import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -62,6 +69,9 @@ import org.mockito.MockitoAnnotations;
 /** Unit tests for {@link DnsNameResolver}. */
 @RunWith(JUnit4.class)
 public class DnsNameResolverTest {
+
+  @Rule public final Timeout globalTimeout = Timeout.seconds(10);
+
   private static final int DEFAULT_PORT = 887;
   private static final Attributes NAME_RESOLVER_PARAMS =
       Attributes.newBuilder().set(NameResolver.Factory.PARAMS_DEFAULT_PORT, DEFAULT_PORT).build();
@@ -102,13 +112,22 @@ public class DnsNameResolverTest {
   private ArgumentCaptor<Status> statusCaptor;
 
   private DnsNameResolver newResolver(String name, int port) {
+    return newResolver(name, port, mockResolver, ProxyDetector.NOOP_INSTANCE);
+  }
+
+  private DnsNameResolver newResolver(
+      String name,
+      int port,
+      DelegateResolver delegateResolver,
+      ProxyDetector proxyDetector) {
     DnsNameResolver dnsResolver = new DnsNameResolver(
         null,
         name,
         Attributes.newBuilder().set(NameResolver.Factory.PARAMS_DEFAULT_PORT, port).build(),
         fakeTimerServiceResource,
-        fakeExecutorResource);
-    dnsResolver.setDelegateResolver(mockResolver);
+        fakeExecutorResource,
+        proxyDetector);
+    dnsResolver.setDelegateResolver(delegateResolver);
     return dnsResolver;
   }
 
@@ -270,7 +289,7 @@ public class DnsNameResolverTest {
     verifyNoMoreInteractions(mockListener);
   }
 
-  @Test(timeout = 10000)
+  @Test
   public void jdkResolverWorks() throws Exception {
     DnsNameResolver.DelegateResolver resolver = new DnsNameResolver.JdkResolver();
 
@@ -280,7 +299,7 @@ public class DnsNameResolverTest {
     assertThat(results.txtRecords).isNotNull();
   }
 
-  @Test(timeout = 10000)
+  @Test
   public void jndiResolverWorks() throws Exception {
     Assume.assumeTrue(DnsNameResolver.jndiAvailable());
     DnsNameResolver.DelegateResolver resolver = new DnsNameResolver.JndiResolver();
@@ -328,6 +347,32 @@ public class DnsNameResolverTest {
 
     assertThat(results.addresses).containsExactlyElementsIn(jdkAnswer).inOrder();
     assertThat(results.txtRecords).isEmpty();
+  }
+
+  @Test
+  public void doNotResolveWhenProxyDetected() throws Exception {
+    final String name = "foo.googleapis.com";
+    final int port = 81;
+    ProxyDetector alwaysDetectProxy = mock(ProxyDetector.class);
+    ProxyParameters proxyParameters = new ProxyParameters(
+        InetSocketAddress.createUnresolved("proxy.example.com", 1000),
+        "username",
+        "password");
+    when(alwaysDetectProxy.proxyFor(any(SocketAddress.class)))
+        .thenReturn(proxyParameters);
+    DelegateResolver unusedResolver = mock(DelegateResolver.class);
+    DnsNameResolver resolver = newResolver(name, port, unusedResolver, alwaysDetectProxy);
+    resolver.start(mockListener);
+    assertEquals(1, fakeExecutor.runDueTasks());
+    verify(unusedResolver, never()).resolve(any(String.class));
+
+    verify(mockListener).onAddresses(resultCaptor.capture(), any(Attributes.class));
+    List<EquivalentAddressGroup> result = resultCaptor.getValue();
+    assertThat(result).hasSize(1);
+    EquivalentAddressGroup eag = result.get(0);
+    assertThat(eag.getAddresses()).hasSize(1);
+    SocketAddress socketAddress = eag.getAddresses().get(0);
+    assertTrue(((InetSocketAddress) socketAddress).isUnresolved());
   }
 
   private void testInvalidUri(URI uri) {

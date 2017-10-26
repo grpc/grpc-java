@@ -19,8 +19,6 @@ package io.grpc;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import java.net.SocketAddress;
-import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -94,30 +92,12 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>No synchronization should be necessary between LoadBalancer and its pickers if you follow
  * the pattern above.  It may be possible to implement in a different way, but that would usually
  * result in more complicated threading.
+ *
+ * @since 1.2.0
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
 @NotThreadSafe
 public abstract class LoadBalancer {
-  /**
-   * Handles newly resolved server groups and metadata attributes from name resolution system.
-   * {@code servers} contained in {@link ResolvedServerInfoGroup} should be considered equivalent
-   * but may be flattened into a single list if needed.
-   *
-   * <p>Implementations should not modify the given {@code servers}.
-   *
-   * @deprecated Implement {@link #handleResolvedAddressGroups} instead.  As it is deprecated, the
-   *             {@link ResolvedServerInfo}s from the passed-in {@link ResolvedServerInfoGroup}s
-   *             lose all their attributes.
-   *
-   * @param servers the resolved server addresses, never empty.
-   * @param attributes extra metadata from naming system.
-   */
-  @Deprecated
-  public void handleResolvedAddresses(
-      List<ResolvedServerInfoGroup> servers, Attributes attributes) {
-    throw new UnsupportedOperationException("This is deprecated and should not be called");
-  }
-
   /**
    * Handles newly resolved server groups and metadata attributes from name resolution system.
    * {@code servers} contained in {@link EquivalentAddressGroup} should be considered equivalent
@@ -127,27 +107,16 @@ public abstract class LoadBalancer {
    *
    * @param servers the resolved server addresses, never empty.
    * @param attributes extra metadata from naming system.
+   * @since 1.2.0
    */
-  @SuppressWarnings("deprecation")
-  public void handleResolvedAddressGroups(
-      List<EquivalentAddressGroup> servers, Attributes attributes) {
-    ArrayList<ResolvedServerInfoGroup> serverInfoGroups =
-        new ArrayList<ResolvedServerInfoGroup>(servers.size());
-    for (EquivalentAddressGroup eag : servers) {
-      ResolvedServerInfoGroup.Builder serverInfoGroupBuilder =
-          ResolvedServerInfoGroup.builder(eag.getAttributes());
-      for (SocketAddress addr : eag.getAddresses()) {
-        serverInfoGroupBuilder.add(new ResolvedServerInfo(addr));
-      }
-      serverInfoGroups.add(serverInfoGroupBuilder.build());
-    }
-    handleResolvedAddresses(serverInfoGroups, attributes);
-  }
+  public abstract void handleResolvedAddressGroups(
+      List<EquivalentAddressGroup> servers, Attributes attributes);
 
   /**
    * Handles an error from the name resolution system.
    *
    * @param error a non-OK status
+   * @since 1.2.0
    */
   public abstract void handleNameResolutionError(Status error);
 
@@ -158,9 +127,9 @@ public abstract class LoadBalancer {
    * state.
    *
    * <p>If the new state is not SHUTDOWN, this method should create a new picker and call {@link
-   * Helper#updatePicker Helper.updatePicker()}.  Failing to do so may result in unnecessary delays
-   * of RPCs. Please refer to {@link PickResult#withSubchannel PickResult.withSubchannel()}'s
-   * javadoc for more information.
+   * Helper#updateBalancingState Helper.updateBalancingState()}.  Failing to do so may result in
+   * unnecessary delays of RPCs. Please refer to {@link PickResult#withSubchannel
+   * PickResult.withSubchannel()}'s javadoc for more information.
    *
    * <p>SHUTDOWN can only happen in two cases.  One is that LoadBalancer called {@link
    * Subchannel#shutdown} earlier, thus it should have already discarded this Subchannel.  The other
@@ -170,6 +139,7 @@ public abstract class LoadBalancer {
    *
    * @param subchannel the involved Subchannel
    * @param stateInfo the new state
+   * @since 1.2.0
    */
   public abstract void handleSubchannelState(
       Subchannel subchannel, ConnectivityStateInfo stateInfo);
@@ -178,12 +148,16 @@ public abstract class LoadBalancer {
    * The channel asks the load-balancer to shutdown.  No more callbacks will be called after this
    * method.  The implementation should shutdown all Subchannels and OOB channels, and do any other
    * cleanup as necessary.
+   *
+   * @since 1.2.0
    */
   public abstract void shutdown();
 
   /**
    * The main balancing logic.  It <strong>must be thread-safe</strong>. Typically it should only
    * synchronize on its own state, and avoid synchronizing with the LoadBalancer's state.
+   *
+   * @since 1.2.0
    */
   @ThreadSafe
   public abstract static class SubchannelPicker {
@@ -191,6 +165,7 @@ public abstract class LoadBalancer {
      * Make a balancing decision for a new RPC.
      *
      * @param args the pick arguments
+     * @since 1.3.0
      */
     public abstract PickResult pickSubchannel(PickSubchannelArgs args);
   }
@@ -198,21 +173,30 @@ public abstract class LoadBalancer {
   /**
    * Provides arguments for a {@link SubchannelPicker#pickSubchannel(
    * LoadBalancer.PickSubchannelArgs)}.
+   *
+   * @since 1.2.0
    */
   public abstract static class PickSubchannelArgs {
 
     /**
      * Call options.
+     *
+     * @since 1.2.0
      */
     public abstract CallOptions getCallOptions();
 
     /**
-     * Headers of the call. {@code pickSubchannel()} may mutate it before before returning.
+     * Headers of the call. {@link SubchannelPicker#pickSubchannel} may mutate it before before
+     * returning.
+     *
+     * @since 1.2.0
      */
     public abstract Metadata getHeaders();
 
     /**
      * Call method.
+     *
+     * @since 1.2.0
      */
     public abstract MethodDescriptor<?, ?> getMethodDescriptor();
   }
@@ -229,13 +213,15 @@ public abstract class LoadBalancer {
    *       wait-for-ready (i.e., {@link CallOptions#withWaitForReady} was not called), the RPC will
    *       fail immediately with the given error.</li>
    *   <li>Buffer: in all other cases, the RPC will be buffered in the Channel, until the next
-   *       picker is provided via {@link Helper#updatePicker Helper.updatePicker()}, when the RPC
-   *       will go through the same picking process again.</li>
+   *       picker is provided via {@link Helper#updateBalancingState Helper.updateBalancingState()},
+   *       when the RPC will go through the same picking process again.</li>
    * </ul>
+   *
+   * @since 1.2.0
    */
   @Immutable
   public static final class PickResult {
-    private static final PickResult NO_RESULT = new PickResult(null, null, Status.OK);
+    private static final PickResult NO_RESULT = new PickResult(null, null, Status.OK, false);
 
     @Nullable private final Subchannel subchannel;
     @Nullable private final ClientStreamTracer.Factory streamTracerFactory;
@@ -243,13 +229,16 @@ public abstract class LoadBalancer {
     // Or OK if there is no error.
     // subchannel being null and error being OK means RPC needs to wait
     private final Status status;
+    // True if the result is created by withDrop()
+    private final boolean drop;
 
     private PickResult(
         @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
-        Status status) {
+        Status status, boolean drop) {
       this.subchannel = subchannel;
       this.streamTracerFactory = streamTracerFactory;
       this.status = Preconditions.checkNotNull(status, "status");
+      this.drop = drop;
     }
 
     /**
@@ -268,7 +257,8 @@ public abstract class LoadBalancer {
      * </ul>
      *
      * <p><strong>All buffered RPCs will stay buffered</strong> until the next call of {@link
-     * Helper#updatePicker Helper.updatePicker()}, which will trigger a new picking process.
+     * Helper#updateBalancingState Helper.updateBalancingState()}, which will trigger a new picking
+     * process.
      *
      * <p>Note that Subchannel's state may change at the same time the picker is making the
      * decision, which means the decision may be made with (to-be) outdated information.  For
@@ -306,25 +296,29 @@ public abstract class LoadBalancer {
      *             whenever the Subchannel has transitioned to IDLE, then you don't need to include
      *             IDLE Subchannels in your pick results.</li>
      *       </ul></li>
-     *   <li>Always create a new picker and call {@link Helper#updatePicker Helper.updatePicker()}
-     *       whenever {@link #handleSubchannelState handleSubchannelState()} is called, unless the
-     *       new state is SHUTDOWN. See {@code handleSubchannelState}'s javadoc for more
-     *       details.</li>
+     *   <li>Always create a new picker and call {@link Helper#updateBalancingState
+     *       Helper.updateBalancingState()} whenever {@link #handleSubchannelState
+     *       handleSubchannelState()} is called, unless the new state is SHUTDOWN. See
+     *       {@code handleSubchannelState}'s javadoc for more details.</li>
      * </ol>
      *
      * @param subchannel the picked Subchannel
      * @param streamTracerFactory if not null, will be used to trace the activities of the stream
      *                            created as a result of this pick. Note it's possible that no
      *                            stream is created at all in some cases.
+     * @since 1.3.0
      */
     public static PickResult withSubchannel(
         Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory) {
       return new PickResult(
-          Preconditions.checkNotNull(subchannel, "subchannel"), streamTracerFactory, Status.OK);
+          Preconditions.checkNotNull(subchannel, "subchannel"), streamTracerFactory, Status.OK,
+          false);
     }
 
     /**
      * Equivalent to {@code withSubchannel(subchannel, null)}.
+     *
+     * @since 1.2.0
      */
     public static PickResult withSubchannel(Subchannel subchannel) {
       return withSubchannel(subchannel, null);
@@ -336,14 +330,29 @@ public abstract class LoadBalancer {
      * with the given error.
      *
      * @param error the error status.  Must not be OK.
+     * @since 1.2.0
      */
     public static PickResult withError(Status error) {
       Preconditions.checkArgument(!error.isOk(), "error status shouldn't be OK");
-      return new PickResult(null, null, error);
+      return new PickResult(null, null, error, false);
+    }
+
+    /**
+     * A decision to fail an RPC immediately.  This is a final decision and will ignore retry
+     * policy.
+     *
+     * @param status the status with which the RPC will fail.  Must not be OK.
+     * @since 1.8.0
+     */
+    public static PickResult withDrop(Status status) {
+      Preconditions.checkArgument(!status.isOk(), "drop status shouldn't be OK");
+      return new PickResult(null, null, status, true);
     }
 
     /**
      * No decision could be made.  The RPC will stay buffered.
+     *
+     * @since 1.2.0
      */
     public static PickResult withNoResult() {
       return NO_RESULT;
@@ -352,6 +361,8 @@ public abstract class LoadBalancer {
     /**
      * The Subchannel if this result was created by {@link #withSubchannel withSubchannel()}, or
      * null otherwise.
+     *
+     * @since 1.2.0
      */
     @Nullable
     public Subchannel getSubchannel() {
@@ -360,6 +371,8 @@ public abstract class LoadBalancer {
 
     /**
      * The stream tracer factory this result was created with.
+     *
+     * @since 1.3.0
      */
     @Nullable
     public ClientStreamTracer.Factory getStreamTracerFactory() {
@@ -369,9 +382,20 @@ public abstract class LoadBalancer {
     /**
      * The status associated with this result.  Non-{@code OK} if created with {@link #withError
      * withError}, or {@code OK} otherwise.
+     *
+     * @since 1.2.0
      */
     public Status getStatus() {
       return status;
+    }
+
+    /**
+     * Returns {@code true} if this result was created by {@link #withDrop withDrop()}.
+     *
+     * @since 1.8.0
+     */
+    public boolean isDrop() {
+      return drop;
     }
 
     @Override
@@ -380,12 +404,13 @@ public abstract class LoadBalancer {
           .add("subchannel", subchannel)
           .add("streamTracerFactory", streamTracerFactory)
           .add("status", status)
+          .add("drop", drop)
           .toString();
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(subchannel, status, streamTracerFactory);
+      return Objects.hashCode(subchannel, status, streamTracerFactory, drop);
     }
 
     /**
@@ -399,12 +424,15 @@ public abstract class LoadBalancer {
       }
       PickResult that = (PickResult) other;
       return Objects.equal(subchannel, that.subchannel) && Objects.equal(status, that.status)
-          && Objects.equal(streamTracerFactory, that.streamTracerFactory);
+          && Objects.equal(streamTracerFactory, that.streamTracerFactory)
+          && drop == that.drop;
     }
   }
 
   /**
    * Provides essentials for LoadBalancer implementations.
+   *
+   * @since 1.2.0
    */
   @ThreadSafe
   public abstract static class Helper {
@@ -416,6 +444,8 @@ public abstract class LoadBalancer {
      *
      * <p>The LoadBalancer is responsible for closing unused Subchannels, and closing all
      * Subchannels within {@link #shutdown}.
+     *
+     * @since 1.2.0
      */
     public abstract Subchannel createSubchannel(EquivalentAddressGroup addrs, Attributes attrs);
 
@@ -426,8 +456,10 @@ public abstract class LoadBalancer {
      *
      * @throws IllegalArgumentException if {@code subchannel} was not returned from {@link
      *     #createSubchannel}
+     * @since 1.4.0
      */
-    public void updateSubchannelAddresses(Subchannel subchannel, EquivalentAddressGroup addrs) {
+    public void updateSubchannelAddresses(
+        Subchannel subchannel, EquivalentAddressGroup addrs) {
       throw new UnsupportedOperationException();
     }
 
@@ -437,6 +469,8 @@ public abstract class LoadBalancer {
      *
      * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
      * channels within {@link #shutdown}.
+     *
+     * @since 1.4.0
      */
     public abstract ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority);
 
@@ -447,29 +481,11 @@ public abstract class LoadBalancer {
      *
      * @throws IllegalArgumentException if {@code channel} was not returned from {@link
      *     #createOobChannel}
+     * @since 1.4.0
      */
     public void updateOobChannelAddresses(ManagedChannel channel, EquivalentAddressGroup eag) {
       throw new UnsupportedOperationException();
     }
-
-    /**
-     * Set a new picker to the channel.
-     *
-     * <p>When a new picker is provided via {@code updatePicker()}, the channel will apply the
-     * picker on all buffered RPCs, by calling {@link SubchannelPicker#pickSubchannel(
-     * LoadBalancer.PickSubchannelArgs)}.
-     *
-     * <p>The channel will hold the picker and use it for all RPCs, until {@code updatePicker()} is
-     * called again and a new picker replaces the old one.  If {@code updatePicker()} has never been
-     * called, the channel will buffer all RPCs until a picker is provided.
-     *
-     * <p>Using this method implies that this load balancer doesn't support channel state, and the
-     * application will get exception when trying to get the channel state.
-     *
-     * @deprecated Please migrate ALL usages to {@link #updateBalancingState}
-     */
-    @Deprecated
-    public abstract void updatePicker(SubchannelPicker picker);
 
     /**
      * Set a new state with a new picker to the channel.
@@ -485,25 +501,31 @@ public abstract class LoadBalancer {
      *
      * <p>The passed state will be the channel's new state. The SHUTDOWN state should not be passed
      * and its behavior is undefined.
+     *
+     * @since 1.6.0
      */
-    public void updateBalancingState(
-        @Nonnull ConnectivityState newState, @Nonnull SubchannelPicker newPicker) {
-      updatePicker(newPicker);
-    }
+    public abstract void updateBalancingState(
+        @Nonnull ConnectivityState newState, @Nonnull SubchannelPicker newPicker);
 
     /**
      * Schedule a task to be run in the Channel Executor, which serializes the task with the
      * callback methods on the {@link LoadBalancer} interface.
+     *
+     * @since 1.2.0
      */
     public abstract void runSerialized(Runnable task);
 
     /**
      * Returns the NameResolver of the channel.
+     *
+     * @since 1.2.0
      */
     public abstract NameResolver.Factory getNameResolverFactory();
 
     /**
      * Returns the authority string of the channel, which is derived from the DNS-style target name.
+     *
+     * @since 1.2.0
      */
     public abstract String getAuthority();
   }
@@ -519,22 +541,30 @@ public abstract class LoadBalancer {
    * create a new transport.  It won't actively create transports otherwise.  {@link
    * #requestConnection requestConnection()} can be used to ask Subchannel to create a transport if
    * there isn't any.
+   *
+   * @since 1.2.0
    */
   @ThreadSafe
   public abstract static class Subchannel {
     /**
      * Shuts down the Subchannel.  After this method is called, this Subchannel should no longer
      * be returned by the latest {@link SubchannelPicker picker}, and can be safely discarded.
+     *
+     * @since 1.2.0
      */
     public abstract void shutdown();
 
     /**
      * Asks the Subchannel to create a connection (aka transport), if there isn't an active one.
+     *
+     * @since 1.2.0
      */
     public abstract void requestConnection();
 
     /**
      * Returns the addresses that this Subchannel is bound to.
+     *
+     * @since 1.2.0
      */
     public abstract EquivalentAddressGroup getAddresses();
 
@@ -542,17 +572,23 @@ public abstract class LoadBalancer {
      * The same attributes passed to {@link Helper#createSubchannel Helper.createSubchannel()}.
      * LoadBalancer can use it to attach additional information here, e.g., the shard this
      * Subchannel belongs to.
+     *
+     * @since 1.2.0
      */
     public abstract Attributes getAttributes();
   }
 
   /**
    * Factory to create {@link LoadBalancer} instance.
+   *
+   * @since 1.2.0
    */
   @ThreadSafe
   public abstract static class Factory {
     /**
      * Creates a {@link LoadBalancer} that will be used inside a channel.
+     *
+     * @since 1.2.0
      */
     public abstract LoadBalancer newLoadBalancer(Helper helper);
   }

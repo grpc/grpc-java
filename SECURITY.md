@@ -62,7 +62,7 @@ In Maven, you can use the [os-maven-plugin](https://github.com/trustin/os-maven-
     <dependency>
       <groupId>io.netty</groupId>
       <artifactId>netty-tcnative-boringssl-static</artifactId>
-      <version>2.0.5.Final</version>
+      <version>2.0.6.Final</version>
     </dependency>
   </dependencies>
 </project>
@@ -80,7 +80,7 @@ buildscript {
 }
 
 dependencies {
-    compile 'io.netty:netty-tcnative-boringssl-static:2.0.5.Final'
+    compile 'io.netty:netty-tcnative-boringssl-static:2.0.6.Final'
 }
 ```
 
@@ -115,7 +115,7 @@ In Maven, you can use the [os-maven-plugin](https://github.com/trustin/os-maven-
     <dependency>
       <groupId>io.netty</groupId>
       <artifactId>netty-tcnative</artifactId>
-      <version>2.0.5.Final</version>
+      <version>2.0.6.Final</version>
       <classifier>${tcnative.classifier}</classifier>
     </dependency>
   </dependencies>
@@ -183,7 +183,7 @@ if (osdetector.os == "linux" && osdetector.release.isLike("fedora")) {
 }
 
 dependencies {
-    compile 'io.netty:netty-tcnative:2.0.5.Final:' + tcnative_classifier
+    compile 'io.netty:netty-tcnative:2.0.6.Final:' + tcnative_classifier
 }
 ```
 
@@ -207,7 +207,7 @@ No standard Java release has built-in support for ALPN today ([there is a tracki
 java -Xbootclasspath/p:/path/to/jetty/alpn/extension.jar ...
 ```
 
-Note that you must use the [release of the Jetty-ALPN jar](http://www.eclipse.org/jetty/documentation/current/alpn-chapter.html#alpn-versions) specific to the version of Java you are using. However, you can use the JVM agent [Jeety-ALPN-Agent](https://github.com/jetty-project/jetty-alpn-agent) to load the correct Jetty `alpn-boot` jar file for the current Java version. To do this, instead of adding an `Xbootclasspath` option, add a `javaagent` JVM option referencing the path to the Jetty `alpn-agent` jar.
+Note that you must use the [release of the Jetty-ALPN jar](http://www.eclipse.org/jetty/documentation/current/alpn-chapter.html#alpn-versions) specific to the version of Java you are using. However, you can use the JVM agent [Jetty-ALPN-Agent](https://github.com/jetty-project/jetty-alpn-agent) to load the correct Jetty `alpn-boot` jar file for the current Java version. To do this, instead of adding an `Xbootclasspath` option, add a `javaagent` JVM option referencing the path to the Jetty `alpn-agent` jar.
 
 ```sh
 java -javaagent:/path/to/jetty-alpn-agent.jar ...
