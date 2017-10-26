@@ -1452,6 +1452,8 @@ public abstract class AbstractTransportTest {
     assertEquals(0, before.streamsSucceeded);
 
     serverStream.close(Status.OK, new Metadata());
+    // Block until the close actually happened before verifying stats
+    serverStreamCreation.listener.status.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     TransportTracer.Stats after = serverTransportListener.transport.getTransportStats();
     assertEquals(1, after.streamsSucceeded);
@@ -1480,6 +1482,8 @@ public abstract class AbstractTransportTest {
     assertEquals(0, before.streamsFailed);
 
     serverStream.close(Status.UNKNOWN, new Metadata());
+    // Block until the close actually happened before verifying stats
+    serverStreamCreation.listener.status.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     TransportTracer.Stats after = serverTransportListener.transport.getTransportStats();
     assertEquals(1, after.streamsFailed);
