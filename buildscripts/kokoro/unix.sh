@@ -15,9 +15,7 @@ export OS_NAME=$(uname)
 
 cd ./github/grpc-java
 
-if [[ $OS_NAME == 'Linux' ]]; then
-  jdk_switcher use oraclejdk8;
-fi
+# TODO(zpencer): always make sure we are using oracle jdk8
 
 # Proto deps
 buildscripts/make_dependencies.sh
@@ -32,5 +30,6 @@ echo "errorProne=true" >> $HOME/.gradle/gradle.properties
 # Run tests
 ./gradlew assemble generateTestProto install
 pushd examples && ./gradlew build && popd
-pushd examples && mvn verify  &&  popd
+# --batch-mode reduces logspam
+pushd examples && mvn verify --batch-mode &&  popd
 # TODO(zpencer): also build the GAE examples
