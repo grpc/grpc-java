@@ -15,7 +15,7 @@ export OS_NAME=$(uname)
 
 cd ./github/grpc-java
 
-# TODO(zpencer): always make sure we are using oracle jdk8
+# TODO(zpencer): always make sure we are using Oracle jdk8
 
 # Proto deps
 buildscripts/make_dependencies.sh
