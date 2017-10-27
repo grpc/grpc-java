@@ -31,6 +31,7 @@ echo "errorProne=true" >> $HOME/.gradle/gradle.properties
 ./gradlew assemble generateTestProto install
 pushd examples
 ./gradlew build
+# --batch-mode reduces log spam
 mvn verify --batch-mode
 popd
 # TODO(zpencer): also build the GAE examples
