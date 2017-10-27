@@ -38,7 +38,9 @@ import java.util.logging.Logger;
  * The Netty-based server transport.
  */
 class NettyServerTransport implements ServerTransport {
+  @SuppressWarnings("unused") // log is for general messages, but nothing currently uses it
   private static final Logger log = Logger.getLogger(NettyServerTransport.class.getName());
+  // connectionLog is for connection related messages only
   private static final Logger connectionLog = Logger.getLogger(
       String.format("%s.connections", NettyServerTransport.class.getName()));
   // Some exceptions are not very useful and add too much noise to the log
