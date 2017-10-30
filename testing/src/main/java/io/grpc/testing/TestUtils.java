@@ -183,6 +183,8 @@ public class TestUtils {
    * Returns the given certificate resource in src/main/resources/certs/ as an {@code InputStream}.
    *
    * @param name name of a file in src/main/resources/certs/, e.g., {@code "ca.key"}.
+   *
+   * @since 1.8.0
    */
   public static InputStream loadCertFromResource(String name) throws IOException {
     return TestUtils.class.getResourceAsStream("/certs/" + name);
