@@ -33,9 +33,7 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLSocket;
 
-/**
- * A helper class located in package com.squareup.okhttp.internal for TLS negotiation.
- */
+/** A helper class for TLS negotiation. */
 class OkHttpProtocolNegotiator {
   private static final Logger logger = Logger.getLogger(OkHttpProtocolNegotiator.class.getName());
   private static final Platform DEFAULT_PLATFORM = Platform.get();

@@ -22,15 +22,15 @@ import static org.junit.Assert.assertTrue;
 
 import com.google.common.base.Throwables;
 import com.google.protobuf.EmptyProtos.Empty;
-import com.squareup.okhttp.ConnectionSpec;
-import com.squareup.okhttp.TlsVersion;
 import io.grpc.ManagedChannel;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
+import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.Platform;
+import io.grpc.okhttp.internal.TlsVersion;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.StreamRecorder;
 import io.netty.handler.ssl.OpenSsl;

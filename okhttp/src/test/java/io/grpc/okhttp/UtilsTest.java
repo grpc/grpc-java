@@ -40,7 +40,8 @@ public class UtilsTest {
 
   @Test
   public void convertSpecRejectsPlaintext() {
-    com.squareup.okhttp.ConnectionSpec plaintext = com.squareup.okhttp.ConnectionSpec.CLEARTEXT;
+    io.grpc.okhttp.internal.ConnectionSpec plaintext =
+        io.grpc.okhttp.internal.ConnectionSpec.CLEARTEXT;
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("plaintext ConnectionSpec is not accepted");
     Utils.convertSpec(plaintext);
@@ -48,13 +49,14 @@ public class UtilsTest {
 
   @Test
   public void convertSpecKeepsAllData() {
-    com.squareup.okhttp.ConnectionSpec squareSpec = com.squareup.okhttp.ConnectionSpec.MODERN_TLS;
+    io.grpc.okhttp.internal.ConnectionSpec squareSpec =
+        io.grpc.okhttp.internal.ConnectionSpec.MODERN_TLS;
     ConnectionSpec spec = Utils.convertSpec(squareSpec);
 
-    List<com.squareup.okhttp.TlsVersion> squareTlsVersions = squareSpec.tlsVersions();
+    List<io.grpc.okhttp.internal.TlsVersion> squareTlsVersions = squareSpec.tlsVersions();
     List<TlsVersion> tlsVersions = spec.tlsVersions();
     int versionsSize = squareTlsVersions.size();
-    List<com.squareup.okhttp.CipherSuite> squareCipherSuites = squareSpec.cipherSuites();
+    List<io.grpc.okhttp.internal.CipherSuite> squareCipherSuites = squareSpec.cipherSuites();
     List<CipherSuite> cipherSuites = spec.cipherSuites();
     int cipherSuitesSize = squareCipherSuites.size();
 

@@ -51,22 +51,21 @@ class Utils {
   }
 
   /**
-   * Converts an instance of {@link com.squareup.okhttp.ConnectionSpec} for a secure connection into
-   * that of {@link ConnectionSpec} in the current package.
+   * Converts an instance of {@link io.grpc.okhttp.internal.ConnectionSpec} for a secure connection
+   * into that of {@link ConnectionSpec} in the current package.
    *
-   * @throws IllegalArgumentException
-   *         If {@code spec} is not with TLS
+   * @throws IllegalArgumentException If {@code spec} is not with TLS
    */
-  static ConnectionSpec convertSpec(com.squareup.okhttp.ConnectionSpec spec) {
+  static ConnectionSpec convertSpec(io.grpc.okhttp.internal.ConnectionSpec spec) {
     Preconditions.checkArgument(spec.isTls(), "plaintext ConnectionSpec is not accepted");
 
-    List<com.squareup.okhttp.TlsVersion> tlsVersionList = spec.tlsVersions();
+    List<io.grpc.okhttp.internal.TlsVersion> tlsVersionList = spec.tlsVersions();
     String[] tlsVersions = new String[tlsVersionList.size()];
     for (int i = 0; i < tlsVersions.length; i++) {
       tlsVersions[i] = tlsVersionList.get(i).javaName();
     }
 
-    List<com.squareup.okhttp.CipherSuite> cipherSuiteList = spec.cipherSuites();
+    List<io.grpc.okhttp.internal.CipherSuite> cipherSuiteList = spec.cipherSuites();
     CipherSuite[] cipherSuites = new CipherSuite[cipherSuiteList.size()];
     for (int i = 0; i < cipherSuites.length; i++) {
       cipherSuites[i] = CipherSuite.valueOf(cipherSuiteList.get(i).name());

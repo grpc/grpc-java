@@ -20,9 +20,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
-import com.squareup.okhttp.ConnectionSpec;
 import io.grpc.NameResolver;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.okhttp.internal.ConnectionSpec;
 import java.net.InetSocketAddress;
 import org.junit.Rule;
 import org.junit.Test;
