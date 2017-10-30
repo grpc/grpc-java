@@ -650,10 +650,10 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
               nameResolver.refresh();
             }
             for (InternalSubchannel subchannel : subchannels) {
-              subchannel.networkAvailable();
+              subchannel.reconnectNow();
             }
             for (InternalSubchannel oobChannel : oobChannels) {
-              oobChannel.networkAvailable();
+              oobChannel.reconnectNow();
             }
           }
         }).drain();

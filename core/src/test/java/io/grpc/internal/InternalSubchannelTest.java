@@ -912,7 +912,7 @@ public class InternalSubchannelTest {
 
     // Call reconnectNow() and move out of TRANSIENT_FAILURE (this allows verifying that
     // reconnectTask.command.run() is a no-op)
-    internalSubchannel.networkAvailable();
+    internalSubchannel.reconnectNow();
     assertExactCallbackInvokes("onStateChange:CONNECTING");
     transports.poll().listener.transportReady();
     assertExactCallbackInvokes("onStateChange:READY");
@@ -931,7 +931,7 @@ public class InternalSubchannelTest {
     createInternalSubchannel(addr);
     assertEquals(IDLE, internalSubchannel.getState());
 
-    internalSubchannel.networkAvailable();
+    internalSubchannel.reconnectNow();
 
     assertNoCallbackInvoke();
   }

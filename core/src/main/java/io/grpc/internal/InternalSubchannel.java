@@ -268,7 +268,7 @@ final class InternalSubchannel implements WithLogId {
    * Immediately attempt to reconnect if the current state is TRANSIENT_FAILURE. Otherwise this
    * method has no effect.
    */
-  void networkAvailable() {
+  void reconnectNow() {
     try {
       synchronized (lock) {
         if (state.getState() != TRANSIENT_FAILURE) {
