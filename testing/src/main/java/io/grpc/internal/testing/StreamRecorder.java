@@ -18,7 +18,6 @@ package io.grpc.internal.testing;
 
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
-import io.grpc.ExperimentalApi;
 import io.grpc.stub.StreamObserver;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,7 +30,6 @@ import javax.annotation.Nullable;
  * Utility implementation of {@link StreamObserver} used in testing. Records all the observed
  * values produced by the stream as well as any errors.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/1791")
 public class StreamRecorder<T> implements StreamObserver<T> {
 
   /**
