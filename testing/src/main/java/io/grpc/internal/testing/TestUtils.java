@@ -16,10 +16,6 @@
 
 package io.grpc.internal.testing;
 
-import io.grpc.Metadata;
-import io.grpc.ServerCall;
-import io.grpc.ServerCallHandler;
-import io.grpc.ServerInterceptor;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -41,7 +37,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManagerFactory;
@@ -52,24 +47,6 @@ import javax.security.auth.x500.X500Principal;
  */
 public class TestUtils {
   public static final String TEST_SERVER_HOST = "foo.test.google.fr";
-
-  /**
-   * Captures the request attributes. Useful for testing ServerCalls.
-   * {@link ServerCall#getAttributes()}
-   */
-  public static ServerInterceptor recordServerCallInterceptor(
-      final AtomicReference<ServerCall<?, ?>> serverCallCapture) {
-    return new ServerInterceptor() {
-      @Override
-      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-          ServerCall<ReqT, RespT> call,
-          Metadata requestHeaders,
-          ServerCallHandler<ReqT, RespT> next) {
-        serverCallCapture.set(call);
-        return next.startCall(call, requestHeaders);
-      }
-    };
-  }
 
   /**
    * Creates a new {@link InetSocketAddress} that overrides the host with {@link #TEST_SERVER_HOST}.
