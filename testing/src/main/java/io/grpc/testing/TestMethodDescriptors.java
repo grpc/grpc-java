@@ -52,8 +52,8 @@ public final class TestMethodDescriptors {
    * Creates a new method descriptor that always creates zero length messages, and always parses to
    * null objects.
    *
-   * @deprecated Use {@link #voidMethod()} instead or build one with {@link
-   *             MethodDescriptor#newBuilder()}
+   * @deprecated Prefer to use {@link #voidMethod()} instead or use one MethodDescriptor from {@code
+   *             io.grpc.testing.protobuf.SimpleServiceGrpc} or from other generated classes.
    * @since 1.1.0
    */
   @Deprecated
