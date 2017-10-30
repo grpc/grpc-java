@@ -80,6 +80,6 @@ class SendResponseHeadersCommand extends WriteQueue.AbstractQueuedCommand {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(stream, headers, status);
+    return Objects.hashCode(stream, status);
   }
 }

@@ -195,7 +195,7 @@ class NettyServerTransport implements ServerTransport {
       // Arbitrarily chosen timeout to avoid blocking forever
       return future.get(1, TimeUnit.MINUTES);
     } catch (InterruptedException e) {
-      Thread.interrupted();
+      Thread.currentThread().interrupt();
       throw new RuntimeException(e);
     } catch (ExecutionException e) {
       throw new RuntimeException(e);
