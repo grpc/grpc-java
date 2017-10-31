@@ -365,7 +365,8 @@ public class TestServiceClient {
         }
         builder = okBuilder;
       }
-      io.grpc.internal.TestingAccessor.setStatsContextFactory(builder, getClientStatsFactory());
+      io.grpc.internal.TestingAccessor.setStatsImplementation(
+          builder, getTagger(), getTagContextBinarySerializer(), getClientStatsFactory());
       return builder.build();
     }
 

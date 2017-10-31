@@ -19,16 +19,11 @@ package io.grpc.internal;
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static com.google.instrumentation.stats.ContextUtils.STATS_CONTEXT_KEY;
+import static io.opencensus.tags.unsafe.ContextUtils.TAG_CONTEXT_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-import com.google.instrumentation.stats.MeasurementMap;
-import com.google.instrumentation.stats.RpcConstants;
-import com.google.instrumentation.stats.StatsContext;
-import com.google.instrumentation.stats.StatsContextFactory;
-import com.google.instrumentation.stats.TagValue;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -42,9 +37,13 @@ import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.StreamTracer;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
+import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
+import io.opencensus.stats.StatsRecord;
+import io.opencensus.stats.StatsRecorder;
+import io.opencensus.tags.TagContext;
+import io.opencensus.tags.TagValue;
+import io.opencensus.tags.Tagger;
+import io.opencensus.tags.propagation.TagContextBinarySerializer;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
@@ -69,44 +68,42 @@ final class CensusStatsModule {
   private static final double NANOS_PER_MILLI = TimeUnit.MILLISECONDS.toNanos(1);
   private static final ClientTracer BLANK_CLIENT_TRACER = new ClientTracer();
 
-  private final StatsContextFactory statsCtxFactory;
+  private final Tagger tagger;
+  private final StatsRecorder statsRecorder;
   private final Supplier<Stopwatch> stopwatchSupplier;
   @VisibleForTesting
-  final Metadata.Key<StatsContext> statsHeader;
+  final Metadata.Key<TagContext> statsHeader;
   private final StatsClientInterceptor clientInterceptor = new StatsClientInterceptor();
   private final ServerTracerFactory serverTracerFactory = new ServerTracerFactory();
   private final boolean propagateTags;
   private final boolean recordStats;
 
   CensusStatsModule(
-      final StatsContextFactory statsCtxFactory, Supplier<Stopwatch> stopwatchSupplier,
+      final Tagger tagger,
+      final TagContextBinarySerializer tagCtxSerializer,
+      StatsRecorder statsRecorder, Supplier<Stopwatch> stopwatchSupplier,
       boolean propagateTags, boolean recordStats) {
-    this.statsCtxFactory = checkNotNull(statsCtxFactory, "statsCtxFactory");
+    this.tagger = checkNotNull(tagger, "tagger");
+    this.statsRecorder = checkNotNull(statsRecorder, "statsRecorder");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.propagateTags = propagateTags;
     this.recordStats = recordStats;
     this.statsHeader =
-        Metadata.Key.of("grpc-tags-bin", new Metadata.BinaryMarshaller<StatsContext>() {
+        Metadata.Key.of("grpc-tags-bin", new Metadata.BinaryMarshaller<TagContext>() {
             @Override
-            public byte[] toBytes(StatsContext context) {
+            public byte[] toBytes(TagContext context) {
               // TODO(carl-mastrangelo): currently we only make sure the correctness. We may need to
               // optimize out the allocation and copy in the future.
-              ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-              try {
-                context.serialize(buffer);
-              } catch (IOException e) {
-                throw new RuntimeException(e);
-              }
-              return buffer.toByteArray();
+              return tagCtxSerializer.toByteArray(context);
             }
 
             @Override
-            public StatsContext parseBytes(byte[] serialized) {
+            public TagContext parseBytes(byte[] serialized) {
               try {
-                return statsCtxFactory.deserialize(new ByteArrayInputStream(serialized));
+                return tagCtxSerializer.fromByteArray(serialized);
               } catch (Exception e) {
                 logger.log(Level.FINE, "Failed to parse stats header", e);
-                return statsCtxFactory.getDefault();
+                return tagger.empty();
               }
             }
           });
@@ -116,7 +113,7 @@ final class CensusStatsModule {
    * Creates a {@link ClientCallTracer} for a new call.
    */
   @VisibleForTesting
-  ClientCallTracer newClientCallTracer(StatsContext parentCtx, String fullMethodName) {
+  ClientCallTracer newClientCallTracer(TagContext parentCtx, String fullMethodName) {
     return new ClientCallTracer(this, parentCtx, fullMethodName);
   }
 
@@ -203,9 +200,9 @@ final class CensusStatsModule {
     private final Stopwatch stopwatch;
     private volatile ClientTracer streamTracer;
     private volatile int callEnded;
-    private final StatsContext parentCtx;
+    private final TagContext parentCtx;
 
-    ClientCallTracer(CensusStatsModule module, StatsContext parentCtx, String fullMethodName) {
+    ClientCallTracer(CensusStatsModule module, TagContext parentCtx, String fullMethodName) {
       this.module = module;
       this.parentCtx = checkNotNull(parentCtx, "parentCtx");
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
@@ -222,7 +219,7 @@ final class CensusStatsModule {
           "Are you creating multiple streams per call? This class doesn't yet support this case.");
       if (module.propagateTags) {
         headers.discardAll(module.statsHeader);
-        if (parentCtx != module.statsCtxFactory.getDefault()) {
+        if (!module.tagger.empty().equals(parentCtx)) {
           headers.put(module.statsHeader, parentCtx);
         }
       }
@@ -248,27 +245,29 @@ final class CensusStatsModule {
       if (tracer == null) {
         tracer = BLANK_CLIENT_TRACER;
       }
-      MeasurementMap.Builder builder = MeasurementMap.builder()
+      StatsRecord statsRecord = module.statsRecorder.newRecord()
           // The metrics are in double
-          .put(RpcConstants.RPC_CLIENT_ROUNDTRIP_LATENCY, roundtripNanos / NANOS_PER_MILLI)
-          .put(RpcConstants.RPC_CLIENT_REQUEST_COUNT, tracer.outboundMessageCount)
-          .put(RpcConstants.RPC_CLIENT_RESPONSE_COUNT, tracer.inboundMessageCount)
-          .put(RpcConstants.RPC_CLIENT_REQUEST_BYTES, tracer.outboundWireSize)
-          .put(RpcConstants.RPC_CLIENT_RESPONSE_BYTES, tracer.inboundWireSize)
+          .put(RpcMeasureConstants.RPC_CLIENT_ROUNDTRIP_LATENCY, roundtripNanos / NANOS_PER_MILLI)
+          .put(RpcMeasureConstants.RPC_CLIENT_REQUEST_COUNT, tracer.outboundMessageCount)
+          .put(RpcMeasureConstants.RPC_CLIENT_RESPONSE_COUNT, tracer.inboundMessageCount)
+          .put(RpcMeasureConstants.RPC_CLIENT_REQUEST_BYTES, tracer.outboundWireSize)
+          .put(RpcMeasureConstants.RPC_CLIENT_RESPONSE_BYTES, tracer.inboundWireSize)
           .put(
-              RpcConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES,
+              RpcMeasureConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES,
               tracer.outboundUncompressedSize)
           .put(
-              RpcConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES,
+              RpcMeasureConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES,
               tracer.inboundUncompressedSize);
       if (!status.isOk()) {
-        builder.put(RpcConstants.RPC_CLIENT_ERROR_COUNT, 1.0);
+        statsRecord.put(RpcMeasureConstants.RPC_CLIENT_ERROR_COUNT, 1);
       }
-      parentCtx
-          .with(
-              RpcConstants.RPC_CLIENT_METHOD, TagValue.create(fullMethodName),
-              RpcConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
-          .record(builder.build());
+      statsRecord.record(
+          module
+              .tagger
+              .toBuilder(parentCtx)
+              .put(RpcMeasureConstants.RPC_CLIENT_METHOD, TagValue.create(fullMethodName))
+              .put(RpcMeasureConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
+              .build());
     }
   }
 
@@ -291,10 +290,10 @@ final class CensusStatsModule {
     private final CensusStatsModule module;
     private final String fullMethodName;
     @Nullable
-    private final StatsContext parentCtx;
+    private final TagContext parentCtx;
     private volatile int streamClosed;
     private final Stopwatch stopwatch;
-    private final StatsContextFactory statsCtxFactory;
+    private final Tagger tagger;
     private volatile long outboundMessageCount;
     private volatile long inboundMessageCount;
     private volatile long outboundWireSize;
@@ -305,14 +304,14 @@ final class CensusStatsModule {
     ServerTracer(
         CensusStatsModule module,
         String fullMethodName,
-        StatsContext parentCtx,
+        TagContext parentCtx,
         Supplier<Stopwatch> stopwatchSupplier,
-        StatsContextFactory statsCtxFactory) {
+        Tagger tagger) {
       this.module = module;
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
       this.parentCtx = checkNotNull(parentCtx, "parentCtx");
       this.stopwatch = stopwatchSupplier.get().start();
-      this.statsCtxFactory = statsCtxFactory;
+      this.tagger = tagger;
     }
 
     @Override
@@ -361,28 +360,31 @@ final class CensusStatsModule {
       }
       stopwatch.stop();
       long elapsedTimeNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
-      MeasurementMap.Builder builder = MeasurementMap.builder()
+      StatsRecord statsRecord = module.statsRecorder.newRecord()
           // The metrics are in double
-          .put(RpcConstants.RPC_SERVER_SERVER_LATENCY, elapsedTimeNanos / NANOS_PER_MILLI)
-          .put(RpcConstants.RPC_SERVER_RESPONSE_COUNT, outboundMessageCount)
-          .put(RpcConstants.RPC_SERVER_REQUEST_COUNT, inboundMessageCount)
-          .put(RpcConstants.RPC_SERVER_RESPONSE_BYTES, outboundWireSize)
-          .put(RpcConstants.RPC_SERVER_REQUEST_BYTES, inboundWireSize)
-          .put(RpcConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES, outboundUncompressedSize)
-          .put(RpcConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES, inboundUncompressedSize);
+          .put(RpcMeasureConstants.RPC_SERVER_SERVER_LATENCY, elapsedTimeNanos / NANOS_PER_MILLI)
+          .put(RpcMeasureConstants.RPC_SERVER_RESPONSE_COUNT, outboundMessageCount)
+          .put(RpcMeasureConstants.RPC_SERVER_REQUEST_COUNT, inboundMessageCount)
+          .put(RpcMeasureConstants.RPC_SERVER_RESPONSE_BYTES, outboundWireSize)
+          .put(RpcMeasureConstants.RPC_SERVER_REQUEST_BYTES, inboundWireSize)
+          .put(RpcMeasureConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES, outboundUncompressedSize)
+          .put(RpcMeasureConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES, inboundUncompressedSize);
       if (!status.isOk()) {
-        builder.put(RpcConstants.RPC_SERVER_ERROR_COUNT, 1.0);
+        statsRecord.put(RpcMeasureConstants.RPC_SERVER_ERROR_COUNT, 1);
       }
-      StatsContext ctx = firstNonNull(parentCtx, statsCtxFactory.getDefault());
-      ctx
-          .with(RpcConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
-          .record(builder.build());
+      TagContext ctx = firstNonNull(parentCtx, tagger.empty());
+      statsRecord.record(
+          module
+              .tagger
+              .toBuilder(ctx)
+              .put(RpcMeasureConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
+              .build());
     }
 
     @Override
     public Context filterContext(Context context) {
-      if (parentCtx != statsCtxFactory.getDefault()) {
-        return context.withValue(STATS_CONTEXT_KEY, parentCtx);
+      if (!tagger.empty().equals(parentCtx)) {
+        return context.withValue(TAG_CONTEXT_KEY, parentCtx);
       }
       return context;
     }
@@ -392,13 +394,17 @@ final class CensusStatsModule {
   final class ServerTracerFactory extends ServerStreamTracer.Factory {
     @Override
     public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
-      StatsContext parentCtx = headers.get(statsHeader);
+      TagContext parentCtx = headers.get(statsHeader);
       if (parentCtx == null) {
-        parentCtx = statsCtxFactory.getDefault();
+        parentCtx = tagger.empty();
       }
-      parentCtx = parentCtx.with(RpcConstants.RPC_SERVER_METHOD, TagValue.create(fullMethodName));
+      parentCtx =
+          tagger
+              .toBuilder(parentCtx)
+              .put(RpcMeasureConstants.RPC_SERVER_METHOD, TagValue.create(fullMethodName))
+              .build();
       return new ServerTracer(
-          CensusStatsModule.this, fullMethodName, parentCtx, stopwatchSupplier, statsCtxFactory);
+          CensusStatsModule.this, fullMethodName, parentCtx, stopwatchSupplier, tagger);
     }
   }
 
@@ -407,8 +413,8 @@ final class CensusStatsModule {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-      // New RPCs on client-side inherit the stats context from the current Context.
-      StatsContext parentCtx = statsCtxFactory.getCurrentStatsContext();
+      // New RPCs on client-side inherit the tag context from the current Context.
+      TagContext parentCtx = tagger.getCurrentTagContext();
       final ClientCallTracer tracerFactory =
           newClientCallTracer(parentCtx, method.getFullMethodName());
       ClientCall<ReqT, RespT> call =

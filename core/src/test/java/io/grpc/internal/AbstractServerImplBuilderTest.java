@@ -19,12 +19,17 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 
-import com.google.instrumentation.stats.StatsContext;
-import com.google.instrumentation.stats.StatsContextFactory;
 import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
+import io.opencensus.common.Scope;
+import io.opencensus.stats.StatsRecord;
+import io.opencensus.stats.StatsRecorder;
+import io.opencensus.tags.TagContext;
+import io.opencensus.tags.TagContextBuilder;
+import io.opencensus.tags.Tagger;
+import io.opencensus.tags.propagation.TagContextBinarySerializer;
+import io.opencensus.tags.propagation.TagContextParseException;
 import java.io.File;
-import java.io.InputStream;
 import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -33,15 +38,57 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link AbstractServerImplBuilder}. */
 @RunWith(JUnit4.class)
 public class AbstractServerImplBuilderTest {
-  private static final StatsContextFactory DUMMY_STATS_FACTORY =
-      new StatsContextFactory() {
+
+  private static final Tagger DUMMY_TAGGER =
+      new Tagger() {
         @Override
-        public StatsContext deserialize(InputStream input) {
+        public TagContext empty() {
           throw new UnsupportedOperationException();
         }
 
         @Override
-        public StatsContext getDefault() {
+        public TagContext getCurrentTagContext() {
+          throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public TagContextBuilder emptyBuilder() {
+          throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public TagContextBuilder toBuilder(TagContext tags) {
+          throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public TagContextBuilder currentBuilder() {
+          throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Scope withTagContext(TagContext tags) {
+          throw new UnsupportedOperationException();
+        }
+      };
+
+  private static final TagContextBinarySerializer DUMMY_TAG_CONTEXT_BINARY_SERIALIZER =
+      new TagContextBinarySerializer() {
+        @Override
+        public byte[] toByteArray(TagContext tags) {
+          throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public TagContext fromByteArray(byte[] bytes) throws TagContextParseException {
+          throw new UnsupportedOperationException();
+        }
+      };
+
+  private static final StatsRecorder DUMMY_STATS_RECORDER =
+      new StatsRecorder() {
+        @Override
+        public StatsRecord newRecord() {
           throw new UnsupportedOperationException();
         }
       };
@@ -97,7 +144,7 @@ public class AbstractServerImplBuilderTest {
 
   static class Builder extends AbstractServerImplBuilder<Builder> {
     Builder() {
-      statsContextFactory(DUMMY_STATS_FACTORY);
+      statsImplementation(DUMMY_TAGGER, DUMMY_TAG_CONTEXT_BINARY_SERIALIZER, DUMMY_STATS_RECORDER);
     }
 
     @Override

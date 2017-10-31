@@ -20,8 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.MoreExecutors;
-import com.google.instrumentation.stats.Stats;
-import com.google.instrumentation.stats.StatsContextFactory;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
@@ -36,6 +34,11 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
+import io.opencensus.stats.Stats;
+import io.opencensus.stats.StatsRecorder;
+import io.opencensus.tags.Tagger;
+import io.opencensus.tags.Tags;
+import io.opencensus.tags.propagation.TagContextBinarySerializer;
 import io.opencensus.trace.Tracing;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -97,7 +100,13 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   CompressorRegistry compressorRegistry = DEFAULT_COMPRESSOR_REGISTRY;
 
   @Nullable
-  private StatsContextFactory statsFactory;
+  private Tagger tagger;
+
+  @Nullable
+  private TagContextBinarySerializer tagCtxSerializer;
+
+  @Nullable
+  private StatsRecorder statsRecorder;
 
   private boolean statsEnabled = true;
   private boolean recordStats = true;
@@ -184,8 +193,13 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
    * Override the default stats implementation.
    */
   @VisibleForTesting
-  protected T statsContextFactory(StatsContextFactory statsFactory) {
-    this.statsFactory = statsFactory;
+  protected T statsImplementation(
+      final Tagger tagger,
+      TagContextBinarySerializer tagCtxSerializer,
+      StatsRecorder statsRecorder) {
+    this.tagger = tagger;
+    this.tagCtxSerializer = tagCtxSerializer;
+    this.statsRecorder = statsRecorder;
     return thisT();
   }
 
@@ -228,13 +242,26 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
     ArrayList<ServerStreamTracer.Factory> tracerFactories =
         new ArrayList<ServerStreamTracer.Factory>();
     if (statsEnabled) {
-      StatsContextFactory statsFactory =
-          this.statsFactory != null ? this.statsFactory : Stats.getStatsContextFactory();
-      if (statsFactory != null) {
-        CensusStatsModule censusStats =
-            new CensusStatsModule(statsFactory, GrpcUtil.STOPWATCH_SUPPLIER, true, recordStats);
-        tracerFactories.add(censusStats.getServerTracerFactory());
-      }
+      Tagger tagger = this.tagger != null ? this.tagger : Tags.getTagger();
+      TagContextBinarySerializer tagCtxSerializer =
+          this.tagCtxSerializer != null
+              ? this.tagCtxSerializer
+              : Tags.getTagPropagationComponent().getBinarySerializer();
+      StatsRecorder statsRecorder =
+          this.statsRecorder != null ? this.statsRecorder : Stats.getStatsRecorder();
+      // // TODO: How do we check whether stats is enabled, now that the StatsRecorder is always
+      // // non-null? Uncommenting this line causes test failures.
+      // if (Stats.getState() == StatsCollectionState.ENABLED) {
+      CensusStatsModule censusStats =
+          new CensusStatsModule(
+              tagger,
+              tagCtxSerializer,
+              statsRecorder,
+              GrpcUtil.STOPWATCH_SUPPLIER,
+              true,
+              recordStats);
+      tracerFactories.add(censusStats.getServerTracerFactory());
+      // }
     }
     if (tracingEnabled) {
       CensusTracingModule censusTracing =

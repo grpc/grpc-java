@@ -21,8 +21,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
-import com.google.instrumentation.stats.Stats;
-import com.google.instrumentation.stats.StatsContextFactory;
 import io.grpc.Attributes;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
@@ -34,6 +32,11 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.PickFirstBalancerFactory;
+import io.opencensus.stats.Stats;
+import io.opencensus.stats.StatsRecorder;
+import io.opencensus.tags.Tagger;
+import io.opencensus.tags.Tags;
+import io.opencensus.tags.propagation.TagContextBinarySerializer;
 import io.opencensus.trace.Tracing;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -152,7 +155,13 @@ public abstract class AbstractManagedChannelImplBuilder
   private boolean tracingEnabled = true;
 
   @Nullable
-  private StatsContextFactory statsFactory;
+  private Tagger tagger;
+
+  @Nullable
+  private TagContextBinarySerializer tagCtxSerializer;
+
+  @Nullable
+  private StatsRecorder statsRecorder;
 
   protected AbstractManagedChannelImplBuilder(String target) {
     this.target = Preconditions.checkNotNull(target, "target");
@@ -287,8 +296,11 @@ public abstract class AbstractManagedChannelImplBuilder
    * Override the default stats implementation.
    */
   @VisibleForTesting
-  protected final T statsContextFactory(StatsContextFactory statsFactory) {
-    this.statsFactory = statsFactory;
+  protected final T statsImplementation(
+      Tagger tagger, TagContextBinarySerializer tagCtxSerializer, StatsRecorder statsRecorder) {
+    this.tagger = tagger;
+    this.tagCtxSerializer = tagCtxSerializer;
+    this.statsRecorder = statsRecorder;
     return thisT();
   }
 
@@ -346,15 +358,28 @@ public abstract class AbstractManagedChannelImplBuilder
     List<ClientInterceptor> effectiveInterceptors =
         new ArrayList<ClientInterceptor>(this.interceptors);
     if (statsEnabled) {
-      StatsContextFactory statsCtxFactory =
-          this.statsFactory != null ? this.statsFactory : Stats.getStatsContextFactory();
-      if (statsCtxFactory != null) {
-        CensusStatsModule censusStats =
-            new CensusStatsModule(statsCtxFactory, GrpcUtil.STOPWATCH_SUPPLIER, true, recordStats);
-        // First interceptor runs last (see ClientInterceptors.intercept()), so that no
-        // other interceptor can override the tracer factory we set in CallOptions.
-        effectiveInterceptors.add(0, censusStats.getClientInterceptor());
-      }
+      Tagger tagger = this.tagger != null ? this.tagger : Tags.getTagger();
+      TagContextBinarySerializer tagCtxSerializer =
+          this.tagCtxSerializer != null
+              ? this.tagCtxSerializer
+              : Tags.getTagPropagationComponent().getBinarySerializer();
+      StatsRecorder statsRecorder =
+          this.statsRecorder != null ? this.statsRecorder : Stats.getStatsRecorder();
+      // // TODO: How do we check whether stats is enabled, now that the StatsRecorder is always
+      // // non-null? Uncommenting this line causes test failures.
+      // if (Stats.getState() == StatsCollectionState.ENABLED) {
+      CensusStatsModule censusStats =
+          new CensusStatsModule(
+              tagger,
+              tagCtxSerializer,
+              statsRecorder,
+              GrpcUtil.STOPWATCH_SUPPLIER,
+              true,
+              recordStats);
+      // First interceptor runs last (see ClientInterceptors.intercept()), so that no
+      // other interceptor can override the tracer factory we set in CallOptions.
+      effectiveInterceptors.add(0, censusStats.getClientInterceptor());
+                               // }
     }
     if (tracingEnabled) {
       CensusTracingModule censusTracing =
