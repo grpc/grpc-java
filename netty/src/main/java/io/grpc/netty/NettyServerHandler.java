@@ -400,7 +400,7 @@ class NettyServerHandler extends AbstractNettyHandler {
     try {
       NettyServerStream.TransportState stream = serverStream(connection().stream(streamId));
       if (stream != null) {
-        stream.transportReportStatus(Status.CANCELLED);
+        stream.transportReportStatus(Status.CANCELLED.withDescription("RST_STREAM received"));
       }
     } catch (Throwable e) {
       logger.log(Level.WARNING, "Exception in onRstStreamRead()", e);
