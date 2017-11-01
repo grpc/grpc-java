@@ -22,13 +22,14 @@ import static org.junit.Assert.assertEquals;
 import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
 import io.opencensus.common.Scope;
-import io.opencensus.stats.StatsRecord;
+import io.opencensus.stats.MeasureMap;
 import io.opencensus.stats.StatsRecorder;
 import io.opencensus.tags.TagContext;
 import io.opencensus.tags.TagContextBuilder;
 import io.opencensus.tags.Tagger;
 import io.opencensus.tags.propagation.TagContextBinarySerializer;
-import io.opencensus.tags.propagation.TagContextParseException;
+import io.opencensus.tags.propagation.TagContextDeserializationException;
+import io.opencensus.tags.propagation.TagContextSerializationException;
 import java.io.File;
 import java.util.List;
 import org.junit.Test;
@@ -75,12 +76,12 @@ public class AbstractServerImplBuilderTest {
   private static final TagContextBinarySerializer DUMMY_TAG_CONTEXT_BINARY_SERIALIZER =
       new TagContextBinarySerializer() {
         @Override
-        public byte[] toByteArray(TagContext tags) {
+        public byte[] toByteArray(TagContext tags) throws TagContextSerializationException {
           throw new UnsupportedOperationException();
         }
 
         @Override
-        public TagContext fromByteArray(byte[] bytes) throws TagContextParseException {
+        public TagContext fromByteArray(byte[] bytes) throws TagContextDeserializationException {
           throw new UnsupportedOperationException();
         }
       };
@@ -88,7 +89,7 @@ public class AbstractServerImplBuilderTest {
   private static final StatsRecorder DUMMY_STATS_RECORDER =
       new StatsRecorder() {
         @Override
-        public StatsRecord newRecord() {
+        public MeasureMap newMeasureMap() {
           throw new UnsupportedOperationException();
         }
       };

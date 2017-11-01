@@ -25,7 +25,7 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.Maps;
 import io.opencensus.common.Scope;
 import io.opencensus.stats.Measure;
-import io.opencensus.stats.StatsRecord;
+import io.opencensus.stats.MeasureMap;
 import io.opencensus.stats.StatsRecorder;
 import io.opencensus.tags.Tag;
 import io.opencensus.tags.TagContext;
@@ -34,7 +34,7 @@ import io.opencensus.tags.TagKey;
 import io.opencensus.tags.TagValue;
 import io.opencensus.tags.Tagger;
 import io.opencensus.tags.propagation.TagContextBinarySerializer;
-import io.opencensus.tags.propagation.TagContextParseException;
+import io.opencensus.tags.propagation.TagContextDeserializationException;
 import io.opencensus.tags.unsafe.ContextUtils;
 import io.opencensus.trace.Annotation;
 import io.opencensus.trace.AttributeValue;
@@ -128,7 +128,7 @@ public class StatsTestUtils {
     }
 
     @Override
-    public StatsRecord newRecord() {
+    public MeasureMap newMeasureMap() {
       return new FakeStatsRecord(this);
     }
 
@@ -193,7 +193,7 @@ public class StatsTestUtils {
     private final FakeTagger tagger = new FakeTagger();
 
     @Override
-    public TagContext fromByteArray(byte[] bytes) throws TagContextParseException {
+    public TagContext fromByteArray(byte[] bytes) throws TagContextDeserializationException {
       String serializedString = new String(bytes, UTF_8);
       if (serializedString.startsWith(EXTRA_TAG_HEADER_VALUE_PREFIX)) {
         return tagger.emptyBuilder()
@@ -203,7 +203,7 @@ public class StatsTestUtils {
       } else if (serializedString.startsWith(NO_EXTRA_TAG_HEADER_VALUE_PREFIX)) {
         return tagger.empty();
       } else {
-        throw new TagContextParseException("Malformed value");
+        throw new TagContextDeserializationException("Malformed value");
       }
     }
 
@@ -218,7 +218,7 @@ public class StatsTestUtils {
     }
   }
 
-  public static final class FakeStatsRecord extends StatsRecord {
+  public static final class FakeStatsRecord extends MeasureMap {
 
     private final BlockingQueue<MetricsRecord> recordSink;
     public final Map<Measure, Number> metrics = Maps.newHashMap();
@@ -228,13 +228,13 @@ public class StatsTestUtils {
     }
 
     @Override
-    public StatsRecord put(Measure.MeasureDouble measure, double value) {
+    public MeasureMap put(Measure.MeasureDouble measure, double value) {
       metrics.put(measure, value);
       return this;
     }
 
     @Override
-    public StatsRecord put(Measure.MeasureLong measure, long value) {
+    public MeasureMap put(Measure.MeasureLong measure, long value) {
       metrics.put(measure, value);
       return this;
     }

@@ -38,12 +38,13 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.StreamTracer;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
-import io.opencensus.stats.StatsRecord;
+import io.opencensus.stats.MeasureMap;
 import io.opencensus.stats.StatsRecorder;
 import io.opencensus.tags.TagContext;
 import io.opencensus.tags.TagValue;
 import io.opencensus.tags.Tagger;
 import io.opencensus.tags.propagation.TagContextBinarySerializer;
+import io.opencensus.tags.propagation.TagContextSerializationException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
@@ -94,7 +95,11 @@ final class CensusStatsModule {
             public byte[] toBytes(TagContext context) {
               // TODO(carl-mastrangelo): currently we only make sure the correctness. We may need to
               // optimize out the allocation and copy in the future.
-              return tagCtxSerializer.toByteArray(context);
+              try {
+                return tagCtxSerializer.toByteArray(context);
+              } catch (TagContextSerializationException e) {
+                throw new RuntimeException(e);
+              }
             }
 
             @Override
@@ -245,7 +250,7 @@ final class CensusStatsModule {
       if (tracer == null) {
         tracer = BLANK_CLIENT_TRACER;
       }
-      StatsRecord statsRecord = module.statsRecorder.newRecord()
+      MeasureMap measureMap = module.statsRecorder.newMeasureMap()
           // The metrics are in double
           .put(RpcMeasureConstants.RPC_CLIENT_ROUNDTRIP_LATENCY, roundtripNanos / NANOS_PER_MILLI)
           .put(RpcMeasureConstants.RPC_CLIENT_REQUEST_COUNT, tracer.outboundMessageCount)
@@ -259,13 +264,13 @@ final class CensusStatsModule {
               RpcMeasureConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES,
               tracer.inboundUncompressedSize);
       if (!status.isOk()) {
-        statsRecord.put(RpcMeasureConstants.RPC_CLIENT_ERROR_COUNT, 1);
+        measureMap.put(RpcMeasureConstants.RPC_CLIENT_ERROR_COUNT, 1);
       }
-      statsRecord.record(
+      measureMap.record(
           module
               .tagger
               .toBuilder(parentCtx)
-              .put(RpcMeasureConstants.RPC_CLIENT_METHOD, TagValue.create(fullMethodName))
+              .put(RpcMeasureConstants.RPC_METHOD, TagValue.create(fullMethodName))
               .put(RpcMeasureConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
               .build());
     }
@@ -360,7 +365,7 @@ final class CensusStatsModule {
       }
       stopwatch.stop();
       long elapsedTimeNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
-      StatsRecord statsRecord = module.statsRecorder.newRecord()
+      MeasureMap measureMap = module.statsRecorder.newMeasureMap()
           // The metrics are in double
           .put(RpcMeasureConstants.RPC_SERVER_SERVER_LATENCY, elapsedTimeNanos / NANOS_PER_MILLI)
           .put(RpcMeasureConstants.RPC_SERVER_RESPONSE_COUNT, outboundMessageCount)
@@ -370,10 +375,10 @@ final class CensusStatsModule {
           .put(RpcMeasureConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES, outboundUncompressedSize)
           .put(RpcMeasureConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES, inboundUncompressedSize);
       if (!status.isOk()) {
-        statsRecord.put(RpcMeasureConstants.RPC_SERVER_ERROR_COUNT, 1);
+        measureMap.put(RpcMeasureConstants.RPC_SERVER_ERROR_COUNT, 1);
       }
       TagContext ctx = firstNonNull(parentCtx, tagger.empty());
-      statsRecord.record(
+      measureMap.record(
           module
               .tagger
               .toBuilder(ctx)
@@ -401,7 +406,7 @@ final class CensusStatsModule {
       parentCtx =
           tagger
               .toBuilder(parentCtx)
-              .put(RpcMeasureConstants.RPC_SERVER_METHOD, TagValue.create(fullMethodName))
+              .put(RpcMeasureConstants.RPC_METHOD, TagValue.create(fullMethodName))
               .build();
       return new ServerTracer(
           CensusStatsModule.this, fullMethodName, parentCtx, stopwatchSupplier, tagger);

@@ -299,7 +299,7 @@ public class CensusModulesTest {
     // The intercepting listener calls callEnded() on ClientCallTracer, which records to Census.
     StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
     assertNotNull(record);
-    TagValue methodTag = record.tags.get(RpcMeasureConstants.RPC_CLIENT_METHOD);
+    TagValue methodTag = record.tags.get(RpcMeasureConstants.RPC_METHOD);
     assertEquals(method.getFullMethodName(), methodTag.asString());
     TagValue statusTag = record.tags.get(RpcMeasureConstants.RPC_STATUS);
     assertEquals(Status.Code.PERMISSION_DENIED.toString(), statusTag.asString());
@@ -352,7 +352,7 @@ public class CensusModulesTest {
     StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
     assertNotNull(record);
     assertNoServerContent(record);
-    TagValue methodTag = record.tags.get(RpcMeasureConstants.RPC_CLIENT_METHOD);
+    TagValue methodTag = record.tags.get(RpcMeasureConstants.RPC_METHOD);
     assertEquals(method.getFullMethodName(), methodTag.asString());
     TagValue statusTag = record.tags.get(RpcMeasureConstants.RPC_STATUS);
     assertEquals(Status.Code.OK.toString(), statusTag.asString());
@@ -441,7 +441,7 @@ public class CensusModulesTest {
     StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
     assertNotNull(record);
     assertNoServerContent(record);
-    TagValue methodTag = record.tags.get(RpcMeasureConstants.RPC_CLIENT_METHOD);
+    TagValue methodTag = record.tags.get(RpcMeasureConstants.RPC_METHOD);
     assertEquals(method.getFullMethodName(), methodTag.asString());
     TagValue statusTag = record.tags.get(RpcMeasureConstants.RPC_STATUS);
     assertEquals(Status.Code.DEADLINE_EXCEEDED.toString(), statusTag.asString());
@@ -533,7 +533,7 @@ public class CensusModulesTest {
     // It also put clientCtx in the Context seen by the call handler
     assertEquals(
         tagger.toBuilder(clientCtx).put(
-            RpcMeasureConstants.RPC_SERVER_METHOD,
+            RpcMeasureConstants.RPC_METHOD,
             TagValue.create(method.getFullMethodName())).build(),
         TAG_CONTEXT_KEY.get(serverContext));
 
@@ -544,7 +544,7 @@ public class CensusModulesTest {
       StatsTestUtils.MetricsRecord serverRecord = statsRecorder.pollRecord();
       assertNotNull(serverRecord);
       assertNoClientContent(serverRecord);
-      TagValue serverMethodTag = serverRecord.tags.get(RpcMeasureConstants.RPC_SERVER_METHOD);
+      TagValue serverMethodTag = serverRecord.tags.get(RpcMeasureConstants.RPC_METHOD);
       assertEquals(method.getFullMethodName(), serverMethodTag.asString());
       TagValue serverStatusTag = serverRecord.tags.get(RpcMeasureConstants.RPC_STATUS);
       assertEquals(Status.Code.OK.toString(), serverStatusTag.asString());
@@ -561,7 +561,7 @@ public class CensusModulesTest {
       StatsTestUtils.MetricsRecord clientRecord = statsRecorder.pollRecord();
       assertNotNull(clientRecord);
       assertNoServerContent(clientRecord);
-      TagValue clientMethodTag = clientRecord.tags.get(RpcMeasureConstants.RPC_CLIENT_METHOD);
+      TagValue clientMethodTag = clientRecord.tags.get(RpcMeasureConstants.RPC_METHOD);
       assertEquals(method.getFullMethodName(), clientMethodTag.asString());
       TagValue clientStatusTag = clientRecord.tags.get(RpcMeasureConstants.RPC_STATUS);
       assertEquals(Status.Code.OK.toString(), clientStatusTag.asString());
@@ -669,7 +669,7 @@ public class CensusModulesTest {
         tagger
             .emptyBuilder()
             .put(
-                RpcMeasureConstants.RPC_SERVER_METHOD,
+                RpcMeasureConstants.RPC_METHOD,
                 TagValue.create(method.getFullMethodName()))
             .build(),
         statsCtx);
@@ -698,7 +698,7 @@ public class CensusModulesTest {
     StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
     assertNotNull(record);
     assertNoClientContent(record);
-    TagValue methodTag = record.tags.get(RpcMeasureConstants.RPC_SERVER_METHOD);
+    TagValue methodTag = record.tags.get(RpcMeasureConstants.RPC_METHOD);
     assertEquals(method.getFullMethodName(), methodTag.asString());
     TagValue statusTag = record.tags.get(RpcMeasureConstants.RPC_STATUS);
     assertEquals(Status.Code.CANCELLED.toString(), statusTag.asString());
