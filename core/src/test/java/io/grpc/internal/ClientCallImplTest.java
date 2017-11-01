@@ -937,14 +937,11 @@ public class ClientCallImplTest {
         throw new UnsupportedOperationException();
       }
     };
-    MethodDescriptor<Void, Void> method = MethodDescriptor.<Void, Void>newBuilder()
-        .setType(MethodType.UNARY)
-        .setFullMethodName("service/method")
-        .setRequestMarshaller(marshaller)
-        .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
-        .build();
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method, MoreExecutors.directExecutor(), baseCallOptions, provider,
+        TestMethodDescriptors.voidMethod().toBuilder().setRequestMarshaller(marshaller).build(),
+        MoreExecutors.directExecutor(),
+        baseCallOptions,
+        provider,
         deadlineCancellationExecutor);
     call.start(callListener, new Metadata());
     call.sendMessage(null);
