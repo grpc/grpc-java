@@ -190,7 +190,6 @@ public final class ClientCalls {
    *     or an {@link InterruptedException}.
    */
   private static <V> V getUnchecked(Future<V> future) {
-
     try {
       return future.get();
     } catch (InterruptedException e) {
@@ -228,16 +227,15 @@ public final class ClientCalls {
 
   /**
    * Cancels a call, and throws the exception.
-   * 
+   *
    * @param t must be a RuntimeException or Error
    */
   private static RuntimeException cancelThrow(ClientCall<?, ?> call, Throwable t) {
     try {
       call.cancel(null, t);
-    } catch (RuntimeException e) {
+    } catch (Throwable e) {
+      assert e instanceof RuntimeException || e instanceof Error;
       logger.log(Level.SEVERE, "RuntimeException encountered while closing call", e);
-    } catch (Error e) {
-      logger.log(Level.SEVERE, "Error encountered while closing call", e);
     }
     if (t instanceof RuntimeException) {
       throw (RuntimeException) t;
