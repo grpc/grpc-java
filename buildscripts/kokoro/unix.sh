@@ -4,7 +4,7 @@
 # TODO(zpencer): test this script for Linux
 
 # This script assumes `set -e`. Removing it may lead to undefined behavior.
-set -ex
+set -exu -o pipefail
 
 export GRADLE_OPTS=-Xmx512m
 export PROTOBUF_VERSION=3.4.0
@@ -29,7 +29,9 @@ echo "errorProne=true" >> $HOME/.gradle/gradle.properties
 
 # Run tests
 ./gradlew assemble generateTestProto install
-pushd examples && ./gradlew build && popd
-# --batch-mode reduces logspam
-pushd examples && mvn verify --batch-mode &&  popd
+pushd examples
+./gradlew build
+# --batch-mode reduces log spam
+mvn verify --batch-mode
+popd
 # TODO(zpencer): also build the GAE examples

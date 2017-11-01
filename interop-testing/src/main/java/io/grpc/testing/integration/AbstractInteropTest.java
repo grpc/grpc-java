@@ -75,6 +75,7 @@ import io.grpc.internal.testing.StatsTestUtils.FakeStatsContextFactory;
 import io.grpc.internal.testing.StatsTestUtils.MetricsRecord;
 import io.grpc.internal.testing.StatsTestUtils.MockableSpan;
 import io.grpc.internal.testing.StatsTestUtils;
+import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.internal.testing.TestClientStreamTracer;
 import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.internal.testing.TestStreamTracer;
@@ -83,7 +84,6 @@ import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
-import io.grpc.testing.StreamRecorder;
 import io.grpc.testing.TestUtils;
 import io.grpc.testing.integration.Messages.EchoStatus;
 import io.grpc.testing.integration.Messages.Payload;
@@ -194,7 +194,7 @@ public abstract class AbstractInteropTest {
     testServiceExecutor = Executors.newScheduledThreadPool(2);
 
     List<ServerInterceptor> allInterceptors = ImmutableList.<ServerInterceptor>builder()
-        .add(TestUtils.recordServerCallInterceptor(serverCallCapture))
+        .add(recordServerCallInterceptor(serverCallCapture))
         .add(TestUtils.recordRequestHeadersInterceptor(requestHeadersCapture))
         .add(recordContextInterceptor(contextCapture))
         .addAll(TestServiceImpl.interceptors())
@@ -303,7 +303,7 @@ public abstract class AbstractInteropTest {
   public void cacheableUnary() {
     // Set safe to true.
     MethodDescriptor<SimpleRequest, SimpleResponse> safeCacheableUnaryCallMethod =
-        TestServiceGrpc.METHOD_CACHEABLE_UNARY_CALL.toBuilder().setSafe(true).build();
+        TestServiceGrpc.getCacheableUnaryCallMethod().toBuilder().setSafe(true).build();
     // Set fake user IP since some proxies (GFE) won't cache requests from localhost.
     Metadata.Key<String> userIpKey = Metadata.Key.of("x-user-ip", Metadata.ASCII_STRING_MARSHALLER);
     Metadata metadata = new Metadata();
@@ -837,7 +837,7 @@ public abstract class AbstractInteropTest {
 
     final ArrayBlockingQueue<Object> queue = new ArrayBlockingQueue<Object>(10);
     ClientCall<StreamingOutputCallRequest, StreamingOutputCallResponse> call =
-        channel.newCall(TestServiceGrpc.METHOD_STREAMING_OUTPUT_CALL, CallOptions.DEFAULT);
+        channel.newCall(TestServiceGrpc.getStreamingOutputCallMethod(), CallOptions.DEFAULT);
     call.start(new ClientCall.Listener<StreamingOutputCallResponse>() {
       @Override
       public void onHeaders(Metadata headers) {}
@@ -1933,6 +1933,24 @@ public abstract class AbstractInteropTest {
       assertNotNull(record.getMetric(RpcConstants.RPC_CLIENT_REQUEST_BYTES));
       assertNotNull(record.getMetric(RpcConstants.RPC_CLIENT_RESPONSE_BYTES));
     }
+  }
+
+  /**
+   * Captures the request attributes. Useful for testing ServerCalls.
+   * {@link ServerCall#getAttributes()}
+   */
+  private static ServerInterceptor recordServerCallInterceptor(
+      final AtomicReference<ServerCall<?, ?>> serverCallCapture) {
+    return new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+          ServerCall<ReqT, RespT> call,
+          Metadata requestHeaders,
+          ServerCallHandler<ReqT, RespT> next) {
+        serverCallCapture.set(call);
+        return next.startCall(call, requestHeaders);
+      }
+    };
   }
 
   private static ServerInterceptor recordContextInterceptor(
