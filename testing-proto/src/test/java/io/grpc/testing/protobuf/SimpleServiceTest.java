@@ -55,6 +55,6 @@ public class SimpleServiceTest {
 
   @Test
   public void generatedMethodsAreSampledToLocalTracing() throws Exception {
-    assertTrue(SimpleServiceGrpc.METHOD_UNARY_RPC.isSampledToLocalTracing());
+    assertTrue(SimpleServiceGrpc.getUnaryRpcMethod().isSampledToLocalTracing());
   }
 }
