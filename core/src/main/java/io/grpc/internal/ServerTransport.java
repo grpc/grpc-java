@@ -17,8 +17,8 @@
 package io.grpc.internal;
 
 import io.grpc.Status;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
-import javax.annotation.Nullable;
 
 /** An inbound connection. */
 public interface ServerTransport extends WithLogId {
@@ -45,8 +45,8 @@ public interface ServerTransport extends WithLogId {
   ScheduledExecutorService getScheduledExecutorService();
 
   /**
-   * Returns the transport level stats.
+   * Returns a Future representing the transport level stats. If this transport does not support
+   * stats, the return value will be a Future of a null value.
    */
-  @Nullable
-  TransportTracer.Stats getTransportStats();
+  Future<TransportTracer.Stats> getTransportStats();
 }

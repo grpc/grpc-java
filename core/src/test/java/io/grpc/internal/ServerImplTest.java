@@ -43,6 +43,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.truth.Truth;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.Compressor;
 import io.grpc.Context;
@@ -74,11 +75,11 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -1239,10 +1240,11 @@ public class ServerImplTest {
       return timer.getScheduledExecutorService();
     }
 
-    @Nullable
     @Override
-    public TransportTracer.Stats getTransportStats() {
-      return null;
+    public Future<TransportTracer.Stats> getTransportStats() {
+      SettableFuture<TransportTracer.Stats> ret = SettableFuture.create();
+      ret.set(null);
+      return ret;
     }
   }
 

@@ -24,8 +24,8 @@ import java.util.concurrent.atomic.AtomicLongArray;
  * {@link AtomicLong} objects. Do not instantiate directly, instead use {@link LongCounterFactory}.
  */
 final class ShardedAtomicLongCounter implements LongCounter {
-  final AtomicLongArray counters;
-  final int mask;
+  private final AtomicLongArray counters;
+  private final int mask;
 
   /**
    * Accepts a hint on how many shards should be created. The actual number of shards may differ.
@@ -59,6 +59,7 @@ final class ShardedAtomicLongCounter implements LongCounter {
 
   @Override
   public void add(long delta) {
+    // TODO(zpencer): replace fixed hashcode with a lightweight RNG. See guava's Striped64.
     counters.addAndGet(getCounterIdx(Thread.currentThread().hashCode()), delta);
   }
 
