@@ -704,7 +704,10 @@ public final class GrpcUtil {
   }
 
   /** Quietly closes all messages in MessageProducer. */
-  static void closeQuietly(MessageProducer producer) {
+  static void closeQuietly(@Nullable MessageProducer producer) {
+    if (producer == null) {
+      return;
+    }
     InputStream message;
     while ((message = producer.next()) != null) {
       closeQuietly(message);
@@ -715,7 +718,10 @@ public final class GrpcUtil {
    * Closes an InputStream, ignoring IOExceptions.
    * This method exists because Guava's {@code Closeables.closeQuietly()} is beta.
    */
-  static void closeQuietly(InputStream message) {
+  static void closeQuietly(@Nullable InputStream message) {
+    if (message == null) {
+      return;
+    }
     try {
       message.close();
     } catch (IOException ioException) {
