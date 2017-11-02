@@ -120,6 +120,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
      * @param args object containing call arguments.
      */
     ClientTransport get(PickSubchannelArgs args);
+
+    DelayedClientTransport getDelayedTransport();
   }
 
   ClientCallImpl<ReqT, RespT> setFullStreamDecompression(boolean fullStreamDecompression) {
@@ -222,13 +224,18 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     if (!deadlineExceeded) {
       updateTimeoutHeaders(effectiveDeadline, callOptions.getDeadline(),
           context.getDeadline(), headers);
-      ClientTransport transport = clientTransportProvider.get(
-          new PickSubchannelArgsImpl(method, headers, callOptions));
-      Context origContext = context.attach();
-      try {
-        stream = transport.newStream(method, headers, callOptions);
-      } finally {
-        context.detach(origContext);
+      if (retryEnabled()) {
+        stream = new RetriableStream<ReqT>(
+            method, callOptions, headers, clientTransportProvider, context);
+      } else {
+        ClientTransport transport = clientTransportProvider.get(
+            new PickSubchannelArgsImpl(method, headers, callOptions));
+        Context origContext = context.attach();
+        try {
+          stream = transport.newStream(method, headers, callOptions);
+        } finally {
+          context.detach(origContext);
+        }
       }
     } else {
       stream = new FailingClientStream(DEADLINE_EXCEEDED);
@@ -267,6 +274,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       // was cancelled.
       removeContextListenerAndCancelDeadlineFuture();
     }
+  }
+
+  // TODO: API plumbing to enable retry.
+  private boolean retryEnabled() {
+    return false;
   }
 
   /**
@@ -405,9 +417,15 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     checkState(!cancelCalled, "call was cancelled");
     checkState(!halfCloseCalled, "call was half-closed");
     try {
-      // TODO(notcarl): Find out if messageIs needs to be closed.
-      InputStream messageIs = method.streamRequest(message);
-      stream.writeMessage(messageIs);
+      if (stream instanceof RetriableStream) {
+        @SuppressWarnings("unchecked")
+        RetriableStream<ReqT> retriableStream = ((RetriableStream<ReqT>) stream);
+        retriableStream.sendMessage(message);
+      } else {
+        // TODO(notcarl): Find out if messageIs needs to be closed.
+        InputStream messageIs = method.streamRequest(message);
+        stream.writeMessage(messageIs);
+      }
     } catch (Throwable e) {
       stream.cancel(Status.CANCELLED.withCause(e).withDescription("Failed to stream message"));
       return;

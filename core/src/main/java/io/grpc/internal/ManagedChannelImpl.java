@@ -386,6 +386,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       }
       return delayedTransport;
     }
+
+    @Override
+    public DelayedClientTransport getDelayedTransport() {
+      return delayedTransport;
+    }
   };
 
   ManagedChannelImpl(
