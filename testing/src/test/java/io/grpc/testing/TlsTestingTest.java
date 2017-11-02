@@ -18,20 +18,19 @@ package io.grpc.testing;
 
 import static org.junit.Assert.assertNotNull;
 
-import java.io.IOException;
 import java.io.InputStream;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link TestUtils}. */
+/** Unit tests for {@link TlsTesting}. */
 @RunWith(JUnit4.class)
-public class TestUtilsTest {
+public class TlsTestingTest {
   @Test
-  public void loadCertFromResource() throws IOException {
+  public void loadCert() throws Exception {
     InputStream is = null;
     try {
-      is = TestUtils.loadCertFromResource("ca.key");
+      is = TlsTesting.loadCert("ca.key");
       assertNotNull(is);
     } finally {
       if (is != null) {
