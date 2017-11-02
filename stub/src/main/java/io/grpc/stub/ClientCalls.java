@@ -306,7 +306,9 @@ public final class ClientCalls {
     private boolean autoFlowControlEnabled = true;
 
     // Non private to avoid synthetic class
+    @SuppressWarnings("deprecation")
     CallToStreamObserverAdapter(ClientCall<T, ?> call) {
+      super(ClientCallStreamObserver.KEY_FOR_20171102);
       this.call = call;
     }
 

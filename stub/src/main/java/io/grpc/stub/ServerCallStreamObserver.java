@@ -51,4 +51,12 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
    * @param compression the compression algorithm to use.
    */
   public abstract void setCompression(String compression);
+
+  /**
+   * Do not call this, it is for the gRPC library to construct.
+   */
+  @Deprecated
+  public ServerCallStreamObserver(Object key) {
+    super(key);
+  }
 }

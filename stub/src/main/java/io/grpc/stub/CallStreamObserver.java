@@ -95,4 +95,18 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    * @param enable whether to enable compression.
    */
   public abstract void setMessageCompression(boolean enable);
+
+  static final Object KEY_FOR_20171102 =
+      "I know what I'm doing and make my own observers. Today's password is actinide.";
+
+
+  /**
+   * Do not call this, it is for the gRPC library to construct.
+   */
+  @Deprecated
+  public CallStreamObserver(Object key) {
+    if (!KEY_FOR_20171102.equals(key)) {
+      throw new IllegalArgumentException("Don't create your own CallStreamObservers");
+    }
+  }
 }
