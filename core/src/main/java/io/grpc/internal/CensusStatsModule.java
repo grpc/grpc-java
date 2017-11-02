@@ -39,10 +39,12 @@ import io.grpc.Status;
 import io.grpc.StreamTracer;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
 import io.opencensus.stats.MeasureMap;
+import io.opencensus.stats.Stats;
 import io.opencensus.stats.StatsRecorder;
 import io.opencensus.tags.TagContext;
 import io.opencensus.tags.TagValue;
 import io.opencensus.tags.Tagger;
+import io.opencensus.tags.Tags;
 import io.opencensus.tags.propagation.TagContextBinarySerializer;
 import io.opencensus.tags.propagation.TagContextSerializationException;
 import java.util.concurrent.TimeUnit;
@@ -74,21 +76,33 @@ final class CensusStatsModule {
   private final Supplier<Stopwatch> stopwatchSupplier;
   @VisibleForTesting
   final Metadata.Key<TagContext> statsHeader;
-  private final StatsClientInterceptor clientInterceptor = new StatsClientInterceptor();
-  private final ServerTracerFactory serverTracerFactory = new ServerTracerFactory();
   private final boolean propagateTags;
-  private final boolean recordStats;
 
+  /**
+   * Creates a {@link CensusStatsModule} with the default OpenCensus implementation.
+   */
+  CensusStatsModule(Supplier<Stopwatch> stopwatchSupplier, boolean propagateTags) {
+    this(
+        Tags.getTagger(),
+        Tags.getTagPropagationComponent().getBinarySerializer(),
+        Stats.getStatsRecorder(),
+        stopwatchSupplier,
+        propagateTags);
+  }
+
+  /**
+   * Creates a {@link CensusStatsModule} with the given OpenCensus implementation.
+   */
   CensusStatsModule(
       final Tagger tagger,
       final TagContextBinarySerializer tagCtxSerializer,
       StatsRecorder statsRecorder, Supplier<Stopwatch> stopwatchSupplier,
-      boolean propagateTags, boolean recordStats) {
+      boolean propagateTags) {
     this.tagger = checkNotNull(tagger, "tagger");
     this.statsRecorder = checkNotNull(statsRecorder, "statsRecorder");
+    checkNotNull(tagCtxSerializer, "tagCtxSerializer");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.propagateTags = propagateTags;
-    this.recordStats = recordStats;
     this.statsHeader =
         Metadata.Key.of("grpc-tags-bin", new Metadata.BinaryMarshaller<TagContext>() {
             @Override
@@ -118,22 +132,23 @@ final class CensusStatsModule {
    * Creates a {@link ClientCallTracer} for a new call.
    */
   @VisibleForTesting
-  ClientCallTracer newClientCallTracer(TagContext parentCtx, String fullMethodName) {
-    return new ClientCallTracer(this, parentCtx, fullMethodName);
+  ClientCallTracer newClientCallTracer(
+      TagContext parentCtx, String fullMethodName, boolean recordStats) {
+    return new ClientCallTracer(this, parentCtx, fullMethodName, recordStats);
   }
 
   /**
    * Returns the server tracer factory.
    */
-  ServerStreamTracer.Factory getServerTracerFactory() {
-    return serverTracerFactory;
+  ServerStreamTracer.Factory getServerTracerFactory(boolean recordStats) {
+    return new ServerTracerFactory(recordStats);
   }
 
   /**
    * Returns the client interceptor that facilitates Census-based stats reporting.
    */
-  ClientInterceptor getClientInterceptor() {
-    return clientInterceptor;
+  ClientInterceptor getClientInterceptor(boolean recordStats) {
+    return new StatsClientInterceptor(recordStats);
   }
 
   private static final class ClientTracer extends ClientStreamTracer {
@@ -206,12 +221,18 @@ final class CensusStatsModule {
     private volatile ClientTracer streamTracer;
     private volatile int callEnded;
     private final TagContext parentCtx;
+    private final boolean recordStats;
 
-    ClientCallTracer(CensusStatsModule module, TagContext parentCtx, String fullMethodName) {
+    ClientCallTracer(
+        CensusStatsModule module,
+        TagContext parentCtx,
+        String fullMethodName,
+        boolean recordStats) {
       this.module = module;
       this.parentCtx = checkNotNull(parentCtx, "parentCtx");
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
       this.stopwatch = module.stopwatchSupplier.get().start();
+      this.recordStats = recordStats;
     }
 
     @Override
@@ -241,7 +262,7 @@ final class CensusStatsModule {
       if (callEndedUpdater.getAndSet(this, 1) != 0) {
         return;
       }
-      if (!module.recordStats) {
+      if (!recordStats) {
         return;
       }
       stopwatch.stop();
@@ -299,6 +320,7 @@ final class CensusStatsModule {
     private volatile int streamClosed;
     private final Stopwatch stopwatch;
     private final Tagger tagger;
+    private final boolean recordStats;
     private volatile long outboundMessageCount;
     private volatile long inboundMessageCount;
     private volatile long outboundWireSize;
@@ -311,12 +333,14 @@ final class CensusStatsModule {
         String fullMethodName,
         TagContext parentCtx,
         Supplier<Stopwatch> stopwatchSupplier,
-        Tagger tagger) {
+        Tagger tagger,
+        boolean recordStats) {
       this.module = module;
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
       this.parentCtx = checkNotNull(parentCtx, "parentCtx");
       this.stopwatch = stopwatchSupplier.get().start();
       this.tagger = tagger;
+      this.recordStats = recordStats;
     }
 
     @Override
@@ -360,7 +384,7 @@ final class CensusStatsModule {
       if (streamClosedUpdater.getAndSet(this, 1) != 0) {
         return;
       }
-      if (!module.recordStats) {
+      if (!recordStats) {
         return;
       }
       stopwatch.stop();
@@ -397,6 +421,12 @@ final class CensusStatsModule {
 
   @VisibleForTesting
   final class ServerTracerFactory extends ServerStreamTracer.Factory {
+    private final boolean recordStats;
+
+    ServerTracerFactory(boolean recordStats) {
+      this.recordStats = recordStats;
+    }
+
     @Override
     public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
       TagContext parentCtx = headers.get(statsHeader);
@@ -409,19 +439,30 @@ final class CensusStatsModule {
               .put(RpcMeasureConstants.RPC_METHOD, TagValue.create(fullMethodName))
               .build();
       return new ServerTracer(
-          CensusStatsModule.this, fullMethodName, parentCtx, stopwatchSupplier, tagger);
+          CensusStatsModule.this,
+          fullMethodName,
+          parentCtx,
+          stopwatchSupplier,
+          tagger,
+          recordStats);
     }
   }
 
   @VisibleForTesting
   final class StatsClientInterceptor implements ClientInterceptor {
+    private final boolean recordStats;
+
+    StatsClientInterceptor(boolean recordStats) {
+      this.recordStats = recordStats;
+    }
+
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
       // New RPCs on client-side inherit the tag context from the current Context.
       TagContext parentCtx = tagger.getCurrentTagContext();
       final ClientCallTracer tracerFactory =
-          newClientCallTracer(parentCtx, method.getFullMethodName());
+          newClientCallTracer(parentCtx, method.getFullMethodName(), recordStats);
       ClientCall<ReqT, RespT> call =
           next.newCall(method, callOptions.withStreamTracerFactory(tracerFactory));
       return new SimpleForwardingClientCall<ReqT, RespT>(call) {

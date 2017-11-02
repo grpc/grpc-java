@@ -393,12 +393,24 @@ public class AbstractManagedChannelImplBuilderTest {
   static class Builder extends AbstractManagedChannelImplBuilder<Builder> {
     Builder(String target) {
       super(target);
-      statsImplementation(DUMMY_TAGGER, DUMMY_TAG_CONTEXT_BINARY_SERIALIZER, DUMMY_STATS_RECORDER);
+      overrideCensusStatsModule(
+          new CensusStatsModule(
+              DUMMY_TAGGER,
+              DUMMY_TAG_CONTEXT_BINARY_SERIALIZER,
+              DUMMY_STATS_RECORDER,
+              GrpcUtil.STOPWATCH_SUPPLIER,
+              true));
     }
 
     Builder(SocketAddress directServerAddress, String authority) {
       super(directServerAddress, authority);
-      statsImplementation(DUMMY_TAGGER, DUMMY_TAG_CONTEXT_BINARY_SERIALIZER, DUMMY_STATS_RECORDER);
+      overrideCensusStatsModule(
+          new CensusStatsModule(
+              DUMMY_TAGGER,
+              DUMMY_TAG_CONTEXT_BINARY_SERIALIZER,
+              DUMMY_STATS_RECORDER,
+              GrpcUtil.STOPWATCH_SUPPLIER,
+              true));
     }
 
     @Override

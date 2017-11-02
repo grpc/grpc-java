@@ -34,11 +34,6 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
-import io.opencensus.stats.Stats;
-import io.opencensus.stats.StatsRecorder;
-import io.opencensus.tags.Tagger;
-import io.opencensus.tags.Tags;
-import io.opencensus.tags.propagation.TagContextBinarySerializer;
 import io.opencensus.trace.Tracing;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -100,13 +95,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   CompressorRegistry compressorRegistry = DEFAULT_COMPRESSOR_REGISTRY;
 
   @Nullable
-  private Tagger tagger;
-
-  @Nullable
-  private TagContextBinarySerializer tagCtxSerializer;
-
-  @Nullable
-  private StatsRecorder statsRecorder;
+  private CensusStatsModule censusStatsOverride;
 
   private boolean statsEnabled = true;
   private boolean recordStats = true;
@@ -193,13 +182,8 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
    * Override the default stats implementation.
    */
   @VisibleForTesting
-  protected T statsImplementation(
-      final Tagger tagger,
-      TagContextBinarySerializer tagCtxSerializer,
-      StatsRecorder statsRecorder) {
-    this.tagger = tagger;
-    this.tagCtxSerializer = tagCtxSerializer;
-    this.statsRecorder = statsRecorder;
+  protected T overrideCensusStatsModule(CensusStatsModule censusStats) {
+    this.censusStatsOverride = censusStats;
     return thisT();
   }
 
@@ -242,22 +226,11 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
     ArrayList<ServerStreamTracer.Factory> tracerFactories =
         new ArrayList<ServerStreamTracer.Factory>();
     if (statsEnabled) {
-      Tagger tagger = this.tagger != null ? this.tagger : Tags.getTagger();
-      TagContextBinarySerializer tagCtxSerializer =
-          this.tagCtxSerializer != null
-              ? this.tagCtxSerializer
-              : Tags.getTagPropagationComponent().getBinarySerializer();
-      StatsRecorder statsRecorder =
-          this.statsRecorder != null ? this.statsRecorder : Stats.getStatsRecorder();
-      CensusStatsModule censusStats =
-          new CensusStatsModule(
-              tagger,
-              tagCtxSerializer,
-              statsRecorder,
-              GrpcUtil.STOPWATCH_SUPPLIER,
-              true,
-              recordStats);
-      tracerFactories.add(censusStats.getServerTracerFactory());
+      CensusStatsModule censusStats = this.censusStatsOverride;
+      if (censusStats == null) {
+        censusStats = new CensusStatsModule(GrpcUtil.STOPWATCH_SUPPLIER, true);
+      }
+      tracerFactories.add(censusStats.getServerTracerFactory(recordStats));
     }
     if (tracingEnabled) {
       CensusTracingModule censusTracing =

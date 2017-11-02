@@ -145,7 +145,13 @@ public class AbstractServerImplBuilderTest {
 
   static class Builder extends AbstractServerImplBuilder<Builder> {
     Builder() {
-      statsImplementation(DUMMY_TAGGER, DUMMY_TAG_CONTEXT_BINARY_SERIALIZER, DUMMY_STATS_RECORDER);
+      overrideCensusStatsModule(
+          new CensusStatsModule(
+              DUMMY_TAGGER,
+              DUMMY_TAG_CONTEXT_BINARY_SERIALIZER,
+              DUMMY_STATS_RECORDER,
+              GrpcUtil.STOPWATCH_SUPPLIER,
+              true));
     }
 
     @Override

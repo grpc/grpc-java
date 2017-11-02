@@ -32,11 +32,6 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.PickFirstBalancerFactory;
-import io.opencensus.stats.Stats;
-import io.opencensus.stats.StatsRecorder;
-import io.opencensus.tags.Tagger;
-import io.opencensus.tags.Tags;
-import io.opencensus.tags.propagation.TagContextBinarySerializer;
 import io.opencensus.trace.Tracing;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -155,13 +150,7 @@ public abstract class AbstractManagedChannelImplBuilder
   private boolean tracingEnabled = true;
 
   @Nullable
-  private Tagger tagger;
-
-  @Nullable
-  private TagContextBinarySerializer tagCtxSerializer;
-
-  @Nullable
-  private StatsRecorder statsRecorder;
+  private CensusStatsModule censusStatsOverride;
 
   protected AbstractManagedChannelImplBuilder(String target) {
     this.target = Preconditions.checkNotNull(target, "target");
@@ -296,11 +285,8 @@ public abstract class AbstractManagedChannelImplBuilder
    * Override the default stats implementation.
    */
   @VisibleForTesting
-  protected final T statsImplementation(
-      Tagger tagger, TagContextBinarySerializer tagCtxSerializer, StatsRecorder statsRecorder) {
-    this.tagger = tagger;
-    this.tagCtxSerializer = tagCtxSerializer;
-    this.statsRecorder = statsRecorder;
+  protected final T overrideCensusStatsModule(CensusStatsModule censusStats) {
+    this.censusStatsOverride = censusStats;
     return thisT();
   }
 
@@ -358,24 +344,13 @@ public abstract class AbstractManagedChannelImplBuilder
     List<ClientInterceptor> effectiveInterceptors =
         new ArrayList<ClientInterceptor>(this.interceptors);
     if (statsEnabled) {
-      Tagger tagger = this.tagger != null ? this.tagger : Tags.getTagger();
-      TagContextBinarySerializer tagCtxSerializer =
-          this.tagCtxSerializer != null
-              ? this.tagCtxSerializer
-              : Tags.getTagPropagationComponent().getBinarySerializer();
-      StatsRecorder statsRecorder =
-          this.statsRecorder != null ? this.statsRecorder : Stats.getStatsRecorder();
-      CensusStatsModule censusStats =
-          new CensusStatsModule(
-              tagger,
-              tagCtxSerializer,
-              statsRecorder,
-              GrpcUtil.STOPWATCH_SUPPLIER,
-              true,
-              recordStats);
+      CensusStatsModule censusStats = this.censusStatsOverride;
+      if (censusStats == null) {
+        censusStats = new CensusStatsModule(GrpcUtil.STOPWATCH_SUPPLIER, true);
+      }
       // First interceptor runs last (see ClientInterceptors.intercept()), so that no
       // other interceptor can override the tracer factory we set in CallOptions.
-      effectiveInterceptors.add(0, censusStats.getClientInterceptor());
+      effectiveInterceptors.add(0, censusStats.getClientInterceptor(recordStats));
     }
     if (tracingEnabled) {
       CensusTracingModule censusTracing =

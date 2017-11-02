@@ -32,7 +32,9 @@ public final class TestingAccessor {
       Tagger tagger,
       TagContextBinarySerializer tagCtxSerializer,
       StatsRecorder statsRecorder) {
-    builder.statsImplementation(tagger, tagCtxSerializer, statsRecorder);
+    builder.overrideCensusStatsModule(
+        new CensusStatsModule(
+            tagger, tagCtxSerializer, statsRecorder, GrpcUtil.STOPWATCH_SUPPLIER, true));
   }
 
   /**
@@ -43,7 +45,9 @@ public final class TestingAccessor {
       Tagger tagger,
       TagContextBinarySerializer tagCtxSerializer,
       StatsRecorder statsRecorder) {
-    builder.statsImplementation(tagger, tagCtxSerializer, statsRecorder);
+    builder.overrideCensusStatsModule(
+        new CensusStatsModule(
+            tagger, tagCtxSerializer, statsRecorder, GrpcUtil.STOPWATCH_SUPPLIER, true));
   }
 
   private TestingAccessor() {
