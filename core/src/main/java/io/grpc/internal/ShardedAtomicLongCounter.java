@@ -17,15 +17,28 @@
 package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicLongArray;
 
 /**
- * An implementation of {@link LongCounter} that works by sharded across an array of
- * {@link AtomicLong} objects. Do not instantiate directly, instead use {@link LongCounterFactory}.
+ * An implementation of {@link LongCounter} that works by sharding across an
+ * {@link AtomicLongArray}. Do not instantiate directly, instead use {@link LongCounterFactory}.
  */
 final class ShardedAtomicLongCounter implements LongCounter {
   private final AtomicLongArray counters;
   private final int mask;
+
+  // Guava's Striped64 uses this technique to spread accesses across the array.
+  private static final Random rng = new Random();
+  private static final ThreadLocal<int[]> threadHashCode = new ThreadLocal<int[]>() {
+    @Override
+    protected int[] initialValue() {
+      int[] ret = new int[1];
+      int r = rng.nextInt();
+      ret[0] = r == 0 ? 1 : r;
+      return ret;
+    }
+  };
 
   /**
    * Accepts a hint on how many shards should be created. The actual number of shards may differ.
@@ -59,8 +72,7 @@ final class ShardedAtomicLongCounter implements LongCounter {
 
   @Override
   public void add(long delta) {
-    // TODO(zpencer): replace fixed hashcode with a lightweight RNG. See guava's Striped64.
-    counters.addAndGet(getCounterIdx(Thread.currentThread().hashCode()), delta);
+    counters.addAndGet(getCounterIdx(getNextHash()), delta);
   }
 
   @Override
@@ -70,5 +82,19 @@ final class ShardedAtomicLongCounter implements LongCounter {
       val += counters.get(i);
     }
     return val;
+  }
+
+  private int getNextHash() {
+    int[] hashHolder = threadHashCode.get();
+    int h = hashHolder[0];
+    try {
+      return h;
+    } finally {
+      // Rehash for next time
+      h ^= h << 13;
+      h ^= h >>> 17;
+      h ^= h << 5;
+      hashHolder[0] = h;
+    }
   }
 }
