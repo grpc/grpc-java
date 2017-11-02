@@ -70,6 +70,11 @@ final class OobChannel extends ManagedChannel implements WithLogId {
       // critical path.
       return delayedTransport;
     }
+
+    @Override
+    public DelayedClientTransport getDelayedTransport() {
+      return delayedTransport;
+    }
   };
 
   OobChannel(
