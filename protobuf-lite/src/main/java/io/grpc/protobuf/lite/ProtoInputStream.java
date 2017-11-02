@@ -33,11 +33,12 @@ import javax.annotation.Nullable;
 class ProtoInputStream extends InputStream implements Drainable, KnownLength {
 
   // ProtoInputStream is first initialized with a *message*. *partial* is initially null.
-  // Once there has been a read operation on this stream, *message* is serialized to *partial* and
-  // set to null.
+  // Once there has been a read operation or mark operation on this stream,
+  // *message* is serialized to *partial* and set to null.
   @Nullable private MessageLite message;
   private final Parser<?> parser;
   @Nullable private ByteArrayInputStream partial;
+  private boolean marked;
 
   public ProtoInputStream(MessageLite message, Parser<?> parser) {
     this.message = message;
@@ -110,6 +111,35 @@ class ProtoInputStream extends InputStream implements Drainable, KnownLength {
       return partial.available();
     }
     return 0;
+  }
+
+  @Override
+  public boolean markSupported() {
+    return true;
+  }
+
+  @Override
+  public void mark(int readlimit) {
+    if (message != null) {
+      partial = new ByteArrayInputStream(message.toByteArray());
+      message = null;
+    }
+    if (partial != null) {
+      partial.mark(readlimit);
+    }
+    marked = true;
+  }
+
+  @Override
+  public void reset() throws IOException {
+    if (!marked) {
+      throw new IOException("mark was never called");
+    }
+    if (partial != null) {
+      partial.reset();
+    }
+    // If partial is null, then there is nothing left on the stream at the time mark() was called.
+    // Reset is a noop in this case.
   }
 
   MessageLite message() {
