@@ -18,11 +18,6 @@ dependencies {
             libraries.guava
 
     testProtobuf libraries.protobuf
-    // TODO(zpencer): fix proto plugin wrt testProtobuf and intellij
-    // Using testProtobuf to add the protobuf libriaries did not add the built-in
-    // types like com.google.protobuf.Empty to intellij's class path.
-    // Adding testCompile is a workaround.
-    testCompile libraries.protobuf
 
     signature "org.codehaus.mojo.signature:java16:1.1@signature"
 }
@@ -61,4 +56,10 @@ protobuf {
       }
     }
   }
+}
+
+idea {
+    module {
+        sourceDirs += file("${projectDir}/build/generated/source/proto/test/javalite/")
+    }
 }
