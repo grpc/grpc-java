@@ -106,9 +106,8 @@ public abstract class ManagedChannel extends Channel {
   }
 
   /**
-   * Notifies the channel that a reconnect attempt should be made. The implementation may attempt to
-   * invoke {@link NameResolver#refresh} and short-circuit the backoff timer for subchannel
-   * reconnection attempts.
+   * For subchannels that are in TRANSIENT_FAILURE state, short-circuit the backoff timer and make
+   * them reconnect immediately. May also attempt to invoke {@link NameResolver#refresh}.
    *
    * <p>This is primarily intended for Android users, where the network may experience frequent
    * temporary drops. Rather than waiting for gRPC's name resolution and reconnect timers to elapse
