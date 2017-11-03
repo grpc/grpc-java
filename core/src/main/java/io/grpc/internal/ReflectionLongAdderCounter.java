@@ -24,7 +24,7 @@ import java.lang.reflect.Method;
  * A {@link LongCounter} that is implemented with a JDK8 {@link LongAdder}. Instantiates the object
  * and invokes methods reflectively to avoid a compile time dependency on LongAdder.
  */
-public class ReflectionLongAdderCounter implements LongCounter {
+public final class ReflectionLongAdderCounter implements LongCounter {
   private static final Constructor<?> defaultConstructor;
   private static final Method addMethod;
   private static final Method sumMethod;
