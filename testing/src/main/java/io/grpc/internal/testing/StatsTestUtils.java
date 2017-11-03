@@ -112,7 +112,6 @@ public class StatsTestUtils {
   public static final TagKey EXTRA_TAG = TagKey.create("/rpc/test/extratag");
 
   private static final String EXTRA_TAG_HEADER_VALUE_PREFIX = "extratag:";
-  private static final String NO_EXTRA_TAG_HEADER_VALUE_PREFIX = "noextratag";
 
   /**
    * A {@link Tagger} implementation that saves metrics records to be accessible from {@link
@@ -200,8 +199,6 @@ public class StatsTestUtils {
             .put(EXTRA_TAG,
                 TagValue.create(serializedString.substring(EXTRA_TAG_HEADER_VALUE_PREFIX.length())))
             .build();
-      } else if (serializedString.startsWith(NO_EXTRA_TAG_HEADER_VALUE_PREFIX)) {
-        return tagger.empty();
       } else {
         throw new TagContextDeserializationException("Malformed value");
       }
@@ -210,11 +207,7 @@ public class StatsTestUtils {
     @Override
     public byte[] toByteArray(TagContext tags) {
       TagValue extraTagValue = getTags(tags).get(EXTRA_TAG);
-      if (extraTagValue == null) {
-        return NO_EXTRA_TAG_HEADER_VALUE_PREFIX.getBytes(UTF_8);
-      } else {
-        return (EXTRA_TAG_HEADER_VALUE_PREFIX + extraTagValue.asString()).getBytes(UTF_8);
-      }
+      return (EXTRA_TAG_HEADER_VALUE_PREFIX + extraTagValue.asString()).getBytes(UTF_8);
     }
   }
 
