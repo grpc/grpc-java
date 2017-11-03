@@ -120,5 +120,5 @@ public abstract class ManagedChannel extends Channel {
    * @since 1.8.0
    */
   @ExperimentalApi
-  public void reconnectNow() {}
+  public void resetConnectBackoff() {}
 }

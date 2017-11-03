@@ -83,7 +83,8 @@ final class InternalSubchannel implements WithLogId {
   private int addressIndex;
 
   /**
-   * The policy to control back off between reconnects. Non-{@code null} when last connect failed.
+   * The policy to control back off between reconnects. Non-{@code null} when a reconnect task is
+   * scheduled.
    */
   @GuardedBy("lock")
   private BackoffPolicy reconnectPolicy;
@@ -268,7 +269,7 @@ final class InternalSubchannel implements WithLogId {
    * Immediately attempt to reconnect if the current state is TRANSIENT_FAILURE. Otherwise this
    * method has no effect.
    */
-  void reconnectNow() {
+  void resetConnectBackoff() {
     try {
       synchronized (lock) {
         if (state.getState() != TRANSIENT_FAILURE) {
@@ -426,6 +427,7 @@ final class InternalSubchannel implements WithLogId {
       reconnectTask.cancel(false);
       reconnectCanceled = true;
       reconnectTask = null;
+      reconnectPolicy = null;
     }
   }
 

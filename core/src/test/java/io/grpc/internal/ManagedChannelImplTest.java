@@ -1541,37 +1541,37 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void networkAvailable_refreshesNameResolver() {
+  public void resetConnectBackoff_refreshesNameResolver() {
     FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory(true);
     createChannel(nameResolverFactory, NO_INTERCEPTOR);
     FakeNameResolverFactory.FakeNameResolver nameResolver = nameResolverFactory.resolvers.get(0);
     assertEquals(0, nameResolver.refreshCalled);
 
-    channel.reconnectNow();
+    channel.resetConnectBackoff();
 
     assertEquals(1, nameResolver.refreshCalled);
   }
 
   @Test
-  public void networkAvailable_noOpWhenChannelShutdown() {
+  public void resetConnectBackoff_noOpWhenChannelShutdown() {
     FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory(true);
     createChannel(nameResolverFactory, NO_INTERCEPTOR);
 
     channel.shutdown();
     assertTrue(channel.isShutdown());
-    channel.reconnectNow();
+    channel.resetConnectBackoff();
 
     FakeNameResolverFactory.FakeNameResolver nameResolver = nameResolverFactory.resolvers.get(0);
     assertEquals(0, nameResolver.refreshCalled);
   }
 
   @Test
-  public void networkAvailable_noOpWhenNameResolverNotStarted() {
+  public void resetConnectBackoff_noOpWhenNameResolverNotStarted() {
     FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory(true);
     createChannel(nameResolverFactory, NO_INTERCEPTOR, false /* requestConnection */,
             ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE);
 
-    channel.reconnectNow();
+    channel.resetConnectBackoff();
 
     FakeNameResolverFactory.FakeNameResolver nameResolver = nameResolverFactory.resolvers.get(0);
     assertEquals(0, nameResolver.refreshCalled);

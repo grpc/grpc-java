@@ -885,7 +885,7 @@ public class InternalSubchannelTest {
   }
 
   @Test
-  public void networkAvailableMovesToConnectingAndCancelsScheduledReconnect() throws Exception {
+  public void resetConnectBackoff() throws Exception {
     SocketAddress addr = mock(SocketAddress.class);
     createInternalSubchannel(addr);
 
@@ -893,10 +893,7 @@ public class InternalSubchannelTest {
     internalSubchannel.obtainActiveTransport();
     assertExactCallbackInvokes("onStateChange:CONNECTING");
     verify(mockTransportFactory).newClientTransport(addr, AUTHORITY, USER_AGENT, NO_PROXY);
-    MockClientTransportInfo transportInfo = transports.poll();
-    transportInfo.listener.transportShutdown(Status.UNAVAILABLE);
-    transportInfo.listener.transportTerminated();
-
+    transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
     assertExactCallbackInvokes("onStateChange:" + UNAVAILABLE_STATE);
 
     // Save the reconnectTask
@@ -910,28 +907,37 @@ public class InternalSubchannelTest {
     }
     assertNotNull("There should be at least one reconnectTask", reconnectTask);
 
-    // Call reconnectNow() and move out of TRANSIENT_FAILURE (this allows verifying that
-    // reconnectTask.command.run() is a no-op)
-    internalSubchannel.reconnectNow();
-    assertExactCallbackInvokes("onStateChange:CONNECTING");
-    transports.poll().listener.transportReady();
-    assertExactCallbackInvokes("onStateChange:READY");
-    assertEquals(READY, internalSubchannel.getState());
+    internalSubchannel.resetConnectBackoff();
 
+    verify(mockTransportFactory, times(2))
+        .newClientTransport(addr, AUTHORITY, USER_AGENT, NO_PROXY);
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
     assertTrue(reconnectTask.isCancelled());
 
-    // Simulate a race between cancel and the task scheduler. Should be a no-op
+    // Simulate a race between cancel and the task scheduler. Should be a no-op.
     reconnectTask.command.run();
     assertNoCallbackInvoke();
+    verify(mockTransportFactory, times(2))
+        .newClientTransport(addr, AUTHORITY, USER_AGENT, NO_PROXY);
+    verify(mockBackoffPolicyProvider, times(1)).get();
+
+    // Fail the reconnect attempt to verify that a fresh reconnect policy is generated after
+    // invoking resetConnectBackoff()
+    transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
+    assertExactCallbackInvokes("onStateChange:" + UNAVAILABLE_STATE);
+    verify(mockBackoffPolicyProvider, times(2)).get();
+    fakeClock.forwardNanos(10);
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
+    assertEquals(CONNECTING, internalSubchannel.getState());
   }
 
   @Test
-  public void networkAvailableIsNoOpOnIdleTransport() throws Exception {
+  public void resetConnectBackoff_noopOnIdleTransport() throws Exception {
     SocketAddress addr = mock(SocketAddress.class);
     createInternalSubchannel(addr);
     assertEquals(IDLE, internalSubchannel.getState());
 
-    internalSubchannel.reconnectNow();
+    internalSubchannel.resetConnectBackoff();
 
     assertNoCallbackInvoke();
   }

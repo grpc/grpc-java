@@ -638,7 +638,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   }
 
   @Override
-  public void reconnectNow() {
+  public void resetConnectBackoff() {
     channelExecutor.executeLater(
         new Runnable() {
           @Override
@@ -650,10 +650,10 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
               nameResolver.refresh();
             }
             for (InternalSubchannel subchannel : subchannels) {
-              subchannel.reconnectNow();
+              subchannel.resetConnectBackoff();
             }
             for (InternalSubchannel oobChannel : oobChannels) {
-              oobChannel.reconnectNow();
+              oobChannel.resetConnectBackoff();
             }
           }
         }).drain();
