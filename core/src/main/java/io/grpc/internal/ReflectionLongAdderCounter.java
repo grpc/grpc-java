@@ -16,7 +16,6 @@
 
 package io.grpc.internal;
 
-import com.google.common.base.Preconditions;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -29,6 +28,8 @@ public class ReflectionLongAdderCounter implements LongCounter {
   private static final Constructor<?> defaultConstructor;
   private static final Method addMethod;
   private static final Method sumMethod;
+  private static final RuntimeException initializationException;
+
   private final Object instance;
 
   static {
@@ -36,7 +37,7 @@ public class ReflectionLongAdderCounter implements LongCounter {
     Constructor<?> defaultConstructorLookup = null;
     Method addMethodLookup = null;
     Method sumMethodLookup = null;
-    Exception caught = null;
+    Throwable caught = null;
     try {
       klass = Class.forName("java.util.concurrent.atomic.LongAdder");
 
@@ -50,9 +51,7 @@ public class ReflectionLongAdderCounter implements LongCounter {
           break;
         }
       }
-    } catch (ClassNotFoundException e) {
-      caught = e;
-    } catch (NoSuchMethodException e) {
+    } catch (Throwable e) {
       caught = e;
     }
 
@@ -60,15 +59,19 @@ public class ReflectionLongAdderCounter implements LongCounter {
       defaultConstructor = defaultConstructorLookup;
       addMethod = addMethodLookup;
       sumMethod = sumMethodLookup;
+      initializationException = null;
     } else {
       defaultConstructor = null;
       addMethod = null;
       sumMethod = null;
+      initializationException = new RuntimeException(caught);
     }
   }
 
   ReflectionLongAdderCounter() {
-    Preconditions.checkNotNull(defaultConstructor);
+    if (initializationException != null) {
+      throw initializationException;
+    }
     try {
       instance = defaultConstructor.newInstance();
     } catch (InstantiationException e) {
@@ -84,7 +87,7 @@ public class ReflectionLongAdderCounter implements LongCounter {
    * Returns true if the environment supports LongAdder. In other words, we are running in >= JDK8.
    */
   static boolean isAvailable() {
-    return defaultConstructor != null;
+    return initializationException == null;
   }
 
   @Override
