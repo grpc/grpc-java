@@ -18,19 +18,13 @@ package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
 
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class ReflectionLongAdderCounterTest {
-  private ReflectionLongAdderCounter counter;
-
-  @Before
-  public void setUp() {
-    counter = new ReflectionLongAdderCounter();
-  }
+  private ReflectionLongAdderCounter counter = new ReflectionLongAdderCounter();
 
   @Test
   public void testInitialValue() {
