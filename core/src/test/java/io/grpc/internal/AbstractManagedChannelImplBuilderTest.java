@@ -36,15 +36,9 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.LoadBalancer;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
-import io.opencensus.common.Scope;
-import io.opencensus.stats.MeasureMap;
-import io.opencensus.stats.StatsRecorder;
-import io.opencensus.tags.TagContext;
-import io.opencensus.tags.TagContextBuilder;
-import io.opencensus.tags.Tagger;
-import io.opencensus.tags.propagation.TagContextBinarySerializer;
-import io.opencensus.tags.propagation.TagContextDeserializationException;
-import io.opencensus.tags.propagation.TagContextSerializationException;
+import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
+import io.grpc.internal.testing.StatsTestUtils.FakeTagContextBinarySerializer;
+import io.grpc.internal.testing.StatsTestUtils.FakeTagger;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -64,60 +58,6 @@ public class AbstractManagedChannelImplBuilderTest {
         public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
             MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
           return next.newCall(method, callOptions);
-        }
-      };
-
-  private static final Tagger DUMMY_TAGGER =
-      new Tagger() {
-        @Override
-        public TagContext empty() {
-          throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public TagContext getCurrentTagContext() {
-          throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public TagContextBuilder emptyBuilder() {
-          throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public TagContextBuilder toBuilder(TagContext tags) {
-          throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public TagContextBuilder currentBuilder() {
-          throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Scope withTagContext(TagContext tags) {
-          throw new UnsupportedOperationException();
-        }
-      };
-
-  private static final TagContextBinarySerializer DUMMY_TAG_CONTEXT_BINARY_SERIALIZER =
-      new TagContextBinarySerializer() {
-        @Override
-        public byte[] toByteArray(TagContext tags) throws TagContextSerializationException {
-          throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public TagContext fromByteArray(byte[] bytes) throws TagContextDeserializationException {
-          throw new UnsupportedOperationException();
-        }
-      };
-
-  private static final StatsRecorder DUMMY_STATS_RECORDER =
-      new StatsRecorder() {
-        @Override
-        public MeasureMap newMeasureMap() {
-          throw new UnsupportedOperationException();
         }
       };
 
@@ -395,9 +335,9 @@ public class AbstractManagedChannelImplBuilderTest {
       super(target);
       overrideCensusStatsModule(
           new CensusStatsModule(
-              DUMMY_TAGGER,
-              DUMMY_TAG_CONTEXT_BINARY_SERIALIZER,
-              DUMMY_STATS_RECORDER,
+              new FakeTagger(),
+              new FakeTagContextBinarySerializer(),
+              new FakeStatsRecorder(),
               GrpcUtil.STOPWATCH_SUPPLIER,
               true));
     }
@@ -406,9 +346,9 @@ public class AbstractManagedChannelImplBuilderTest {
       super(directServerAddress, authority);
       overrideCensusStatsModule(
           new CensusStatsModule(
-              DUMMY_TAGGER,
-              DUMMY_TAG_CONTEXT_BINARY_SERIALIZER,
-              DUMMY_STATS_RECORDER,
+              new FakeTagger(),
+              new FakeTagContextBinarySerializer(),
+              new FakeStatsRecorder(),
               GrpcUtil.STOPWATCH_SUPPLIER,
               true));
     }
