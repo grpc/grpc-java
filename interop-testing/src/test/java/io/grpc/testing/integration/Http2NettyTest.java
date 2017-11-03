@@ -81,7 +81,7 @@ public class Http2NettyTest extends AbstractInteropTest {
               .sslProvider(SslProvider.OPENSSL)
               .build());
       io.grpc.internal.TestingAccessor.setStatsImplementation(
-          builder, getTagger(), getTagContextBinarySerializer(), getClientStatsFactory());
+          builder, createClientCensusStatsModule());
       return builder.build();
     } catch (Exception ex) {
       throw new RuntimeException(ex);

@@ -49,7 +49,7 @@ public class AutoWindowSizingOnTest extends AbstractInteropTest {
         .negotiationType(NegotiationType.PLAINTEXT)
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
     io.grpc.internal.TestingAccessor.setStatsImplementation(
-        builder, getTagger(), getTagContextBinarySerializer(), getClientStatsFactory());
+        builder, createClientCensusStatsModule());
     return builder.build();
   }
 }

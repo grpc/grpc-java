@@ -173,7 +173,7 @@ public class TransportCompressionTest extends AbstractInteropTest {
         })
         .usePlaintext(true);
     io.grpc.internal.TestingAccessor.setStatsImplementation(
-        builder, getTagger(), getTagContextBinarySerializer(), getClientStatsFactory());
+        builder, createClientCensusStatsModule());
     return builder.build();
   }
 

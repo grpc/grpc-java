@@ -16,10 +16,6 @@
 
 package io.grpc.internal;
 
-import io.opencensus.stats.StatsRecorder;
-import io.opencensus.tags.Tagger;
-import io.opencensus.tags.propagation.TagContextBinarySerializer;
-
 /**
  * Test helper that allows accessing package-private stuff.
  */
@@ -28,26 +24,16 @@ public final class TestingAccessor {
    * Sets a custom stats implementation for tests.
    */
   public static void setStatsImplementation(
-      AbstractManagedChannelImplBuilder<?> builder,
-      Tagger tagger,
-      TagContextBinarySerializer tagCtxSerializer,
-      StatsRecorder statsRecorder) {
-    builder.overrideCensusStatsModule(
-        new CensusStatsModule(
-            tagger, tagCtxSerializer, statsRecorder, GrpcUtil.STOPWATCH_SUPPLIER, true));
+      AbstractManagedChannelImplBuilder<?> builder, CensusStatsModule censusStats) {
+    builder.overrideCensusStatsModule(censusStats);
   }
 
   /**
    * Sets a custom stats implementation for tests.
    */
   public static void setStatsImplementation(
-      AbstractServerImplBuilder<?> builder,
-      Tagger tagger,
-      TagContextBinarySerializer tagCtxSerializer,
-      StatsRecorder statsRecorder) {
-    builder.overrideCensusStatsModule(
-        new CensusStatsModule(
-            tagger, tagCtxSerializer, statsRecorder, GrpcUtil.STOPWATCH_SUPPLIER, true));
+      AbstractServerImplBuilder<?> builder, CensusStatsModule censusStats) {
+    builder.overrideCensusStatsModule(censusStats);
   }
 
   private TestingAccessor() {

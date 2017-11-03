@@ -65,6 +65,7 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.AbstractServerImplBuilder;
+import io.grpc.internal.CensusStatsModule;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.testing.StatsTestUtils;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
@@ -94,11 +95,8 @@ import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
-import io.opencensus.stats.StatsRecorder;
 import io.opencensus.tags.TagKey;
 import io.opencensus.tags.TagValue;
-import io.opencensus.tags.Tagger;
-import io.opencensus.tags.propagation.TagContextBinarySerializer;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.unsafe.ContextUtils;
 import java.io.IOException;
@@ -214,7 +212,13 @@ public abstract class AbstractInteropTest {
                 allInterceptors))
         .addStreamTracerFactory(serverStreamTracerFactory);
     io.grpc.internal.TestingAccessor.setStatsImplementation(
-        builder, tagger, tagContextBinarySerializer, serverStatsRecorder);
+        builder,
+        new CensusStatsModule(
+            tagger,
+            tagContextBinarySerializer,
+            serverStatsRecorder,
+            GrpcUtil.STOPWATCH_SUPPLIER,
+            true));
     try {
       server = builder.build().start();
     } catch (IOException ex) {
@@ -283,16 +287,9 @@ public abstract class AbstractInteropTest {
 
   protected abstract ManagedChannel createChannel();
 
-  protected final StatsRecorder getClientStatsFactory() {
-    return clientStatsRecorder;
-  }
-
-  protected final Tagger getTagger() {
-    return tagger;
-  }
-
-  protected final TagContextBinarySerializer getTagContextBinarySerializer() {
-    return tagContextBinarySerializer;
+  protected final CensusStatsModule createClientCensusStatsModule() {
+    return new CensusStatsModule(
+        tagger, tagContextBinarySerializer, clientStatsRecorder, GrpcUtil.STOPWATCH_SUPPLIER, true);
   }
 
   /**
