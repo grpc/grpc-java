@@ -207,6 +207,9 @@ public class StatsTestUtils {
     @Override
     public byte[] toByteArray(TagContext tags) {
       TagValue extraTagValue = getTags(tags).get(EXTRA_TAG);
+      if (extraTagValue == null) {
+        throw new UnsupportedOperationException("TagContext must contain EXTRA_TAG");
+      }
       return (EXTRA_TAG_HEADER_VALUE_PREFIX + extraTagValue.asString()).getBytes(UTF_8);
     }
   }
