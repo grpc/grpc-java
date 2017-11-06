@@ -40,6 +40,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.instrumentation.stats.RpcConstants;
 import com.google.instrumentation.stats.StatsContextFactory;
@@ -99,6 +100,7 @@ import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.unsafe.ContextUtils;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.cert.Certificate;
@@ -1128,7 +1130,7 @@ public abstract class AbstractInteropTest {
         md.toBuilder(md.getRequestMarshaller(), mar).build(),
         blockingStub.getCallOptions(),
         request)
-            .next();
+        .next();
 
     int size = mar.lastInSize;
 
@@ -2030,36 +2032,24 @@ public abstract class AbstractInteropTest {
     @Override
     public InputStream stream(T value) {
       InputStream is = delegate.stream(value);
-      byte[] dst = new byte[16 * 1024 * 1024];
-      int total = 0;
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
       try {
-        for (int r; (r = is.read(dst, total, dst.length - total)) != -1; total += r) {
-          if (r == 0 && total == dst.length) {
-            throw new RuntimeException("out of space");
-          }
-        }
+        lastOutSize = (int) ByteStreams.copy(is, baos);
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
-      lastOutSize = total;
-      return new ByteArrayInputStream(dst, 0, total);
+      return new ByteArrayInputStream(baos.toByteArray());
     }
 
     @Override
     public T parse(InputStream stream) {
-      byte[] dst = new byte[16 * 1024 * 1024];
-      int total = 0;
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
       try {
-        for (int r; (r = stream.read(dst, total, dst.length - total)) != -1; total += r) {
-          if (r == 0 && total == dst.length) {
-            throw new RuntimeException("out of space");
-          }
-        }
+        lastInSize = (int) ByteStreams.copy(stream, baos);
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
-      lastInSize = total;
-      return delegate.parse(new ByteArrayInputStream(dst, 0, total));
+      return delegate.parse(new ByteArrayInputStream(baos.toByteArray()));
     }
   }
 }
