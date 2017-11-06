@@ -18,6 +18,7 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -112,7 +113,8 @@ class NettyServerStream extends AbstractServerStream {
     }
 
     @Override
-    public void writeFrame(WritableBuffer frame, boolean flush, int numMessages) {
+    public void writeFrame(WritableBuffer frame, boolean flush, final int numMessages) {
+      Preconditions.checkArgument(numMessages >= 0);
       if (frame == null) {
         writeQueue.scheduleFlush();
         return;
@@ -122,13 +124,16 @@ class NettyServerStream extends AbstractServerStream {
       // Add the bytes to outbound flow control.
       onSendingBytes(numBytes);
       writeQueue.enqueue(
-          new SendGrpcFrameCommand(transportState(), bytebuf, false, numMessages),
+          new SendGrpcFrameCommand(transportState(), bytebuf, false),
           channel.newPromise().addListener(new ChannelFutureListener() {
             @Override
             public void operationComplete(ChannelFuture future) throws Exception {
               // Remove the bytes from outbound flow control, optionally notifying
               // the client that they can send more bytes.
               transportState().onSentBytes(numBytes);
+              if (future.isSuccess()) {
+                transportTracer.reportMessageSent(numMessages);
+              }
             }
           }), flush);
     }

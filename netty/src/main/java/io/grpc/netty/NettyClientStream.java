@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
 
+import com.google.common.base.Preconditions;
 import com.google.common.io.BaseEncoding;
 import io.grpc.Attributes;
 import io.grpc.InternalKnownTransport;
@@ -148,13 +149,14 @@ class NettyClientStream extends AbstractClientStream {
     @Override
     public void writeFrame(
         WritableBuffer frame, boolean endOfStream, boolean flush, int numMessages) {
+      Preconditions.checkArgument(numMessages >= 0);
       ByteBuf bytebuf = frame == null ? EMPTY_BUFFER : ((NettyWritableBuffer) frame).bytebuf();
       final int numBytes = bytebuf.readableBytes();
       if (numBytes > 0) {
         // Add the bytes to outbound flow control.
         onSendingBytes(numBytes);
         writeQueue.enqueue(
-            new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream, numMessages),
+            new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream),
             channel.newPromise().addListener(new ChannelFutureListener() {
               @Override
               public void operationComplete(ChannelFuture future) throws Exception {
@@ -169,9 +171,7 @@ class NettyClientStream extends AbstractClientStream {
             }), flush);
       } else {
         // The frame is empty and will not impact outbound flow control. Just send it.
-        writeQueue.enqueue(
-            new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream, numMessages),
-            flush);
+        writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream), flush);
       }
     }
 

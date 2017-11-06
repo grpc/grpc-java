@@ -585,7 +585,6 @@ class NettyServerHandler extends AbstractNettyHandler {
     }
     // Call the base class to write the HTTP/2 DATA frame.
     encoder().writeData(ctx, cmd.streamId(), cmd.content(), 0, cmd.endStream(), promise);
-    transportTracer.reportMessageSent(cmd.getNumMessages());
   }
 
   /**

@@ -79,7 +79,9 @@ public final class TransportTracer {
    * Reports that some messages were successfully sent. {@code numMessages} must be at least 1.
    */
   public void reportMessageSent(int numMessages) {
-    Preconditions.checkArgument(numMessages > 0);
+    if (numMessages == 0) {
+      return;
+    }
     messagesSent += numMessages;
     lastMessageSentTimeNanos = currentTimeNanos();
   }
