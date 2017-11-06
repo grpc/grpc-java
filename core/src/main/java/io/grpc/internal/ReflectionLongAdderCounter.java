@@ -19,12 +19,15 @@ package io.grpc.internal;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * A {@link LongCounter} that is implemented with a JDK8 {@link LongAdder}. Instantiates the object
  * and invokes methods reflectively to avoid a compile time dependency on LongAdder.
  */
 public final class ReflectionLongAdderCounter implements LongCounter {
+  private static final Logger logger = Logger.getLogger(ReflectionLongAdderCounter.class.getName());
   private static final Constructor<?> defaultConstructor;
   private static final Method addMethod;
   private static final Method sumMethod;
@@ -52,6 +55,10 @@ public final class ReflectionLongAdderCounter implements LongCounter {
         }
       }
     } catch (Throwable e) {
+      logger.log(
+          Level.FINE,
+          "LongAdder can not be found via reflection, this is normal for JDK7 and below",
+          e);
       caught = e;
     }
 
