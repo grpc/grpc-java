@@ -32,6 +32,7 @@ import io.grpc.Status;
 import io.grpc.internal.AbstractClientStream;
 import io.grpc.internal.Http2ClientStreamTransportState;
 import io.grpc.internal.StatsTraceContext;
+import io.grpc.internal.TransportTracer;
 import io.grpc.internal.WritableBuffer;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
@@ -59,14 +60,22 @@ class NettyClientStream extends AbstractClientStream {
   private AsciiString authority;
   private final AsciiString scheme;
   private final AsciiString userAgent;
+  private final TransportTracer transportTracer;
 
   NettyClientStream(
-      TransportState state, MethodDescriptor<?, ?> method, Metadata headers,
-      Channel channel, AsciiString authority, AsciiString scheme, AsciiString userAgent,
-      StatsTraceContext statsTraceCtx) {
-    super(new NettyWritableBufferAllocator(channel.alloc()),
+      TransportState state,
+      MethodDescriptor<?, ?> method,
+      Metadata headers,
+      Channel channel,
+      AsciiString authority,
+      AsciiString scheme,
+      AsciiString userAgent,
+      StatsTraceContext statsTraceCtx,
+      TransportTracer transportTracer) {
+    super(
+        new NettyWritableBufferAllocator(channel.alloc()),
         statsTraceCtx,
-        null,
+        transportTracer,
         headers,
         useGet(method));
     this.state = checkNotNull(state, "transportState");
@@ -76,6 +85,7 @@ class NettyClientStream extends AbstractClientStream {
     this.authority = checkNotNull(authority, "authority");
     this.scheme = checkNotNull(scheme, "scheme");
     this.userAgent = userAgent;
+    this.transportTracer = transportTracer;
   }
 
   @Override
@@ -149,7 +159,7 @@ class NettyClientStream extends AbstractClientStream {
 
     @Override
     public void writeFrame(
-        WritableBuffer frame, boolean endOfStream, boolean flush, int numMessages) {
+        WritableBuffer frame, boolean endOfStream, boolean flush, final int numMessages) {
       Preconditions.checkArgument(numMessages >= 0);
       ByteBuf bytebuf = frame == null ? EMPTY_BUFFER : ((NettyWritableBuffer) frame).bytebuf();
       final int numBytes = bytebuf.readableBytes();
@@ -167,6 +177,7 @@ class NettyClientStream extends AbstractClientStream {
                   // Remove the bytes from outbound flow control, optionally notifying
                   // the client that they can send more bytes.
                   transportState().onSentBytes(numBytes);
+                  transportTracer.reportMessageSent(numMessages);
                 }
               }
             }), flush);
@@ -205,9 +216,13 @@ class NettyClientStream extends AbstractClientStream {
     private int id;
     private Http2Stream http2Stream;
 
-    public TransportState(NettyClientHandler handler, EventLoop eventLoop, int maxMessageSize,
-        StatsTraceContext statsTraceCtx) {
-      super(maxMessageSize, statsTraceCtx, /*transportTracer=*/null);
+    public TransportState(
+        NettyClientHandler handler,
+        EventLoop eventLoop,
+        int maxMessageSize,
+        StatsTraceContext statsTraceCtx,
+        TransportTracer transportTracer) {
+      super(maxMessageSize, statsTraceCtx, transportTracer);
       this.handler = checkNotNull(handler, "handler");
       this.eventLoop = checkNotNull(eventLoop, "eventLoop");
     }

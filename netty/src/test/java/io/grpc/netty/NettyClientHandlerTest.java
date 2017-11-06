@@ -59,6 +59,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
+import io.grpc.internal.TransportTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ClientHeadersDecoder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
@@ -69,6 +70,7 @@ import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoop;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
+import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
@@ -115,6 +117,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   private Runnable tooManyPingsRunnable = new Runnable() {
     @Override public void run() {}
   };
+  private TransportTracer transportTracer = new TransportTracer();
 
   @Rule
   public TestName testNameRule = new TestName();
@@ -156,8 +159,11 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     }
 
     initChannel(new GrpcHttp2ClientHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
-    streamTransportState = new TransportStateImpl(handler(), channel().eventLoop(),
-        DEFAULT_MAX_MESSAGE_SIZE);
+    streamTransportState = new TransportStateImpl(
+        handler(),
+        channel().eventLoop(),
+        DEFAULT_MAX_MESSAGE_SIZE,
+        transportTracer);
     streamTransportState.setListener(streamListener);
 
     grpcHeaders = new DefaultHttp2Headers()
@@ -462,14 +468,20 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
     assertEquals(3, streamTransportState.id());
 
-    streamTransportState = new TransportStateImpl(handler(), channel().eventLoop(),
-        DEFAULT_MAX_MESSAGE_SIZE);
+    streamTransportState = new TransportStateImpl(
+        handler(),
+        channel().eventLoop(),
+        DEFAULT_MAX_MESSAGE_SIZE,
+        transportTracer);
     streamTransportState.setListener(streamListener);
     enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
     assertEquals(5, streamTransportState.id());
 
-    streamTransportState = new TransportStateImpl(handler(), channel().eventLoop(),
-        DEFAULT_MAX_MESSAGE_SIZE);
+    streamTransportState = new TransportStateImpl(
+        handler(),
+        channel().eventLoop(),
+        DEFAULT_MAX_MESSAGE_SIZE,
+        transportTracer);
     streamTransportState.setListener(streamListener);
     enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
     assertEquals(7, streamTransportState.id());
@@ -501,10 +513,13 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   @Test
   public void ping() throws Exception {
     PingCallbackImpl callback1 = new PingCallbackImpl();
+    assertEquals(0, transportTracer.getStats().keepAlivesSent);
     sendPing(callback1);
+    assertEquals(1, transportTracer.getStats().keepAlivesSent);
     // add'l ping will be added as listener to outstanding operation
     PingCallbackImpl callback2 = new PingCallbackImpl();
     sendPing(callback2);
+    assertEquals(1, transportTracer.getStats().keepAlivesSent);
 
     ArgumentCaptor<ByteBuf> captor = ArgumentCaptor.forClass(ByteBuf.class);
     verifyWrite().writePing(eq(ctx()), eq(false), captor.capture(),
@@ -534,7 +549,9 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
     // now that previous ping is done, next request starts a new operation
     callback1 = new PingCallbackImpl();
+    assertEquals(1, transportTracer.getStats().keepAlivesSent);
     sendPing(callback1);
+    assertEquals(2, transportTracer.getStats().keepAlivesSent);
     assertEquals(0, callback1.invocationCount);
   }
 
@@ -550,6 +567,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     assertTrue(callback.failureCause instanceof StatusException);
     assertEquals(Status.Code.UNAVAILABLE,
         ((StatusException) callback.failureCause).getStatus().getCode());
+    // A failed ping is still counted
+    assertEquals(1, transportTracer.getStats().keepAlivesSent);
   }
 
   @Test
@@ -558,7 +577,9 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     handler().setAutoTuneFlowControl(true);
 
     PingCallbackImpl callback = new PingCallbackImpl();
+    assertEquals(0, transportTracer.getStats().keepAlivesSent);
     sendPing(callback);
+    assertEquals(1, transportTracer.getStats().keepAlivesSent);
     ArgumentCaptor<ByteBuf> captor = ArgumentCaptor.forClass(ByteBuf.class);
     verifyWrite().writePing(eq(ctx()), eq(false), captor.capture(), any(ChannelPromise.class));
     ByteBuf payload = captor.getValue();
@@ -575,6 +596,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
     assertEquals(1, handler().flowControlPing().getPingReturn());
     assertEquals(1, callback.invocationCount);
+    assertEquals(1, transportTracer.getStats().keepAlivesSent);
   }
 
   @Override
@@ -658,7 +680,32 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         flowControlWindow,
         maxHeaderListSize,
         stopwatchSupplier,
-        tooManyPingsRunnable);
+        tooManyPingsRunnable,
+        transportTracer);
+  }
+
+  @Test
+  public void transportTracer_windowSizeDefault() throws Exception {
+    TransportTracer.Stats stats = transportTracer.getStats();
+    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, stats.remoteFlowControlWindow);
+    assertEquals(flowControlWindow, stats.localFlowControlWindow);
+  }
+
+  @Test
+  public void transportTracer_windowSize() throws Exception {
+    flowControlWindow = 1048576; // 1MiB
+    setUp();
+    TransportTracer.Stats before = transportTracer.getStats();
+    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, before.remoteFlowControlWindow);
+    assertEquals(flowControlWindow, before.localFlowControlWindow);
+
+    ByteBuf serializedSettings = windowUpdate(0, 1000);
+    channelRead(serializedSettings);
+
+    TransportTracer.Stats after = transportTracer.getStats();
+    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE + 1000,
+        after.remoteFlowControlWindow);
+    assertEquals(flowControlWindow, after.localFlowControlWindow);
   }
 
   @Override
@@ -690,8 +737,12 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   private static class TransportStateImpl extends NettyClientStream.TransportState {
-    public TransportStateImpl(NettyClientHandler handler, EventLoop eventLoop, int maxMessageSize) {
-      super(handler, eventLoop, maxMessageSize, StatsTraceContext.NOOP);
+    public TransportStateImpl(
+        NettyClientHandler handler,
+        EventLoop eventLoop,
+        int maxMessageSize,
+        TransportTracer transportTracer) {
+      super(handler, eventLoop, maxMessageSize, StatsTraceContext.NOOP, transportTracer);
     }
 
     @Override

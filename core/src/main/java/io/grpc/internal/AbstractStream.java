@@ -131,7 +131,7 @@ public abstract class AbstractStream implements Stream {
     protected TransportState(
         int maxMessageSize,
         StatsTraceContext statsTraceCtx,
-        @Nullable TransportTracer transportTracer) { // nullable: client streams don't trace yet
+        @Nullable TransportTracer transportTracer) { // nullable: okhttp transports don't trace yet
       this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
       deframer = new MessageDeframer(
           this,

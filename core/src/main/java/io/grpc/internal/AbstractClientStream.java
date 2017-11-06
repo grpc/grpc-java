@@ -104,6 +104,9 @@ public abstract class AbstractClientStream extends AbstractStream
       Metadata headers,
       boolean useGet) {
     Preconditions.checkNotNull(headers, "headers");
+    if (transportTracer != null) {
+      transportTracer.reportStreamStarted();
+    }
     this.useGet = useGet;
     if (!useGet) {
       framer = new MessageFramer(this, bufferAllocator, statsTraceCtx);
@@ -193,6 +196,8 @@ public abstract class AbstractClientStream extends AbstractStream
   protected abstract static class TransportState extends AbstractStream.TransportState {
     /** Whether listener.closed() has been called. */
     private final StatsTraceContext statsTraceCtx;
+    // TODO(zpencer): remove @Nullable when okhttp supports transport tracing
+    @Nullable private final TransportTracer transportTracer;
     private boolean listenerClosed;
     private ClientStreamListener listener;
     private boolean fullStreamDecompression;
@@ -213,6 +218,7 @@ public abstract class AbstractClientStream extends AbstractStream
         @Nullable TransportTracer transportTracer) {
       super(maxMessageSize, statsTraceCtx, transportTracer);
       this.statsTraceCtx = Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
+      this.transportTracer = transportTracer;
     }
 
     private void setFullStreamDecompression(boolean fullStreamDecompression) {
@@ -383,6 +389,9 @@ public abstract class AbstractClientStream extends AbstractStream
         listenerClosed = true;
         statsTraceCtx.streamClosed(status);
         listener().closed(status, trailers);
+        if (transportTracer != null) {
+          transportTracer.reportStreamClosed(status.isOk());
+        }
       }
     }
   }
