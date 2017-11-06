@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -41,6 +42,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -73,6 +75,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
       DecompressorRegistry.getDefaultInstance();
   private static final CompressorRegistry DEFAULT_COMPRESSOR_REGISTRY =
       CompressorRegistry.getDefaultInstance();
+  private static final long DEFAULT_HANDSHAKE_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(20);
 
   final InternalHandlerRegistry.Builder registryBuilder =
       new InternalHandlerRegistry.Builder();
@@ -95,6 +98,8 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   DecompressorRegistry decompressorRegistry = DEFAULT_DECOMPRESSOR_REGISTRY;
 
   CompressorRegistry compressorRegistry = DEFAULT_COMPRESSOR_REGISTRY;
+
+  long handshakeTimeoutMillis = DEFAULT_HANDSHAKE_TIMEOUT_MILLIS;
 
   @Nullable
   private StatsContextFactory statsFactory;
@@ -176,6 +181,13 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
     } else {
       compressorRegistry = DEFAULT_COMPRESSOR_REGISTRY;
     }
+    return thisT();
+  }
+
+  @Override
+  public final T handshakeTimeout(long timeout, TimeUnit unit) {
+    checkArgument(timeout > 0, "handshake timeout is %s, but must be positive", timeout);
+    handshakeTimeoutMillis = unit.toMillis(timeout);
     return thisT();
   }
 
