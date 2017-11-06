@@ -76,10 +76,11 @@ public final class TransportTracer {
   }
 
   /**
-   * Reports that a message was successfully sent. This method is thread safe.
+   * Reports that some messages were successfully sent. {@code numMessages} must be at least 1.
    */
-  public void reportMessageSent() {
-    messagesSent++;
+  public void reportMessageSent(int numMessages) {
+    Preconditions.checkArgument(numMessages > 0);
+    messagesSent += numMessages;
     lastMessageSentTimeNanos = currentTimeNanos();
   }
 

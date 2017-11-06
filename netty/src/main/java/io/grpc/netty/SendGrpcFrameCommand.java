@@ -125,4 +125,9 @@ class SendGrpcFrameCommand extends DefaultByteBufHolder implements WriteQueue.Qu
   public final void run(Channel channel) {
     channel.write(this, promise);
   }
+
+  /** Returns the number of messages that this frame represents. */
+  public int getNumMessages() {
+    return numMessages;
+  }
 }
