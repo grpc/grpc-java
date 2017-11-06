@@ -21,6 +21,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
@@ -90,8 +91,8 @@ public class MessageFramerTest {
     writeUnknownLength(framer, new byte[]{3, 14});
     framer.flush();
     // Header is written first, then payload
-    verify(sink).deliverFrame(toWriteBuffer(new byte[] {0, 0, 0, 0, 2}), false, false, 1);
-    verify(sink).deliverFrame(toWriteBuffer(new byte[] {3, 14}), false, true, 0);
+    verify(sink).deliverFrame(toWriteBuffer(new byte[] {0, 0, 0, 0, 2}), false, false, 0);
+    verify(sink).deliverFrame(toWriteBuffer(new byte[] {3, 14}), false, true, 1);
     assertEquals(2, allocator.allocCount);
     verifyNoMoreInteractions(sink);
     checkStats(2, 2);
@@ -224,11 +225,10 @@ public class MessageFramerTest {
     writeUnknownLength(framer, new byte[1000]);
     framer.flush();
     // Header and first chunk written with flush = false
-    // The first chunk contains the count of how many messages are represented
-    verify(sink).deliverFrame(frameCaptor.capture(), eq(false), eq(false), eq(1));
-    verify(sink).deliverFrame(frameCaptor.capture(), eq(false), eq(false), eq(0));
+    verify(sink, times(2)).deliverFrame(frameCaptor.capture(), eq(false), eq(false), eq(0));
     // On flush third buffer written with flish = true
-    verify(sink).deliverFrame(frameCaptor.capture(), eq(false), eq(true), eq(0));
+    // The message count is only bumped when a message is completely written.
+    verify(sink).deliverFrame(frameCaptor.capture(), eq(false), eq(true), eq(1));
 
     // header has fixed length of 5 and specifies correct length
     assertEquals(5, frameCaptor.getAllValues().get(0).readableBytes());
@@ -254,9 +254,9 @@ public class MessageFramerTest {
     writeKnownLength(framer, new byte[1000]);
     framer.flush();
     // The GRPC header is written first as a separate frame.
-    // The first chunk contains the count of how many messages are represented
-    verify(sink).deliverFrame(frameCaptor.capture(), eq(false), eq(false), eq(1));
-    verify(sink).deliverFrame(frameCaptor.capture(), eq(false), eq(true), eq(0));
+    // The message count is only bumped when a message is completely written.
+    verify(sink).deliverFrame(frameCaptor.capture(), eq(false), eq(false), eq(0));
+    verify(sink).deliverFrame(frameCaptor.capture(), eq(false), eq(true), eq(1));
 
     // Check the header
     ByteWritableBuffer buffer = frameCaptor.getAllValues().get(0);

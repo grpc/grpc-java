@@ -247,8 +247,10 @@ public class MessageFramer implements Framer {
     // Note that we are always delivering a small message to the transport here which
     // may incur transport framing overhead as it may be sent separately to the contents
     // of the GRPC frame.
-    sink.deliverFrame(writeableHeader, false, false, messagesBuffered);
-    messagesBuffered = 0;
+    // The final message may not be completely written because we do not flush the last buffer.
+    // Do not report the last message as sent.
+    sink.deliverFrame(writeableHeader, false, false, messagesBuffered - 1);
+    messagesBuffered = 1;
     // Commit all except the last buffer to the sink
     List<WritableBuffer> bufferList = bufferChain.bufferList;
     for (int i = 0; i < bufferList.size() - 1; i++) {
