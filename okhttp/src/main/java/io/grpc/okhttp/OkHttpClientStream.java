@@ -70,7 +70,7 @@ class OkHttpClientStream extends AbstractClientStream {
       String authority,
       String userAgent,
       StatsTraceContext statsTraceCtx) {
-    super(new OkHttpWritableBufferAllocator(), statsTraceCtx, headers, method.isSafe());
+    super(new OkHttpWritableBufferAllocator(), statsTraceCtx, null, headers, method.isSafe());
     this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
     this.method = method;
     this.authority = authority;
@@ -195,7 +195,7 @@ class OkHttpClientStream extends AbstractClientStream {
         AsyncFrameWriter frameWriter,
         OutboundFlowController outboundFlow,
         OkHttpClientTransport transport) {
-      super(maxMessageSize, statsTraceCtx);
+      super(maxMessageSize, statsTraceCtx, null);
       this.lock = checkNotNull(lock, "lock");
       this.frameWriter = frameWriter;
       this.outboundFlow = outboundFlow;
