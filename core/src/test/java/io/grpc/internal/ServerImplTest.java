@@ -75,6 +75,7 @@ import java.util.List;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -347,10 +348,34 @@ public class ServerImplTest {
   }
 
   @Test
+  public void transportHandshakeTimeout_expired() throws Exception {
+    class ShutdownRecordingTransport extends SimpleServerTransport {
+      Status shutdownNowStatus;
+
+      @Override public void shutdownNow(Status status) {
+        shutdownNowStatus = status;
+        super.shutdownNow(status);
+      }
+    }
+
+    builder.handshakeTimeout(60, TimeUnit.SECONDS);
+    createAndStartServer();
+    ShutdownRecordingTransport serverTransport = new ShutdownRecordingTransport();
+    ServerTransportListener transportListener
+        = transportServer.registerNewServerTransport(serverTransport);
+    timer.forwardTime(59, TimeUnit.SECONDS);
+    assertNull("shutdownNow status", serverTransport.shutdownNowStatus);
+    // Don't call transportReady() in time
+    timer.forwardTime(2, TimeUnit.SECONDS);
+    assertNotNull("shutdownNow status", serverTransport.shutdownNowStatus);
+  }
+
+  @Test
   public void methodNotFound() throws Exception {
     createAndStartServer();
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
     Metadata requestHeaders = new Metadata();
     StatsTraceContext statsTraceCtx =
         StatsTraceContext.newServerContext(
@@ -377,6 +402,7 @@ public class ServerImplTest {
     createAndStartServer();
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
     Metadata requestHeaders = new Metadata();
     requestHeaders.put(MESSAGE_ENCODING_KEY, decompressorName);
     StatsTraceContext statsTraceCtx =
@@ -421,6 +447,7 @@ public class ServerImplTest {
             }).build());
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
 
     Metadata requestHeaders = new Metadata();
     requestHeaders.put(metadataKey, "value");
@@ -620,6 +647,7 @@ public class ServerImplTest {
 
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
 
     Metadata requestHeaders = new Metadata();
     StatsTraceContext statsTraceCtx =
@@ -664,6 +692,7 @@ public class ServerImplTest {
             }).build());
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
 
     Metadata requestHeaders = new Metadata();
     StatsTraceContext statsTraceCtx =
@@ -825,6 +854,7 @@ public class ServerImplTest {
             }).build());
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
 
     Metadata requestHeaders = new Metadata();
     StatsTraceContext statsTraceCtx =
@@ -890,6 +920,7 @@ public class ServerImplTest {
             }).build());
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
     Metadata requestHeaders = new Metadata();
     StatsTraceContext statsTraceCtx =
         StatsTraceContext.newServerContext(streamTracerFactories, "Waitier/serve", requestHeaders);
@@ -996,6 +1027,7 @@ public class ServerImplTest {
 
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
     Metadata requestHeaders = new Metadata();
     StatsTraceContext statsTraceCtx =
         StatsTraceContext.newServerContext(streamTracerFactories, "Waiter/serve", requestHeaders);
