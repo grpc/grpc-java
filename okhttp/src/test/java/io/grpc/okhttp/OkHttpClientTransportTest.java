@@ -65,6 +65,7 @@ import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ManagedClientTransport;
+import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.OkHttpClientTransport.ClientFrameHandler;
 import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.framed.ErrorCode;
@@ -92,6 +93,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLSocketFactory;
 import okio.Buffer;
 import okio.ByteString;
 import org.junit.After;
@@ -127,9 +130,16 @@ public class OkHttpClientTransportTest {
 
   @Mock
   private ManagedClientTransport.Listener transportListener;
+
+  private final SSLSocketFactory sslSocketFactory = null;
+  private final HostnameVerifier hostnameVerifier = null;
+  private final InetSocketAddress proxyAddr = null;
+  private final String proxyUser = null;
+  private final String proxyPassword = null;
+  private final TransportTracer transportTracer = new TransportTracer();
   private OkHttpClientTransport clientTransport;
   private MockFrameReader frameReader;
-  private ExecutorService executor;
+  private ExecutorService executor = Executors.newCachedThreadPool();
   private long nanoTime; // backs a ticker, for testing ping round-trip time measurement
   private SettableFuture<Void> connectedFuture;
   private DelayConnectedCallback delayConnectedCallback;
@@ -143,7 +153,6 @@ public class OkHttpClientTransportTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    executor = Executors.newCachedThreadPool();
     when(frameWriter.maxDataLength()).thenReturn(Integer.MAX_VALUE);
     frameReader = new MockFrameReader();
   }
@@ -192,7 +201,8 @@ public class OkHttpClientTransportTest {
         connectingCallback,
         connectedFuture,
         maxMessageSize,
-        tooManyPingsRunnable);
+        tooManyPingsRunnable,
+        new TransportTracer());
     clientTransport.start(transportListener);
     if (waitingForConnected) {
       connectedFuture.get(TIME_OUT_MS, TimeUnit.MILLISECONDS);
@@ -203,10 +213,19 @@ public class OkHttpClientTransportTest {
   public void testToString() throws Exception {
     InetSocketAddress address = InetSocketAddress.createUnresolved("hostname", 31415);
     clientTransport = new OkHttpClientTransport(
-        address, "hostname", null /* agent */, executor, /* sslSocketFactory */ null,
-        /* hostnameVerifier */null,
-        Utils.convertSpec(OkHttpChannelBuilder.DEFAULT_CONNECTION_SPEC), DEFAULT_MAX_MESSAGE_SIZE,
-        null, null, null, tooManyPingsRunnable);
+        address,
+        "hostname",
+        /*agent=*/ null,
+        executor,
+        sslSocketFactory,
+        hostnameVerifier,
+        Utils.convertSpec(OkHttpChannelBuilder.DEFAULT_CONNECTION_SPEC),
+        DEFAULT_MAX_MESSAGE_SIZE,
+        proxyAddr,
+        proxyUser,
+        proxyPassword,
+        tooManyPingsRunnable,
+        transportTracer);
     String s = clientTransport.toString();
     assertTrue("Unexpected: " + s, s.contains("OkHttpClientTransport"));
     assertTrue("Unexpected: " + s, s.contains(address.toString()));
@@ -522,6 +541,30 @@ public class OkHttpClientTransportTest {
     assertEquals(createMessageFrame(message), sentFrame);
     stream.cancel(Status.CANCELLED);
     shutdownAndVerify();
+  }
+
+  @Test
+  public void transportTracer_windowSizeDefault() throws Exception {
+    initTransport();
+    TransportTracer.Stats stats = clientTransport.getTransportStats().get();
+    assertEquals(Utils.DEFAULT_WINDOW_SIZE, stats.remoteFlowControlWindow);
+    // okhttp does not track local window sizes
+    assertEquals(-1, stats.localFlowControlWindow);
+  }
+
+  @Test
+  public void transportTracer_windowSize_remote() throws Exception {
+    initTransport();
+    TransportTracer.Stats before = clientTransport.getTransportStats().get();
+    assertEquals(Utils.DEFAULT_WINDOW_SIZE, before.remoteFlowControlWindow);
+    // okhttp does not track local window sizes
+    assertEquals(-1, before.localFlowControlWindow);
+
+    frameHandler().windowUpdate(0, 1000);
+    TransportTracer.Stats after = clientTransport.getTransportStats().get();
+    assertEquals(Utils.DEFAULT_WINDOW_SIZE + 1000, after.remoteFlowControlWindow);
+    // okhttp does not track local window sizes
+    assertEquals(-1, after.localFlowControlWindow);
   }
 
   @Test
@@ -1234,9 +1277,11 @@ public class OkHttpClientTransportTest {
     initTransport();
     PingCallbackImpl callback1 = new PingCallbackImpl();
     clientTransport.ping(callback1, MoreExecutors.directExecutor());
+    assertEquals(1, clientTransport.getTransportStats().get().keepAlivesSent);
     // add'l ping will be added as listener to outstanding operation
     PingCallbackImpl callback2 = new PingCallbackImpl();
     clientTransport.ping(callback2, MoreExecutors.directExecutor());
+    assertEquals(1, clientTransport.getTransportStats().get().keepAlivesSent);
 
     ArgumentCaptor<Integer> captor1 = ArgumentCaptor.forClass(int.class);
     ArgumentCaptor<Integer> captor2 = ArgumentCaptor.forClass(int.class);
@@ -1269,6 +1314,7 @@ public class OkHttpClientTransportTest {
     // now that previous ping is done, next request returns a different future
     callback1 = new PingCallbackImpl();
     clientTransport.ping(callback1, MoreExecutors.directExecutor());
+    assertEquals(2, clientTransport.getTransportStats().get().keepAlivesSent);
     assertEquals(0, callback1.invocationCount);
     shutdownAndVerify();
   }
@@ -1278,6 +1324,7 @@ public class OkHttpClientTransportTest {
     initTransport();
     PingCallbackImpl callback = new PingCallbackImpl();
     clientTransport.ping(callback, MoreExecutors.directExecutor());
+    assertEquals(1, clientTransport.getTransportStats().get().keepAlivesSent);
     assertEquals(0, callback.invocationCount);
 
     clientTransport.shutdown(SHUTDOWN_REASON);
@@ -1289,6 +1336,7 @@ public class OkHttpClientTransportTest {
     // now that handler is in terminal state, all future pings fail immediately
     callback = new PingCallbackImpl();
     clientTransport.ping(callback, MoreExecutors.directExecutor());
+    assertEquals(1, clientTransport.getTransportStats().get().keepAlivesSent);
     assertEquals(1, callback.invocationCount);
     assertTrue(callback.failureCause instanceof StatusException);
     assertSame(SHUTDOWN_REASON, ((StatusException) callback.failureCause).getStatus());
@@ -1300,6 +1348,7 @@ public class OkHttpClientTransportTest {
     initTransport();
     PingCallbackImpl callback = new PingCallbackImpl();
     clientTransport.ping(callback, MoreExecutors.directExecutor());
+    assertEquals(1, clientTransport.getTransportStats().get().keepAlivesSent);
     assertEquals(0, callback.invocationCount);
 
     clientTransport.onException(new IOException());
@@ -1312,6 +1361,7 @@ public class OkHttpClientTransportTest {
     // now that handler is in terminal state, all future pings fail immediately
     callback = new PingCallbackImpl();
     clientTransport.ping(callback, MoreExecutors.directExecutor());
+    assertEquals(1, clientTransport.getTransportStats().get().keepAlivesSent);
     assertEquals(1, callback.invocationCount);
     assertTrue(callback.failureCause instanceof StatusException);
     assertEquals(Status.Code.UNAVAILABLE,
@@ -1392,14 +1442,15 @@ public class OkHttpClientTransportTest {
         "invalid_authority",
         "userAgent",
         executor,
-        null,
-        null,
+        sslSocketFactory,
+        hostnameVerifier,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
-        null,
-        null,
-        null,
-        tooManyPingsRunnable);
+        proxyAddr,
+        proxyUser,
+        proxyPassword,
+        tooManyPingsRunnable,
+        transportTracer);
 
     String host = clientTransport.getOverridenHost();
     int port = clientTransport.getOverridenPort();
@@ -1415,14 +1466,15 @@ public class OkHttpClientTransportTest {
         "authority",
         "userAgent",
         executor,
-        null,
-        null,
+        sslSocketFactory,
+        hostnameVerifier,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
-        null,
-        null,
-        null,
-        tooManyPingsRunnable);
+        proxyAddr,
+        proxyUser,
+        proxyPassword,
+        tooManyPingsRunnable,
+        new TransportTracer());
 
     ManagedClientTransport.Listener listener = mock(ManagedClientTransport.Listener.class);
     clientTransport.start(listener);
@@ -1446,14 +1498,15 @@ public class OkHttpClientTransportTest {
         "authority",
         "userAgent",
         executor,
-        null,
-        null,
+        sslSocketFactory,
+        hostnameVerifier,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
         (InetSocketAddress) serverSocket.getLocalSocketAddress(),
-        null,
-        null,
-        tooManyPingsRunnable);
+        proxyUser,
+        proxyPassword,
+        tooManyPingsRunnable,
+        transportTracer);
     clientTransport.start(transportListener);
 
     Socket sock = serverSocket.accept();
@@ -1496,14 +1549,15 @@ public class OkHttpClientTransportTest {
         "authority",
         "userAgent",
         executor,
-        null,
-        null,
+        sslSocketFactory,
+        hostnameVerifier,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
         (InetSocketAddress) serverSocket.getLocalSocketAddress(),
-        null,
-        null,
-        tooManyPingsRunnable);
+        proxyUser,
+        proxyPassword,
+        tooManyPingsRunnable,
+        transportTracer);
     clientTransport.start(transportListener);
 
     Socket sock = serverSocket.accept();
@@ -1545,14 +1599,15 @@ public class OkHttpClientTransportTest {
         "authority",
         "userAgent",
         executor,
-        null,
-        null,
+        sslSocketFactory,
+        hostnameVerifier,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
         (InetSocketAddress) serverSocket.getLocalSocketAddress(),
-        null,
-        null,
-        tooManyPingsRunnable);
+        proxyUser,
+        proxyPassword,
+        tooManyPingsRunnable,
+        transportTracer);
     clientTransport.start(transportListener);
 
     Socket sock = serverSocket.accept();
@@ -1576,14 +1631,15 @@ public class OkHttpClientTransportTest {
         "authority",
         "userAgent",
         executor,
-        null,
-        null,
+        sslSocketFactory,
+        hostnameVerifier,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
         InetSocketAddress.createUnresolved("unresolvedproxy", 80),
-        null,
-        null,
-        tooManyPingsRunnable);
+        proxyUser,
+        proxyPassword,
+        tooManyPingsRunnable,
+        transportTracer);
     clientTransport.start(transportListener);
 
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);

@@ -86,7 +86,6 @@ public abstract class AbstractClientStream extends AbstractStream
     void cancel(Status status);
   }
 
-  @Nullable // okhttp does not support transportTracer yet
   private final TransportTracer transportTracer;
   private final Framer framer;
   private boolean useGet;
@@ -102,11 +101,11 @@ public abstract class AbstractClientStream extends AbstractStream
   protected AbstractClientStream(
       WritableBufferAllocator bufferAllocator,
       StatsTraceContext statsTraceCtx,
-      @Nullable TransportTracer transportTracer,
+      TransportTracer transportTracer,
       Metadata headers,
       boolean useGet) {
     Preconditions.checkNotNull(headers, "headers");
-    this.transportTracer = transportTracer;
+    this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
     this.useGet = useGet;
     if (!useGet) {
       framer = new MessageFramer(this, bufferAllocator, statsTraceCtx);
@@ -217,7 +216,7 @@ public abstract class AbstractClientStream extends AbstractStream
     protected TransportState(
         int maxMessageSize,
         StatsTraceContext statsTraceCtx,
-        @Nullable TransportTracer transportTracer) {
+        TransportTracer transportTracer) {
       super(maxMessageSize, statsTraceCtx, transportTracer);
       this.statsTraceCtx = Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
     }
