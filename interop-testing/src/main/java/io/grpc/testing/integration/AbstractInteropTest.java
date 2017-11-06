@@ -1187,7 +1187,7 @@ public abstract class AbstractInteropTest {
         md.toBuilder(mar, md.getResponseMarshaller()).build(),
         blockingStub.getCallOptions(),
         request)
-            .next();
+        .next();
 
     int size = mar.lastOutSize;
 
