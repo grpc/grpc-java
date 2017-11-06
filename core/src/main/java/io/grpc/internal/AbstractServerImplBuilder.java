@@ -107,6 +107,8 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   private boolean recordFinishedRpcs = true;
   private boolean tracingEnabled = true;
 
+  protected TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
+
   @Override
   public final T directExecutor() {
     return executor(MoreExecutors.directExecutor());
@@ -262,6 +264,11 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
     }
     tracerFactories.addAll(streamTracerFactories);
     return tracerFactories;
+  }
+
+  @VisibleForTesting
+  protected void setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
+    this.transportTracerFactory = transportTracerFactory;
   }
 
   /**

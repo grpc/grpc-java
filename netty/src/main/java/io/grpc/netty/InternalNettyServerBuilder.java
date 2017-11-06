@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import io.grpc.Internal;
+import io.grpc.internal.TransportTracer;
 
 /**
  * Internal {@link InternalNettyServerBuilder} accessor.  This is intended for usage internal to
@@ -31,6 +32,11 @@ public final class InternalNettyServerBuilder {
 
   public static void setTracingEnabled(NettyServerBuilder builder, boolean value) {
     builder.setTracingEnabled(value);
+  }
+
+  public static void setTransportTracerFactorty(
+      NettyServerBuilder builder, TransportTracer.Factory factory) {
+    builder.setTransportTracerFactory(factory);
   }
 
   private InternalNettyServerBuilder() {}

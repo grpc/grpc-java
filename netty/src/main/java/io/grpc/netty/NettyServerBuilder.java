@@ -30,6 +30,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
+import io.grpc.internal.TransportTracer;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
@@ -202,6 +203,11 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   @Override
   protected void setStatsEnabled(boolean value) {
     super.setStatsEnabled(value);
+  }
+
+  @Override
+  protected final void setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
+    super.setTransportTracerFactory(transportTracerFactory);
   }
 
   /**
@@ -391,7 +397,8 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
 
     return new NettyServer(
         address, channelType, bossEventLoopGroup, workerEventLoopGroup,
-        negotiator, streamTracerFactories, maxConcurrentCallsPerConnection, flowControlWindow,
+        negotiator, streamTracerFactories, transportTracerFactory,
+        maxConcurrentCallsPerConnection, flowControlWindow,
         maxMessageSize, maxHeaderListSize, keepAliveTimeInNanos, keepAliveTimeoutInNanos,
         maxConnectionIdleInNanos,
         maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,

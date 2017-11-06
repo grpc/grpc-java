@@ -126,6 +126,8 @@ public abstract class AbstractManagedChannelImplBuilder
 
   private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 
+  private TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
+
   /**
    * Sets the maximum message size allowed for a single gRPC frame. If an inbound messages
    * larger than this limit is received it will not be processed and the RPC will fail with
@@ -367,6 +369,15 @@ public abstract class AbstractManagedChannelImplBuilder
       effectiveInterceptors.add(0, censusTracing.getClientInterceptor());
     }
     return effectiveInterceptors;
+  }
+
+  @VisibleForTesting
+  protected void setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
+    this.transportTracerFactory = transportTracerFactory;
+  }
+
+  protected TransportTracer.Factory getTransportTracerFactory() {
+    return transportTracerFactory;
   }
 
   /**

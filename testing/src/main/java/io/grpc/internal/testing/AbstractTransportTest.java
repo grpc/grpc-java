@@ -190,6 +190,21 @@ public abstract class AbstractTransportTest {
     }
   }
 
+  /**
+   * Moves the clock foward, for tests that require moving the clock fowrard. It is the transport
+   * subclass's responsibility to implement this method.
+   */
+  protected void advanceClock(long nanos) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Returns the current time, for tests that rely on the clock.
+   */
+  protected long currentTimeMillis() {
+    throw new UnsupportedOperationException();
+  }
+
   // TODO(ejona):
   //   multiple streams on same transport
   //   multiple client transports to same server
@@ -1409,23 +1424,23 @@ public abstract class AbstractTransportTest {
           serverTransportListener.transport.getTransportStats().get();
       assertEquals(1, serverAfter.streamsStarted);
       serverFirstTimestampNanos = serverAfter.lastStreamCreatedTimeNanos;
-      assertThat(System.currentTimeMillis()
-          - TimeUnit.NANOSECONDS.toMillis(serverAfter.lastStreamCreatedTimeNanos)).isAtMost(50L);
+      assertEquals(
+          currentTimeMillis(),
+          TimeUnit.NANOSECONDS.toMillis(serverAfter.lastStreamCreatedTimeNanos));
 
       TransportTracer.Stats clientAfter = client.getTransportStats().get();
       assertEquals(1, clientAfter.streamsStarted);
       clientFirstTimestampNanos = clientAfter.lastStreamCreatedTimeNanos;
-      assertThat(System.currentTimeMillis()
-          - TimeUnit.NANOSECONDS.toMillis(clientFirstTimestampNanos)).isAtMost(50L);
+      assertEquals(
+          currentTimeMillis(),
+          TimeUnit.NANOSECONDS.toMillis(clientFirstTimestampNanos));
 
       ServerStream serverStream = serverStreamCreation.stream;
       serverStream.close(Status.OK, new Metadata());
     }
 
-    // lastStreamCreatedTimeNanos is converted from the system milli clock. Sleep a bit to ensure
-    // it has moved forward in time.
-    // TODO(zpencer): plumb in a fake clock instead
-    Thread.sleep(5);
+    final long elapsedNanos = TimeUnit.MILLISECONDS.toNanos(100);
+    advanceClock(elapsedNanos);
 
     // start second stream
     {
@@ -1444,17 +1459,19 @@ public abstract class AbstractTransportTest {
       TransportTracer.Stats serverAfter =
           serverTransportListener.transport.getTransportStats().get();
       assertEquals(2, serverAfter.streamsStarted);
-      assertTrue(serverAfter.lastStreamCreatedTimeNanos > serverFirstTimestampNanos);
+      assertEquals(
+          elapsedNanos, serverAfter.lastStreamCreatedTimeNanos - serverFirstTimestampNanos);
       long serverSecondTimestamp =
           TimeUnit.NANOSECONDS.toMillis(serverAfter.lastStreamCreatedTimeNanos);
-      assertThat(System.currentTimeMillis() - serverSecondTimestamp).isAtMost(50L);
+      assertEquals(currentTimeMillis(), serverSecondTimestamp);
 
       TransportTracer.Stats clientAfter = client.getTransportStats().get();
       assertEquals(2, clientAfter.streamsStarted);
-      assertTrue(clientAfter.lastStreamCreatedTimeNanos > clientFirstTimestampNanos);
+      assertEquals(
+          elapsedNanos, clientAfter.lastStreamCreatedTimeNanos - clientFirstTimestampNanos);
       long clientSecondTimestamp =
           TimeUnit.NANOSECONDS.toMillis(clientAfter.lastStreamCreatedTimeNanos);
-      assertThat(System.currentTimeMillis() - clientSecondTimestamp).isAtMost(50L);
+      assertEquals(currentTimeMillis(), clientSecondTimestamp);
 
       ServerStream serverStream = serverStreamCreation.stream;
       serverStream.close(Status.OK, new Metadata());
@@ -1618,12 +1635,12 @@ public abstract class AbstractTransportTest {
     assertEquals(1, serverAfter.messagesReceived);
     long serverTimestamp =
         TimeUnit.NANOSECONDS.toMillis(serverAfter.lastMessageReceivedTimeNanos);
-    assertThat(System.currentTimeMillis() - serverTimestamp).isAtMost(50L);
+    assertEquals(currentTimeMillis(), serverTimestamp);
     TransportTracer.Stats clientAfter = client.getTransportStats().get();
     assertEquals(1, clientAfter.messagesSent);
     long clientTimestamp =
         TimeUnit.NANOSECONDS.toMillis(clientAfter.lastMessageSentTimeNanos);
-    assertThat(System.currentTimeMillis() - clientTimestamp).isAtMost(50L);
+    assertEquals(currentTimeMillis(), clientTimestamp);
 
     serverStream.close(Status.OK, new Metadata());
   }
@@ -1663,12 +1680,13 @@ public abstract class AbstractTransportTest {
         serverTransportListener.transport.getTransportStats().get();
     assertEquals(1, serverAfter.messagesSent);
     long serverTimestmap = TimeUnit.NANOSECONDS.toMillis(serverAfter.lastMessageSentTimeNanos);
-    assertThat(System.currentTimeMillis() - serverTimestmap).isAtMost(50L);
+    assertEquals(currentTimeMillis(), serverTimestmap);
     TransportTracer.Stats clientAfter = client.getTransportStats().get();
     assertEquals(1, clientAfter.messagesReceived);
     long clientTimestmap =
         TimeUnit.NANOSECONDS.toMillis(clientAfter.lastMessageReceivedTimeNanos);
-    assertThat(System.currentTimeMillis() - clientTimestmap).isAtMost(50L);
+    assertEquals(currentTimeMillis(), clientTimestmap);
+
 
     serverStream.close(Status.OK, new Metadata());
   }
