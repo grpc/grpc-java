@@ -70,7 +70,12 @@ class OkHttpClientStream extends AbstractClientStream {
       String authority,
       String userAgent,
       StatsTraceContext statsTraceCtx) {
-    super(new OkHttpWritableBufferAllocator(), statsTraceCtx, null, headers, method.isSafe());
+    super(
+        new OkHttpWritableBufferAllocator(),
+        statsTraceCtx,
+        null /* transportTracer */,
+        headers,
+        method.isSafe());
     this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
     this.method = method;
     this.authority = authority;

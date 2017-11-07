@@ -207,7 +207,7 @@ class NettyClientStream extends AbstractClientStream {
 
     public TransportState(NettyClientHandler handler, EventLoop eventLoop, int maxMessageSize,
         StatsTraceContext statsTraceCtx) {
-      super(maxMessageSize, statsTraceCtx, null);
+      super(maxMessageSize, statsTraceCtx, null /* transportTracer */);
       this.handler = checkNotNull(handler, "handler");
       this.eventLoop = checkNotNull(eventLoop, "eventLoop");
     }
