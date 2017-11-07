@@ -200,7 +200,7 @@ class OkHttpClientStream extends AbstractClientStream {
         AsyncFrameWriter frameWriter,
         OutboundFlowController outboundFlow,
         OkHttpClientTransport transport) {
-      super(maxMessageSize, statsTraceCtx, null);
+      super(maxMessageSize, statsTraceCtx, null /* transportTracer */);
       this.lock = checkNotNull(lock, "lock");
       this.frameWriter = frameWriter;
       this.outboundFlow = outboundFlow;
