@@ -73,7 +73,7 @@ class OkHttpClientStream extends AbstractClientStream {
     super(
         new OkHttpWritableBufferAllocator(),
         statsTraceCtx,
-        /*transportTracer=*/ null
+        /*transportTracer=*/ null,
         headers,
         method.isSafe());
     this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
