@@ -224,10 +224,14 @@ public final class GrpcUtil {
    */
   public static final long SERVER_KEEPALIVE_TIME_NANOS_DISABLED = Long.MAX_VALUE;
 
-  /** The default proxy detector. */
+  /**
+   * The default proxy detector.
+   */
   public static final ProxyDetector DEFAULT_PROXY_DETECTOR = new ProxyDetectorImpl();
 
-  /** A proxy detector that always claims no proxy is needed. */
+  /**
+   * A proxy detector that always claims no proxy is needed.
+   */
   public static final ProxyDetector NOOP_PROXY_DETECTOR = new ProxyDetector() {
     @Nullable
     @Override
