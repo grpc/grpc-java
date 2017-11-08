@@ -602,7 +602,6 @@ class NettyServerHandler extends AbstractNettyHandler {
     }
     if (cmd.endOfStream()) {
       closeStreamWhenDone(promise, streamId);
-      transportTracer.reportStreamClosed(cmd.status().isOk());
     }
     encoder().writeHeaders(ctx, streamId, cmd.headers(), 0, cmd.endOfStream(), promise);
   }
