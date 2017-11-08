@@ -64,6 +64,9 @@ $ MAJOR=1 MINOR=7 PATCH=0 # Set appropriately for new release
 $ VERSION_FILES=(
   build.gradle
   android-interop-testing/app/build.gradle
+  compiler/src/test/golden/TestService.java.txt
+  compiler/src/testLite/golden/TestService.java.txt
+  compiler/src/testNano/golden/TestService.java.txt
   examples/build.gradle
   examples/pom.xml
   examples/android/helloworld/app/build.gradle
