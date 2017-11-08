@@ -19,6 +19,7 @@ package io.grpc;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Preconditions;
+import io.grpc.internal.BinaryLog;
 import java.io.InputStream;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import javax.annotation.CheckReturnValue;
@@ -46,6 +47,7 @@ public final class MethodDescriptor<ReqT, RespT> {
   private final boolean idempotent;
   private final boolean safe;
   private final boolean sampledToLocalTracing;
+  private final BinaryLog binaryLog;
 
   // Must be set to InternalKnownTransport.values().length
   // Not referenced to break the dependency.
@@ -211,7 +213,8 @@ public final class MethodDescriptor<ReqT, RespT> {
       Marshaller<RequestT> requestMarshaller,
       Marshaller<ResponseT> responseMarshaller) {
     return new MethodDescriptor<RequestT, ResponseT>(
-        type, fullMethodName, requestMarshaller, responseMarshaller, null, false, false, false);
+        type, fullMethodName, requestMarshaller, responseMarshaller, null, false, false, false,
+        BinaryLog.getLog(fullMethodName));
   }
 
   private MethodDescriptor(
@@ -222,7 +225,8 @@ public final class MethodDescriptor<ReqT, RespT> {
       Object schemaDescriptor,
       boolean idempotent,
       boolean safe,
-      boolean sampledToLocalTracing) {
+      boolean sampledToLocalTracing,
+      BinaryLog binaryLog) {
 
     this.type = Preconditions.checkNotNull(type, "type");
     this.fullMethodName = Preconditions.checkNotNull(fullMethodName, "fullMethodName");
@@ -234,6 +238,8 @@ public final class MethodDescriptor<ReqT, RespT> {
     this.sampledToLocalTracing = sampledToLocalTracing;
     Preconditions.checkArgument(!safe || type == MethodType.UNARY,
         "Only unary methods can be specified safe");
+    // The binlog may be a noop log
+    this.binaryLog = Preconditions.checkNotNull(binaryLog);
   }
 
   /**
@@ -568,7 +574,8 @@ public final class MethodDescriptor<ReqT, RespT> {
           schemaDescriptor,
           idempotent,
           safe,
-          sampledToLocalTracing);
+          sampledToLocalTracing,
+          BinaryLog.getLog(fullMethodName));
     }
   }
 }
