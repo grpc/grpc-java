@@ -90,6 +90,7 @@ public final class BinaryLog {
     // The form: {h:256,m:256}
     private static final Pattern bothRe = Pattern.compile("\\{h(?::(\\d+))?;m(?::(\\d+))?}");
 
+    private final boolean enabled;
     private final Map<String, BinaryLog> perMethodLogs = new HashMap<String, BinaryLog>();
     private final Map<String, BinaryLog> perServiceLogs = new HashMap<String, BinaryLog>();
     private final BinaryLog globalLog;
@@ -101,6 +102,7 @@ public final class BinaryLog {
     Factory(String configurationString) {
       if (configurationString == null || configurationString.length() == 0) {
         globalLog = NOOP_LOG;
+        enabled = false;
         return;
       }
       String[] configurations = configurationString.split(",");
@@ -135,6 +137,7 @@ public final class BinaryLog {
           logger.info(String.format("Method binlog: method=%s log=%s", methodOrSvc, binLog));
         }
       }
+      enabled = true;
       this.globalLog = globalLog == null ? NOOP_LOG : globalLog;
     }
 
@@ -142,6 +145,9 @@ public final class BinaryLog {
      * Accepts a full method name and returns the log that should be used.
      */
     public BinaryLog getLog(String fullMethodName) {
+      if (!enabled) {
+        return NOOP_LOG;
+      }
       BinaryLog methodLog = perMethodLogs.get(fullMethodName);
       if (methodLog != null) {
         return methodLog;
