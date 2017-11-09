@@ -19,6 +19,7 @@ package io.grpc.cronet;
 import io.grpc.CallOptions;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 
 /** Call options for use with the Cronet transport. */
 public final class CronetCallOptions {
@@ -55,7 +56,8 @@ public final class CronetCallOptions {
       newAnnotations = new ArrayList<Object>(existingAnnotations);
     }
     newAnnotations.add(annotation);
-    return callOptions.withOption(CronetCallOptions.CRONET_ANNOTATIONS_KEY, newAnnotations);
+    return callOptions.withOption(
+        CronetCallOptions.CRONET_ANNOTATIONS_KEY, Collections.unmodifiableList(newAnnotations));
   }
 
   static final CallOptions.Key<Collection<Object>> CRONET_ANNOTATIONS_KEY =
