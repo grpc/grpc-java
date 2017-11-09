@@ -29,10 +29,14 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public final class BinaryLogTest {
   private static final BinaryLog NONE = new Builder().build();
-  private static final BinaryLog HEADER_ONLY = new Builder().header(Integer.MAX_VALUE).build();
-  private static final BinaryLog MSG_ONLY = new Builder().msg(Integer.MAX_VALUE).build();
-  private static final BinaryLog BOTH =
+  private static final BinaryLog HEADER_FULL = new Builder().header(Integer.MAX_VALUE).build();
+  private static final BinaryLog HEADER_256 = new Builder().header(256).build();
+  private static final BinaryLog MSG_FULL = new Builder().msg(Integer.MAX_VALUE).build();
+  private static final BinaryLog MSG_256 = new Builder().msg(256).build();
+  private static final BinaryLog BOTH_256 = new Builder().header(256).msg(256).build();
+  private static final BinaryLog BOTH_FULL =
       new Builder().header(Integer.MAX_VALUE).msg(Integer.MAX_VALUE).build();
+  
 
   @Test
   public void noConfiguration() throws Exception {
@@ -43,15 +47,13 @@ public final class BinaryLogTest {
 
   @Test
   public void configBinLog_global() throws Exception {
-    assertEquals(BOTH, new Factory("*").getLog("p.s/m"));
-    assertEquals(BOTH, new Factory("*{h;m}").getLog("p.s/m"));
-    assertEquals(HEADER_ONLY, new Factory("*{h}").getLog("p.s/m"));
-    assertEquals(MSG_ONLY, new Factory("*{m}").getLog("p.s/m"));
-    assertEquals(new Builder().header(256).build(), new Factory("*{h:256}").getLog("p.s/m"));
-    assertEquals(new Builder().msg(256).build(), new Factory("*{m:256}").getLog("p.s/m"));
-    assertEquals(
-        new Builder().header(256).msg(256).build(),
-        new Factory("*{h:256;m:256}").getLog("p.s/m"));
+    assertEquals(BOTH_FULL, new Factory("*").getLog("p.s/m"));
+    assertEquals(BOTH_FULL, new Factory("*{h;m}").getLog("p.s/m"));
+    assertEquals(HEADER_FULL, new Factory("*{h}").getLog("p.s/m"));
+    assertEquals(MSG_FULL, new Factory("*{m}").getLog("p.s/m"));
+    assertEquals(HEADER_256, new Factory("*{h:256}").getLog("p.s/m"));
+    assertEquals(MSG_256, new Factory("*{m:256}").getLog("p.s/m"));
+    assertEquals(BOTH_256, new Factory("*{h:256;m:256}").getLog("p.s/m"));
     assertEquals(
         new Builder().header(Integer.MAX_VALUE).msg(256).build(),
         new Factory("*{h;m:256}").getLog("p.s/m"));
@@ -62,14 +64,13 @@ public final class BinaryLogTest {
 
   @Test
   public void configBinLog_method() throws Exception {
-    assertEquals(BOTH, new Factory("p.s/m").getLog("p.s/m"));
-    assertEquals(BOTH, new Factory("p.s/m{h;m}").getLog("p.s/m"));
-    assertEquals(HEADER_ONLY, new Factory("p.s/m{h}").getLog("p.s/m"));
-    assertEquals(MSG_ONLY, new Factory("p.s/m{m}").getLog("p.s/m"));
-    assertEquals(new Builder().header(256).build(), new Factory("p.s/m{h:256}").getLog("p.s/m"));
-    assertEquals(new Builder().msg(256).build(), new Factory("p.s/m{m:256}").getLog("p.s/m"));
-    assertEquals(new Builder().header(256).msg(256).build(),
-        new Factory("p.s/m{h:256;m:256}").getLog("p.s/m"));
+    assertEquals(BOTH_FULL, new Factory("p.s/m").getLog("p.s/m"));
+    assertEquals(BOTH_FULL, new Factory("p.s/m{h;m}").getLog("p.s/m"));
+    assertEquals(HEADER_FULL, new Factory("p.s/m{h}").getLog("p.s/m"));
+    assertEquals(MSG_FULL, new Factory("p.s/m{m}").getLog("p.s/m"));
+    assertEquals(HEADER_256, new Factory("p.s/m{h:256}").getLog("p.s/m"));
+    assertEquals(MSG_256, new Factory("p.s/m{m:256}").getLog("p.s/m"));
+    assertEquals(BOTH_256, new Factory("p.s/m{h:256;m:256}").getLog("p.s/m"));
     assertEquals(
         new Builder().header(Integer.MAX_VALUE).msg(256).build(),
         new Factory("p.s/m{h;m:256}").getLog("p.s/m"));
@@ -85,17 +86,13 @@ public final class BinaryLogTest {
 
   @Test
   public void configBinLog_service() throws Exception {
-    assertEquals(BOTH, new Factory("p.s/*").getLog("p.s/m"));
-    assertEquals(BOTH, new Factory("p.s/*{h;m}").getLog("p.s/m"));
-    assertEquals(HEADER_ONLY, new Factory("p.s/*{h}").getLog("p.s/m"));
-    assertEquals(MSG_ONLY, new Factory("p.s/*{m}").getLog("p.s/m"));
-    assertEquals(
-        new Builder().header(256).build(), new Factory("p.s/*{h:256}").getLog("p.s/m"));
-    assertEquals(
-        new Builder().msg(256).build(), new Factory("p.s/*{m:256}").getLog("p.s/m"));
-    assertEquals(
-        new Builder().header(256).msg(256).build(),
-        new Factory("p.s/*{h:256;m:256}").getLog("p.s/m"));
+    assertEquals(BOTH_FULL, new Factory("p.s/*").getLog("p.s/m"));
+    assertEquals(BOTH_FULL, new Factory("p.s/*{h;m}").getLog("p.s/m"));
+    assertEquals(HEADER_FULL, new Factory("p.s/*{h}").getLog("p.s/m"));
+    assertEquals(MSG_FULL, new Factory("p.s/*{m}").getLog("p.s/m"));
+    assertEquals(HEADER_256, new Factory("p.s/*{h:256}").getLog("p.s/m"));
+    assertEquals(MSG_256, new Factory("p.s/*{m:256}").getLog("p.s/m"));
+    assertEquals(BOTH_256, new Factory("p.s/*{h:256;m:256}").getLog("p.s/m"));
     assertEquals(
         new Builder().header(Integer.MAX_VALUE).msg(256).build(),
         new Factory("p.s/*{h;m:256}").getLog("p.s/m"));
@@ -111,14 +108,12 @@ public final class BinaryLogTest {
 
   @Test
   public void createLogFromOptionString() throws Exception {
-    assertEquals(BOTH, Factory.createBinaryLog(/*logConfig=*/ null));
-    assertEquals(HEADER_ONLY, Factory.createBinaryLog("{h}"));
-    assertEquals(MSG_ONLY, Factory.createBinaryLog("{m}"));
-    assertEquals(new Builder().header(256).build(), Factory.createBinaryLog("{h:256}"));
-    assertEquals(new Builder().msg(256).build(), Factory.createBinaryLog("{m:256}"));
-    assertEquals(
-        new Builder().header(256).msg(256).build(),
-        Factory.createBinaryLog("{h:256;m:256}"));
+    assertEquals(BOTH_FULL, Factory.createBinaryLog(/*logConfig=*/ null));
+    assertEquals(HEADER_FULL, Factory.createBinaryLog("{h}"));
+    assertEquals(MSG_FULL, Factory.createBinaryLog("{m}"));
+    assertEquals(HEADER_256, Factory.createBinaryLog("{h:256}"));
+    assertEquals(MSG_256, Factory.createBinaryLog("{m:256}"));
+    assertEquals(BOTH_256, Factory.createBinaryLog("{h:256;m:256}"));
     assertEquals(
         new Builder().header(Integer.MAX_VALUE).msg(256).build(),
         Factory.createBinaryLog("{h;m:256}"));
@@ -134,24 +129,20 @@ public final class BinaryLogTest {
         + "package.both256/*{h:256;m:256},"
         + "package.service1/both128{h:128;m:128},"
         + "package.service2/method_messageOnly{m}");
-    assertEquals(
-        HEADER_ONLY, factory.getLog("otherpackage.service/method"));
+    assertEquals(HEADER_FULL, factory.getLog("otherpackage.service/method"));
 
-    assertEquals(
-        new Builder().header(256).msg(256).build(), factory.getLog("package.both256/method1"));
-    assertEquals(
-        new Builder().header(256).msg(256).build(), factory.getLog("package.both256/method2"));
-    assertEquals(
-        new Builder().header(256).msg(256).build(), factory.getLog("package.both256/method3"));
+    assertEquals(BOTH_256, factory.getLog("package.both256/method1"));
+    assertEquals(BOTH_256, factory.getLog("package.both256/method2"));
+    assertEquals(BOTH_256, factory.getLog("package.both256/method3"));
 
     assertEquals(
         new Builder().header(128).msg(128).build(), factory.getLog("package.service1/both128"));
     // the global config is in effect
-    assertEquals(HEADER_ONLY, factory.getLog("package.service1/absent"));
+    assertEquals(HEADER_FULL, factory.getLog("package.service1/absent"));
 
-    assertEquals(MSG_ONLY, factory.getLog("package.service2/method_messageOnly"));
+    assertEquals(MSG_FULL, factory.getLog("package.service2/method_messageOnly"));
     // the global config is in effect
-    assertEquals(HEADER_ONLY, factory.getLog("package.service2/absent"));
+    assertEquals(HEADER_FULL, factory.getLog("package.service2/absent"));
   }
 
   @Test
@@ -162,19 +153,16 @@ public final class BinaryLogTest {
         + "package.service2/method_messageOnly{m}");
     assertEquals(NONE, factory.getLog("otherpackage.service/method"));
 
-    assertEquals(
-        new Builder().header(256).msg(256).build(), factory.getLog("package.both256/method1"));
-    assertEquals(
-        new Builder().header(256).msg(256).build(), factory.getLog("package.both256/method2"));
-    assertEquals(
-        new Builder().header(256).msg(256).build(), factory.getLog("package.both256/method3"));
+    assertEquals(BOTH_256, factory.getLog("package.both256/method1"));
+    assertEquals(BOTH_256, factory.getLog("package.both256/method2"));
+    assertEquals(BOTH_256, factory.getLog("package.both256/method3"));
 
     assertEquals(
         new Builder().header(128).msg(128).build(), factory.getLog("package.service1/both128"));
     // no global config in effect
     assertEquals(NONE, factory.getLog("package.service1/absent"));
 
-    assertEquals(MSG_ONLY, factory.getLog("package.service2/method_messageOnly"));
+    assertEquals(MSG_FULL, factory.getLog("package.service2/method_messageOnly"));
     // no global config in effect
     assertEquals(NONE, factory.getLog("package.service2/absent"));
   }
