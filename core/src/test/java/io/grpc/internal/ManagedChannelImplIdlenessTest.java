@@ -52,7 +52,6 @@ import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
-import java.io.File;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -61,7 +60,6 @@ import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import javax.net.ssl.SSLException;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -135,11 +133,6 @@ public class ManagedChannelImplIdlenessTest {
 
       @Override
       public Builder useTransportSecurity() {
-        throw new UnsupportedOperationException();
-      }
-
-      @Override
-      public Builder trustStore(File trustStorePath) throws SSLException {
         throw new UnsupportedOperationException();
       }
     }

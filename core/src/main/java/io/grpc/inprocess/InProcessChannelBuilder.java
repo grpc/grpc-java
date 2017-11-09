@@ -25,7 +25,6 @@ import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
 
-import java.io.File;
 import java.net.SocketAddress;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -94,14 +93,6 @@ public final class InProcessChannelBuilder extends
    */
   @Override
   public InProcessChannelBuilder useTransportSecurity() {
-    return this;
-  }
-
-  /**
-   * Does nothing.
-   */
-  @Override
-  public InProcessChannelBuilder trustStore(File trustCertCollectionFile) {
     return this;
   }
 

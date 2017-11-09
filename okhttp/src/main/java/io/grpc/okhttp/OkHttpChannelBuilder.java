@@ -39,7 +39,6 @@ import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.okhttp.internal.Platform;
 
-import java.io.File;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.GeneralSecurityException;
@@ -310,15 +309,6 @@ public class OkHttpChannelBuilder extends
   public final OkHttpChannelBuilder useTransportSecurity() {
     negotiationType(NegotiationType.TLS);
     return this;
-  }
-
-  /**
-   * Trust Store to be used instead of system default.
-   * @throws SSLException
-   */
-  @Override
-  public final OkHttpChannelBuilder trustStore(File trustCertCollectionFile) throws SSLException {
-    throw new UnsupportedOperationException("Use sslSocketFactory method instead");
   }
 
   @Override

@@ -16,11 +16,9 @@
 
 package io.grpc;
 
-import java.io.File;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import javax.net.ssl.SSLException;
 
 /**
  * A {@link ManagedChannelBuilder} that delegates all its builder method to another builder by
@@ -102,12 +100,6 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   @Override
   public T useTransportSecurity() {
     delegate().useTransportSecurity();
-    return thisT();
-  }
-
-  @Override
-  public T trustStore(File trustCertCollectionFile) throws SSLException {
-    delegate().trustStore(trustCertCollectionFile);
     return thisT();
   }
 

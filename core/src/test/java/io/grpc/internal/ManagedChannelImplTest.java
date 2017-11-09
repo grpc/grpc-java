@@ -76,7 +76,6 @@ import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.ManagedChannelImpl.ManagedChannelReference;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
-import java.io.File;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -93,7 +92,6 @@ import java.util.logging.Filter;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
-import javax.net.ssl.SSLException;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -207,11 +205,6 @@ public class ManagedChannelImplTest {
 
       @Override
       public Builder useTransportSecurity() {
-        throw new UnsupportedOperationException();
-      }
-
-      @Override
-      public Builder trustStore(File trustStorePath) throws SSLException {
         throw new UnsupportedOperationException();
       }
     }

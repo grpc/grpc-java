@@ -38,7 +38,6 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.LoadBalancer;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
-import java.io.File;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -46,7 +45,6 @@ import java.net.URI;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import javax.net.ssl.SSLException;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -368,11 +366,6 @@ public class AbstractManagedChannelImplBuilderTest {
 
     @Override
     public Builder useTransportSecurity() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public Builder trustStore(File trustStorePath) throws SSLException {
       throw new UnsupportedOperationException();
     }
   }

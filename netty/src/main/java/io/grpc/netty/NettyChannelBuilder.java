@@ -43,7 +43,6 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.ssl.SslContext;
 
-import java.io.File;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.HashMap;
@@ -174,15 +173,6 @@ public final class NettyChannelBuilder
   public NettyChannelBuilder eventLoopGroup(@Nullable EventLoopGroup eventLoopGroup) {
     this.eventLoopGroup = eventLoopGroup;
     return this;
-  }
-
-  /**
-   * Trust Store to be used instead of system default.
-   * @throws SSLException
-   */
-  @Override
-  public NettyChannelBuilder trustStore(File trustCertCollectionFile) throws SSLException {
-    return sslContext(GrpcSslContexts.forClient().trustManager(trustCertCollectionFile).build());
   }
 
   /**
