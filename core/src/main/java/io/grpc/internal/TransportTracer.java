@@ -76,7 +76,7 @@ public final class TransportTracer {
   }
 
   /**
-   * Reports that some messages were successfully sent. {@code numMessages} must be at least 1.
+   * Reports that some messages were successfully sent. {@code numMessages} must be at least 0.
    */
   public void reportMessageSent(int numMessages) {
     if (numMessages == 0) {
