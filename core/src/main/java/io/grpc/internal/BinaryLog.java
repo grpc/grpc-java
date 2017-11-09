@@ -18,9 +18,12 @@ package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
 import io.grpc.MethodDescriptor;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -29,7 +32,7 @@ import javax.annotation.Nullable;
 /**
  * A binary log class that is configured for a specific {@link MethodDescriptor}.
  */
-public final class BinaryLog {
+final class BinaryLog {
   private static final Logger logger = Logger.getLogger(BinaryLog.class.getName());
   private static final BinaryLog NOOP_LOG =
       new BinaryLog(/*maxHeaderBytes=*/ 0, /*maxMessageBytes=*/ 0);
@@ -64,14 +67,31 @@ public final class BinaryLog {
         + "maxMessageBytes=" + maxMessageBytes + "]";
   }
 
-  private static final Factory DEFAULT_FACTORY =
-      new Factory(System.getenv("GRPC_BINARY_LOG_CONFIG"));
+  @Nullable
+  private static final Factory DEFAULT_FACTORY;
+
+  static {
+    Factory defaultFactory = null;
+    try {
+      String configStr = System.getenv("GRPC_BINARY_LOG_CONFIG");
+      if (configStr != null && configStr.length() > 0) {
+        defaultFactory = new Factory(configStr);
+      }
+    } catch (Throwable t) {
+      logger.log(Level.SEVERE, "Failed to initialize binary log. Disabling binary log.", t);
+      defaultFactory = null;
+    }
+    DEFAULT_FACTORY = defaultFactory;
+  }
 
   /**
    * Accepts the fullMethodName and returns the binary log that should be used. The log may be
    * a log that does nothing.
    */
-  public static BinaryLog getLog(String fullMethodName) {
+  static BinaryLog getLog(String fullMethodName) {
+    if (DEFAULT_FACTORY == null) {
+      return NOOP_LOG;
+    }
     return DEFAULT_FACTORY.getLog(fullMethodName);
   }
 
@@ -90,23 +110,21 @@ public final class BinaryLog {
     // The form: {h:256,m:256}
     private static final Pattern bothRe = Pattern.compile("\\{h(?::(\\d+))?;m(?::(\\d+))?}");
 
-    private final boolean enabled;
-    private final Map<String, BinaryLog> perMethodLogs = new HashMap<String, BinaryLog>();
-    private final Map<String, BinaryLog> perServiceLogs = new HashMap<String, BinaryLog>();
     private final BinaryLog globalLog;
+    private final Map<String, BinaryLog> perServiceLogs;
+    private final Map<String, BinaryLog> perMethodLogs;
 
     /**
      * Accepts a string in the format specified by the binary log spec.
      */
     @VisibleForTesting
     Factory(String configurationString) {
-      if (configurationString == null || configurationString.length() == 0) {
-        globalLog = NOOP_LOG;
-        enabled = false;
-        return;
-      }
-      String[] configurations = configurationString.split(",");
+      Preconditions.checkState(configurationString != null && configurationString.length() > 0);
       BinaryLog globalLog = null;
+      Map<String, BinaryLog> perServiceLogs = new HashMap<String, BinaryLog>();
+      Map<String, BinaryLog> perMethodLogs = new HashMap<String, BinaryLog>();
+
+      String[] configurations = configurationString.split(",");
       for (String configuration : configurations) {
         Matcher configMatcher = configRe.matcher(configuration);
         if (!configMatcher.matches()) {
@@ -115,39 +133,44 @@ public final class BinaryLog {
         String methodOrSvc = configMatcher.group(1);
         String binlogOptionStr = configMatcher.group(2);
         BinaryLog binLog = createBinaryLog(binlogOptionStr);
+        if (binLog == null) {
+          logger.log(Level.SEVERE, "Can not create binary log for: " + configuration);
+          continue;
+        }
         if (methodOrSvc.equals("*")) {
           if (globalLog != null) {
-            throw new IllegalArgumentException("Duplicate log config for: *");
+            logger.log(Level.SEVERE, "Ignoring duplicate entry: " + configuration);
+            continue;
           }
           globalLog = binLog;
           logger.info("Global binlog: " + globalLog);
         } else if (isServiceGlob(methodOrSvc)) {
           String service = MethodDescriptor.extractFullServiceName(methodOrSvc);
           if (perServiceLogs.containsKey(service)) {
-            throw new IllegalArgumentException("Duplicate log config for service: " + methodOrSvc);
+            logger.log(Level.SEVERE, "Ignoring duplicate entry: " + configuration);
+            continue;
           }
           perServiceLogs.put(service, binLog);
           logger.info(String.format("Service binlog: service=%s log=%s", service, binLog));
         } else {
           // assume fully qualified method name
           if (perMethodLogs.containsKey(methodOrSvc)) {
-            throw new IllegalArgumentException("Duplicate log config for method: " + methodOrSvc);
+            logger.log(Level.SEVERE, "Ignoring duplicate entry: " + configuration);
+            continue;
           }
           perMethodLogs.put(methodOrSvc, binLog);
           logger.info(String.format("Method binlog: method=%s log=%s", methodOrSvc, binLog));
         }
       }
-      enabled = true;
       this.globalLog = globalLog == null ? NOOP_LOG : globalLog;
+      this.perServiceLogs = Collections.unmodifiableMap(perServiceLogs);
+      this.perMethodLogs = Collections.unmodifiableMap(perMethodLogs);
     }
 
     /**
      * Accepts a full method name and returns the log that should be used.
      */
     public BinaryLog getLog(String fullMethodName) {
-      if (!enabled) {
-        return NOOP_LOG;
-      }
       BinaryLog methodLog = perMethodLogs.get(fullMethodName);
       if (methodLog != null) {
         return methodLog;
@@ -161,8 +184,8 @@ public final class BinaryLog {
     }
 
     /**
-     * Returns a binlog with the correct header and message limits. The input should be a string
-     * that is in one of these forms:
+     * Returns a binlog with the correct header and message limits or {@code null} if the input
+     * is malformed. The input should be a string that is in one of these forms:
      *
      * <p>{@code {h(:\d+)?}, {m(:\d+)?}, {h(:\d+)?,m(:\d+)?}}
      *
@@ -170,39 +193,48 @@ public final class BinaryLog {
      * Integer.MAX_VALUE.
      */
     @VisibleForTesting
+    @Nullable
     static BinaryLog createBinaryLog(@Nullable String logConfig) {
       if (logConfig == null) {
         return new BinaryLog(Integer.MAX_VALUE, Integer.MAX_VALUE);
       }
-      Matcher headerMatcher;
-      Matcher msgMatcher;
-      Matcher bothMatcher;
-      final int maxHeaderBytes;
-      final int maxMsgBytes;
-      if ((headerMatcher = headerRe.matcher(logConfig)).matches()) {
-        maxMsgBytes = 0;
-        String maxHeaderStr = headerMatcher.group(1);
-        maxHeaderBytes = maxHeaderStr != null ? Integer.parseInt(maxHeaderStr) : Integer.MAX_VALUE;
-      } else if ((msgMatcher = msgRe.matcher(logConfig)).matches()) {
-        maxHeaderBytes = 0;
-        String maxMsgStr = msgMatcher.group(1);
-        maxMsgBytes = maxMsgStr != null ? Integer.parseInt(maxMsgStr) : Integer.MAX_VALUE;
-      } else if ((bothMatcher = bothRe.matcher(logConfig)).matches()) {
-        String maxHeaderStr = bothMatcher.group(1);
-        String maxMsgStr = bothMatcher.group(2);
-        maxHeaderBytes = maxHeaderStr != null ? Integer.parseInt(maxHeaderStr) : Integer.MAX_VALUE;
-        maxMsgBytes = maxMsgStr != null ? Integer.parseInt(maxMsgStr) : Integer.MAX_VALUE;
-      } else {
-        throw new IllegalArgumentException("Illegal log config pattern: " + logConfig);
+      try {
+        Matcher headerMatcher;
+        Matcher msgMatcher;
+        Matcher bothMatcher;
+        final int maxHeaderBytes;
+        final int maxMsgBytes;
+        if ((headerMatcher = headerRe.matcher(logConfig)).matches()) {
+          String maxHeaderStr = headerMatcher.group(1);
+          maxHeaderBytes =
+              maxHeaderStr != null ? Integer.parseInt(maxHeaderStr) : Integer.MAX_VALUE;
+          maxMsgBytes = 0;
+        } else if ((msgMatcher = msgRe.matcher(logConfig)).matches()) {
+          maxHeaderBytes = 0;
+          String maxMsgStr = msgMatcher.group(1);
+          maxMsgBytes = maxMsgStr != null ? Integer.parseInt(maxMsgStr) : Integer.MAX_VALUE;
+        } else if ((bothMatcher = bothRe.matcher(logConfig)).matches()) {
+          String maxHeaderStr = bothMatcher.group(1);
+          String maxMsgStr = bothMatcher.group(2);
+          maxHeaderBytes =
+              maxHeaderStr != null ? Integer.parseInt(maxHeaderStr) : Integer.MAX_VALUE;
+          maxMsgBytes = maxMsgStr != null ? Integer.parseInt(maxMsgStr) : Integer.MAX_VALUE;
+        } else {
+          logger.log(Level.SEVERE, "Illegal log config pattern: " + logConfig);
+          return null;
+        }
+        return new BinaryLog(maxHeaderBytes, maxMsgBytes);
+      } catch (NumberFormatException e) {
+        logger.log(Level.SEVERE, "Illegal log config pattern: " + logConfig);
+        return null;
       }
-      return new BinaryLog(maxHeaderBytes, maxMsgBytes);
     }
 
     /**
      * Returns true if the input string is a glob of the form: {@code <package-service>/*}.
      */
     static boolean isServiceGlob(String input) {
-      return input.substring(input.lastIndexOf('/')).equals("/*");
+      return input.endsWith("/*");
     }
   }
 }

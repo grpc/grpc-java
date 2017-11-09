@@ -17,8 +17,7 @@
 package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.assertNull;
 
 import io.grpc.internal.BinaryLog.Factory;
 import org.junit.Test;
@@ -37,13 +36,6 @@ public final class BinaryLogTest {
   private static final BinaryLog BOTH_FULL =
       new Builder().header(Integer.MAX_VALUE).msg(Integer.MAX_VALUE).build();
   
-
-  @Test
-  public void noConfiguration() throws Exception {
-    Factory factory = new Factory(null);
-    assertEquals(NONE, factory.getLog("p.s/m"));
-    assertEquals(NONE, factory.getLog("/p.s/m"));
-  }
 
   @Test
   public void configBinLog_global() throws Exception {
@@ -123,6 +115,20 @@ public final class BinaryLogTest {
   }
 
   @Test
+  public void createLogFromOptionString_malformed() throws Exception {
+    assertNull(Factory.createBinaryLog("bad"));
+    assertNull(Factory.createBinaryLog("{bad}"));
+    assertNull(Factory.createBinaryLog("{x;y}"));
+    assertNull(Factory.createBinaryLog("{h:abc}"));
+    assertNull(Factory.createBinaryLog("{2}"));
+    assertNull(Factory.createBinaryLog("{2;2}"));
+    // The grammar specifies that if both h and m are present, h comes before m
+    assertNull(Factory.createBinaryLog("{m:123;h:123}"));
+    // NumberFormatException
+    assertNull(Factory.createBinaryLog("{h:99999999999999}"));
+  }
+
+  @Test
   public void configBinLog_multiConfig_withGlobal() throws Exception {
     Factory factory = new Factory(
         "*{h},"
@@ -168,33 +174,34 @@ public final class BinaryLogTest {
   }
 
   @Test
-  public void configBinLog_duplicateGlobal() throws Exception {
-    try {
-      new Factory("*{h},p.s/m,*{h:256}");
-      fail();
-    } catch (IllegalArgumentException expected) {
-      assertTrue(expected.getMessage().equals("Duplicate log config for: *"));
-    }
+  public void configBinLog_ignoreDuplicates_global() throws Exception {
+    Factory factory = new Factory("*{h},p.s/m,*{h:256}");
+    // The duplicate
+    assertEquals(HEADER_FULL, factory.getLog("p.other1/m"));
+    assertEquals(HEADER_FULL, factory.getLog("p.other2/m"));
+    // Other
+    assertEquals(BOTH_FULL, factory.getLog("p.s/m"));
   }
 
   @Test
-  public void configBinLog_duplicateMethod() throws Exception {
-    try {
-      new Factory("p.s/m,*{h:256},p.s/m{h}");
-      fail();
-    } catch (IllegalArgumentException expected) {
-      assertTrue(expected.getMessage().startsWith("Duplicate log config for method:"));
-    }
+  public void configBinLog_ignoreDuplicates_service() throws Exception {
+    Factory factory = new Factory("p.s/*,*{h:256},p.s/*{h}");
+    // The duplicate
+    assertEquals(BOTH_FULL, factory.getLog("p.s/m1"));
+    assertEquals(BOTH_FULL, factory.getLog("p.s/m2"));
+    // Other
+    assertEquals(HEADER_256, factory.getLog("p.other1/m"));
+    assertEquals(HEADER_256, factory.getLog("p.other2/m"));
   }
 
   @Test
-  public void configBinLog_duplicateService() throws Exception {
-    try {
-      new Factory("p.s/*,*{h:256},p.s/*{h}");
-      fail();
-    } catch (IllegalArgumentException expected) {
-      assertTrue(expected.getMessage().startsWith("Duplicate log config for service:"));
-    }
+  public void configBinLog_ignoreDuplicates_method() throws Exception {
+    Factory factory = new Factory("p.s/m,*{h:256},p.s/m{h}");
+    // The duplicate
+    assertEquals(BOTH_FULL, factory.getLog("p.s/m"));
+    // Other
+    assertEquals(HEADER_256, factory.getLog("p.other1/m"));
+    assertEquals(HEADER_256, factory.getLog("p.other2/m"));
   }
 
   /** A builder class to make unit test code more readable. */
