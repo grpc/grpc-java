@@ -60,7 +60,6 @@ class NettyClientStream extends AbstractClientStream {
   private AsciiString authority;
   private final AsciiString scheme;
   private final AsciiString userAgent;
-  private final TransportTracer transportTracer;
 
   NettyClientStream(
       TransportState state,
@@ -85,7 +84,6 @@ class NettyClientStream extends AbstractClientStream {
     this.authority = checkNotNull(authority, "authority");
     this.scheme = checkNotNull(scheme, "scheme");
     this.userAgent = userAgent;
-    this.transportTracer = transportTracer;
   }
 
   @Override
@@ -177,7 +175,7 @@ class NettyClientStream extends AbstractClientStream {
                   // Remove the bytes from outbound flow control, optionally notifying
                   // the client that they can send more bytes.
                   transportState().onSentBytes(numBytes);
-                  transportTracer.reportMessageSent(numMessages);
+                  NettyClientStream.this.getTransportTracer().reportMessageSent(numMessages);
                 }
               }
             }), flush);
