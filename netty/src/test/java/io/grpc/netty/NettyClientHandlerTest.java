@@ -684,6 +684,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         transportTracer);
   }
 
+  // TODO(zpencer): move this to NettyHandlerTestBase
   @Test
   public void transportTracer_windowSizeDefault() throws Exception {
     TransportTracer.Stats stats = transportTracer.getStats();
@@ -691,6 +692,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     assertEquals(flowControlWindow, stats.localFlowControlWindow);
   }
 
+  // TODO(zpencer): move this to NettyHandlerTestBase
   @Test
   public void transportTracer_windowSize() throws Exception {
     flowControlWindow = 1048576; // 1MiB
