@@ -17,6 +17,8 @@
 package io.grpc.cronet;
 
 import io.grpc.CallOptions;
+import java.util.HashSet;
+import java.util.Set;
 
 /** Call options for use with the Cronet transport. */
 public final class CronetCallOptions {
@@ -27,8 +29,34 @@ public final class CronetCallOptions {
    * get Cronet metrics from {@link org.chromium.net.RequestFinishedInfo.Listener} with the same
    * annotation object.
    *
-   * The Object must not be null.
+   * <p>The Object must not be null.
+   *
+   * @deprecated Use {@link CronetCallOptions#withAnnotation} instead.
    */
-    public static final CallOptions.Key<Object> CRONET_ANNOTATION_KEY =
+  @Deprecated
+  public static final CallOptions.Key<Object> CRONET_ANNOTATION_KEY =
       CallOptions.Key.of("cronet-annotation", null);
+
+  /**
+   * Returns a copy of {@code callOptions} with {@code annotation} included in the set of Cronet
+   * annotation objects. When an RPC is made using a {@link CallOptions} instance returned by this
+   * method, the annotation objects will be attached to the underlying Cronet bidirectional stream.
+   * When the stream finishes, the user can retrieve the annotation object(s) via {@link
+   * org.chromium.net.RequestFinishedInfo.Listener}.
+   *
+   * @param annotation the object to attach to the Cronet stream
+   */
+  public static CallOptions withAnnotation(CallOptions callOptions, Object annotation) {
+    Set<Object> annotations = callOptions.getOption(CRONET_ANNOTATIONS_KEY);
+    if (annotations != null) {
+      annotations.add(annotation);
+    } else {
+      annotations = new HashSet<Object>();
+      annotations.add(annotation);
+    }
+    return callOptions.withOption(CronetCallOptions.CRONET_ANNOTATIONS_KEY, annotations);
+  }
+
+  static final CallOptions.Key<Set<Object>> CRONET_ANNOTATIONS_KEY =
+      CallOptions.Key.of("cronet-annotations", null);
 }
