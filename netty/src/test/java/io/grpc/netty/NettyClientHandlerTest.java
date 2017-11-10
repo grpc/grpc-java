@@ -70,7 +70,6 @@ import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoop;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
-import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
@@ -106,7 +105,6 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   private NettyClientStream.TransportState streamTransportState;
   private Http2Headers grpcHeaders;
   private long nanoTime; // backs a ticker, for testing ping round-trip time measurement
-  private int flowControlWindow = DEFAULT_WINDOW_SIZE;
   private int maxHeaderListSize = Integer.MAX_VALUE;
   private int streamId = 3;
   private ClientTransportLifecycleManager lifecycleManager;
@@ -117,7 +115,6 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   private Runnable tooManyPingsRunnable = new Runnable() {
     @Override public void run() {}
   };
-  private TransportTracer transportTracer = new TransportTracer();
 
   @Rule
   public TestName testNameRule = new TestName();
@@ -682,32 +679,6 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         stopwatchSupplier,
         tooManyPingsRunnable,
         transportTracer);
-  }
-
-  // TODO(zpencer): move this to NettyHandlerTestBase
-  @Test
-  public void transportTracer_windowSizeDefault() throws Exception {
-    TransportTracer.Stats stats = transportTracer.getStats();
-    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, stats.remoteFlowControlWindow);
-    assertEquals(flowControlWindow, stats.localFlowControlWindow);
-  }
-
-  // TODO(zpencer): move this to NettyHandlerTestBase
-  @Test
-  public void transportTracer_windowSize() throws Exception {
-    flowControlWindow = 1048576; // 1MiB
-    setUp();
-    TransportTracer.Stats before = transportTracer.getStats();
-    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, before.remoteFlowControlWindow);
-    assertEquals(flowControlWindow, before.localFlowControlWindow);
-
-    ByteBuf serializedSettings = windowUpdate(0, 1000);
-    channelRead(serializedSettings);
-
-    TransportTracer.Stats after = transportTracer.getStats();
-    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE + 1000,
-        after.remoteFlowControlWindow);
-    assertEquals(flowControlWindow, after.localFlowControlWindow);
   }
 
   @Override

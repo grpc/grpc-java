@@ -29,7 +29,6 @@ import static io.grpc.netty.Utils.HTTP_METHOD;
 import static io.grpc.netty.Utils.TE_HEADER;
 import static io.grpc.netty.Utils.TE_TRAILERS;
 import static io.netty.buffer.Unpooled.directBuffer;
-import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -126,7 +125,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   final Queue<InputStream> streamListenerMessageQueue = new LinkedList<InputStream>();
 
-  private int flowControlWindow = DEFAULT_WINDOW_SIZE;
   private int maxConcurrentStreams = Integer.MAX_VALUE;
   private int maxHeaderListSize = Integer.MAX_VALUE;
   private boolean permitKeepAliveWithoutCalls = true;
@@ -136,7 +134,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
   private long keepAliveTimeInNanos = DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
   private long keepAliveTimeoutInNanos = DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
-  private TransportTracer transportTracer = new TransportTracer();
 
   private class ServerTransportListenerImpl implements ServerTransportListener {
 
