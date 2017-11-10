@@ -472,6 +472,7 @@ public final class ProtocolNegotiators {
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
       fail(ctx, cause);
+      super.exceptionCaught(ctx, cause);
     }
 
     /**
