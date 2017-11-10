@@ -86,7 +86,7 @@ public final class InProcessChannelBuilder extends
   public InProcessChannelBuilder useTransportSecurity() {
     return this;
   }
-  
+
   /**
    * Does nothing.
    */

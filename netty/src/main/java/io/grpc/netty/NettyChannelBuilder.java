@@ -236,7 +236,7 @@ public final class NettyChannelBuilder
   }
 
   /**
-   * Equivalent to using {@link #negotiationType(NegotiationType)} with {@code TLS}
+   * Equivalent to using {@link #negotiationType(NegotiationType)} with {@code TLS}.
    */
   @Override
   public NettyChannelBuilder useTransportSecurity() {
