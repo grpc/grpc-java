@@ -42,7 +42,6 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.ssl.SslContext;
-
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.HashMap;
@@ -187,7 +186,6 @@ public final class NettyChannelBuilder
       GrpcSslContexts.ensureAlpnAndH2Enabled(sslContext.applicationProtocolNegotiator());
     }
     this.sslContext = sslContext;
-    this.negotiationType = NegotiationType.TLS;
     return this;
   }
 

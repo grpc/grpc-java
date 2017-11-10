@@ -363,10 +363,5 @@ public class AbstractManagedChannelImplBuilderTest {
     public Builder usePlaintext(boolean value) {
       throw new UnsupportedOperationException();
     }
-
-    @Override
-    public Builder useTransportSecurity() {
-      throw new UnsupportedOperationException();
-    }
   }
 }

@@ -24,7 +24,6 @@ import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
-
 import java.net.SocketAddress;
 import java.util.concurrent.ScheduledExecutorService;
 
