@@ -467,7 +467,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
   @Test
   public void transportTracer_windowSize() throws Exception {
     flowControlWindow = 1024 * 1024;
-    this.manualSetUp();
+    manualSetUp();
     TransportTracer.Stats stats = transportTracer.getStats();
     assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, stats.remoteFlowControlWindow);
     assertEquals(flowControlWindow, stats.localFlowControlWindow);

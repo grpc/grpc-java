@@ -26,7 +26,6 @@ import static io.grpc.netty.Utils.STATUS_OK;
 import static io.grpc.netty.Utils.TE_HEADER;
 import static io.grpc.netty.Utils.TE_TRAILERS;
 import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_PRIORITY_WEIGHT;
-import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -124,6 +123,11 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   private ClientStreamListener streamListener;
 
   private final Queue<InputStream> streamListenerMessageQueue = new LinkedList<InputStream>();
+
+  @Override
+  protected void manualSetUp() throws Exception {
+    setUp();
+  }
 
   /**
    * Set up for test.
