@@ -38,7 +38,6 @@ import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.okhttp.internal.Platform;
-
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.GeneralSecurityException;

@@ -130,11 +130,6 @@ public class ManagedChannelImplIdlenessTest {
       @Override public Builder usePlaintext(boolean b) {
         throw new UnsupportedOperationException();
       }
-
-      @Override
-      public Builder useTransportSecurity() {
-        throw new UnsupportedOperationException();
-      }
     }
 
     Builder builder = new Builder("fake://target")

@@ -20,7 +20,6 @@ import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
-
 /**
  * A builder for {@link ManagedChannel} instances.
  *

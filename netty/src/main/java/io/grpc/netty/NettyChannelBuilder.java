@@ -177,7 +177,6 @@ public final class NettyChannelBuilder
   /**
    * SSL/TLS context to use instead of the system default. It must have been configured with {@link
    * GrpcSslContexts}, but options could have been overridden.
-   * Also sets the {@link NegotiationType} to TLS.
    */
   public NettyChannelBuilder sslContext(SslContext sslContext) {
     if (sslContext != null) {
