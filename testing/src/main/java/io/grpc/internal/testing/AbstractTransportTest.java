@@ -1424,6 +1424,7 @@ public abstract class AbstractTransportTest {
 
     // lastStreamCreatedTimeNanos is converted from the system milli clock. Sleep a bit to ensure
     // it has moved forward in time.
+    // TODO(zpencer): plumb in a fake clock instead
     Thread.sleep(5);
 
     // start second stream
