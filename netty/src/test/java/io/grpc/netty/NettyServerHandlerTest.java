@@ -789,7 +789,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     TransportTracer.Stats after = transportTracer.getStats();
     assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, after.remoteFlowControlWindow);
     assertEquals(flowControlWindow + 8 * Http2CodecUtil.DEFAULT_WINDOW_SIZE,
-        connection().local().flowController().windowSize(connection().connectionStream()));
+        after.localFlowControlWindow);
   }
 
   private void createStream() throws Exception {
