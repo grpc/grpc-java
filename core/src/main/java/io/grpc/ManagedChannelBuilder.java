@@ -165,6 +165,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *
    * @return this
    * @throws UnsupportedOperationException if transport security is not supported.
+   * @since 1.9.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3713")
   public T useTransportSecurity() {
