@@ -1422,6 +1422,10 @@ public abstract class AbstractTransportTest {
       serverStream.close(Status.OK, new Metadata());
     }
 
+    // lastStreamCreatedTimeNanos is converted from the system milli clock. Sleep a bit to ensure
+    // it has moved forward in time.
+    Thread.sleep(5);
+
     // start second stream
     {
       TransportTracer.Stats serverBefore =
