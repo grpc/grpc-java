@@ -1,7 +1,7 @@
 java_library(
     name = "core",
     srcs = glob([
-        "src/main/java/io/grpc/*.java",
+        "src/main/java/io/grpc/**/*.java",
     ]),
     resources = glob([
         "src/main/resources/**",
