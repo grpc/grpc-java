@@ -22,6 +22,7 @@ import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.ExperimentalApi;
@@ -205,9 +206,11 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     super.setStatsEnabled(value);
   }
 
-  @Override
-  protected void setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
-    super.setTransportTracerFactory(transportTracerFactory);
+  @VisibleForTesting
+  NettyServerBuilder setTransportTracerFactory(
+      TransportTracer.Factory transportTracerFactory) {
+    super.setTransportTracerFactoryHelper(transportTracerFactory);
+    return this;
   }
 
   /**

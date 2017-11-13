@@ -372,7 +372,7 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   @VisibleForTesting
-  protected void setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
+  protected void setTransportTracerFactoryHelper(TransportTracer.Factory transportTracerFactory) {
     this.transportTracerFactory = transportTracerFactory;
   }
 

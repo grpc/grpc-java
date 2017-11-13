@@ -191,10 +191,10 @@ public abstract class AbstractTransportTest {
   }
 
   /**
-   * Moves the clock foward, for tests that require moving the clock fowrard. It is the transport
+   * Moves the clock forward, for tests that require moving the clock forward. It is the transport
    * subclass's responsibility to implement this method.
    */
-  protected void advanceClock(long nanos) {
+  protected void advanceClock(long offset, TimeUnit unit) {
     throw new UnsupportedOperationException();
   }
 
@@ -1439,8 +1439,8 @@ public abstract class AbstractTransportTest {
       serverStream.close(Status.OK, new Metadata());
     }
 
-    final long elapsedNanos = TimeUnit.MILLISECONDS.toNanos(100);
-    advanceClock(elapsedNanos);
+    final long elapsedMillis = 100;
+    advanceClock(100, TimeUnit.MILLISECONDS);
 
     // start second stream
     {
@@ -1460,7 +1460,8 @@ public abstract class AbstractTransportTest {
           serverTransportListener.transport.getTransportStats().get();
       assertEquals(2, serverAfter.streamsStarted);
       assertEquals(
-          elapsedNanos, serverAfter.lastStreamCreatedTimeNanos - serverFirstTimestampNanos);
+          TimeUnit.MILLISECONDS.toNanos(elapsedMillis),
+          serverAfter.lastStreamCreatedTimeNanos - serverFirstTimestampNanos);
       long serverSecondTimestamp =
           TimeUnit.NANOSECONDS.toMillis(serverAfter.lastStreamCreatedTimeNanos);
       assertEquals(currentTimeMillis(), serverSecondTimestamp);
@@ -1468,7 +1469,8 @@ public abstract class AbstractTransportTest {
       TransportTracer.Stats clientAfter = client.getTransportStats().get();
       assertEquals(2, clientAfter.streamsStarted);
       assertEquals(
-          elapsedNanos, clientAfter.lastStreamCreatedTimeNanos - clientFirstTimestampNanos);
+          TimeUnit.MILLISECONDS.toNanos(elapsedMillis),
+          clientAfter.lastStreamCreatedTimeNanos - clientFirstTimestampNanos);
       long clientSecondTimestamp =
           TimeUnit.NANOSECONDS.toMillis(clientAfter.lastStreamCreatedTimeNanos);
       assertEquals(currentTimeMillis(), clientSecondTimestamp);

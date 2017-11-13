@@ -18,7 +18,6 @@ package io.grpc.netty;
 
 import io.grpc.Internal;
 import io.grpc.internal.ProxyParameters;
-import io.grpc.internal.TransportTracer;
 import java.net.SocketAddress;
 
 /**
@@ -69,11 +68,6 @@ public final class InternalNettyChannelBuilder {
 
   public static void setTracingEnabled(NettyChannelBuilder builder, boolean value) {
     builder.setTracingEnabled(value);
-  }
-
-  public static void setTransportTracerFactorty(
-      NettyChannelBuilder builder, TransportTracer.Factory factory) {
-    builder.setTransportTracerFactory(factory);
   }
 
   private InternalNettyChannelBuilder() {}

@@ -25,6 +25,7 @@ import io.grpc.internal.TransportTracer;
 import io.grpc.internal.testing.AbstractTransportTest;
 import java.net.InetSocketAddress;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -49,11 +50,12 @@ public class NettyTransportTest extends AbstractTransportTest {
 
   /** Creates a test object. */
   public NettyTransportTest() {
-    // Although specified here, address is ignored because we never call build.
-    NettyChannelBuilder builder = NettyChannelBuilder.forAddress("localhost", 0);
-    InternalNettyChannelBuilder.setTransportTracerFactorty(builder, fakeClockTransportTracer);
-    clientFactory = builder.flowControlWindow(65 * 1024)
+    clientFactory = NettyChannelBuilder
+        // Although specified here, address is ignored because we never call build.
+        .forAddress("localhost", 0)
+        .flowControlWindow(65 * 1024)
         .negotiationType(NegotiationType.PLAINTEXT)
+        .setTransportTracerFactory(fakeClockTransportTracer)
         .buildTransportFactory();
   }
 
@@ -69,10 +71,9 @@ public class NettyTransportTest extends AbstractTransportTest {
 
   @Override
   protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
-    NettyServerBuilder builder = NettyServerBuilder.forPort(0);
-    InternalNettyServerBuilder.setTransportTracerFactorty(builder, fakeClockTransportTracer);
-    return builder
+    return NettyServerBuilder.forPort(0)
         .flowControlWindow(65 * 1024)
+        .setTransportTracerFactory(fakeClockTransportTracer)
         .buildTransportServer(streamTracerFactories);
   }
 
@@ -80,9 +81,10 @@ public class NettyTransportTest extends AbstractTransportTest {
   protected InternalServer newServer(
       InternalServer server, List<ServerStreamTracer.Factory> streamTracerFactories) {
     int port = server.getPort();
-    NettyServerBuilder builder = NettyServerBuilder.forPort(port);
-    InternalNettyServerBuilder.setTransportTracerFactorty(builder, fakeClockTransportTracer);
-    return builder.flowControlWindow(65 * 1024)
+    return NettyServerBuilder
+        .forPort(port)
+        .flowControlWindow(65 * 1024)
+        .setTransportTracerFactory(fakeClockTransportTracer)
         .buildTransportServer(streamTracerFactories);
   }
 
@@ -92,8 +94,8 @@ public class NettyTransportTest extends AbstractTransportTest {
   }
 
   @Override
-  protected void advanceClock(long nanos) {
-    fakeClock.forwardNanos(nanos);
+  protected void advanceClock(long offset, TimeUnit unit) {
+    fakeClock.forwardNanos(unit.toNanos(offset));
   }
 
   @Override

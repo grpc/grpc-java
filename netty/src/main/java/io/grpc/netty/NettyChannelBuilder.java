@@ -410,11 +410,12 @@ public final class NettyChannelBuilder
     super.setStatsEnabled(value);
   }
 
-  @Override
-  protected void setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
-    super.setTransportTracerFactory(transportTracerFactory);
+  @VisibleForTesting
+  NettyChannelBuilder setTransportTracerFactory(
+      TransportTracer.Factory transportTracerFactory) {
+    super.setTransportTracerFactoryHelper(transportTracerFactory);
+    return this;
   }
-
 
   interface TransportCreationParamsFilterFactory {
     @CheckReturnValue
