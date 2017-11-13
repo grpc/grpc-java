@@ -206,7 +206,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   }
 
   @Override
-  protected final void setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
+  protected void setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
     super.setTransportTracerFactory(transportTracerFactory);
   }
 
