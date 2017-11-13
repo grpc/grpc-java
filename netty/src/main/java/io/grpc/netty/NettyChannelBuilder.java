@@ -322,7 +322,7 @@ public final class NettyChannelBuilder
     return new NettyTransportFactory(dynamicParamsFactory, channelType, channelOptions,
         negotiationType, sslContext, eventLoopGroup, flowControlWindow, maxInboundMessageSize(),
         maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
-        getTransportTracerFactory().create());
+        transportTracerFactory.create());
   }
 
   @Override
@@ -411,9 +411,8 @@ public final class NettyChannelBuilder
   }
 
   @VisibleForTesting
-  NettyChannelBuilder setTransportTracerFactory(
-      TransportTracer.Factory transportTracerFactory) {
-    super.setTransportTracerFactoryHelper(transportTracerFactory);
+  NettyChannelBuilder setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
+    this.transportTracerFactory = transportTracerFactory;
     return this;
   }
 

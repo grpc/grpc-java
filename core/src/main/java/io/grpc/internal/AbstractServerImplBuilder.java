@@ -266,11 +266,6 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
     return tracerFactories;
   }
 
-  @VisibleForTesting
-  protected void setTransportTracerFactoryHelper(TransportTracer.Factory transportTracerFactory) {
-    this.transportTracerFactory = transportTracerFactory;
-  }
-
   /**
    * Children of AbstractServerBuilder should override this method to provide transport specific
    * information for the server.  This method is mean for Transport implementors and should not be

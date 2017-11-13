@@ -124,9 +124,9 @@ public abstract class AbstractManagedChannelImplBuilder
 
   long idleTimeoutMillis = IDLE_MODE_DEFAULT_TIMEOUT_MILLIS;
 
-  private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
+  protected TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
 
-  private TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
+  private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 
   /**
    * Sets the maximum message size allowed for a single gRPC frame. If an inbound messages
@@ -369,15 +369,6 @@ public abstract class AbstractManagedChannelImplBuilder
       effectiveInterceptors.add(0, censusTracing.getClientInterceptor());
     }
     return effectiveInterceptors;
-  }
-
-  @VisibleForTesting
-  protected void setTransportTracerFactoryHelper(TransportTracer.Factory transportTracerFactory) {
-    this.transportTracerFactory = transportTracerFactory;
-  }
-
-  protected TransportTracer.Factory getTransportTracerFactory() {
-    return transportTracerFactory;
   }
 
   /**

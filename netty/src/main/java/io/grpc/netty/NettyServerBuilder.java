@@ -207,9 +207,8 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   }
 
   @VisibleForTesting
-  NettyServerBuilder setTransportTracerFactory(
-      TransportTracer.Factory transportTracerFactory) {
-    super.setTransportTracerFactoryHelper(transportTracerFactory);
+  NettyServerBuilder setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
+    this.transportTracerFactory = transportTracerFactory;
     return this;
   }
 
