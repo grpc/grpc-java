@@ -361,22 +361,20 @@ class NettyServerHandler extends AbstractNettyHandler {
     }
 
 
-    if (transportTracer != null) {
-      assert encoder().connection().equals(decoder().connection());
-      final Http2Connection connection = encoder().connection();
-      transportTracer.setFlowControlWindowReader(new TransportTracer.FlowControlReader() {
-        private final Http2FlowController local = connection.local().flowController();
-        private final Http2FlowController remote = connection.remote().flowController();
+    assert encoder().connection().equals(decoder().connection());
+    final Http2Connection connection = encoder().connection();
+    transportTracer.setFlowControlWindowReader(new TransportTracer.FlowControlReader() {
+      private final Http2FlowController local = connection.local().flowController();
+      private final Http2FlowController remote = connection.remote().flowController();
 
-        @Override
-        public TransportTracer.FlowControlWindows read() {
-          assert ctx.executor().inEventLoop();
-          return new TransportTracer.FlowControlWindows(
-              local.windowSize(connection.connectionStream()),
-              remote.windowSize(connection.connectionStream()));
-        }
-      });
-    }
+      @Override
+      public TransportTracer.FlowControlWindows read() {
+        assert ctx.executor().inEventLoop();
+        return new TransportTracer.FlowControlWindows(
+            local.windowSize(connection.connectionStream()),
+            remote.windowSize(connection.connectionStream()));
+      }
+    });
 
     super.handlerAdded(ctx);
   }
@@ -809,16 +807,14 @@ class NettyServerHandler extends AbstractNettyHandler {
           // slice KEEPALIVE_PING_BUF because tls handler may modify the reader index
           ctx, false /* isAck */, KEEPALIVE_PING_BUF.slice(), ctx.newPromise());
       ctx.flush();
-      if (transportTracer != null) {
-        pingFuture.addListener(new ChannelFutureListener() {
-          @Override
-          public void operationComplete(ChannelFuture future) throws Exception {
-            if (future.isSuccess()) {
-              transportTracer.reportKeepAliveSent();
-            }
+      pingFuture.addListener(new ChannelFutureListener() {
+        @Override
+        public void operationComplete(ChannelFuture future) throws Exception {
+          if (future.isSuccess()) {
+            transportTracer.reportKeepAliveSent();
           }
-        });
-      }
+        }
+      });
     }
 
     @Override
