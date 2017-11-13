@@ -46,18 +46,13 @@ public class NettyTransportTest extends AbstractTransportTest {
   // Avoid LocalChannel for testing because LocalChannel can fail with
   // io.netty.channel.ChannelException instead of java.net.ConnectException which breaks
   // serverNotListening test.
-  private final ClientTransportFactory clientFactory;
-
-  /** Creates a test object. */
-  public NettyTransportTest() {
-    clientFactory = NettyChannelBuilder
-        // Although specified here, address is ignored because we never call build.
-        .forAddress("localhost", 0)
-        .flowControlWindow(65 * 1024)
-        .negotiationType(NegotiationType.PLAINTEXT)
-        .setTransportTracerFactory(fakeClockTransportTracer)
-        .buildTransportFactory();
-  }
+  private final ClientTransportFactory clientFactory = NettyChannelBuilder
+      // Although specified here, address is ignored because we never call build.
+      .forAddress("localhost", 0)
+      .flowControlWindow(65 * 1024)
+      .negotiationType(NegotiationType.PLAINTEXT)
+      .setTransportTracerFactory(fakeClockTransportTracer)
+      .buildTransportFactory();
 
   @Override
   protected boolean haveTransportTracer() {
