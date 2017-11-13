@@ -65,6 +65,7 @@ import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ManagedClientTransport;
+import io.grpc.internal.SerializingExecutor;
 import io.grpc.okhttp.OkHttpClientTransport.ClientFrameHandler;
 import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.framed.ErrorCode;
@@ -129,7 +130,8 @@ public class OkHttpClientTransportTest {
   private ManagedClientTransport.Listener transportListener;
   private OkHttpClientTransport clientTransport;
   private MockFrameReader frameReader;
-  private ExecutorService executor;
+  private ExecutorService executor = Executors.newCachedThreadPool();
+  private final SerializingExecutor serializingExecutor = new SerializingExecutor(executor);
   private long nanoTime; // backs a ticker, for testing ping round-trip time measurement
   private SettableFuture<Void> connectedFuture;
   private DelayConnectedCallback delayConnectedCallback;
@@ -143,7 +145,6 @@ public class OkHttpClientTransportTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    executor = Executors.newCachedThreadPool();
     when(frameWriter.maxDataLength()).thenReturn(Integer.MAX_VALUE);
     frameReader = new MockFrameReader();
   }
@@ -184,6 +185,7 @@ public class OkHttpClientTransportTest {
     clientTransport = new OkHttpClientTransport(
         userAgent,
         executor,
+        serializingExecutor,
         frameReader,
         frameWriter,
         startId,
@@ -1234,9 +1236,14 @@ public class OkHttpClientTransportTest {
     initTransport();
     PingCallbackImpl callback1 = new PingCallbackImpl();
     clientTransport.ping(callback1, MoreExecutors.directExecutor());
+    runAllQueuedSerializingExecutorTasks();
+    // TODO(zpencer): uncomment when okhttpclient has transport tracer
+    // assertEquals(1, clientTransport.getTransportStats().get().keepAlivesSent);
     // add'l ping will be added as listener to outstanding operation
     PingCallbackImpl callback2 = new PingCallbackImpl();
     clientTransport.ping(callback2, MoreExecutors.directExecutor());
+    // TODO(zpencer): uncomment when okhttpclient has transport tracer
+    // assertEquals(1, clientTransport.getTransportStats().get().keepAlivesSent);
 
     ArgumentCaptor<Integer> captor1 = ArgumentCaptor.forClass(int.class);
     ArgumentCaptor<Integer> captor2 = ArgumentCaptor.forClass(int.class);
@@ -1269,6 +1276,9 @@ public class OkHttpClientTransportTest {
     // now that previous ping is done, next request returns a different future
     callback1 = new PingCallbackImpl();
     clientTransport.ping(callback1, MoreExecutors.directExecutor());
+    runAllQueuedSerializingExecutorTasks();
+    // TODO(zpencer): uncomment when okhttpclient has transport tracer
+    // assertEquals(2, clientTransport.getTransportStats().get().keepAlivesSent);
     assertEquals(0, callback1.invocationCount);
     shutdownAndVerify();
   }
@@ -1276,46 +1286,70 @@ public class OkHttpClientTransportTest {
   @Test
   public void ping_failsWhenTransportShutdown() throws Exception {
     initTransport();
-    PingCallbackImpl callback = new PingCallbackImpl();
-    clientTransport.ping(callback, MoreExecutors.directExecutor());
-    assertEquals(0, callback.invocationCount);
+    {
+      PingCallbackImpl callback = new PingCallbackImpl();
+      clientTransport.ping(callback, MoreExecutors.directExecutor());
+      runAllQueuedSerializingExecutorTasks();
+      // transport tracer: ping is already sent on the wire
+      // TODO(zpencer): uncomment when okhttpclient has transport tracer
+      // assertEquals(1, clientTransport.getTransportStats().get().keepAlivesSent);
+      assertEquals(0, callback.invocationCount);
 
-    clientTransport.shutdown(SHUTDOWN_REASON);
-    // ping failed on channel shutdown
-    assertEquals(1, callback.invocationCount);
-    assertTrue(callback.failureCause instanceof StatusException);
-    assertSame(SHUTDOWN_REASON, ((StatusException) callback.failureCause).getStatus());
+      clientTransport.shutdown(SHUTDOWN_REASON);
+      // ping failed on channel shutdown
+      assertEquals(1, callback.invocationCount);
+      assertTrue(callback.failureCause instanceof StatusException);
+      assertSame(SHUTDOWN_REASON, ((StatusException) callback.failureCause).getStatus());
+    }
 
-    // now that handler is in terminal state, all future pings fail immediately
-    callback = new PingCallbackImpl();
-    clientTransport.ping(callback, MoreExecutors.directExecutor());
-    assertEquals(1, callback.invocationCount);
-    assertTrue(callback.failureCause instanceof StatusException);
-    assertSame(SHUTDOWN_REASON, ((StatusException) callback.failureCause).getStatus());
+    {
+      // now that handler is in terminal state, all future pings fail immediately
+      PingCallbackImpl callback = new PingCallbackImpl();
+      clientTransport.ping(callback, MoreExecutors.directExecutor());
+      runAllQueuedSerializingExecutorTasks();
+      // transport tracer: no more pings can be sent on the wire
+      // TODO(zpencer): uncomment when okhttpclient has transport tracer
+      // assertEquals(1, clientTransport.getTransportStats().get().keepAlivesSent);
+      assertEquals(1, callback.invocationCount);
+      assertTrue(callback.failureCause instanceof StatusException);
+      assertSame(SHUTDOWN_REASON, ((StatusException) callback.failureCause).getStatus());
+    }
     shutdownAndVerify();
   }
 
   @Test
   public void ping_failsIfTransportFails() throws Exception {
     initTransport();
-    PingCallbackImpl callback = new PingCallbackImpl();
-    clientTransport.ping(callback, MoreExecutors.directExecutor());
-    assertEquals(0, callback.invocationCount);
+    {
+      PingCallbackImpl callback = new PingCallbackImpl();
+      clientTransport.ping(callback, MoreExecutors.directExecutor());
+      runAllQueuedSerializingExecutorTasks();
+      // transport tracer: ping is already sent on the wire
+      // TODO(zpencer): uncomment when okhttpclient has transport tracer
+      // assertEquals(1, clientTransport.getTransportStats().get().keepAlivesSent);
+      assertEquals(0, callback.invocationCount);
 
-    clientTransport.onException(new IOException());
-    // ping failed on error
-    assertEquals(1, callback.invocationCount);
-    assertTrue(callback.failureCause instanceof StatusException);
-    assertEquals(Status.Code.UNAVAILABLE,
-        ((StatusException) callback.failureCause).getStatus().getCode());
+      clientTransport.onException(new IOException());
+      // ping failed on error
+      assertEquals(1, callback.invocationCount);
+      assertTrue(callback.failureCause instanceof StatusException);
+      assertEquals(Status.Code.UNAVAILABLE,
+          ((StatusException) callback.failureCause).getStatus().getCode());
+    }
 
-    // now that handler is in terminal state, all future pings fail immediately
-    callback = new PingCallbackImpl();
-    clientTransport.ping(callback, MoreExecutors.directExecutor());
-    assertEquals(1, callback.invocationCount);
-    assertTrue(callback.failureCause instanceof StatusException);
-    assertEquals(Status.Code.UNAVAILABLE,
-        ((StatusException) callback.failureCause).getStatus().getCode());
+    {
+      // now that handler is in terminal state, all future pings fail immediately
+      PingCallbackImpl callback = new PingCallbackImpl();
+      clientTransport.ping(callback, MoreExecutors.directExecutor());
+      runAllQueuedSerializingExecutorTasks();
+      // transport tracer: no more pings can be sent on the wire
+      // TODO(zpencer): uncomment when okhttpclient has transport tracer
+      // assertEquals(1, clientTransport.getTransportStats().get().keepAlivesSent);
+      assertEquals(1, callback.invocationCount);
+      assertTrue(callback.failureCause instanceof StatusException);
+      assertEquals(Status.Code.UNAVAILABLE,
+          ((StatusException) callback.failureCause).getStatus().getCode());
+    }
     shutdownAndVerify();
   }
 
@@ -1391,7 +1425,7 @@ public class OkHttpClientTransportTest {
         new InetSocketAddress("host", 1234),
         "invalid_authority",
         "userAgent",
-        executor,
+        serializingExecutor,
         null,
         null,
         ConnectionSpec.CLEARTEXT,
@@ -1414,7 +1448,7 @@ public class OkHttpClientTransportTest {
         new InetSocketAddress("localhost", 0),
         "authority",
         "userAgent",
-        executor,
+        serializingExecutor,
         null,
         null,
         ConnectionSpec.CLEARTEXT,
@@ -1445,7 +1479,7 @@ public class OkHttpClientTransportTest {
         InetSocketAddress.createUnresolved("theservice", 80),
         "authority",
         "userAgent",
-        executor,
+        serializingExecutor,
         null,
         null,
         ConnectionSpec.CLEARTEXT,
@@ -1495,7 +1529,7 @@ public class OkHttpClientTransportTest {
         InetSocketAddress.createUnresolved("theservice", 80),
         "authority",
         "userAgent",
-        executor,
+        serializingExecutor,
         null,
         null,
         ConnectionSpec.CLEARTEXT,
@@ -1544,7 +1578,7 @@ public class OkHttpClientTransportTest {
         InetSocketAddress.createUnresolved("theservice", 80),
         "authority",
         "userAgent",
-        executor,
+        serializingExecutor,
         null,
         null,
         ConnectionSpec.CLEARTEXT,
@@ -1637,6 +1671,20 @@ public class OkHttpClientTransportTest {
       Thread.sleep(duration);
     }
     assertEquals(expected, clientTransport.getPendingStreamSize());
+  }
+
+  /**
+   * Waits until all currently queued runnables on the serializing executor are done.
+   */
+  private void runAllQueuedSerializingExecutorTasks() throws Exception {
+    final SettableFuture<Void> fence = SettableFuture.create();
+    serializingExecutor.execute(new Runnable() {
+      @Override
+      public void run() {
+        fence.set(null);
+      }
+    });
+    fence.get();
   }
 
   private void assertNewStreamFail() throws Exception {

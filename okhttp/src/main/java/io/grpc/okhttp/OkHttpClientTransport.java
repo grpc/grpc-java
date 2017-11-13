@@ -218,6 +218,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   OkHttpClientTransport(
       String userAgent,
       Executor executor,
+      SerializingExecutor serializingExecutor,
       FrameReader frameReader,
       FrameWriter testFrameWriter,
       int nextStreamId,
@@ -232,7 +233,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     defaultAuthority = "notarealauthority:80";
     this.userAgent = GrpcUtil.getGrpcUserAgent("okhttp", userAgent);
     this.executor = Preconditions.checkNotNull(executor, "executor");
-    serializingExecutor = new SerializingExecutor(executor);
+    this.serializingExecutor = serializingExecutor;
     this.testFrameReader = Preconditions.checkNotNull(frameReader, "frameReader");
     this.testFrameWriter = Preconditions.checkNotNull(testFrameWriter, "testFrameWriter");
     this.socket = Preconditions.checkNotNull(socket, "socket");
