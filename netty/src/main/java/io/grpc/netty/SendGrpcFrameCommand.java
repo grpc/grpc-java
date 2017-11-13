@@ -16,6 +16,7 @@
 
 package io.grpc.netty;
 
+import io.grpc.internal.StreamIdHolder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufHolder;
 import io.netty.buffer.DefaultByteBufHolder;

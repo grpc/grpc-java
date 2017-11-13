@@ -323,7 +323,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   @GuardedBy("lock")
   private void startStream(OkHttpClientStream stream) {
     Preconditions.checkState(
-        stream.id() == OkHttpClientStream.ABSENT_ID, "StreamId already assigned");
+        stream.transportState().id() == OkHttpClientStream.ABSENT_ID, "StreamId already assigned");
     streams.put(nextStreamId, stream);
     setInUse();
     stream.transportState().start(nextStreamId);
