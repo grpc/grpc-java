@@ -1529,7 +1529,7 @@ public class OkHttpClientTransportTest {
         InetSocketAddress.createUnresolved("theservice", 80),
         "authority",
         "userAgent",
-        serializingExecutor,
+        executor,
         null,
         null,
         ConnectionSpec.CLEARTEXT,
