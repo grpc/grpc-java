@@ -25,7 +25,7 @@ ln -s /tmp/build_cache/protobuf-${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)/ /tm
 # Always bootstrap our cache using master's cache.
 PLATFORM=$(uname)
 ARCHIVE_FILE="depdencies_master.tgz"
-CACHE_PATH="gs:/grpc-temp-files/grpc-java-kokoro-build-cache/$PLATFORM/$ARCHIVE_FILE"
+CACHE_PATH="gs://grpc-temp-files/grpc-java-kokoro-build-cache/$PLATFORM/$ARCHIVE_FILE"
 set +e
 gsutil stat $CACHE_PATH
 IS_CACHED=$?
