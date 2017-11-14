@@ -25,7 +25,7 @@ gsutil stat $GRADLE_CACHE_PATH
 GRADLE_IS_CACHED=$?
 set -e
 
-if [[ $GRADLE_IS_CACHED ]]; then
+if [[ $GRADLE_IS_CACHED == 0 ]]; then
   gsutil cp $GRADLE_CACHE_PATH .
   tar xpzf $DEP_HASH.tgz /
 fi
