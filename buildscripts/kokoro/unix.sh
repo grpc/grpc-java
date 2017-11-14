@@ -58,9 +58,11 @@ popd
 # TODO(zpencer): also build the GAE examples
 
 
-# for master branch only:
-#   if build was successful and the gradle dep hash is not cached, then cache it
-#GITBRANCH=$(git rev-parse --abbrev-ref HEAD)
+# For master branch only: If build was successful and the gradle dep
+# hash is not cached, then cache it. Builds on master are serialized,
+# and are in commit order for all intents and purposes.
+
+# GITBRANCH=$(git rev-parse --abbrev-ref HEAD)
 GITBRANCH='master' # TODO(zpencer): remove after testing
 if [[ $GITBRANCH == 'master' && $IS_CACHED != 0 ]]; then
   tar czf $ARCHIVE_FILE /tmp/build_cache/
