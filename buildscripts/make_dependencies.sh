@@ -4,7 +4,7 @@
 set -evux -o pipefail
 
 DOWNLOAD_DIR=/tmp/source
-INSTALL_DIR="/tmp/protobuf-$PROTOBUF_VERSION/$(uname -s)-$(uname -p)"
+INSTALL_DIR="/tmp/build_cache/protobuf-$PROTOBUF_VERSION/$(uname -s)-$(uname -p)"
 mkdir -p $DOWNLOAD_DIR
 
 # Start with a sane default

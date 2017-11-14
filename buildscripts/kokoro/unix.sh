@@ -24,8 +24,8 @@ fi
 
 mkdir -p /tmp/build_cache/gradle
 ln -s /tmp/build_cache/gradle ~/.gradle
-mkdir -p /tmp/build_cache/protobuf/${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)/
-ln -s /tmp/build_cache/protobuf/${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)/ /tmp/protobuf
+mkdir -p /tmp/build_cache/protobuf-${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)/
+ln -s /tmp/build_cache/protobuf-${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)/ /tmp/protobuf
 
 # kokoro workers are stateless, so local gradle caches will not persist across runs
 # hash all files related to gradle, and use it as the name of a google cloud storage object
@@ -45,7 +45,7 @@ fi
 cd ./github/grpc-java
 
 # Proto deps
-buildscripts/make_dependencies.sh
+buildscripts/make_dependencies.sh # build protoc into /tmp/protobuf-${PROTOBUF_VERSION}
 ln -s "/tmp/protobuf-${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)" /tmp/protobuf
 
 # Gradle build config
