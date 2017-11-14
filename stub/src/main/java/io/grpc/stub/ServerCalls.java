@@ -311,7 +311,9 @@ public final class ServerCalls {
     private Runnable onCancelHandler;
 
     // Non private to avoid synthetic class
+    @SuppressWarnings("deprecation")
     ServerCallStreamObserverImpl(ServerCall<ReqT, RespT> call) {
+      super(ClientCallStreamObserver.KEY_FOR_20171102);
       this.call = call;
     }
 

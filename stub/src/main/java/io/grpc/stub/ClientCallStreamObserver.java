@@ -31,6 +31,7 @@ import javax.annotation.Nullable;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1788")
 @DoNotMock
 public abstract class ClientCallStreamObserver<V> extends CallStreamObserver<V> {
+
   /**
    * Prevent any further processing for this {@code ClientCallStreamObserver}. No further messages
    * will be received. The server is informed of cancellations, but may not stop processing the
@@ -47,4 +48,12 @@ public abstract class ClientCallStreamObserver<V> extends CallStreamObserver<V> 
    * @param cause if not {@code null}, will appear as the cause of the CANCELLED status
    */
   public abstract void cancel(@Nullable String message, @Nullable Throwable cause);
+
+  /**
+   * Do not call this, it is for the gRPC library to construct.
+   */
+  @Deprecated
+  public ClientCallStreamObserver(Object key) {
+    super(key);
+  }
 }
