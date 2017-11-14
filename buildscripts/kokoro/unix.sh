@@ -13,6 +13,13 @@ export CXXFLAGS=-I/tmp/protobuf/include
 export LD_LIBRARY_PATH=/tmp/protobuf/lib
 export OS_NAME=$(uname)
 
+PLATFORM=$(uname)
+
+MD5_COMMAND='md5sum'
+if [[ $PLATFORM == 'Darwin' ]]; then
+  MD5_COMMAND='md5'
+fi
+
 # TODO(zpencer): always make sure we are using Oracle jdk8
 
 mkdir -p /tmp/build_cache/gradle
@@ -22,8 +29,8 @@ ln -s /tmp/build_cache/protobuf/${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)/ /tm
 
 # kokoro workers are stateless, so local gradle caches will not persist across runs
 # hash all files related to gradle, and use it as the name of a google cloud storage object
-DEP_HASH=$(find . -name 'build.gradle' -or -name 'settings.gradle'  | sort | xargs /usr/bin/md5sum | /usr/bin/md5sum | cut -d' ' -f1)
-PLATFORM=$(uname)
+DEPS=$(find . -name 'build.gradle' -or -name 'settings.gradle'  | sort | xargs $MD5_COMMAND)
+DEP_HASH=$(echo $DEPS | $MD5_COMMAND | cut -d' ' -f1)
 CACHE_PATH="gs://grpc-java-kokoro-gradle-cache/$PLATFORM/$DEP_HASH.tgz"
 set +e
 gsutil stat $CACHE_PATH
