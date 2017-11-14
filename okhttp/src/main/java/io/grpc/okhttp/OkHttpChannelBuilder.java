@@ -369,6 +369,16 @@ public class OkHttpChannelBuilder extends
     }
   }
 
+  @Override
+  protected void setTracingEnabled(boolean value) {
+    super.setTracingEnabled(value);
+  }
+
+  @Override
+  protected void setStatsEnabled(boolean value) {
+    super.setStatsEnabled(value);
+  }
+
   /**
    * Creates OkHttp transports. Exposed for internal use, as it should be private.
    */

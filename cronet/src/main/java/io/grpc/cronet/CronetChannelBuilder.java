@@ -139,6 +139,16 @@ public final class CronetChannelBuilder extends
         .set(NameResolver.Factory.PARAMS_DEFAULT_PORT, GrpcUtil.DEFAULT_PORT_SSL).build();
   }
 
+  @Override
+  protected void setTracingEnabled(boolean value) {
+    super.setTracingEnabled(value);
+  }
+
+  @Override
+  protected void setStatsEnabled(boolean value) {
+    super.setStatsEnabled(value);
+  }
+
   @VisibleForTesting
   static class CronetTransportFactory implements ClientTransportFactory {
     private final ScheduledExecutorService timeoutService =
