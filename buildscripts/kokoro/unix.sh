@@ -15,18 +15,23 @@ export OS_NAME=$(uname)
 
 # TODO(zpencer): always make sure we are using Oracle jdk8
 
+mkdir -p /tmp/build_cache/gradle
+ln -s /tmp/build_cache/gradle ~/.gradle/
+mkdir -p /tmp/build_cache/protobuf/${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)/
+ln -s /tmp/build_cache/protobuf/${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)/ /tmp/protobuf
+
 # kokoro workers are stateless, so local gradle caches will not persist across runs
 # hash all files related to gradle, and use it as the name of a google cloud storage object
 DEP_HASH=$(find . -name 'build.gradle' -or -name 'settings.gradle'  | sort | xargs /usr/bin/md5sum | /usr/bin/md5sum | cut -d' ' -f1)
 PLATFORM=$(uname)
-GRADLE_CACHE_PATH="gs://grpc-java-kokoro-gradle-cache/$PLATFORM/$DEP_HASH.tgz"
+CACHE_PATH="gs://grpc-java-kokoro-gradle-cache/$PLATFORM/$DEP_HASH.tgz"
 set +e
-gsutil stat $GRADLE_CACHE_PATH
-GRADLE_IS_CACHED=$?
+gsutil stat $CACHE_PATH
+IS_CACHED=$?
 set -e
 
-if [[ $GRADLE_IS_CACHED == 0 ]]; then
-  gsutil cp $GRADLE_CACHE_PATH .
+if [[ $IS_CACHED == 0 ]]; then
+  gsutil cp $CACHE_PATH .
   tar xpzf $DEP_HASH.tgz /
 fi
 
@@ -53,7 +58,7 @@ popd
 
 
 # if build was successful and the gradle dep hash is not cached, then cache it
-if [[ $GRADLE_IS_CACHED != 0 ]]; then
-  tar cvz $DEP_HASH.tgz ~/.gradle/
-  gsutil cp $DEP_HASH.tgz $GRADLE_CACHE_PATH
+if [[ $IS_CACHED != 0 ]]; then
+  tar cvz $DEP_HASH.tgz /tmp/build_cache/
+  gsutil cp $DEP_HASH.tgz $CACHE_PATH
 fi
