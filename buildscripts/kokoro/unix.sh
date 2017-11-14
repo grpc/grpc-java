@@ -16,7 +16,7 @@ export OS_NAME=$(uname)
 # TODO(zpencer): always make sure we are using Oracle jdk8
 
 mkdir -p /tmp/build_cache/gradle
-ln -s /tmp/build_cache/gradle ~/.gradle/
+ln -s /tmp/build_cache/gradle ~/.gradle
 mkdir -p /tmp/build_cache/protobuf/${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)/
 ln -s /tmp/build_cache/protobuf/${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)/ /tmp/protobuf
 
