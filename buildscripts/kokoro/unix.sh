@@ -30,7 +30,7 @@ ln -s /tmp/build_cache/protobuf/${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)/ /tm
 # kokoro workers are stateless, so local gradle caches will not persist across runs
 # hash all files related to gradle, and use it as the name of a google cloud storage object
 DEPS=$(find . -name 'build.gradle' -or -name 'settings.gradle'  | sort | xargs $MD5_COMMAND)
-DEP_HASH=$(echo $DEPS | $MD5_COMMAND | cut -d' ' -f1)
+DEP_HASH=$(echo "$DEPS $PROTOBUF_VERSION" | $MD5_COMMAND | cut -d' ' -f1)
 CACHE_PATH="gs://grpc-java-kokoro-gradle-cache/$PLATFORM/$DEP_HASH.tgz"
 set +e
 gsutil stat $CACHE_PATH
