@@ -21,8 +21,10 @@ ln -s /tmp/build_cache/gradle ~/.gradle
 mkdir -p /tmp/build_cache/protobuf-${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)/
 ln -s /tmp/build_cache/protobuf-${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)/ /tmp/protobuf
 
-# Kokoro workers are stateless, so local caches will not persist across runs.
-# Always bootstrap our cache using master's cache.
+# Kokoro workers are stateless, so local caches will not persist
+# across runs.  Always bootstrap our cache using master's cache. The
+# cache should still contain cache hits for most artifacts, even if
+# this is not master branch.
 PLATFORM=$(uname)
 ARCHIVE_FILE="depdencies_master.tgz"
 CACHE_PATH="gs://grpc-temp-files/grpc-java-kokoro-build-cache/$PLATFORM/$ARCHIVE_FILE"
@@ -40,7 +42,6 @@ cd ./github/grpc-java
 
 # Proto deps
 buildscripts/make_dependencies.sh # build protoc into /tmp/protobuf-${PROTOBUF_VERSION}
-ln -s "/tmp/protobuf-${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)" /tmp/protobuf
 
 # Gradle build config
 mkdir -p $HOME/.gradle
