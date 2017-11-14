@@ -2,9 +2,6 @@
 
 set -exu -o pipefail
 
-pwd
-hostname
-
 KOKORO_GAE_SERVICE="java-gae-interop-test"
 
 # We deploy as different versions of a single service, this way any stale
