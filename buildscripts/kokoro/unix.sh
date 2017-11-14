@@ -17,7 +17,7 @@ export OS_NAME=$(uname)
 
 # kokoro workers are stateless, so local gradle caches will not persist across runs
 # hash all files related to gradle, and use it as the name of a google cloud storage object
-DEP_HASH=$(find . -name 'build.gradle' -or -name 'settings.gradle'  | sort | xargs /usr/sbin/md5sum | /usr/sbin/md5sum | cut -d' ' -f1)
+DEP_HASH=$(find . -name 'build.gradle' -or -name 'settings.gradle'  | sort | xargs /usr/bin/md5sum | /usr/bin/md5sum | cut -d' ' -f1)
 PLATFORM=$(uname)
 GRADLE_CACHE_PATH="gs://grpc-java-kokoro-gradle-cache/$PLATFORM/$DEP_HASH.tgz"
 set +e
