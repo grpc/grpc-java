@@ -35,11 +35,7 @@ echo "<?xml version='1.0' encoding='utf-8'?>
 cat ./gae-interop-testing/gae-jdk8/src/main/webapp/WEB-INF/appengine-web.xml
 # Deploy the dummy 'default' version. It doesn't matter if we race with other kokoro runs.
 # We only require that it exists when cleanup() is called.
-set +e
-gcloud app versions describe $DUMMY_DEFAULT_VERSION  --service=java-gae-interop-test
-ALREADY_EXIST=$?
-set -e
-if [[ $ALREADY_EXIST != 0 ]]; then
+if [[ $(gcloud app versions describe $DUMMY_DEFAULT_VERSION  --service=$KOKORO_GAE_SERVICE) != 0 ]]; then
   ./gradlew --stacktrace -DgaeDeployVersion=$DUMMY_DEFAULT_VERSION -DgaeStopPreviousVersion=false -DgaePromote=false -PskipCodegen=true :grpc-gae-interop-testing-jdk8:appengineDeploy
 fi
 
