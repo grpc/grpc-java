@@ -13,12 +13,6 @@ export CXXFLAGS=-I/tmp/protobuf/include
 export LD_LIBRARY_PATH=/tmp/protobuf/lib
 export OS_NAME=$(uname)
 
-PLATFORM=$(uname)
-
-MD5_COMMAND='md5sum'
-if [[ $PLATFORM == 'Darwin' ]]; then
-  MD5_COMMAND='md5'
-fi
 
 # TODO(zpencer): always make sure we are using Oracle jdk8
 
@@ -27,11 +21,11 @@ ln -s /tmp/build_cache/gradle ~/.gradle
 mkdir -p /tmp/build_cache/protobuf-${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)/
 ln -s /tmp/build_cache/protobuf-${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)/ /tmp/protobuf
 
-# kokoro workers are stateless, so local gradle caches will not persist across runs
-# hash all files related to gradle, and use it as the name of a google cloud storage object
-DEPS=$(find . -name 'build.gradle' -or -name 'settings.gradle'  | sort | xargs $MD5_COMMAND)
-DEP_HASH=$(echo "$DEPS $PROTOBUF_VERSION" | $MD5_COMMAND | cut -d' ' -f1)
-CACHE_PATH="gs://grpc-java-kokoro-gradle-cache/$PLATFORM/$DEP_HASH.tgz"
+# Kokoro workers are stateless, so local caches will not persist across runs.
+# Always bootstrap our cache using master's cache.
+PLATFORM=$(uname)
+ARCHIVE_FILE="depdencies_master.tgz"
+CACHE_PATH="gs:/grpc-temp-files/grpc-java-kokoro-build-cache/$PLATFORM/$ARCHIVE_FILE"
 set +e
 gsutil stat $CACHE_PATH
 IS_CACHED=$?
@@ -39,7 +33,7 @@ set -e
 
 if [[ $IS_CACHED == 0 ]]; then
   gsutil cp $CACHE_PATH .
-  tar xpzf $DEP_HASH.tgz /
+  tar xpzf $ARCHIVE_FILE /
 fi
 
 cd ./github/grpc-java
@@ -64,8 +58,11 @@ popd
 # TODO(zpencer): also build the GAE examples
 
 
-# if build was successful and the gradle dep hash is not cached, then cache it
-if [[ $IS_CACHED != 0 ]]; then
-  tar czf $DEP_HASH.tgz /tmp/build_cache/
-  gsutil cp $DEP_HASH.tgz $CACHE_PATH
+# for master branch only:
+#   if build was successful and the gradle dep hash is not cached, then cache it
+#GITBRANCH=$(git rev-parse --abbrev-ref HEAD)
+GITBRANCH='master' # TODO(zpencer): remove after testing
+if [[ $GITBRANCH == 'master' && $IS_CACHED != 0 ]]; then
+  tar czf $ARCHIVE_FILE /tmp/build_cache/
+  gsutil cp $ARCHIVE_FILE $CACHE_PATH
 fi
