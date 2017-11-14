@@ -106,7 +106,10 @@ final class GrpclbState {
   private ScheduledFuture<?> fallbackTimer;
   private List<EquivalentAddressGroup> fallbackBackendList = Collections.emptyList();
   private boolean fallbackTimerExpired;
-  private boolean receivedServerListFromBalancer;
+  private boolean usingFallbackBackends;
+  // True if the current balancer has returned a serverlist.  Will be reset to false when lost
+  // connection to a balancer.
+  private boolean balancerWorking;
 
   @Nullable
   private ManagedChannel lbCommChannel;
@@ -141,6 +144,7 @@ final class GrpclbState {
       subchannel.requestConnection();
     }
     subchannel.getAttributes().get(STATE_INFO).set(newState);
+    maybeUseFallbackBackends();
     maybeUpdatePicker();
   }
 
@@ -166,22 +170,38 @@ final class GrpclbState {
           timerService.schedule(new FallbackModeTask(), FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     } else {
       maybeUseFallbackBackends();
+      maybeUpdatePicker();
     }
   }
 
   private void maybeUseFallbackBackends() {
-    // Only use fallback backends after fallback timer expired and before receiving server list from
-    // the balancer.
-    if (receivedServerListFromBalancer || !fallbackTimerExpired) {
+    if (fallbackBackendList.isEmpty()) {
       return;
     }
+    int numReadySubchannels = 0;
+    if (!fallbackTimerExpired) {
+      return;
+    }
+    if (balancerWorking) {
+      return;
+    }
+    for (Subchannel subchannel : subchannels.values()) {
+      if (subchannel.getAttributes().get(STATE_INFO).get().getState() == READY) {
+        numReadySubchannels++;
+      }
+    }
+    if (numReadySubchannels > 0) {
+      return;
+    }
+    logger.log(Level.INFO, "Falling back to: " + fallbackBackendList);
+    usingFallbackBackends = true;
     List<DropEntry> newDropList = new ArrayList<DropEntry>();
     List<BackendAddressGroup> newBackendAddrList = new ArrayList<BackendAddressGroup>();
     for (EquivalentAddressGroup eag : fallbackBackendList) {
       newDropList.add(null);
       newBackendAddrList.add(new BackendAddressGroup(eag, null));
     }
-    updateRoundRobinLists(newDropList, newBackendAddrList, null);
+    useRoundRobinLists(newDropList, newBackendAddrList, null);
   }
 
   private void shutdownLbComm() {
@@ -257,7 +277,7 @@ final class GrpclbState {
     return lbStream.loadRecorder;
   }
 
-  private void updateRoundRobinLists(
+  private void useRoundRobinLists(
       List<DropEntry> newDropList, List<BackendAddressGroup> newBackendAddrList,
       @Nullable GrpclbClientLoadRecorder loadRecorder) {
     HashMap<EquivalentAddressGroup, Subchannel> newSubchannelMap =
@@ -301,7 +321,6 @@ final class GrpclbState {
     subchannels = Collections.unmodifiableMap(newSubchannelMap);
     dropList = Collections.unmodifiableList(newDropList);
     backendList = Collections.unmodifiableList(newBackendList);
-    maybeUpdatePicker();
   }
 
   @VisibleForTesting
@@ -313,6 +332,7 @@ final class GrpclbState {
           public void run() {
             fallbackTimerExpired = true;
             maybeUseFallbackBackends();
+            maybeUpdatePicker();
           }
         });
     }
@@ -443,7 +463,7 @@ final class GrpclbState {
         return;
       }
 
-      receivedServerListFromBalancer = true;
+      balancerWorking = true;
       if (fallbackTimer != null) {
         fallbackTimer.cancel(false);
       }
@@ -470,16 +490,21 @@ final class GrpclbState {
           newBackendAddrList.add(new BackendAddressGroup(eag, token));
         }
       }
-      updateRoundRobinLists(newDropList, newBackendAddrList, loadRecorder);
+      useRoundRobinLists(newDropList, newBackendAddrList, loadRecorder);
+      maybeUpdatePicker();
     }
 
-    private void handleStreamClosed(Status status) {
+    private void handleStreamClosed(Status error) {
+      checkArgument(!error.isOk(), "unexpected OK status");
       if (closed) {
         return;
       }
       closed = true;
       cleanUp();
-      propagateError(status);
+      propagateError(error);
+      balancerWorking = false;
+      maybeUseFallbackBackends();
+      maybeUpdatePicker();
       startLbRpc();
     }
 
@@ -547,6 +572,7 @@ final class GrpclbState {
       logger.log(
           Level.FINE, "[{0}] Using drop list {1} and pick list {2}",
           new Object[] {logId, dropList, pickList});
+      usingFallbackBackends = false;
       state = READY;
     }
     maybeUpdatePicker(state, new RoundRobinPicker(dropList, pickList));
