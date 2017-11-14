@@ -174,6 +174,10 @@ final class GrpclbState {
     }
   }
 
+  /**
+   * If conditions for using fallback backends are met, populate the round-robin lists with the
+   * fallback backends.
+   */
   private void maybeUseFallbackBackends() {
     if (fallbackBackendList.isEmpty()) {
       return;
@@ -277,6 +281,9 @@ final class GrpclbState {
     return lbStream.loadRecorder;
   }
 
+  /**
+   * Populate the round-robin lists with the given values.
+   */
   private void useRoundRobinLists(
       List<DropEntry> newDropList, List<BackendAddressGroup> newBackendAddrList,
       @Nullable GrpclbClientLoadRecorder loadRecorder) {
