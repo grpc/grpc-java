@@ -66,6 +66,6 @@ popd
 
 # if build was successful and the gradle dep hash is not cached, then cache it
 if [[ $IS_CACHED != 0 ]]; then
-  tar cvz $DEP_HASH.tgz /tmp/build_cache/
+  tar czf $DEP_HASH.tgz /tmp/build_cache/
   gsutil cp $DEP_HASH.tgz $CACHE_PATH
 fi
