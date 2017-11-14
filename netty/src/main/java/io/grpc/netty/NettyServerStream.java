@@ -24,6 +24,7 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.AbstractServerStream;
 import io.grpc.internal.StatsTraceContext;
+import io.grpc.internal.StreamIdHolder;
 import io.grpc.internal.TransportTracer;
 import io.grpc.internal.WritableBuffer;
 import io.netty.buffer.ByteBuf;

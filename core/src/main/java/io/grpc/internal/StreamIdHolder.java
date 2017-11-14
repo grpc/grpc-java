@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package io.grpc.netty;
+package io.grpc.internal;
 
 /** Container for stream ids. */
-interface StreamIdHolder {
+public interface StreamIdHolder {
   /**
    * Returns the id.
    */

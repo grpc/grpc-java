@@ -234,7 +234,7 @@ class OutboundFlowController {
     }
 
     OutboundFlowState(OkHttpClientStream stream) {
-      this(stream.id());
+      this(stream.transportState().id());
       this.stream = stream;
     }
 

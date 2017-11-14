@@ -343,6 +343,15 @@ public class Http2ClientStreamTransportStateTest {
   }
 
   private static class BaseTransportState extends Http2ClientStreamTransportState {
+    private static int ids = 1;
+
+    private final int id = ids++;
+
+    @Override
+    public int id() {
+      return id;
+    }
+
     public BaseTransportState(TransportTracer transportTracer) {
       super(DEFAULT_MAX_MESSAGE_SIZE, StatsTraceContext.NOOP, transportTracer);
     }

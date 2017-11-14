@@ -53,7 +53,7 @@ class OkHttpClientStream extends AbstractClientStream {
   private final StatsTraceContext statsTraceCtx;
   private String authority;
   private Object outboundFlowState;
-  private volatile int id = ABSENT_ID;
+  private int id = ABSENT_ID;
   private final TransportState state;
   private final Sink sink = new Sink();
 
@@ -99,10 +99,6 @@ class OkHttpClientStream extends AbstractClientStream {
    */
   public MethodDescriptor.MethodType getType() {
     return method.getType();
-  }
-
-  public int id() {
-    return id;
   }
 
   /**
@@ -205,6 +201,11 @@ class OkHttpClientStream extends AbstractClientStream {
       this.frameWriter = frameWriter;
       this.outboundFlow = outboundFlow;
       this.transport = transport;
+    }
+
+    @Override
+    public int id() {
+      return id;
     }
 
     @GuardedBy("lock")

@@ -19,6 +19,7 @@ package io.grpc.netty;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import io.grpc.Status;
+import io.grpc.internal.StreamIdHolder;
 import io.netty.handler.codec.http2.Http2Headers;
 
 /**
