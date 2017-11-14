@@ -50,7 +50,7 @@ echo "<?xml version='1.0' encoding='utf-8'?>
 </appengine-web-app>
 " > ./gae-interop-testing/gae-jdk8/src/main/webapp/WEB-INF/appengine-web.xml
 cat ./gae-interop-testing/gae-jdk8/src/main/webapp/WEB-INF/appengine-web.xml
-# Deploy and test the real app
+# Deploy and test the real app (jdk8)
 ./gradlew --stacktrace -DgaeDeployVersion=$KOKORO_GAE_APP_VERSION -DgaeStopPreviousVersion=false -DgaePromote=false -PskipCodegen=true :grpc-gae-interop-testing-jdk8:runInteropTestRemote
 
 ##
@@ -64,5 +64,5 @@ echo "<?xml version='1.0' encoding='utf-8'?>
 </appengine-web-app>
 " > ./gae-interop-testing/gae-jdk7/src/main/webapp/WEB-INF/appengine-web.xml
 cat ./gae-interop-testing/gae-jdk7/src/main/webapp/WEB-INF/appengine-web.xml
-# The dummy 'default' version is already deployed earlier, so no need to do that again.
+# Deploy and test the real app (jdk7)
 ./gradlew --stacktrace -DgaeDeployVersion=$KOKORO_GAE_APP_VERSION -DgaeStopPreviousVersion=false -DgaePromote=false -PskipCodegen=true :grpc-gae-interop-testing-jdk7:runInteropTestRemote
