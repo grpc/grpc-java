@@ -27,7 +27,7 @@ set -e
 
 if [[ $GRADLE_IS_CACHED ]]; then
   gsutil cp $GRADLE_CACHE_PATH .
-  tar xpz $DEP_HASH.tgz .
+  tar xpzf $DEP_HASH.tgz /
 fi
 
 cd ./github/grpc-java
