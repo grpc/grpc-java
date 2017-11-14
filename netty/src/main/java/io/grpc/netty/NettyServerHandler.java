@@ -719,7 +719,9 @@ class NettyServerHandler extends AbstractNettyHandler {
 
     @Override
     public void ping() {
-      encoder().writePing(ctx, false /* isAck */, KEEPALIVE_PING_BUF, ctx.newPromise());
+      encoder().writePing(
+          // slice KEEPALIVE_PING_BUF because tls handler may modify the reader index
+          ctx, false /* isAck */, KEEPALIVE_PING_BUF.slice(), ctx.newPromise());
       ctx.flush();
     }
 
