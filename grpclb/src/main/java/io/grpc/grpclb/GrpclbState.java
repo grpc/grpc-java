@@ -149,9 +149,10 @@ final class GrpclbState {
   }
 
   /**
-   * Set the new addresses of the balancer and backends, and create connection if not yet connected.
+   * Handle new addresses of the balancer and backends from the resolver, and create connection if
+   * not yet connected.
    */
-  void updateAddresses(
+  void handleAddresses(
       List<LbAddressGroup> newLbAddressGroups, List<EquivalentAddressGroup> newBackendServers) {
     LbAddressGroup newLbAddressGroup = flattenLbAddressGroups(newLbAddressGroups);
     startLbComm(newLbAddressGroup);
@@ -179,26 +180,33 @@ final class GrpclbState {
    * fallback backends.
    */
   private void maybeUseFallbackBackends() {
-    if (fallbackBackendList.isEmpty()) {
-      return;
-    }
-    int numReadySubchannels = 0;
-    if (!fallbackTimerExpired) {
-      return;
-    }
-    if (balancerWorking) {
-      return;
-    }
-    for (Subchannel subchannel : subchannels.values()) {
-      if (subchannel.getAttributes().get(STATE_INFO).get().getState() == READY) {
-        numReadySubchannels++;
+    if (!usingFallbackBackends) {
+      // Check conditions that needs to be met in order to switch to fallback mode.
+      if (fallbackBackendList.isEmpty()) {
+        return;
       }
+      int numReadySubchannels = 0;
+      if (!fallbackTimerExpired) {
+        return;
+      }
+      if (balancerWorking) {
+        return;
+      }
+      for (Subchannel subchannel : subchannels.values()) {
+        if (subchannel.getAttributes().get(STATE_INFO).get().getState() == READY) {
+          numReadySubchannels++;
+        }
+      }
+      if (numReadySubchannels > 0) {
+        return;
+      }
+      logger.log(Level.INFO, "Falling back to: " + fallbackBackendList);
+      usingFallbackBackends = true;
+    } else {
+      // else: already in fallback mode, but fallbackBackendList may have changed.
+      logger.log(Level.INFO, "Using fallback: " + fallbackBackendList);
     }
-    if (numReadySubchannels > 0) {
-      return;
-    }
-    logger.log(Level.INFO, "Falling back to: " + fallbackBackendList);
-    usingFallbackBackends = true;
+
     List<DropEntry> newDropList = new ArrayList<DropEntry>();
     List<BackendAddressGroup> newBackendAddrList = new ArrayList<BackendAddressGroup>();
     for (EquivalentAddressGroup eag : fallbackBackendList) {
@@ -261,6 +269,9 @@ final class GrpclbState {
       subchannel.shutdown();
     }
     subchannels = Collections.emptyMap();
+    if (fallbackTimer != null) {
+      fallbackTimer.cancel(false);
+    }
   }
 
   void propagateError(Status status) {
@@ -471,9 +482,6 @@ final class GrpclbState {
       }
 
       balancerWorking = true;
-      if (fallbackTimer != null) {
-        fallbackTimer.cancel(false);
-      }
       // TODO(zhangkun83): handle delegate from initialResponse
       ServerList serverList = response.getServerList();
       List<DropEntry> newDropList = new ArrayList<DropEntry>();
@@ -497,6 +505,8 @@ final class GrpclbState {
           newBackendAddrList.add(new BackendAddressGroup(eag, token));
         }
       }
+      // Stop using fallback backends as soon as a new server list is received from the balancer.
+      usingFallbackBackends = false;
       useRoundRobinLists(newDropList, newBackendAddrList, loadRecorder);
       maybeUpdatePicker();
     }
@@ -579,7 +589,6 @@ final class GrpclbState {
       logger.log(
           Level.FINE, "[{0}] Using drop list {1} and pick list {2}",
           new Object[] {logId, dropList, pickList});
-      usingFallbackBackends = false;
       state = READY;
     }
     maybeUpdatePicker(state, new RoundRobinPicker(dropList, pickList));

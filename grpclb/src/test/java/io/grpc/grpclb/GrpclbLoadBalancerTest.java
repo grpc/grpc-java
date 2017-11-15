@@ -247,6 +247,8 @@ public class GrpclbLoadBalancerTest {
       for (Subchannel subchannel: subchannelTracker) {
         verify(subchannel).shutdown();
       }
+      // No timer should linger after shutdown
+      assertEquals(0, fakeClock.numPendingTasks());
     } finally {
       if (fakeLbServer != null) {
         fakeLbServer.shutdownNow();
@@ -358,6 +360,12 @@ public class GrpclbLoadBalancerTest {
     Attributes grpclbResolutionAttrs = Attributes.newBuilder()
         .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.GRPCLB).build();
     deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+
+    // Let the fallback timer run so that it doesn't interfere with the load reporting test
+    assertEquals(1, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
+    fakeClock.forwardTime(GrpclbState.FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
+
     assertEquals(1, fakeOobChannels.size());
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
     StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
@@ -1034,8 +1042,8 @@ public class GrpclbLoadBalancerTest {
         eq(new EquivalentAddressGroup(backends1.get(0).addr)), any(Attributes.class));
     inOrder.verify(helper).createSubchannel(
         eq(new EquivalentAddressGroup(backends1.get(1).addr)), any(Attributes.class));
-    // Timer for fallback mode is cancelled as soon as the balancer returns a server list
-    assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
+    // Keep the timer for fallback mode even though the balancer returns a server list.
+    assertEquals(1, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
     assertEquals(2, mockSubchannels.size());
     Subchannel subchannel1 = mockSubchannels.poll();
     Subchannel subchannel2 = mockSubchannels.poll();
@@ -1180,11 +1188,11 @@ public class GrpclbLoadBalancerTest {
     verify(lbRequestObserver, never()).onError(any(Throwable.class));
 
     // Load reporting was not requested, thus never scheduled
-    assertEquals(0, fakeClock.numPendingTasks());
+    assertEquals(0, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
   }
 
   @Test
-  public void grpclbFallbackToBackendsFromResolver() {
+  public void grpclbFallback_initialTimeout() {
     long loadReportIntervalMillis = 1983;
     InOrder helperInOrder = inOrder(helper);
 
@@ -1211,8 +1219,6 @@ public class GrpclbLoadBalancerTest {
         eq(LoadBalanceRequest.newBuilder().setInitialRequest(
                 InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
             .build()));
-    // Receiving the initial response won't reset the fallback timer. Only reciving the server list
-    // does.
     lbResponseObserver.onNext(buildInitialResponse(loadReportIntervalMillis));
     // We don't care if runSerialized() has been run.
     helperInOrder.verify(helper, atLeast(0)).runSerialized(any(Runnable.class));
@@ -1311,16 +1317,121 @@ public class GrpclbLoadBalancerTest {
     helperInOrder.verify(helper, never())
         .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
 
-    // Fallback mode is one-shot only.
+    // The fallback timeout timer is scheduled only once
     assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
   }
 
-  private void fallbackTestVerifyUseOfFallbackBackendLists(
-      InOrder inOrder, Helper helper, List<EquivalentAddressGroup> addrs) {
-    fallbackTestVerifyUseOfBackendLists(inOrder, helper, addrs, null);
+  @Test
+  public void grpclbFallback_balancerLostAfterTimeoutExpired() {
+    subtestGrpclbFallbackConnectionLost(true, false, true);
   }
 
-  private void fallbackTestVerifyUseOfBalancerBackendLists(
+  @Test
+  public void grpclbFallback_subchannelsLostAfterTimeoutExpired() {
+    subtestGrpclbFallbackConnectionLost(false, true, true);
+  }
+
+  @Test
+  public void grpclbFallback_allLostAfterTimeoutExpired() {
+    subtestGrpclbFallbackConnectionLost(true, true, true);
+  }
+
+  @Test
+  public void grpclbFallback_allLostBeforeTimeoutExpired() {
+    subtestGrpclbFallbackConnectionLost(true, true, false);
+  }
+
+  private void subtestGrpclbFallbackConnectionLost(
+      boolean balancerBroken, boolean allSubchannelsBroken, boolean brokenAfterTimeoutExpires) {
+    long loadReportIntervalMillis = 1983;
+    InOrder inOrder = inOrder(helper, mockLbService);
+
+    // Create a resolution list with a mixture of balancer and backend addresses
+    List<EquivalentAddressGroup> resolutionList =
+        createResolvedServerAddresses(false, true, false);
+    Attributes resolutionAttrs = Attributes.newBuilder()
+        .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.GRPCLB).build();
+    deliverResolvedAddresses(resolutionList, resolutionAttrs);
+
+    assertSame(LbPolicy.GRPCLB, balancer.getLbPolicy());
+    inOrder.verify(helper).createOobChannel(
+        addrsEq(resolutionList.get(1)), eq(lbAuthority(0)));
+
+    // Attempted to connect to balancer
+    assertEquals(1, fakeOobChannels.size());
+    ManagedChannel oobChannel = fakeOobChannels.poll();
+    inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
+
+    verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
+                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            .build()));
+    lbResponseObserver.onNext(buildInitialResponse(loadReportIntervalMillis));
+    // We don't care if runSerialized() has been run.
+    inOrder.verify(helper, atLeast(0)).runSerialized(any(Runnable.class));
+    inOrder.verifyNoMoreInteractions();
+
+    // Balancer returns a server list
+    List<ServerEntry> serverList = Arrays.asList(
+        new ServerEntry("127.0.0.1", 2000, "token0001"),
+        new ServerEntry("127.0.0.1", 2010, "token0002"));
+    lbResponseObserver.onNext(buildInitialResponse());
+    lbResponseObserver.onNext(buildLbResponse(serverList));
+
+    List<Subchannel> subchannels =
+        fallbackTestVerifyUseOfBalancerBackendLists(inOrder, helper, serverList);
+
+    // Let fallback timer expire
+    assertEquals(1, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
+    if (brokenAfterTimeoutExpires) {
+      fakeClock.forwardTime(GrpclbState.FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
+    }
+
+    // Break connections
+    if (balancerBroken) {
+      lbResponseObserver.onError(Status.UNAVAILABLE.asException());
+      // A new stream to LB is created
+      inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+      lbResponseObserver = lbResponseObserverCaptor.getValue();
+      assertEquals(1, lbRequestObservers.size());
+      lbRequestObserver = lbRequestObservers.poll();
+    }
+    if (allSubchannelsBroken) {
+      for (Subchannel subchannel : subchannels) {
+        // A READY subchannel transits to IDLE when receiving a go-away
+        deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
+      }
+    }
+
+    // Only after the fallback timeout has expired, losing all connections can lead to fallback
+    // mode.
+    if (balancerBroken && allSubchannelsBroken && brokenAfterTimeoutExpires) {
+      fallbackTestVerifyUseOfFallbackBackendLists(
+          inOrder, helper, Arrays.asList(resolutionList.get(0), resolutionList.get(2)));
+
+      // Exit fallback mode when receiving a new server list from balancer
+      List<ServerEntry> serverList2 = Arrays.asList(
+          new ServerEntry("127.0.0.1", 2001, "token0003"),
+          new ServerEntry("127.0.0.1", 2011, "token0004"));
+      lbResponseObserver.onNext(buildInitialResponse());
+      lbResponseObserver.onNext(buildLbResponse(serverList2));
+      fallbackTestVerifyUseOfBalancerBackendLists(inOrder, helper, serverList2);
+    } else {
+      verify(helper, never()).createSubchannel(eq(resolutionList.get(0)), any(Attributes.class));
+      verify(helper, never()).createSubchannel(eq(resolutionList.get(2)), any(Attributes.class));
+    }
+  }
+
+  private List<Subchannel> fallbackTestVerifyUseOfFallbackBackendLists(
+      InOrder inOrder, Helper helper, List<EquivalentAddressGroup> addrs) {
+    return fallbackTestVerifyUseOfBackendLists(inOrder, helper, addrs, null);
+  }
+
+  private List<Subchannel> fallbackTestVerifyUseOfBalancerBackendLists(
       InOrder inOrder, Helper helper, List<ServerEntry> servers) {
     ArrayList<EquivalentAddressGroup> addrs = new ArrayList<EquivalentAddressGroup>();
     ArrayList<String> tokens = new ArrayList<String>();
@@ -1328,10 +1439,10 @@ public class GrpclbLoadBalancerTest {
       addrs.add(new EquivalentAddressGroup(server.addr));
       tokens.add(server.token);
     }
-    fallbackTestVerifyUseOfBackendLists(inOrder, helper, addrs, tokens);
+    return fallbackTestVerifyUseOfBackendLists(inOrder, helper, addrs, tokens);
   }
 
-  private void fallbackTestVerifyUseOfBackendLists(
+  private List<Subchannel> fallbackTestVerifyUseOfBackendLists(
       InOrder inOrder, Helper helper, List<EquivalentAddressGroup> addrs,
       @Nullable List<String> tokens) {
     if (tokens != null) {
@@ -1374,6 +1485,7 @@ public class GrpclbLoadBalancerTest {
       inOrder.verify(helper, never())
           .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
     }
+    return subchannels;
   }
 
   @Test
