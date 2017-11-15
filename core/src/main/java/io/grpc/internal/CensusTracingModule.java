@@ -58,10 +58,25 @@ import javax.annotation.Nullable;
  */
 final class CensusTracingModule {
   private static final Logger logger = Logger.getLogger(CensusTracingModule.class.getName());
-  private static final AtomicIntegerFieldUpdater<ClientCallTracer> callEndedUpdater =
-      AtomicIntegerFieldUpdater.newUpdater(ClientCallTracer.class, "callEnded");
-  private static final AtomicIntegerFieldUpdater<ServerTracer> streamClosedUpdater =
-      AtomicIntegerFieldUpdater.newUpdater(ServerTracer.class, "streamClosed");
+
+  // When using Atomic*FieldUpdater, some Samsung Android 5.0.x devices encounter a bug in the JDK
+  // reflection API that triggers a NoSuchFieldException. When this occurs, fallback to a
+  // synchronized implementation.
+  private static final AtomicHelper atomicHelper = getAtomicHelper();
+
+  private static AtomicHelper getAtomicHelper() {
+    AtomicHelper helper;
+    try {
+      helper =
+          new FieldUpdaterAtomicHelper(
+              AtomicIntegerFieldUpdater.newUpdater(ClientCallTracer.class, "callEnded"),
+              AtomicIntegerFieldUpdater.newUpdater(ServerTracer.class, "streamClosed"));
+    } catch (Throwable t) {
+      logger.log(Level.WARNING, "FieldUpdaterAtomicHelper failed", t);
+      helper = new SynchronizedAtomicHelper();
+    }
+    return helper;
+  }
 
   private final Tracer censusTracer;
   @VisibleForTesting
@@ -232,7 +247,7 @@ final class CensusTracingModule {
      * is a no-op.
      */
     void callEnded(io.grpc.Status status) {
-      if (callEndedUpdater.getAndSet(this, 1) != 0) {
+      if (atomicHelper.callEndedGetAndSet(this, 1) != 0) {
         return;
       }
       span.end(createEndSpanOptions(status, isSampledToLocalTracing));
@@ -291,7 +306,7 @@ final class CensusTracingModule {
      */
     @Override
     public void streamClosed(io.grpc.Status status) {
-      if (streamClosedUpdater.getAndSet(this, 1) != 0) {
+      if (atomicHelper.streamClosedGetAndSet(this, 1) != 0) {
         return;
       }
       span.end(createEndSpanOptions(status, isSampledToLocalTracing));
@@ -376,4 +391,51 @@ final class CensusTracingModule {
     return prefix + "." + fullMethodName.replace('/', '.');
   }
 
+  private abstract static class AtomicHelper {
+    public abstract int callEndedGetAndSet(ClientCallTracer obj, int newValue);
+
+    public abstract int streamClosedGetAndSet(ServerTracer obj, int newValue);
+  }
+
+  private static final class FieldUpdaterAtomicHelper extends AtomicHelper {
+    private final AtomicIntegerFieldUpdater<ClientCallTracer> callEndedUpdater;
+    private final AtomicIntegerFieldUpdater<ServerTracer> streamClosedUpdater;
+
+    private FieldUpdaterAtomicHelper(
+        AtomicIntegerFieldUpdater<ClientCallTracer> callEndedUpdater,
+        AtomicIntegerFieldUpdater<ServerTracer> streamClosedUpdater) {
+      this.callEndedUpdater = callEndedUpdater;
+      this.streamClosedUpdater = streamClosedUpdater;
+    }
+
+    @Override
+    public int callEndedGetAndSet(ClientCallTracer obj, int newValue) {
+      return callEndedUpdater.getAndSet(obj, newValue);
+    }
+
+    @Override
+    public int streamClosedGetAndSet(ServerTracer obj, int newValue) {
+      return streamClosedUpdater.getAndSet(obj, newValue);
+    }
+  }
+
+  private static final class SynchronizedAtomicHelper extends AtomicHelper {
+    @Override
+    public int callEndedGetAndSet(ClientCallTracer obj, int newValue) {
+      synchronized (obj) {
+        int prev = obj.callEnded;
+        obj.callEnded = newValue;
+        return prev;
+      }
+    }
+
+    @Override
+    public int streamClosedGetAndSet(ServerTracer obj, int newValue) {
+      synchronized (obj) {
+        int prev = obj.streamClosed;
+        obj.streamClosed = newValue;
+        return prev;
+      }
+    }
+  }
 }

@@ -153,19 +153,28 @@ public final class CensusStatsModule {
   }
 
   private static final class ClientTracer extends ClientStreamTracer {
+    // When using Atomic*FieldUpdater, some Samsung Android 5.0.x devices encounter a bug in the JDK
+    // reflection API that triggers a NoSuchFieldException. When this occurs, fallback to a
+    // synchronized implementation.
+    private static final ClientTracerAtomicHelper atomicHelper = getAtomicHelper();
 
-    private static final AtomicLongFieldUpdater<ClientTracer> outboundMessageCountUpdater =
-        AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "outboundMessageCount");
-    private static final AtomicLongFieldUpdater<ClientTracer> inboundMessageCountUpdater =
-        AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "inboundMessageCount");
-    private static final AtomicLongFieldUpdater<ClientTracer> outboundWireSizeUpdater =
-        AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "outboundWireSize");
-    private static final AtomicLongFieldUpdater<ClientTracer> inboundWireSizeUpdater =
-        AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "inboundWireSize");
-    private static final AtomicLongFieldUpdater<ClientTracer> outboundUncompressedSizeUpdater =
-        AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "outboundUncompressedSize");
-    private static final AtomicLongFieldUpdater<ClientTracer> inboundUncompressedSizeUpdater =
-        AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "inboundUncompressedSize");
+    private static ClientTracerAtomicHelper getAtomicHelper() {
+      ClientTracerAtomicHelper helper;
+      try {
+        helper =
+            new FieldUpdaterClientTracerAtomicHelper(
+                AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "outboundMessageCount"),
+                AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "inboundMessageCount"),
+                AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "outboundWireSize"),
+                AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "inboundWireSize"),
+                AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "outboundUncompressedSize"),
+                AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "inboundUncompressedSize"));
+      } catch (Throwable t) {
+        logger.log(Level.WARNING, "FieldUpdaterClientTracerAtomicHelper failed", t);
+        helper = new SynchronizedClientTracerAtomicHelper();
+      }
+      return helper;
+    }
 
     volatile long outboundMessageCount;
     volatile long inboundMessageCount;
@@ -176,45 +185,179 @@ public final class CensusStatsModule {
 
     @Override
     public void outboundWireSize(long bytes) {
-      outboundWireSizeUpdater.getAndAdd(this, bytes);
+      atomicHelper.outboundWireSizeGetAndAdd(this, bytes);
     }
 
     @Override
     public void inboundWireSize(long bytes) {
-      inboundWireSizeUpdater.getAndAdd(this, bytes);
+      atomicHelper.inboundWireSizeGetAndAdd(this, bytes);
     }
 
     @Override
     public void outboundUncompressedSize(long bytes) {
-      outboundUncompressedSizeUpdater.getAndAdd(this, bytes);
+      atomicHelper.outboundUncompressedSizeGetAndAdd(this, bytes);
     }
 
     @Override
     public void inboundUncompressedSize(long bytes) {
-      inboundUncompressedSizeUpdater.getAndAdd(this, bytes);
+      atomicHelper.inboundUncompressedSizeGetAndAdd(this, bytes);
     }
 
     @Override
     public void inboundMessage(int seqNo) {
-      inboundMessageCountUpdater.getAndIncrement(this);
+      atomicHelper.inboundMessageCountGetAndIncrement(this);
     }
 
     @Override
     public void outboundMessage(int seqNo) {
-      outboundMessageCountUpdater.getAndIncrement(this);
+      atomicHelper.outboundMessageCountGetAndIncrement(this);
+    }
+
+    private abstract static class ClientTracerAtomicHelper {
+      public abstract long outboundMessageCountGetAndIncrement(ClientTracer obj);
+
+      public abstract long inboundMessageCountGetAndIncrement(ClientTracer obj);
+
+      public abstract long outboundWireSizeGetAndAdd(ClientTracer obj, long delta);
+
+      public abstract long inboundWireSizeGetAndAdd(ClientTracer obj, long delta);
+
+      public abstract long outboundUncompressedSizeGetAndAdd(ClientTracer obj, long delta);
+
+      public abstract long inboundUncompressedSizeGetAndAdd(ClientTracer obj, long delta);
+    }
+
+    private static final class FieldUpdaterClientTracerAtomicHelper
+        extends ClientTracerAtomicHelper {
+      private final AtomicLongFieldUpdater<ClientTracer> outboundMessageCountUpdater;
+      private final AtomicLongFieldUpdater<ClientTracer> inboundMessageCountUpdater;
+      private final AtomicLongFieldUpdater<ClientTracer> outboundWireSizeUpdater;
+      private final AtomicLongFieldUpdater<ClientTracer> inboundWireSizeUpdater;
+      private final AtomicLongFieldUpdater<ClientTracer> outboundUncompressedSizeUpdater;
+      private final AtomicLongFieldUpdater<ClientTracer> inboundUncompressedSizeUpdater;
+
+      private FieldUpdaterClientTracerAtomicHelper(
+          AtomicLongFieldUpdater<ClientTracer> outboundMessageCountUpdater,
+          AtomicLongFieldUpdater<ClientTracer> inboundMessageCountUpdater,
+          AtomicLongFieldUpdater<ClientTracer> outboundWireSizeUpdater,
+          AtomicLongFieldUpdater<ClientTracer> inboundWireSizeUpdater,
+          AtomicLongFieldUpdater<ClientTracer> outboundUncompressedSizeUpdater,
+          AtomicLongFieldUpdater<ClientTracer> inboundUncompressedSizeUpdater) {
+        this.outboundMessageCountUpdater = outboundMessageCountUpdater;
+        this.inboundMessageCountUpdater = inboundMessageCountUpdater;
+        this.outboundWireSizeUpdater = outboundWireSizeUpdater;
+        this.inboundWireSizeUpdater = inboundWireSizeUpdater;
+        this.outboundUncompressedSizeUpdater = outboundUncompressedSizeUpdater;
+        this.inboundUncompressedSizeUpdater = inboundUncompressedSizeUpdater;
+      }
+
+      @Override
+      public long outboundMessageCountGetAndIncrement(ClientTracer obj) {
+        return outboundMessageCountUpdater.getAndIncrement(obj);
+      }
+
+      @Override
+      public long inboundMessageCountGetAndIncrement(ClientTracer obj) {
+        return inboundMessageCountUpdater.getAndIncrement(obj);
+      }
+
+      @Override
+      public long outboundWireSizeGetAndAdd(ClientTracer obj, long delta) {
+        return outboundWireSizeUpdater.getAndAdd(obj, delta);
+      }
+
+      @Override
+      public long inboundWireSizeGetAndAdd(ClientTracer obj, long delta) {
+        return inboundWireSizeUpdater.getAndAdd(obj, delta);
+      }
+
+      @Override
+      public long outboundUncompressedSizeGetAndAdd(ClientTracer obj, long delta) {
+        return outboundUncompressedSizeUpdater.getAndAdd(obj, delta);
+      }
+
+      @Override
+      public long inboundUncompressedSizeGetAndAdd(ClientTracer obj, long delta) {
+        return inboundUncompressedSizeUpdater.getAndAdd(obj, delta);
+      }
+    }
+
+    private static final class SynchronizedClientTracerAtomicHelper
+        extends ClientTracerAtomicHelper {
+
+      @Override
+      public long outboundMessageCountGetAndIncrement(ClientTracer obj) {
+        synchronized (obj) {
+          return obj.outboundMessageCount++;
+        }
+      }
+
+      @Override
+      public long inboundMessageCountGetAndIncrement(ClientTracer obj) {
+        synchronized (obj) {
+          return obj.inboundMessageCount++;
+        }
+      }
+
+      @Override
+      public long outboundWireSizeGetAndAdd(ClientTracer obj, long delta) {
+        synchronized (obj) {
+          long prev = obj.outboundWireSize;
+          obj.outboundWireSize += delta;
+          return prev;
+        }
+      }
+
+      @Override
+      public long inboundWireSizeGetAndAdd(ClientTracer obj, long delta) {
+        synchronized (obj) {
+          long prev = obj.inboundWireSize;
+          obj.inboundWireSize += delta;
+          return prev;
+        }
+      }
+
+      @Override
+      public long outboundUncompressedSizeGetAndAdd(ClientTracer obj, long delta) {
+        synchronized (obj) {
+          long prev = obj.outboundUncompressedSize;
+          obj.outboundUncompressedSize += delta;
+          return prev;
+        }
+      }
+
+      @Override
+      public long inboundUncompressedSizeGetAndAdd(ClientTracer obj, long delta) {
+        synchronized (obj) {
+          long prev = obj.inboundUncompressedSize;
+          obj.inboundUncompressedSize += delta;
+          return prev;
+        }
+      }
     }
   }
 
-
-
   @VisibleForTesting
   static final class ClientCallTracer extends ClientStreamTracer.Factory {
-    private static final AtomicReferenceFieldUpdater<ClientCallTracer, ClientTracer>
-        streamTracerUpdater =
-            AtomicReferenceFieldUpdater.newUpdater(
-                ClientCallTracer.class, ClientTracer.class, "streamTracer");
-    private static final AtomicIntegerFieldUpdater<ClientCallTracer> callEndedUpdater =
-        AtomicIntegerFieldUpdater.newUpdater(ClientCallTracer.class, "callEnded");
+    // When using Atomic*FieldUpdater, some Samsung Android 5.0.x devices encounter a bug in the JDK
+    // reflection API that triggers a NoSuchFieldException. When this occurs, fallback to a
+    // synchronized implementation.
+    private static final ClientCallTracerAtomicHelper atomicHelper = getAtomicHelper();
+
+    private static ClientCallTracerAtomicHelper getAtomicHelper() {
+      ClientCallTracerAtomicHelper helper;
+      try {
+        helper =
+            new FieldUpdaterClientCallTracerAtomicHelper(
+                AtomicReferenceFieldUpdater.newUpdater(
+                    ClientCallTracer.class, ClientTracer.class, "streamTracer"),
+                AtomicIntegerFieldUpdater.newUpdater(ClientCallTracer.class, "callEnded"));
+      } catch (Throwable t) {
+        logger.log(Level.WARNING, "FieldUpdaterClientCallTracerAtomicHelper failed", t);
+        helper = new SynchronizedClientCallTracerAtomicHelper();
+      }
+      return helper;
+    }
 
     private final CensusStatsModule module;
     private final String fullMethodName;
@@ -251,7 +394,7 @@ public final class CensusStatsModule {
       // TODO(zhangkun83): Once retry or hedging is implemented, a ClientCall may start more than
       // one streams.  We will need to update this file to support them.
       checkState(
-          streamTracerUpdater.compareAndSet(this, null, tracer),
+          atomicHelper.streamTracerCompareAndSet(this, null, tracer),
           "Are you creating multiple streams per call? This class doesn't yet support this case.");
       if (module.propagateTags) {
         headers.discardAll(module.statsHeader);
@@ -269,7 +412,7 @@ public final class CensusStatsModule {
      * is a no-op.
      */
     void callEnded(Status status) {
-      if (callEndedUpdater.getAndSet(this, 1) != 0) {
+      if (atomicHelper.callEndedGetAndSet(this, 1) != 0) {
         return;
       }
       if (!recordFinishedRpcs) {
@@ -305,23 +448,88 @@ public final class CensusStatsModule {
               .put(RpcMeasureConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
               .build());
     }
+
+    private abstract static class ClientCallTracerAtomicHelper {
+      public abstract boolean streamTracerCompareAndSet(
+          ClientCallTracer obj, ClientTracer expect, ClientTracer update);
+
+      public abstract int callEndedGetAndSet(ClientCallTracer obj, int newValue);
+    }
+
+    private static final class FieldUpdaterClientCallTracerAtomicHelper
+        extends ClientCallTracerAtomicHelper {
+      private final AtomicReferenceFieldUpdater<ClientCallTracer, ClientTracer> streamTracerUpdater;
+      private final AtomicIntegerFieldUpdater<ClientCallTracer> callEndedUpdater;
+
+      private FieldUpdaterClientCallTracerAtomicHelper(
+          AtomicReferenceFieldUpdater<ClientCallTracer, ClientTracer> streamTracerUpdater,
+          AtomicIntegerFieldUpdater<ClientCallTracer> callEndedUpdater) {
+        this.streamTracerUpdater = streamTracerUpdater;
+        this.callEndedUpdater = callEndedUpdater;
+      }
+
+      @Override
+      public boolean streamTracerCompareAndSet(
+          ClientCallTracer obj, ClientTracer expect, ClientTracer update) {
+        return streamTracerUpdater.compareAndSet(obj, expect, update);
+      }
+
+      @Override
+      public int callEndedGetAndSet(ClientCallTracer obj, int newValue) {
+        return callEndedUpdater.getAndSet(obj, newValue);
+      }
+    }
+
+    private static final class SynchronizedClientCallTracerAtomicHelper
+        extends ClientCallTracerAtomicHelper {
+
+      @Override
+      public boolean streamTracerCompareAndSet(
+          ClientCallTracer obj, ClientTracer expect, ClientTracer update) {
+        synchronized (obj) {
+          if (obj.streamTracer == expect) {
+            obj.streamTracer = update;
+            return true;
+          }
+          return false;
+        }
+      }
+
+      @Override
+      public int callEndedGetAndSet(ClientCallTracer obj, int newValue) {
+        synchronized (obj) {
+          int prev = obj.callEnded;
+          obj.callEnded = newValue;
+          return prev;
+        }
+      }
+    }
   }
 
   private static final class ServerTracer extends ServerStreamTracer {
-    private static final AtomicIntegerFieldUpdater<ServerTracer> streamClosedUpdater =
-        AtomicIntegerFieldUpdater.newUpdater(ServerTracer.class, "streamClosed");
-    private static final AtomicLongFieldUpdater<ServerTracer> outboundMessageCountUpdater =
-        AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "outboundMessageCount");
-    private static final AtomicLongFieldUpdater<ServerTracer> inboundMessageCountUpdater =
-        AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "inboundMessageCount");
-    private static final AtomicLongFieldUpdater<ServerTracer> outboundWireSizeUpdater =
-        AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "outboundWireSize");
-    private static final AtomicLongFieldUpdater<ServerTracer> inboundWireSizeUpdater =
-        AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "inboundWireSize");
-    private static final AtomicLongFieldUpdater<ServerTracer> outboundUncompressedSizeUpdater =
-        AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "outboundUncompressedSize");
-    private static final AtomicLongFieldUpdater<ServerTracer> inboundUncompressedSizeUpdater =
-        AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "inboundUncompressedSize");
+    // When using Atomic*FieldUpdater, some Samsung Android 5.0.x devices encounter a bug in the JDK
+    // reflection API that triggers a NoSuchFieldException. When this occurs, fallback to a
+    // synchronized implementation.
+    private static final ServerTracerAtomicHelper atomicHelper = getAtomicHelper();
+
+    private static ServerTracerAtomicHelper getAtomicHelper() {
+      ServerTracerAtomicHelper helper;
+      try {
+        helper =
+            new FieldUpdaterServerTracerAtomicHelper(
+                AtomicIntegerFieldUpdater.newUpdater(ServerTracer.class, "streamClosed"),
+                AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "outboundMessageCount"),
+                AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "inboundMessageCount"),
+                AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "outboundWireSize"),
+                AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "inboundWireSize"),
+                AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "outboundUncompressedSize"),
+                AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "inboundUncompressedSize"));
+      } catch (Throwable t) {
+        logger.log(Level.WARNING, "FieldUpdaterServerTracerAtomicHelper failed", t);
+        helper = new SynchronizedServerTracerAtomicHelper();
+      }
+      return helper;
+    }
 
     private final CensusStatsModule module;
     private final String fullMethodName;
@@ -359,32 +567,32 @@ public final class CensusStatsModule {
 
     @Override
     public void outboundWireSize(long bytes) {
-      outboundWireSizeUpdater.getAndAdd(this, bytes);
+      atomicHelper.outboundWireSizeGetAndAdd(this, bytes);
     }
 
     @Override
     public void inboundWireSize(long bytes) {
-      inboundWireSizeUpdater.getAndAdd(this, bytes);
+      atomicHelper.inboundWireSizeGetAndAdd(this, bytes);
     }
 
     @Override
     public void outboundUncompressedSize(long bytes) {
-      outboundUncompressedSizeUpdater.getAndAdd(this, bytes);
+      atomicHelper.outboundUncompressedSizeGetAndAdd(this, bytes);
     }
 
     @Override
     public void inboundUncompressedSize(long bytes) {
-      inboundUncompressedSizeUpdater.getAndAdd(this, bytes);
+      atomicHelper.inboundUncompressedSizeGetAndAdd(this, bytes);
     }
 
     @Override
     public void inboundMessage(int seqNo) {
-      inboundMessageCountUpdater.getAndIncrement(this);
+      atomicHelper.inboundMessageCountGetAndIncrement(this);
     }
 
     @Override
     public void outboundMessage(int seqNo) {
-      outboundMessageCountUpdater.getAndIncrement(this);
+      atomicHelper.outboundMessageCountGetAndIncrement(this);
     }
 
     /**
@@ -395,7 +603,7 @@ public final class CensusStatsModule {
      */
     @Override
     public void streamClosed(Status status) {
-      if (streamClosedUpdater.getAndSet(this, 1) != 0) {
+      if (atomicHelper.streamClosedGetAndSet(this, 1) != 0) {
         return;
       }
       if (!recordFinishedRpcs) {
@@ -430,6 +638,148 @@ public final class CensusStatsModule {
         return context.withValue(TAG_CONTEXT_KEY, parentCtx);
       }
       return context;
+    }
+
+    private abstract static class ServerTracerAtomicHelper {
+      public abstract int streamClosedGetAndSet(ServerTracer obj, int newValue);
+
+      public abstract long outboundMessageCountGetAndIncrement(ServerTracer obj);
+
+      public abstract long inboundMessageCountGetAndIncrement(ServerTracer obj);
+
+      public abstract long outboundWireSizeGetAndAdd(ServerTracer obj, long delta);
+
+      public abstract long inboundWireSizeGetAndAdd(ServerTracer obj, long delta);
+
+      public abstract long outboundUncompressedSizeGetAndAdd(ServerTracer obj, long delta);
+
+      public abstract long inboundUncompressedSizeGetAndAdd(ServerTracer obj, long delta);
+    }
+
+    private static final class FieldUpdaterServerTracerAtomicHelper
+        extends ServerTracerAtomicHelper {
+      private final AtomicIntegerFieldUpdater<ServerTracer> streamClosedUpdater;
+      private final AtomicLongFieldUpdater<ServerTracer> outboundMessageCountUpdater;
+      private final AtomicLongFieldUpdater<ServerTracer> inboundMessageCountUpdater;
+      private final AtomicLongFieldUpdater<ServerTracer> outboundWireSizeUpdater;
+      private final AtomicLongFieldUpdater<ServerTracer> inboundWireSizeUpdater;
+      private final AtomicLongFieldUpdater<ServerTracer> outboundUncompressedSizeUpdater;
+      private final AtomicLongFieldUpdater<ServerTracer> inboundUncompressedSizeUpdater;
+
+      private FieldUpdaterServerTracerAtomicHelper(
+          AtomicIntegerFieldUpdater<ServerTracer> streamClosedUpdater,
+          AtomicLongFieldUpdater<ServerTracer> outboundMessageCountUpdater,
+          AtomicLongFieldUpdater<ServerTracer> inboundMessageCountUpdater,
+          AtomicLongFieldUpdater<ServerTracer> outboundWireSizeUpdater,
+          AtomicLongFieldUpdater<ServerTracer> inboundWireSizeUpdater,
+          AtomicLongFieldUpdater<ServerTracer> outboundUncompressedSizeUpdater,
+          AtomicLongFieldUpdater<ServerTracer> inboundUncompressedSizeUpdater) {
+        this.streamClosedUpdater = streamClosedUpdater;
+        this.outboundMessageCountUpdater = outboundMessageCountUpdater;
+        this.inboundMessageCountUpdater = inboundMessageCountUpdater;
+        this.outboundWireSizeUpdater = outboundWireSizeUpdater;
+        this.inboundWireSizeUpdater = inboundWireSizeUpdater;
+        this.outboundUncompressedSizeUpdater = outboundUncompressedSizeUpdater;
+        this.inboundUncompressedSizeUpdater = inboundUncompressedSizeUpdater;
+      }
+
+      @Override
+      public int streamClosedGetAndSet(ServerTracer obj, int newValue) {
+        return streamClosedUpdater.getAndSet(obj, newValue);
+      }
+
+      @Override
+      public long outboundMessageCountGetAndIncrement(ServerTracer obj) {
+        return outboundMessageCountUpdater.getAndIncrement(obj);
+      }
+
+      @Override
+      public long inboundMessageCountGetAndIncrement(ServerTracer obj) {
+        return inboundMessageCountUpdater.getAndIncrement(obj);
+      }
+
+      @Override
+      public long outboundWireSizeGetAndAdd(ServerTracer obj, long delta) {
+        return outboundWireSizeUpdater.getAndAdd(obj, delta);
+      }
+
+      @Override
+      public long inboundWireSizeGetAndAdd(ServerTracer obj, long delta) {
+        return inboundWireSizeUpdater.getAndAdd(obj, delta);
+      }
+
+      @Override
+      public long outboundUncompressedSizeGetAndAdd(ServerTracer obj, long delta) {
+        return outboundUncompressedSizeUpdater.getAndAdd(obj, delta);
+      }
+
+      @Override
+      public long inboundUncompressedSizeGetAndAdd(ServerTracer obj, long delta) {
+        return inboundUncompressedSizeUpdater.getAndAdd(obj, delta);
+      }
+    }
+
+    private static final class SynchronizedServerTracerAtomicHelper
+        extends ServerTracerAtomicHelper {
+
+      @Override
+      public int streamClosedGetAndSet(ServerTracer obj, int newValue) {
+        synchronized (obj) {
+          int prev = obj.streamClosed;
+          obj.streamClosed = newValue;
+          return prev;
+        }
+      }
+
+      @Override
+      public long outboundMessageCountGetAndIncrement(ServerTracer obj) {
+        synchronized (obj) {
+          return obj.outboundMessageCount++;
+        }
+      }
+
+      @Override
+      public long inboundMessageCountGetAndIncrement(ServerTracer obj) {
+        synchronized (obj) {
+          return obj.inboundMessageCount++;
+        }
+      }
+
+      @Override
+      public long outboundWireSizeGetAndAdd(ServerTracer obj, long delta) {
+        synchronized (obj) {
+          long prev = obj.outboundWireSize;
+          obj.outboundWireSize += delta;
+          return prev;
+        }
+      }
+
+      @Override
+      public long inboundWireSizeGetAndAdd(ServerTracer obj, long delta) {
+        synchronized (obj) {
+          long prev = obj.inboundWireSize;
+          obj.inboundWireSize += delta;
+          return prev;
+        }
+      }
+
+      @Override
+      public long outboundUncompressedSizeGetAndAdd(ServerTracer obj, long delta) {
+        synchronized (obj) {
+          long prev = obj.outboundUncompressedSize;
+          obj.outboundUncompressedSize += delta;
+          return prev;
+        }
+      }
+
+      @Override
+      public long inboundUncompressedSizeGetAndAdd(ServerTracer obj, long delta) {
+        synchronized (obj) {
+          long prev = obj.inboundUncompressedSize;
+          obj.inboundUncompressedSize += delta;
+          return prev;
+        }
+      }
     }
   }
 
