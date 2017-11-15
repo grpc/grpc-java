@@ -16,9 +16,11 @@
 
 package io.grpc.netty;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Internal;
 import io.grpc.internal.ProxyParameters;
 import java.net.SocketAddress;
+import javax.annotation.Nullable;
 
 /**
  * Internal {@link NettyChannelBuilder} accessor.  This is intended for usage internal to the gRPC
@@ -75,4 +77,25 @@ public final class InternalNettyChannelBuilder {
   }
 
   private InternalNettyChannelBuilder() {}
+
+  /**
+   * Accessor for tests.
+   */
+  @VisibleForTesting
+  public static final class TestAccessor {
+    private TestAccessor() {}
+
+    /**
+     * Gets the {@link TransportCreationParamsFilterFactory} that is dynamically set to the
+     * specified NettyChannelBuilder at the moment.
+     */
+    @Nullable
+    public static TransportCreationParamsFilterFactory getDynamicTransportParamsFactory(
+        NettyChannelBuilder builder) {
+      if (builder.dynamicParamsFactory instanceof TransportCreationParamsFilterFactory) {
+        return (TransportCreationParamsFilterFactory) builder.dynamicParamsFactory;
+      }
+      return null;
+    }
+  }
 }
