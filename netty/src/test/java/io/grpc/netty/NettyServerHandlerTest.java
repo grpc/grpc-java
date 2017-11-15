@@ -447,6 +447,24 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
+  public void headersWithMissingPathShouldFail() throws Exception {
+    manualSetUp();
+    Http2Headers headers = new DefaultHttp2Headers()
+        .method(HTTP_METHOD)
+        .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC);
+    ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
+    channelRead(headersFrame);
+    Http2Headers responseHeaders = new DefaultHttp2Headers()
+        .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.UNIMPLEMENTED.value()))
+        .set(InternalStatus.MESSAGE_KEY.name(), "Expected path but is missing")
+        .status("" + 404)
+        .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
+
+    verifyWrite().writeHeaders(eq(ctx()), eq(STREAM_ID), eq(responseHeaders), eq(0),
+        eq(DEFAULT_PRIORITY_WEIGHT), eq(false), eq(0), eq(false), any(ChannelPromise.class));
+  }
+
+  @Test
   public void headersWithInvalidPathShouldFail() throws Exception {
     manualSetUp();
     Http2Headers headers = new DefaultHttp2Headers()

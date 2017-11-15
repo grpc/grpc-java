@@ -385,6 +385,23 @@ class NettyServerHandler extends AbstractNettyHandler {
 
     try {
 
+      // Remove the leading slash of the path and get the fully qualified method name
+      CharSequence path = headers.path();
+
+      if (path == null) {
+        respondWithHttpError(ctx, streamId, 404, Status.Code.UNIMPLEMENTED,
+            "Expected path but is missing");
+        return;
+      }
+
+      if (path.charAt(0) != '/') {
+        respondWithHttpError(ctx, streamId, 404, Status.Code.UNIMPLEMENTED,
+            String.format("Expected path to start with /: %s", path));
+        return;
+      }
+
+      String method = path.subSequence(1, path.length()).toString();
+
       // Verify that the Content-Type is correct in the request.
       CharSequence contentType = headers.get(CONTENT_TYPE_HEADER);
       if (contentType == null) {
@@ -404,14 +421,6 @@ class NettyServerHandler extends AbstractNettyHandler {
             String.format("Method '%s' is not supported", headers.method()));
         return;
       }
-      // Remove the leading slash of the path and get the fully qualified method name
-      CharSequence path = headers.path();
-      if (path.charAt(0) != '/') {
-        respondWithHttpError(ctx, streamId, 404, Status.Code.UNIMPLEMENTED,
-            String.format("Expected path to start with /: %s", path));
-        return;
-      }
-      String method = path.subSequence(1, path.length()).toString();
 
       // The Http2Stream object was put by AbstractHttp2ConnectionHandler before calling this
       // method.
