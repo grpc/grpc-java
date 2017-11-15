@@ -54,6 +54,7 @@ final class OobChannel extends ManagedChannel implements WithLogId {
   private SubchannelPicker subchannelPicker;
 
   private final LogId logId = LogId.allocate(getClass().getName());
+  private final ChannelTraceStats channelStats = new ChannelTraceStats();
   private final String authority;
   private final DelayedClientTransport delayedTransport;
   private final ObjectPool<? extends Executor> executorPool;
@@ -155,7 +156,7 @@ final class OobChannel extends ManagedChannel implements WithLogId {
       MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
     return new ClientCallImpl<RequestT, ResponseT>(methodDescriptor,
         callOptions.getExecutor() == null ? executor : callOptions.getExecutor(),
-        callOptions, transportProvider, deadlineCancellationExecutor);
+        callOptions, transportProvider, deadlineCancellationExecutor, channelStats);
   }
 
   @Override

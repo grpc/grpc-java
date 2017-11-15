@@ -184,6 +184,9 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
   private final ManagedChannelReference phantom;
 
+  @VisibleForTesting
+  final ChannelTraceStats channelStats;
+
   // Called from channelExecutor
   private final ManagedClientTransport.Listener delayedTransportListener =
       new ManagedClientTransport.Listener() {
@@ -395,7 +398,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       ObjectPool<? extends Executor> oobExecutorPool,
       Supplier<Stopwatch> stopwatchSupplier,
       List<ClientInterceptor> interceptors,
-      ProxyDetector proxyDetector) {
+      ProxyDetector proxyDetector,
+      ChannelTraceStats channelTraceStats) {
     this.target = checkNotNull(builder.target, "target");
     this.nameResolverFactory = builder.getNameResolverFactory();
     this.nameResolverParams = checkNotNull(builder.getNameResolverParams(), "nameResolverParams");
@@ -428,6 +432,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     this.proxyDetector = proxyDetector;
 
     phantom = new ManagedChannelReference(this);
+    this.channelStats = channelTraceStats;
     logger.log(Level.FINE, "[{0}] Created with target {1}", new Object[] {getLogId(), target});
   }
 
@@ -578,7 +583,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
               executor,
               callOptions,
               transportProvider,
-              terminated ? null : transportFactory.getScheduledExecutorService())
+              terminated ? null : transportFactory.getScheduledExecutorService(),
+              channelStats)
           .setFullStreamDecompression(fullStreamDecompression)
           .setDecompressorRegistry(decompressorRegistry)
           .setCompressorRegistry(compressorRegistry);
