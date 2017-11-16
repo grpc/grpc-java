@@ -56,7 +56,7 @@ final class RetriableStream<ReqT> implements ClientStream {
 
   private volatile State state =
       new State(
-          new ArrayList<BufferEntry>(), Collections.<ClientStream>emptySet(), null, null, false);
+          new ArrayList<BufferEntry>(), Collections.<ClientStream>emptySet(), null, false, false);
 
   private ClientStreamListener masterListener;
 
@@ -75,8 +75,14 @@ final class RetriableStream<ReqT> implements ClientStream {
   }
 
   private boolean commit(ClientStream winningSubstream) {
-    delayedClientTransport.removeUncommittedRetriableStream(this);
+    if (commit0(winningSubstream)) {
+      postCommit();
+      return true;
+    }
+    return false;
+  }
 
+  private boolean commit0(ClientStream winningSubstream) {
     Collection<ClientStream> savedDrainedSubstreams;
     synchronized (lock) {
       if (state.winningSubstream != null) {
@@ -95,8 +101,11 @@ final class RetriableStream<ReqT> implements ClientStream {
         substream.cancel(CANCELLED_BECAUSE_COMMITTED);
       }
     }
-
     return true;
+  }
+
+  private void postCommit() {
+    delayedClientTransport.removeUncommittedRetriableStream(RetriableStream.this);
   }
 
   private void retry() {
@@ -122,7 +131,6 @@ final class RetriableStream<ReqT> implements ClientStream {
     int index = 0;
     int chunk = 0x80;
     List<BufferEntry> list = null;
-    Status status;
 
     while (true) {
       State savedState;
@@ -130,13 +138,8 @@ final class RetriableStream<ReqT> implements ClientStream {
       synchronized (lock) {
         savedState = state;
         if (index == savedState.buffer.size()) { // I'm drained
-          if (savedState.cancellingStatus != null) {
-            status = savedState.cancellingStatus;
-            break;
-          }
           if (savedState.winningSubstream != null && savedState.winningSubstream != substream) {
             // committed but not me
-            status = CANCELLED_BECAUSE_COMMITTED;
             break;
           }
           state = savedState.drained(substream);
@@ -153,20 +156,22 @@ final class RetriableStream<ReqT> implements ClientStream {
       }
 
       for (BufferEntry bufferEntry : list) {
-        if (savedState.cancellingStatus != null) {
-          substream.cancel(savedState.cancellingStatus);
-          return;
-        }
+        savedState = state;
         if (savedState.winningSubstream != null && savedState.winningSubstream != substream) {
           // committed but not me
-          substream.cancel(CANCELLED_BECAUSE_COMMITTED);
+          break;
+        }
+        if (savedState.cancelled) {
+          checkState(
+              savedState.winningSubstream == substream,
+              "substream should be CANCELLED_BECAUSE_COMMITTED already");
           return;
         }
         bufferEntry.runWith(substream);
       }
     }
 
-    substream.cancel(status);
+    substream.cancel(CANCELLED_BECAUSE_COMMITTED);
   }
 
   /** Starts the first PRC attempt. */
@@ -194,19 +199,17 @@ final class RetriableStream<ReqT> implements ClientStream {
 
   @Override
   public void cancel(Status reason) {
-    delayedClientTransport.removeUncommittedRetriableStream(this);
+    if (commit0(new NoopClientStream())) {
+      masterListener.closed(reason, new Metadata());
+      postCommit();
+      return;
+    }
 
-    Collection<ClientStream> drainedSubstreams;
+    state.winningSubstream.cancel(reason);
     synchronized (lock) {
-      state = state.cancelled(reason);
-      drainedSubstreams = state.drainedSubstreams;
+      // This is not required, but causes a short-circuit in the draining process.
+      state = state.cancelled();
     }
-
-    for (ClientStream substream : drainedSubstreams) {
-      substream.cancel(reason);
-    }
-
-    // TODO(zdapeng): also cancel all the scheduled attempts.
   }
 
   private void delayOrExecute(BufferEntry bufferEntry) {
@@ -430,12 +433,12 @@ final class RetriableStream<ReqT> implements ClientStream {
     }
 
     @Override
-    public void closed(Status status, Metadata trailers) {
+    public void closed(final Status status, final Metadata trailers) {
       if (shouldRetry()) {
         // TODO(zdapeng): backoff and schedule; retry() should run in an executor
         retry();
       } else if (!hasHedging()) {
-        delayedClientTransport.removeUncommittedRetriableStream(RetriableStream.this);
+        commit(substream);
         masterListener.closed(status, trailers);
       }
       // TODO(zdapeng): in hedge case, if this is a fatal status, cancel all the other attempts, and
@@ -478,19 +481,20 @@ final class RetriableStream<ReqT> implements ClientStream {
     /** Null until committed. */
     @Nullable final ClientStream winningSubstream;
 
-    @Nullable final Status cancellingStatus;
+    /** Not required to set to true when cancelled, but can short-circuit the draining process. */
+    final boolean cancelled;
 
     State(
         @Nullable List<BufferEntry> buffer,
         Collection<ClientStream> drainedSubstreams,
         @Nullable ClientStream winningSubstream,
-        @Nullable Status cancellingStatus,
+        boolean cancelled,
         boolean passThrough) {
       this.buffer = buffer;
       this.drainedSubstreams =
           Collections.unmodifiableCollection(checkNotNull(drainedSubstreams, "drainedSubstreams"));
       this.winningSubstream = winningSubstream;
-      this.cancellingStatus = cancellingStatus;
+      this.cancelled = cancelled;
       this.passThrough = passThrough;
 
       checkState(!passThrough || buffer == null, "passThrough should imply buffer is null");
@@ -500,13 +504,14 @@ final class RetriableStream<ReqT> implements ClientStream {
       checkState(
           !passThrough
               || (drainedSubstreams.size() == 1 && drainedSubstreams.contains(winningSubstream)),
-          "assThrough should imply winningSubstream is drained");
+          "passThrough should imply winningSubstream is drained");
+      checkState(!cancelled || winningSubstream != null, "cancelled should imply committed");
     }
 
     @CheckReturnValue
     @GuardedBy("lock")
-    State cancelled(Status cancellingStatus) {
-      return new State(buffer, drainedSubstreams, winningSubstream, cancellingStatus, passThrough);
+    State cancelled() {
+      return new State(buffer, drainedSubstreams, winningSubstream, true, passThrough);
     }
 
     /** The given substream is drained. */
@@ -527,7 +532,7 @@ final class RetriableStream<ReqT> implements ClientStream {
         buffer = null;
       }
 
-      return new State(buffer, drainedSubstreams, winningSubstream, cancellingStatus, passThrough);
+      return new State(buffer, drainedSubstreams, winningSubstream, cancelled, passThrough);
     }
 
     @CheckReturnValue
@@ -545,7 +550,7 @@ final class RetriableStream<ReqT> implements ClientStream {
         drainedSubstreams = Collections.singleton(winningSubstream);
       }
 
-      return new State(buffer, drainedSubstreams, winningSubstream, cancellingStatus, passThrough);
+      return new State(buffer, drainedSubstreams, winningSubstream, cancelled, passThrough);
     }
   }
 }
