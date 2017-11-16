@@ -49,7 +49,7 @@ public final class SerializingExecutor implements Executor, Runnable {
           new FieldUpdaterAtomicHelper(
               AtomicIntegerFieldUpdater.newUpdater(SerializingExecutor.class, "runState"));
     } catch (Throwable t) {
-      log.log(Level.WARNING, "FieldUpdaterAtomicHelper failed", t);
+      log.log(Level.SEVERE, "FieldUpdaterAtomicHelper failed", t);
       helper = new SynchronizedAtomicHelper();
     }
     return helper;

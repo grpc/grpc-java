@@ -192,7 +192,7 @@ public final class CensusStatsModule {
         tmpInboundUncompressedSizeUpdater =
             AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "inboundUncompressedSize");
       } catch (Throwable t) {
-        logger.log(Level.WARNING, "Creating atomic field updaters failed", t);
+        logger.log(Level.SEVERE, "Creating atomic field updaters failed", t);
         tmpOutboundMessageCountUpdater = null;
         tmpInboundMessageCountUpdater = null;
         tmpOutboundWireSizeUpdater = null;
@@ -301,7 +301,7 @@ public final class CensusStatsModule {
         tmpCallEndedUpdater =
             AtomicIntegerFieldUpdater.newUpdater(ClientCallTracer.class, "callEnded");
       } catch (Throwable t) {
-        logger.log(Level.WARNING, "Creating atomic field updaters failed", t);
+        logger.log(Level.SEVERE, "Creating atomic field updaters failed", t);
         tmpStreamTracerUpdater = null;
         tmpCallEndedUpdater = null;
       }
@@ -456,7 +456,7 @@ public final class CensusStatsModule {
         tmpInboundUncompressedSizeUpdater =
             AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "inboundUncompressedSize");
       } catch (Throwable t) {
-        logger.log(Level.WARNING, "Creating atomic field updaters failed", t);
+        logger.log(Level.SEVERE, "Creating atomic field updaters failed", t);
         tmpStreamClosedUpdater = null;
         tmpOutboundMessageCountUpdater = null;
         tmpInboundMessageCountUpdater = null;

@@ -77,7 +77,7 @@ final class CensusTracingModule {
       tmpStreamClosedUpdater =
           AtomicIntegerFieldUpdater.newUpdater(ServerTracer.class, "streamClosed");
     } catch (Throwable t) {
-      logger.log(Level.WARNING, "Creating atomic field updaters failed", t);
+      logger.log(Level.SEVERE, "Creating atomic field updaters failed", t);
       tmpCallEndedUpdater = null;
       tmpStreamClosedUpdater = null;
     }
