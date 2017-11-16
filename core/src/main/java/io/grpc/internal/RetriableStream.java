@@ -51,7 +51,7 @@ final class RetriableStream<ReqT> implements ClientStream {
   private final DelayedClientTransport delayedClientTransport;
   private final Context context;
 
-  /** For reading and updating state. */
+  /** Must be held when updating state or accessing state.buffer. */
   private final Object lock = new Object();
 
   private volatile State state =
