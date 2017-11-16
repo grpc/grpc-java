@@ -125,18 +125,34 @@ final class RetriableStream<ReqT> implements ClientStream {
     Status status;
 
     while (true) {
+      State savedState;
+
       synchronized (lock) {
-        int stop = Math.min(index + chunk, state.buffer.size());
+        savedState = state;
+        if (index == savedState.buffer.size()) { // I'm drained
+          if (savedState.cancellingStatus != null) {
+            status = savedState.cancellingStatus;
+            break;
+          }
+          if (savedState.winningSubstream != null && savedState.winningSubstream != substream) {
+            // committed but not me
+            status = Status.CANCELLED.withDescription(CANCELLED_BECAUSE_HEDGE_COMMITTED);
+            break;
+          }
+          state = savedState.drained(substream);
+          return;
+        }
+
+        int stop = Math.min(index + chunk, savedState.buffer.size());
         if (list == null) {
           list = new ArrayList<BufferEntry>(stop - index);
         }
         list.clear();
-        list.addAll(state.buffer.subList(index, stop));
+        list.addAll(savedState.buffer.subList(index, stop));
         index = stop;
       }
 
       for (BufferEntry bufferEntry : list) {
-        State savedState = state;
         if (savedState.cancellingStatus != null) {
           substream.cancel(savedState.cancellingStatus);
           return;
@@ -147,25 +163,6 @@ final class RetriableStream<ReqT> implements ClientStream {
           return;
         }
         bufferEntry.runWith(substream);
-      }
-
-      synchronized (lock) {
-        if (index != state.buffer.size()) { // I'm not drained
-          continue;
-        }
-
-        if (state.cancellingStatus != null) {
-          status = state.cancellingStatus;
-          break;
-        }
-        if (state.winningSubstream != null && state.winningSubstream != substream) {
-          // committed but not me
-          status = Status.CANCELLED.withDescription(CANCELLED_BECAUSE_HEDGE_COMMITTED);
-          break;
-        }
-
-        state = state.drained(substream);
-        return;
       }
     }
 
