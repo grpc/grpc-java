@@ -216,7 +216,7 @@ public class ManagedChannelImplTest {
     channel = new ManagedChannelImpl(
         builder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         oobExecutorPool, timer.getStopwatchSupplier(), interceptors, GrpcUtil.NOOP_PROXY_DETECTOR,
-        new ChannelTraceStats(new ChannelTraceStats.TimeProvider() {
+        new ChannelStats(new ChannelStats.TimeProvider() {
           @Override
           public long currentTimeMillis() {
             return executor.currentTimeMillis();
@@ -1652,7 +1652,7 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void channelTrace_callStarted() throws Exception {
+  public void channelStat_callStarted() throws Exception {
     createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     assertEquals(0, channel.channelStats.getCallsStarted());
@@ -1662,7 +1662,7 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void channelTrace_callEndSuccess() throws Exception {
+  public void channelStat_callEndSuccess() throws Exception {
     // set up
     Metadata headers = new Metadata();
     ClientStream mockStream = mock(ClientStream.class);
@@ -1703,7 +1703,7 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void channelTrace_callEndFail() throws Exception {
+  public void channelStat_callEndFail() throws Exception {
     createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());

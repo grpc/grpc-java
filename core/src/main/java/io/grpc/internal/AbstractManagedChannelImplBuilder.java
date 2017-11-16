@@ -346,7 +346,7 @@ public abstract class AbstractManagedChannelImplBuilder
         GrpcUtil.STOPWATCH_SUPPLIER,
         getEffectiveInterceptors(),
         GrpcUtil.getProxyDetector(),
-        new ChannelTraceStats());
+        new ChannelStats());
   }
 
   @VisibleForTesting

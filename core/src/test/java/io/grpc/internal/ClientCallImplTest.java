@@ -89,7 +89,7 @@ public class ClientCallImplTest {
   private final FakeClock fakeClock = new FakeClock();
   private final ScheduledExecutorService deadlineCancellationExecutor =
       fakeClock.getScheduledExecutorService();
-  private final ChannelTraceStats channaleStats = new ChannelTraceStats();
+  private final ChannelStats channaleStats = new ChannelStats();
   private final DecompressorRegistry decompressorRegistry =
       DecompressorRegistry.getDefaultInstance().with(new Codec.Gzip(), true);
   private final MethodDescriptor<Void, Void> method = MethodDescriptor.<Void, Void>newBuilder()

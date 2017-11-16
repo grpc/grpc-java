@@ -21,19 +21,19 @@ import com.google.common.annotations.VisibleForTesting;
 /**
  * A collection of channel level stats for channelz.
  */
-final class ChannelTraceStats {
+final class ChannelStats {
   private final TimeProvider timeProvider;
   private final LongCounter callsStarted = LongCounterFactory.create();
   private final LongCounter callsSucceeded = LongCounterFactory.create();
   private final LongCounter callsFailed = LongCounterFactory.create();
   private volatile long lastCallStartedMillis;
 
-  ChannelTraceStats() {
+  ChannelStats() {
     timeProvider = SYSTEM_TIME_PROVIDER;
   }
 
   @VisibleForTesting
-  ChannelTraceStats(TimeProvider timeProvider) {
+  ChannelStats(TimeProvider timeProvider) {
     this.timeProvider = timeProvider;
   }
 

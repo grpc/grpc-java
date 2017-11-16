@@ -185,7 +185,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   private final ManagedChannelReference phantom;
 
   @VisibleForTesting
-  final ChannelTraceStats channelStats;
+  final ChannelStats channelStats;
 
   // Called from channelExecutor
   private final ManagedClientTransport.Listener delayedTransportListener =
@@ -399,7 +399,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       Supplier<Stopwatch> stopwatchSupplier,
       List<ClientInterceptor> interceptors,
       ProxyDetector proxyDetector,
-      ChannelTraceStats channelTraceStats) {
+      ChannelStats channelStats) {
     this.target = checkNotNull(builder.target, "target");
     this.nameResolverFactory = builder.getNameResolverFactory();
     this.nameResolverParams = checkNotNull(builder.getNameResolverParams(), "nameResolverParams");
@@ -432,7 +432,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     this.proxyDetector = proxyDetector;
 
     phantom = new ManagedChannelReference(this);
-    this.channelStats = channelTraceStats;
+    this.channelStats = channelStats;
     logger.log(Level.FINE, "[{0}] Created with target {1}", new Object[] {getLogId(), target});
   }
 
