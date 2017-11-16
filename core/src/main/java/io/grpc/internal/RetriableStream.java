@@ -396,9 +396,8 @@ final class RetriableStream<ReqT> implements ClientStream {
 
   @Override
   public Attributes getAttributes() {
-    // TODO(zdapeng): Hedging case need be handled properly.
-    if (state.drainedSubstreams.size() == 1) {
-      return state.drainedSubstreams.iterator().next().getAttributes();
+    if (state.winningSubstream != null) {
+      return state.winningSubstream.getAttributes();
     }
     return Attributes.EMPTY;
   }
