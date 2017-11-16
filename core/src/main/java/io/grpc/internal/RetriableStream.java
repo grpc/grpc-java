@@ -41,8 +41,8 @@ import javax.annotation.concurrent.GuardedBy;
 
 /** A logical {@link ClientStream} that is retriable. */
 final class RetriableStream<ReqT> implements ClientStream {
-  private static final String CANCELLED_BECAUSE_HEDGE_COMMITTED =
-      "Cancelled because a hedged RPC is committed";
+  private static final Status CANCELLED_BECAUSE_COMMITTED =
+      Status.CANCELLED.withDescription("Stream thrown away because RetriableStream committed");
 
   private final MethodDescriptor<ReqT, ?> method;
   private final CallOptions callOptions;
@@ -92,7 +92,7 @@ final class RetriableStream<ReqT> implements ClientStream {
     // TODO(zdapeng): also cancel all the scheduled hedges.
     for (ClientStream substream : savedDrainedSubstreams) {
       if (substream != winningSubstream) {
-        substream.cancel(Status.CANCELLED.withDescription(CANCELLED_BECAUSE_HEDGE_COMMITTED));
+        substream.cancel(CANCELLED_BECAUSE_COMMITTED);
       }
     }
 
@@ -136,7 +136,7 @@ final class RetriableStream<ReqT> implements ClientStream {
           }
           if (savedState.winningSubstream != null && savedState.winningSubstream != substream) {
             // committed but not me
-            status = Status.CANCELLED.withDescription(CANCELLED_BECAUSE_HEDGE_COMMITTED);
+            status = CANCELLED_BECAUSE_COMMITTED;
             break;
           }
           state = savedState.drained(substream);
@@ -159,7 +159,7 @@ final class RetriableStream<ReqT> implements ClientStream {
         }
         if (savedState.winningSubstream != null && savedState.winningSubstream != substream) {
           // committed but not me
-          substream.cancel(Status.CANCELLED.withDescription(CANCELLED_BECAUSE_HEDGE_COMMITTED));
+          substream.cancel(CANCELLED_BECAUSE_COMMITTED);
           return;
         }
         bufferEntry.runWith(substream);
