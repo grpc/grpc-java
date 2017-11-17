@@ -20,9 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import io.grpc.Attributes;
-import io.grpc.CallOptions;
 import io.grpc.Compressor;
-import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -44,9 +42,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       Status.CANCELLED.withDescription("Stream thrown away because RetriableStream committed");
 
   private final MethodDescriptor<ReqT, ?> method;
-  private final CallOptions callOptions;
-  private final Metadata headers;
-  private final Context context;
 
   /** Must be held when updating state or accessing state.buffer. */
   private final Object lock = new Object();
@@ -57,15 +52,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   private ClientStreamListener masterListener;
 
-  RetriableStream(
-      MethodDescriptor<ReqT, ?> method,
-      CallOptions callOptions,
-      Metadata headers,
-      Context context) {
+  RetriableStream(MethodDescriptor<ReqT, ?> method) {
     this.method = method;
-    this.callOptions = callOptions;
-    this.headers = headers;
-    this.context = context;
   }
 
   private boolean commit(ClientStream winningSubstream) {

@@ -395,7 +395,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
         final CallOptions callOptions,
         final Metadata headers,
         final Context context) {
-      return new RetriableStream<ReqT>(method, callOptions, headers, context) {
+      return new RetriableStream<ReqT>(method) {
         @Override
         void prestart() {
           delayedTransport.addUncommittedRetriableStream(this);
