@@ -406,7 +406,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
 
     @Override
-    public void closed(final Status status, final Metadata trailers) {
+    public void closed(Status status, Metadata trailers) {
       if (shouldRetry()) {
         // TODO(zdapeng): backoff and schedule; retry() should run in an executor
         retry();
