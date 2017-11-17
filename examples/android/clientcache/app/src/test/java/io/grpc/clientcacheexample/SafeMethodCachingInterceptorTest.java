@@ -1,5 +1,7 @@
 package io.grpc.clientcacheexample;
 
+import com.google.common.truth.Truth;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertSame;
@@ -239,8 +241,8 @@ public class SafeMethodCachingInterceptorTest {
 
     assertNotEquals(reply1, reply2);
     assertNotEquals(reply1, reply2);
-    assertEquals(0, cache.internalCache.size());
-    assertEquals(0, cache.removedKeys.size());
+    Truth.assertThat(cache.internalCache).isEmpty();
+    Truth.assertThat(cache.removedKeys).isEmpty();
   }
 
   @Test
@@ -255,8 +257,8 @@ public class SafeMethodCachingInterceptorTest {
             channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message);
 
     assertNotEquals(reply1, reply2);
-    assertEquals(0, cache.internalCache.size());
-    assertEquals(0, cache.removedKeys.size());
+    Truth.assertThat(cache.internalCache).isEmpty();
+    Truth.assertThat(cache.removedKeys).isEmpty();
   }
 
   @Test
@@ -271,8 +273,8 @@ public class SafeMethodCachingInterceptorTest {
             channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message);
 
     assertNotEquals(reply1, reply2);
-    assertEquals(0, cache.internalCache.size());
-    assertEquals(0, cache.removedKeys.size());
+    Truth.assertThat(cache.internalCache).isEmpty();
+    Truth.assertThat(cache.removedKeys).isEmpty();
   }
 
   @Test
@@ -301,8 +303,8 @@ public class SafeMethodCachingInterceptorTest {
             channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message);
 
     assertNotEquals(reply1, reply2);
-    assertEquals(0, cache.internalCache.size());
-    assertEquals(0, cache.removedKeys.size());
+    Truth.assertThat(cache.internalCache).isEmpty();
+    Truth.assertThat(cache.removedKeys).isEmpty();
   }
 
   @Test
@@ -317,8 +319,8 @@ public class SafeMethodCachingInterceptorTest {
             channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message);
 
     assertNotEquals(reply1, reply2);
-    assertEquals(0, cache.internalCache.size());
-    assertEquals(0, cache.removedKeys.size());
+    Truth.assertThat(cache.internalCache).isEmpty();
+    Truth.assertThat(cache.removedKeys).isEmpty();
   }
 
   @Test
@@ -333,8 +335,8 @@ public class SafeMethodCachingInterceptorTest {
             channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message);
 
     assertNotEquals(reply1, reply2);
-    assertEquals(0, cache.internalCache.size());
-    assertEquals(0, cache.removedKeys.size());
+    Truth.assertThat(cache.internalCache).isEmpty();
+    Truth.assertThat(cache.removedKeys).isEmpty();
   }
 
   @Test
@@ -350,8 +352,8 @@ public class SafeMethodCachingInterceptorTest {
             channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message);
 
     assertNotEquals(reply1, reply2);
-    assertEquals(0, cache.internalCache.size());
-    assertEquals(0, cache.removedKeys.size());
+    Truth.assertThat(cache.internalCache).isEmpty();
+    Truth.assertThat(cache.removedKeys).isEmpty();
   }
 
   @Test
@@ -373,7 +375,7 @@ public class SafeMethodCachingInterceptorTest {
         reply1,
         ClientCalls.blockingUnaryCall(
             channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message));
-    assertEquals(1, cache.removedKeys.size());
+    Truth.assertThat(cache.removedKeys).hasSize(1);
     assertEquals(
         new SafeMethodCachingInterceptor.Key(
             GreeterGrpc.getSayHelloMethod().getFullMethodName(), message),
@@ -402,7 +404,7 @@ public class SafeMethodCachingInterceptorTest {
         reply1,
         ClientCalls.blockingUnaryCall(
             channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message));
-    assertEquals(1, cache.removedKeys.size());
+    Truth.assertThat(cache.removedKeys).hasSize(1);
     assertEquals(
         new SafeMethodCachingInterceptor.Key(
             GreeterGrpc.getSayHelloMethod().getFullMethodName(), message),
@@ -421,8 +423,8 @@ public class SafeMethodCachingInterceptorTest {
             channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message);
 
     assertNotEquals(reply1, reply2);
-    assertEquals(0, cache.internalCache.size());
-    assertEquals(0, cache.removedKeys.size());
+    Truth.assertThat(cache.internalCache).isEmpty();
+    Truth.assertThat(cache.removedKeys).isEmpty();
   }
 
   @Test
@@ -448,8 +450,8 @@ public class SafeMethodCachingInterceptorTest {
 
     assertSame(reply1, reply2);
     assertNotEquals(reply1, reply3);
-    assertEquals(1, cache.internalCache.size());
-    assertEquals(1, cache.removedKeys.size());
+    Truth.assertThat(cache.internalCache).hasSize(1);
+    Truth.assertThat(cache.removedKeys).hasSize(1);
   }
 
   @Test
@@ -473,7 +475,7 @@ public class SafeMethodCachingInterceptorTest {
         reply1,
         ClientCalls.blockingUnaryCall(
             channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message));
-    assertEquals(1, cache.removedKeys.size());
+    Truth.assertThat(cache.removedKeys).hasSize(1);
     assertEquals(
         new SafeMethodCachingInterceptor.Key(
             GreeterGrpc.getSayHelloMethod().getFullMethodName(), message),

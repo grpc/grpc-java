@@ -62,5 +62,6 @@ dependencies {
     compile 'javax.annotation:javax.annotation-api:1.2'
 
     testCompile 'junit:junit:4.12'
+    testCompile 'com.google.truth:truth:0.28'
     testCompile 'io.grpc:grpc-testing:1.8.0-SNAPSHOT'
 }
