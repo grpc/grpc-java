@@ -85,7 +85,7 @@ public final class InProcessServerBuilder
     setStatsRecordStartedRpcs(false);
     setStatsRecordFinishedRpcs(false);
     // Disable handshake timeout because it is unnecessary, and can trigger Thread creation that can
-    // break some environemnts (like tests).
+    // break some environments (like tests).
     handshakeTimeout(Long.MAX_VALUE, TimeUnit.SECONDS);
   }
 
