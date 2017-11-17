@@ -76,7 +76,7 @@ final class OobChannel extends ManagedChannel implements WithLogId {
     @Override
     public <ReqT> RetriableStream<ReqT> newRetriableStream(MethodDescriptor<ReqT, ?> method,
         CallOptions callOptions, Metadata headers, Context context) {
-      return null;
+      throw new UnsupportedOperationException("OobChannel should not create retriable streams");
     }
   };
 
