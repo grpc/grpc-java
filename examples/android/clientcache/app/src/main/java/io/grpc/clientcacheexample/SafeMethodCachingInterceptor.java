@@ -1,5 +1,6 @@
 package io.grpc.clientcacheexample;
 
+import android.util.Log;
 import android.util.LruCache;
 import com.google.common.base.Splitter;
 import com.google.protobuf.MessageLite;
@@ -32,10 +33,10 @@ import java.util.concurrent.TimeUnit;
  * this implementation.
  */
 final class SafeMethodCachingInterceptor implements ClientInterceptor {
-  public static CallOptions.Key<Boolean> NO_CACHE_CALL_OPTION =
-      CallOptions.Key.of("no-cache", false);
-  public static CallOptions.Key<Boolean> ONLY_IF_CACHED_CALL_OPTION =
+  static CallOptions.Key<Boolean> NO_CACHE_CALL_OPTION = CallOptions.Key.of("no-cache", false);
+  static CallOptions.Key<Boolean> ONLY_IF_CACHED_CALL_OPTION =
       CallOptions.Key.of("only-if-cached", false);
+  private static final String TAG = "grpcCacheExample";
 
   public static final class Key {
     private final String fullMethodName;
@@ -204,6 +205,7 @@ final class SafeMethodCachingInterceptor implements ClientInterceptor {
                           try {
                             maxAge = Integer.parseInt(parts[1]);
                           } catch (NumberFormatException e) {
+                            Log.e(TAG, "max-age directive failed to parse", e);
                             continue;
                           }
                         }
@@ -236,7 +238,10 @@ final class SafeMethodCachingInterceptor implements ClientInterceptor {
                   // UNAVAILABLE is the canonical gRPC mapping for HTTP response code 504 (as used
                   // by the built-in Android HTTP request cache).
                   super.onClose(
-                      Status.UNAVAILABLE.withDescription(status.getDescription()), new Metadata());
+                      Status.UNAVAILABLE
+                          .withCause(status.getCause())
+                          .withDescription(status.getDescription()),
+                      new Metadata());
                 } else {
                   super.onClose(status, trailers);
                 }

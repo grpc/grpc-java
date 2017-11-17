@@ -22,6 +22,7 @@ import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
 import android.text.method.ScrollingMovementMethod;
+import android.util.Log;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
@@ -42,8 +43,9 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.concurrent.TimeUnit;
 
-public class ClientCacheExampleActivity extends AppCompatActivity {
+public final class ClientCacheExampleActivity extends AppCompatActivity {
   private static final int CACHE_SIZE_IN_BYTES = 1 * 1024 * 1024; // 1MB
+  private static final String TAG = "grpcCacheExample";
   private Button mSendButton;
   private EditText mHostEdit;
   private EditText mPortEdit;
@@ -52,7 +54,6 @@ public class ClientCacheExampleActivity extends AppCompatActivity {
   private CheckBox getCheckBox;
   private CheckBox noCacheCheckBox;
   private CheckBox onlyIfCachedCheckBox;
-  private ManagedChannel mChannel;
   private SafeMethodCachingInterceptor.Cache cache;
 
   @Override
@@ -72,6 +73,7 @@ public class ClientCacheExampleActivity extends AppCompatActivity {
     cache = SafeMethodCachingInterceptor.newLruCache(CACHE_SIZE_IN_BYTES);
   }
 
+  /** Sends RPC. Invoked when app button is pressed. */
   public void sendMessage(View view) {
     ((InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE))
         .hideSoftInputFromWindow(mHostEdit.getWindowToken(), 0);
@@ -80,33 +82,32 @@ public class ClientCacheExampleActivity extends AppCompatActivity {
   }
 
   private class GrpcTask extends AsyncTask<Void, Void, String> {
-    private String mHost;
-    private String mMessage;
-    private int mPort;
-    private ManagedChannel mChannel;
+    private String host;
+    private String message;
+    private int port;
+    private ManagedChannel channel;
 
     @Override
     protected void onPreExecute() {
-      mHost = mHostEdit.getText().toString();
-      mMessage = mMessageEdit.getText().toString();
+      host = mHostEdit.getText().toString();
+      message = mMessageEdit.getText().toString();
       String portStr = mPortEdit.getText().toString();
-      mPort = TextUtils.isEmpty(portStr) ? 0 : Integer.valueOf(portStr);
+      port = TextUtils.isEmpty(portStr) ? 0 : Integer.valueOf(portStr);
       mResultText.setText("");
     }
 
     @Override
     protected String doInBackground(Void... nothing) {
       try {
-        mChannel = ManagedChannelBuilder.forAddress(mHost, mPort).usePlaintext(true).build();
+        channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext(true).build();
         Channel channelToUse =
             ClientInterceptors.intercept(
-                ManagedChannelBuilder.forAddress(mHost, mPort).usePlaintext(true).build(),
-                SafeMethodCachingInterceptor.newSafeMethodCachingInterceptor(cache));
-        HelloRequest message = HelloRequest.newBuilder().setName(mMessage).build();
+                channel, SafeMethodCachingInterceptor.newSafeMethodCachingInterceptor(cache));
+        HelloRequest message = HelloRequest.newBuilder().setName(this.message).build();
         HelloReply reply;
         if (getCheckBox.isChecked()) {
           MethodDescriptor<HelloRequest, HelloReply> safeCacheableUnaryCallMethod =
-              GreeterGrpc.METHOD_SAY_HELLO.toBuilder().setSafe(true).build();
+              GreeterGrpc.getSayHelloMethod().toBuilder().setSafe(true).build();
           CallOptions callOptions = CallOptions.DEFAULT;
           if (noCacheCheckBox.isChecked()) {
             callOptions =
@@ -126,6 +127,7 @@ public class ClientCacheExampleActivity extends AppCompatActivity {
         }
         return reply.getMessage();
       } catch (Exception e) {
+        Log.e(TAG, "RPC failed", e);
         StringWriter sw = new StringWriter();
         PrintWriter pw = new PrintWriter(sw);
         e.printStackTrace(pw);
@@ -136,9 +138,9 @@ public class ClientCacheExampleActivity extends AppCompatActivity {
 
     @Override
     protected void onPostExecute(String result) {
-      if (mChannel != null) {
+      if (channel != null) {
         try {
-          mChannel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
         }

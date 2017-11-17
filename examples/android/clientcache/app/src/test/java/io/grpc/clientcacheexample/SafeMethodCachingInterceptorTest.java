@@ -2,6 +2,7 @@ package io.grpc.clientcacheexample;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
 
 import io.grpc.CallOptions;
@@ -28,6 +29,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -99,7 +101,7 @@ public class SafeMethodCachingInterceptorTest {
 
   private final HelloRequest message = HelloRequest.newBuilder().setName("Test Name").build();
   private final MethodDescriptor<HelloRequest, HelloReply> safeGreeterSayHelloMethod =
-      GreeterGrpc.METHOD_SAY_HELLO.toBuilder().setSafe(true).build();
+      GreeterGrpc.getSayHelloMethod().toBuilder().setSafe(true).build();
   private final TestCache cache = new TestCache();
 
   private ManagedChannel baseChannel;
@@ -134,7 +136,22 @@ public class SafeMethodCachingInterceptorTest {
         ClientCalls.blockingUnaryCall(
             channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message);
 
-    assertEquals(reply1, reply2);
+    assertSame(reply1, reply2);
+  }
+
+  @Test
+  public void safeCallsAreCachedWithCopiedMethodDescriptor() {
+    HelloReply reply1 =
+        ClientCalls.blockingUnaryCall(
+            channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message);
+    HelloReply reply2 =
+        ClientCalls.blockingUnaryCall(
+            channelToUse,
+            safeGreeterSayHelloMethod.toBuilder().build(),
+            CallOptions.DEFAULT,
+            message);
+
+    assertSame(reply1, reply2);
   }
 
   @Test
@@ -153,7 +170,7 @@ public class SafeMethodCachingInterceptorTest {
             channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message);
 
     assertNotEquals(reply1, reply2);
-    assertEquals(reply1, reply3);
+    assertSame(reply1, reply3);
   }
 
   @Test
@@ -187,7 +204,7 @@ public class SafeMethodCachingInterceptorTest {
                 SafeMethodCachingInterceptor.ONLY_IF_CACHED_CALL_OPTION, true),
             message);
 
-    assertEquals(reply1, reply2);
+    assertSame(reply1, reply2);
   }
 
   @Test
@@ -269,7 +286,7 @@ public class SafeMethodCachingInterceptorTest {
         ClientCalls.blockingUnaryCall(
             channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message);
 
-    assertEquals(reply1, reply2);
+    assertSame(reply1, reply2);
   }
 
   @Test
@@ -347,7 +364,7 @@ public class SafeMethodCachingInterceptorTest {
     HelloReply reply2 =
         ClientCalls.blockingUnaryCall(
             channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message);
-    assertEquals(reply1, reply2);
+    assertSame(reply1, reply2);
 
     // Wait for cache entry to expire
     Thread.sleep(1001);
@@ -359,7 +376,7 @@ public class SafeMethodCachingInterceptorTest {
     assertEquals(1, cache.removedKeys.size());
     assertEquals(
         new SafeMethodCachingInterceptor.Key(
-            GreeterGrpc.METHOD_SAY_HELLO.getFullMethodName(), message),
+            GreeterGrpc.getSayHelloMethod().getFullMethodName(), message),
         cache.removedKeys.get(0));
   }
 
@@ -388,7 +405,7 @@ public class SafeMethodCachingInterceptorTest {
     assertEquals(1, cache.removedKeys.size());
     assertEquals(
         new SafeMethodCachingInterceptor.Key(
-            GreeterGrpc.METHOD_SAY_HELLO.getFullMethodName(), message),
+            GreeterGrpc.getSayHelloMethod().getFullMethodName(), message),
         cache.removedKeys.get(0));
   }
 
@@ -429,7 +446,7 @@ public class SafeMethodCachingInterceptorTest {
         ClientCalls.blockingUnaryCall(
             channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message);
 
-    assertEquals(reply1, reply2);
+    assertSame(reply1, reply2);
     assertNotEquals(reply1, reply3);
     assertEquals(1, cache.internalCache.size());
     assertEquals(1, cache.removedKeys.size());
@@ -447,10 +464,10 @@ public class SafeMethodCachingInterceptorTest {
     HelloReply reply2 =
         ClientCalls.blockingUnaryCall(
             channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message);
-    assertEquals(reply1, reply2);
+    assertSame(reply1, reply2);
 
     // Wait for cache entry to expire
-    Thread.sleep(1001);
+    sleepAtLeast(1001);
 
     assertNotEquals(
         reply1,
@@ -459,7 +476,7 @@ public class SafeMethodCachingInterceptorTest {
     assertEquals(1, cache.removedKeys.size());
     assertEquals(
         new SafeMethodCachingInterceptor.Key(
-            GreeterGrpc.METHOD_SAY_HELLO.getFullMethodName(), message),
+            GreeterGrpc.getSayHelloMethod().getFullMethodName(), message),
         cache.removedKeys.get(0));
   }
 
@@ -476,7 +493,7 @@ public class SafeMethodCachingInterceptorTest {
   @Test
   public void differentMethodCallsAreNotConflated() {
     MethodDescriptor<HelloRequest, HelloReply> anotherSafeMethod =
-        GreeterGrpc.METHOD_SAY_ANOTHER_HELLO.toBuilder().setSafe(true).build();
+        GreeterGrpc.getSayAnotherHelloMethod().toBuilder().setSafe(true).build();
 
     HelloReply reply1 =
         ClientCalls.blockingUnaryCall(
@@ -491,7 +508,7 @@ public class SafeMethodCachingInterceptorTest {
   @Test
   public void differentServiceCallsAreNotConflated() {
     MethodDescriptor<HelloRequest, HelloReply> anotherSafeMethod =
-        AnotherGreeterGrpc.METHOD_SAY_HELLO.toBuilder().setSafe(true).build();
+        AnotherGreeterGrpc.getSayHelloMethod().toBuilder().setSafe(true).build();
 
     HelloReply reply1 =
         ClientCalls.blockingUnaryCall(
@@ -501,6 +518,15 @@ public class SafeMethodCachingInterceptorTest {
             channelToUse, anotherSafeMethod, CallOptions.DEFAULT, message);
 
     assertNotEquals(reply1, reply2);
+  }
+
+  private static void sleepAtLeast(long millis) throws InterruptedException {
+    long delay = TimeUnit.MILLISECONDS.toNanos(millis);
+    long end = System.nanoTime() + delay;
+    while (delay > 0) {
+      TimeUnit.NANOSECONDS.sleep(delay);
+      delay = end - System.nanoTime();
+    }
   }
 
   private static class TestCache implements SafeMethodCachingInterceptor.Cache {

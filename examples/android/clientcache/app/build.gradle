@@ -2,13 +2,13 @@ apply plugin: 'com.android.application'
 apply plugin: 'com.google.protobuf'
 
 android {
-    compileSdkVersion 24
+    compileSdkVersion 25
     buildToolsVersion "25.0.2"
 
     defaultConfig {
         applicationId "io.grpc.android.clientcacheexample"
-        minSdkVersion 22
-        targetSdkVersion 22
+        minSdkVersion 19
+        targetSdkVersion 25
         multiDexEnabled true
         versionCode 1
         versionName "1.0"
@@ -53,7 +53,7 @@ protobuf {
 }
 
 dependencies {
-    compile 'com.android.support:appcompat-v7:24.0.0'
+    compile 'com.android.support:appcompat-v7:25.0.0'
 
     // You need to build grpc-java to obtain these libraries below.
     compile 'io.grpc:grpc-okhttp:1.8.0-SNAPSHOT' // CURRENT_GRPC_VERSION
