@@ -102,7 +102,9 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
               metadata = creds.getRequestMetadata(uri);
             } catch (IOException e) {
               // Since it's an I/O failure, let the call be retried with UNAVAILABLE.
-              applier.fail(Status.UNAVAILABLE.withCause(e));
+              applier.fail(Status.UNAVAILABLE
+                  .withDescription("Credentials failed to obtain metadata")
+                  .withCause(e));
               return;
             }
             // Re-use the headers if getRequestMetadata() returns the same map. It may return a
@@ -118,7 +120,9 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
             }
             applier.apply(headers);
           } catch (Throwable e) {
-            applier.fail(Status.UNAUTHENTICATED.withCause(e));
+            applier.fail(Status.UNAUTHENTICATED
+                .withDescription("Failed computing credential metadata")
+                .withCause(e));
           }
         }
       });
