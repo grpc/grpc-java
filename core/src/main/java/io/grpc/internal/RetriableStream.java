@@ -27,7 +27,6 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
-import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -40,15 +39,13 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 
 /** A logical {@link ClientStream} that is retriable. */
-final class RetriableStream<ReqT> implements ClientStream {
+abstract class RetriableStream<ReqT> implements ClientStream {
   private static final Status CANCELLED_BECAUSE_COMMITTED =
       Status.CANCELLED.withDescription("Stream thrown away because RetriableStream committed");
 
   private final MethodDescriptor<ReqT, ?> method;
   private final CallOptions callOptions;
   private final Metadata headers;
-  private final ClientTransportProvider clientTransportProvider;
-  private final DelayedClientTransport delayedClientTransport;
   private final Context context;
 
   /** Must be held when updating state or accessing state.buffer. */
@@ -64,13 +61,10 @@ final class RetriableStream<ReqT> implements ClientStream {
       MethodDescriptor<ReqT, ?> method,
       CallOptions callOptions,
       Metadata headers,
-      ClientTransportProvider clientTransportProvider,
       Context context) {
     this.method = method;
     this.callOptions = callOptions;
     this.headers = headers;
-    this.clientTransportProvider = clientTransportProvider;
-    delayedClientTransport = clientTransportProvider.getDelayedTransport();
     this.context = context;
   }
 
@@ -104,9 +98,7 @@ final class RetriableStream<ReqT> implements ClientStream {
     return true;
   }
 
-  private void postCommit() {
-    delayedClientTransport.removeUncommittedRetriableStream(RetriableStream.this);
-  }
+  abstract void postCommit();
 
   private void retry() {
     ClientStream substream = newSubstream();
@@ -116,16 +108,7 @@ final class RetriableStream<ReqT> implements ClientStream {
     drain(substream);
   }
 
-  private ClientStream newSubstream() {
-    ClientTransport transport =
-        clientTransportProvider.get(new PickSubchannelArgsImpl(method, headers, callOptions));
-    Context origContext = context.attach();
-    try {
-      return transport.newStream(method, headers, callOptions);
-    } finally {
-      context.detach(origContext);
-    }
-  }
+  abstract ClientStream newSubstream();
 
   private void drain(ClientStream substream) {
     int index = 0;
@@ -174,12 +157,14 @@ final class RetriableStream<ReqT> implements ClientStream {
     substream.cancel(CANCELLED_BECAUSE_COMMITTED);
   }
 
+  abstract void prestart();
+
   /** Starts the first PRC attempt. */
   @Override
-  public void start(ClientStreamListener listener) {
-    masterListener = listener;
-    delayedClientTransport.addUncommittedRetriableStream(this);
+  public final void start(ClientStreamListener listener) {
+    prestart();
 
+    masterListener = listener;
     class StartEntry implements BufferEntry {
       @Override
       public void runWith(ClientStream substream) {
@@ -198,7 +183,7 @@ final class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
-  public void cancel(Status reason) {
+  public final void cancel(Status reason) {
     if (commit0(new NoopClientStream())) {
       masterListener.closed(reason, new Metadata());
       postCommit();
@@ -231,11 +216,11 @@ final class RetriableStream<ReqT> implements ClientStream {
    * for buffering.
    */
   @Override
-  public void writeMessage(InputStream message) {
+  public final void writeMessage(InputStream message) {
     throw new IllegalStateException("RetriableStream.writeMessage() should not be called directly");
   }
 
-  void sendMessage(final ReqT message) {
+  final void sendMessage(final ReqT message) {
     State savedState = state;
     if (savedState.passThrough) {
       savedState.winningSubstream.writeMessage(method.streamRequest(message));
@@ -253,7 +238,7 @@ final class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
-  public void request(final int numMessages) {
+  public final void request(final int numMessages) {
     State savedState = state;
     if (savedState.passThrough) {
       savedState.winningSubstream.request(numMessages);
@@ -271,7 +256,7 @@ final class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
-  public void flush() {
+  public final void flush() {
     State savedState = state;
     if (savedState.passThrough) {
       savedState.winningSubstream.flush();
@@ -289,7 +274,7 @@ final class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
-  public boolean isReady() {
+  public final boolean isReady() {
     for (ClientStream substream : state.drainedSubstreams) {
       if (substream.isReady()) {
         return true;
@@ -299,7 +284,7 @@ final class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
-  public void setCompressor(final Compressor compressor) {
+  public final void setCompressor(final Compressor compressor) {
     class CompressorEntry implements BufferEntry {
       @Override
       public void runWith(ClientStream substream) {
@@ -311,7 +296,7 @@ final class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
-  public void setFullStreamDecompression(final boolean fullStreamDecompression) {
+  public final void setFullStreamDecompression(final boolean fullStreamDecompression) {
     class FullStreamDecompressionEntry implements BufferEntry {
       @Override
       public void runWith(ClientStream substream) {
@@ -323,7 +308,7 @@ final class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
-  public void setMessageCompression(final boolean enable) {
+  public final void setMessageCompression(final boolean enable) {
     class MessageCompressionEntry implements BufferEntry {
       @Override
       public void runWith(ClientStream substream) {
@@ -335,7 +320,7 @@ final class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
-  public void halfClose() {
+  public final void halfClose() {
     class HalfCloseEntry implements BufferEntry {
       @Override
       public void runWith(ClientStream substream) {
@@ -347,7 +332,7 @@ final class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
-  public void setAuthority(final String authority) {
+  public final void setAuthority(final String authority) {
     class AuthorityEntry implements BufferEntry {
       @Override
       public void runWith(ClientStream substream) {
@@ -359,7 +344,7 @@ final class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
-  public void setDecompressorRegistry(final DecompressorRegistry decompressorRegistry) {
+  public final void setDecompressorRegistry(final DecompressorRegistry decompressorRegistry) {
     class DecompressorRegistryEntry implements BufferEntry {
       @Override
       public void runWith(ClientStream substream) {
@@ -371,7 +356,7 @@ final class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
-  public void setMaxInboundMessageSize(final int maxSize) {
+  public final void setMaxInboundMessageSize(final int maxSize) {
     class MaxInboundMessageSizeEntry implements BufferEntry {
       @Override
       public void runWith(ClientStream substream) {
@@ -383,7 +368,7 @@ final class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
-  public void setMaxOutboundMessageSize(final int maxSize) {
+  public final void setMaxOutboundMessageSize(final int maxSize) {
     class MaxOutboundMessageSizeEntry implements BufferEntry {
       @Override
       public void runWith(ClientStream substream) {
@@ -395,7 +380,7 @@ final class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
-  public Attributes getAttributes() {
+  public final Attributes getAttributes() {
     if (state.winningSubstream != null) {
       return state.winningSubstream.getAttributes();
     }
@@ -405,11 +390,11 @@ final class RetriableStream<ReqT> implements ClientStream {
   // TODO(zdapeng): implement retry policy.
   // Retry policy is obtained from the combination of the name resolver plus channel builder, and
   // passed all the way down to this class.
-  private boolean shouldRetry() {
+  boolean shouldRetry() {
     return false;
   }
 
-  private boolean hasHedging() {
+  boolean hasHedging() {
     return false;
   }
 

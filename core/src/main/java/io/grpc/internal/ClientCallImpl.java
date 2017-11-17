@@ -113,6 +113,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   /**
    * Provider of {@link ClientTransport}s.
    */
+  // TODO(zdapeng): replace the two APIs with a single API: newStream()
   interface ClientTransportProvider {
     /**
      * Returns a transport for a new call.
@@ -121,7 +122,12 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
      */
     ClientTransport get(PickSubchannelArgs args);
 
-    DelayedClientTransport getDelayedTransport();
+    <ReqT> RetriableStream<ReqT> newRetriableStream(
+        MethodDescriptor<ReqT, ?> method,
+        CallOptions callOptions,
+        Metadata headers,
+        Context context);
+
   }
 
   ClientCallImpl<ReqT, RespT> setFullStreamDecompression(boolean fullStreamDecompression) {
@@ -225,8 +231,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       updateTimeoutHeaders(effectiveDeadline, callOptions.getDeadline(),
           context.getDeadline(), headers);
       if (retryEnabled()) {
-        stream = new RetriableStream<ReqT>(
-            method, callOptions, headers, clientTransportProvider, context);
+        stream = clientTransportProvider.newRetriableStream(method, callOptions, headers, context);
       } else {
         ClientTransport transport = clientTransportProvider.get(
             new PickSubchannelArgsImpl(method, headers, callOptions));
