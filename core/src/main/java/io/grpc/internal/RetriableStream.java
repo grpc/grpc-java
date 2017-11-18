@@ -145,14 +145,25 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     substream.cancel(CANCELLED_BECAUSE_COMMITTED);
   }
 
-  abstract void prestart();
+  /**
+   * Runs pre-start tasks. Returns the Status of shutdown if the channel is shutdown.
+   */
+  @CheckReturnValue
+  @Nullable
+  abstract Status prestart();
 
   /** Starts the first PRC attempt. */
   @Override
   public final void start(ClientStreamListener listener) {
-    prestart();
+    Status shutdownStatus = prestart();
 
     masterListener = listener;
+
+    if (shutdownStatus != null) {
+      cancel(shutdownStatus);
+      return;
+    }
+
     class StartEntry implements BufferEntry {
       @Override
       public void runWith(ClientStream substream) {

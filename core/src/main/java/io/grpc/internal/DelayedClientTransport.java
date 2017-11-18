@@ -277,15 +277,21 @@ final class DelayedClientTransport implements ManagedClientTransport {
     }
   }
 
-  final void addUncommittedRetriableStream(RetriableStream<?> retriableStream) {
+  /**
+   * Registers a RetriableStream and return null if not shutdown, otherwise just returns the
+   * shutdown Status.
+   */
+  @Nullable
+  final Status addUncommittedRetriableStream(RetriableStream<?> retriableStream) {
     synchronized (lock) {
       if (shutdownStatus != null) {
-        return;
+        return shutdownStatus;
       }
       uncommittedRetriableStreams.add(retriableStream);
       if (getPendingStreamsCount() == 1) {
         channelExecutor.executeLater(reportTransportInUse);
       }
+      return null;
     }
   }
 

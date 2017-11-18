@@ -397,8 +397,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
         final Context context) {
       return new RetriableStream<ReqT>(method) {
         @Override
-        void prestart() {
-          delayedTransport.addUncommittedRetriableStream(this);
+        Status prestart() {
+          return delayedTransport.addUncommittedRetriableStream(this);
         }
 
         @Override
