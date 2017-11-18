@@ -369,7 +369,7 @@ public class SafeMethodCachingInterceptorTest {
     assertSame(reply1, reply2);
 
     // Wait for cache entry to expire
-    Thread.sleep(1001);
+    sleepAtLeast(1001);
 
     assertNotEquals(
         reply1,
@@ -398,7 +398,7 @@ public class SafeMethodCachingInterceptorTest {
     assertEquals(reply1, reply2);
 
     // Wait for cache entry to expire
-    Thread.sleep(1001);
+    sleepAtLeast(1001);
 
     assertNotEquals(
         reply1,
@@ -434,15 +434,11 @@ public class SafeMethodCachingInterceptorTest {
     HelloReply reply1 =
         ClientCalls.blockingUnaryCall(
             channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message);
-
-    Thread.sleep(500);
-
     HelloReply reply2 =
         ClientCalls.blockingUnaryCall(
             channelToUse, safeGreeterSayHelloMethod, CallOptions.DEFAULT, message);
 
-    // TODO(ericgribkoff) Use custom Deadline ticker for testing rather than Thread.sleep
-    Thread.sleep(501);
+    sleepAtLeast(1001);
 
     HelloReply reply3 =
         ClientCalls.blockingUnaryCall(
