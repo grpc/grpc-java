@@ -155,9 +155,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   /** Starts the first PRC attempt. */
   @Override
   public final void start(ClientStreamListener listener) {
-    Status shutdownStatus = prestart();
-
     masterListener = listener;
+
+    Status shutdownStatus = prestart();
 
     if (shutdownStatus != null) {
       cancel(shutdownStatus);
