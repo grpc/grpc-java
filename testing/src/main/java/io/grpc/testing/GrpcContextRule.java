@@ -37,34 +37,7 @@ import org.junit.runners.model.Statement;
  */
 public class GrpcContextRule implements TestRule {
   private static final Logger log = Logger.getLogger(GrpcContextRule.class.getName());
-  private final Context root;
   private boolean failOnLeak;
-
-  /**
-   * Instantiate a new {@code GrpcContextRule}.
-   */
-  public GrpcContextRule() {
-    // Context storage implementations can define an alternative root context for threads with with
-    // no attached context. To capture this, create a virgin thread and extract its context. Use
-    // that context in lieu of Context.ROOT. While paranoid, this prevents contexts leaked by other
-    // tests classes from poisoning Context.current().
-    ListeningExecutorService executorService = MoreExecutors.listeningDecorator(
-        Executors.newSingleThreadExecutor());
-    try {
-      root = executorService.submit(new Callable<Context>() {
-        @Override
-        public Context call() throws Exception {
-          return Context.current();
-        }
-      }).get();
-    } catch (InterruptedException e) {
-      throw new RuntimeException(e);
-    } catch (ExecutionException e) {
-      throw new RuntimeException(e);
-    } finally {
-      executorService.shutdown();
-    }
-  }
 
   public GrpcContextRule failIfTestLeaksContext() {
     failOnLeak = true;
@@ -77,10 +50,11 @@ public class GrpcContextRule implements TestRule {
       @Override
       public void evaluate() throws Throwable {
         // Reset the gRPC context between test executions
-        Context prev = root.attach();
+        Context current = Context.current();
+        Context prev = current.attach();
         try {
           base.evaluate();
-          if (Context.current() != root) {
+          if (Context.current() != current) {
             if (failOnLeak) {
               Assert.fail("Test is leaking context state between tests! Ensure proper "
                       + "attach()/detach() pairing.");
@@ -90,7 +64,7 @@ public class GrpcContextRule implements TestRule {
             }
           }
         } finally {
-          root.detach(prev);
+          current.detach(prev);
         }
       }
     };
