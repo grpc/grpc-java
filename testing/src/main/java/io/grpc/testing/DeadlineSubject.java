@@ -20,8 +20,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import com.google.common.truth.ComparableSubject;
-import com.google.common.truth.FailureStrategy;
-import com.google.common.truth.SubjectFactory;
+import com.google.common.truth.FailureMetadata;
+import com.google.common.truth.Subject;
 import io.grpc.Deadline;
 import io.grpc.ExperimentalApi;
 import java.math.BigInteger;
@@ -34,15 +34,15 @@ import javax.annotation.Nullable;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3613")
 public final class DeadlineSubject extends ComparableSubject<DeadlineSubject, Deadline> {
-  private static final SubjectFactory<DeadlineSubject, Deadline> deadlineFactory =
+  private static final Subject.Factory<DeadlineSubject, Deadline> deadlineFactory =
       new DeadlineSubjectFactory();
 
-  public static SubjectFactory<DeadlineSubject, Deadline> deadline() {
+  public static Subject.Factory<DeadlineSubject, Deadline> deadline() {
     return deadlineFactory;
   }
 
-  private DeadlineSubject(FailureStrategy failureStrategy, Deadline subject) {
-    super(failureStrategy, subject);
+  private DeadlineSubject(FailureMetadata failureMetadata, Deadline subject) {
+    super(failureMetadata, subject);
   }
 
   /**
@@ -123,10 +123,10 @@ public final class DeadlineSubject extends ComparableSubject<DeadlineSubject, De
   }
 
   private static final class DeadlineSubjectFactory
-      extends SubjectFactory<DeadlineSubject, Deadline>  {
+      implements Subject.Factory<DeadlineSubject, Deadline>  {
     @Override
-    public DeadlineSubject getSubject(FailureStrategy fs, Deadline that) {
-      return new DeadlineSubject(fs, that);
+    public DeadlineSubject createSubject(FailureMetadata fm, Deadline that) {
+      return new DeadlineSubject(fm, that);
     }
   }
 }
