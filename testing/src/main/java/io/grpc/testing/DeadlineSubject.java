@@ -54,7 +54,7 @@ public final class DeadlineSubject extends ComparableSubject<DeadlineSubject, De
     return new TolerantDeadlineComparison() {
       @Override
       public void of(Deadline expected) {
-        Deadline actual = getSubject();
+        Deadline actual = actual();
         checkNotNull(actual, "actual value cannot be null. expected=%s", expected);
 
         // This is probably overkill, but easier than thinking about overflow.
@@ -64,7 +64,7 @@ public final class DeadlineSubject extends ComparableSubject<DeadlineSubject, De
         if (actualTimeRemaining.subtract(expectedTimeRemaining).abs().compareTo(deltaNanos) > 0) {
           failWithRawMessage(
               "%s and <%s> should have been within <%sns> of each other",
-              getDisplaySubject(),
+              actualAsString(),
               expected,
               deltaNanos);
         }
