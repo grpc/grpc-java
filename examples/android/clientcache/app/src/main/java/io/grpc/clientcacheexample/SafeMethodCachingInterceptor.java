@@ -174,7 +174,7 @@ final class SafeMethodCachingInterceptor implements ClientInterceptor {
       private Listener<RespT> interceptedListener;
       private Key requestKey;
       private boolean cacheResponse = true;
-      private boolean cacheOptionsCausedCancellation;
+      private volatile String cacheOptionsErrorMsg;
 
       @Override
       public void start(Listener<RespT> responseListener, Metadata headers) {
@@ -234,14 +234,11 @@ final class SafeMethodCachingInterceptor implements ClientInterceptor {
 
               @Override
               public void onClose(Status status, Metadata trailers) {
-                if (cacheOptionsCausedCancellation) {
+                if (cacheOptionsErrorMsg != null) {
                   // UNAVAILABLE is the canonical gRPC mapping for HTTP response code 504 (as used
                   // by the built-in Android HTTP request cache).
                   super.onClose(
-                      Status.UNAVAILABLE
-                          .withCause(status.getCause())
-                          .withDescription(status.getDescription()),
-                      new Metadata());
+                      Status.UNAVAILABLE.withDescription(cacheOptionsErrorMsg), new Metadata());
                 } else {
                   super.onClose(status, trailers);
                 }
@@ -257,8 +254,8 @@ final class SafeMethodCachingInterceptor implements ClientInterceptor {
 
         if (noCache) {
           if (onlyIfCached) {
-            cacheOptionsCausedCancellation = true;
-            super.cancel("Unsatisfiable Request (no-cache and only-if-cached conflict)", null);
+            cacheOptionsErrorMsg = "Unsatisfiable Request (no-cache and only-if-cached conflict)";
+            super.cancel(cacheOptionsErrorMsg, null);
             return;
           }
           cacheResponse = false;
@@ -282,8 +279,9 @@ final class SafeMethodCachingInterceptor implements ClientInterceptor {
         }
 
         if (onlyIfCached) {
-          cacheOptionsCausedCancellation = true;
-          super.cancel("Unsatisfiable Request (only-if-cached set, but value not in cache)", null);
+          cacheOptionsErrorMsg =
+              "Unsatisfiable Request (only-if-cached set, but value not in cache)";
+          super.cancel(cacheOptionsErrorMsg, null);
           return;
         }
         super.sendMessage(message);
@@ -291,7 +289,7 @@ final class SafeMethodCachingInterceptor implements ClientInterceptor {
 
       @Override
       public void halfClose() {
-        if (cacheOptionsCausedCancellation) {
+        if (cacheOptionsErrorMsg != null) {
           // already canceled
           return;
         }
