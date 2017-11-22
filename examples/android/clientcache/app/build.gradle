@@ -56,12 +56,12 @@ dependencies {
     compile 'com.android.support:appcompat-v7:25.0.0'
 
     // You need to build grpc-java to obtain these libraries below.
-    compile 'io.grpc:grpc-okhttp:1.8.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    compile 'io.grpc:grpc-protobuf-lite:1.8.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    compile 'io.grpc:grpc-stub:1.8.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    compile 'io.grpc:grpc-okhttp:1.9.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    compile 'io.grpc:grpc-protobuf-lite:1.9.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    compile 'io.grpc:grpc-stub:1.9.0-SNAPSHOT' // CURRENT_GRPC_VERSION
     compile 'javax.annotation:javax.annotation-api:1.2'
 
     testCompile 'junit:junit:4.12'
     testCompile 'com.google.truth:truth:0.28'
-    testCompile 'io.grpc:grpc-testing:1.8.0-SNAPSHOT'
+    testCompile 'io.grpc:grpc-testing:1.9.0-SNAPSHOT'
 }
