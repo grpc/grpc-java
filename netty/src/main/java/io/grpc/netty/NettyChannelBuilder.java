@@ -80,7 +80,8 @@ public final class NettyChannelBuilder
   private long keepAliveTimeNanos = KEEPALIVE_TIME_NANOS_DISABLED;
   private long keepAliveTimeoutNanos = DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
   private boolean keepAliveWithoutCalls;
-  private TransportCreationParamsFilterFactory dynamicParamsFactory;
+  @VisibleForTesting
+  TransportCreationParamsFilterFactory dynamicParamsFactory;
 
   /**
    * Creates a new builder with the given server address. This factory method is primarily intended
