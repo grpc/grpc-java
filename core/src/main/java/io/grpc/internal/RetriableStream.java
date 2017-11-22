@@ -423,7 +423,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         retry();
       } else if (!hasHedging()) {
         commit(substream);
-        masterListener.closed(status, trailers);
+        if (state.winningSubstream == substream) {
+          masterListener.closed(status, trailers);
+        }
       }
       // TODO(zdapeng): in hedge case, if this is a fatal status, cancel all the other attempts, and
       // close the masterListener.
