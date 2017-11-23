@@ -415,7 +415,7 @@ public class OkHttpChannelBuilder extends
         if (parts.length > 1) {
           port = Integer.parseInt(parts[1]);
         }
-        proxyAddress = new InetSocketAddress(parts[0], port);
+        proxyAddress = InetSocketAddress.createUnresolved(parts[0], port);
       }
       final AtomicBackoff.State keepAliveTimeNanosState = keepAliveTimeNanos.getState();
       Runnable tooManyPingsRunnable = new Runnable() {
