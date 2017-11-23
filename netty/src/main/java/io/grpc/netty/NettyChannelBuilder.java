@@ -351,7 +351,7 @@ public final class NettyChannelBuilder
       if (parts.length > 1) {
         port = Integer.parseInt(parts[1]);
       }
-      InetSocketAddress proxyAddress = new InetSocketAddress(parts[0], port);
+      InetSocketAddress proxyAddress = InetSocketAddress.createUnresolved(parts[0], port);
       negotiator = ProtocolNegotiators.httpProxy(proxyAddress, null, null, negotiator);
     }
     return negotiator;
