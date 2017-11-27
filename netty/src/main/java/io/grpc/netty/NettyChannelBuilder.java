@@ -36,7 +36,9 @@ import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
+import io.grpc.internal.ProxyParameters;
 import io.grpc.internal.SharedResourceHolder;
+import io.grpc.internal.TransportTracer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
@@ -236,6 +238,15 @@ public final class NettyChannelBuilder
   }
 
   /**
+   * Equivalent to using {@link #negotiationType(NegotiationType)} with {@code TLS}.
+   */
+  @Override
+  public NettyChannelBuilder useTransportSecurity() {
+    negotiationType(NegotiationType.TLS);
+    return this;
+  }
+
+  /**
    * Enable keepalive with default delay and timeout.
    *
    * @deprecated Please use {@link #keepAliveTime} and {@link #keepAliveTimeout} instead
@@ -264,17 +275,11 @@ public final class NettyChannelBuilder
   }
 
   /**
-   * Sets the time without read activity before sending a keepalive ping. An unreasonably small
-   * value might be increased, and {@code Long.MAX_VALUE} nano seconds or an unreasonably large
-   * value will disable keepalive. Defaults to infinite.
-   *
-   * <p>Clients must receive permission from the service owner before enabling this option.
-   * Keepalives can increase the load on services and are commonly "invisible" making it hard to
-   * notice when they are causing excessive load. Clients are strongly encouraged to use only as
-   * small of a value as necessary.
+   * {@inheritDoc}
    *
    * @since 1.3.0
    */
+  @Override
   public NettyChannelBuilder keepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
     checkArgument(keepAliveTime > 0L, "keepalive time must be positive");
     keepAliveTimeNanos = timeUnit.toNanos(keepAliveTime);
@@ -287,14 +292,11 @@ public final class NettyChannelBuilder
   }
 
   /**
-   * Sets the time waiting for read activity after sending a keepalive ping. If the time expires
-   * without any read activity on the connection, the connection is considered dead. An unreasonably
-   * small value might be increased. Defaults to 20 seconds.
-   *
-   * <p>This value should be at least multiple times the RTT to allow for lost packets.
+   * {@inheritDoc}
    *
    * @since 1.3.0
    */
+  @Override
   public NettyChannelBuilder keepAliveTimeout(long keepAliveTimeout, TimeUnit timeUnit) {
     checkArgument(keepAliveTimeout > 0L, "keepalive timeout must be positive");
     keepAliveTimeoutNanos = timeUnit.toNanos(keepAliveTimeout);
@@ -303,16 +305,11 @@ public final class NettyChannelBuilder
   }
 
   /**
-   * Sets whether keepalive will be performed when there are no outstanding RPC on a connection.
-   * Defaults to {@code false}.
-   *
-   * <p>Clients must receive permission from the service owner before enabling this option.
-   * Keepalives on unused connections can easilly accidentally consume a considerable amount of
-   * bandwidth and CPU.
+   * {@inheritDoc}
    *
    * @since 1.3.0
-   * @see #keepAliveTime(long, TimeUnit)
    */
+  @Override
   public NettyChannelBuilder keepAliveWithoutCalls(boolean enable) {
     keepAliveWithoutCalls = enable;
     return this;
@@ -324,7 +321,8 @@ public final class NettyChannelBuilder
   protected ClientTransportFactory buildTransportFactory() {
     return new NettyTransportFactory(dynamicParamsFactory, channelType, channelOptions,
         negotiationType, sslContext, eventLoopGroup, flowControlWindow, maxInboundMessageSize(),
-        maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls);
+        maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
+        transportTracerFactory.create());
   }
 
   @Override
@@ -355,18 +353,13 @@ public final class NettyChannelBuilder
   static ProtocolNegotiator createProtocolNegotiator(
       String authority,
       NegotiationType negotiationType,
-      SslContext sslContext) {
+      SslContext sslContext,
+      ProxyParameters proxy) {
     ProtocolNegotiator negotiator =
         createProtocolNegotiatorByType(authority, negotiationType, sslContext);
-    String proxy = System.getenv("GRPC_PROXY_EXP");
     if (proxy != null) {
-      String[] parts = proxy.split(":", 2);
-      int port = 80;
-      if (parts.length > 1) {
-        port = Integer.parseInt(parts[1]);
-      }
-      InetSocketAddress proxyAddress = new InetSocketAddress(parts[0], port);
-      negotiator = ProtocolNegotiators.httpProxy(proxyAddress, null, null, negotiator);
+      negotiator = ProtocolNegotiators.httpProxy(
+          proxy.proxyAddress, proxy.username, proxy.password, negotiator);
     }
     return negotiator;
   }
@@ -417,10 +410,24 @@ public final class NettyChannelBuilder
     super.setStatsEnabled(value);
   }
 
+  @Override
+  protected void setStatsRecordStartedRpcs(boolean value) {
+    super.setStatsRecordStartedRpcs(value);
+  }
+
+  @VisibleForTesting
+  NettyChannelBuilder setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
+    this.transportTracerFactory = transportTracerFactory;
+    return this;
+  }
+
   interface TransportCreationParamsFilterFactory {
     @CheckReturnValue
     TransportCreationParamsFilter create(
-        SocketAddress targetServerAddress, String authority, @Nullable String userAgent);
+        SocketAddress targetServerAddress,
+        String authority,
+        @Nullable String userAgent,
+        @Nullable ProxyParameters proxy);
   }
 
   @CheckReturnValue
@@ -451,6 +458,7 @@ public final class NettyChannelBuilder
     private final AtomicBackoff keepAliveTimeNanos;
     private final long keepAliveTimeoutNanos;
     private final boolean keepAliveWithoutCalls;
+    private final TransportTracer transportTracer;
 
     private boolean closed;
 
@@ -458,10 +466,12 @@ public final class NettyChannelBuilder
         Class<? extends Channel> channelType, Map<ChannelOption<?>, ?> channelOptions,
         NegotiationType negotiationType, SslContext sslContext, EventLoopGroup group,
         int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
-        long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls) {
+        long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
+        TransportTracer transportTracer) {
       this.channelType = channelType;
       this.negotiationType = negotiationType;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
+      this.transportTracer = transportTracer;
 
       if (transportCreationParamsFilterFactory == null) {
         transportCreationParamsFilterFactory =
@@ -486,11 +496,12 @@ public final class NettyChannelBuilder
 
     @Override
     public ConnectionClientTransport newClientTransport(
-        SocketAddress serverAddress, String authority, @Nullable String userAgent) {
+        SocketAddress serverAddress, String authority, @Nullable String userAgent,
+        @Nullable ProxyParameters proxy) {
       checkState(!closed, "The transport factory is closed.");
 
       TransportCreationParamsFilter dparams =
-          transportCreationParamsFilterFactory.create(serverAddress, authority, userAgent);
+          transportCreationParamsFilterFactory.create(serverAddress, authority, userAgent, proxy);
 
       final AtomicBackoff.State keepAliveTimeNanosState = keepAliveTimeNanos.getState();
       Runnable tooManyPingsRunnable = new Runnable() {
@@ -504,7 +515,7 @@ public final class NettyChannelBuilder
           dparams.getProtocolNegotiator(), flowControlWindow,
           maxMessageSize, maxHeaderListSize, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos,
           keepAliveWithoutCalls, dparams.getAuthority(), dparams.getUserAgent(),
-          tooManyPingsRunnable);
+          tooManyPingsRunnable, transportTracer);
       return transport;
     }
 
@@ -542,8 +553,12 @@ public final class NettyChannelBuilder
 
       @Override
       public TransportCreationParamsFilter create(
-          SocketAddress targetServerAddress, String authority, String userAgent) {
-        return new DynamicNettyTransportParams(targetServerAddress, authority, userAgent);
+          SocketAddress targetServerAddress,
+          String authority,
+          String userAgent,
+          ProxyParameters proxyParams) {
+        return new DynamicNettyTransportParams(
+            targetServerAddress, authority, userAgent, proxyParams);
       }
 
       @CheckReturnValue
@@ -552,12 +567,17 @@ public final class NettyChannelBuilder
         private final SocketAddress targetServerAddress;
         private final String authority;
         @Nullable private final String userAgent;
+        private ProxyParameters proxyParams;
 
         private DynamicNettyTransportParams(
-            SocketAddress targetServerAddress, String authority, String userAgent) {
+            SocketAddress targetServerAddress,
+            String authority,
+            String userAgent,
+            ProxyParameters proxyParams) {
           this.targetServerAddress = targetServerAddress;
           this.authority = authority;
           this.userAgent = userAgent;
+          this.proxyParams = proxyParams;
         }
 
         @Override
@@ -577,7 +597,7 @@ public final class NettyChannelBuilder
 
         @Override
         public ProtocolNegotiator getProtocolNegotiator() {
-          return createProtocolNegotiator(authority, negotiationType, sslContext);
+          return createProtocolNegotiator(authority, negotiationType, sslContext, proxyParams);
         }
       }
     }

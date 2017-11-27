@@ -16,7 +16,7 @@
 
 package io.grpc.internal;
 
-import static com.google.instrumentation.stats.ContextUtils.STATS_CONTEXT_KEY;
+import static io.opencensus.tags.unsafe.ContextUtils.TAG_CONTEXT_KEY;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -40,9 +40,6 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.instrumentation.stats.RpcConstants;
-import com.google.instrumentation.stats.StatsContext;
-import com.google.instrumentation.stats.TagValue;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -58,33 +55,29 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.testing.StatsTestUtils;
-import io.grpc.internal.testing.StatsTestUtils.FakeStatsContextFactory;
+import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
+import io.grpc.internal.testing.StatsTestUtils.FakeTagContextBinarySerializer;
+import io.grpc.internal.testing.StatsTestUtils.FakeTagger;
+import io.grpc.internal.testing.StatsTestUtils.MockableSpan;
 import io.grpc.testing.GrpcServerRule;
-import io.opencensus.trace.Annotation;
-import io.opencensus.trace.AttributeValue;
+import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
+import io.opencensus.tags.TagContext;
+import io.opencensus.tags.TagValue;
+import io.opencensus.tags.Tags;
 import io.opencensus.trace.EndSpanOptions;
-import io.opencensus.trace.Link;
 import io.opencensus.trace.NetworkEvent;
 import io.opencensus.trace.NetworkEvent.Type;
-import io.opencensus.trace.Sampler;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.SpanBuilder;
 import io.opencensus.trace.SpanContext;
-import io.opencensus.trace.SpanId;
-import io.opencensus.trace.TraceId;
-import io.opencensus.trace.TraceOptions;
 import io.opencensus.trace.Tracer;
 import io.opencensus.trace.propagation.BinaryFormat;
+import io.opencensus.trace.propagation.SpanContextParseException;
 import io.opencensus.trace.unsafe.ContextUtils;
-import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.text.ParseException;
-import java.util.EnumSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
-import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -142,8 +135,14 @@ public class CensusModulesTest {
           .setResponseMarshaller(MARSHALLER)
           .setFullMethodName("package1.service2/method3")
           .build();
+  private final MethodDescriptor<String, String> sampledMethod =
+      method.toBuilder().setSampledToLocalTracing(true).build();
+
   private final FakeClock fakeClock = new FakeClock();
-  private final FakeStatsContextFactory statsCtxFactory = new FakeStatsContextFactory();
+  private final FakeTagger tagger = new FakeTagger();
+  private final FakeTagContextBinarySerializer tagCtxSerializer =
+      new FakeTagContextBinarySerializer();
+  private final FakeStatsRecorder statsRecorder = new FakeStatsRecorder();
   private final Random random = new Random(1234);
   private final Span fakeClientParentSpan = MockableSpan.generateRandomSpan(random);
   private final Span spyClientSpan = spy(MockableSpan.generateRandomSpan(random));
@@ -186,17 +185,19 @@ public class CensusModulesTest {
     when(spyServerSpanBuilder.startSpan()).thenReturn(spyServerSpan);
     when(tracer.spanBuilderWithRemoteParent(anyString(), any(SpanContext.class)))
         .thenReturn(spyServerSpanBuilder);
-    when(mockTracingPropagationHandler.toBinaryValue(any(SpanContext.class)))
+    when(mockTracingPropagationHandler.toByteArray(any(SpanContext.class)))
         .thenReturn(binarySpanContext);
-    when(mockTracingPropagationHandler.fromBinaryValue(any(byte[].class)))
+    when(mockTracingPropagationHandler.fromByteArray(any(byte[].class)))
         .thenReturn(fakeClientSpanContext);
-    censusStats = new CensusStatsModule(statsCtxFactory, fakeClock.getStopwatchSupplier(), true);
+    censusStats =
+        new CensusStatsModule(
+            tagger, tagCtxSerializer, statsRecorder, fakeClock.getStopwatchSupplier(), true);
     censusTracing = new CensusTracingModule(tracer, mockTracingPropagationHandler);
   }
 
   @After
   public void wrapUp() {
-    assertNull(statsCtxFactory.pollRecord());
+    assertNull(statsRecorder.pollRecord());
   }
 
   @Test
@@ -209,7 +210,7 @@ public class CensusModulesTest {
     testClientInterceptors(true);
   }
 
-  // Test that Census ClientInterceptors uses the StatsContext and Span out of the current Context
+  // Test that Census ClientInterceptors uses the TagContext and Span out of the current Context
   // to create the ClientCallTracer, and that it intercepts ClientCall.Listener.onClose() to call
   // ClientCallTracer.callEnded().
   private void testClientInterceptors(boolean nonDefaultContext) {
@@ -239,14 +240,14 @@ public class CensusModulesTest {
     Channel interceptedChannel =
         ClientInterceptors.intercept(
             grpcServerRule.getChannel(), callOptionsCaptureInterceptor,
-            censusStats.getClientInterceptor(), censusTracing.getClientInterceptor());
+            censusStats.getClientInterceptor(true, true), censusTracing.getClientInterceptor());
     ClientCall<String, String> call;
     if (nonDefaultContext) {
       Context ctx =
           Context.ROOT.withValues(
-              STATS_CONTEXT_KEY,
-              statsCtxFactory.getDefault().with(
-                  StatsTestUtils.EXTRA_TAG, TagValue.create("extra value")),
+              TAG_CONTEXT_KEY,
+              tagger.emptyBuilder().put(
+                  StatsTestUtils.EXTRA_TAG, TagValue.create("extra value")).build(),
               ContextUtils.CONTEXT_SPAN_KEY,
               fakeClientParentSpan);
       Context origCtx = ctx.attach();
@@ -256,7 +257,7 @@ public class CensusModulesTest {
         ctx.detach(origCtx);
       }
     } else {
-      assertNull(STATS_CONTEXT_KEY.get());
+      assertEquals(Tags.getTagger().empty(), TAG_CONTEXT_KEY.get());
       assertNull(ContextUtils.CONTEXT_SPAN_KEY.get());
       call = interceptedChannel.newCall(method, CALL_OPTIONS);
     }
@@ -274,7 +275,20 @@ public class CensusModulesTest {
     // Make the call
     Metadata headers = new Metadata();
     call.start(mockClientCallListener, headers);
-    assertNull(statsCtxFactory.pollRecord());
+
+    StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
+    assertNotNull(record);
+    TagValue methodTag = record.tags.get(RpcMeasureConstants.RPC_METHOD);
+    assertEquals(method.getFullMethodName(), methodTag.asString());
+    if (nonDefaultContext) {
+      TagValue extraTag = record.tags.get(StatsTestUtils.EXTRA_TAG);
+      assertEquals("extra value", extraTag.asString());
+      assertEquals(2, record.tags.size());
+    } else {
+      assertNull(record.tags.get(StatsTestUtils.EXTRA_TAG));
+      assertEquals(1, record.tags.size());
+    }
+
     if (nonDefaultContext) {
       verify(tracer).spanBuilderWithExplicitParent(
           eq("Sent.package1.service2.method3"), same(fakeClientParentSpan));
@@ -296,15 +310,15 @@ public class CensusModulesTest {
     assertEquals("No you don't", status.getDescription());
 
     // The intercepting listener calls callEnded() on ClientCallTracer, which records to Census.
-    StatsTestUtils.MetricsRecord record = statsCtxFactory.pollRecord();
+    record = statsRecorder.pollRecord();
     assertNotNull(record);
-    TagValue methodTag = record.tags.get(RpcConstants.RPC_CLIENT_METHOD);
-    assertEquals(method.getFullMethodName(), methodTag.toString());
-    TagValue statusTag = record.tags.get(RpcConstants.RPC_STATUS);
-    assertEquals(Status.Code.PERMISSION_DENIED.toString(), statusTag.toString());
+    methodTag = record.tags.get(RpcMeasureConstants.RPC_METHOD);
+    assertEquals(method.getFullMethodName(), methodTag.asString());
+    TagValue statusTag = record.tags.get(RpcMeasureConstants.RPC_STATUS);
+    assertEquals(Status.Code.PERMISSION_DENIED.toString(), statusTag.asString());
     if (nonDefaultContext) {
       TagValue extraTag = record.tags.get(StatsTestUtils.EXTRA_TAG);
-      assertEquals("extra value", extraTag.toString());
+      assertEquals("extra value", extraTag.asString());
     } else {
       assertNull(record.tags.get(StatsTestUtils.EXTRA_TAG));
     }
@@ -313,16 +327,49 @@ public class CensusModulesTest {
             .setStatus(
                 io.opencensus.trace.Status.PERMISSION_DENIED
                     .withDescription("No you don't"))
+            .setSampleToLocalSpanStore(false)
             .build());
     verify(spyClientSpan, never()).end();
   }
 
   @Test
-  public void clientBasicStatsDefaultContext() {
+  public void clientBasicStatsDefaultContext_startsAndFinishes() {
+    subtestClientBasicStatsDefaultContext(true, true);
+  }
+
+  @Test
+  public void clientBasicStatsDefaultContext_startsOnly() {
+    subtestClientBasicStatsDefaultContext(true, false);
+  }
+
+  @Test
+  public void clientBasicStatsDefaultContext_finishesOnly() {
+    subtestClientBasicStatsDefaultContext(false, true);
+  }
+
+  @Test
+  public void clientBasicStatsDefaultContext_neither() {
+    subtestClientBasicStatsDefaultContext(false, true);
+  }
+
+  private void subtestClientBasicStatsDefaultContext(boolean recordStarts, boolean recordFinishes) {
     CensusStatsModule.ClientCallTracer callTracer =
-        censusStats.newClientCallTracer(statsCtxFactory.getDefault(), method.getFullMethodName());
+        censusStats.newClientCallTracer(
+            tagger.empty(), method.getFullMethodName(), recordStarts, recordFinishes);
     Metadata headers = new Metadata();
     ClientStreamTracer tracer = callTracer.newClientStreamTracer(CallOptions.DEFAULT, headers);
+
+    if (recordStarts) {
+      StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
+      assertNotNull(record);
+      assertNoServerContent(record);
+      assertEquals(1, record.tags.size());
+      TagValue methodTag = record.tags.get(RpcMeasureConstants.RPC_METHOD);
+      assertEquals(method.getFullMethodName(), methodTag.asString());
+      assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_STARTED_COUNT));
+    } else {
+      assertNull(statsRecorder.pollRecord());
+    }
 
     fakeClock.forwardTime(30, MILLISECONDS);
     tracer.outboundHeaders();
@@ -347,30 +394,38 @@ public class CensusModulesTest {
     tracer.streamClosed(Status.OK);
     callTracer.callEnded(Status.OK);
 
-    StatsTestUtils.MetricsRecord record = statsCtxFactory.pollRecord();
-    assertNotNull(record);
-    assertNoServerContent(record);
-    TagValue methodTag = record.tags.get(RpcConstants.RPC_CLIENT_METHOD);
-    assertEquals(method.getFullMethodName(), methodTag.toString());
-    TagValue statusTag = record.tags.get(RpcConstants.RPC_STATUS);
-    assertEquals(Status.Code.OK.toString(), statusTag.toString());
-    assertNull(record.getMetric(RpcConstants.RPC_CLIENT_ERROR_COUNT));
-    assertEquals(2, record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_REQUEST_COUNT));
-    assertEquals(1028 + 99, record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_REQUEST_BYTES));
-    assertEquals(1128 + 865,
-        record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES));
-    assertEquals(2, record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_RESPONSE_COUNT));
-    assertEquals(33 + 154, record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_RESPONSE_BYTES));
-    assertEquals(67 + 552,
-        record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
-    assertEquals(30 + 100 + 16 + 24,
-        record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_ROUNDTRIP_LATENCY));
+    if (recordFinishes) {
+      StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
+      assertNotNull(record);
+      assertNoServerContent(record);
+      TagValue methodTag = record.tags.get(RpcMeasureConstants.RPC_METHOD);
+      assertEquals(method.getFullMethodName(), methodTag.asString());
+      TagValue statusTag = record.tags.get(RpcMeasureConstants.RPC_STATUS);
+      assertEquals(Status.Code.OK.toString(), statusTag.asString());
+      assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_FINISHED_COUNT));
+      assertNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_ERROR_COUNT));
+      assertEquals(2, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_REQUEST_COUNT));
+      assertEquals(
+          1028 + 99, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_REQUEST_BYTES));
+      assertEquals(
+          1128 + 865,
+          record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES));
+      assertEquals(2, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_RESPONSE_COUNT));
+      assertEquals(
+          33 + 154, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_RESPONSE_BYTES));
+      assertEquals(67 + 552,
+          record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
+      assertEquals(30 + 100 + 16 + 24,
+          record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_ROUNDTRIP_LATENCY));
+    } else {
+      assertNull(statsRecorder.pollRecord());
+    }
   }
 
   @Test
   public void clientBasicTracingDefaultSpan() {
     CensusTracingModule.ClientCallTracer callTracer =
-        censusTracing.newClientCallTracer(null, method.getFullMethodName());
+        censusTracing.newClientCallTracer(null, method);
     Metadata headers = new Metadata();
     ClientStreamTracer clientStreamTracer =
         callTracer.newClientStreamTracer(CallOptions.DEFAULT, headers);
@@ -402,44 +457,73 @@ public class CensusModulesTest {
             .build(),
         events.get(2));
     inOrder.verify(spyClientSpan).end(
-        EndSpanOptions.builder().setStatus(io.opencensus.trace.Status.OK).build());
+        EndSpanOptions.builder()
+            .setStatus(io.opencensus.trace.Status.OK)
+            .setSampleToLocalSpanStore(false)
+            .build());
     verifyNoMoreInteractions(spyClientSpan);
     verifyNoMoreInteractions(tracer);
+  }
+
+  @Test
+  public void clientTracingSampledToLocalSpanStore() {
+    CensusTracingModule.ClientCallTracer callTracer =
+        censusTracing.newClientCallTracer(null, sampledMethod);
+    Metadata headers = new Metadata();
+    callTracer.callEnded(Status.OK);
+
+    verify(spyClientSpan).end(
+        EndSpanOptions.builder()
+            .setStatus(io.opencensus.trace.Status.OK)
+            .setSampleToLocalSpanStore(true)
+            .build());
   }
 
   @Test
   public void clientStreamNeverCreatedStillRecordStats() {
     CensusStatsModule.ClientCallTracer callTracer =
         censusStats.newClientCallTracer(
-            statsCtxFactory.getDefault(), method.getFullMethodName());
+            tagger.empty(), method.getFullMethodName(), true, true);
 
     fakeClock.forwardTime(3000, MILLISECONDS);
     callTracer.callEnded(Status.DEADLINE_EXCEEDED.withDescription("3 seconds"));
 
-    StatsTestUtils.MetricsRecord record = statsCtxFactory.pollRecord();
+    // Upstart record
+    StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
     assertNotNull(record);
     assertNoServerContent(record);
-    TagValue methodTag = record.tags.get(RpcConstants.RPC_CLIENT_METHOD);
-    assertEquals(method.getFullMethodName(), methodTag.toString());
-    TagValue statusTag = record.tags.get(RpcConstants.RPC_STATUS);
-    assertEquals(Status.Code.DEADLINE_EXCEEDED.toString(), statusTag.toString());
-    assertEquals(1, record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_ERROR_COUNT));
-    assertEquals(0, record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_REQUEST_COUNT));
-    assertEquals(0, record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_REQUEST_BYTES));
+    assertEquals(1, record.tags.size());
+    TagValue methodTag = record.tags.get(RpcMeasureConstants.RPC_METHOD);
+    assertEquals(method.getFullMethodName(), methodTag.asString());
+    assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_STARTED_COUNT));
+
+    // Completion record
+    record = statsRecorder.pollRecord();
+    assertNotNull(record);
+    assertNoServerContent(record);
+    methodTag = record.tags.get(RpcMeasureConstants.RPC_METHOD);
+    assertEquals(method.getFullMethodName(), methodTag.asString());
+    TagValue statusTag = record.tags.get(RpcMeasureConstants.RPC_STATUS);
+    assertEquals(Status.Code.DEADLINE_EXCEEDED.toString(), statusTag.asString());
+    assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_FINISHED_COUNT));
+    assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_ERROR_COUNT));
+    assertEquals(0, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_REQUEST_COUNT));
+    assertEquals(0, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_REQUEST_BYTES));
     assertEquals(0,
-        record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES));
-    assertEquals(0, record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_RESPONSE_COUNT));
-    assertEquals(0, record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_RESPONSE_BYTES));
+        record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES));
+    assertEquals(0, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_RESPONSE_COUNT));
+    assertEquals(0, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_RESPONSE_BYTES));
     assertEquals(0,
-        record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
-    assertEquals(3000, record.getMetricAsLongOrFail(RpcConstants.RPC_CLIENT_ROUNDTRIP_LATENCY));
-    assertNull(record.getMetric(RpcConstants.RPC_CLIENT_SERVER_ELAPSED_TIME));
+        record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
+    assertEquals(
+        3000, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_ROUNDTRIP_LATENCY));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_SERVER_ELAPSED_TIME));
   }
 
   @Test
   public void clientStreamNeverCreatedStillRecordTracing() {
     CensusTracingModule.ClientCallTracer callTracer =
-        censusTracing.newClientCallTracer(fakeClientParentSpan, method.getFullMethodName());
+        censusTracing.newClientCallTracer(fakeClientParentSpan, method);
     verify(tracer).spanBuilderWithExplicitParent(
         eq("Sent.package1.service2.method3"), same(fakeClientParentSpan));
     verify(spyClientSpanBuilder).setRecordEvents(eq(true));
@@ -450,33 +534,61 @@ public class CensusModulesTest {
             .setStatus(
                 io.opencensus.trace.Status.DEADLINE_EXCEEDED
                     .withDescription("3 seconds"))
+            .setSampleToLocalSpanStore(false)
             .build());
     verifyNoMoreInteractions(spyClientSpan);
   }
 
   @Test
-  public void statsHeadersPropagateTags() {
-    subtestStatsHeadersPropagateTags(true);
+  public void statsHeadersPropagateTags_record() {
+    subtestStatsHeadersPropagateTags(true, true);
   }
 
   @Test
-  public void statsHeadersNotPropagateTags() {
-    subtestStatsHeadersPropagateTags(false);
+  public void statsHeadersPropagateTags_notRecord() {
+    subtestStatsHeadersPropagateTags(true, false);
   }
 
-  private void subtestStatsHeadersPropagateTags(boolean propagate) {
+  @Test
+  public void statsHeadersNotPropagateTags_record() {
+    subtestStatsHeadersPropagateTags(false, true);
+  }
+
+  @Test
+  public void statsHeadersNotPropagateTags_notRecord() {
+    subtestStatsHeadersPropagateTags(false, false);
+  }
+
+  private void subtestStatsHeadersPropagateTags(boolean propagate, boolean recordStats) {
     // EXTRA_TAG is propagated by the FakeStatsContextFactory. Note that not all tags are
     // propagated.  The StatsContextFactory decides which tags are to propagated.  gRPC facilitates
     // the propagation by putting them in the headers.
-    StatsContext clientCtx = statsCtxFactory.getDefault().with(
-        StatsTestUtils.EXTRA_TAG, TagValue.create("extra-tag-value-897"));
+    TagContext clientCtx = tagger.emptyBuilder().put(
+        StatsTestUtils.EXTRA_TAG, TagValue.create("extra-tag-value-897")).build();
     CensusStatsModule census =
-        new CensusStatsModule(statsCtxFactory, fakeClock.getStopwatchSupplier(), propagate);
+        new CensusStatsModule(
+            tagger,
+            tagCtxSerializer,
+            statsRecorder,
+            fakeClock.getStopwatchSupplier(),
+            propagate);
     Metadata headers = new Metadata();
     CensusStatsModule.ClientCallTracer callTracer =
-        census.newClientCallTracer(clientCtx, method.getFullMethodName());
+        census.newClientCallTracer(clientCtx, method.getFullMethodName(), recordStats, recordStats);
     // This propagates clientCtx to headers if propagates==true
     callTracer.newClientStreamTracer(CallOptions.DEFAULT, headers);
+    if (recordStats) {
+      // Client upstart record
+      StatsTestUtils.MetricsRecord clientRecord = statsRecorder.pollRecord();
+      assertNotNull(clientRecord);
+      assertNoServerContent(clientRecord);
+      assertEquals(2, clientRecord.tags.size());
+      TagValue clientMethodTag = clientRecord.tags.get(RpcMeasureConstants.RPC_METHOD);
+      assertEquals(method.getFullMethodName(), clientMethodTag.asString());
+      TagValue clientPropagatedTag = clientRecord.tags.get(StatsTestUtils.EXTRA_TAG);
+      assertEquals("extra-tag-value-897", clientPropagatedTag.asString());
+    }
+
     if (propagate) {
       assertTrue(headers.containsKey(census.statsHeader));
     } else {
@@ -485,50 +597,72 @@ public class CensusModulesTest {
     }
 
     ServerStreamTracer serverTracer =
-        census.getServerTracerFactory().newServerStreamTracer(
+        census.getServerTracerFactory(recordStats, recordStats).newServerStreamTracer(
             method.getFullMethodName(), headers);
     // Server tracer deserializes clientCtx from the headers, so that it records stats with the
     // propagated tags.
     Context serverContext = serverTracer.filterContext(Context.ROOT);
     // It also put clientCtx in the Context seen by the call handler
     assertEquals(
-        clientCtx.with(RpcConstants.RPC_SERVER_METHOD, TagValue.create(method.getFullMethodName())),
-        STATS_CONTEXT_KEY.get(serverContext));
+        tagger.toBuilder(clientCtx).put(
+            RpcMeasureConstants.RPC_METHOD,
+            TagValue.create(method.getFullMethodName())).build(),
+        TAG_CONTEXT_KEY.get(serverContext));
 
     // Verifies that the server tracer records the status with the propagated tag
     serverTracer.streamClosed(Status.OK);
 
-    StatsTestUtils.MetricsRecord serverRecord = statsCtxFactory.pollRecord();
-    assertNotNull(serverRecord);
-    assertNoClientContent(serverRecord);
-    TagValue serverMethodTag = serverRecord.tags.get(RpcConstants.RPC_SERVER_METHOD);
-    assertEquals(method.getFullMethodName(), serverMethodTag.toString());
-    TagValue serverStatusTag = serverRecord.tags.get(RpcConstants.RPC_STATUS);
-    assertEquals(Status.Code.OK.toString(), serverStatusTag.toString());
-    assertNull(serverRecord.getMetric(RpcConstants.RPC_SERVER_ERROR_COUNT));
-    TagValue serverPropagatedTag = serverRecord.tags.get(StatsTestUtils.EXTRA_TAG);
-    assertEquals("extra-tag-value-897", serverPropagatedTag.toString());
+    if (recordStats) {
+      // Server upstart record
+      StatsTestUtils.MetricsRecord serverRecord = statsRecorder.pollRecord();
+      assertNotNull(serverRecord);
+      assertNoClientContent(serverRecord);
+      assertEquals(2, serverRecord.tags.size());
+      TagValue serverMethodTag = serverRecord.tags.get(RpcMeasureConstants.RPC_METHOD);
+      assertEquals(method.getFullMethodName(), serverMethodTag.asString());
+      TagValue serverPropagatedTag = serverRecord.tags.get(StatsTestUtils.EXTRA_TAG);
+      assertEquals("extra-tag-value-897", serverPropagatedTag.asString());
+
+      // Server completion record
+      serverRecord = statsRecorder.pollRecord();
+      assertNotNull(serverRecord);
+      assertNoClientContent(serverRecord);
+      serverMethodTag = serverRecord.tags.get(RpcMeasureConstants.RPC_METHOD);
+      assertEquals(method.getFullMethodName(), serverMethodTag.asString());
+      TagValue serverStatusTag = serverRecord.tags.get(RpcMeasureConstants.RPC_STATUS);
+      assertEquals(Status.Code.OK.toString(), serverStatusTag.asString());
+      assertNull(serverRecord.getMetric(RpcMeasureConstants.RPC_SERVER_ERROR_COUNT));
+      serverPropagatedTag = serverRecord.tags.get(StatsTestUtils.EXTRA_TAG);
+      assertEquals("extra-tag-value-897", serverPropagatedTag.asString());
+    }
 
     // Verifies that the client tracer factory uses clientCtx, which includes the custom tags, to
     // record stats.
     callTracer.callEnded(Status.OK);
 
-    StatsTestUtils.MetricsRecord clientRecord = statsCtxFactory.pollRecord();
-    assertNotNull(clientRecord);
-    assertNoServerContent(clientRecord);
-    TagValue clientMethodTag = clientRecord.tags.get(RpcConstants.RPC_CLIENT_METHOD);
-    assertEquals(method.getFullMethodName(), clientMethodTag.toString());
-    TagValue clientStatusTag = clientRecord.tags.get(RpcConstants.RPC_STATUS);
-    assertEquals(Status.Code.OK.toString(), clientStatusTag.toString());
-    assertNull(clientRecord.getMetric(RpcConstants.RPC_CLIENT_ERROR_COUNT));
-    TagValue clientPropagatedTag = clientRecord.tags.get(StatsTestUtils.EXTRA_TAG);
-    assertEquals("extra-tag-value-897", clientPropagatedTag.toString());
+    if (recordStats) {
+      // Client completion record
+      StatsTestUtils.MetricsRecord clientRecord = statsRecorder.pollRecord();
+      assertNotNull(clientRecord);
+      assertNoServerContent(clientRecord);
+      TagValue clientMethodTag = clientRecord.tags.get(RpcMeasureConstants.RPC_METHOD);
+      assertEquals(method.getFullMethodName(), clientMethodTag.asString());
+      TagValue clientStatusTag = clientRecord.tags.get(RpcMeasureConstants.RPC_STATUS);
+      assertEquals(Status.Code.OK.toString(), clientStatusTag.asString());
+      assertNull(clientRecord.getMetric(RpcMeasureConstants.RPC_CLIENT_ERROR_COUNT));
+      TagValue clientPropagatedTag = clientRecord.tags.get(StatsTestUtils.EXTRA_TAG);
+      assertEquals("extra-tag-value-897", clientPropagatedTag.asString());
+    }
+
+    if (!recordStats) {
+      assertNull(statsRecorder.pollRecord());
+    }
   }
 
   @Test
   public void statsHeadersNotPropagateDefaultContext() {
     CensusStatsModule.ClientCallTracer callTracer =
-        censusStats.newClientCallTracer(statsCtxFactory.getDefault(), method.getFullMethodName());
+        censusStats.newClientCallTracer(tagger.empty(), method.getFullMethodName(), false, false);
     Metadata headers = new Metadata();
     callTracer.newClientStreamTracer(CallOptions.DEFAULT, headers);
     assertFalse(headers.containsKey(censusStats.statsHeader));
@@ -541,7 +675,7 @@ public class CensusModulesTest {
     Metadata.Key<byte[]> arbitraryStatsHeader =
         Metadata.Key.of("grpc-tags-bin", Metadata.BINARY_BYTE_MARSHALLER);
     try {
-      statsCtxFactory.deserialize(new ByteArrayInputStream(statsHeaderValue));
+      tagCtxSerializer.fromByteArray(statsHeaderValue);
       fail("Should have thrown");
     } catch (Exception e) {
       // Expected
@@ -551,17 +685,17 @@ public class CensusModulesTest {
     Metadata headers = new Metadata();
     assertNull(headers.get(censusStats.statsHeader));
     headers.put(arbitraryStatsHeader, statsHeaderValue);
-    assertSame(statsCtxFactory.getDefault(), headers.get(censusStats.statsHeader));
+    assertSame(tagger.empty(), headers.get(censusStats.statsHeader));
   }
 
   @Test
   public void traceHeadersPropagateSpanContext() throws Exception {
     CensusTracingModule.ClientCallTracer callTracer =
-        censusTracing.newClientCallTracer(fakeClientParentSpan, method.getFullMethodName());
+        censusTracing.newClientCallTracer(fakeClientParentSpan, method);
     Metadata headers = new Metadata();
     callTracer.newClientStreamTracer(CallOptions.DEFAULT, headers);
 
-    verify(mockTracingPropagationHandler).toBinaryValue(same(fakeClientSpanContext));
+    verify(mockTracingPropagationHandler).toByteArray(same(fakeClientSpanContext));
     verifyNoMoreInteractions(mockTracingPropagationHandler);
     verify(tracer).spanBuilderWithExplicitParent(
         eq("Sent.package1.service2.method3"), same(fakeClientParentSpan));
@@ -572,7 +706,7 @@ public class CensusModulesTest {
     ServerStreamTracer serverTracer =
         censusTracing.getServerTracerFactory().newServerStreamTracer(
             method.getFullMethodName(), headers);
-    verify(mockTracingPropagationHandler).fromBinaryValue(same(binarySpanContext));
+    verify(mockTracingPropagationHandler).fromByteArray(same(binarySpanContext));
     verify(tracer).spanBuilderWithRemoteParent(
         eq("Recv.package1.service2.method3"), same(spyClientSpan.getContext()));
     verify(spyServerSpanBuilder).setRecordEvents(eq(true));
@@ -590,8 +724,8 @@ public class CensusModulesTest {
     assertSame(spyClientSpan.getContext(), headers.get(censusTracing.tracingHeader));
 
     // Make BinaryPropagationHandler always throw when parsing the header
-    when(mockTracingPropagationHandler.fromBinaryValue(any(byte[].class)))
-        .thenThrow(new ParseException("Malformed header", 0));
+    when(mockTracingPropagationHandler.fromByteArray(any(byte[].class)))
+        .thenThrow(new SpanContextParseException("Malformed header"));
 
     headers = new Metadata();
     assertNull(headers.get(censusTracing.tracingHeader));
@@ -608,16 +742,52 @@ public class CensusModulesTest {
   }
 
   @Test
-  public void serverBasicStatsNoHeaders() {
-    ServerStreamTracer.Factory tracerFactory = censusStats.getServerTracerFactory();
+  public void serverBasicStatsNoHeaders_startsAndFinishes() {
+    subtestServerBasicStatsNoHeaders(true, true);
+  }
+
+  @Test
+  public void serverBasicStatsNoHeaders_startsOnly() {
+    subtestServerBasicStatsNoHeaders(true, false);
+  }
+
+  @Test
+  public void serverBasicStatsNoHeaders_finishesOnly() {
+    subtestServerBasicStatsNoHeaders(false, true);
+  }
+
+  @Test
+  public void serverBasicStatsNoHeaders_neither() {
+    subtestServerBasicStatsNoHeaders(false, false);
+  }
+
+  private void subtestServerBasicStatsNoHeaders(boolean recordStarts, boolean recordFinishes) {
+    ServerStreamTracer.Factory tracerFactory =
+        censusStats.getServerTracerFactory(recordStarts, recordFinishes);
     ServerStreamTracer tracer =
         tracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
 
+    if (recordStarts) {
+      StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
+      assertNotNull(record);
+      assertNoClientContent(record);
+      assertEquals(1, record.tags.size());
+      TagValue methodTag = record.tags.get(RpcMeasureConstants.RPC_METHOD);
+      assertEquals(method.getFullMethodName(), methodTag.asString());
+      assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_SERVER_STARTED_COUNT));
+    } else {
+      assertNull(statsRecorder.pollRecord());
+    }
+
     Context filteredContext = tracer.filterContext(Context.ROOT);
-    StatsContext statsCtx = STATS_CONTEXT_KEY.get(filteredContext);
+    TagContext statsCtx = TAG_CONTEXT_KEY.get(filteredContext);
     assertEquals(
-        statsCtxFactory.getDefault()
-            .with(RpcConstants.RPC_SERVER_METHOD, TagValue.create(method.getFullMethodName())),
+        tagger
+            .emptyBuilder()
+            .put(
+                RpcMeasureConstants.RPC_METHOD,
+                TagValue.create(method.getFullMethodName()))
+            .build(),
         statsCtx);
 
     tracer.inboundMessage(0);
@@ -641,24 +811,32 @@ public class CensusModulesTest {
 
     tracer.streamClosed(Status.CANCELLED);
 
-    StatsTestUtils.MetricsRecord record = statsCtxFactory.pollRecord();
-    assertNotNull(record);
-    assertNoClientContent(record);
-    TagValue methodTag = record.tags.get(RpcConstants.RPC_SERVER_METHOD);
-    assertEquals(method.getFullMethodName(), methodTag.toString());
-    TagValue statusTag = record.tags.get(RpcConstants.RPC_STATUS);
-    assertEquals(Status.Code.CANCELLED.toString(), statusTag.toString());
-    assertEquals(1, record.getMetricAsLongOrFail(RpcConstants.RPC_SERVER_ERROR_COUNT));
-    assertEquals(2, record.getMetricAsLongOrFail(RpcConstants.RPC_SERVER_RESPONSE_COUNT));
-    assertEquals(1028 + 99, record.getMetricAsLongOrFail(RpcConstants.RPC_SERVER_RESPONSE_BYTES));
-    assertEquals(1128 + 865,
-        record.getMetricAsLongOrFail(RpcConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES));
-    assertEquals(2, record.getMetricAsLongOrFail(RpcConstants.RPC_SERVER_REQUEST_COUNT));
-    assertEquals(34 + 154, record.getMetricAsLongOrFail(RpcConstants.RPC_SERVER_REQUEST_BYTES));
-    assertEquals(67 + 552,
-        record.getMetricAsLongOrFail(RpcConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES));
-    assertEquals(100 + 16 + 24,
-        record.getMetricAsLongOrFail(RpcConstants.RPC_SERVER_SERVER_LATENCY));
+    if (recordFinishes) {
+      StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
+      assertNotNull(record);
+      assertNoClientContent(record);
+      TagValue methodTag = record.tags.get(RpcMeasureConstants.RPC_METHOD);
+      assertEquals(method.getFullMethodName(), methodTag.asString());
+      TagValue statusTag = record.tags.get(RpcMeasureConstants.RPC_STATUS);
+      assertEquals(Status.Code.CANCELLED.toString(), statusTag.asString());
+      assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_SERVER_FINISHED_COUNT));
+      assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_SERVER_ERROR_COUNT));
+      assertEquals(2, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_SERVER_RESPONSE_COUNT));
+      assertEquals(
+          1028 + 99, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_SERVER_RESPONSE_BYTES));
+      assertEquals(
+          1128 + 865,
+          record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES));
+      assertEquals(2, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_SERVER_REQUEST_COUNT));
+      assertEquals(
+          34 + 154, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_SERVER_REQUEST_BYTES));
+      assertEquals(67 + 552,
+          record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES));
+      assertEquals(100 + 16 + 24,
+          record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_SERVER_SERVER_LATENCY));
+    } else {
+      assertNull(statsRecorder.pollRecord());
+    }
   }
 
   @Test
@@ -673,6 +851,8 @@ public class CensusModulesTest {
 
     Context filteredContext = serverStreamTracer.filterContext(Context.ROOT);
     assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));
+
+    serverStreamTracer.serverCallStarted(new FakeServerCall<String, String>(method));
 
     verify(spyServerSpan, never()).end(any(EndSpanOptions.class));
 
@@ -700,8 +880,42 @@ public class CensusModulesTest {
         events.get(2));
     inOrder.verify(spyServerSpan).end(
         EndSpanOptions.builder()
-            .setStatus(io.opencensus.trace.Status.CANCELLED).build());
+            .setStatus(io.opencensus.trace.Status.CANCELLED)
+            .setSampleToLocalSpanStore(false)
+            .build());
     verifyNoMoreInteractions(spyServerSpan);
+  }
+
+  @Test
+  public void serverTracingSampledToLocalSpanStore() {
+    ServerStreamTracer.Factory tracerFactory = censusTracing.getServerTracerFactory();
+    ServerStreamTracer serverStreamTracer =
+        tracerFactory.newServerStreamTracer(sampledMethod.getFullMethodName(), new Metadata());
+
+    serverStreamTracer.filterContext(Context.ROOT);
+    serverStreamTracer.serverCallStarted(new FakeServerCall<String, String>(sampledMethod));
+    serverStreamTracer.streamClosed(Status.CANCELLED);
+
+    verify(spyServerSpan).end(
+        EndSpanOptions.builder()
+            .setStatus(io.opencensus.trace.Status.CANCELLED)
+            .setSampleToLocalSpanStore(true)
+            .build());
+  }
+
+  @Test
+  public void serverTracingNotSampledToLocalSpanStore_whenServerCallNotCreated() {
+    ServerStreamTracer.Factory tracerFactory = censusTracing.getServerTracerFactory();
+    ServerStreamTracer serverStreamTracer =
+        tracerFactory.newServerStreamTracer(sampledMethod.getFullMethodName(), new Metadata());
+
+    serverStreamTracer.streamClosed(Status.CANCELLED);
+
+    verify(spyServerSpan).end(
+        EndSpanOptions.builder()
+            .setStatus(io.opencensus.trace.Status.CANCELLED)
+            .setSampleToLocalSpanStore(false)
+            .build());
   }
 
   @Test
@@ -725,91 +939,74 @@ public class CensusModulesTest {
     }
   }
 
+
+  @Test
+  public void generateTraceSpanName() {
+    assertEquals(
+        "Sent.io.grpc.Foo", CensusTracingModule.generateTraceSpanName(false, "io.grpc/Foo"));
+    assertEquals(
+        "Recv.io.grpc.Bar", CensusTracingModule.generateTraceSpanName(true, "io.grpc/Bar"));
+  }
+
   private static void assertNoServerContent(StatsTestUtils.MetricsRecord record) {
-    assertNull(record.getMetric(RpcConstants.RPC_SERVER_ERROR_COUNT));
-    assertNull(record.getMetric(RpcConstants.RPC_SERVER_REQUEST_COUNT));
-    assertNull(record.getMetric(RpcConstants.RPC_SERVER_RESPONSE_COUNT));
-    assertNull(record.getMetric(RpcConstants.RPC_SERVER_REQUEST_BYTES));
-    assertNull(record.getMetric(RpcConstants.RPC_SERVER_RESPONSE_BYTES));
-    assertNull(record.getMetric(RpcConstants.RPC_SERVER_SERVER_ELAPSED_TIME));
-    assertNull(record.getMetric(RpcConstants.RPC_SERVER_SERVER_LATENCY));
-    assertNull(record.getMetric(RpcConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES));
-    assertNull(record.getMetric(RpcConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_SERVER_ERROR_COUNT));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_SERVER_REQUEST_COUNT));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_SERVER_RESPONSE_COUNT));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_SERVER_REQUEST_BYTES));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_SERVER_RESPONSE_BYTES));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_SERVER_SERVER_ELAPSED_TIME));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_SERVER_SERVER_LATENCY));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES));
   }
 
   private static void assertNoClientContent(StatsTestUtils.MetricsRecord record) {
-    assertNull(record.getMetric(RpcConstants.RPC_CLIENT_ERROR_COUNT));
-    assertNull(record.getMetric(RpcConstants.RPC_CLIENT_REQUEST_COUNT));
-    assertNull(record.getMetric(RpcConstants.RPC_CLIENT_RESPONSE_COUNT));
-    assertNull(record.getMetric(RpcConstants.RPC_CLIENT_REQUEST_BYTES));
-    assertNull(record.getMetric(RpcConstants.RPC_CLIENT_RESPONSE_BYTES));
-    assertNull(record.getMetric(RpcConstants.RPC_CLIENT_ROUNDTRIP_LATENCY));
-    assertNull(record.getMetric(RpcConstants.RPC_CLIENT_SERVER_ELAPSED_TIME));
-    assertNull(record.getMetric(RpcConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES));
-    assertNull(record.getMetric(RpcConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_ERROR_COUNT));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_REQUEST_COUNT));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_RESPONSE_COUNT));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_REQUEST_BYTES));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_RESPONSE_BYTES));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_ROUNDTRIP_LATENCY));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_SERVER_ELAPSED_TIME));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES));
+    assertNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
   }
 
-  // TODO(bdrutu): Remove this class after OpenCensus releases support for this class.
-  private static class MockableSpan extends Span {
-    private static MockableSpan generateRandomSpan(Random random) {
-      return new MockableSpan(
-          SpanContext.create(
-              TraceId.generateRandomId(random),
-              SpanId.generateRandomId(random),
-              TraceOptions.DEFAULT),
-          null);
+  private static class FakeServerCall<ReqT, RespT> extends ServerCall<ReqT, RespT> {
+    final MethodDescriptor<ReqT, RespT> method;
+
+    FakeServerCall(MethodDescriptor<ReqT, RespT> method) {
+      this.method = method;
     }
 
     @Override
-    @SuppressWarnings("deprecation")
-    public void addAttributes(Map<String, AttributeValue> attributes) {}
-
-    @Override
-    public void addAnnotation(String description, Map<String, AttributeValue> attributes) {}
-
-    @Override
-    public void addAnnotation(Annotation annotation) {}
-
-    @Override
-    public void addNetworkEvent(NetworkEvent networkEvent) {}
-
-    @Override
-    public void addLink(Link link) {}
-
-    @Override
-    public void end(EndSpanOptions options) {}
-
-    private MockableSpan(SpanContext context, @Nullable EnumSet<Options> options) {
-      super(context, options);
+    public void request(int numMessages) {
+      throw new AssertionError("Should not be called");
     }
 
-    /**
-     * Mockable implementation for the {@link SpanBuilder} class.
-     *
-     * <p>Not {@code final} to allow easy mocking.
-     *
-     */
-    public static class Builder extends SpanBuilder {
+    @Override
+    public void sendHeaders(Metadata headers) {
+      throw new AssertionError("Should not be called");
+    }
 
-      @Override
-      public SpanBuilder setSampler(Sampler sampler) {
-        return this;
-      }
+    @Override
+    public void sendMessage(RespT message) {
+      throw new AssertionError("Should not be called");
+    }
 
-      @Override
-      public SpanBuilder setParentLinks(List<Span> parentLinks) {
-        return this;
-      }
+    @Override
+    public void close(Status status, Metadata trailers) {
+      throw new AssertionError("Should not be called");
+    }
 
-      @Override
-      public SpanBuilder setRecordEvents(boolean recordEvents) {
-        return this;
-      }
+    @Override
+    public boolean isCancelled() {
+      throw new AssertionError("Should not be called");
+    }
 
-      @Override
-      public Span startSpan() {
-        return null;
-      }
+    @Override
+    public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
+      return method;
     }
   }
 }

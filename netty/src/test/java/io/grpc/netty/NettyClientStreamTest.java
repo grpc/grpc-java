@@ -51,6 +51,7 @@ import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
+import io.grpc.internal.TransportTracer;
 import io.grpc.netty.WriteQueue.QueuedCommand;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -93,11 +94,12 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
   // Must be initialized before @Before, because it is used by createStream()
   private MethodDescriptor<?, ?> methodDescriptor = MethodDescriptor.<Void, Void>newBuilder()
       .setType(MethodDescriptor.MethodType.UNARY)
-      .setFullMethodName("/testService/test")
+      .setFullMethodName("testService/test")
       .setRequestMarshaller(marshaller)
       .setResponseMarshaller(marshaller)
       .build();
 
+  private final TransportTracer transportTracer = new TransportTracer();
 
   /** Set up for test. */
   @Before
@@ -189,6 +191,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     stream.writeMessage(new BufferedInputStream(new ByteArrayInputStream(msg)));
     stream.flush();
     // Two writes occur, one for the GRPC frame header and the second with the payload
+    // The framer reports the message count when the payload is completely written
     verify(writeQueue).enqueue(
             eq(new SendGrpcFrameCommand(
                 stream.transportState(), messageFrame(MESSAGE).slice(0, 5), false)),
@@ -387,8 +390,14 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     listener = mock(ClientStreamListener.class);
 
     stream = new NettyClientStream(new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE),
-        methodDescriptor, new Metadata(), channel, AsciiString.of("localhost"),
-        AsciiString.of("http"), AsciiString.of("agent"), StatsTraceContext.NOOP);
+        methodDescriptor,
+        new Metadata(),
+        channel,
+        AsciiString.of("localhost"),
+        AsciiString.of("http"),
+        AsciiString.of("agent"),
+        StatsTraceContext.NOOP,
+        transportTracer);
     stream.start(listener);
     stream().transportState().setId(STREAM_ID);
     verify(listener, never()).onReady();
@@ -406,9 +415,16 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     Mockito.reset(writeQueue);
     when(writeQueue.enqueue(any(QueuedCommand.class), any(boolean.class))).thenReturn(future);
 
-    stream = new NettyClientStream(new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE),
-        methodDescriptor, new Metadata(), channel, AsciiString.of("localhost"),
-        AsciiString.of("http"), AsciiString.of("good agent"), StatsTraceContext.NOOP);
+    stream = new NettyClientStream(
+        new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE),
+        methodDescriptor,
+        new Metadata(),
+        channel,
+        AsciiString.of("localhost"),
+        AsciiString.of("http"),
+        AsciiString.of("good agent"),
+        StatsTraceContext.NOOP,
+        transportTracer);
     stream.start(listener);
 
     ArgumentCaptor<CreateStreamCommand> cmdCap = ArgumentCaptor.forClass(CreateStreamCommand.class);
@@ -422,16 +438,22 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     // Creating a GET method
     MethodDescriptor<?, ?> descriptor = MethodDescriptor.<Void, Void>newBuilder()
         .setType(MethodDescriptor.MethodType.UNARY)
-        .setFullMethodName("/testService/test")
+        .setFullMethodName("testService/test")
         .setRequestMarshaller(marshaller)
         .setResponseMarshaller(marshaller)
         .setIdempotent(true)
         .setSafe(true)
         .build();
     NettyClientStream stream = new NettyClientStream(
-        new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE), descriptor, new Metadata(),
-        channel, AsciiString.of("localhost"), AsciiString.of("http"), AsciiString.of("agent"),
-        StatsTraceContext.NOOP);
+        new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE),
+        descriptor,
+        new Metadata(),
+        channel,
+        AsciiString.of("localhost"),
+        AsciiString.of("http"),
+        AsciiString.of("agent"),
+        StatsTraceContext.NOOP,
+        transportTracer);
     stream.start(listener);
     stream.transportState().setId(STREAM_ID);
     stream.transportState().setHttp2Stream(http2Stream);
@@ -450,7 +472,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     assertThat(headers)
         .containsEntry(
             AsciiString.of(":path"),
-            AsciiString.of("//testService/test?" + BaseEncoding.base64().encode(msg)));
+            AsciiString.of("/testService/test?" + BaseEncoding.base64().encode(msg)));
   }
 
   @Override
@@ -467,9 +489,15 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     }).when(writeQueue).enqueue(any(QueuedCommand.class), any(ChannelPromise.class), anyBoolean());
     when(writeQueue.enqueue(any(QueuedCommand.class), anyBoolean())).thenReturn(future);
     NettyClientStream stream = new NettyClientStream(
-        new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE), methodDescriptor, new Metadata(),
-        channel, AsciiString.of("localhost"), AsciiString.of("http"), AsciiString.of("agent"),
-        StatsTraceContext.NOOP);
+        new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE),
+        methodDescriptor,
+        new Metadata(),
+        channel,
+        AsciiString.of("localhost"),
+        AsciiString.of("http"),
+        AsciiString.of("agent"),
+        StatsTraceContext.NOOP,
+        transportTracer);
     stream.start(listener);
     stream.transportState().setId(STREAM_ID);
     stream.transportState().setHttp2Stream(http2Stream);
@@ -507,7 +535,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
 
   private class TransportStateImpl extends NettyClientStream.TransportState {
     public TransportStateImpl(NettyClientHandler handler, int maxMessageSize) {
-      super(handler, channel.eventLoop(), maxMessageSize, StatsTraceContext.NOOP);
+      super(handler, channel.eventLoop(), maxMessageSize, StatsTraceContext.NOOP, transportTracer);
     }
 
     @Override

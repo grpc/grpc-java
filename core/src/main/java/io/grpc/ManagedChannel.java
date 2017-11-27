@@ -73,9 +73,6 @@ public abstract class ManagedChannel extends Channel {
   /**
    * Gets the current connectivity state. Note the result may soon become outdated.
    *
-   * <p><strong>Warning</strong>: this API is not yet implemented by the gRPC library (<a
-   * href="https://github.com/grpc/grpc-java/issues/2292" target="_blank">issue on github</a>).
-   *
    * @param requestConnection if {@code true}, the channel will try to make a connection if it is
    *        currently IDLE
    * @throws UnsupportedOperationException if not supported by implementation
@@ -92,9 +89,6 @@ public abstract class ManagedChannel extends Channel {
    * #getState}.  If the states are already different, the callback will be called immediately.  The
    * callback is run in the same executor that runs Call listeners.
    *
-   * <p><strong>Warning</strong>: this API is not yet implemented by the gRPC library (<a
-   * href="https://github.com/grpc/grpc-java/issues/2292" target="_blank">issue on github</a>).
-   *
    * @param source the assumed current state, typically just returned by {@link #getState}
    * @param callback the one-off callback
    * @throws UnsupportedOperationException if not supported by implementation
@@ -104,4 +98,20 @@ public abstract class ManagedChannel extends Channel {
   public void notifyWhenStateChanged(ConnectivityState source, Runnable callback) {
     throw new UnsupportedOperationException("Not implemented");
   }
+
+  /**
+   * For subchannels that are in TRANSIENT_FAILURE state, short-circuit the backoff timer and make
+   * them reconnect immediately. May also attempt to invoke {@link NameResolver#refresh}.
+   *
+   * <p>This is primarily intended for Android users, where the network may experience frequent
+   * temporary drops. Rather than waiting for gRPC's name resolution and reconnect timers to elapse
+   * before reconnecting, the app may use this method as a mechanism to notify gRPC that the network
+   * is now available and a reconnection attempt may occur immediately.
+   *
+   * <p>No-op if not supported by the implementation.
+   *
+   * @since 1.8.0
+   */
+  @ExperimentalApi
+  public void resetConnectBackoff() {}
 }

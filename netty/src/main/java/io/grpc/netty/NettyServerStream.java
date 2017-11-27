@@ -18,11 +18,13 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.AbstractServerStream;
 import io.grpc.internal.StatsTraceContext;
+import io.grpc.internal.TransportTracer;
 import io.grpc.internal.WritableBuffer;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
@@ -47,15 +49,22 @@ class NettyServerStream extends AbstractServerStream {
   private final WriteQueue writeQueue;
   private final Attributes attributes;
   private final String authority;
+  private final TransportTracer transportTracer;
 
-  public NettyServerStream(Channel channel, TransportState state, Attributes transportAttrs,
-      String authority, StatsTraceContext statsTraceCtx) {
+  public NettyServerStream(
+      Channel channel,
+      TransportState state,
+      Attributes transportAttrs,
+      String authority,
+      StatsTraceContext statsTraceCtx,
+      TransportTracer transportTracer) {
     super(new NettyWritableBufferAllocator(channel.alloc()), statsTraceCtx);
     this.state = checkNotNull(state, "transportState");
     this.channel = checkNotNull(channel, "channel");
     this.writeQueue = state.handler.getWriteQueue();
     this.attributes = checkNotNull(transportAttrs);
     this.authority = authority;
+    this.transportTracer = checkNotNull(transportTracer, "transportTracer");
   }
 
   @Override
@@ -96,13 +105,16 @@ class NettyServerStream extends AbstractServerStream {
 
     @Override
     public void writeHeaders(Metadata headers) {
-      writeQueue.enqueue(new SendResponseHeadersCommand(transportState(),
-          Utils.convertServerHeaders(headers), false),
+      writeQueue.enqueue(
+          SendResponseHeadersCommand.createHeaders(
+              transportState(),
+              Utils.convertServerHeaders(headers)),
           true);
     }
 
     @Override
-    public void writeFrame(WritableBuffer frame, boolean flush) {
+    public void writeFrame(WritableBuffer frame, boolean flush, final int numMessages) {
+      Preconditions.checkArgument(numMessages >= 0);
       if (frame == null) {
         writeQueue.scheduleFlush();
         return;
@@ -119,15 +131,19 @@ class NettyServerStream extends AbstractServerStream {
               // Remove the bytes from outbound flow control, optionally notifying
               // the client that they can send more bytes.
               transportState().onSentBytes(numBytes);
+              if (future.isSuccess()) {
+                transportTracer.reportMessageSent(numMessages);
+              }
             }
           }), flush);
     }
 
     @Override
-    public void writeTrailers(Metadata trailers, boolean headersSent) {
+    public void writeTrailers(Metadata trailers, boolean headersSent, Status status) {
       Http2Headers http2Trailers = Utils.convertTrailers(trailers, headersSent);
       writeQueue.enqueue(
-          new SendResponseHeadersCommand(transportState(), http2Trailers, true), true);
+          SendResponseHeadersCommand.createTrailers(transportState(), http2Trailers, status),
+          true);
     }
 
     @Override
@@ -143,9 +159,14 @@ class NettyServerStream extends AbstractServerStream {
     private final NettyServerHandler handler;
     private final EventLoop eventLoop;
 
-    public TransportState(NettyServerHandler handler, EventLoop eventLoop, Http2Stream http2Stream,
-        int maxMessageSize, StatsTraceContext statsTraceCtx) {
-      super(maxMessageSize, statsTraceCtx);
+    public TransportState(
+        NettyServerHandler handler,
+        EventLoop eventLoop,
+        Http2Stream http2Stream,
+        int maxMessageSize,
+        StatsTraceContext statsTraceCtx,
+        TransportTracer transportTracer) {
+      super(maxMessageSize, statsTraceCtx, transportTracer);
       this.http2Stream = checkNotNull(http2Stream, "http2Stream");
       this.handler = checkNotNull(handler, "handler");
       this.eventLoop = eventLoop;

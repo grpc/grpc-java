@@ -32,6 +32,8 @@ import static io.netty.handler.codec.http2.DefaultHttp2LocalFlowController.DEFAU
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
+import io.grpc.InternalMetadata;
+import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
@@ -40,6 +42,7 @@ import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.LogExceptionRunnable;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
+import io.grpc.internal.TransportTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ServerHeadersDecoder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
@@ -53,6 +56,7 @@ import io.netty.handler.codec.http2.DefaultHttp2ConnectionDecoder;
 import io.netty.handler.codec.http2.DefaultHttp2ConnectionEncoder;
 import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
 import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
+import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
 import io.netty.handler.codec.http2.DefaultHttp2RemoteFlowController;
 import io.netty.handler.codec.http2.Http2Connection;
@@ -62,6 +66,7 @@ import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Exception.StreamException;
+import io.netty.handler.codec.http2.Http2FlowController;
 import io.netty.handler.codec.http2.Http2FrameAdapter;
 import io.netty.handler.codec.http2.Http2FrameLogger;
 import io.netty.handler.codec.http2.Http2FrameReader;
@@ -102,7 +107,11 @@ class NettyServerHandler extends AbstractNettyHandler {
   private final long maxConnectionAgeInNanos;
   private final long maxConnectionAgeGraceInNanos;
   private final List<ServerStreamTracer.Factory> streamTracerFactories;
+  private final TransportTracer transportTracer;
   private final KeepAliveEnforcer keepAliveEnforcer;
+  /** Incomplete attributes produced by negotiator. */
+  private Attributes negotiationAttributes;
+  /** Completed attributes produced by transportReady. */
   private Attributes attributes;
   private Throwable connectionError;
   private boolean teWarningLogged;
@@ -118,6 +127,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   static NettyServerHandler newHandler(
       ServerTransportListener transportListener,
       List<ServerStreamTracer.Factory> streamTracerFactories,
+      TransportTracer transportTracer,
       int maxStreams,
       int flowControlWindow,
       int maxHeaderListSize,
@@ -137,12 +147,22 @@ class NettyServerHandler extends AbstractNettyHandler {
     Http2FrameWriter frameWriter =
         new Http2OutboundFrameLogger(new DefaultHttp2FrameWriter(), frameLogger);
     return newHandler(
-        frameReader, frameWriter, transportListener, streamTracerFactories,
-        maxStreams, flowControlWindow, maxHeaderListSize, maxMessageSize,
-        keepAliveTimeInNanos, keepAliveTimeoutInNanos,
+        frameReader,
+        frameWriter,
+        transportListener,
+        streamTracerFactories,
+        transportTracer,
+        maxStreams,
+        flowControlWindow,
+        maxHeaderListSize,
+        maxMessageSize,
+        keepAliveTimeInNanos,
+        keepAliveTimeoutInNanos,
         maxConnectionIdleInNanos,
-        maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
-        permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos);
+        maxConnectionAgeInNanos,
+        maxConnectionAgeGraceInNanos,
+        permitKeepAliveWithoutCalls,
+        permitKeepAliveTimeInNanos);
   }
 
   @VisibleForTesting
@@ -150,6 +170,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       Http2FrameReader frameReader, Http2FrameWriter frameWriter,
       ServerTransportListener transportListener,
       List<ServerStreamTracer.Factory> streamTracerFactories,
+      TransportTracer transportTracer,
       int maxStreams,
       int flowControlWindow,
       int maxHeaderListSize,
@@ -178,7 +199,6 @@ class NettyServerHandler extends AbstractNettyHandler {
     // Create the local flow controller configured to auto-refill the connection window.
     connection.local().flowController(
         new DefaultHttp2LocalFlowController(connection, DEFAULT_WINDOW_UPDATE_RATIO, true));
-
     frameWriter = new WriteMonitoringFrameWriter(frameWriter, keepAliveEnforcer);
     Http2ConnectionEncoder encoder = new DefaultHttp2ConnectionEncoder(connection, frameWriter);
     Http2ConnectionDecoder decoder = new DefaultHttp2ConnectionDecoder(connection, encoder,
@@ -193,6 +213,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         connection,
         transportListener,
         streamTracerFactories,
+        transportTracer,
         decoder, encoder, settings,
         maxMessageSize,
         keepAliveTimeInNanos, keepAliveTimeoutInNanos,
@@ -205,8 +226,10 @@ class NettyServerHandler extends AbstractNettyHandler {
       final Http2Connection connection,
       ServerTransportListener transportListener,
       List<ServerStreamTracer.Factory> streamTracerFactories,
+      TransportTracer transportTracer,
       Http2ConnectionDecoder decoder,
-      Http2ConnectionEncoder encoder, Http2Settings settings,
+      Http2ConnectionEncoder encoder,
+      Http2Settings settings,
       int maxMessageSize,
       long keepAliveTimeInNanos,
       long keepAliveTimeoutInNanos,
@@ -273,6 +296,7 @@ class NettyServerHandler extends AbstractNettyHandler {
     streamKey = encoder.connection().newKey();
     this.transportListener = checkNotNull(transportListener, "transportListener");
     this.streamTracerFactories = checkNotNull(streamTracerFactories, "streamTracerFactories");
+    this.transportTracer = checkNotNull(transportTracer, "transportTracer");
 
     // Set the frame listener on the decoder.
     decoder().frameListener(new FrameListener());
@@ -328,6 +352,25 @@ class NettyServerHandler extends AbstractNettyHandler {
           keepAliveTimeInNanos, keepAliveTimeoutInNanos, true /* keepAliveDuringTransportIdle */);
       keepAliveManager.onTransportStarted();
     }
+
+
+    if (transportTracer != null) {
+      assert encoder().connection().equals(decoder().connection());
+      final Http2Connection connection = encoder().connection();
+      transportTracer.setFlowControlWindowReader(new TransportTracer.FlowControlReader() {
+        private final Http2FlowController local = connection.local().flowController();
+        private final Http2FlowController remote = connection.remote().flowController();
+
+        @Override
+        public TransportTracer.FlowControlWindows read() {
+          assert ctx.executor().inEventLoop();
+          return new TransportTracer.FlowControlWindows(
+              local.windowSize(connection.connectionStream()),
+              remote.windowSize(connection.connectionStream()));
+        }
+      });
+    }
+
     super.handlerAdded(ctx);
   }
 
@@ -335,15 +378,49 @@ class NettyServerHandler extends AbstractNettyHandler {
       throws Http2Exception {
     if (!teWarningLogged && !TE_TRAILERS.equals(headers.get(TE_HEADER))) {
       logger.warning(String.format("Expected header TE: %s, but %s is received. This means "
-            + "some intermediate proxy may not support trailers",
-            TE_TRAILERS, headers.get(TE_HEADER)));
+              + "some intermediate proxy may not support trailers",
+          TE_TRAILERS, headers.get(TE_HEADER)));
       teWarningLogged = true;
     }
 
     try {
+
+      // Remove the leading slash of the path and get the fully qualified method name
+      CharSequence path = headers.path();
+
+      if (path == null) {
+        respondWithHttpError(ctx, streamId, 404, Status.Code.UNIMPLEMENTED,
+            "Expected path but is missing");
+        return;
+      }
+
+      if (path.charAt(0) != '/') {
+        respondWithHttpError(ctx, streamId, 404, Status.Code.UNIMPLEMENTED,
+            String.format("Expected path to start with /: %s", path));
+        return;
+      }
+
+      String method = path.subSequence(1, path.length()).toString();
+
       // Verify that the Content-Type is correct in the request.
-      verifyContentType(streamId, headers);
-      String method = determineMethod(streamId, headers);
+      CharSequence contentType = headers.get(CONTENT_TYPE_HEADER);
+      if (contentType == null) {
+        respondWithHttpError(
+            ctx, streamId, 415, Status.Code.INTERNAL, "Content-Type is missing from the request");
+        return;
+      }
+      String contentTypeString = contentType.toString();
+      if (!GrpcUtil.isGrpcContentType(contentTypeString)) {
+        respondWithHttpError(ctx, streamId, 415, Status.Code.INTERNAL,
+            String.format("Content-Type '%s' is not supported", contentTypeString));
+        return;
+      }
+
+      if (!HTTP_METHOD.equals(headers.method())) {
+        respondWithHttpError(ctx, streamId, 405, Status.Code.INTERNAL,
+            String.format("Method '%s' is not supported", headers.method()));
+        return;
+      }
 
       // The Http2Stream object was put by AbstractHttp2ConnectionHandler before calling this
       // method.
@@ -354,17 +431,24 @@ class NettyServerHandler extends AbstractNettyHandler {
           StatsTraceContext.newServerContext(streamTracerFactories, method, metadata);
 
       NettyServerStream.TransportState state = new NettyServerStream.TransportState(
-          this, ctx.channel().eventLoop(), http2Stream, maxMessageSize, statsTraceCtx);
-      String authority = getOrUpdateAuthority((AsciiString)headers.authority());
-      NettyServerStream stream = new NettyServerStream(ctx.channel(), state, attributes,
-          authority, statsTraceCtx);
+          this,
+          ctx.channel().eventLoop(),
+          http2Stream,
+          maxMessageSize,
+          statsTraceCtx,
+          transportTracer);
+      String authority = getOrUpdateAuthority((AsciiString) headers.authority());
+      NettyServerStream stream = new NettyServerStream(
+          ctx.channel(),
+          state,
+          attributes,
+          authority,
+          statsTraceCtx,
+          transportTracer);
       transportListener.streamCreated(stream, method, metadata);
       state.onStreamAllocated();
       http2Stream.setProperty(streamKey, state);
-
-    } catch (Http2Exception e) {
-      throw e;
-    } catch (Throwable e) {
+    } catch (Exception e) {
       logger.log(Level.WARNING, "Exception in onHeadersRead()", e);
       // Throw an exception that will get handled by onStreamError.
       throw newStreamException(streamId, e);
@@ -396,11 +480,12 @@ class NettyServerHandler extends AbstractNettyHandler {
     }
   }
 
-  private void onRstStreamRead(int streamId) throws Http2Exception {
+  private void onRstStreamRead(int streamId, long errorCode) throws Http2Exception {
     try {
       NettyServerStream.TransportState stream = serverStream(connection().stream(streamId));
       if (stream != null) {
-        stream.transportReportStatus(Status.CANCELLED);
+        stream.transportReportStatus(
+            Status.CANCELLED.withDescription("RST_STREAM received for code " + errorCode));
       }
     } catch (Throwable e) {
       logger.log(Level.WARNING, "Exception in onRstStreamRead()", e);
@@ -433,7 +518,7 @@ class NettyServerHandler extends AbstractNettyHandler {
 
   @Override
   public void handleProtocolNegotiationCompleted(Attributes attrs) {
-    attributes = transportListener.transportReady(attrs);
+    negotiationAttributes = attrs;
   }
 
   @VisibleForTesting
@@ -583,17 +668,22 @@ class NettyServerHandler extends AbstractNettyHandler {
     });
   }
 
-  private void verifyContentType(int streamId, Http2Headers headers) throws Http2Exception {
-    CharSequence contentType = headers.get(CONTENT_TYPE_HEADER);
-    if (contentType == null) {
-      throw Http2Exception.streamError(streamId, Http2Error.REFUSED_STREAM,
-          "Content-Type is missing from the request");
+  private void respondWithHttpError(
+      ChannelHandlerContext ctx, int streamId, int code, Status.Code statusCode, String msg) {
+    Metadata metadata = new Metadata();
+    metadata.put(InternalStatus.CODE_KEY, statusCode.toStatus());
+    metadata.put(InternalStatus.MESSAGE_KEY, msg);
+    byte[][] serialized = InternalMetadata.serialize(metadata);
+
+    Http2Headers headers = new DefaultHttp2Headers(true, serialized.length / 2)
+        .status("" + code)
+        .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
+    for (int i = 0; i < serialized.length; i += 2) {
+      headers.add(new AsciiString(serialized[i], false), new AsciiString(serialized[i + 1], false));
     }
-    String contentTypeString = contentType.toString();
-    if (!GrpcUtil.isGrpcContentType(contentTypeString)) {
-      throw Http2Exception.streamError(streamId, Http2Error.REFUSED_STREAM,
-          "Content-Type '%s' is not supported", contentTypeString);
-    }
+    encoder().writeHeaders(ctx, streamId, headers, 0, false, ctx.newPromise());
+    ByteBuf msgBuf = ByteBufUtil.writeUtf8(ctx.alloc(), msg);
+    encoder().writeData(ctx, streamId, msgBuf, 0, true, ctx.newPromise());
   }
 
   private Http2Stream requireHttp2Stream(int streamId) {
@@ -603,20 +693,6 @@ class NettyServerHandler extends AbstractNettyHandler {
       throw new AssertionError("Stream does not exist: " + streamId);
     }
     return stream;
-  }
-
-  private String determineMethod(int streamId, Http2Headers headers) throws Http2Exception {
-    if (!HTTP_METHOD.equals(headers.method())) {
-      throw Http2Exception.streamError(streamId, Http2Error.REFUSED_STREAM,
-          "Method '%s' is not supported", headers.method());
-    }
-    // Remove the leading slash of the path and get the fully qualified method name
-    CharSequence path = headers.path();
-    if (path.charAt(0) != '/') {
-      throw Http2Exception.streamError(streamId, Http2Error.REFUSED_STREAM,
-          "Malformatted path: %s", path);
-    }
-    return path.subSequence(1, path.length()).toString();
   }
 
   /**
@@ -632,6 +708,17 @@ class NettyServerHandler extends AbstractNettyHandler {
   }
 
   private class FrameListener extends Http2FrameAdapter {
+    private boolean firstSettings = true;
+
+    @Override
+    public void onSettingsRead(ChannelHandlerContext ctx, Http2Settings settings) {
+      if (firstSettings) {
+        firstSettings = false;
+        // Delay transportReady until we see the client's HTTP handshake, for coverage with
+        // handshakeTimeout
+        attributes = transportListener.transportReady(negotiationAttributes);
+      }
+    }
 
     @Override
     public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding,
@@ -664,7 +751,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       if (keepAliveManager != null) {
         keepAliveManager.onDataReceived();
       }
-      NettyServerHandler.this.onRstStreamRead(streamId);
+      NettyServerHandler.this.onRstStreamRead(streamId, errorCode);
     }
 
     @Override
@@ -711,8 +798,20 @@ class NettyServerHandler extends AbstractNettyHandler {
 
     @Override
     public void ping() {
-      encoder().writePing(ctx, false /* isAck */, KEEPALIVE_PING_BUF, ctx.newPromise());
+      ChannelFuture pingFuture = encoder().writePing(
+          // slice KEEPALIVE_PING_BUF because tls handler may modify the reader index
+          ctx, false /* isAck */, KEEPALIVE_PING_BUF.slice(), ctx.newPromise());
       ctx.flush();
+      if (transportTracer != null) {
+        pingFuture.addListener(new ChannelFutureListener() {
+          @Override
+          public void operationComplete(ChannelFuture future) throws Exception {
+            if (future.isSuccess()) {
+              transportTracer.reportKeepAliveSent();
+            }
+          }
+        });
+      }
     }
 
     @Override

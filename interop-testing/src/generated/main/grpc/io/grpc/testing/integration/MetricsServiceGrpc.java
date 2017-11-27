@@ -1,19 +1,19 @@
 package io.grpc.testing.integration;
 
-import static io.grpc.stub.ClientCalls.asyncUnaryCall;
-import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ClientCalls.blockingUnaryCall;
-import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
-import static io.grpc.stub.ClientCalls.futureUnaryCall;
 import static io.grpc.MethodDescriptor.generateFullMethodName;
-import static io.grpc.stub.ServerCalls.asyncUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
+import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
+import static io.grpc.stub.ClientCalls.asyncClientStreamingCall;
+import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
+import static io.grpc.stub.ClientCalls.asyncUnaryCall;
+import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
+import static io.grpc.stub.ClientCalls.blockingUnaryCall;
+import static io.grpc.stub.ClientCalls.futureUnaryCall;
 import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
+import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
+import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
+import static io.grpc.stub.ServerCalls.asyncUnaryCall;
 import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
+import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 
 /**
  */
@@ -28,31 +28,69 @@ public final class MetricsServiceGrpc {
 
   // Static method descriptors that strictly reflect the proto.
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
+  @java.lang.Deprecated // Use {@link #getGetAllGaugesMethod()} instead. 
   public static final io.grpc.MethodDescriptor<io.grpc.testing.integration.Metrics.EmptyMessage,
-      io.grpc.testing.integration.Metrics.GaugeResponse> METHOD_GET_ALL_GAUGES =
-      io.grpc.MethodDescriptor.<io.grpc.testing.integration.Metrics.EmptyMessage, io.grpc.testing.integration.Metrics.GaugeResponse>newBuilder()
-          .setType(io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
-          .setFullMethodName(generateFullMethodName(
-              "grpc.testing.MetricsService", "GetAllGauges"))
-          .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-              io.grpc.testing.integration.Metrics.EmptyMessage.getDefaultInstance()))
-          .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-              io.grpc.testing.integration.Metrics.GaugeResponse.getDefaultInstance()))
-          .setSchemaDescriptor(new MetricsServiceMethodDescriptorSupplier("GetAllGauges"))
-          .build();
+      io.grpc.testing.integration.Metrics.GaugeResponse> METHOD_GET_ALL_GAUGES = getGetAllGaugesMethod();
+
+  private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Metrics.EmptyMessage,
+      io.grpc.testing.integration.Metrics.GaugeResponse> getGetAllGaugesMethod;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
+  public static io.grpc.MethodDescriptor<io.grpc.testing.integration.Metrics.EmptyMessage,
+      io.grpc.testing.integration.Metrics.GaugeResponse> getGetAllGaugesMethod() {
+    io.grpc.MethodDescriptor<io.grpc.testing.integration.Metrics.EmptyMessage, io.grpc.testing.integration.Metrics.GaugeResponse> getGetAllGaugesMethod;
+    if ((getGetAllGaugesMethod = MetricsServiceGrpc.getGetAllGaugesMethod) == null) {
+      synchronized (MetricsServiceGrpc.class) {
+        if ((getGetAllGaugesMethod = MetricsServiceGrpc.getGetAllGaugesMethod) == null) {
+          MetricsServiceGrpc.getGetAllGaugesMethod = getGetAllGaugesMethod = 
+              io.grpc.MethodDescriptor.<io.grpc.testing.integration.Metrics.EmptyMessage, io.grpc.testing.integration.Metrics.GaugeResponse>newBuilder()
+              .setType(io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
+              .setFullMethodName(generateFullMethodName(
+                  "grpc.testing.MetricsService", "GetAllGauges"))
+              .setSampledToLocalTracing(true)
+              .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.testing.integration.Metrics.EmptyMessage.getDefaultInstance()))
+              .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.testing.integration.Metrics.GaugeResponse.getDefaultInstance()))
+                  .setSchemaDescriptor(new MetricsServiceMethodDescriptorSupplier("GetAllGauges"))
+                  .build();
+          }
+        }
+     }
+     return getGetAllGaugesMethod;
+  }
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
+  @java.lang.Deprecated // Use {@link #getGetGaugeMethod()} instead. 
   public static final io.grpc.MethodDescriptor<io.grpc.testing.integration.Metrics.GaugeRequest,
-      io.grpc.testing.integration.Metrics.GaugeResponse> METHOD_GET_GAUGE =
-      io.grpc.MethodDescriptor.<io.grpc.testing.integration.Metrics.GaugeRequest, io.grpc.testing.integration.Metrics.GaugeResponse>newBuilder()
-          .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-          .setFullMethodName(generateFullMethodName(
-              "grpc.testing.MetricsService", "GetGauge"))
-          .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-              io.grpc.testing.integration.Metrics.GaugeRequest.getDefaultInstance()))
-          .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-              io.grpc.testing.integration.Metrics.GaugeResponse.getDefaultInstance()))
-          .setSchemaDescriptor(new MetricsServiceMethodDescriptorSupplier("GetGauge"))
-          .build();
+      io.grpc.testing.integration.Metrics.GaugeResponse> METHOD_GET_GAUGE = getGetGaugeMethod();
+
+  private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Metrics.GaugeRequest,
+      io.grpc.testing.integration.Metrics.GaugeResponse> getGetGaugeMethod;
+
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
+  public static io.grpc.MethodDescriptor<io.grpc.testing.integration.Metrics.GaugeRequest,
+      io.grpc.testing.integration.Metrics.GaugeResponse> getGetGaugeMethod() {
+    io.grpc.MethodDescriptor<io.grpc.testing.integration.Metrics.GaugeRequest, io.grpc.testing.integration.Metrics.GaugeResponse> getGetGaugeMethod;
+    if ((getGetGaugeMethod = MetricsServiceGrpc.getGetGaugeMethod) == null) {
+      synchronized (MetricsServiceGrpc.class) {
+        if ((getGetGaugeMethod = MetricsServiceGrpc.getGetGaugeMethod) == null) {
+          MetricsServiceGrpc.getGetGaugeMethod = getGetGaugeMethod = 
+              io.grpc.MethodDescriptor.<io.grpc.testing.integration.Metrics.GaugeRequest, io.grpc.testing.integration.Metrics.GaugeResponse>newBuilder()
+              .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
+              .setFullMethodName(generateFullMethodName(
+                  "grpc.testing.MetricsService", "GetGauge"))
+              .setSampledToLocalTracing(true)
+              .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.testing.integration.Metrics.GaugeRequest.getDefaultInstance()))
+              .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.testing.integration.Metrics.GaugeResponse.getDefaultInstance()))
+                  .setSchemaDescriptor(new MetricsServiceMethodDescriptorSupplier("GetGauge"))
+                  .build();
+          }
+        }
+     }
+     return getGetGaugeMethod;
+  }
 
   /**
    * Creates a new async stub that supports all call types for the service
@@ -89,7 +127,7 @@ public final class MetricsServiceGrpc {
      */
     public void getAllGauges(io.grpc.testing.integration.Metrics.EmptyMessage request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Metrics.GaugeResponse> responseObserver) {
-      asyncUnimplementedUnaryCall(METHOD_GET_ALL_GAUGES, responseObserver);
+      asyncUnimplementedUnaryCall(getGetAllGaugesMethod(), responseObserver);
     }
 
     /**
@@ -99,20 +137,20 @@ public final class MetricsServiceGrpc {
      */
     public void getGauge(io.grpc.testing.integration.Metrics.GaugeRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Metrics.GaugeResponse> responseObserver) {
-      asyncUnimplementedUnaryCall(METHOD_GET_GAUGE, responseObserver);
+      asyncUnimplementedUnaryCall(getGetGaugeMethod(), responseObserver);
     }
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
           .addMethod(
-            METHOD_GET_ALL_GAUGES,
+            getGetAllGaugesMethod(),
             asyncServerStreamingCall(
               new MethodHandlers<
                 io.grpc.testing.integration.Metrics.EmptyMessage,
                 io.grpc.testing.integration.Metrics.GaugeResponse>(
                   this, METHODID_GET_ALL_GAUGES)))
           .addMethod(
-            METHOD_GET_GAUGE,
+            getGetGaugeMethod(),
             asyncUnaryCall(
               new MethodHandlers<
                 io.grpc.testing.integration.Metrics.GaugeRequest,
@@ -149,7 +187,7 @@ public final class MetricsServiceGrpc {
     public void getAllGauges(io.grpc.testing.integration.Metrics.EmptyMessage request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Metrics.GaugeResponse> responseObserver) {
       asyncServerStreamingCall(
-          getChannel().newCall(METHOD_GET_ALL_GAUGES, getCallOptions()), request, responseObserver);
+          getChannel().newCall(getGetAllGaugesMethod(), getCallOptions()), request, responseObserver);
     }
 
     /**
@@ -160,7 +198,7 @@ public final class MetricsServiceGrpc {
     public void getGauge(io.grpc.testing.integration.Metrics.GaugeRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Metrics.GaugeResponse> responseObserver) {
       asyncUnaryCall(
-          getChannel().newCall(METHOD_GET_GAUGE, getCallOptions()), request, responseObserver);
+          getChannel().newCall(getGetGaugeMethod(), getCallOptions()), request, responseObserver);
     }
   }
 
@@ -191,7 +229,7 @@ public final class MetricsServiceGrpc {
     public java.util.Iterator<io.grpc.testing.integration.Metrics.GaugeResponse> getAllGauges(
         io.grpc.testing.integration.Metrics.EmptyMessage request) {
       return blockingServerStreamingCall(
-          getChannel(), METHOD_GET_ALL_GAUGES, getCallOptions(), request);
+          getChannel(), getGetAllGaugesMethod(), getCallOptions(), request);
     }
 
     /**
@@ -201,7 +239,7 @@ public final class MetricsServiceGrpc {
      */
     public io.grpc.testing.integration.Metrics.GaugeResponse getGauge(io.grpc.testing.integration.Metrics.GaugeRequest request) {
       return blockingUnaryCall(
-          getChannel(), METHOD_GET_GAUGE, getCallOptions(), request);
+          getChannel(), getGetGaugeMethod(), getCallOptions(), request);
     }
   }
 
@@ -231,7 +269,7 @@ public final class MetricsServiceGrpc {
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Metrics.GaugeResponse> getGauge(
         io.grpc.testing.integration.Metrics.GaugeRequest request) {
       return futureUnaryCall(
-          getChannel().newCall(METHOD_GET_GAUGE, getCallOptions()), request);
+          getChannel().newCall(getGetGaugeMethod(), getCallOptions()), request);
     }
   }
 
@@ -324,8 +362,8 @@ public final class MetricsServiceGrpc {
         if (result == null) {
           serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
               .setSchemaDescriptor(new MetricsServiceFileDescriptorSupplier())
-              .addMethod(METHOD_GET_ALL_GAUGES)
-              .addMethod(METHOD_GET_GAUGE)
+              .addMethod(getGetAllGaugesMethod())
+              .addMethod(getGetGaugeMethod())
               .build();
         }
       }

@@ -49,6 +49,8 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -82,6 +84,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
   // This is iterated on a per-call basis.  Use an array instead of a Collection to avoid iterator
   // creations.
   private final ServerInterceptor[] interceptors;
+  private final long handshakeTimeoutMillis;
   @GuardedBy("lock") private boolean started;
   @GuardedBy("lock") private boolean shutdown;
   /** non-{@code null} if immediate shutdown has been requested. */
@@ -127,6 +130,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
         new ArrayList<ServerTransportFilter>(builder.transportFilters));
     this.interceptors =
         builder.interceptors.toArray(new ServerInterceptor[builder.interceptors.size()]);
+    this.handshakeTimeoutMillis = builder.handshakeTimeoutMillis;
   }
 
   /**
@@ -308,7 +312,9 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       synchronized (lock) {
         transports.add(transport);
       }
-      return new ServerTransportListenerImpl(transport);
+      ServerTransportListenerImpl stli = new ServerTransportListenerImpl(transport);
+      stli.init();
+      return stli;
     }
 
     @Override
@@ -338,14 +344,36 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
 
   private final class ServerTransportListenerImpl implements ServerTransportListener {
     private final ServerTransport transport;
+    private Future<?> handshakeTimeoutFuture;
     private Attributes attributes;
 
     ServerTransportListenerImpl(ServerTransport transport) {
       this.transport = transport;
     }
 
+    public void init() {
+      class TransportShutdownNow implements Runnable {
+        @Override public void run() {
+          transport.shutdownNow(Status.CANCELLED.withDescription("Handshake timeout exceeded"));
+        }
+      }
+
+      if (handshakeTimeoutMillis != Long.MAX_VALUE) {
+        handshakeTimeoutFuture = transport.getScheduledExecutorService()
+            .schedule(new TransportShutdownNow(), handshakeTimeoutMillis, TimeUnit.MILLISECONDS);
+      } else {
+        // Noop, to avoid triggering Thread creation in InProcessServer
+        handshakeTimeoutFuture = new FutureTask<Void>(new Runnable() {
+          @Override public void run() {}
+        }, null);
+      }
+    }
+
     @Override
     public Attributes transportReady(Attributes attributes) {
+      handshakeTimeoutFuture.cancel(false);
+      handshakeTimeoutFuture = null;
+
       for (ServerTransportFilter filter : transportFilters) {
         attributes = Preconditions.checkNotNull(filter.transportReady(attributes),
             "Filter %s returned null", filter);
@@ -356,6 +384,10 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
 
     @Override
     public void transportTerminated() {
+      if (handshakeTimeoutFuture != null) {
+        handshakeTimeoutFuture.cancel(false);
+        handshakeTimeoutFuture = null;
+      }
       for (ServerTransportFilter filter : transportFilters) {
         filter.transportTerminated(attributes);
       }

@@ -16,6 +16,7 @@
 
 package io.grpc.stub;
 
+import com.google.errorprone.annotations.DoNotMock;
 import io.grpc.ExperimentalApi;
 
 import javax.annotation.Nullable;
@@ -23,8 +24,12 @@ import javax.annotation.Nullable;
 /**
  * A refinement of {@link CallStreamObserver} that allows for lower-level interaction with
  * client calls.
+ *
+ * <p>Like {@code StreamObserver}, implementations are not required to be thread-safe; if multiple
+ * threads will be writing to an instance concurrently, the application must synchronize its calls.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1788")
+@DoNotMock
 public abstract class ClientCallStreamObserver<V> extends CallStreamObserver<V> {
   /**
    * Prevent any further processing for this {@code ClientCallStreamObserver}. No further messages

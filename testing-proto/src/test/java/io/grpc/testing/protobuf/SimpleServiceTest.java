@@ -21,6 +21,7 @@ import static io.grpc.MethodDescriptor.MethodType.CLIENT_STREAMING;
 import static io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING;
 import static io.grpc.MethodDescriptor.MethodType.UNARY;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import io.grpc.MethodDescriptor;
 import org.junit.Test;
@@ -39,16 +40,21 @@ public class SimpleServiceTest {
   public void serviceMethodDescriotrs() {
     MethodDescriptor<SimpleRequest, SimpleResponse> genericTypeShouldMatchWhenAssigned;
 
-    genericTypeShouldMatchWhenAssigned = SimpleServiceGrpc.METHOD_UNARY_RPC;
+    genericTypeShouldMatchWhenAssigned = SimpleServiceGrpc.getUnaryRpcMethod();
     assertEquals(UNARY, genericTypeShouldMatchWhenAssigned.getType());
 
-    genericTypeShouldMatchWhenAssigned = SimpleServiceGrpc.METHOD_CLIENT_STREAMING_RPC;
+    genericTypeShouldMatchWhenAssigned = SimpleServiceGrpc.getClientStreamingRpcMethod();
     assertEquals(CLIENT_STREAMING, genericTypeShouldMatchWhenAssigned.getType());
 
-    genericTypeShouldMatchWhenAssigned = SimpleServiceGrpc.METHOD_SERVER_STREAMING_RPC;
+    genericTypeShouldMatchWhenAssigned = SimpleServiceGrpc.getServerStreamingRpcMethod();
     assertEquals(SERVER_STREAMING, genericTypeShouldMatchWhenAssigned.getType());
 
-    genericTypeShouldMatchWhenAssigned = SimpleServiceGrpc.METHOD_BIDI_STREAMING_RPC;
+    genericTypeShouldMatchWhenAssigned = SimpleServiceGrpc.getBidiStreamingRpcMethod();
     assertEquals(BIDI_STREAMING, genericTypeShouldMatchWhenAssigned.getType());
+  }
+
+  @Test
+  public void generatedMethodsAreSampledToLocalTracing() throws Exception {
+    assertTrue(SimpleServiceGrpc.getUnaryRpcMethod().isSampledToLocalTracing());
   }
 }

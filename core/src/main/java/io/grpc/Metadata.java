@@ -104,21 +104,6 @@ public final class Metadata {
         }
       };
 
-  /** Simple metadata marshaller that encodes an integer as a signed decimal string. */
-  static final AsciiMarshaller<Integer> INTEGER_MARSHALLER =
-      new AsciiMarshaller<Integer>() {
-
-        @Override
-        public String toAsciiString(Integer value) {
-          return value.toString();
-        }
-
-        @Override
-        public Integer parseAsciiString(String serialized) {
-          return Integer.parseInt(serialized);
-        }
-      };
-
   /**
    * Constructor called by the transport layer when it receives binary metadata. Metadata will
    * mutate the passed in array.
@@ -559,7 +544,7 @@ public final class Metadata {
    * <li>special characters: {@code -_.}
    * </ul>
    *
-   * <p>This is a a strict subset of the HTTP field-name rules. Applications may not send or receive
+   * <p>This is a strict subset of the HTTP field-name rules. Applications may not send or receive
    * metadata with invalid key names. However, the gRPC library may preserve any metadata received
    * even if it does not conform to the above limitations. Additionally, if metadata contains non
    * conforming field names, they will still be sent. In this way, unknown metadata fields are

@@ -17,8 +17,8 @@
 package io.grpc.testing.integration;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import com.google.common.base.Throwables;
 import com.google.protobuf.EmptyProtos.Empty;
@@ -26,13 +26,13 @@ import com.squareup.okhttp.ConnectionSpec;
 import com.squareup.okhttp.TlsVersion;
 import io.grpc.ManagedChannel;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.okhttp.internal.Platform;
 import io.grpc.stub.StreamObserver;
-import io.grpc.testing.StreamRecorder;
 import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -42,7 +42,6 @@ import java.io.IOException;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
-
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -98,7 +97,7 @@ public class Http2OkHttpTest extends AbstractInteropTest {
   }
 
   private OkHttpChannelBuilder createChannelBuilder() {
-    OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("::1", getPort())
+    OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("localhost", getPort())
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .connectionSpec(new ConnectionSpec.Builder(OkHttpChannelBuilder.DEFAULT_CONNECTION_SPEC)
             .cipherSuites(TestUtils.preferredTestCiphers().toArray(new String[0]))
@@ -106,7 +105,8 @@ public class Http2OkHttpTest extends AbstractInteropTest {
             .build())
         .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
             TestUtils.TEST_SERVER_HOST, getPort()));
-    io.grpc.internal.TestingAccessor.setStatsContextFactory(builder, getClientStatsFactory());
+    io.grpc.internal.TestingAccessor.setStatsImplementation(
+        builder, createClientCensusStatsModule());
     try {
       builder.sslSocketFactory(TestUtils.newSslSocketFactoryForCa(Platform.get().getProvider(),
           TestUtils.loadCert("ca.pem")));
@@ -116,7 +116,7 @@ public class Http2OkHttpTest extends AbstractInteropTest {
     return builder;
   }
 
-  @Test(timeout = 10000)
+  @Test
   public void receivedDataForFinishedStream() throws Exception {
     Messages.ResponseParameters.Builder responseParameters =
         Messages.ResponseParameters.newBuilder()
@@ -141,7 +141,7 @@ public class Http2OkHttpTest extends AbstractInteropTest {
     assertEquals(EMPTY, blockingStub.emptyCall(EMPTY));
   }
 
-  @Test(timeout = 10000)
+  @Test
   public void wrongHostNameFailHostnameVerification() throws Exception {
     ManagedChannel channel = createChannelBuilder()
         .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
@@ -150,18 +150,20 @@ public class Http2OkHttpTest extends AbstractInteropTest {
     TestServiceGrpc.TestServiceBlockingStub blockingStub =
         TestServiceGrpc.newBlockingStub(channel);
 
+    Throwable actualThrown = null;
     try {
       blockingStub.emptyCall(Empty.getDefaultInstance());
-      fail("The rpc should have been failed due to hostname verification");
     } catch (Throwable t) {
-      Throwable cause = Throwables.getRootCause(t);
-      assertTrue("Failed by unexpected exception: " + cause,
-          cause instanceof SSLPeerUnverifiedException);
+      actualThrown = t;
     }
+    assertNotNull("The rpc should have been failed due to hostname verification", actualThrown);
+    Throwable cause = Throwables.getRootCause(actualThrown);
+    assertTrue(
+        "Failed by unexpected exception: " + cause, cause instanceof SSLPeerUnverifiedException);
     channel.shutdown();
   }
 
-  @Test(timeout = 10000)
+  @Test
   public void hostnameVerifierWithBadHostname() throws Exception {
     ManagedChannel channel = createChannelBuilder()
         .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
@@ -181,7 +183,7 @@ public class Http2OkHttpTest extends AbstractInteropTest {
     channel.shutdown();
   }
 
-  @Test(timeout = 10000)
+  @Test
   public void hostnameVerifierWithCorrectHostname() throws Exception {
     ManagedChannel channel = createChannelBuilder()
         .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
@@ -196,14 +198,16 @@ public class Http2OkHttpTest extends AbstractInteropTest {
     TestServiceGrpc.TestServiceBlockingStub blockingStub =
         TestServiceGrpc.newBlockingStub(channel);
 
+    Throwable actualThrown = null;
     try {
       blockingStub.emptyCall(Empty.getDefaultInstance());
-      fail("The rpc should have been failed due to hostname verification");
     } catch (Throwable t) {
-      Throwable cause = Throwables.getRootCause(t);
-      assertTrue("Failed by unexpected exception: " + cause,
-          cause instanceof SSLPeerUnverifiedException);
+      actualThrown = t;
     }
+    assertNotNull("The rpc should have been failed due to hostname verification", actualThrown);
+    Throwable cause = Throwables.getRootCause(actualThrown);
+    assertTrue(
+        "Failed by unexpected exception: " + cause, cause instanceof SSLPeerUnverifiedException);
     channel.shutdown();
   }
 }

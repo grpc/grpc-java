@@ -16,17 +16,24 @@
 
 package io.grpc.stub;
 
+import com.google.errorprone.annotations.DoNotMock;
 import io.grpc.ExperimentalApi;
 
 /**
  * A refinement of {@link CallStreamObserver} to allows for interaction with call
  * cancellation events on the server side.
+ *
+ * <p>Like {@code StreamObserver}, implementations are not required to be thread-safe; if multiple
+ * threads will be writing to an instance concurrently, the application must synchronize its calls.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1788")
+@DoNotMock
 public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> {
 
   /**
    * If {@code true} indicates that the call has been cancelled by the remote peer.
+   *
+   * <p>This method may safely be called concurrently from multiple threads.
    */
   public abstract boolean isCancelled();
 

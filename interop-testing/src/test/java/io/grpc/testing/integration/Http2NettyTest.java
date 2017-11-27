@@ -16,6 +16,9 @@
 
 package io.grpc.testing.integration;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+
 import io.grpc.ManagedChannel;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcSslContexts;
@@ -25,6 +28,8 @@ import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -75,19 +80,23 @@ public class Http2NettyTest extends AbstractInteropTest {
               .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
               .sslProvider(SslProvider.OPENSSL)
               .build());
-      io.grpc.internal.TestingAccessor.setStatsContextFactory(builder, getClientStatsFactory());
+      io.grpc.internal.TestingAccessor.setStatsImplementation(
+          builder, createClientCensusStatsModule());
       return builder.build();
     } catch (Exception ex) {
       throw new RuntimeException(ex);
     }
   }
 
-  @Test(timeout = 10000)
-  public void remoteAddr() {
-    assertRemoteAddr("/0:0:0:0:0:0:0:1");
+  @Test
+  public void remoteAddr() throws Exception {
+    InetSocketAddress isa = (InetSocketAddress) obtainRemoteClientAddr();
+    assertEquals(InetAddress.getLoopbackAddress(), isa.getAddress());
+    // It should not be the same as the server
+    assertNotEquals(getPort(), isa.getPort());
   }
 
-  @Test(timeout = 10000)
+  @Test
   public void tlsInfo() {
     assertX500SubjectDn("CN=testclient, O=Internet Widgits Pty Ltd, ST=Some-State, C=AU");
   }

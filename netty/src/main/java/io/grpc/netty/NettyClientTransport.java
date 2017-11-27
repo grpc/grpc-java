@@ -21,6 +21,7 @@ import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
@@ -35,6 +36,7 @@ import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
 import io.grpc.internal.LogId;
 import io.grpc.internal.StatsTraceContext;
+import io.grpc.internal.TransportTracer;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -48,7 +50,9 @@ import io.netty.util.AsciiString;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
 import javax.annotation.Nullable;
 
 /**
@@ -81,6 +85,8 @@ class NettyClientTransport implements ConnectionClientTransport {
   private Status statusExplainingWhyTheChannelIsNull;
   /** Since not thread-safe, may only be used from event loop. */
   private ClientTransportLifecycleManager lifecycleManager;
+  /** Since not thread-safe, may only be used from event loop. */
+  private final TransportTracer transportTracer;
 
   NettyClientTransport(
       SocketAddress address, Class<? extends Channel> channelType,
@@ -88,7 +94,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       ProtocolNegotiator negotiator, int flowControlWindow, int maxMessageSize,
       int maxHeaderListSize, long keepAliveTimeNanos, long keepAliveTimeoutNanos,
       boolean keepAliveWithoutCalls, String authority, @Nullable String userAgent,
-      Runnable tooManyPingsRunnable) {
+      Runnable tooManyPingsRunnable, TransportTracer transportTracer) {
     this.negotiator = Preconditions.checkNotNull(negotiator, "negotiator");
     this.address = Preconditions.checkNotNull(address, "address");
     this.group = Preconditions.checkNotNull(group, "group");
@@ -104,6 +110,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.userAgent = new AsciiString(GrpcUtil.getGrpcUserAgent("netty", userAgent));
     this.tooManyPingsRunnable =
         Preconditions.checkNotNull(tooManyPingsRunnable, "tooManyPingsRunnable");
+    this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
   }
 
   @Override
@@ -143,15 +150,25 @@ class NettyClientTransport implements ConnectionClientTransport {
     }
     StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(callOptions, headers);
     return new NettyClientStream(
-        new NettyClientStream.TransportState(handler, channel.eventLoop(), maxMessageSize,
-            statsTraceCtx) {
+        new NettyClientStream.TransportState(
+            handler,
+            channel.eventLoop(),
+            maxMessageSize,
+            statsTraceCtx,
+            transportTracer) {
           @Override
           protected Status statusFromFailedFuture(ChannelFuture f) {
             return NettyClientTransport.this.statusFromFailedFuture(f);
           }
         },
-        method, headers, channel, authority, negotiationHandler.scheme(), userAgent,
-        statsTraceCtx);
+        method,
+        headers,
+        channel,
+        authority,
+        negotiationHandler.scheme(),
+        userAgent,
+        statsTraceCtx,
+        transportTracer);
   }
 
   @SuppressWarnings("unchecked")
@@ -172,7 +189,8 @@ class NettyClientTransport implements ConnectionClientTransport {
         flowControlWindow,
         maxHeaderListSize,
         GrpcUtil.STOPWATCH_SUPPLIER,
-        tooManyPingsRunnable);
+        tooManyPingsRunnable,
+        transportTracer);
     NettyHandlerSettings.setAutoWindow(handler);
 
     negotiationHandler = negotiator.newHandler(handler);
@@ -288,6 +306,24 @@ class NettyClientTransport implements ConnectionClientTransport {
   public Attributes getAttributes() {
     // TODO(zhangkun83): fill channel security attributes
     return Attributes.EMPTY;
+  }
+
+  @Override
+  public Future<TransportTracer.Stats> getTransportStats() {
+    if (channel.eventLoop().inEventLoop()) {
+      // This is necessary, otherwise we will block forever if we get the future from inside
+      // the event loop.
+      SettableFuture<TransportTracer.Stats> result = SettableFuture.create();
+      result.set(transportTracer.getStats());
+      return result;
+    }
+    return channel.eventLoop().submit(
+        new Callable<TransportTracer.Stats>() {
+          @Override
+          public TransportTracer.Stats call() throws Exception {
+            return transportTracer.getStats();
+          }
+        });
   }
 
   @VisibleForTesting

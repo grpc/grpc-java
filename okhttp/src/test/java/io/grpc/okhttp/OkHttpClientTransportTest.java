@@ -118,8 +118,7 @@ public class OkHttpClientTransportTest {
   private static final int HEADER_LENGTH = 5;
   private static final Status SHUTDOWN_REASON = Status.UNAVAILABLE.withDescription("for test");
 
-  @Rule
-  public Timeout globalTimeout = new Timeout(10 * 1000);
+  @Rule public final Timeout globalTimeout = Timeout.seconds(10);
 
   @Mock
   private FrameWriter frameWriter;
@@ -1559,6 +1558,33 @@ public class OkHttpClientTransportTest {
     Socket sock = serverSocket.accept();
     serverSocket.close();
     sock.close();
+
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(captor.capture());
+    Status error = captor.getValue();
+    assertTrue("Status didn't contain proxy: " + captor.getValue(),
+        error.getDescription().contains("proxy"));
+    assertEquals("Not UNAVAILABLE: " + captor.getValue(),
+        Status.UNAVAILABLE.getCode(), error.getCode());
+    verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
+  }
+
+  @Test
+  public void proxy_unresolvedProxyAddress() throws Exception {
+    clientTransport = new OkHttpClientTransport(
+        InetSocketAddress.createUnresolved("theservice", 80),
+        "authority",
+        "userAgent",
+        executor,
+        null,
+        null,
+        ConnectionSpec.CLEARTEXT,
+        DEFAULT_MAX_MESSAGE_SIZE,
+        InetSocketAddress.createUnresolved("unresolvedproxy", 80),
+        null,
+        null,
+        tooManyPingsRunnable);
+    clientTransport.start(transportListener);
 
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(captor.capture());

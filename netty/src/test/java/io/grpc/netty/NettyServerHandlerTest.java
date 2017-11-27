@@ -29,7 +29,7 @@ import static io.grpc.netty.Utils.HTTP_METHOD;
 import static io.grpc.netty.Utils.TE_HEADER;
 import static io.grpc.netty.Utils.TE_TRAILERS;
 import static io.netty.buffer.Unpooled.directBuffer;
-import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
+import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_PRIORITY_WEIGHT;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -42,6 +42,7 @@ import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
@@ -51,10 +52,13 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.io.ByteStreams;
+import com.google.common.truth.Truth;
 import io.grpc.Attributes;
+import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.StreamTracer;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
@@ -85,11 +89,13 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.TimeUnit;
+import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Matchers;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
@@ -101,7 +107,13 @@ import org.mockito.stubbing.Answer;
 @RunWith(JUnit4.class)
 public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHandler> {
 
+  @Rule
+  public final Timeout globalTimeout = Timeout.seconds(1);
+
   private static final int STREAM_ID = 3;
+
+  private static final AsciiString HTTP_FAKE_METHOD = AsciiString.of("FAKE");
+
 
   @Mock
   private ServerStreamListener streamListener;
@@ -117,7 +129,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   final Queue<InputStream> streamListenerMessageQueue = new LinkedList<InputStream>();
 
-  private int flowControlWindow = DEFAULT_WINDOW_SIZE;
   private int maxConcurrentStreams = Integer.MAX_VALUE;
   private int maxHeaderListSize = Integer.MAX_VALUE;
   private boolean permitKeepAliveWithoutCalls = true;
@@ -145,11 +156,10 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     }
   }
 
-  @Override
-  protected void manualSetUp() throws Exception {
-    assertNull("manualSetUp should not run more than once", handler());
-
+  @Before
+  public void setUp() {
     MockitoAnnotations.initMocks(this);
+
     when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
         .thenReturn(streamTracer);
 
@@ -167,7 +177,12 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
             }
           })
       .when(streamListener)
-      .messagesAvailable(Matchers.<StreamListener.MessageProducer>any());
+      .messagesAvailable(any(StreamListener.MessageProducer.class));
+  }
+
+  @Override
+  protected void manualSetUp() throws Exception {
+    assertNull("manualSetUp should not run more than once", handler());
 
     initChannel(new GrpcHttp2ServerHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
 
@@ -182,6 +197,19 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     // Simulate receipt of initial remote settings.
     ByteBuf serializedSettings = serializeSettings(new Http2Settings());
     channelRead(serializedSettings);
+  }
+
+  @Test
+  public void transportReadyDelayedUntilConnectionPreface() throws Exception {
+    initChannel(new GrpcHttp2ServerHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
+
+    handler().handleProtocolNegotiationCompleted(Attributes.EMPTY);
+    verify(transportListener, never()).transportReady(any(Attributes.class));
+
+    // Simulate receipt of the connection preface
+    channelRead(Http2CodecUtil.connectionPrefaceBuf());
+    channelRead(serializeSettings(new Http2Settings()));
+    verify(transportListener).transportReady(any(Attributes.class));
   }
 
   @Test
@@ -266,14 +294,15 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     createStream();
 
     channelRead(rstStreamFrame(STREAM_ID, (int) Http2Error.CANCEL.code()));
-    verify(streamListener).closed(Status.CANCELLED);
+
+    ArgumentCaptor<Status> statusCap = ArgumentCaptor.forClass(Status.class);
+    verify(streamListener).closed(statusCap.capture());
+    assertEquals(Code.CANCELLED, statusCap.getValue().getCode());
+    Truth.assertThat(statusCap.getValue().getDescription()).contains("RST_STREAM");
     verify(streamListener, atLeastOnce()).onReady();
     assertNull("no messages expected", streamListenerMessageQueue.poll());
   }
 
-  // TODO(ericgribkoff) Figure out how this test should be restructured to accommodate application-
-  // thread deframing.
-  /*
   @Test
   public void streamErrorShouldNotCloseChannel() throws Exception {
     manualSetUp();
@@ -297,7 +326,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     assertEquals(e, captor.getValue().asException().getCause());
     assertEquals(Code.UNKNOWN, captor.getValue().getCode());
   }
-  */
 
   @Test
   public void closeShouldCloseChannel() throws Exception {
@@ -383,14 +411,76 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   public void headersWithInvalidContentTypeShouldFail() throws Exception {
     manualSetUp();
     Http2Headers headers = new DefaultHttp2Headers()
-            .method(HTTP_METHOD)
-            .set(CONTENT_TYPE_HEADER, new AsciiString("application/bad", UTF_8))
-            .set(TE_HEADER, TE_TRAILERS)
-            .path(new AsciiString("/foo/bar"));
+        .method(HTTP_METHOD)
+        .set(CONTENT_TYPE_HEADER, new AsciiString("application/bad", UTF_8))
+        .set(TE_HEADER, TE_TRAILERS)
+        .path(new AsciiString("/foo/bar"));
     ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
     channelRead(headersFrame);
-    verifyWrite().writeRstStream(eq(ctx()), eq(STREAM_ID), eq(Http2Error.REFUSED_STREAM.code()),
-        any(ChannelPromise.class));
+    Http2Headers responseHeaders = new DefaultHttp2Headers()
+        .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.INTERNAL.value()))
+        .set(InternalStatus.MESSAGE_KEY.name(), "Content-Type 'application/bad' is not supported")
+        .status("" + 415)
+        .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
+
+    verifyWrite().writeHeaders(eq(ctx()), eq(STREAM_ID), eq(responseHeaders), eq(0),
+        eq(DEFAULT_PRIORITY_WEIGHT), eq(false), eq(0), eq(false), any(ChannelPromise.class));
+  }
+
+  @Test
+  public void headersWithInvalidMethodShouldFail() throws Exception {
+    manualSetUp();
+    Http2Headers headers = new DefaultHttp2Headers()
+        .method(HTTP_FAKE_METHOD)
+        .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
+        .path(new AsciiString("/foo/bar"));
+    ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
+    channelRead(headersFrame);
+    Http2Headers responseHeaders = new DefaultHttp2Headers()
+        .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.INTERNAL.value()))
+        .set(InternalStatus.MESSAGE_KEY.name(), "Method 'FAKE' is not supported")
+        .status("" + 405)
+        .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
+
+    verifyWrite().writeHeaders(eq(ctx()), eq(STREAM_ID), eq(responseHeaders), eq(0),
+        eq(DEFAULT_PRIORITY_WEIGHT), eq(false), eq(0), eq(false), any(ChannelPromise.class));
+  }
+
+  @Test
+  public void headersWithMissingPathShouldFail() throws Exception {
+    manualSetUp();
+    Http2Headers headers = new DefaultHttp2Headers()
+        .method(HTTP_METHOD)
+        .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC);
+    ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
+    channelRead(headersFrame);
+    Http2Headers responseHeaders = new DefaultHttp2Headers()
+        .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.UNIMPLEMENTED.value()))
+        .set(InternalStatus.MESSAGE_KEY.name(), "Expected path but is missing")
+        .status("" + 404)
+        .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
+
+    verifyWrite().writeHeaders(eq(ctx()), eq(STREAM_ID), eq(responseHeaders), eq(0),
+        eq(DEFAULT_PRIORITY_WEIGHT), eq(false), eq(0), eq(false), any(ChannelPromise.class));
+  }
+
+  @Test
+  public void headersWithInvalidPathShouldFail() throws Exception {
+    manualSetUp();
+    Http2Headers headers = new DefaultHttp2Headers()
+        .method(HTTP_METHOD)
+        .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
+        .path(new AsciiString("foo/bar"));
+    ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
+    channelRead(headersFrame);
+    Http2Headers responseHeaders = new DefaultHttp2Headers()
+        .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.UNIMPLEMENTED.value()))
+        .set(InternalStatus.MESSAGE_KEY.name(), "Expected path to start with /: foo/bar")
+        .status("" + 404)
+        .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
+
+    verifyWrite().writeHeaders(eq(ctx()), eq(STREAM_ID), eq(responseHeaders), eq(0),
+        eq(DEFAULT_PRIORITY_WEIGHT), eq(false), eq(0), eq(false), any(ChannelPromise.class));
   }
 
   @Test
@@ -487,7 +577,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     keepAliveTimeoutInNanos = TimeUnit.MINUTES.toNanos(30L);
     manualSetUp();
 
+    assertEquals(0, transportTracer.getStats().keepAlivesSent);
     fakeClock().forwardNanos(keepAliveTimeInNanos);
+    assertEquals(1, transportTracer.getStats().keepAlivesSent);
 
     verifyWrite().writePing(eq(ctx()), eq(false), eq(pingBuf), any(ChannelPromise.class));
 
@@ -531,7 +623,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     assertFalse(channel().isActive());
   }
 
-  @Test(timeout = 1000)
+  @Test
   public void keepAliveEnforcer_sendingDataResetsCounters() throws Exception {
     permitKeepAliveWithoutCalls = false;
     permitKeepAliveTimeInNanos = TimeUnit.HOURS.toNanos(1);
@@ -540,7 +632,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     createStream();
     Http2Headers headers = Utils.convertServerHeaders(new Metadata());
     ChannelFuture future = enqueue(
-        new SendResponseHeadersCommand(stream.transportState(), headers, false));
+        SendResponseHeadersCommand.createHeaders(stream.transportState(), headers));
     future.get();
     ByteBuf payload = handler().ctx().alloc().buffer(8);
     payload.writeLong(1);
@@ -767,7 +859,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   protected NettyServerHandler newHandler() {
     return NettyServerHandler.newHandler(
         frameReader(), frameWriter(), transportListener,
-        Arrays.asList(streamTracerFactory), maxConcurrentStreams, flowControlWindow,
+        Arrays.asList(streamTracerFactory), transportTracer,
+        maxConcurrentStreams, flowControlWindow,
         maxHeaderListSize, DEFAULT_MAX_MESSAGE_SIZE,
         keepAliveTimeInNanos, keepAliveTimeoutInNanos,
         maxConnectionIdleInNanos,

@@ -28,13 +28,14 @@ public abstract class ServerStreamTracer extends StreamTracer {
    * Called before the interceptors and the call handlers and make changes to the Context object
    * if needed.
    */
-  public <ReqT, RespT> Context filterContext(Context context) {
+  public Context filterContext(Context context) {
     return context;
   }
 
   /**
-   * Called when {@link ServerCall} is created.  This is for the tracer to access information
-   * about the {@code ServerCall}.
+   * Called when {@link ServerCall} is created.  This is for the tracer to access information about
+   * the {@code ServerCall}.  Called after {@link #filterContext} and before the application call
+   * handler.
    */
   public void serverCallStarted(ServerCall<?, ?> call) {
   }

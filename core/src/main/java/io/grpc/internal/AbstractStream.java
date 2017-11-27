@@ -24,6 +24,7 @@ import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.Decompressor;
 import java.io.InputStream;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 
 /**
@@ -93,7 +94,7 @@ public abstract class AbstractStream implements Stream {
 
   /**
    * Stream state as used by the transport. This should only called from the transport thread
-   * (except for private interactions with {@code AbstractStream2}).
+   * (except for private interactions with {@code AbstractStream}).
    */
   public abstract static class TransportState
       implements ApplicationThreadDeframer.TransportExecutor, MessageDeframer.Listener {
@@ -103,11 +104,12 @@ public abstract class AbstractStream implements Stream {
      */
     @VisibleForTesting
     public static final int DEFAULT_ONREADY_THRESHOLD = 32 * 1024;
-    private static final boolean DEFRAME_IN_APPLICATION_THREAD = false;
 
-    private final Deframer deframer;
+    private Deframer deframer;
     private final Object onReadyLock = new Object();
     private final StatsTraceContext statsTraceCtx;
+    @Nullable // okhttp transports don't trace yet
+    private final TransportTracer transportTracer;
 
     /**
      * The number of bytes currently queued, waiting to be sent. When this falls below
@@ -128,22 +130,24 @@ public abstract class AbstractStream implements Stream {
     @GuardedBy("onReadyLock")
     private boolean deallocated;
 
-    protected TransportState(int maxMessageSize, StatsTraceContext statsTraceCtx) {
+    protected TransportState(
+        int maxMessageSize,
+        StatsTraceContext statsTraceCtx,
+        @Nullable TransportTracer transportTracer) { // nullable: okhttp transports don't trace yet
       this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
-      if (DEFRAME_IN_APPLICATION_THREAD) {
-        deframer =
-            new ApplicationThreadDeframer(
-                this,
-                Codec.Identity.NONE,
-                maxMessageSize,
-                statsTraceCtx,
-                getClass().getName(),
-                this);
-      } else {
-        deframer =
-            new MessageDeframer(
-                this, Codec.Identity.NONE, maxMessageSize, statsTraceCtx, getClass().getName());
-      }
+      this.transportTracer = transportTracer;
+      deframer = new MessageDeframer(
+          this,
+          Codec.Identity.NONE,
+          maxMessageSize,
+          statsTraceCtx,
+          transportTracer,
+          getClass().getName());
+    }
+
+    protected void setFullStreamDecompressor(GzipInflatingBuffer fullStreamDecompressor) {
+      deframer.setFullStreamDecompressor(fullStreamDecompressor);
+      deframer = new ApplicationThreadDeframer(this, this, (MessageDeframer) deframer);
     }
 
     final void setMaxInboundMessageSize(int maxSize) {
@@ -230,6 +234,9 @@ public abstract class AbstractStream implements Stream {
         allocated = true;
       }
       notifyIfReady();
+      if (transportTracer != null) {
+        transportTracer.reportStreamStarted();
+      }
     }
 
     /**
@@ -278,6 +285,10 @@ public abstract class AbstractStream implements Stream {
       if (doNotify) {
         notifyIfReady();
       }
+    }
+
+    protected TransportTracer getTransportTracer() {
+      return transportTracer;
     }
 
     private void notifyIfReady() {

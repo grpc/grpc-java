@@ -16,19 +16,13 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static com.google.instrumentation.stats.ContextUtils.STATS_CONTEXT_KEY;
+import static io.opencensus.tags.unsafe.ContextUtils.TAG_CONTEXT_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-import com.google.instrumentation.stats.MeasurementMap;
-import com.google.instrumentation.stats.RpcConstants;
-import com.google.instrumentation.stats.StatsContext;
-import com.google.instrumentation.stats.StatsContextFactory;
-import com.google.instrumentation.stats.TagValue;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -42,13 +36,20 @@ import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.StreamTracer;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
+import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
+import io.opencensus.stats.MeasureMap;
+import io.opencensus.stats.Stats;
+import io.opencensus.stats.StatsRecorder;
+import io.opencensus.tags.TagContext;
+import io.opencensus.tags.TagValue;
+import io.opencensus.tags.Tagger;
+import io.opencensus.tags.Tags;
+import io.opencensus.tags.propagation.TagContextBinarySerializer;
+import io.opencensus.tags.propagation.TagContextSerializationException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
+import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -64,47 +65,63 @@ import javax.annotation.Nullable;
  * starts earlier than the ServerCall.  Therefore, only one tracer is created per stream/call and
  * it's the tracer that reports the summary to Census.
  */
-final class CensusStatsModule {
+public final class CensusStatsModule {
   private static final Logger logger = Logger.getLogger(CensusStatsModule.class.getName());
   private static final double NANOS_PER_MILLI = TimeUnit.MILLISECONDS.toNanos(1);
   private static final ClientTracer BLANK_CLIENT_TRACER = new ClientTracer();
 
-  private final StatsContextFactory statsCtxFactory;
+  private final Tagger tagger;
+  private final StatsRecorder statsRecorder;
   private final Supplier<Stopwatch> stopwatchSupplier;
   @VisibleForTesting
-  final Metadata.Key<StatsContext> statsHeader;
-  private final StatsClientInterceptor clientInterceptor = new StatsClientInterceptor();
-  private final ServerTracerFactory serverTracerFactory = new ServerTracerFactory();
+  final Metadata.Key<TagContext> statsHeader;
   private final boolean propagateTags;
 
-  CensusStatsModule(
-      final StatsContextFactory statsCtxFactory, Supplier<Stopwatch> stopwatchSupplier,
+  /**
+   * Creates a {@link CensusStatsModule} with the default OpenCensus implementation.
+   */
+  CensusStatsModule(Supplier<Stopwatch> stopwatchSupplier, boolean propagateTags) {
+    this(
+        Tags.getTagger(),
+        Tags.getTagPropagationComponent().getBinarySerializer(),
+        Stats.getStatsRecorder(),
+        stopwatchSupplier,
+        propagateTags);
+  }
+
+  /**
+   * Creates a {@link CensusStatsModule} with the given OpenCensus implementation.
+   */
+  public CensusStatsModule(
+      final Tagger tagger,
+      final TagContextBinarySerializer tagCtxSerializer,
+      StatsRecorder statsRecorder, Supplier<Stopwatch> stopwatchSupplier,
       boolean propagateTags) {
-    this.statsCtxFactory = checkNotNull(statsCtxFactory, "statsCtxFactory");
+    this.tagger = checkNotNull(tagger, "tagger");
+    this.statsRecorder = checkNotNull(statsRecorder, "statsRecorder");
+    checkNotNull(tagCtxSerializer, "tagCtxSerializer");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.propagateTags = propagateTags;
     this.statsHeader =
-        Metadata.Key.of("grpc-tags-bin", new Metadata.BinaryMarshaller<StatsContext>() {
+        Metadata.Key.of("grpc-tags-bin", new Metadata.BinaryMarshaller<TagContext>() {
             @Override
-            public byte[] toBytes(StatsContext context) {
+            public byte[] toBytes(TagContext context) {
               // TODO(carl-mastrangelo): currently we only make sure the correctness. We may need to
               // optimize out the allocation and copy in the future.
-              ByteArrayOutputStream buffer = new ByteArrayOutputStream();
               try {
-                context.serialize(buffer);
-              } catch (IOException e) {
+                return tagCtxSerializer.toByteArray(context);
+              } catch (TagContextSerializationException e) {
                 throw new RuntimeException(e);
               }
-              return buffer.toByteArray();
             }
 
             @Override
-            public StatsContext parseBytes(byte[] serialized) {
+            public TagContext parseBytes(byte[] serialized) {
               try {
-                return statsCtxFactory.deserialize(new ByteArrayInputStream(serialized));
+                return tagCtxSerializer.fromByteArray(serialized);
               } catch (Exception e) {
                 logger.log(Level.FINE, "Failed to parse stats header", e);
-                return statsCtxFactory.getDefault();
+                return tagger.empty();
               }
             }
           });
@@ -114,76 +131,211 @@ final class CensusStatsModule {
    * Creates a {@link ClientCallTracer} for a new call.
    */
   @VisibleForTesting
-  ClientCallTracer newClientCallTracer(StatsContext parentCtx, String fullMethodName) {
-    return new ClientCallTracer(parentCtx, fullMethodName);
+  ClientCallTracer newClientCallTracer(
+      TagContext parentCtx, String fullMethodName,
+      boolean recordStartedRpcs, boolean recordFinishedRpcs) {
+    return new ClientCallTracer(
+        this, parentCtx, fullMethodName, recordStartedRpcs, recordFinishedRpcs);
   }
 
   /**
    * Returns the server tracer factory.
    */
-  ServerStreamTracer.Factory getServerTracerFactory() {
-    return serverTracerFactory;
+  ServerStreamTracer.Factory getServerTracerFactory(
+      boolean recordStartedRpcs, boolean recordFinishedRpcs) {
+    return new ServerTracerFactory(recordStartedRpcs, recordFinishedRpcs);
   }
 
   /**
    * Returns the client interceptor that facilitates Census-based stats reporting.
    */
-  ClientInterceptor getClientInterceptor() {
-    return clientInterceptor;
+  ClientInterceptor getClientInterceptor(boolean recordStartedRpcs, boolean recordFinishedRpcs) {
+    return new StatsClientInterceptor(recordStartedRpcs, recordFinishedRpcs);
   }
 
   private static final class ClientTracer extends ClientStreamTracer {
-    final AtomicLong outboundMessageCount = new AtomicLong();
-    final AtomicLong inboundMessageCount = new AtomicLong();
-    final AtomicLong outboundWireSize = new AtomicLong();
-    final AtomicLong inboundWireSize = new AtomicLong();
-    final AtomicLong outboundUncompressedSize = new AtomicLong();
-    final AtomicLong inboundUncompressedSize = new AtomicLong();
+
+    @Nullable private static final AtomicLongFieldUpdater<ClientTracer> outboundMessageCountUpdater;
+    @Nullable private static final AtomicLongFieldUpdater<ClientTracer> inboundMessageCountUpdater;
+    @Nullable private static final AtomicLongFieldUpdater<ClientTracer> outboundWireSizeUpdater;
+    @Nullable private static final AtomicLongFieldUpdater<ClientTracer> inboundWireSizeUpdater;
+
+    @Nullable
+    private static final AtomicLongFieldUpdater<ClientTracer> outboundUncompressedSizeUpdater;
+
+    @Nullable
+    private static final AtomicLongFieldUpdater<ClientTracer> inboundUncompressedSizeUpdater;
+
+    /**
+     * When using Atomic*FieldUpdater, some Samsung Android 5.0.x devices encounter a bug in their
+     * JDK reflection API that triggers a NoSuchFieldException. When this occurs, we fallback to
+     * (potentially racy) direct updates of the volatile variables.
+     */
+    static {
+      AtomicLongFieldUpdater<ClientTracer> tmpOutboundMessageCountUpdater;
+      AtomicLongFieldUpdater<ClientTracer> tmpInboundMessageCountUpdater;
+      AtomicLongFieldUpdater<ClientTracer> tmpOutboundWireSizeUpdater;
+      AtomicLongFieldUpdater<ClientTracer> tmpInboundWireSizeUpdater;
+      AtomicLongFieldUpdater<ClientTracer> tmpOutboundUncompressedSizeUpdater;
+      AtomicLongFieldUpdater<ClientTracer> tmpInboundUncompressedSizeUpdater;
+      try {
+        tmpOutboundMessageCountUpdater =
+            AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "outboundMessageCount");
+        tmpInboundMessageCountUpdater =
+            AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "inboundMessageCount");
+        tmpOutboundWireSizeUpdater =
+            AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "outboundWireSize");
+        tmpInboundWireSizeUpdater =
+            AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "inboundWireSize");
+        tmpOutboundUncompressedSizeUpdater =
+            AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "outboundUncompressedSize");
+        tmpInboundUncompressedSizeUpdater =
+            AtomicLongFieldUpdater.newUpdater(ClientTracer.class, "inboundUncompressedSize");
+      } catch (Throwable t) {
+        logger.log(Level.SEVERE, "Creating atomic field updaters failed", t);
+        tmpOutboundMessageCountUpdater = null;
+        tmpInboundMessageCountUpdater = null;
+        tmpOutboundWireSizeUpdater = null;
+        tmpInboundWireSizeUpdater = null;
+        tmpOutboundUncompressedSizeUpdater = null;
+        tmpInboundUncompressedSizeUpdater = null;
+      }
+      outboundMessageCountUpdater = tmpOutboundMessageCountUpdater;
+      inboundMessageCountUpdater = tmpInboundMessageCountUpdater;
+      outboundWireSizeUpdater = tmpOutboundWireSizeUpdater;
+      inboundWireSizeUpdater = tmpInboundWireSizeUpdater;
+      outboundUncompressedSizeUpdater = tmpOutboundUncompressedSizeUpdater;
+      inboundUncompressedSizeUpdater = tmpInboundUncompressedSizeUpdater;
+    }
+
+    volatile long outboundMessageCount;
+    volatile long inboundMessageCount;
+    volatile long outboundWireSize;
+    volatile long inboundWireSize;
+    volatile long outboundUncompressedSize;
+    volatile long inboundUncompressedSize;
 
     @Override
+    @SuppressWarnings("NonAtomicVolatileUpdate")
     public void outboundWireSize(long bytes) {
-      outboundWireSize.addAndGet(bytes);
+      if (outboundWireSizeUpdater != null) {
+        outboundWireSizeUpdater.getAndAdd(this, bytes);
+      } else {
+        outboundWireSize += bytes;
+      }
     }
 
     @Override
+    @SuppressWarnings("NonAtomicVolatileUpdate")
     public void inboundWireSize(long bytes) {
-      inboundWireSize.addAndGet(bytes);
+      if (inboundWireSizeUpdater != null) {
+        inboundWireSizeUpdater.getAndAdd(this, bytes);
+      } else {
+        inboundWireSize += bytes;
+      }
     }
 
     @Override
+    @SuppressWarnings("NonAtomicVolatileUpdate")
     public void outboundUncompressedSize(long bytes) {
-      outboundUncompressedSize.addAndGet(bytes);
+      if (outboundUncompressedSizeUpdater != null) {
+        outboundUncompressedSizeUpdater.getAndAdd(this, bytes);
+      } else {
+        outboundUncompressedSize += bytes;
+      }
     }
 
     @Override
+    @SuppressWarnings("NonAtomicVolatileUpdate")
     public void inboundUncompressedSize(long bytes) {
-      inboundUncompressedSize.addAndGet(bytes);
+      if (inboundUncompressedSizeUpdater != null) {
+        inboundUncompressedSizeUpdater.getAndAdd(this, bytes);
+      } else {
+        inboundUncompressedSize += bytes;
+      }
     }
 
     @Override
+    @SuppressWarnings("NonAtomicVolatileUpdate")
     public void inboundMessage(int seqNo) {
-      inboundMessageCount.incrementAndGet();
+      if (inboundMessageCountUpdater != null) {
+        inboundMessageCountUpdater.getAndIncrement(this);
+      } else {
+        inboundMessageCount++;
+      }
     }
 
     @Override
+    @SuppressWarnings("NonAtomicVolatileUpdate")
     public void outboundMessage(int seqNo) {
-      outboundMessageCount.incrementAndGet();
+      if (outboundMessageCountUpdater != null) {
+        outboundMessageCountUpdater.getAndIncrement(this);
+      } else {
+        outboundMessageCount++;
+      }
     }
   }
 
-  @VisibleForTesting
-  final class ClientCallTracer extends ClientStreamTracer.Factory {
 
+
+  @VisibleForTesting
+  static final class ClientCallTracer extends ClientStreamTracer.Factory {
+    @Nullable
+    private static final AtomicReferenceFieldUpdater<ClientCallTracer, ClientTracer>
+        streamTracerUpdater;
+
+    @Nullable private static final AtomicIntegerFieldUpdater<ClientCallTracer> callEndedUpdater;
+
+    /**
+     * When using Atomic*FieldUpdater, some Samsung Android 5.0.x devices encounter a bug in their
+     * JDK reflection API that triggers a NoSuchFieldException. When this occurs, we fallback to
+     * (potentially racy) direct updates of the volatile variables.
+     */
+    static {
+      AtomicReferenceFieldUpdater<ClientCallTracer, ClientTracer> tmpStreamTracerUpdater;
+      AtomicIntegerFieldUpdater<ClientCallTracer> tmpCallEndedUpdater;
+      try {
+        tmpStreamTracerUpdater =
+            AtomicReferenceFieldUpdater.newUpdater(
+                ClientCallTracer.class, ClientTracer.class, "streamTracer");
+        tmpCallEndedUpdater =
+            AtomicIntegerFieldUpdater.newUpdater(ClientCallTracer.class, "callEnded");
+      } catch (Throwable t) {
+        logger.log(Level.SEVERE, "Creating atomic field updaters failed", t);
+        tmpStreamTracerUpdater = null;
+        tmpCallEndedUpdater = null;
+      }
+      streamTracerUpdater = tmpStreamTracerUpdater;
+      callEndedUpdater = tmpCallEndedUpdater;
+    }
+
+    private final CensusStatsModule module;
     private final String fullMethodName;
     private final Stopwatch stopwatch;
-    private final AtomicReference<ClientTracer> streamTracer = new AtomicReference<ClientTracer>();
-    private final AtomicBoolean callEnded = new AtomicBoolean(false);
-    private final StatsContext parentCtx;
+    private volatile ClientTracer streamTracer;
+    private volatile int callEnded;
+    private final TagContext parentCtx;
+    private final TagContext startCtx;
+    private final boolean recordFinishedRpcs;
 
-    ClientCallTracer(StatsContext parentCtx, String fullMethodName) {
-      this.parentCtx = checkNotNull(parentCtx, "parentCtx");
+    ClientCallTracer(
+        CensusStatsModule module,
+        TagContext parentCtx,
+        String fullMethodName,
+        boolean recordStartedRpcs,
+        boolean recordFinishedRpcs) {
+      this.module = module;
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
-      this.stopwatch = stopwatchSupplier.get().start();
+      this.parentCtx = checkNotNull(parentCtx);
+      this.startCtx =
+          module.tagger.toBuilder(parentCtx)
+          .put(RpcMeasureConstants.RPC_METHOD, TagValue.create(fullMethodName)).build();
+      this.stopwatch = module.stopwatchSupplier.get().start();
+      this.recordFinishedRpcs = recordFinishedRpcs;
+      if (recordStartedRpcs) {
+        module.statsRecorder.newMeasureMap().put(RpcMeasureConstants.RPC_CLIENT_STARTED_COUNT, 1)
+            .record(startCtx);
+      }
     }
 
     @Override
@@ -191,12 +343,20 @@ final class CensusStatsModule {
       ClientTracer tracer = new ClientTracer();
       // TODO(zhangkun83): Once retry or hedging is implemented, a ClientCall may start more than
       // one streams.  We will need to update this file to support them.
-      checkState(streamTracer.compareAndSet(null, tracer),
-          "Are you creating multiple streams per call? This class doesn't yet support this case.");
-      if (propagateTags) {
-        headers.discardAll(statsHeader);
-        if (parentCtx != statsCtxFactory.getDefault()) {
-          headers.put(statsHeader, parentCtx);
+      if (streamTracerUpdater != null) {
+        checkState(
+            streamTracerUpdater.compareAndSet(this, null, tracer),
+            "Are you creating multiple streams per call? This class doesn't yet support this case");
+      } else {
+        checkState(
+            streamTracer == null,
+            "Are you creating multiple streams per call? This class doesn't yet support this case");
+        streamTracer = tracer;
+      }
+      if (module.propagateTags) {
+        headers.discardAll(module.statsHeader);
+        if (!module.tagger.empty().equals(parentCtx)) {
+          headers.put(module.statsHeader, parentCtx);
         }
       }
       return tracer;
@@ -209,86 +369,203 @@ final class CensusStatsModule {
      * is a no-op.
      */
     void callEnded(Status status) {
-      if (!callEnded.compareAndSet(false, true)) {
+      if (callEndedUpdater != null) {
+        if (callEndedUpdater.getAndSet(this, 1) != 0) {
+          return;
+        }
+      } else {
+        if (callEnded != 0) {
+          return;
+        }
+        callEnded = 1;
+      }
+      if (!recordFinishedRpcs) {
         return;
       }
       stopwatch.stop();
       long roundtripNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
-      ClientTracer tracer = streamTracer.get();
+      ClientTracer tracer = streamTracer;
       if (tracer == null) {
         tracer = BLANK_CLIENT_TRACER;
       }
-      MeasurementMap.Builder builder = MeasurementMap.builder()
-          // The metrics are in double
-          .put(RpcConstants.RPC_CLIENT_ROUNDTRIP_LATENCY, roundtripNanos / NANOS_PER_MILLI)
-          .put(RpcConstants.RPC_CLIENT_REQUEST_COUNT, tracer.outboundMessageCount.get())
-          .put(RpcConstants.RPC_CLIENT_RESPONSE_COUNT, tracer.inboundMessageCount.get())
-          .put(RpcConstants.RPC_CLIENT_REQUEST_BYTES, tracer.outboundWireSize.get())
-          .put(RpcConstants.RPC_CLIENT_RESPONSE_BYTES, tracer.inboundWireSize.get())
+      MeasureMap measureMap = module.statsRecorder.newMeasureMap()
+          .put(RpcMeasureConstants.RPC_CLIENT_FINISHED_COUNT, 1)
+          // The latency is double value
+          .put(RpcMeasureConstants.RPC_CLIENT_ROUNDTRIP_LATENCY, roundtripNanos / NANOS_PER_MILLI)
+          .put(RpcMeasureConstants.RPC_CLIENT_REQUEST_COUNT, tracer.outboundMessageCount)
+          .put(RpcMeasureConstants.RPC_CLIENT_RESPONSE_COUNT, tracer.inboundMessageCount)
+          .put(RpcMeasureConstants.RPC_CLIENT_REQUEST_BYTES, tracer.outboundWireSize)
+          .put(RpcMeasureConstants.RPC_CLIENT_RESPONSE_BYTES, tracer.inboundWireSize)
           .put(
-              RpcConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES,
-              tracer.outboundUncompressedSize.get())
+              RpcMeasureConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES,
+              tracer.outboundUncompressedSize)
           .put(
-              RpcConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES,
-              tracer.inboundUncompressedSize.get());
+              RpcMeasureConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES,
+              tracer.inboundUncompressedSize);
       if (!status.isOk()) {
-        builder.put(RpcConstants.RPC_CLIENT_ERROR_COUNT, 1.0);
+        measureMap.put(RpcMeasureConstants.RPC_CLIENT_ERROR_COUNT, 1);
       }
-      parentCtx
-          .with(
-              RpcConstants.RPC_CLIENT_METHOD, TagValue.create(fullMethodName),
-              RpcConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
-          .record(builder.build());
+      measureMap.record(
+          module
+              .tagger
+              .toBuilder(startCtx)
+              .put(RpcMeasureConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
+              .build());
     }
   }
 
-  private final class ServerTracer extends ServerStreamTracer {
-    private final String fullMethodName;
-    @Nullable
-    private final StatsContext parentCtx;
-    private final AtomicBoolean streamClosed = new AtomicBoolean(false);
-    private final Stopwatch stopwatch;
-    private final AtomicLong outboundMessageCount = new AtomicLong();
-    private final AtomicLong inboundMessageCount = new AtomicLong();
-    private final AtomicLong outboundWireSize = new AtomicLong();
-    private final AtomicLong inboundWireSize = new AtomicLong();
-    private final AtomicLong outboundUncompressedSize = new AtomicLong();
-    private final AtomicLong inboundUncompressedSize = new AtomicLong();
+  private static final class ServerTracer extends ServerStreamTracer {
+    @Nullable private static final AtomicIntegerFieldUpdater<ServerTracer> streamClosedUpdater;
+    @Nullable private static final AtomicLongFieldUpdater<ServerTracer> outboundMessageCountUpdater;
+    @Nullable private static final AtomicLongFieldUpdater<ServerTracer> inboundMessageCountUpdater;
+    @Nullable private static final AtomicLongFieldUpdater<ServerTracer> outboundWireSizeUpdater;
+    @Nullable private static final AtomicLongFieldUpdater<ServerTracer> inboundWireSizeUpdater;
 
-    ServerTracer(String fullMethodName, StatsContext parentCtx) {
+    @Nullable
+    private static final AtomicLongFieldUpdater<ServerTracer> outboundUncompressedSizeUpdater;
+
+    @Nullable
+    private static final AtomicLongFieldUpdater<ServerTracer> inboundUncompressedSizeUpdater;
+
+    /**
+     * When using Atomic*FieldUpdater, some Samsung Android 5.0.x devices encounter a bug in their
+     * JDK reflection API that triggers a NoSuchFieldException. When this occurs, we fallback to
+     * (potentially racy) direct updates of the volatile variables.
+     */
+    static {
+      AtomicIntegerFieldUpdater<ServerTracer> tmpStreamClosedUpdater;
+      AtomicLongFieldUpdater<ServerTracer> tmpOutboundMessageCountUpdater;
+      AtomicLongFieldUpdater<ServerTracer> tmpInboundMessageCountUpdater;
+      AtomicLongFieldUpdater<ServerTracer> tmpOutboundWireSizeUpdater;
+      AtomicLongFieldUpdater<ServerTracer> tmpInboundWireSizeUpdater;
+      AtomicLongFieldUpdater<ServerTracer> tmpOutboundUncompressedSizeUpdater;
+      AtomicLongFieldUpdater<ServerTracer> tmpInboundUncompressedSizeUpdater;
+      try {
+        tmpStreamClosedUpdater =
+            AtomicIntegerFieldUpdater.newUpdater(ServerTracer.class, "streamClosed");
+        tmpOutboundMessageCountUpdater =
+            AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "outboundMessageCount");
+        tmpInboundMessageCountUpdater =
+            AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "inboundMessageCount");
+        tmpOutboundWireSizeUpdater =
+            AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "outboundWireSize");
+        tmpInboundWireSizeUpdater =
+            AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "inboundWireSize");
+        tmpOutboundUncompressedSizeUpdater =
+            AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "outboundUncompressedSize");
+        tmpInboundUncompressedSizeUpdater =
+            AtomicLongFieldUpdater.newUpdater(ServerTracer.class, "inboundUncompressedSize");
+      } catch (Throwable t) {
+        logger.log(Level.SEVERE, "Creating atomic field updaters failed", t);
+        tmpStreamClosedUpdater = null;
+        tmpOutboundMessageCountUpdater = null;
+        tmpInboundMessageCountUpdater = null;
+        tmpOutboundWireSizeUpdater = null;
+        tmpInboundWireSizeUpdater = null;
+        tmpOutboundUncompressedSizeUpdater = null;
+        tmpInboundUncompressedSizeUpdater = null;
+      }
+      streamClosedUpdater = tmpStreamClosedUpdater;
+      outboundMessageCountUpdater = tmpOutboundMessageCountUpdater;
+      inboundMessageCountUpdater = tmpInboundMessageCountUpdater;
+      outboundWireSizeUpdater = tmpOutboundWireSizeUpdater;
+      inboundWireSizeUpdater = tmpInboundWireSizeUpdater;
+      outboundUncompressedSizeUpdater = tmpOutboundUncompressedSizeUpdater;
+      inboundUncompressedSizeUpdater = tmpInboundUncompressedSizeUpdater;
+    }
+
+    private final CensusStatsModule module;
+    private final String fullMethodName;
+    private final TagContext parentCtx;
+    private volatile int streamClosed;
+    private final Stopwatch stopwatch;
+    private final Tagger tagger;
+    private final boolean recordFinishedRpcs;
+    private volatile long outboundMessageCount;
+    private volatile long inboundMessageCount;
+    private volatile long outboundWireSize;
+    private volatile long inboundWireSize;
+    private volatile long outboundUncompressedSize;
+    private volatile long inboundUncompressedSize;
+
+    ServerTracer(
+        CensusStatsModule module,
+        String fullMethodName,
+        TagContext parentCtx,
+        Supplier<Stopwatch> stopwatchSupplier,
+        Tagger tagger,
+        boolean recordStartedRpcs,
+        boolean recordFinishedRpcs) {
+      this.module = module;
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
       this.parentCtx = checkNotNull(parentCtx, "parentCtx");
       this.stopwatch = stopwatchSupplier.get().start();
+      this.tagger = tagger;
+      this.recordFinishedRpcs = recordFinishedRpcs;
+      if (recordStartedRpcs) {
+        module.statsRecorder.newMeasureMap().put(RpcMeasureConstants.RPC_SERVER_STARTED_COUNT, 1)
+            .record(parentCtx);
+      }
     }
 
     @Override
+    @SuppressWarnings("NonAtomicVolatileUpdate")
     public void outboundWireSize(long bytes) {
-      outboundWireSize.addAndGet(bytes);
+      if (outboundWireSizeUpdater != null) {
+        outboundWireSizeUpdater.getAndAdd(this, bytes);
+      } else {
+        outboundWireSize += bytes;
+      }
     }
 
     @Override
+    @SuppressWarnings("NonAtomicVolatileUpdate")
     public void inboundWireSize(long bytes) {
-      inboundWireSize.addAndGet(bytes);
+      if (inboundWireSizeUpdater != null) {
+        inboundWireSizeUpdater.getAndAdd(this, bytes);
+      } else {
+        inboundWireSize += bytes;
+      }
     }
 
     @Override
+    @SuppressWarnings("NonAtomicVolatileUpdate")
     public void outboundUncompressedSize(long bytes) {
-      outboundUncompressedSize.addAndGet(bytes);
+      if (outboundUncompressedSizeUpdater != null) {
+        outboundUncompressedSizeUpdater.getAndAdd(this, bytes);
+      } else {
+        outboundUncompressedSize += bytes;
+      }
     }
 
     @Override
+    @SuppressWarnings("NonAtomicVolatileUpdate")
     public void inboundUncompressedSize(long bytes) {
-      inboundUncompressedSize.addAndGet(bytes);
+      if (inboundUncompressedSizeUpdater != null) {
+        inboundUncompressedSizeUpdater.getAndAdd(this, bytes);
+      } else {
+        inboundUncompressedSize += bytes;
+      }
     }
 
     @Override
+    @SuppressWarnings("NonAtomicVolatileUpdate")
     public void inboundMessage(int seqNo) {
-      inboundMessageCount.incrementAndGet();
+      if (inboundMessageCountUpdater != null) {
+        inboundMessageCountUpdater.getAndIncrement(this);
+      } else {
+        inboundMessageCount++;
+      }
     }
 
     @Override
+    @SuppressWarnings("NonAtomicVolatileUpdate")
     public void outboundMessage(int seqNo) {
-      outboundMessageCount.incrementAndGet();
+      if (outboundMessageCountUpdater != null) {
+        outboundMessageCountUpdater.getAndIncrement(this);
+      } else {
+        outboundMessageCount++;
+      }
     }
 
     /**
@@ -299,37 +576,46 @@ final class CensusStatsModule {
      */
     @Override
     public void streamClosed(Status status) {
-      if (!streamClosed.compareAndSet(false, true)) {
+      if (streamClosedUpdater != null) {
+        if (streamClosedUpdater.getAndSet(this, 1) != 0) {
+          return;
+        }
+      } else {
+        if (streamClosed != 0) {
+          return;
+        }
+        streamClosed = 1;
+      }
+      if (!recordFinishedRpcs) {
         return;
       }
       stopwatch.stop();
       long elapsedTimeNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
-      MeasurementMap.Builder builder = MeasurementMap.builder()
-          // The metrics are in double
-          .put(RpcConstants.RPC_SERVER_SERVER_LATENCY, elapsedTimeNanos / NANOS_PER_MILLI)
-          .put(RpcConstants.RPC_SERVER_RESPONSE_COUNT, outboundMessageCount.get())
-          .put(RpcConstants.RPC_SERVER_REQUEST_COUNT, inboundMessageCount.get())
-          .put(RpcConstants.RPC_SERVER_RESPONSE_BYTES, outboundWireSize.get())
-          .put(RpcConstants.RPC_SERVER_REQUEST_BYTES, inboundWireSize.get())
-          .put(
-              RpcConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES,
-              outboundUncompressedSize.get())
-          .put(
-              RpcConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES,
-              inboundUncompressedSize.get());
+      MeasureMap measureMap = module.statsRecorder.newMeasureMap()
+          .put(RpcMeasureConstants.RPC_SERVER_FINISHED_COUNT, 1)
+          // The latency is double value
+          .put(RpcMeasureConstants.RPC_SERVER_SERVER_LATENCY, elapsedTimeNanos / NANOS_PER_MILLI)
+          .put(RpcMeasureConstants.RPC_SERVER_RESPONSE_COUNT, outboundMessageCount)
+          .put(RpcMeasureConstants.RPC_SERVER_REQUEST_COUNT, inboundMessageCount)
+          .put(RpcMeasureConstants.RPC_SERVER_RESPONSE_BYTES, outboundWireSize)
+          .put(RpcMeasureConstants.RPC_SERVER_REQUEST_BYTES, inboundWireSize)
+          .put(RpcMeasureConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES, outboundUncompressedSize)
+          .put(RpcMeasureConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES, inboundUncompressedSize);
       if (!status.isOk()) {
-        builder.put(RpcConstants.RPC_SERVER_ERROR_COUNT, 1.0);
+        measureMap.put(RpcMeasureConstants.RPC_SERVER_ERROR_COUNT, 1);
       }
-      StatsContext ctx = firstNonNull(parentCtx, statsCtxFactory.getDefault());
-      ctx
-          .with(RpcConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
-          .record(builder.build());
+      measureMap.record(
+          module
+              .tagger
+              .toBuilder(parentCtx)
+              .put(RpcMeasureConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
+              .build());
     }
 
     @Override
     public Context filterContext(Context context) {
-      if (parentCtx != statsCtxFactory.getDefault()) {
-        return context.withValue(STATS_CONTEXT_KEY, parentCtx);
+      if (!tagger.empty().equals(parentCtx)) {
+        return context.withValue(TAG_CONTEXT_KEY, parentCtx);
       }
       return context;
     }
@@ -337,26 +623,54 @@ final class CensusStatsModule {
 
   @VisibleForTesting
   final class ServerTracerFactory extends ServerStreamTracer.Factory {
+    private final boolean recordStartedRpcs;
+    private final boolean recordFinishedRpcs;
+
+    ServerTracerFactory(boolean recordStartedRpcs, boolean recordFinishedRpcs) {
+      this.recordStartedRpcs = recordStartedRpcs;
+      this.recordFinishedRpcs = recordFinishedRpcs;
+    }
+
     @Override
     public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
-      StatsContext parentCtx = headers.get(statsHeader);
+      TagContext parentCtx = headers.get(statsHeader);
       if (parentCtx == null) {
-        parentCtx = statsCtxFactory.getDefault();
+        parentCtx = tagger.empty();
       }
-      parentCtx = parentCtx.with(RpcConstants.RPC_SERVER_METHOD, TagValue.create(fullMethodName));
-      return new ServerTracer(fullMethodName, parentCtx);
+      parentCtx =
+          tagger
+              .toBuilder(parentCtx)
+              .put(RpcMeasureConstants.RPC_METHOD, TagValue.create(fullMethodName))
+              .build();
+      return new ServerTracer(
+          CensusStatsModule.this,
+          fullMethodName,
+          parentCtx,
+          stopwatchSupplier,
+          tagger,
+          recordStartedRpcs,
+          recordFinishedRpcs);
     }
   }
 
   @VisibleForTesting
   final class StatsClientInterceptor implements ClientInterceptor {
+    private final boolean recordStartedRpcs;
+    private final boolean recordFinishedRpcs;
+
+    StatsClientInterceptor(boolean recordStartedRpcs, boolean recordFinishedRpcs) {
+      this.recordStartedRpcs = recordStartedRpcs;
+      this.recordFinishedRpcs = recordFinishedRpcs;
+    }
+
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-      // New RPCs on client-side inherit the stats context from the current Context.
-      StatsContext parentCtx = statsCtxFactory.getCurrentStatsContext();
+      // New RPCs on client-side inherit the tag context from the current Context.
+      TagContext parentCtx = tagger.getCurrentTagContext();
       final ClientCallTracer tracerFactory =
-          newClientCallTracer(parentCtx, method.getFullMethodName());
+          newClientCallTracer(parentCtx, method.getFullMethodName(),
+              recordStartedRpcs, recordFinishedRpcs);
       ClientCall<ReqT, RespT> call =
           next.newCall(method, callOptions.withStreamTracerFactory(tracerFactory));
       return new SimpleForwardingClientCall<ReqT, RespT>(call) {

@@ -54,53 +54,34 @@ separately and install it under your personal directory, because
 
 Please see the [Main Readme](README.md) for details on building protobuf.
 
-Tagging the Release
-----------------------
-The first step in the release process is to create a release branch, bump
-versions, and create a tag for the release. Our release branches follow the naming
+Common Variables
+----------------
+Many of the following commands expect release-specific variables to be set. Set
+them before continuing, and set them again when resuming.
+
+```bash
+$ MAJOR=1 MINOR=7 PATCH=0 # Set appropriately for new release
+$ VERSION_FILES=(
+  build.gradle
+  android-interop-testing/app/build.gradle
+  examples/build.gradle
+  examples/pom.xml
+  examples/android/helloworld/app/build.gradle
+  examples/android/routeguide/app/build.gradle
+  )
+```
+
+
+Branching the Release
+---------------------
+The first step in the release process is to create a release branch and bump
+the SNAPSHOT version. Our release branches follow the naming
 convention of `v<major>.<minor>.x`, while the tags include the patch version
-`v<major>.<minor>.<patch>`. For example, the same branch `v0.7.x`
-would be used to create all `v0.7` tags (e.g. `v0.7.0`, `v0.7.1`).
+`v<major>.<minor>.<patch>`. For example, the same branch `v1.7.x`
+would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
 
-1. Create the release branch and push it to GitHub:
-
-   ```bash
-   $ MAJOR=0 MINOR=7 PATCH=0 # Set appropriately for new release
-   $ VERSION_FILES=(
-     build.gradle
-     android-interop-testing/app/build.gradle
-     examples/build.gradle
-     examples/pom.xml
-     examples/android/helloworld/app/build.gradle
-     examples/android/routeguide/app/build.gradle
-     examples/thrift/build.gradle
-     )
-   $ git checkout -b v$MAJOR.$MINOR.x master
-   $ git push upstream v$MAJOR.$MINOR.x
-   ```
-2. Make sure you are [logged in](https://grpc-testing.appspot.com/manage) to
-   Jenkins, then make a [new release
-   job](https://grpc-testing.appspot.com/view/Releases/newJob)
-   * _Name_: gRPC-Java-$MAJOR.$MINOR-Windows
-   * _Copy from_: gRPC-Java-master-windows
-   * Click _OK_ button
-   * _Display Name_ under _Use custom workspace_ (not ~~Project
-     url~~): gRPC Java $MAJOR.$MINOR Windows
-   * Under _Source Code Management_, _Branches to build_'s
-   _Branch Specifier_: `*/v$MAJOR.$MINOR.x`
-   * Under _Build Triggers_, _Build periodically_: `H H * * H`
-   * Click _SAVE_ button
-   * Click _Build Now_
-   * Click on job #1, then _Console Output_. Verify the `git checkout` checked
-     out the correct commit
-3. Go to [Travis CI settings](https://travis-ci.org/grpc/grpc-java/settings) and
-   add a _Cron Job_:
-   * Branch: `v$MAJOR.$MINOR.x`
-   * Interval: `weekly`
-   * Options: `Do not run if there has been a build in the last 24h`
-   * Click _Add_ button
-4. For `master`, change root build files to the next minor snapshot (e.g.
-   ``0.8.0-SNAPSHOT``).
+1. For `master`, change root build files to the next minor snapshot (e.g.
+   ``1.8.0-SNAPSHOT``).
 
    ```bash
    $ git checkout -b bump-version master
@@ -110,14 +91,48 @@ would be used to create all `v0.7` tags (e.g. `v0.7.0`, `v0.7.1`).
    $ ./gradlew build
    $ git commit -a -m "Start $MAJOR.$((MINOR+1)).0 development cycle"
    ```
-5. Go through PR review and push the master branch to GitHub:
+2. Go through PR review and submit.
+3. Create the release branch starting just before your commit and push it to GitHub:
 
    ```bash
-   $ git checkout master
-   $ git merge --ff-only bump-version
-   $ git push upstream master
+   $ git fetch upstream
+   $ git checkout -b v$MAJOR.$MINOR.x \
+     $(git log --pretty=format:%H --grep "^Start $MAJOR.$((MINOR+1)).0 development cycle$" upstream/master)^
+   $ git push upstream v$MAJOR.$MINOR.x
    ```
-6. For vMajor.Minor.x branch, change `README.md` to refer to the next release
+4. Make sure you are [logged in](https://grpc-testing.appspot.com/manage) to
+   Jenkins, then make a [new release
+   job](https://grpc-testing.appspot.com/view/Releases/newJob)
+   * _Name_: gRPC-Java-$MAJOR.$MINOR-Windows
+   * _Copy from_: gRPC-Java-master-windows
+   * Click _OK_ button
+   * Click _Advanced..._ in the _General_ area right above _Source Code Management_
+   * _Display Name_ under _Use custom workspace_ (not ~~Project
+     url~~): gRPC Java $MAJOR.$MINOR Windows
+   * Under _Source Code Management_, _Branches to build_'s
+   _Branch Specifier_: `*/v$MAJOR.$MINOR.x`
+   * Under _Build Triggers_, _Build periodically_: `H H * * H`
+   * Click _SAVE_ button
+   * Click _Build Now_
+   * Click on job #1, then _Console Output_. Verify the `git checkout` checked
+     out the correct commit
+5. Go to [Travis CI settings](https://travis-ci.org/grpc/grpc-java/settings) and
+   add a _Cron Job_:
+   * Branch: `v$MAJOR.$MINOR.x`
+   * Interval: `weekly`
+   * Options: `Do not run if there has been a build in the last 24h`
+   * Click _Add_ button
+6. Continue with Google-internal steps at go/grpc/java/releasing.
+7. Move items out of the release milestone that didn't make the cut. Issues that
+   may be backported should stay in the release milestone. Treat issues with the
+   'release blocker' label with special care.
+
+Tagging the Release
+-------------------
+
+1. Verify there are no open issues in the release milestone. Open issues should
+   either be deferred or resolved and the fix backported.
+2. For vMajor.Minor.x branch, change `README.md` to refer to the next release
    version. _Also_ update the version numbers for protoc if the protobuf library
    version was updated since the last release.
 
@@ -127,27 +142,29 @@ would be used to create all `v0.7` tags (e.g. `v0.7.0`, `v0.7.1`).
    $ ${EDITOR:-nano -w} README.md
    $ git commit -a -m "Update README to reference $MAJOR.$MINOR.$PATCH"
    ```
-7. Change root build files to remove "-SNAPSHOT" for the next release version
+3. Change root build files to remove "-SNAPSHOT" for the next release version
    (e.g. `0.7.0`). Commit the result and make a tag:
 
    ```bash
    # Change version to remove -SNAPSHOT
    $ sed -i 's/-SNAPSHOT\(.*CURRENT_GRPC_VERSION\)/\1/' "${VERSION_FILES[@]}"
+   $ sed -i s/-SNAPSHOT// compiler/src/test{,Lite,Nano}/golden/TestService.java.txt
    $ ./gradlew build
    $ git commit -a -m "Bump version to $MAJOR.$MINOR.$PATCH"
    $ git tag -a v$MAJOR.$MINOR.$PATCH -m "Version $MAJOR.$MINOR.$PATCH"
    ```
-8. Change root build files to the next snapshot version (e.g. `0.7.1-SNAPSHOT`).
+4. Change root build files to the next snapshot version (e.g. `0.7.1-SNAPSHOT`).
    Commit the result:
 
    ```bash
    # Change version to next patch and add -SNAPSHOT
    $ sed -i 's/[0-9]\+\.[0-9]\+\.[0-9]\+\(.*CURRENT_GRPC_VERSION\)/'$MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT'\1/' \
      "${VERSION_FILES[@]}"
+   $ sed -i s/$MAJOR.$MINOR.$PATCH/$MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT/ compiler/src/test{,Lite,Nano}/golden/TestService.java.txt
    $ ./gradlew build
    $ git commit -a -m "Bump version to $MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT"
    ```
-9. Go through PR review and push the release tag and updated release branch to
+5. Go through PR review and push the release tag and updated release branch to
    GitHub:
 
    ```bash
@@ -344,6 +361,13 @@ be `released`, which will begin the process of pushing the new artifacts to
 Maven Central (the staging repository will be destroyed in the process). You can
 see the complete process for releasing to Maven Central on the [OSSRH
 site](http://central.sonatype.org/pages/releasing-the-deployment.html).
+
+Build interop container image
+-----------------------------
+
+We have containers for each release to detect compatibility regressions with old
+releases. Generate one for the new release by following the
+[GCR image generation instructions](https://github.com/grpc/grpc/blob/master/tools/interop_matrix/README.md#step-by-step-instructions-for-adding-a-gcr-image-for-a-new-release-for-compatibility-test).
 
 Update README.md
 ----------------

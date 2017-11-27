@@ -98,6 +98,12 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   }
 
   @Override
+  public T useTransportSecurity() {
+    delegate().useTransportSecurity();
+    return thisT();
+  }
+
+  @Override
   public T nameResolverFactory(NameResolver.Factory resolverFactory) {
     delegate().nameResolverFactory(resolverFactory);
     return thisT();
@@ -106,6 +112,12 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   @Override
   public T loadBalancerFactory(LoadBalancer.Factory loadBalancerFactory) {
     delegate().loadBalancerFactory(loadBalancerFactory);
+    return thisT();
+  }
+
+  @Override
+  public T enableFullStreamDecompression() {
+    delegate().enableFullStreamDecompression();
     return thisT();
   }
 
@@ -130,6 +142,24 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   @Override
   public T maxInboundMessageSize(int max) {
     delegate().maxInboundMessageSize(max);
+    return thisT();
+  }
+
+  @Override
+  public T keepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
+    delegate().keepAliveTime(keepAliveTime, timeUnit);
+    return thisT();
+  }
+
+  @Override
+  public T keepAliveTimeout(long keepAliveTimeout, TimeUnit timeUnit) {
+    delegate().keepAliveTimeout(keepAliveTimeout, timeUnit);
+    return thisT();
+  }
+
+  @Override
+  public T keepAliveWithoutCalls(boolean enable) {
+    delegate().keepAliveWithoutCalls(enable);
     return thisT();
   }
 

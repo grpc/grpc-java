@@ -35,6 +35,7 @@ import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
+import io.grpc.internal.ProxyParameters;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.okhttp.internal.Platform;
@@ -118,6 +119,12 @@ public class OkHttpChannelBuilder extends
 
   private OkHttpChannelBuilder(String target) {
     super(target);
+    // TODO(zpencer): re-enable after census issue is resolved
+    // census-instrumentation/opencensus-java/issues/777
+    if (GrpcUtil.IS_RESTRICTED_APPENGINE) {
+      setTracingEnabled(false);
+      setStatsEnabled(false);
+    }
   }
 
   /**
@@ -177,17 +184,11 @@ public class OkHttpChannelBuilder extends
   }
 
   /**
-   * Sets the time without read activity before sending a keepalive ping. An unreasonably small
-   * value might be increased, and {@code Long.MAX_VALUE} nano seconds or an unreasonably large
-   * value will disable keepalive. Defaults to infinite.
-   *
-   * <p>Clients must receive permission from the service owner before enabling this option.
-   * Keepalives can increase the load on services and are commonly "invisible" making it hard to
-   * notice when they are causing excessive load. Clients are strongly encouraged to use only as
-   * small of a value as necessary.
+   * {@inheritDoc}
    *
    * @since 1.3.0
    */
+  @Override
   public OkHttpChannelBuilder keepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
     Preconditions.checkArgument(keepAliveTime > 0L, "keepalive time must be positive");
     keepAliveTimeNanos = timeUnit.toNanos(keepAliveTime);
@@ -200,14 +201,11 @@ public class OkHttpChannelBuilder extends
   }
 
   /**
-   * Sets the time waiting for read activity after sending a keepalive ping. If the time expires
-   * without any read activity on the connection, the connection is considered dead. An unreasonably
-   * small value might be increased. Defaults to 20 seconds.
-   *
-   * <p>This value should be at least multiple times the RTT to allow for lost packets.
+   * {@inheritDoc}
    *
    * @since 1.3.0
    */
+  @Override
   public OkHttpChannelBuilder keepAliveTimeout(long keepAliveTimeout, TimeUnit timeUnit) {
     Preconditions.checkArgument(keepAliveTimeout > 0L, "keepalive timeout must be positive");
     keepAliveTimeoutNanos = timeUnit.toNanos(keepAliveTimeout);
@@ -216,16 +214,12 @@ public class OkHttpChannelBuilder extends
   }
 
   /**
-   * Sets whether keepalive will be performed when there are no outstanding RPC on a connection.
-   * Defaults to {@code false}.
-   *
-   * <p>Clients must receive permission from the service owner before enabling this option.
-   * Keepalives on unused connections can easilly accidentally consume a considerable amount of
-   * bandwidth and CPU.
+   * {@inheritDoc}
    *
    * @since 1.3.0
    * @see #keepAliveTime(long, TimeUnit)
    */
+  @Override
   public OkHttpChannelBuilder keepAliveWithoutCalls(boolean enable) {
     keepAliveWithoutCalls = enable;
     return this;
@@ -298,6 +292,15 @@ public class OkHttpChannelBuilder extends
     } else {
       throw new IllegalArgumentException("Plaintext negotiation not currently supported");
     }
+    return this;
+  }
+
+  /**
+   * Equivalent to using {@link #negotiationType(NegotiationType)} with {@code TLS}.
+   */
+  @Override
+  public final OkHttpChannelBuilder useTransportSecurity() {
+    negotiationType(NegotiationType.TLS);
     return this;
   }
 
@@ -416,19 +419,10 @@ public class OkHttpChannelBuilder extends
 
     @Override
     public ConnectionClientTransport newClientTransport(
-        SocketAddress addr, String authority, @Nullable String userAgent) {
+        SocketAddress addr, String authority, @Nullable String userAgent,
+        @Nullable ProxyParameters proxy) {
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
-      }
-      InetSocketAddress proxyAddress = null;
-      String proxy = System.getenv("GRPC_PROXY_EXP");
-      if (proxy != null) {
-        String[] parts = proxy.split(":", 2);
-        int port = 80;
-        if (parts.length > 1) {
-          port = Integer.parseInt(parts[1]);
-        }
-        proxyAddress = new InetSocketAddress(parts[0], port);
       }
       final AtomicBackoff.State keepAliveTimeNanosState = keepAliveTimeNanos.getState();
       Runnable tooManyPingsRunnable = new Runnable() {
@@ -438,9 +432,19 @@ public class OkHttpChannelBuilder extends
         }
       };
       InetSocketAddress inetSocketAddr = (InetSocketAddress) addr;
-      OkHttpClientTransport transport = new OkHttpClientTransport(inetSocketAddr, authority,
-          userAgent, executor, socketFactory, hostnameVerifier, Utils.convertSpec(connectionSpec),
-          maxMessageSize, proxyAddress, null, null, tooManyPingsRunnable);
+      OkHttpClientTransport transport = new OkHttpClientTransport(
+          inetSocketAddr,
+          authority,
+          userAgent,
+          executor,
+          socketFactory,
+          hostnameVerifier,
+          Utils.convertSpec(connectionSpec),
+          maxMessageSize,
+          proxy == null ? null : proxy.proxyAddress,
+          proxy == null ? null : proxy.username,
+          proxy == null ? null : proxy.password,
+          tooManyPingsRunnable);
       if (enableKeepAlive) {
         transport.enableKeepAlive(
             true, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos, keepAliveWithoutCalls);

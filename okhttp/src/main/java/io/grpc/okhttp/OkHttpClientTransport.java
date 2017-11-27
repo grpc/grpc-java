@@ -45,6 +45,7 @@ import io.grpc.internal.LogId;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.StatsTraceContext;
+import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.framed.ErrorCode;
 import io.grpc.okhttp.internal.framed.FrameReader;
@@ -68,6 +69,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -470,7 +472,13 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   private Socket createHttpProxySocket(InetSocketAddress address, InetSocketAddress proxyAddress,
       String proxyUsername, String proxyPassword) throws IOException, StatusException {
     try {
-      Socket sock = new Socket(proxyAddress.getAddress(), proxyAddress.getPort());
+      Socket sock;
+      // The proxy address may not be resolved
+      if (proxyAddress.getAddress() != null) {
+        sock = new Socket(proxyAddress.getAddress(), proxyAddress.getPort());
+      } else {
+        sock = new Socket(proxyAddress.getHostName(), proxyAddress.getPort());
+      }
       sock.setTcpNoDelay(true);
 
       Source source = Okio.source(sock);
@@ -846,6 +854,13 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     Status status = ERROR_CODE_TO_STATUS.get(code);
     return status != null ? status : Status.UNKNOWN.withDescription(
         "Unknown http2 error code: " + code.httpCode);
+  }
+
+  @Override
+  public Future<TransportTracer.Stats> getTransportStats() {
+    SettableFuture<TransportTracer.Stats> ret = SettableFuture.create();
+    ret.set(null);
+    return ret;
   }
 
   /**

@@ -22,16 +22,16 @@ repositories {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.7.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.9.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 
 dependencies {
-  compile "com.google.api.grpc:proto-google-common-protos:0.1.9"
+  compile "com.google.api.grpc:proto-google-common-protos:1.0.0"
   compile "io.grpc:grpc-netty:${grpcVersion}"
   compile "io.grpc:grpc-protobuf:${grpcVersion}"
   compile "io.grpc:grpc-stub:${grpcVersion}"
 
   testCompile "io.grpc:grpc-testing:${grpcVersion}"
-  testCompile "junit:junit:4.11"
+  testCompile "junit:junit:4.12"
   testCompile "org.mockito:mockito-core:1.9.5"
 }
 
@@ -46,26 +46,23 @@ protobuf {
   }
   generateProtoTasks {
     all()*.plugins {
-      grpc {
-        // To generate deprecated interfaces and static bindService method,
-        // turn the enable_deprecated option to true below:
-        option 'enable_deprecated=false'
-      }
+      grpc {}
     }
   }
 }
 
-// Inform IntelliJ projects about the generated code.
-apply plugin: 'idea'
-
-idea {
-  module {
-    // Not using generatedSourceDirs because of
-    // https://discuss.gradle.org/t/support-for-intellij-2016/15294/8
-    sourceDirs += file("${projectDir}/build/generated/source/proto/main/java");
-    sourceDirs += file("${projectDir}/build/generated/source/proto/main/grpc");
-  }
+// Inform IDEs like IntelliJ IDEA, Eclipse or NetBeans about the generated code.
+sourceSets {
+    main {
+        java {
+            srcDirs 'build/generated/source/proto/main/grpc'
+            srcDirs 'build/generated/source/proto/main/java'
+        }
+    }
 }
+
+// Generate IntelliJ IDEA's .idea & .iml project files
+apply plugin: 'idea'
 
 // Provide convenience executables for trying out the examples.
 apply plugin: 'application'

@@ -19,6 +19,7 @@ package io.grpc.auth;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auth.Credentials;
+import com.google.auth.RequestMetadataCallback;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.BaseEncoding;
 import io.grpc.Attributes;
@@ -27,7 +28,9 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.StatusException;
+import java.io.IOException;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -82,37 +85,48 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
       applier.fail(e.getStatus());
       return;
     }
-    appExecutor.execute(new Runnable() {
-        @Override
-        public void run() {
-          try {
-            // Credentials is expected to manage caching internally if the metadata is fetched over
-            // the network.
-            //
-            // TODO(zhangkun83): we don't know whether there is valid cache data. If there is, we
-            // would waste a context switch by always scheduling in executor. However, we have to
-            // do so because we can't risk blocking the network thread. This can be resolved after
-            // https://github.com/google/google-auth-library-java/issues/3 is resolved.
-            //
-            // Some implementations may return null here.
-            Map<String, List<String>> metadata = creds.getRequestMetadata(uri);
-            // Re-use the headers if getRequestMetadata() returns the same map. It may return a
-            // different map based on the provided URI, i.e., for JWT. However, today it does not
-            // cache JWT and so we won't bother tring to save its return value based on the URI.
-            Metadata headers;
-            synchronized (GoogleAuthLibraryCallCredentials.this) {
-              if (lastMetadata == null || lastMetadata != metadata) {
-                lastMetadata = metadata;
-                lastHeaders = toHeaders(metadata);
-              }
-              headers = lastHeaders;
+    // Credentials is expected to manage caching internally if the metadata is fetched over
+    // the network.
+    creds.getRequestMetadata(uri, appExecutor, new RequestMetadataCallback() {
+      @Override
+      public void onSuccess(Map<String, List<String>> metadata) {
+        // Some implementations may pass null metadata.
+
+        // Re-use the headers if getRequestMetadata() returns the same map. It may return a
+        // different map based on the provided URI, i.e., for JWT. However, today it does not
+        // cache JWT and so we won't bother tring to save its return value based on the URI.
+        Metadata headers;
+        try {
+          synchronized (GoogleAuthLibraryCallCredentials.this) {
+            if (lastMetadata == null || lastMetadata != metadata) {
+              lastHeaders = toHeaders(metadata);
+              lastMetadata = metadata;
             }
-            applier.apply(headers);
-          } catch (Throwable e) {
-            applier.fail(Status.UNAUTHENTICATED.withCause(e));
+            headers = lastHeaders;
           }
+        } catch (Throwable t) {
+          applier.fail(Status.UNAUTHENTICATED
+              .withDescription("Failed to convert credential metadata")
+              .withCause(t));
+          return;
         }
-      });
+        applier.apply(headers);
+      }
+
+      @Override
+      public void onFailure(Throwable e) {
+        if (e instanceof IOException) {
+          // Since it's an I/O failure, let the call be retried with UNAVAILABLE.
+          applier.fail(Status.UNAVAILABLE
+              .withDescription("Credentials failed to obtain metadata")
+              .withCause(e));
+        } else {
+          applier.fail(Status.UNAUTHENTICATED
+              .withDescription("Failed computing credential metadata")
+              .withCause(e));
+        }
+      }
+    });
   }
 
   /**
@@ -184,13 +198,19 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
     } catch (ClassNotFoundException ex) {
       return null;
     }
+    Exception caughtException;
     try {
       return new JwtHelper(rawServiceAccountClass, loader);
-    } catch (ReflectiveOperationException ex) {
-      // Failure is a bug in this class, but we still choose to gracefully recover
-      log.log(Level.WARNING, "Failed to create JWT helper. This is unexpected", ex);
-      return null;
+    } catch (ClassNotFoundException ex) {
+      caughtException = ex;
+    } catch (NoSuchMethodException ex) {
+      caughtException = ex;
     }
+    if (caughtException != null) {
+      // Failure is a bug in this class, but we still choose to gracefully recover
+      log.log(Level.WARNING, "Failed to create JWT helper. This is unexpected", caughtException);
+    }
+    return null;
   }
 
   @VisibleForTesting
@@ -204,7 +224,7 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
     private final Method getPrivateKeyId;
 
     public JwtHelper(Class<?> rawServiceAccountClass, ClassLoader loader)
-        throws ReflectiveOperationException {
+        throws ClassNotFoundException, NoSuchMethodException {
       serviceAccountClass = rawServiceAccountClass.asSubclass(Credentials.class);
       getScopes = serviceAccountClass.getMethod("getScopes");
       getClientId = serviceAccountClass.getMethod("getClientId");
@@ -222,6 +242,7 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
       if (!serviceAccountClass.isInstance(creds)) {
         return creds;
       }
+      Exception caughtException;
       try {
         creds = serviceAccountClass.cast(creds);
         Collection<?> scopes = (Collection<?>) getScopes.invoke(creds);
@@ -234,12 +255,21 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
             getClientEmail.invoke(creds),
             getPrivateKey.invoke(creds),
             getPrivateKeyId.invoke(creds));
-      } catch (ReflectiveOperationException ex) {
-        // Failure is a bug in this class, but we still choose to gracefully recover
-        log.log(Level.WARNING,
-            "Failed converting service account credential to JWT. This is unexpected", ex);
-        return creds;
+      } catch (IllegalAccessException ex) {
+        caughtException = ex;
+      } catch (InvocationTargetException ex) {
+        caughtException = ex;
+      } catch (InstantiationException ex) {
+        caughtException = ex;
       }
+      if (caughtException != null) {
+        // Failure is a bug in this class, but we still choose to gracefully recover
+        log.log(
+            Level.WARNING,
+            "Failed converting service account credential to JWT. This is unexpected",
+            caughtException);
+      }
+      return creds;
     }
   }
 }

@@ -26,6 +26,8 @@ dependencies {
             libraries.netty_tcnative,
             libraries.oauth_client,
             libraries.truth
+    runtime libraries.opencensus_impl
+    testCompile project(':grpc-context').sourceSets.test.output
 }
 
 configureProtoCompilation()

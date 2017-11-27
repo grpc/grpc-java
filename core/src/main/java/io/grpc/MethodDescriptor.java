@@ -45,10 +45,12 @@ public final class MethodDescriptor<ReqT, RespT> {
   private final @Nullable Object schemaDescriptor;
   private final boolean idempotent;
   private final boolean safe;
+  private final boolean sampledToLocalTracing;
 
   // Must be set to InternalKnownTransport.values().length
   // Not referenced to break the dependency.
   private final AtomicReferenceArray<Object> rawMethodNames = new AtomicReferenceArray<Object>(1);
+
 
   /**
    * Gets the cached "raw" method name for this Method Descriptor.  The raw name is transport
@@ -209,7 +211,7 @@ public final class MethodDescriptor<ReqT, RespT> {
       Marshaller<RequestT> requestMarshaller,
       Marshaller<ResponseT> responseMarshaller) {
     return new MethodDescriptor<RequestT, ResponseT>(
-        type, fullMethodName, requestMarshaller, responseMarshaller, null, false, false);
+        type, fullMethodName, requestMarshaller, responseMarshaller, null, false, false, false);
   }
 
   private MethodDescriptor(
@@ -219,7 +221,8 @@ public final class MethodDescriptor<ReqT, RespT> {
       Marshaller<RespT> responseMarshaller,
       Object schemaDescriptor,
       boolean idempotent,
-      boolean safe) {
+      boolean safe,
+      boolean sampledToLocalTracing) {
 
     this.type = Preconditions.checkNotNull(type, "type");
     this.fullMethodName = Preconditions.checkNotNull(fullMethodName, "fullMethodName");
@@ -228,6 +231,7 @@ public final class MethodDescriptor<ReqT, RespT> {
     this.schemaDescriptor = schemaDescriptor;
     this.idempotent = idempotent;
     this.safe = safe;
+    this.sampledToLocalTracing = sampledToLocalTracing;
     Preconditions.checkArgument(!safe || type == MethodType.UNARY,
         "Only unary methods can be specified safe");
   }
@@ -351,6 +355,13 @@ public final class MethodDescriptor<ReqT, RespT> {
   }
 
   /**
+   * Returns whether RPCs for this method may be sampled into the local tracing store.
+   */
+  public boolean isSampledToLocalTracing() {
+    return sampledToLocalTracing;
+  }
+
+  /**
    * Generate the fully qualified method name.
    *
    * @param fullServiceName the fully qualified service name that is prefixed with the package name
@@ -426,7 +437,8 @@ public final class MethodDescriptor<ReqT, RespT> {
         .setType(type)
         .setFullMethodName(fullMethodName)
         .setIdempotent(idempotent)
-        .setSafe(safe);
+        .setSafe(safe)
+        .setSampledToLocalTracing(sampledToLocalTracing);
   }
 
   /**
@@ -443,6 +455,7 @@ public final class MethodDescriptor<ReqT, RespT> {
     private boolean idempotent;
     private boolean safe;
     private Object schemaDescriptor;
+    private boolean sampledToLocalTracing;
 
     private Builder() {}
 
@@ -530,6 +543,17 @@ public final class MethodDescriptor<ReqT, RespT> {
     }
 
     /**
+     * Sets whether RPCs for this method may be sampled into the local tracing store.  If true,
+     * sampled traces of this method may be kept in memory by tracing libraries.
+     *
+     * @since 1.8.0
+     */
+    public Builder<ReqT, RespT> setSampledToLocalTracing(boolean value) {
+      this.sampledToLocalTracing = value;
+      return this;
+    }
+
+    /**
      * Builds the method descriptor.
      *
      * @since 1.1.0
@@ -543,7 +567,8 @@ public final class MethodDescriptor<ReqT, RespT> {
           responseMarshaller,
           schemaDescriptor,
           idempotent,
-          safe);
+          safe,
+          sampledToLocalTracing);
     }
   }
 }

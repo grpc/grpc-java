@@ -39,8 +39,11 @@ import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.StreamListener.MessageProducer;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
@@ -48,6 +51,7 @@ import java.util.Collection;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
@@ -83,6 +87,18 @@ public final class GrpcUtil {
    */
   public static final Metadata.Key<byte[]> MESSAGE_ACCEPT_ENCODING_KEY =
       InternalMetadata.keyOf(GrpcUtil.MESSAGE_ACCEPT_ENCODING, new AcceptEncodingMarshaller());
+
+  /**
+   * {@link io.grpc.Metadata.Key} for the stream's content encoding header.
+   */
+  public static final Metadata.Key<String> CONTENT_ENCODING_KEY =
+      Metadata.Key.of(GrpcUtil.CONTENT_ENCODING, Metadata.ASCII_STRING_MARSHALLER);
+
+  /**
+   * {@link io.grpc.Metadata.Key} for the stream's accepted content encoding header.
+   */
+  public static final Metadata.Key<byte[]> CONTENT_ACCEPT_ENCODING_KEY =
+      InternalMetadata.keyOf(GrpcUtil.CONTENT_ACCEPT_ENCODING, new AcceptEncodingMarshaller());
 
   private static final class AcceptEncodingMarshaller implements TrustedAsciiMarshaller<byte[]> {
     @Override
@@ -155,6 +171,16 @@ public final class GrpcUtil {
   public static final String MESSAGE_ACCEPT_ENCODING = "grpc-accept-encoding";
 
   /**
+   * The content-encoding used to compress the full gRPC stream.
+   */
+  public static final String CONTENT_ENCODING = "content-encoding";
+
+  /**
+   * The accepted content-encodings that can be used to compress the full gRPC stream.
+   */
+  public static final String CONTENT_ACCEPT_ENCODING = "accept-encoding";
+
+  /**
    * The default maximum uncompressed size (in bytes) for inbound messages. Defaults to 4 MiB.
    */
   public static final int DEFAULT_MAX_MESSAGE_SIZE = 4 * 1024 * 1024;
@@ -198,6 +224,33 @@ public final class GrpcUtil {
    * The magic keepalive time value that disables keepalive.
    */
   public static final long SERVER_KEEPALIVE_TIME_NANOS_DISABLED = Long.MAX_VALUE;
+
+  /**
+   * The default proxy detector.
+   */
+  public static final ProxyDetector DEFAULT_PROXY_DETECTOR = new ProxyDetectorImpl();
+
+  /**
+   * A proxy detector that always claims no proxy is needed.
+   */
+  public static final ProxyDetector NOOP_PROXY_DETECTOR = new ProxyDetector() {
+    @Nullable
+    @Override
+    public ProxyParameters proxyFor(SocketAddress targetServerAddress) {
+      return null;
+    }
+  };
+
+  /**
+   * Returns a proxy detector appropriate for the current environment.
+   */
+  public static ProxyDetector getProxyDetector() {
+    if (IS_RESTRICTED_APPENGINE) {
+      return NOOP_PROXY_DETECTOR;
+    } else {
+      return DEFAULT_PROXY_DETECTOR;
+    }
+  }
 
   /**
    * Maps HTTP error response status codes to transport codes, as defined in <a
@@ -513,6 +566,25 @@ public final class GrpcUtil {
     };
 
   /**
+   * Returns the host via {@link InetSocketAddress#getHostString} if it is possible,
+   * i.e. in jdk >= 7.
+   * Otherwise, return it via {@link InetSocketAddress#getHostName} which may incur a DNS lookup.
+   */
+  public static String getHost(InetSocketAddress addr) {
+    try {
+      Method getHostStringMethod = InetSocketAddress.class.getMethod("getHostString");
+      return (String) getHostStringMethod.invoke(addr);
+    } catch (NoSuchMethodException e) {
+      // noop
+    } catch (IllegalAccessException e) {
+      // noop
+    } catch (InvocationTargetException e) {
+      // noop
+    }
+    return addr.getHostName();
+  }
+
+  /**
    * Marshals a nanoseconds representation of the timeout to and from a string representation,
    * consisting of an ASCII decimal representation of a number with at most 8 digits, followed by a
    * unit:
@@ -607,9 +679,15 @@ public final class GrpcUtil {
         public void ping(PingCallback callback, Executor executor) {
           transport.ping(callback, executor);
         }
+
+        @Nullable
+        @Override
+        public Future<TransportTracer.Stats> getTransportStats() {
+          return transport.getTransportStats();
+        }
       };
     }
-    if (!result.getStatus().isOk() && !isWaitForReady) {
+    if (!result.getStatus().isOk() && (result.isDrop() || !isWaitForReady)) {
       return new FailingClientTransport(result.getStatus());
     }
     return null;

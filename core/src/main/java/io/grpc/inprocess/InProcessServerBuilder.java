@@ -23,6 +23,7 @@ import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.GrpcUtil;
 import java.io.File;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Builder for a server that services in-process requests. Clients identify the in-process server by
@@ -79,15 +80,19 @@ public final class InProcessServerBuilder
 
   private InProcessServerBuilder(String name) {
     this.name = Preconditions.checkNotNull(name, "name");
+    // In-process transport should not record its traffic to the stats module.
+    // https://github.com/grpc/grpc-java/issues/2284
+    setStatsRecordStartedRpcs(false);
+    setStatsRecordFinishedRpcs(false);
+    // Disable handshake timeout because it is unnecessary, and can trigger Thread creation that can
+    // break some environments (like tests).
+    handshakeTimeout(Long.MAX_VALUE, TimeUnit.SECONDS);
   }
 
   @Override
   protected InProcessServer buildTransportServer(
       List<ServerStreamTracer.Factory> streamTracerFactories) {
-    // TODO(zhangkun83): InProcessTransport by-passes framer and deframer, thus message sizses are
-    // not counted.  Therefore, we disable stats for now.
-    // (https://github.com/grpc/grpc-java/issues/2284)
-    return new InProcessServer(name, GrpcUtil.TIMER_SERVICE);
+    return new InProcessServer(name, GrpcUtil.TIMER_SERVICE, streamTracerFactories);
   }
 
   @Override

@@ -19,17 +19,21 @@ package io.grpc.netty;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.LogId;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
+import io.grpc.internal.TransportTracer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -38,7 +42,11 @@ import java.util.logging.Logger;
  * The Netty-based server transport.
  */
 class NettyServerTransport implements ServerTransport {
+  @SuppressWarnings("unused") // log is for general messages, but nothing currently uses it
   private static final Logger log = Logger.getLogger(NettyServerTransport.class.getName());
+  // connectionLog is for connection related messages only
+  private static final Logger connectionLog = Logger.getLogger(
+      String.format("%s.connections", NettyServerTransport.class.getName()));
   // Some exceptions are not very useful and add too much noise to the log
   private static final ImmutableList<String> QUIET_ERRORS = ImmutableList.of(
       "Connection reset by peer",
@@ -61,10 +69,12 @@ class NettyServerTransport implements ServerTransport {
   private final boolean permitKeepAliveWithoutCalls;
   private final long permitKeepAliveTimeInNanos;
   private final List<ServerStreamTracer.Factory> streamTracerFactories;
+  private final TransportTracer transportTracer;
 
   NettyServerTransport(
       Channel channel, ProtocolNegotiator protocolNegotiator,
-      List<ServerStreamTracer.Factory> streamTracerFactories, int maxStreams,
+      List<ServerStreamTracer.Factory> streamTracerFactories,
+      TransportTracer transportTracer, int maxStreams,
       int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
       long keepAliveTimeInNanos, long keepAliveTimeoutInNanos,
       long maxConnectionIdleInNanos,
@@ -74,6 +84,7 @@ class NettyServerTransport implements ServerTransport {
     this.protocolNegotiator = Preconditions.checkNotNull(protocolNegotiator, "protocolNegotiator");
     this.streamTracerFactories =
         Preconditions.checkNotNull(streamTracerFactories, "streamTracerFactories");
+    this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
     this.maxStreams = maxStreams;
     this.flowControlWindow = flowControlWindow;
     this.maxMessageSize = maxMessageSize;
@@ -156,7 +167,7 @@ class NettyServerTransport implements ServerTransport {
 
   private void notifyTerminated(Throwable t) {
     if (t != null) {
-      log.log(getLogLevel(t), "Transport failed", t);
+      connectionLog.log(getLogLevel(t), "Transport failed", t);
     }
     if (!terminated) {
       terminated = true;
@@ -164,12 +175,30 @@ class NettyServerTransport implements ServerTransport {
     }
   }
 
+  @Override
+  public Future<TransportTracer.Stats> getTransportStats() {
+    if (channel.eventLoop().inEventLoop()) {
+      // This is necessary, otherwise we will block forever if we get the future from inside
+      // the event loop.
+      SettableFuture<TransportTracer.Stats> result = SettableFuture.create();
+      result.set(transportTracer.getStats());
+      return result;
+    }
+    return channel.eventLoop().submit(
+        new Callable<TransportTracer.Stats>() {
+          @Override
+          public TransportTracer.Stats call() throws Exception {
+            return transportTracer.getStats();
+          }
+        });
+  }
+
   /**
    * Creates the Netty handler to be used in the channel pipeline.
    */
   private NettyServerHandler createHandler(ServerTransportListener transportListener) {
     return NettyServerHandler.newHandler(
-        transportListener, streamTracerFactories, maxStreams,
+        transportListener, streamTracerFactories, transportTracer, maxStreams,
         flowControlWindow, maxHeaderListSize, maxMessageSize,
         keepAliveTimeInNanos, keepAliveTimeoutInNanos,
         maxConnectionIdleInNanos,

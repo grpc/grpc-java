@@ -1,19 +1,19 @@
 package io.grpc.instrumentation.v1alpha;
 
-import static io.grpc.stub.ClientCalls.asyncUnaryCall;
-import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ClientCalls.blockingUnaryCall;
-import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
-import static io.grpc.stub.ClientCalls.futureUnaryCall;
 import static io.grpc.MethodDescriptor.generateFullMethodName;
-import static io.grpc.stub.ServerCalls.asyncUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
+import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
+import static io.grpc.stub.ClientCalls.asyncClientStreamingCall;
+import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
+import static io.grpc.stub.ClientCalls.asyncUnaryCall;
+import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
+import static io.grpc.stub.ClientCalls.blockingUnaryCall;
+import static io.grpc.stub.ClientCalls.futureUnaryCall;
 import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
+import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
+import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
+import static io.grpc.stub.ServerCalls.asyncUnaryCall;
 import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
+import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 
 /**
  */
@@ -28,70 +28,165 @@ public final class MonitoringGrpc {
 
   // Static method descriptors that strictly reflect the proto.
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
+  @java.lang.Deprecated // Use {@link #getGetCanonicalRpcStatsMethod()} instead. 
   public static final io.grpc.MethodDescriptor<com.google.protobuf.Empty,
-      io.grpc.instrumentation.v1alpha.CanonicalRpcStats> METHOD_GET_CANONICAL_RPC_STATS =
-      io.grpc.MethodDescriptor.<com.google.protobuf.Empty, io.grpc.instrumentation.v1alpha.CanonicalRpcStats>newBuilder()
-          .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-          .setFullMethodName(generateFullMethodName(
-              "grpc.instrumentation.v1alpha.Monitoring", "GetCanonicalRpcStats"))
-          .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-              com.google.protobuf.Empty.getDefaultInstance()))
-          .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-              io.grpc.instrumentation.v1alpha.CanonicalRpcStats.getDefaultInstance()))
-          .setSchemaDescriptor(new MonitoringMethodDescriptorSupplier("GetCanonicalRpcStats"))
-          .build();
+      io.grpc.instrumentation.v1alpha.CanonicalRpcStats> METHOD_GET_CANONICAL_RPC_STATS = getGetCanonicalRpcStatsMethod();
+
+  private static volatile io.grpc.MethodDescriptor<com.google.protobuf.Empty,
+      io.grpc.instrumentation.v1alpha.CanonicalRpcStats> getGetCanonicalRpcStatsMethod;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
+  public static io.grpc.MethodDescriptor<com.google.protobuf.Empty,
+      io.grpc.instrumentation.v1alpha.CanonicalRpcStats> getGetCanonicalRpcStatsMethod() {
+    io.grpc.MethodDescriptor<com.google.protobuf.Empty, io.grpc.instrumentation.v1alpha.CanonicalRpcStats> getGetCanonicalRpcStatsMethod;
+    if ((getGetCanonicalRpcStatsMethod = MonitoringGrpc.getGetCanonicalRpcStatsMethod) == null) {
+      synchronized (MonitoringGrpc.class) {
+        if ((getGetCanonicalRpcStatsMethod = MonitoringGrpc.getGetCanonicalRpcStatsMethod) == null) {
+          MonitoringGrpc.getGetCanonicalRpcStatsMethod = getGetCanonicalRpcStatsMethod = 
+              io.grpc.MethodDescriptor.<com.google.protobuf.Empty, io.grpc.instrumentation.v1alpha.CanonicalRpcStats>newBuilder()
+              .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
+              .setFullMethodName(generateFullMethodName(
+                  "grpc.instrumentation.v1alpha.Monitoring", "GetCanonicalRpcStats"))
+              .setSampledToLocalTracing(true)
+              .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  com.google.protobuf.Empty.getDefaultInstance()))
+              .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.instrumentation.v1alpha.CanonicalRpcStats.getDefaultInstance()))
+                  .setSchemaDescriptor(new MonitoringMethodDescriptorSupplier("GetCanonicalRpcStats"))
+                  .build();
+          }
+        }
+     }
+     return getGetCanonicalRpcStatsMethod;
+  }
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
+  @java.lang.Deprecated // Use {@link #getGetStatsMethod()} instead. 
   public static final io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.StatsRequest,
-      io.grpc.instrumentation.v1alpha.StatsResponse> METHOD_GET_STATS =
-      io.grpc.MethodDescriptor.<io.grpc.instrumentation.v1alpha.StatsRequest, io.grpc.instrumentation.v1alpha.StatsResponse>newBuilder()
-          .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-          .setFullMethodName(generateFullMethodName(
-              "grpc.instrumentation.v1alpha.Monitoring", "GetStats"))
-          .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-              io.grpc.instrumentation.v1alpha.StatsRequest.getDefaultInstance()))
-          .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-              io.grpc.instrumentation.v1alpha.StatsResponse.getDefaultInstance()))
-          .setSchemaDescriptor(new MonitoringMethodDescriptorSupplier("GetStats"))
-          .build();
+      io.grpc.instrumentation.v1alpha.StatsResponse> METHOD_GET_STATS = getGetStatsMethod();
+
+  private static volatile io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.StatsRequest,
+      io.grpc.instrumentation.v1alpha.StatsResponse> getGetStatsMethod;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
+  public static io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.StatsRequest,
+      io.grpc.instrumentation.v1alpha.StatsResponse> getGetStatsMethod() {
+    io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.StatsRequest, io.grpc.instrumentation.v1alpha.StatsResponse> getGetStatsMethod;
+    if ((getGetStatsMethod = MonitoringGrpc.getGetStatsMethod) == null) {
+      synchronized (MonitoringGrpc.class) {
+        if ((getGetStatsMethod = MonitoringGrpc.getGetStatsMethod) == null) {
+          MonitoringGrpc.getGetStatsMethod = getGetStatsMethod = 
+              io.grpc.MethodDescriptor.<io.grpc.instrumentation.v1alpha.StatsRequest, io.grpc.instrumentation.v1alpha.StatsResponse>newBuilder()
+              .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
+              .setFullMethodName(generateFullMethodName(
+                  "grpc.instrumentation.v1alpha.Monitoring", "GetStats"))
+              .setSampledToLocalTracing(true)
+              .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.instrumentation.v1alpha.StatsRequest.getDefaultInstance()))
+              .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.instrumentation.v1alpha.StatsResponse.getDefaultInstance()))
+                  .setSchemaDescriptor(new MonitoringMethodDescriptorSupplier("GetStats"))
+                  .build();
+          }
+        }
+     }
+     return getGetStatsMethod;
+  }
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
+  @java.lang.Deprecated // Use {@link #getWatchStatsMethod()} instead. 
   public static final io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.StatsRequest,
-      io.grpc.instrumentation.v1alpha.StatsResponse> METHOD_WATCH_STATS =
-      io.grpc.MethodDescriptor.<io.grpc.instrumentation.v1alpha.StatsRequest, io.grpc.instrumentation.v1alpha.StatsResponse>newBuilder()
-          .setType(io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
-          .setFullMethodName(generateFullMethodName(
-              "grpc.instrumentation.v1alpha.Monitoring", "WatchStats"))
-          .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-              io.grpc.instrumentation.v1alpha.StatsRequest.getDefaultInstance()))
-          .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-              io.grpc.instrumentation.v1alpha.StatsResponse.getDefaultInstance()))
-          .setSchemaDescriptor(new MonitoringMethodDescriptorSupplier("WatchStats"))
-          .build();
+      io.grpc.instrumentation.v1alpha.StatsResponse> METHOD_WATCH_STATS = getWatchStatsMethod();
+
+  private static volatile io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.StatsRequest,
+      io.grpc.instrumentation.v1alpha.StatsResponse> getWatchStatsMethod;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
+  public static io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.StatsRequest,
+      io.grpc.instrumentation.v1alpha.StatsResponse> getWatchStatsMethod() {
+    io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.StatsRequest, io.grpc.instrumentation.v1alpha.StatsResponse> getWatchStatsMethod;
+    if ((getWatchStatsMethod = MonitoringGrpc.getWatchStatsMethod) == null) {
+      synchronized (MonitoringGrpc.class) {
+        if ((getWatchStatsMethod = MonitoringGrpc.getWatchStatsMethod) == null) {
+          MonitoringGrpc.getWatchStatsMethod = getWatchStatsMethod = 
+              io.grpc.MethodDescriptor.<io.grpc.instrumentation.v1alpha.StatsRequest, io.grpc.instrumentation.v1alpha.StatsResponse>newBuilder()
+              .setType(io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
+              .setFullMethodName(generateFullMethodName(
+                  "grpc.instrumentation.v1alpha.Monitoring", "WatchStats"))
+              .setSampledToLocalTracing(true)
+              .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.instrumentation.v1alpha.StatsRequest.getDefaultInstance()))
+              .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.instrumentation.v1alpha.StatsResponse.getDefaultInstance()))
+                  .setSchemaDescriptor(new MonitoringMethodDescriptorSupplier("WatchStats"))
+                  .build();
+          }
+        }
+     }
+     return getWatchStatsMethod;
+  }
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
+  @java.lang.Deprecated // Use {@link #getGetRequestTracesMethod()} instead. 
   public static final io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.TraceRequest,
-      io.grpc.instrumentation.v1alpha.TraceResponse> METHOD_GET_REQUEST_TRACES =
-      io.grpc.MethodDescriptor.<io.grpc.instrumentation.v1alpha.TraceRequest, io.grpc.instrumentation.v1alpha.TraceResponse>newBuilder()
-          .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-          .setFullMethodName(generateFullMethodName(
-              "grpc.instrumentation.v1alpha.Monitoring", "GetRequestTraces"))
-          .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-              io.grpc.instrumentation.v1alpha.TraceRequest.getDefaultInstance()))
-          .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-              io.grpc.instrumentation.v1alpha.TraceResponse.getDefaultInstance()))
-          .setSchemaDescriptor(new MonitoringMethodDescriptorSupplier("GetRequestTraces"))
-          .build();
+      io.grpc.instrumentation.v1alpha.TraceResponse> METHOD_GET_REQUEST_TRACES = getGetRequestTracesMethod();
+
+  private static volatile io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.TraceRequest,
+      io.grpc.instrumentation.v1alpha.TraceResponse> getGetRequestTracesMethod;
+
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
+  public static io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.TraceRequest,
+      io.grpc.instrumentation.v1alpha.TraceResponse> getGetRequestTracesMethod() {
+    io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.TraceRequest, io.grpc.instrumentation.v1alpha.TraceResponse> getGetRequestTracesMethod;
+    if ((getGetRequestTracesMethod = MonitoringGrpc.getGetRequestTracesMethod) == null) {
+      synchronized (MonitoringGrpc.class) {
+        if ((getGetRequestTracesMethod = MonitoringGrpc.getGetRequestTracesMethod) == null) {
+          MonitoringGrpc.getGetRequestTracesMethod = getGetRequestTracesMethod = 
+              io.grpc.MethodDescriptor.<io.grpc.instrumentation.v1alpha.TraceRequest, io.grpc.instrumentation.v1alpha.TraceResponse>newBuilder()
+              .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
+              .setFullMethodName(generateFullMethodName(
+                  "grpc.instrumentation.v1alpha.Monitoring", "GetRequestTraces"))
+              .setSampledToLocalTracing(true)
+              .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.instrumentation.v1alpha.TraceRequest.getDefaultInstance()))
+              .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.instrumentation.v1alpha.TraceResponse.getDefaultInstance()))
+                  .setSchemaDescriptor(new MonitoringMethodDescriptorSupplier("GetRequestTraces"))
+                  .build();
+          }
+        }
+     }
+     return getGetRequestTracesMethod;
+  }
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
+  @java.lang.Deprecated // Use {@link #getGetCustomMonitoringDataMethod()} instead. 
   public static final io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.MonitoringDataGroup,
-      io.grpc.instrumentation.v1alpha.CustomMonitoringData> METHOD_GET_CUSTOM_MONITORING_DATA =
-      io.grpc.MethodDescriptor.<io.grpc.instrumentation.v1alpha.MonitoringDataGroup, io.grpc.instrumentation.v1alpha.CustomMonitoringData>newBuilder()
-          .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-          .setFullMethodName(generateFullMethodName(
-              "grpc.instrumentation.v1alpha.Monitoring", "GetCustomMonitoringData"))
-          .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-              io.grpc.instrumentation.v1alpha.MonitoringDataGroup.getDefaultInstance()))
-          .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-              io.grpc.instrumentation.v1alpha.CustomMonitoringData.getDefaultInstance()))
-          .setSchemaDescriptor(new MonitoringMethodDescriptorSupplier("GetCustomMonitoringData"))
-          .build();
+      io.grpc.instrumentation.v1alpha.CustomMonitoringData> METHOD_GET_CUSTOM_MONITORING_DATA = getGetCustomMonitoringDataMethod();
+
+  private static volatile io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.MonitoringDataGroup,
+      io.grpc.instrumentation.v1alpha.CustomMonitoringData> getGetCustomMonitoringDataMethod;
+
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
+  public static io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.MonitoringDataGroup,
+      io.grpc.instrumentation.v1alpha.CustomMonitoringData> getGetCustomMonitoringDataMethod() {
+    io.grpc.MethodDescriptor<io.grpc.instrumentation.v1alpha.MonitoringDataGroup, io.grpc.instrumentation.v1alpha.CustomMonitoringData> getGetCustomMonitoringDataMethod;
+    if ((getGetCustomMonitoringDataMethod = MonitoringGrpc.getGetCustomMonitoringDataMethod) == null) {
+      synchronized (MonitoringGrpc.class) {
+        if ((getGetCustomMonitoringDataMethod = MonitoringGrpc.getGetCustomMonitoringDataMethod) == null) {
+          MonitoringGrpc.getGetCustomMonitoringDataMethod = getGetCustomMonitoringDataMethod = 
+              io.grpc.MethodDescriptor.<io.grpc.instrumentation.v1alpha.MonitoringDataGroup, io.grpc.instrumentation.v1alpha.CustomMonitoringData>newBuilder()
+              .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
+              .setFullMethodName(generateFullMethodName(
+                  "grpc.instrumentation.v1alpha.Monitoring", "GetCustomMonitoringData"))
+              .setSampledToLocalTracing(true)
+              .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.instrumentation.v1alpha.MonitoringDataGroup.getDefaultInstance()))
+              .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.instrumentation.v1alpha.CustomMonitoringData.getDefaultInstance()))
+                  .setSchemaDescriptor(new MonitoringMethodDescriptorSupplier("GetCustomMonitoringData"))
+                  .build();
+          }
+        }
+     }
+     return getGetCustomMonitoringDataMethod;
+  }
 
   /**
    * Creates a new async stub that supports all call types for the service
@@ -127,7 +222,7 @@ public final class MonitoringGrpc {
      */
     public void getCanonicalRpcStats(com.google.protobuf.Empty request,
         io.grpc.stub.StreamObserver<io.grpc.instrumentation.v1alpha.CanonicalRpcStats> responseObserver) {
-      asyncUnimplementedUnaryCall(METHOD_GET_CANONICAL_RPC_STATS, responseObserver);
+      asyncUnimplementedUnaryCall(getGetCanonicalRpcStatsMethod(), responseObserver);
     }
 
     /**
@@ -137,7 +232,7 @@ public final class MonitoringGrpc {
      */
     public void getStats(io.grpc.instrumentation.v1alpha.StatsRequest request,
         io.grpc.stub.StreamObserver<io.grpc.instrumentation.v1alpha.StatsResponse> responseObserver) {
-      asyncUnimplementedUnaryCall(METHOD_GET_STATS, responseObserver);
+      asyncUnimplementedUnaryCall(getGetStatsMethod(), responseObserver);
     }
 
     /**
@@ -147,7 +242,7 @@ public final class MonitoringGrpc {
      */
     public void watchStats(io.grpc.instrumentation.v1alpha.StatsRequest request,
         io.grpc.stub.StreamObserver<io.grpc.instrumentation.v1alpha.StatsResponse> responseObserver) {
-      asyncUnimplementedUnaryCall(METHOD_WATCH_STATS, responseObserver);
+      asyncUnimplementedUnaryCall(getWatchStatsMethod(), responseObserver);
     }
 
     /**
@@ -157,7 +252,7 @@ public final class MonitoringGrpc {
      */
     public void getRequestTraces(io.grpc.instrumentation.v1alpha.TraceRequest request,
         io.grpc.stub.StreamObserver<io.grpc.instrumentation.v1alpha.TraceResponse> responseObserver) {
-      asyncUnimplementedUnaryCall(METHOD_GET_REQUEST_TRACES, responseObserver);
+      asyncUnimplementedUnaryCall(getGetRequestTracesMethod(), responseObserver);
     }
 
     /**
@@ -170,41 +265,41 @@ public final class MonitoringGrpc {
      */
     public void getCustomMonitoringData(io.grpc.instrumentation.v1alpha.MonitoringDataGroup request,
         io.grpc.stub.StreamObserver<io.grpc.instrumentation.v1alpha.CustomMonitoringData> responseObserver) {
-      asyncUnimplementedUnaryCall(METHOD_GET_CUSTOM_MONITORING_DATA, responseObserver);
+      asyncUnimplementedUnaryCall(getGetCustomMonitoringDataMethod(), responseObserver);
     }
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
           .addMethod(
-            METHOD_GET_CANONICAL_RPC_STATS,
+            getGetCanonicalRpcStatsMethod(),
             asyncUnaryCall(
               new MethodHandlers<
                 com.google.protobuf.Empty,
                 io.grpc.instrumentation.v1alpha.CanonicalRpcStats>(
                   this, METHODID_GET_CANONICAL_RPC_STATS)))
           .addMethod(
-            METHOD_GET_STATS,
+            getGetStatsMethod(),
             asyncUnaryCall(
               new MethodHandlers<
                 io.grpc.instrumentation.v1alpha.StatsRequest,
                 io.grpc.instrumentation.v1alpha.StatsResponse>(
                   this, METHODID_GET_STATS)))
           .addMethod(
-            METHOD_WATCH_STATS,
+            getWatchStatsMethod(),
             asyncServerStreamingCall(
               new MethodHandlers<
                 io.grpc.instrumentation.v1alpha.StatsRequest,
                 io.grpc.instrumentation.v1alpha.StatsResponse>(
                   this, METHODID_WATCH_STATS)))
           .addMethod(
-            METHOD_GET_REQUEST_TRACES,
+            getGetRequestTracesMethod(),
             asyncUnaryCall(
               new MethodHandlers<
                 io.grpc.instrumentation.v1alpha.TraceRequest,
                 io.grpc.instrumentation.v1alpha.TraceResponse>(
                   this, METHODID_GET_REQUEST_TRACES)))
           .addMethod(
-            METHOD_GET_CUSTOM_MONITORING_DATA,
+            getGetCustomMonitoringDataMethod(),
             asyncUnaryCall(
               new MethodHandlers<
                 io.grpc.instrumentation.v1alpha.MonitoringDataGroup,
@@ -240,7 +335,7 @@ public final class MonitoringGrpc {
     public void getCanonicalRpcStats(com.google.protobuf.Empty request,
         io.grpc.stub.StreamObserver<io.grpc.instrumentation.v1alpha.CanonicalRpcStats> responseObserver) {
       asyncUnaryCall(
-          getChannel().newCall(METHOD_GET_CANONICAL_RPC_STATS, getCallOptions()), request, responseObserver);
+          getChannel().newCall(getGetCanonicalRpcStatsMethod(), getCallOptions()), request, responseObserver);
     }
 
     /**
@@ -251,7 +346,7 @@ public final class MonitoringGrpc {
     public void getStats(io.grpc.instrumentation.v1alpha.StatsRequest request,
         io.grpc.stub.StreamObserver<io.grpc.instrumentation.v1alpha.StatsResponse> responseObserver) {
       asyncUnaryCall(
-          getChannel().newCall(METHOD_GET_STATS, getCallOptions()), request, responseObserver);
+          getChannel().newCall(getGetStatsMethod(), getCallOptions()), request, responseObserver);
     }
 
     /**
@@ -262,7 +357,7 @@ public final class MonitoringGrpc {
     public void watchStats(io.grpc.instrumentation.v1alpha.StatsRequest request,
         io.grpc.stub.StreamObserver<io.grpc.instrumentation.v1alpha.StatsResponse> responseObserver) {
       asyncServerStreamingCall(
-          getChannel().newCall(METHOD_WATCH_STATS, getCallOptions()), request, responseObserver);
+          getChannel().newCall(getWatchStatsMethod(), getCallOptions()), request, responseObserver);
     }
 
     /**
@@ -273,7 +368,7 @@ public final class MonitoringGrpc {
     public void getRequestTraces(io.grpc.instrumentation.v1alpha.TraceRequest request,
         io.grpc.stub.StreamObserver<io.grpc.instrumentation.v1alpha.TraceResponse> responseObserver) {
       asyncUnaryCall(
-          getChannel().newCall(METHOD_GET_REQUEST_TRACES, getCallOptions()), request, responseObserver);
+          getChannel().newCall(getGetRequestTracesMethod(), getCallOptions()), request, responseObserver);
     }
 
     /**
@@ -287,7 +382,7 @@ public final class MonitoringGrpc {
     public void getCustomMonitoringData(io.grpc.instrumentation.v1alpha.MonitoringDataGroup request,
         io.grpc.stub.StreamObserver<io.grpc.instrumentation.v1alpha.CustomMonitoringData> responseObserver) {
       asyncUnaryCall(
-          getChannel().newCall(METHOD_GET_CUSTOM_MONITORING_DATA, getCallOptions()), request, responseObserver);
+          getChannel().newCall(getGetCustomMonitoringDataMethod(), getCallOptions()), request, responseObserver);
     }
   }
 
@@ -316,7 +411,7 @@ public final class MonitoringGrpc {
      */
     public io.grpc.instrumentation.v1alpha.CanonicalRpcStats getCanonicalRpcStats(com.google.protobuf.Empty request) {
       return blockingUnaryCall(
-          getChannel(), METHOD_GET_CANONICAL_RPC_STATS, getCallOptions(), request);
+          getChannel(), getGetCanonicalRpcStatsMethod(), getCallOptions(), request);
     }
 
     /**
@@ -326,7 +421,7 @@ public final class MonitoringGrpc {
      */
     public io.grpc.instrumentation.v1alpha.StatsResponse getStats(io.grpc.instrumentation.v1alpha.StatsRequest request) {
       return blockingUnaryCall(
-          getChannel(), METHOD_GET_STATS, getCallOptions(), request);
+          getChannel(), getGetStatsMethod(), getCallOptions(), request);
     }
 
     /**
@@ -337,7 +432,7 @@ public final class MonitoringGrpc {
     public java.util.Iterator<io.grpc.instrumentation.v1alpha.StatsResponse> watchStats(
         io.grpc.instrumentation.v1alpha.StatsRequest request) {
       return blockingServerStreamingCall(
-          getChannel(), METHOD_WATCH_STATS, getCallOptions(), request);
+          getChannel(), getWatchStatsMethod(), getCallOptions(), request);
     }
 
     /**
@@ -347,7 +442,7 @@ public final class MonitoringGrpc {
      */
     public io.grpc.instrumentation.v1alpha.TraceResponse getRequestTraces(io.grpc.instrumentation.v1alpha.TraceRequest request) {
       return blockingUnaryCall(
-          getChannel(), METHOD_GET_REQUEST_TRACES, getCallOptions(), request);
+          getChannel(), getGetRequestTracesMethod(), getCallOptions(), request);
     }
 
     /**
@@ -360,7 +455,7 @@ public final class MonitoringGrpc {
      */
     public io.grpc.instrumentation.v1alpha.CustomMonitoringData getCustomMonitoringData(io.grpc.instrumentation.v1alpha.MonitoringDataGroup request) {
       return blockingUnaryCall(
-          getChannel(), METHOD_GET_CUSTOM_MONITORING_DATA, getCallOptions(), request);
+          getChannel(), getGetCustomMonitoringDataMethod(), getCallOptions(), request);
     }
   }
 
@@ -390,7 +485,7 @@ public final class MonitoringGrpc {
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.instrumentation.v1alpha.CanonicalRpcStats> getCanonicalRpcStats(
         com.google.protobuf.Empty request) {
       return futureUnaryCall(
-          getChannel().newCall(METHOD_GET_CANONICAL_RPC_STATS, getCallOptions()), request);
+          getChannel().newCall(getGetCanonicalRpcStatsMethod(), getCallOptions()), request);
     }
 
     /**
@@ -401,7 +496,7 @@ public final class MonitoringGrpc {
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.instrumentation.v1alpha.StatsResponse> getStats(
         io.grpc.instrumentation.v1alpha.StatsRequest request) {
       return futureUnaryCall(
-          getChannel().newCall(METHOD_GET_STATS, getCallOptions()), request);
+          getChannel().newCall(getGetStatsMethod(), getCallOptions()), request);
     }
 
     /**
@@ -412,7 +507,7 @@ public final class MonitoringGrpc {
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.instrumentation.v1alpha.TraceResponse> getRequestTraces(
         io.grpc.instrumentation.v1alpha.TraceRequest request) {
       return futureUnaryCall(
-          getChannel().newCall(METHOD_GET_REQUEST_TRACES, getCallOptions()), request);
+          getChannel().newCall(getGetRequestTracesMethod(), getCallOptions()), request);
     }
 
     /**
@@ -426,7 +521,7 @@ public final class MonitoringGrpc {
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.instrumentation.v1alpha.CustomMonitoringData> getCustomMonitoringData(
         io.grpc.instrumentation.v1alpha.MonitoringDataGroup request) {
       return futureUnaryCall(
-          getChannel().newCall(METHOD_GET_CUSTOM_MONITORING_DATA, getCallOptions()), request);
+          getChannel().newCall(getGetCustomMonitoringDataMethod(), getCallOptions()), request);
     }
   }
 
@@ -534,11 +629,11 @@ public final class MonitoringGrpc {
         if (result == null) {
           serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
               .setSchemaDescriptor(new MonitoringFileDescriptorSupplier())
-              .addMethod(METHOD_GET_CANONICAL_RPC_STATS)
-              .addMethod(METHOD_GET_STATS)
-              .addMethod(METHOD_WATCH_STATS)
-              .addMethod(METHOD_GET_REQUEST_TRACES)
-              .addMethod(METHOD_GET_CUSTOM_MONITORING_DATA)
+              .addMethod(getGetCanonicalRpcStatsMethod())
+              .addMethod(getGetStatsMethod())
+              .addMethod(getWatchStatsMethod())
+              .addMethod(getGetRequestTracesMethod())
+              .addMethod(getGetCustomMonitoringDataMethod())
               .build();
         }
       }

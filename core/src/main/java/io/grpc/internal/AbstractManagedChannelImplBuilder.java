@@ -21,8 +21,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
-import com.google.instrumentation.stats.Stats;
-import com.google.instrumentation.stats.StatsContextFactory;
 import io.grpc.Attributes;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
@@ -118,11 +116,15 @@ public abstract class AbstractManagedChannelImplBuilder
 
   LoadBalancer.Factory loadBalancerFactory = DEFAULT_LOAD_BALANCER_FACTORY;
 
+  boolean fullStreamDecompression;
+
   DecompressorRegistry decompressorRegistry = DEFAULT_DECOMPRESSOR_REGISTRY;
 
   CompressorRegistry compressorRegistry = DEFAULT_COMPRESSOR_REGISTRY;
 
   long idleTimeoutMillis = IDLE_MODE_DEFAULT_TIMEOUT_MILLIS;
+
+  protected TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
 
   private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 
@@ -144,10 +146,12 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   private boolean statsEnabled = true;
+  private boolean recordStartedRpcs = true;
+  private boolean recordFinishedRpcs = true;
   private boolean tracingEnabled = true;
 
   @Nullable
-  private StatsContextFactory statsFactory;
+  private CensusStatsModule censusStatsOverride;
 
   protected AbstractManagedChannelImplBuilder(String target) {
     this.target = Preconditions.checkNotNull(target, "target");
@@ -228,6 +232,12 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   @Override
+  public final T enableFullStreamDecompression() {
+    this.fullStreamDecompression = true;
+    return thisT();
+  }
+
+  @Override
   public final T decompressorRegistry(DecompressorRegistry registry) {
     if (registry != null) {
       this.decompressorRegistry = registry;
@@ -276,8 +286,8 @@ public abstract class AbstractManagedChannelImplBuilder
    * Override the default stats implementation.
    */
   @VisibleForTesting
-  protected final T statsContextFactory(StatsContextFactory statsFactory) {
-    this.statsFactory = statsFactory;
+  protected final T overrideCensusStatsModule(CensusStatsModule censusStats) {
+    this.censusStatsOverride = censusStats;
     return thisT();
   }
 
@@ -286,6 +296,22 @@ public abstract class AbstractManagedChannelImplBuilder
    */
   protected void setStatsEnabled(boolean value) {
     statsEnabled = value;
+  }
+
+  /**
+   * Disable or enable stats recording for RPC upstarts.  Effective only if {@link
+   * #setStatsEnabled} is set to true.  Enabled by default.
+   */
+  protected void setStatsRecordStartedRpcs(boolean value) {
+    recordStartedRpcs = value;
+  }
+
+  /**
+   * Disable or enable stats recording for RPC completions.  Effective only if {@link
+   * #setStatsEnabled} is set to true.  Enabled by default.
+   */
+  protected void setStatsRecordFinishedRpcs(boolean value) {
+    recordFinishedRpcs = value;
   }
 
   /**
@@ -318,7 +344,8 @@ public abstract class AbstractManagedChannelImplBuilder
         new ExponentialBackoffPolicy.Provider(),
         SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
         GrpcUtil.STOPWATCH_SUPPLIER,
-        getEffectiveInterceptors());
+        getEffectiveInterceptors(),
+        GrpcUtil.getProxyDetector());
   }
 
   @VisibleForTesting
@@ -326,15 +353,14 @@ public abstract class AbstractManagedChannelImplBuilder
     List<ClientInterceptor> effectiveInterceptors =
         new ArrayList<ClientInterceptor>(this.interceptors);
     if (statsEnabled) {
-      StatsContextFactory statsCtxFactory =
-          this.statsFactory != null ? this.statsFactory : Stats.getStatsContextFactory();
-      if (statsCtxFactory != null) {
-        CensusStatsModule censusStats =
-            new CensusStatsModule(statsCtxFactory, GrpcUtil.STOPWATCH_SUPPLIER, true);
-        // First interceptor runs last (see ClientInterceptors.intercept()), so that no
-        // other interceptor can override the tracer factory we set in CallOptions.
-        effectiveInterceptors.add(0, censusStats.getClientInterceptor());
+      CensusStatsModule censusStats = this.censusStatsOverride;
+      if (censusStats == null) {
+        censusStats = new CensusStatsModule(GrpcUtil.STOPWATCH_SUPPLIER, true);
       }
+      // First interceptor runs last (see ClientInterceptors.intercept()), so that no
+      // other interceptor can override the tracer factory we set in CallOptions.
+      effectiveInterceptors.add(
+          0, censusStats.getClientInterceptor(recordStartedRpcs, recordFinishedRpcs));
     }
     if (tracingEnabled) {
       CensusTracingModule censusTracing =

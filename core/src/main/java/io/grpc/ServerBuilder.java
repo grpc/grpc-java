@@ -18,6 +18,7 @@ package io.grpc;
 
 import java.io.File;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -135,7 +136,6 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * @return this
    * @since 1.0.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/933")
   public abstract T fallbackHandlerRegistry(@Nullable HandlerRegistry fallbackRegistry);
 
   /**
@@ -171,6 +171,20 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
   public abstract T compressorRegistry(@Nullable CompressorRegistry registry);
+
+  /**
+   * Sets the permitted time for new connections to complete negotiation handshakes before being
+   * killed.
+   *
+   * @return this
+   * @throws IllegalArgumentException if timeout is negative
+   * @throws UnsupportedOperationException if unsupported
+   * @since 1.8.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3706")
+  public T handshakeTimeout(long timeout, TimeUnit unit) {
+    throw new UnsupportedOperationException();
+  }
 
   /**
    * Builds a server using the given parameters.

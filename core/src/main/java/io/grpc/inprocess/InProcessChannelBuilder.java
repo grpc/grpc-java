@@ -23,9 +23,11 @@ import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.ProxyParameters;
 import io.grpc.internal.SharedResourceHolder;
 import java.net.SocketAddress;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Builder for a channel that issues in-process requests. Clients identify the in-process server by
@@ -67,10 +69,10 @@ public final class InProcessChannelBuilder extends
   private InProcessChannelBuilder(String name) {
     super(new InProcessSocketAddress(name), "localhost");
     this.name = Preconditions.checkNotNull(name, "name");
-    // TODO(zhangkun83): InProcessTransport by-passes framer and deframer, thus message sizses are
-    // not counted.  Therefore, we disable stats for now.
-    // (https://github.com/grpc/grpc-java/issues/2284)
-    setStatsEnabled(false);
+    // In-process transport should not record its traffic to the stats module.
+    // https://github.com/grpc/grpc-java/issues/2284
+    setStatsRecordStartedRpcs(false);
+    setStatsRecordFinishedRpcs(false);
   }
 
   @Override
@@ -83,7 +85,33 @@ public final class InProcessChannelBuilder extends
    * Does nothing.
    */
   @Override
+  public InProcessChannelBuilder useTransportSecurity() {
+    return this;
+  }
+
+  /**
+   * Does nothing.
+   */
+  @Override
   public InProcessChannelBuilder usePlaintext(boolean skipNegotiation) {
+    return this;
+  }
+
+  /** Does nothing. */
+  @Override
+  public InProcessChannelBuilder keepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
+    return this;
+  }
+
+  /** Does nothing. */
+  @Override
+  public InProcessChannelBuilder keepAliveTimeout(long keepAliveTimeout, TimeUnit timeUnit) {
+    return this;
+  }
+
+  /** Does nothing. */
+  @Override
+  public InProcessChannelBuilder keepAliveWithoutCalls(boolean enable) {
     return this;
   }
 
@@ -110,7 +138,7 @@ public final class InProcessChannelBuilder extends
 
     @Override
     public ConnectionClientTransport newClientTransport(
-        SocketAddress addr, String authority, String userAgent) {
+        SocketAddress addr, String authority, String userAgent, ProxyParameters proxy) {
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
       }

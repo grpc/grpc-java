@@ -58,6 +58,7 @@ import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
+import io.grpc.internal.TransportTracer;
 import io.grpc.internal.testing.TestUtils;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelOption;
@@ -170,7 +171,7 @@ public class NettyClientTransportTest {
         address, NioSocketChannel.class, channelOptions, group, newNegotiator(),
         DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
         KEEPALIVE_TIME_NANOS_DISABLED, 1L, false, authority, null /* user agent */,
-        tooManyPingsRunnable);
+        tooManyPingsRunnable, new TransportTracer());
     transports.add(transport);
     callMeMaybe(transport.start(clientTransportListener));
 
@@ -374,7 +375,7 @@ public class NettyClientTransportTest {
         address, CantConstructChannel.class, new HashMap<ChannelOption<?>, Object>(), group,
         newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1, false, authority,
-        null, tooManyPingsRunnable);
+        null, tooManyPingsRunnable, new TransportTracer());
     transports.add(transport);
 
     // Should not throw
@@ -542,7 +543,8 @@ public class NettyClientTransportTest {
         address, NioSocketChannel.class, new HashMap<ChannelOption<?>, Object>(), group, negotiator,
         DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize,
         keepAliveTimeNano, keepAliveTimeoutNano,
-        false, authority, userAgent, tooManyPingsRunnable);
+        false, authority, userAgent, tooManyPingsRunnable,
+        new TransportTracer());
     transports.add(transport);
     return transport;
   }
@@ -554,8 +556,12 @@ public class NettyClientTransportTest {
   private void startServer(int maxStreamsPerConnection, int maxHeaderListSize) throws IOException {
     server = new NettyServer(
         TestUtils.testServerAddress(0),
-        NioServerSocketChannel.class, group, group, negotiator,
-        Collections.<ServerStreamTracer.Factory>emptyList(), maxStreamsPerConnection,
+        NioServerSocketChannel.class,
+        new HashMap<ChannelOption<?>, Object>(),
+        group, group, negotiator,
+        Collections.<ServerStreamTracer.Factory>emptyList(),
+        TransportTracer.getDefaultFactory(),
+        maxStreamsPerConnection,
         DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE, maxHeaderListSize,
         DEFAULT_SERVER_KEEPALIVE_TIME_NANOS, DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS,
         MAX_CONNECTION_IDLE_NANOS_DISABLED,
@@ -587,7 +593,7 @@ public class NettyClientTransportTest {
     static final MethodDescriptor<String, String> METHOD =
         MethodDescriptor.<String, String>newBuilder()
             .setType(MethodDescriptor.MethodType.UNARY)
-            .setFullMethodName("/testService/test")
+            .setFullMethodName("testService/test")
             .setRequestMarshaller(StringMarshaller.INSTANCE)
             .setResponseMarshaller(StringMarshaller.INSTANCE)
             .build();

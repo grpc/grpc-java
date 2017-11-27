@@ -14,6 +14,8 @@ On Android we recommend the use of the [Play Services Dynamic Security Provider]
 
 You may need to [update the security provider](https://developer.android.com/training/articles/security-gms-provider.html) to enable ALPN support, especially for Android versions < 5.0. If the provider fails to update, ALPN may not work.
 
+*Note: The Dynamic Security Provider must be installed **before** creating a gRPC OkHttp channel. gRPC's OkHttpProtocolNegotiator statically initializes the security protocol(s) available to gRPC, which means that changes to the security provider after the first channel is created will not be picked up by gRPC.*
+
 ## TLS with OpenSSL
 
 This is currently the recommended approach for using gRPC over TLS (on non-Android systems).
@@ -62,7 +64,7 @@ In Maven, you can use the [os-maven-plugin](https://github.com/trustin/os-maven-
     <dependency>
       <groupId>io.netty</groupId>
       <artifactId>netty-tcnative-boringssl-static</artifactId>
-      <version>2.0.5.Final</version>
+      <version>2.0.6.Final</version>
     </dependency>
   </dependencies>
 </project>
@@ -80,7 +82,7 @@ buildscript {
 }
 
 dependencies {
-    compile 'io.netty:netty-tcnative-boringssl-static:2.0.5.Final'
+    compile 'io.netty:netty-tcnative-boringssl-static:2.0.6.Final'
 }
 ```
 
@@ -115,7 +117,7 @@ In Maven, you can use the [os-maven-plugin](https://github.com/trustin/os-maven-
     <dependency>
       <groupId>io.netty</groupId>
       <artifactId>netty-tcnative</artifactId>
-      <version>2.0.5.Final</version>
+      <version>2.0.6.Final</version>
       <classifier>${tcnative.classifier}</classifier>
     </dependency>
   </dependencies>
@@ -183,7 +185,7 @@ if (osdetector.os == "linux" && osdetector.release.isLike("fedora")) {
 }
 
 dependencies {
-    compile 'io.netty:netty-tcnative:2.0.5.Final:' + tcnative_classifier
+    compile 'io.netty:netty-tcnative:2.0.6.Final:' + tcnative_classifier
 }
 ```
 
@@ -207,7 +209,7 @@ No standard Java release has built-in support for ALPN today ([there is a tracki
 java -Xbootclasspath/p:/path/to/jetty/alpn/extension.jar ...
 ```
 
-Note that you must use the [release of the Jetty-ALPN jar](http://www.eclipse.org/jetty/documentation/current/alpn-chapter.html#alpn-versions) specific to the version of Java you are using. However, you can use the JVM agent [Jeety-ALPN-Agent](https://github.com/jetty-project/jetty-alpn-agent) to load the correct Jetty `alpn-boot` jar file for the current Java version. To do this, instead of adding an `Xbootclasspath` option, add a `javaagent` JVM option referencing the path to the Jetty `alpn-agent` jar.
+Note that you must use the [release of the Jetty-ALPN jar](http://www.eclipse.org/jetty/documentation/current/alpn-chapter.html#alpn-versions) specific to the version of Java you are using. However, you can use the JVM agent [Jetty-ALPN-Agent](https://github.com/jetty-project/jetty-alpn-agent) to load the correct Jetty `alpn-boot` jar file for the current Java version. To do this, instead of adding an `Xbootclasspath` option, add a `javaagent` JVM option referencing the path to the Jetty `alpn-agent` jar.
 
 ```sh
 java -javaagent:/path/to/jetty-alpn-agent.jar ...
@@ -284,6 +286,62 @@ public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<RespT> c
 ```
 
 [Mutual authentication]: http://en.wikipedia.org/wiki/Transport_Layer_Security#Client-authenticated_TLS_handshake
+
+## Troubleshooting
+
+If you received an error message "ALPN is not configured properly" or "Jetty ALPN/NPN has not been properly configured", it most likely means that:
+ - ALPN related dependencies are either not present in the classpath
+ - or that there is a classpath conflict
+ - or that a wrong version is used due to dependency management.
+
+### Netty
+If you aren't using gRPC on Android devices, you are most likely using `grpc-netty` transport.
+
+If you are developing for Android and have a dependency on `grpc-netty`, you should remove it as `grpc-netty` is unsupported on Android. Use `grpc-okhttp` instead.
+
+Find the dependency tree (e.g., `mvn dependency:tree`), and look for versions of:
+ - `io.grpc:grpc-netty`
+ - `io.netty:netty-codec-http2`
+ - `io.netty:netty-tcnative-boringssl-static:jar` 
+
+If `netty-tcnative-boringssl-static` is missing, then you either need to add it as a dependency, or use alternative methods of providing ALPN capability by reading the *Transport Security (TLS)* section carefully.
+
+If you have both `netty-codec-http2` and `netty-tcnative-boringssl-static` dependencies, then check the versions carefully. These versions could've been overridden by dependency management from another BOM. You would receive the "ALPN is not configured properly" exception if you are using incompatible versions.
+
+If you have other `netty` dependencies, such as `netty-all`, that are pulled in from other libraries, then ultimately you should make sure only one `netty` dependency is used to avoid classpath conflict. The easiest way is to exclude transitive Netty dependencies from all the immediate dependencies, e.g., in Maven use `<exclusions>`, and then add an explict Netty dependency in your project along with the corresponding `tcnative` versions. See the versions table below.
+
+If you are using `musl` libc (e.g., with Alpine Linux), then `netty-tcnative-boringssl-static` won't work. There are several alternatives:
+ - Use [netty-tcnative-alpine] (https://github.com/pires/netty-tcnative-alpine)
+ - Use a distribution with `glibc`
+
+If you are running inside of an embedded Tomcat runtime (e.g., Spring Boot), then some versions of `netty-tcnative-boringssl-static` will have conflicts and won't work. You must use gRPC 1.4.0 or later.
+
+Below are known to work version combinations:
+
+grpc-netty version | netty-code-http2 version | netty-tcnative-boringssl-static version
+------------------ | ------------------------ | ---------------------------------------
+1.0.0-1.0.1        | 4.1.3.Final              | 1.1.33.Fork19
+1.0.2-1.0.3        | 4.1.6.Final              | 1.1.33.Fork23
+1.1.x-1.3.x        | 4.1.8.Final              | 1.1.33.Fork26
+1.4.x              | 4.1.11.Final             | 2.0.1.Final
+1.5.x              | 4.1.12.Final             | 2.0.5.Final
+1.6.x              | 4.1.14.Final             | 2.0.5.Final
+1.7.x-             | 4.1.16.Final             | 2.0.6.Final
+
+### OkHttp
+If you are using gRPC on Android devices, you are most likely using `grpc-okhttp` transport.
+
+Find the dependency tree (e.g., `mvn dependency:tree`), and look for versions of:
+ - `io.grpc:grpc-okhttp`
+ - `com.squareup.okhttp:okhttp`
+
+If you don't have `grpc-okhttp`, you should add it as a dependency.
+
+If you have both `io.grpc:grpc-netty` and `io.grpc:grpc-okhttp`, you may also have issues. Remove `grpc-netty` if you are on Android.
+
+If you have `okhttp` version below 2.5.0, then it may not work with gRPC.
+
+It is OK to have both `okhttp` 2.x and 3.x since they have different group name and under different packages.
 
 # gRPC over plaintext
 

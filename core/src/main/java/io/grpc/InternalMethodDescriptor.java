@@ -19,7 +19,7 @@ package io.grpc;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
- * Accesses internal data.  Do not use this.
+ * Accesses internal data and methods.  Do not use this.
  */
 @Internal
 public final class InternalMethodDescriptor {

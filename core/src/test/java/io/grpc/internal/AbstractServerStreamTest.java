@@ -38,6 +38,7 @@ import java.io.InputStream;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.TimeUnit;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -63,9 +64,18 @@ public class AbstractServerStreamTest {
   };
 
   private AbstractServerStream.Sink sink = mock(AbstractServerStream.Sink.class);
-  private AbstractServerStreamBase stream = new AbstractServerStreamBase(
-      allocator, sink, new AbstractServerStreamBase.TransportState(MAX_MESSAGE_SIZE));
+  private TransportTracer transportTracer;
+  private AbstractServerStreamBase stream;
   private final ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
+
+  @Before
+  public void setUp() {
+    transportTracer = new TransportTracer();
+    stream = new AbstractServerStreamBase(
+        allocator,
+        sink,
+        new AbstractServerStreamBase.TransportState(MAX_MESSAGE_SIZE, transportTracer));
+  }
 
   /**
    * Test for issue https://github.com/grpc/grpc-java/issues/1795
@@ -85,6 +95,7 @@ public class AbstractServerStreamTest {
     ReadableBuffer buffer = mock(ReadableBuffer.class);
 
     // Close the deframer
+    stream.close(Status.OK, new Metadata());
     stream.transportState().complete();
     // Frame received after deframer closed, should be ignored and not trigger an exception
     stream.transportState().inboundDataReceived(buffer, true);
@@ -108,6 +119,7 @@ public class AbstractServerStreamTest {
 
     // Queue bytes in deframer
     stream.transportState().inboundDataReceived(ReadableBuffers.wrap(new byte[] {1}), false);
+    stream.close(Status.OK, new Metadata());
     stream.transportState().complete();
 
     assertEquals(Status.OK, closedFuture.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
@@ -162,6 +174,7 @@ public class AbstractServerStreamTest {
   public void completeWithoutClose() {
     stream.transportState().setListener(new ServerStreamListenerBase());
     // Test that it doesn't throw an exception
+    stream.close(Status.OK, new Metadata());
     stream.transportState().complete();
   }
 
@@ -256,7 +269,8 @@ public class AbstractServerStreamTest {
 
     stream.writeMessage(new ByteArrayInputStream(new byte[]{}));
 
-    verify(sink, never()).writeFrame(any(WritableBuffer.class), any(Boolean.class));
+    verify(sink, never())
+        .writeFrame(any(WritableBuffer.class), any(Boolean.class), any(Integer.class));
   }
 
   @Test
@@ -266,7 +280,7 @@ public class AbstractServerStreamTest {
     stream.writeMessage(new ByteArrayInputStream(new byte[]{}));
     stream.flush();
 
-    verify(sink).writeFrame(any(WritableBuffer.class), eq(true));
+    verify(sink).writeFrame(any(WritableBuffer.class), eq(true), eq(1));
   }
 
   @Test
@@ -287,7 +301,7 @@ public class AbstractServerStreamTest {
   public void close_sendsTrailers() {
     Metadata trailers = new Metadata();
     stream.close(Status.INTERNAL, trailers);
-    verify(sink).writeTrailers(any(Metadata.class), eq(false));
+    verify(sink).writeTrailers(any(Metadata.class), eq(false), eq(Status.INTERNAL));
   }
 
   @Test
@@ -298,9 +312,10 @@ public class AbstractServerStreamTest {
     trailers.put(InternalStatus.CODE_KEY, Status.OK);
     trailers.put(InternalStatus.MESSAGE_KEY, "Everything's super.");
 
-    stream.close(Status.INTERNAL.withDescription("bad"), trailers);
+    Status closeStatus = Status.INTERNAL.withDescription("bad");
+    stream.close(closeStatus, trailers);
 
-    verify(sink).writeTrailers(metadataCaptor.capture(), eq(false));
+    verify(sink).writeTrailers(metadataCaptor.capture(), eq(false), eq(closeStatus));
     assertEquals(
         Status.Code.INTERNAL, metadataCaptor.getValue().get(InternalStatus.CODE_KEY).getCode());
     assertEquals("bad", metadataCaptor.getValue().get(InternalStatus.MESSAGE_KEY));
@@ -351,8 +366,8 @@ public class AbstractServerStreamTest {
     }
 
     static class TransportState extends AbstractServerStream.TransportState {
-      protected TransportState(int maxMessageSize) {
-        super(maxMessageSize, StatsTraceContext.NOOP);
+      protected TransportState(int maxMessageSize, TransportTracer transportTracer) {
+        super(maxMessageSize, StatsTraceContext.NOOP, transportTracer);
       }
 
       @Override

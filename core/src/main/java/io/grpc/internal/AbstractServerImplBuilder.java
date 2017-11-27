@@ -16,12 +16,11 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.MoreExecutors;
-import com.google.instrumentation.stats.Stats;
-import com.google.instrumentation.stats.StatsContextFactory;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
@@ -41,6 +40,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -73,6 +73,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
       DecompressorRegistry.getDefaultInstance();
   private static final CompressorRegistry DEFAULT_COMPRESSOR_REGISTRY =
       CompressorRegistry.getDefaultInstance();
+  private static final long DEFAULT_HANDSHAKE_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(20);
 
   final InternalHandlerRegistry.Builder registryBuilder =
       new InternalHandlerRegistry.Builder();
@@ -96,11 +97,17 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
 
   CompressorRegistry compressorRegistry = DEFAULT_COMPRESSOR_REGISTRY;
 
+  long handshakeTimeoutMillis = DEFAULT_HANDSHAKE_TIMEOUT_MILLIS;
+
   @Nullable
-  private StatsContextFactory statsFactory;
+  private CensusStatsModule censusStatsOverride;
 
   private boolean statsEnabled = true;
+  private boolean recordStartedRpcs = true;
+  private boolean recordFinishedRpcs = true;
   private boolean tracingEnabled = true;
+
+  protected TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
 
   @Override
   public final T directExecutor() {
@@ -179,12 +186,19 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
     return thisT();
   }
 
+  @Override
+  public final T handshakeTimeout(long timeout, TimeUnit unit) {
+    checkArgument(timeout > 0, "handshake timeout is %s, but must be positive", timeout);
+    handshakeTimeoutMillis = unit.toMillis(timeout);
+    return thisT();
+  }
+
   /**
    * Override the default stats implementation.
    */
   @VisibleForTesting
-  protected T statsContextFactory(StatsContextFactory statsFactory) {
-    this.statsFactory = statsFactory;
+  protected T overrideCensusStatsModule(CensusStatsModule censusStats) {
+    this.censusStatsOverride = censusStats;
     return thisT();
   }
 
@@ -193,6 +207,22 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
    */
   protected void setStatsEnabled(boolean value) {
     statsEnabled = value;
+  }
+
+  /**
+   * Disable or enable stats recording for RPC upstarts.  Effective only if {@link
+   * #setStatsEnabled} is set to true.  Enabled by default.
+   */
+  protected void setStatsRecordStartedRpcs(boolean value) {
+    recordStartedRpcs = value;
+  }
+
+  /**
+   * Disable or enable stats recording for RPC completions.  Effective only if {@link
+   * #setStatsEnabled} is set to true.  Enabled by default.
+   */
+  protected void setStatsRecordFinishedRpcs(boolean value) {
+    recordFinishedRpcs = value;
   }
 
   /**
@@ -219,13 +249,12 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
     ArrayList<ServerStreamTracer.Factory> tracerFactories =
         new ArrayList<ServerStreamTracer.Factory>();
     if (statsEnabled) {
-      StatsContextFactory statsFactory =
-          this.statsFactory != null ? this.statsFactory : Stats.getStatsContextFactory();
-      if (statsFactory != null) {
-        CensusStatsModule censusStats =
-            new CensusStatsModule(statsFactory, GrpcUtil.STOPWATCH_SUPPLIER, true);
-        tracerFactories.add(censusStats.getServerTracerFactory());
+      CensusStatsModule censusStats = this.censusStatsOverride;
+      if (censusStats == null) {
+        censusStats = new CensusStatsModule(GrpcUtil.STOPWATCH_SUPPLIER, true);
       }
+      tracerFactories.add(
+          censusStats.getServerTracerFactory(recordStartedRpcs, recordFinishedRpcs));
     }
     if (tracingEnabled) {
       CensusTracingModule censusTracing =
