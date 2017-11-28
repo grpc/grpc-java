@@ -1830,50 +1830,54 @@ public abstract class AbstractInteropTest {
       return;
     }
     AssertionError checkFailure = null;
-    boolean passed = false;
 
     if (metricsExpected()) {
       // Because the server doesn't restart between tests, it may still be processing the requests
       // from the previous tests when a new test starts, thus the test may see metrics from previous
       // tests.  The best we can do here is to exhaust all records and find one that matches the
       // given conditions.
+      boolean startRecordFound = false;
+      boolean endRecordFound = false;
       while (true) {
-        MetricsRecord serverStartRecord;
-        MetricsRecord serverEndRecord;
+        MetricsRecord serverRecord;
         try {
-          // On the server, the stats is finalized in ServerStreamListener.closed(), which can be
-          // run after the client receives the final status.  So we use a timeout.
-          serverStartRecord = serverStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
-          serverEndRecord = serverStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
+          serverRecord = serverStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
           throw new RuntimeException(e);
         }
-        if (serverEndRecord == null) {
+        if (serverRecord == null) {
           break;
         }
-        try {
-          checkStartTags(serverStartRecord, method);
-          checkEndTags(serverEndRecord, method, code);
-          if (requests != null && responses != null) {
-            checkCensus(serverEndRecord, true, requests, responses);
+        if (!startRecordFound) {
+          try {
+            checkStartTags(serverRecord, method);
+            startRecordFound = true;
+          } catch (AssertionError e) {
+            // May be the fallout from a previous test, continue trying
+            checkFailure = e;
           }
-          passed = true;
+        } else if (!endRecordFound) {
+          try {
+            checkEndTags(serverRecord, method, code);
+            endRecordFound = true;
+          } catch (AssertionError e) {
+            checkFailure = e;
+          }
+        }
+        if (startRecordFound && endRecordFound) {
           break;
-        } catch (AssertionError e) {
-          // May be the fallout from a previous test, continue trying
-          checkFailure = e;
         }
       }
-      if (!passed) {
-        if (checkFailure == null) {
-          throw new AssertionError("No record found");
-        }
-        throw checkFailure;
+      if (!(startRecordFound && endRecordFound)) {
+        throw new AssertionError(
+            "Insufficient record. startRecordFound=" + startRecordFound
+            + ", endRecordFound=" + endRecordFound,
+            checkFailure);
       }
     }
 
     // Use the same trick to check ServerStreamTracer records
-    passed = false;
+    boolean passed = false;
     while (true) {
       ServerStreamTracerInfo tracerInfo;
       tracerInfo = serverStreamTracers.poll();
