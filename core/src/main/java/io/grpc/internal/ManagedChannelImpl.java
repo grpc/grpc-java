@@ -184,6 +184,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
 
   private final ManagedChannelReference phantom;
 
+  private final ChannelStats.Factory channelStatsFactory; // to create new stats for each oobchannel
   @VisibleForTesting
   final ChannelStats channelStats;
 
@@ -399,7 +400,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       Supplier<Stopwatch> stopwatchSupplier,
       List<ClientInterceptor> interceptors,
       ProxyDetector proxyDetector,
-      ChannelStats channelStats) {
+      ChannelStats.Factory channelStatsFactory) {
     this.target = checkNotNull(builder.target, "target");
     this.nameResolverFactory = builder.getNameResolverFactory();
     this.nameResolverParams = checkNotNull(builder.getNameResolverParams(), "nameResolverParams");
@@ -432,7 +433,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
     this.proxyDetector = proxyDetector;
 
     phantom = new ManagedChannelReference(this);
-    this.channelStats = channelStats;
+    this.channelStatsFactory = channelStatsFactory;
+    channelStats = channelStatsFactory.create();
     logger.log(Level.FINE, "[{0}] Created with target {1}", new Object[] {getLogId(), target});
   }
 
@@ -781,7 +783,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
       checkState(!terminated, "Channel is terminated");
       final OobChannel oobChannel = new OobChannel(
           authority, oobExecutorPool, transportFactory.getScheduledExecutorService(),
-          channelExecutor);
+          channelExecutor, channelStatsFactory.create());
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
           addressGroup, authority, userAgent, backoffPolicyProvider, transportFactory,
           transportFactory.getScheduledExecutorService(), stopwatchSupplier, channelExecutor,

@@ -217,7 +217,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     } else {
       compressor = Codec.Identity.NONE;
     }
-
     prepareHeaders(headers, decompressorRegistry, compressor, fullStreamDecompression);
 
     Deadline effectiveDeadline = effectiveDeadline();
@@ -249,6 +248,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     stream.setCompressor(compressor);
     stream.setFullStreamDecompression(fullStreamDecompression);
     stream.setDecompressorRegistry(decompressorRegistry);
+    channelStats.reportCallStarted();
     stream.start(new ClientStreamListenerImpl(observer));
 
     // Delay any sources of cancellation after start(), because most of the transports are broken if
@@ -270,7 +270,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       // was cancelled.
       removeContextListenerAndCancelDeadlineFuture();
     }
-    channelStats.reportCallStarted();
   }
 
   /**
@@ -527,9 +526,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       cancelListenersShouldBeRemoved = true;
       try {
         closeObserver(observer, status, trailers);
-        channelStats.reportCallEnded(status.isOk());
       } finally {
         removeContextListenerAndCancelDeadlineFuture();
+        channelStats.reportCallEnded(status.isOk());
       }
     }
 

@@ -78,4 +78,18 @@ final class ChannelStats {
       return System.currentTimeMillis();
     }
   };
+  private static final Factory DEFAULT_FACTORY = new Factory() {
+    @Override
+    public ChannelStats create() {
+      return new ChannelStats(SYSTEM_TIME_PROVIDER);
+    }
+  };
+
+  public static Factory getDefaultFactory() {
+    return DEFAULT_FACTORY;
+  }
+
+  public interface Factory {
+    ChannelStats create();
+  }
 }

@@ -54,7 +54,6 @@ final class OobChannel extends ManagedChannel implements WithLogId {
   private SubchannelPicker subchannelPicker;
 
   private final LogId logId = LogId.allocate(getClass().getName());
-  private final ChannelStats channelStats = new ChannelStats();
   private final String authority;
   private final DelayedClientTransport delayedTransport;
   private final ObjectPool<? extends Executor> executorPool;
@@ -62,6 +61,8 @@ final class OobChannel extends ManagedChannel implements WithLogId {
   private final ScheduledExecutorService deadlineCancellationExecutor;
   private final CountDownLatch terminatedLatch = new CountDownLatch(1);
   private volatile boolean shutdown;
+  @VisibleForTesting
+  final ChannelStats channelStats;
 
   private final ClientTransportProvider transportProvider = new ClientTransportProvider() {
     @Override
@@ -75,7 +76,8 @@ final class OobChannel extends ManagedChannel implements WithLogId {
 
   OobChannel(
       String authority, ObjectPool<? extends Executor> executorPool,
-      ScheduledExecutorService deadlineCancellationExecutor, ChannelExecutor channelExecutor) {
+      ScheduledExecutorService deadlineCancellationExecutor, ChannelExecutor channelExecutor,
+      ChannelStats channelStats) {
     this.authority = checkNotNull(authority, "authority");
     this.executorPool = checkNotNull(executorPool, "executorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
@@ -103,6 +105,7 @@ final class OobChannel extends ManagedChannel implements WithLogId {
           // Don't care
         }
       });
+    this.channelStats = channelStats;
   }
 
   // Must be called only once, right after the OobChannel is created.
