@@ -67,19 +67,24 @@ final class BinaryLog {
         + "maxMessageBytes=" + maxMessageBytes + "]";
   }
 
-  @Nullable
   private static final Factory DEFAULT_FACTORY;
+  private static final Factory NOOP_FACTORY = new Factory() {
+    @Override
+    public BinaryLog getLog(String fullMethodName) {
+      return NOOP_LOG;
+    }
+  };
 
   static {
-    Factory defaultFactory = null;
+    Factory defaultFactory = NOOP_FACTORY;
     try {
       String configStr = System.getenv("GRPC_BINARY_LOG_CONFIG");
       if (configStr != null && configStr.length() > 0) {
-        defaultFactory = new Factory(configStr);
+        defaultFactory = new FactoryImpl(configStr);
       }
     } catch (Throwable t) {
       logger.log(Level.SEVERE, "Failed to initialize binary log. Disabling binary log.", t);
-      defaultFactory = null;
+      defaultFactory = NOOP_FACTORY;
     }
     DEFAULT_FACTORY = defaultFactory;
   }
@@ -89,13 +94,14 @@ final class BinaryLog {
    * a log that does nothing.
    */
   static BinaryLog getLog(String fullMethodName) {
-    if (DEFAULT_FACTORY == null) {
-      return NOOP_LOG;
-    }
     return DEFAULT_FACTORY.getLog(fullMethodName);
   }
 
-  static final class Factory {
+  interface Factory {
+    BinaryLog getLog(String fullMethodName);
+  }
+
+  static final class FactoryImpl implements Factory {
     // '*' for global, 'service/*' for service glob, or 'service/method' for fully qualified.
     private static final Pattern logPatternRe = Pattern.compile("[^{]+");
     // A curly brace wrapped expression. Will be further matched with the more specified REs below.
@@ -118,7 +124,7 @@ final class BinaryLog {
      * Accepts a string in the format specified by the binary log spec.
      */
     @VisibleForTesting
-    Factory(String configurationString) {
+    FactoryImpl(String configurationString) {
       Preconditions.checkState(configurationString != null && configurationString.length() > 0);
       BinaryLog globalLog = null;
       Map<String, BinaryLog> perServiceLogs = new HashMap<String, BinaryLog>();
@@ -134,7 +140,6 @@ final class BinaryLog {
         String binlogOptionStr = configMatcher.group(2);
         BinaryLog binLog = createBinaryLog(binlogOptionStr);
         if (binLog == null) {
-          logger.log(Level.SEVERE, "Can not create binary log for: " + configuration);
           continue;
         }
         if (methodOrSvc.equals("*")) {
@@ -170,6 +175,7 @@ final class BinaryLog {
     /**
      * Accepts a full method name and returns the log that should be used.
      */
+    @Override
     public BinaryLog getLog(String fullMethodName) {
       BinaryLog methodLog = perMethodLogs.get(fullMethodName);
       if (methodLog != null) {
