@@ -108,11 +108,11 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
       synchronized (lock) {
         savedState = state;
+        if (savedState.winningSubstream != null && savedState.winningSubstream != substream) {
+          // committed but not me
+          break;
+        }
         if (index == savedState.buffer.size()) { // I'm drained
-          if (savedState.winningSubstream != null && savedState.winningSubstream != substream) {
-            // committed but not me
-            break;
-          }
           state = savedState.drained(substream);
           return;
         }
