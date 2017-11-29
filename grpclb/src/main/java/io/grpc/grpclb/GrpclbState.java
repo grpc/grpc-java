@@ -203,8 +203,7 @@ final class GrpclbState {
     }
     logger.log(Level.FINE, "[{0}] Starting fallback timer.", new Object[] {logId});
     fallbackTimer = new FallbackModeTask();
-    fallbackTimer.scheduledFuture =
-        timerService.schedule(fallbackTimer, FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    fallbackTimer.schedule();
   }
 
   /**
@@ -378,6 +377,11 @@ final class GrpclbState {
     void cancel() {
       scheduledFuture.cancel(false);
       cancelled = true;
+    }
+
+    void schedule() {
+      checkState(scheduledFuture == null, "FallbackModeTask already scheduled");
+      scheduledFuture = timerService.schedule(this, FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     }
   }
 
