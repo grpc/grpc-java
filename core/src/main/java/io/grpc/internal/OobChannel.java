@@ -61,7 +61,6 @@ final class OobChannel extends ManagedChannel implements WithLogId {
   private final ScheduledExecutorService deadlineCancellationExecutor;
   private final CountDownLatch terminatedLatch = new CountDownLatch(1);
   private volatile boolean shutdown;
-  @VisibleForTesting
   final ChannelStats channelStats;
 
   private final ClientTransportProvider transportProvider = new ClientTransportProvider() {

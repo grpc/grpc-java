@@ -185,7 +185,6 @@ public final class ManagedChannelImpl extends ManagedChannel implements WithLogI
   private final ManagedChannelReference phantom;
 
   private final ChannelStats.Factory channelStatsFactory; // to create new stats for each oobchannel
-  @VisibleForTesting
   final ChannelStats channelStats;
 
   // Called from channelExecutor
