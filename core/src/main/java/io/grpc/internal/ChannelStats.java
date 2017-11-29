@@ -28,7 +28,7 @@ final class ChannelStats {
   private final LongCounter callsFailed = LongCounterFactory.create();
   private volatile long lastCallStartedMillis;
 
-  ChannelStats() {
+  private ChannelStats() {
     timeProvider = SYSTEM_TIME_PROVIDER;
   }
 
