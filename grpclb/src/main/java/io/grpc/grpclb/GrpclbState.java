@@ -180,27 +180,31 @@ final class GrpclbState {
    * Start the fallback timer if it's not already started and all connections are lost.
    */
   private void maybeStartFallbackTimer() {
-    if (fallbackTimer == null) {
-      if (fallbackBackendList.isEmpty()) {
-        return;
-      }
-      if (balancerWorking) {
-        return;
-      }
-      int numReadySubchannels = 0;
-      for (Subchannel subchannel : subchannels.values()) {
-        if (subchannel.getAttributes().get(STATE_INFO).get().getState() == READY) {
-          numReadySubchannels++;
-        }
-      }
-      if (numReadySubchannels > 0) {
-        return;
-      }
-      logger.log(Level.FINE, "[{0}] Starting fallback timer.", new Object[] {logId});
-      fallbackTimer = new FallbackModeTask();
-      fallbackTimer.scheduledFuture =
-          timerService.schedule(fallbackTimer, FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    if (fallbackTimer != null) {
+      return;
     }
+    if (fallbackBackendList.isEmpty()) {
+      return;
+    }
+    if (balancerWorking) {
+      return;
+    }
+    if (usingFallbackBackends) {
+      return;
+    }
+    int numReadySubchannels = 0;
+    for (Subchannel subchannel : subchannels.values()) {
+      if (subchannel.getAttributes().get(STATE_INFO).get().getState() == READY) {
+        numReadySubchannels++;
+      }
+    }
+    if (numReadySubchannels > 0) {
+      return;
+    }
+    logger.log(Level.FINE, "[{0}] Starting fallback timer.", new Object[] {logId});
+    fallbackTimer = new FallbackModeTask();
+    fallbackTimer.scheduledFuture =
+        timerService.schedule(fallbackTimer, FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
   }
 
   /**

@@ -1446,8 +1446,16 @@ public class GrpclbLoadBalancerTest {
         fakeClock.forwardTime(GrpclbState.FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
 
-        fallbackTestVerifyUseOfFallbackBackendLists(
+        // Going into fallback
+        subchannels = fallbackTestVerifyUseOfFallbackBackendLists(
             inOrder, helper, Arrays.asList(resolutionList.get(0), resolutionList.get(2)));
+
+        // When in fallback mode, fallback timer should not be scheduled when all backend
+        // connections are lost
+        for (Subchannel subchannel : subchannels) {
+          deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
+        }
+        assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
       } else {
         fakeClock.forwardTime(GrpclbState.FALLBACK_TIMEOUT_MS - 1, TimeUnit.MILLISECONDS);
       }
