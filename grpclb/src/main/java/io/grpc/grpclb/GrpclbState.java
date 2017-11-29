@@ -153,6 +153,11 @@ final class GrpclbState {
    */
   void handleAddresses(
       List<LbAddressGroup> newLbAddressGroups, List<EquivalentAddressGroup> newBackendServers) {
+    if (newLbAddressGroups.isEmpty()) {
+      propagateError(Status.UNAVAILABLE.withDescription(
+              "NameResolver returned no LB address while asking for GRPCLB"));
+      return;
+    }
     LbAddressGroup newLbAddressGroup = flattenLbAddressGroups(newLbAddressGroups);
     startLbComm(newLbAddressGroup);
     // Avoid creating a new RPC just because the addresses were updated, as it can cause a
