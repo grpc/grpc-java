@@ -418,7 +418,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     @Override
     public void closed(Status status, Metadata trailers) {
-      if (shouldRetry()) {
+      if (state.winningSubstream == null && shouldRetry()) {
+        // The check state.winningSubstream == null, checking if is not already committed, is racy,
+        // but is still safe b/c the retry will also handle committed/cancellation
         // TODO(zdapeng): backoff and schedule; retry() should run in an executor
         retry();
       } else if (!hasHedging()) {

@@ -364,7 +364,8 @@ public class RetriableStreamTest {
     assertEquals(CANCELLED_BECAUSE_COMMITTED, statusCaptor.getValue().getDescription());
 
     // closed
-    doReturn(false).when(retriableStreamRecorder).shouldRetry();
+    // even shouldRetry() returns true
+    doReturn(true).when(retriableStreamRecorder).shouldRetry();
     Status status = Status.UNAVAILABLE;
     Metadata metadata = new Metadata();
     sublistenerCaptor1.getValue().closed(status, metadata);
