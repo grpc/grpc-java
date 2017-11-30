@@ -48,6 +48,7 @@ import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Grpc;
+import io.grpc.InternalInstrumented;
 import io.grpc.InternalTransportStats;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -75,6 +76,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -1406,11 +1408,10 @@ public abstract class AbstractTransportTest {
     long serverFirstTimestampNanos;
     long clientFirstTimestampNanos;
     {
-      InternalTransportStats serverBefore =
-          serverTransportListener.transport.getTransportStats().get();
+      InternalTransportStats serverBefore = getStats(serverTransportListener.transport);
       assertEquals(0, serverBefore.streamsStarted);
       assertEquals(0, serverBefore.lastStreamCreatedTimeNanos);
-      InternalTransportStats clientBefore = client.getTransportStats().get();
+      InternalTransportStats clientBefore = getStats(client);
       assertEquals(0, clientBefore.streamsStarted);
       assertEquals(0, clientBefore.lastStreamCreatedTimeNanos);
 
@@ -1420,15 +1421,14 @@ public abstract class AbstractTransportTest {
       StreamCreation serverStreamCreation = serverTransportListener
           .takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
-      InternalTransportStats serverAfter =
-          serverTransportListener.transport.getTransportStats().get();
+      InternalTransportStats serverAfter = getStats(serverTransportListener.transport);
       assertEquals(1, serverAfter.streamsStarted);
       serverFirstTimestampNanos = serverAfter.lastStreamCreatedTimeNanos;
       assertEquals(
           currentTimeMillis(),
           TimeUnit.NANOSECONDS.toMillis(serverAfter.lastStreamCreatedTimeNanos));
 
-      InternalTransportStats clientAfter = client.getTransportStats().get();
+      InternalTransportStats clientAfter = getStats(client);
       assertEquals(1, clientAfter.streamsStarted);
       clientFirstTimestampNanos = clientAfter.lastStreamCreatedTimeNanos;
       assertEquals(
@@ -1444,10 +1444,9 @@ public abstract class AbstractTransportTest {
 
     // start second stream
     {
-      InternalTransportStats serverBefore =
-          serverTransportListener.transport.getTransportStats().get();
+      InternalTransportStats serverBefore = getStats(serverTransportListener.transport);
       assertEquals(1, serverBefore.streamsStarted);
-      InternalTransportStats clientBefore = client.getTransportStats().get();
+      InternalTransportStats clientBefore = getStats(client);
       assertEquals(1, clientBefore.streamsStarted);
 
       ClientStream clientStream = client.newStream(methodDescriptor, new Metadata(), callOptions);
@@ -1456,8 +1455,7 @@ public abstract class AbstractTransportTest {
       StreamCreation serverStreamCreation = serverTransportListener
           .takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
-      InternalTransportStats serverAfter =
-          serverTransportListener.transport.getTransportStats().get();
+      InternalTransportStats serverAfter = getStats(serverTransportListener.transport);
       assertEquals(2, serverAfter.streamsStarted);
       assertEquals(
           TimeUnit.MILLISECONDS.toNanos(elapsedMillis),
@@ -1466,7 +1464,7 @@ public abstract class AbstractTransportTest {
           TimeUnit.NANOSECONDS.toMillis(serverAfter.lastStreamCreatedTimeNanos);
       assertEquals(currentTimeMillis(), serverSecondTimestamp);
 
-      InternalTransportStats clientAfter = client.getTransportStats().get();
+      InternalTransportStats clientAfter = getStats(client);
       assertEquals(2, clientAfter.streamsStarted);
       assertEquals(
           TimeUnit.MILLISECONDS.toNanos(elapsedMillis),
@@ -1497,11 +1495,10 @@ public abstract class AbstractTransportTest {
       return;
     }
 
-    InternalTransportStats serverBefore =
-        serverTransportListener.transport.getTransportStats().get();
+    InternalTransportStats serverBefore = getStats(serverTransportListener.transport);
     assertEquals(0, serverBefore.streamsSucceeded);
     assertEquals(0, serverBefore.streamsFailed);
-    InternalTransportStats clientBefore = client.getTransportStats().get();
+    InternalTransportStats clientBefore = getStats(client);
     assertEquals(0, clientBefore.streamsSucceeded);
     assertEquals(0, clientBefore.streamsFailed);
 
@@ -1512,11 +1509,10 @@ public abstract class AbstractTransportTest {
     assertNotNull(clientStreamListener.trailers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
 
-    InternalTransportStats serverAfter =
-        serverTransportListener.transport.getTransportStats().get();
+    InternalTransportStats serverAfter = getStats(serverTransportListener.transport);
     assertEquals(1, serverAfter.streamsSucceeded);
     assertEquals(0, serverAfter.streamsFailed);
-    InternalTransportStats clientAfter = client.getTransportStats().get();
+    InternalTransportStats clientAfter = getStats(client);
     assertEquals(1, clientAfter.streamsSucceeded);
     assertEquals(0, clientAfter.streamsFailed);
   }
@@ -1538,11 +1534,10 @@ public abstract class AbstractTransportTest {
       return;
     }
 
-    InternalTransportStats serverBefore =
-        serverTransportListener.transport.getTransportStats().get();
+    InternalTransportStats serverBefore = getStats(serverTransportListener.transport);
     assertEquals(0, serverBefore.streamsFailed);
     assertEquals(0, serverBefore.streamsSucceeded);
-    InternalTransportStats clientBefore = client.getTransportStats().get();
+    InternalTransportStats clientBefore = getStats(client);
     assertEquals(0, clientBefore.streamsFailed);
     assertEquals(0, clientBefore.streamsSucceeded);
 
@@ -1552,11 +1547,10 @@ public abstract class AbstractTransportTest {
     assertNotNull(clientStreamListener.trailers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
 
-    InternalTransportStats serverAfter =
-        serverTransportListener.transport.getTransportStats().get();
+    InternalTransportStats serverAfter = getStats(serverTransportListener.transport);
     assertEquals(1, serverAfter.streamsFailed);
     assertEquals(0, serverAfter.streamsSucceeded);
-    InternalTransportStats clientAfter = client.getTransportStats().get();
+    InternalTransportStats clientAfter = getStats(client);
     assertEquals(1, clientAfter.streamsFailed);
     assertEquals(0, clientAfter.streamsSucceeded);
 
@@ -1579,11 +1573,10 @@ public abstract class AbstractTransportTest {
       return;
     }
 
-    InternalTransportStats serverBefore =
-        serverTransportListener.transport.getTransportStats().get();
+    InternalTransportStats serverBefore = getStats(serverTransportListener.transport);
     assertEquals(0, serverBefore.streamsFailed);
     assertEquals(0, serverBefore.streamsSucceeded);
-    InternalTransportStats clientBefore = client.getTransportStats().get();
+    InternalTransportStats clientBefore = getStats(client);
     assertEquals(0, clientBefore.streamsFailed);
     assertEquals(0, clientBefore.streamsSucceeded);
 
@@ -1591,11 +1584,10 @@ public abstract class AbstractTransportTest {
     // do not validate stats until close() has been called on server
     assertNotNull(serverStreamCreation.listener.status.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
-    InternalTransportStats serverAfter =
-        serverTransportListener.transport.getTransportStats().get();
+    InternalTransportStats serverAfter = getStats(serverTransportListener.transport);
     assertEquals(1, serverAfter.streamsFailed);
     assertEquals(0, serverAfter.streamsSucceeded);
-    InternalTransportStats clientAfter = client.getTransportStats().get();
+    InternalTransportStats clientAfter = getStats(client);
     assertEquals(1, clientAfter.streamsFailed);
     assertEquals(0, clientAfter.streamsSucceeded);
   }
@@ -1618,11 +1610,10 @@ public abstract class AbstractTransportTest {
       return;
     }
 
-    InternalTransportStats serverBefore =
-        serverTransportListener.transport.getTransportStats().get();
+    InternalTransportStats serverBefore = getStats(serverTransportListener.transport);
     assertEquals(0, serverBefore.messagesReceived);
     assertEquals(0, serverBefore.lastMessageReceivedTimeNanos);
-    InternalTransportStats clientBefore = client.getTransportStats().get();
+    InternalTransportStats clientBefore = getStats(client);
     assertEquals(0, clientBefore.messagesSent);
     assertEquals(0, clientBefore.lastMessageSentTimeNanos);
 
@@ -1632,13 +1623,12 @@ public abstract class AbstractTransportTest {
     clientStream.halfClose();
     verifyMessageCountAndClose(serverStreamListener.messageQueue, 1);
 
-    InternalTransportStats serverAfter =
-        serverTransportListener.transport.getTransportStats().get();
+    InternalTransportStats serverAfter = getStats(serverTransportListener.transport);
     assertEquals(1, serverAfter.messagesReceived);
     long serverTimestamp =
         TimeUnit.NANOSECONDS.toMillis(serverAfter.lastMessageReceivedTimeNanos);
     assertEquals(currentTimeMillis(), serverTimestamp);
-    InternalTransportStats clientAfter = client.getTransportStats().get();
+    InternalTransportStats clientAfter = getStats(client);
     assertEquals(1, clientAfter.messagesSent);
     long clientTimestamp =
         TimeUnit.NANOSECONDS.toMillis(clientAfter.lastMessageSentTimeNanos);
@@ -1664,11 +1654,10 @@ public abstract class AbstractTransportTest {
       return;
     }
 
-    InternalTransportStats serverBefore =
-        serverTransportListener.transport.getTransportStats().get();
+    InternalTransportStats serverBefore = getStats(serverTransportListener.transport);
     assertEquals(0, serverBefore.messagesSent);
     assertEquals(0, serverBefore.lastMessageSentTimeNanos);
-    InternalTransportStats clientBefore = client.getTransportStats().get();
+    InternalTransportStats clientBefore = getStats(client);
     assertEquals(0, clientBefore.messagesReceived);
     assertEquals(0, clientBefore.lastMessageReceivedTimeNanos);
 
@@ -1678,12 +1667,11 @@ public abstract class AbstractTransportTest {
     serverStream.flush();
     verifyMessageCountAndClose(clientStreamListener.messageQueue, 1);
 
-    InternalTransportStats serverAfter =
-        serverTransportListener.transport.getTransportStats().get();
+    InternalTransportStats serverAfter = getStats(serverTransportListener.transport);
     assertEquals(1, serverAfter.messagesSent);
     long serverTimestmap = TimeUnit.NANOSECONDS.toMillis(serverAfter.lastMessageSentTimeNanos);
     assertEquals(currentTimeMillis(), serverTimestmap);
-    InternalTransportStats clientAfter = client.getTransportStats().get();
+    InternalTransportStats clientAfter = getStats(client);
     assertEquals(1, clientAfter.messagesReceived);
     long clientTimestmap =
         TimeUnit.NANOSECONDS.toMillis(clientAfter.lastMessageReceivedTimeNanos);
@@ -1987,5 +1975,17 @@ public abstract class AbstractTransportTest {
     public String parseBytes(byte[] serialized) {
       return new String(serialized, UTF_8);
     }
+  }
+
+  private static <T> T getStats(InternalInstrumented<T> transport)
+      throws ExecutionException, InterruptedException {
+    final SettableFuture<T> future = SettableFuture.create();
+    transport.produceStat(new InternalInstrumented.Consumer<T>() {
+      @Override
+      public void consume(@Nullable T stat) {
+        future.set(stat);
+      }
+    });
+    return future.get();
   }
 }

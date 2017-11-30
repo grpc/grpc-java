@@ -19,7 +19,6 @@ package io.grpc.netty;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InternalLogId;
 import io.grpc.InternalTransportStats;
 import io.grpc.ServerStreamTracer;
@@ -33,8 +32,6 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -177,21 +174,20 @@ class NettyServerTransport implements ServerTransport {
   }
 
   @Override
-  public Future<InternalTransportStats> getTransportStats() {
+  public void produceStat(final Consumer<InternalTransportStats> consumer) {
     if (channel.eventLoop().inEventLoop()) {
       // This is necessary, otherwise we will block forever if we get the future from inside
       // the event loop.
-      SettableFuture<InternalTransportStats> result = SettableFuture.create();
-      result.set(transportTracer.getStats());
-      return result;
+      consumer.consume(transportTracer.getStats());
+    } else {
+      channel.eventLoop().submit(
+          new Runnable() {
+            @Override
+            public void run() {
+              consumer.consume(transportTracer.getStats());
+            }
+          });
     }
-    return channel.eventLoop().submit(
-        new Callable<InternalTransportStats>() {
-          @Override
-          public InternalTransportStats call() throws Exception {
-            return transportTracer.getStats();
-          }
-        });
   }
 
   /**

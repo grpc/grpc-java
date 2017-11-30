@@ -18,20 +18,18 @@ package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallOptions;
+import io.grpc.InternalLogId;
 import io.grpc.InternalTransportStats;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Future;
 
 /**
  * A client transport that creates streams that will immediately fail when started.
  */
 class FailingClientTransport implements ClientTransport {
-
   @VisibleForTesting
   final Status error;
 
@@ -56,9 +54,12 @@ class FailingClientTransport implements ClientTransport {
   }
 
   @Override
-  public Future<InternalTransportStats> getTransportStats() {
-    SettableFuture<InternalTransportStats> ret = SettableFuture.create();
-    ret.set(null);
-    return ret;
+  public void produceStat(Consumer<InternalTransportStats> consumer) {
+    throw new UnsupportedOperationException("Not a real transport");
+  }
+
+  @Override
+  public InternalLogId getLogId() {
+    throw new UnsupportedOperationException("Not a real transport");
   }
 }

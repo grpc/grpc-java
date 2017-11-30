@@ -18,7 +18,6 @@ package io.grpc.inprocess;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Compressor;
@@ -50,7 +49,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -221,11 +219,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   }
 
   @Override
-  public Future<InternalTransportStats> getTransportStats() {
-    // TODO(zpencer): add transport tracing to in-process server
-    SettableFuture<InternalTransportStats> ret = SettableFuture.create();
-    ret.set(null);
-    return ret;
+  public void produceStat(Consumer<InternalTransportStats> consumer) {
+    consumer.consume(null);
   }
 
   private synchronized void notifyShutdown(Status s) {
