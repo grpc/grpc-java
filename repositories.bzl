@@ -139,8 +139,8 @@ def com_google_protobuf():
   native.http_archive(
       name = "com_google_protobuf",
       sha256 = "542703acadc3f690d998f4641e1b988f15ba57ebca05fdfb1cd9095bec007948",
-      strip_prefix = "protobuf-3.4.0",
-      urls = ["https://github.com/google/protobuf/archive/v3.4.0.zip"],
+      strip_prefix = "protobuf-3.5.0",
+      urls = ["https://github.com/google/protobuf/archive/v3.5.0.zip"],
   )
 
 def com_google_protobuf_java():
@@ -149,8 +149,8 @@ def com_google_protobuf_java():
   native.http_archive(
       name = "com_google_protobuf_java",
       sha256 = "542703acadc3f690d998f4641e1b988f15ba57ebca05fdfb1cd9095bec007948",
-      strip_prefix = "protobuf-3.4.0",
-      urls = ["https://github.com/google/protobuf/archive/v3.4.0.zip"],
+      strip_prefix = "protobuf-3.5.0",
+      urls = ["https://github.com/google/protobuf/archive/v3.5.0.zip"],
   )
 
 def com_google_protobuf_nano_protobuf_javanano():
@@ -177,8 +177,8 @@ def com_squareup_okhttp():
 def com_squareup_okio():
   native.maven_jar(
       name = "com_squareup_okio_okio",
-      artifact = "com.squareup.okio:okio:1.6.0",
-      sha1 = "98476622f10715998eacf9240d6b479f12c66143",
+      artifact = "com.squareup.okio:okio:1.13.0",
+      sha1 = "a9283170b7305c8d92d25aff02a6ab7e45d06cbe",
   )
 
 def io_netty_codec_http2():

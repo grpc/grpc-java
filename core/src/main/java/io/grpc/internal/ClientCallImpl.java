@@ -82,6 +82,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private boolean fullStreamDecompression;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
+  private final BinaryLog binlog;
 
   ClientCallImpl(
       MethodDescriptor<ReqT, RespT> method, Executor executor, CallOptions callOptions,
@@ -101,6 +102,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     this.callOptions = callOptions;
     this.clientTransportProvider = clientTransportProvider;
     this.deadlineCancellationExecutor = deadlineCancellationExecutor;
+    this.binlog = BinaryLog.getLog(method.getFullMethodName());
   }
 
   private final class ContextCancellationListener implements CancellationListener {
@@ -113,6 +115,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   /**
    * Provider of {@link ClientTransport}s.
    */
+  // TODO(zdapeng): replace the two APIs with a single API: newStream()
   interface ClientTransportProvider {
     /**
      * Returns a transport for a new call.
@@ -120,6 +123,13 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
      * @param args object containing call arguments.
      */
     ClientTransport get(PickSubchannelArgs args);
+
+    <ReqT> RetriableStream<ReqT> newRetriableStream(
+        MethodDescriptor<ReqT, ?> method,
+        CallOptions callOptions,
+        Metadata headers,
+        Context context);
+
   }
 
   ClientCallImpl<ReqT, RespT> setFullStreamDecompression(boolean fullStreamDecompression) {
@@ -222,13 +232,17 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     if (!deadlineExceeded) {
       updateTimeoutHeaders(effectiveDeadline, callOptions.getDeadline(),
           context.getDeadline(), headers);
-      ClientTransport transport = clientTransportProvider.get(
-          new PickSubchannelArgsImpl(method, headers, callOptions));
-      Context origContext = context.attach();
-      try {
-        stream = transport.newStream(method, headers, callOptions);
-      } finally {
-        context.detach(origContext);
+      if (retryEnabled()) {
+        stream = clientTransportProvider.newRetriableStream(method, callOptions, headers, context);
+      } else {
+        ClientTransport transport = clientTransportProvider.get(
+            new PickSubchannelArgsImpl(method, headers, callOptions));
+        Context origContext = context.attach();
+        try {
+          stream = transport.newStream(method, headers, callOptions);
+        } finally {
+          context.detach(origContext);
+        }
       }
     } else {
       stream = new FailingClientStream(DEADLINE_EXCEEDED);
@@ -267,6 +281,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       // was cancelled.
       removeContextListenerAndCancelDeadlineFuture();
     }
+  }
+
+  // TODO: API plumbing to enable retry.
+  private boolean retryEnabled() {
+    return false;
   }
 
   /**
@@ -405,9 +424,15 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     checkState(!cancelCalled, "call was cancelled");
     checkState(!halfCloseCalled, "call was half-closed");
     try {
-      // TODO(notcarl): Find out if messageIs needs to be closed.
-      InputStream messageIs = method.streamRequest(message);
-      stream.writeMessage(messageIs);
+      if (stream instanceof RetriableStream) {
+        @SuppressWarnings("unchecked")
+        RetriableStream<ReqT> retriableStream = ((RetriableStream<ReqT>) stream);
+        retriableStream.sendMessage(message);
+      } else {
+        // TODO(notcarl): Find out if messageIs needs to be closed.
+        InputStream messageIs = method.streamRequest(message);
+        stream.writeMessage(messageIs);
+      }
     } catch (Throwable e) {
       stream.cancel(Status.CANCELLED.withCause(e).withDescription("Failed to stream message"));
       return;
