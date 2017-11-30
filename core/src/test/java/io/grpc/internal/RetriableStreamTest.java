@@ -77,7 +77,7 @@ public class RetriableStreamTest {
         }
 
         @Override
-        ClientStream newSubstream() {
+        ClientStream newStream() {
           return retriableStreamRecorder.newSubstream();
         }
 
