@@ -89,14 +89,14 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   abstract void postCommit();
 
   private void retry() {
-    Substream substream = newSubstream();
+    Substream substream = createSubstream();
 
     // TODO(zdapeng): update "grpc-retry-attempts" header
 
     drain(substream);
   }
 
-  private Substream newSubstream() {
+  private Substream createSubstream() {
     Substream sub = new Substream();
     // NOTICE: This set _must_ be done before stream.start() and it actually is.
     sub.stream = newStream();
@@ -189,7 +189,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       state.buffer.add(new StartEntry());
     }
 
-    Substream substream = newSubstream();
+    Substream substream = createSubstream();
     drain(substream);
 
     // TODO(zdapeng): schedule hedging if needed
