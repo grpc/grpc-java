@@ -214,7 +214,6 @@ public abstract class AbstractInteropTest {
         .add(TestUtils.recordRequestHeadersInterceptor(requestHeadersCapture))
         .add(recordContextInterceptor(contextCapture))
         .addAll(TestServiceImpl.interceptors())
-        .addAll(getServerInterceptors())
         .build();
 
     builder
@@ -309,10 +308,6 @@ public abstract class AbstractInteropTest {
   @Nullable
   protected AbstractServerImplBuilder<?> getServerBuilder() {
     return null;
-  }
-
-  protected List<? extends ServerInterceptor> getServerInterceptors() {
-    return Collections.emptyList();
   }
 
   protected final CensusStatsModule createClientCensusStatsModule() {

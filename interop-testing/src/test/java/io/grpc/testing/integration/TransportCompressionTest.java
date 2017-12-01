@@ -50,8 +50,6 @@ import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.Collections;
-import java.util.List;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -90,22 +88,17 @@ public class TransportCompressionTest extends AbstractInteropTest {
     return NettyServerBuilder.forPort(0)
         .maxMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .compressorRegistry(compressors)
-        .decompressorRegistry(decompressors);
-  }
-
-  @Override
-  protected List<? extends ServerInterceptor> getServerInterceptors() {
-    return Collections.singletonList(
-        new ServerInterceptor() {
-          @Override
-          public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
-              Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-            Listener<ReqT> listener = next.startCall(call, headers);
-            // TODO(carl-mastrangelo): check that encoding was set.
-            call.setMessageCompression(true);
-            return listener;
-          }
-      });
+        .decompressorRegistry(decompressors)
+        .intercept(new ServerInterceptor() {
+            @Override
+            public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+                Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+              Listener<ReqT> listener = next.startCall(call, headers);
+              // TODO(carl-mastrangelo): check that encoding was set.
+              call.setMessageCompression(true);
+              return listener;
+            }
+          });
   }
 
   @Test
