@@ -1858,7 +1858,7 @@ public abstract class AbstractInteropTest {
       assertNotNull(serverEndRecord);
       checkStartTags(serverStartRecord, method);
       checkEndTags(serverEndRecord, method, code);
-      if (requests != null && responses != null) {
+      if (server != null && requests != null && responses != null) {
         checkCensus(serverEndRecord, true, requests, responses);
       }
     }
@@ -1947,7 +1947,7 @@ public abstract class AbstractInteropTest {
     for (MessageLite response : responses) {
       uncompressedResponsesSize += response.getSerializedSize();
     }
-    if (isServer && server != null) {
+    if (isServer) {
       assertEquals(
           requests.size(),
           record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_SERVER_REQUEST_COUNT));
@@ -1965,8 +1965,7 @@ public abstract class AbstractInteropTest {
       // check if they are recorded.
       assertNotNull(record.getMetric(RpcMeasureConstants.RPC_SERVER_REQUEST_BYTES));
       assertNotNull(record.getMetric(RpcMeasureConstants.RPC_SERVER_RESPONSE_BYTES));
-    }
-    if (!isServer) {
+    } else {
       assertEquals(
           requests.size(),
           record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_REQUEST_COUNT));
