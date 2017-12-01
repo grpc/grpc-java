@@ -1426,9 +1426,7 @@ public abstract class AbstractInteropTest {
 
   @Test(timeout = 10000)
   public void censusContextsPropagated() {
-    if (server == null) {
-      return;
-    }
+    Assume.assumeTrue("Skip the test because server is not in the same process.", server != null);
     Span clientParentSpan = MockableSpan.generateRandomSpan(new Random());
     Context ctx =
         Context.ROOT.withValues(
