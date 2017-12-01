@@ -529,8 +529,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     State drained(Substream substream) {
       checkState(!passThrough, "Already passThrough");
 
-      Set<Substream> drainedSubstreams = new HashSet<Substream>();
-      drainedSubstreams.addAll(this.drainedSubstreams);
+      Set<Substream> drainedSubstreams = new HashSet<Substream>(this.drainedSubstreams);
 
       if (!substream.closed) {
         drainedSubstreams.add(substream);
@@ -554,8 +553,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     State closed(Substream substream) {
       substream.closed = true;
       if (this.drainedSubstreams.contains(substream)) {
-        Set<Substream> drainedSubstreams = new HashSet<Substream>();
-        drainedSubstreams.addAll(this.drainedSubstreams);
+        Set<Substream> drainedSubstreams = new HashSet<Substream>(this.drainedSubstreams);
         drainedSubstreams.remove(substream);
         return new State(buffer, drainedSubstreams, winningSubstream, cancelled, passThrough);
       } else {
