@@ -159,10 +159,11 @@ public abstract class AbstractInteropTest {
       new AtomicReference<Metadata>();
   private final AtomicReference<Context> contextCapture =
       new AtomicReference<Context>();
+  private final FakeStatsRecorder clientStatsRecorder = new FakeStatsRecorder();
+  private final FakeStatsRecorder serverStatsRecorder = new FakeStatsRecorder();
+
   private ScheduledExecutorService testServiceExecutor;
   private Server server;
-  private FakeStatsRecorder clientStatsRecorder;
-  private FakeStatsRecorder serverStatsRecorder;
 
   private final LinkedBlockingQueue<ServerStreamTracerInfo> serverStreamTracers =
       new LinkedBlockingQueue<ServerStreamTracerInfo>();
@@ -281,8 +282,6 @@ public abstract class AbstractInteropTest {
    */
   @Before
   public void setUp() {
-    clientStatsRecorder = new FakeStatsRecorder();
-    serverStatsRecorder = new FakeStatsRecorder();
     startServer();
     channel = createChannel();
 
