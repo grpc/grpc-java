@@ -197,7 +197,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   @Override
   public final void cancel(Status reason) {
-    Substream noopSubstream = newSubstream();
+    Substream noopSubstream = new Substream();
     noopSubstream.stream = new NoopClientStream();
     if (commit0(noopSubstream)) {
       masterListener.closed(reason, new Metadata());
