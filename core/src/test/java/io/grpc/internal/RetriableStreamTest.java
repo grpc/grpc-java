@@ -29,6 +29,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import io.grpc.Codec;
 import io.grpc.Compressor;
@@ -691,9 +692,6 @@ public class RetriableStreamTest {
   @Test
   public void closedWhileDraining() {
     ClientStream mockStream1 = mock(ClientStream.class);
-    doReturn(mockStream1).when(retriableStreamRecorder).newSubstream();
-
-    final ClientStream mockStream3 = mock(ClientStream.class);
     final ClientStream mockStream2 =
         mock(
             ClientStream.class,
@@ -701,12 +699,14 @@ public class RetriableStreamTest {
                 new NoopClientStream() {
                   @Override
                   public void start(ClientStreamListener listener) {
-                    // closed while draning and retry
-                    doReturn(true).when(retriableStreamRecorder).shouldRetry();
-                    doReturn(mockStream3).when(retriableStreamRecorder).newSubstream();
+                    // closed while draning
                     listener.closed(Status.UNAVAILABLE, new Metadata());
                   }
                 }));
+    final ClientStream mockStream3 = mock(ClientStream.class);
+
+    doReturn(true).when(retriableStreamRecorder).shouldRetry();
+    when(retriableStreamRecorder.newSubstream()).thenReturn(mockStream1, mockStream2, mockStream3);
 
     retriableStream.start(masterListener);
     retriableStream.sendMessage("msg1");
@@ -720,8 +720,6 @@ public class RetriableStreamTest {
 
     // retry
     // TODO(zdapeng): send more messages during backoff, then forward backoff ticker
-    doReturn(true).when(retriableStreamRecorder).shouldRetry();
-    doReturn(mockStream2).when(retriableStreamRecorder).newSubstream();
     listener1.closed(Status.UNAVAILABLE, new Metadata());
 
     retriableStream.request(1);
