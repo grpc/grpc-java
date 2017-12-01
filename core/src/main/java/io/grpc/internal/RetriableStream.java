@@ -435,7 +435,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     @Override
     public void closed(Status status, Metadata trailers) {
       synchronized (lock) {
-        state = state.sbustreamClosed(substream);
+        state = state.substreamClosed(substream);
       }
 
       if (state.winningSubstream == null && shouldRetry()) {
@@ -550,7 +550,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     /** The given substream is closed. */
     @CheckReturnValue
     @GuardedBy("lock")
-    State sbustreamClosed(Substream substream) {
+    State substreamClosed(Substream substream) {
       substream.closed = true;
       if (this.drainedSubstreams.contains(substream)) {
         Set<Substream> drainedSubstreams = new HashSet<Substream>(this.drainedSubstreams);
