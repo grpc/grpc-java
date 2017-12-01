@@ -40,7 +40,6 @@ import java.util.logging.Logger;
  * The Netty-based server transport.
  */
 class NettyServerTransport implements ServerTransport {
-  @SuppressWarnings("unused") // log is for general messages, but nothing currently uses it
   private static final Logger log = Logger.getLogger(NettyServerTransport.class.getName());
   // connectionLog is for connection related messages only
   private static final Logger connectionLog = Logger.getLogger(
@@ -175,18 +174,23 @@ class NettyServerTransport implements ServerTransport {
 
   @Override
   public void produceStat(final Consumer<InternalTransportStats> consumer) {
-    if (channel.eventLoop().inEventLoop()) {
-      // This is necessary, otherwise we will block forever if we get the future from inside
-      // the event loop.
-      consumer.consume(transportTracer.getStats());
-    } else {
+    try {
       channel.eventLoop().submit(
           new Runnable() {
             @Override
             public void run() {
-              consumer.consume(transportTracer.getStats());
+              try {
+                consumer.consume(transportTracer.getStats());
+              } catch (Throwable t) {
+                // swallow all exceptions, so that a failed future means
+                // we never gave anything to the consumer.
+                log.log(Level.FINE, "exception from user supplied callback", t);
+              }
             }
           });
+    } catch (Throwable t) {
+      // TODO(zpencer): verify that this covers all cases wrt transport shutdown
+      consumer.consume(null);
     }
   }
 

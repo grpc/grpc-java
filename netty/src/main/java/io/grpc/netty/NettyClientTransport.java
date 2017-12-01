@@ -51,12 +51,15 @@ import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
  * A Netty-based {@link ConnectionClientTransport} implementation.
  */
 class NettyClientTransport implements ConnectionClientTransport {
+  private static final Logger log = Logger.getLogger(NettyServerTransport.class.getName());
   private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
   private final Map<ChannelOption<?>, ?> channelOptions;
   private final SocketAddress address;
@@ -308,18 +311,23 @@ class NettyClientTransport implements ConnectionClientTransport {
 
   @Override
   public void produceStat(final Consumer<InternalTransportStats> consumer) {
-    if (channel.eventLoop().inEventLoop()) {
-      // This is necessary, otherwise we will block forever if we get the future from inside
-      // the event loop.
-      consumer.consume(transportTracer.getStats());
-    } else {
+    try {
       channel.eventLoop().submit(
           new Runnable() {
             @Override
             public void run() {
-              consumer.consume(transportTracer.getStats());
+              try {
+                consumer.consume(transportTracer.getStats());
+              } catch (Throwable t) {
+                // swallow all exceptions, so that a failed future means
+                // we never gave anything to the consumer.
+                log.log(Level.FINE, "exception from user supplied callback", t);
+              }
             }
           });
+    } catch (Throwable t) {
+      // TODO(zpencer): verify that this covers all cases wrt transport shutdown
+      consumer.consume(null);
     }
   }
 
