@@ -127,6 +127,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           return;
         }
 
+        if (substream.closed) {
+          return;
+        }
+
         int stop = Math.min(index + chunk, savedState.buffer.size());
         if (list == null) {
           list = new ArrayList<BufferEntry>(stop - index);
@@ -430,6 +434,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     @Override
     public void closed(Status status, Metadata trailers) {
+      synchronized (lock) {
+        state = state.closed(substream);
+      }
+
       if (state.winningSubstream == null && shouldRetry()) {
         // The check state.winningSubstream == null, checking if is not already committed, is racy,
         // but is still safe b/c the retry will also handle committed/cancellation
@@ -503,7 +511,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           "passThrough should imply winningSubstream != null");
       checkState(
           !passThrough
-              || (drainedSubstreams.size() == 1 && drainedSubstreams.contains(winningSubstream)),
+              || (drainedSubstreams.size() == 1 && drainedSubstreams.contains(winningSubstream))
+              || (drainedSubstreams.size() == 0 && winningSubstream.closed),
           "passThrough should imply winningSubstream is drained");
       checkState(!cancelled || winningSubstream != null, "cancelled should imply committed");
     }
@@ -522,7 +531,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
       Set<Substream> drainedSubstreams = new HashSet<Substream>();
       drainedSubstreams.addAll(this.drainedSubstreams);
-      drainedSubstreams.add(substream);
+
+      if (!substream.closed) {
+        drainedSubstreams.add(substream);
+      }
 
       boolean passThrough = winningSubstream != null;
 
@@ -534,6 +546,21 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       }
 
       return new State(buffer, drainedSubstreams, winningSubstream, cancelled, passThrough);
+    }
+
+    /** The given substream is closed. */
+    @CheckReturnValue
+    @GuardedBy("lock")
+    State closed(Substream substream) {
+      substream.closed = true;
+      if (this.drainedSubstreams.contains(substream)) {
+        Set<Substream> drainedSubstreams = new HashSet<Substream>();
+        drainedSubstreams.addAll(this.drainedSubstreams);
+        drainedSubstreams.remove(substream);
+        return new State(buffer, drainedSubstreams, winningSubstream, cancelled, passThrough);
+      } else {
+        return this;
+      }
     }
 
     @CheckReturnValue
@@ -559,7 +586,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
    * A wrapper of a physical stream of a retry/hedging attempt, that comes with some useful
    *  attributes.
    */
-  static final class Substream {
+  private static final class Substream {
     ClientStream stream;
 
     // GuardedBy RetriableStream.lock
