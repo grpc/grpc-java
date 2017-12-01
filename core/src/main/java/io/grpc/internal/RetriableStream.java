@@ -123,7 +123,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           break;
         }
         if (index == savedState.buffer.size()) { // I'm drained
-          state = savedState.drained(substream);
+          state = savedState.substreamDrained(substream);
           return;
         }
 
@@ -435,7 +435,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     @Override
     public void closed(Status status, Metadata trailers) {
       synchronized (lock) {
-        state = state.closed(substream);
+        state = state.sbustreamClosed(substream);
       }
 
       if (state.winningSubstream == null && shouldRetry()) {
@@ -526,7 +526,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     /** The given substream is drained. */
     @CheckReturnValue
     @GuardedBy("lock")
-    State drained(Substream substream) {
+    State substreamDrained(Substream substream) {
       checkState(!passThrough, "Already passThrough");
 
       Set<Substream> drainedSubstreams = new HashSet<Substream>(this.drainedSubstreams);
@@ -550,7 +550,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     /** The given substream is closed. */
     @CheckReturnValue
     @GuardedBy("lock")
-    State closed(Substream substream) {
+    State sbustreamClosed(Substream substream) {
       substream.closed = true;
       if (this.drainedSubstreams.contains(substream)) {
         Set<Substream> drainedSubstreams = new HashSet<Substream>(this.drainedSubstreams);
