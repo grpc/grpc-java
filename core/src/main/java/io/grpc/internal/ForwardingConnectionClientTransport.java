@@ -24,6 +24,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
 
 abstract class ForwardingConnectionClientTransport implements ConnectionClientTransport {
   @Override
@@ -68,8 +69,8 @@ abstract class ForwardingConnectionClientTransport implements ConnectionClientTr
   }
 
   @Override
-  public void produceStat(Consumer<InternalTransportStats> consumer) {
-    delegate().produceStat(consumer);
+  public Future<InternalTransportStats> getStats() {
+    return delegate().getStats();
   }
 
   protected abstract ConnectionClientTransport delegate();

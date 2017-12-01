@@ -53,6 +53,7 @@ import java.util.Collection;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
@@ -687,8 +688,8 @@ public final class GrpcUtil {
         }
 
         @Override
-        public void produceStat(Consumer<InternalTransportStats> consumer) {
-          transport.produceStat(consumer);
+        public Future<InternalTransportStats> getStats() {
+          return transport.getStats();
         }
       };
     }

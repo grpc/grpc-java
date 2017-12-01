@@ -21,6 +21,7 @@ import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.InternalLogId;
@@ -50,8 +51,9 @@ import io.netty.util.AsciiString;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
-import java.util.logging.Level;
+import java.util.concurrent.Future;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
@@ -310,25 +312,21 @@ class NettyClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public void produceStat(final Consumer<InternalTransportStats> consumer) {
-    try {
-      channel.eventLoop().submit(
-          new Runnable() {
-            @Override
-            public void run() {
-              try {
-                consumer.consume(transportTracer.getStats());
-              } catch (Throwable t) {
-                // swallow all exceptions, so that a failed future means
-                // we never gave anything to the consumer.
-                log.log(Level.FINE, "exception from user supplied callback", t);
-              }
-            }
-          });
-    } catch (Throwable t) {
-      // TODO(zpencer): verify that this covers all cases wrt transport shutdown
-      consumer.consume(null);
+  public Future<InternalTransportStats> getStats() {
+    if (channel.eventLoop().inEventLoop()) {
+      // This is necessary, otherwise we will block forever if we get the future from inside
+      // the event loop.
+      SettableFuture<InternalTransportStats> result = SettableFuture.create();
+      result.set(transportTracer.getStats());
+      return result;
     }
+    return channel.eventLoop().submit(
+        new Callable<InternalTransportStats>() {
+          @Override
+          public InternalTransportStats call() throws Exception {
+            return transportTracer.getStats();
+          }
+        });
   }
 
   @VisibleForTesting

@@ -43,6 +43,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.truth.Truth;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.Compressor;
 import io.grpc.Context;
@@ -76,6 +77,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -1273,8 +1275,10 @@ public class ServerImplTest {
     }
 
     @Override
-    public void produceStat(Consumer<InternalTransportStats> consumer) {
-      consumer.consume(null);
+    public Future<InternalTransportStats> getStats() {
+      SettableFuture<InternalTransportStats> ret = SettableFuture.create();
+      ret.set(null);
+      return ret;
     }
   }
 

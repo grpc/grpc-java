@@ -16,24 +16,15 @@
 
 package io.grpc;
 
-import javax.annotation.Nullable;
+import java.util.concurrent.Future;
 
 /**
  * This is an gRPC internal interface. Do not use this.
  *
- * <p>An interface for types that <b>may</b> support instrumentation. If the concrete
- * type does not support instrumentation, then the stat passed to {@link Consumer}
- * will be {@code null}. The actual consumption of the stat T does not necessarily happen
- * on the current thread.
+ * <p>An interface for types that <b>may</b> support instrumentation. If the actual type does not
+ * support instrumentation, then the future will return a {@code null}.
  */
 @Internal
 public interface InternalInstrumented<T> extends InternalWithLogId {
-  void produceStat(Consumer<T> consumer);
-
-  /**
-   * An interface for consuming an arbitrary stat of type T.
-   */
-  interface Consumer<T> {
-    void consume(@Nullable T stat);
-  }
+  Future<T> getStats();
 }
