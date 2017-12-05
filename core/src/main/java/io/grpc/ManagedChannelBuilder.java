@@ -328,6 +328,24 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
+   * Sets the retry buffer size in bytes. The implementation may only estimate the buffer size being
+   * used instead of counting the exact memory allocated. It does not have any effect if retry is
+   * disabled.
+   */
+  public T retryBufferSize(long bytes) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Sets the per RPC buffer limit in bytes used for retry.  The implementation may only estimate
+   * the buffer size being used instead of counting the exact memory allocated. It does not have any
+   * effect if retry is disabled.
+   */
+  public T perRpcBufferLimit(long bytes) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
    * Builds a channel using the given parameters.
    *
    * @since 1.0.0
