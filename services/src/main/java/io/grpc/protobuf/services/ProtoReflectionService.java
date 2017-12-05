@@ -191,7 +191,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
             sendErrorResponse(
                 request,
                 Status.Code.UNIMPLEMENTED,
-                "not implemented" + request.getMessageRequestCase());
+                "not implemented " + request.getMessageRequestCase());
         }
         request = null;
         if (closeAfterSend) {
