@@ -56,6 +56,8 @@ import java.lang.ref.SoftReference;
 import java.lang.ref.WeakReference;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -160,6 +162,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
 
   // reprocess() must be run from channelExecutor
   private final DelayedClientTransport delayedTransport;
+  private final RetriableTransport retriableTransport = new RetriableTransport();
 
   // Shutdown states.
   //
@@ -400,12 +403,12 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
       return new RetriableStream<ReqT>(method) {
         @Override
         Status prestart() {
-          return delayedTransport.addUncommittedRetriableStream(this);
+          return retriableTransport.addUncommittedRetriableStream(this);
         }
 
         @Override
         void postCommit() {
-          delayedTransport.removeUncommittedRetriableStream(this);
+          retriableTransport.removeUncommittedRetriableStream(this);
         }
 
         @Override
@@ -524,9 +527,9 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
     phantom.shutdown = true;
 
     // Put gotoState(SHUTDOWN) as early into the channelExecutor's queue as possible.
-    // delayedTransport.shutdown() may also add some tasks into the queue. But some things inside
-    // delayedTransport.shutdown() like setting delayedTransport.shutdown = true are not run in the
-    // channelExecutor's queue and should not be blocked, so we do not drain() immediately here.
+    // retriableTransport.shutdown() may also add some tasks into the queue. But some things inside
+    // retriableTransport.shutdown() like setting delayedTransport.shutdown = true are not run in
+    // the channelExecutor's queue and should not be blocked, so we do not drain() immediately here.
     channelExecutor.executeLater(new Runnable() {
       @Override
       public void run() {
@@ -536,7 +539,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
       }
     });
 
-    delayedTransport.shutdown(SHUTDOWN_STATUS);
+    retriableTransport.shutdown(SHUTDOWN_STATUS);
     channelExecutor.executeLater(new Runnable() {
         @Override
         public void run() {
@@ -557,7 +560,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
     logger.log(Level.FINE, "[{0}] shutdownNow() called", getLogId());
     shutdown();
     phantom.shutdownNow = true;
-    delayedTransport.shutdownNow(SHUTDOWN_NOW_STATUS);
+    retriableTransport.shutdownNow(SHUTDOWN_NOW_STATUS);
     channelExecutor.executeLater(new Runnable() {
         @Override
         public void run() {
@@ -692,6 +695,85 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
             }
           }
         }).drain();
+  }
+
+  /**
+   * A logical "transport" that prevents channel shutdown from killing existing retry attempts that
+   * are in backoff.
+   */
+  private final class RetriableTransport {
+    final Object lock = new Object();
+
+    @GuardedBy("lock")
+    Collection<ClientStream> uncommittedRetriableStreams = new HashSet<ClientStream>();
+
+    @GuardedBy("lock")
+    Status shutdownStatus;
+
+    void shutdown(Status reason) {
+      boolean shouldShutdownDelayedTransport = false;
+      synchronized (lock) {
+        if (shutdownStatus != null) {
+          return;
+        }
+        shutdownStatus = reason;
+        if (uncommittedRetriableStreams.isEmpty()) {
+          shouldShutdownDelayedTransport = true;
+        }
+      }
+
+      if (shouldShutdownDelayedTransport) {
+        delayedTransport.shutdown(reason);
+      }
+      channelExecutor.drain();
+    }
+
+    void shutdownNow(Status reason) {
+      shutdown(reason);
+      Collection<ClientStream> streams;
+
+      synchronized (lock) {
+        streams = new ArrayList<ClientStream>(uncommittedRetriableStreams);
+      }
+
+      for (ClientStream stream : streams) {
+        stream.cancel(reason);
+      }
+      delayedTransport.shutdownNow(reason);
+    }
+
+    /**
+     * Registers a RetriableStream and return null if not shutdown, otherwise just returns the
+     * shutdown Status.
+     */
+    @Nullable
+    Status addUncommittedRetriableStream(RetriableStream<?> retriableStream) {
+      synchronized (lock) {
+        if (shutdownStatus != null) {
+          return shutdownStatus;
+        }
+        uncommittedRetriableStreams.add(retriableStream);
+        return null;
+      }
+    }
+
+    void removeUncommittedRetriableStream(RetriableStream<?> retriableStream) {
+      Status shutdownStatusCopy = null;
+
+      synchronized (lock) {
+        uncommittedRetriableStreams.remove(retriableStream);
+        if (uncommittedRetriableStreams.isEmpty()) {
+          shutdownStatusCopy = shutdownStatus;
+          // Because retriable transport is long-lived, we take this opportunity to down-size the
+          // hashmap.
+          uncommittedRetriableStreams = new HashSet<ClientStream>();
+        }
+      }
+
+      if (shutdownStatusCopy != null) {
+        delayedTransport.shutdown(shutdownStatusCopy);
+      }
+    }
   }
 
   private class LbHelperImpl extends LoadBalancer.Helper {
