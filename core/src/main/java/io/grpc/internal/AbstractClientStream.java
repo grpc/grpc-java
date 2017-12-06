@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.CONTENT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 
@@ -104,8 +105,8 @@ public abstract class AbstractClientStream extends AbstractStream
       TransportTracer transportTracer,
       Metadata headers,
       boolean useGet) {
-    Preconditions.checkNotNull(headers, "headers");
-    this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
+    checkNotNull(headers, "headers");
+    this.transportTracer = checkNotNull(transportTracer, "transportTracer");
     this.useGet = useGet;
     if (!useGet) {
       framer = new MessageFramer(this, bufferAllocator, statsTraceCtx);
@@ -218,7 +219,7 @@ public abstract class AbstractClientStream extends AbstractStream
         StatsTraceContext statsTraceCtx,
         TransportTracer transportTracer) {
       super(maxMessageSize, statsTraceCtx, transportTracer);
-      this.statsTraceCtx = Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
+      this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
     }
 
     private void setFullStreamDecompression(boolean fullStreamDecompression) {
@@ -228,13 +229,13 @@ public abstract class AbstractClientStream extends AbstractStream
     private void setDecompressorRegistry(DecompressorRegistry decompressorRegistry) {
       Preconditions.checkState(this.listener == null, "Already called start");
       this.decompressorRegistry =
-          Preconditions.checkNotNull(decompressorRegistry, "decompressorRegistry");
+          checkNotNull(decompressorRegistry, "decompressorRegistry");
     }
 
     @VisibleForTesting
     public final void setListener(ClientStreamListener listener) {
       Preconditions.checkState(this.listener == null, "Already called setListener");
-      this.listener = Preconditions.checkNotNull(listener, "listener");
+      this.listener = checkNotNull(listener, "listener");
     }
 
     @Override
@@ -307,7 +308,7 @@ public abstract class AbstractClientStream extends AbstractStream
      * @param frame the received data frame. Its ownership is transferred to this method.
      */
     protected void inboundDataReceived(ReadableBuffer frame) {
-      Preconditions.checkNotNull(frame, "frame");
+      checkNotNull(frame, "frame");
       boolean needToCloseFrame = true;
       try {
         if (statusReported) {
@@ -331,8 +332,8 @@ public abstract class AbstractClientStream extends AbstractStream
      * @param status the status extracted from the trailers
      */
     protected void inboundTrailersReceived(Metadata trailers, Status status) {
-      Preconditions.checkNotNull(status, "status");
-      Preconditions.checkNotNull(trailers, "trailers");
+      checkNotNull(status, "status");
+      checkNotNull(trailers, "trailers");
       if (statusReported) {
         log.log(Level.INFO, "Received trailers on closed stream:\n {1}\n {2}",
             new Object[]{status, trailers});
@@ -355,8 +356,8 @@ public abstract class AbstractClientStream extends AbstractStream
      */
     public final void transportReportStatus(final Status status, boolean stopDelivery,
         final Metadata trailers) {
-      Preconditions.checkNotNull(status, "status");
-      Preconditions.checkNotNull(trailers, "trailers");
+      checkNotNull(status, "status");
+      checkNotNull(trailers, "trailers");
       // If stopDelivery, we continue in case previous invocation is waiting for stall
       if (statusReported && !stopDelivery) {
         return;
@@ -403,8 +404,8 @@ public abstract class AbstractClientStream extends AbstractStream
     private byte[] payload;
 
     public GetFramer(Metadata headers, StatsTraceContext statsTraceCtx) {
-      this.headers = Preconditions.checkNotNull(headers, "headers");
-      this.statsTraceCtx = Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
+      this.headers = checkNotNull(headers, "headers");
+      this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
     }
 
     @Override

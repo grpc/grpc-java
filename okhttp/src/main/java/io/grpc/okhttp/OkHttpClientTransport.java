@@ -253,7 +253,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     this.proxyPassword = null;
     this.tooManyPingsRunnable =
         Preconditions.checkNotNull(tooManyPingsRunnable, "tooManyPingsRunnable");
-    this.transportTracer = Preconditions.checkNotNull(transportTracer);
+    this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
     initTransportTracer();
   }
 
