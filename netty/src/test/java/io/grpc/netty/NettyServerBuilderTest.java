@@ -69,4 +69,52 @@ public class NettyServerBuilderTest {
 
     NettyServerBuilder.forPort(8080).keepAliveTimeout(-10L, TimeUnit.HOURS);
   }
+
+  @Test
+  public void failIfMaxConcurrentCallsPerConnectionNegative() {
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("max must be positive");
+
+    NettyServerBuilder.forPort(8080).maxConcurrentCallsPerConnection(0);
+  }
+
+  @Test
+  public void failIfMaxHeaderListSizeNegative() {
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("maxHeaderListSize must be > 0");
+
+    NettyServerBuilder.forPort(8080).maxHeaderListSize(0);
+  }
+
+  @Test
+  public void failIfMaxConnectionIdleNegative() {
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("max connection idle must be positive");
+
+    NettyServerBuilder.forPort(8080).maxConnectionIdle(-1, TimeUnit.HOURS);
+  }
+
+  @Test
+  public void failIfMaxConnectionAgeNegative() {
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("max connection age must be positive");
+
+    NettyServerBuilder.forPort(8080).maxConnectionAge(-1, TimeUnit.HOURS);
+  }
+
+  @Test
+  public void failIfMaxConnectionAgeGraceNegative() {
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("max connection age grace must be non-negative");
+
+    NettyServerBuilder.forPort(8080).maxConnectionAgeGrace(-1, TimeUnit.HOURS);
+  }
+
+  @Test
+  public void failIfPermitKeepAliveTimeNegative() {
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("permit keepalive time must be non-negative");
+
+    NettyServerBuilder.forPort(8080).permitKeepAliveTime(-1, TimeUnit.HOURS);
+  }
 }
