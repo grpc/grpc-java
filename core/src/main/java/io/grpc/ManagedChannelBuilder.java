@@ -328,18 +328,18 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Sets the retry buffer size in bytes. The implementation may only estimate the buffer size being
-   * used instead of counting the exact memory allocated. It does not have any effect if retry is
-   * disabled.
+   * Sets the retry buffer size in bytes. All RPCs are not retriable if the buffer limit is
+   * exceeded. The implementation may only estimate the buffer size being used rather than count
+   * the exact physical memory allocated. It does not have any effect if retry is disabled.
    */
   public T retryBufferSize(long bytes) {
     throw new UnsupportedOperationException();
   }
 
   /**
-   * Sets the per RPC buffer limit in bytes used for retry.  The implementation may only estimate
-   * the buffer size being used instead of counting the exact memory allocated. It does not have any
-   * effect if retry is disabled.
+   * Sets the per RPC buffer limit in bytes used for retry. The RPC is not retriable if its buffer
+   * limit is exceeded. The implementation may only estimate the buffer size being used rather than
+   * count the exact physical memory allocated. It does not have any effect if retry is disabled.
    */
   public T perRpcBufferLimit(long bytes) {
     throw new UnsupportedOperationException();

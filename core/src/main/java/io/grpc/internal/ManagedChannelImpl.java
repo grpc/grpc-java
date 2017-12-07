@@ -205,7 +205,7 @@ public final class ManagedChannelImpl
   // One instance per channel.
   private final AtomicLong channelBufferUsed = new AtomicLong();
 
-  private final long perRpcBufferLimit ;
+  private final long perRpcBufferLimit;
   private final long channelBufferLimit;
 
   // Called from channelExecutor
@@ -447,7 +447,7 @@ public final class ManagedChannelImpl
 
         @Override
         ClientStream newStream(ClientStreamTracer.Factory tracerFactory) {
-          // TODO(zdapeng): only add tracer when retry is not disabled.
+          // TODO(zdapeng): only add tracer when retry is enabled.
           CallOptions newOptions = callOptions.withStreamTracerFactory(tracerFactory);
           ClientTransport transport =
               get(new PickSubchannelArgsImpl(method, headers, newOptions));

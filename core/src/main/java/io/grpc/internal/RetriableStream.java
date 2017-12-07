@@ -660,7 +660,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     /**
      * A message is sent to the wire, so its reference would be released if no retry or
-     * hedging were involved. So at this point we have to held the reference of the message longer
+     * hedging were involved. So at this point we have to hold the reference of the message longer
      * for retry, and we need to increment {@code substream.bufferNeeded}.
      */
     @Override
