@@ -54,6 +54,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallOptions;
 import io.grpc.InternalStatus;
+import io.grpc.InternalTransportStats;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -546,7 +547,7 @@ public class OkHttpClientTransportTest {
   @Test
   public void transportTracer_windowSizeDefault() throws Exception {
     initTransport();
-    TransportTracer.Stats stats = clientTransport.getTransportStats().get();
+    InternalTransportStats stats = clientTransport.getTransportStats().get();
     assertEquals(Utils.DEFAULT_WINDOW_SIZE, stats.remoteFlowControlWindow);
     // okhttp does not track local window sizes
     assertEquals(-1, stats.localFlowControlWindow);
@@ -555,13 +556,13 @@ public class OkHttpClientTransportTest {
   @Test
   public void transportTracer_windowSize_remote() throws Exception {
     initTransport();
-    TransportTracer.Stats before = clientTransport.getTransportStats().get();
+    InternalTransportStats before = clientTransport.getTransportStats().get();
     assertEquals(Utils.DEFAULT_WINDOW_SIZE, before.remoteFlowControlWindow);
     // okhttp does not track local window sizes
     assertEquals(-1, before.localFlowControlWindow);
 
     frameHandler().windowUpdate(0, 1000);
-    TransportTracer.Stats after = clientTransport.getTransportStats().get();
+    InternalTransportStats after = clientTransport.getTransportStats().get();
     assertEquals(Utils.DEFAULT_WINDOW_SIZE + 1000, after.remoteFlowControlWindow);
     // okhttp does not track local window sizes
     assertEquals(-1, after.localFlowControlWindow);
