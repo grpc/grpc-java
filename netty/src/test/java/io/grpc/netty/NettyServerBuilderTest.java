@@ -21,6 +21,8 @@ import static org.mockito.Mockito.when;
 
 import io.netty.handler.ssl.SslContext;
 import java.util.concurrent.TimeUnit;
+
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -36,9 +38,15 @@ public class NettyServerBuilderTest {
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
+  private NettyServerBuilder builder = null;
+
+  @Before
+  public void setUp() {
+    builder = NettyServerBuilder.forPort(8080);
+  }
+
   @Test
   public void sslContextCanBeNull() {
-    NettyServerBuilder builder = NettyServerBuilder.forPort(8080);
     builder.sslContext(null);
   }
 
@@ -46,8 +54,6 @@ public class NettyServerBuilderTest {
   public void failIfSslContextIsNotServer() {
     SslContext sslContext = mock(SslContext.class);
     when(sslContext.isClient()).thenReturn(true);
-
-    NettyServerBuilder builder = NettyServerBuilder.forPort(8080);
 
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Client SSL context can not be used for server");
@@ -59,7 +65,7 @@ public class NettyServerBuilderTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("keepalive time must be positive");
 
-    NettyServerBuilder.forPort(8080).keepAliveTime(-10L, TimeUnit.HOURS);
+    builder.keepAliveTime(-10L, TimeUnit.HOURS);
   }
 
   @Test
@@ -67,7 +73,7 @@ public class NettyServerBuilderTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("keepalive timeout must be positive");
 
-    NettyServerBuilder.forPort(8080).keepAliveTimeout(-10L, TimeUnit.HOURS);
+    builder.keepAliveTimeout(-10L, TimeUnit.HOURS);
   }
 
   @Test
@@ -75,7 +81,7 @@ public class NettyServerBuilderTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("max must be positive");
 
-    NettyServerBuilder.forPort(8080).maxConcurrentCallsPerConnection(0);
+    builder.maxConcurrentCallsPerConnection(0);
   }
 
   @Test
@@ -83,7 +89,7 @@ public class NettyServerBuilderTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("maxHeaderListSize must be > 0");
 
-    NettyServerBuilder.forPort(8080).maxHeaderListSize(0);
+    builder.maxHeaderListSize(0);
   }
 
   @Test
@@ -91,7 +97,7 @@ public class NettyServerBuilderTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("max connection idle must be positive");
 
-    NettyServerBuilder.forPort(8080).maxConnectionIdle(-1, TimeUnit.HOURS);
+    builder.maxConnectionIdle(-1, TimeUnit.HOURS);
   }
 
   @Test
@@ -99,7 +105,7 @@ public class NettyServerBuilderTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("max connection age must be positive");
 
-    NettyServerBuilder.forPort(8080).maxConnectionAge(-1, TimeUnit.HOURS);
+    builder.maxConnectionAge(-1, TimeUnit.HOURS);
   }
 
   @Test
@@ -107,7 +113,7 @@ public class NettyServerBuilderTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("max connection age grace must be non-negative");
 
-    NettyServerBuilder.forPort(8080).maxConnectionAgeGrace(-1, TimeUnit.HOURS);
+    builder.maxConnectionAgeGrace(-1, TimeUnit.HOURS);
   }
 
   @Test
@@ -115,6 +121,6 @@ public class NettyServerBuilderTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("permit keepalive time must be non-negative");
 
-    NettyServerBuilder.forPort(8080).permitKeepAliveTime(-1, TimeUnit.HOURS);
+    builder.permitKeepAliveTime(-1, TimeUnit.HOURS);
   }
 }
