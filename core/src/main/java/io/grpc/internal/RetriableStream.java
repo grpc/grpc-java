@@ -35,16 +35,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 
 /** A logical {@link ClientStream} that is retriable. */
 abstract class RetriableStream<ReqT> implements ClientStream {
-  @SuppressWarnings("rawtypes") // rawtypes is fine here
-  private static final AtomicLongFieldUpdater<RetriableStream> perRpcBufferUsedUpdater =
-      AtomicLongFieldUpdater.newUpdater(RetriableStream.class, "perRpcBufferUsed");
   private static final Status CANCELLED_BECAUSE_COMMITTED =
       Status.CANCELLED.withDescription("Stream thrown away because RetriableStream committed");
 
@@ -62,7 +58,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   // Used for recording the share of buffer used for the current call out of the channel buffer.
   // This field would not be necessary if there is no channel buffer limit.
-  private volatile long perRpcBufferUsed;
+  @GuardedBy("lock")
+  private long perRpcBufferUsed;
 
   private ClientStreamListener masterListener;
 
@@ -90,7 +87,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         @Override
         public void run() {
           // subtract the share of this RPC from channelBufferUsed.
-          channelBufferUsed.addAndGet(-perRpcBufferUsedUpdater.get(RetriableStream.this));
+          channelBufferUsed.addAndGet(-perRpcBufferUsed);
 
           // For hedging only, not needed for normal retry
           // TODO(zdapeng): also cancel all the scheduled hedges.
@@ -671,30 +668,24 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       if (state.winningSubstream != null || substream.closed) {
         return;
       }
-      substream.bufferNeeded += bytes;
-      long bufferNeeded = substream.bufferNeeded;
-      long savedPerRpcBufferUsed = perRpcBufferUsedUpdater.get(RetriableStream.this);
-      while (bufferNeeded > savedPerRpcBufferUsed) {
-        if (perRpcBufferUsedUpdater
-            .compareAndSet(RetriableStream.this, savedPerRpcBufferUsed, bufferNeeded)) {
-          long savedChannelBufferUsed =
-              channelBufferUsed.addAndGet(bufferNeeded - savedPerRpcBufferUsed);
-          if (bufferNeeded > perRpcBufferLimit || savedChannelBufferUsed > channelBufferLimit) {
-            // If the stream is not closed, commit this stream;
-            // otherwise, which is a racy edge case, just do nothing until next hedge/normal retry
-            // triggers this IF statement.
-            synchronized (lock) {
-              if (substream.closed) {
-                return;
-              }
-              // state.substreamClosed(substream) never happen before
-              substream.bufferLimitExceeded = true;
-            }
-            commit(substream);
-          }
+
+      synchronized (lock) {
+        if (state.winningSubstream != null || substream.closed) {
           return;
         }
-        savedPerRpcBufferUsed = perRpcBufferUsedUpdater.get(RetriableStream.this);
+        substream.bufferNeeded += bytes;
+        if (substream.bufferNeeded > perRpcBufferUsed) {
+          perRpcBufferUsed = substream.bufferNeeded;
+          long savedChannelBufferUsed =
+              channelBufferUsed.addAndGet(bytes);
+          if (perRpcBufferUsed > perRpcBufferLimit || savedChannelBufferUsed > channelBufferLimit) {
+            substream.bufferLimitExceeded = true;
+          }
+        }
+      }
+
+      if (substream.bufferLimitExceeded) {
+        commit(substream);
       }
     }
   }
