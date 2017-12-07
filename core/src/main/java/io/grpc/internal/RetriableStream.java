@@ -130,11 +130,13 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   }
 
   private Substream createSubstream() {
-    final Substream sub = new Substream();
+    Substream sub = new Substream();
+    // one tracer per substream
+    final ClientStreamTracer bufferSizeTracer = new BufferSizeTracer(sub);
     ClientStreamTracer.Factory tracerFactory = new ClientStreamTracer.Factory() {
       @Override
       public ClientStreamTracer newClientStreamTracer(CallOptions callOptions, Metadata headers) {
-        return new BufferSizeTracer(sub);
+        return bufferSizeTracer;
       }
     };
     // NOTICE: This set _must_ be done before stream.start() and it actually is.
