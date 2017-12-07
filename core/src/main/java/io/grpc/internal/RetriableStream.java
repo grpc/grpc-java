@@ -485,7 +485,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       // handle a race between buffer limit exceeded and closed, when setting
       // substream.bufferLimitExceeded = true happens before state.substreamClosed(substream).
       if (substream.bufferLimitExceeded) {
-        masterListener.closed(status, trailers);
+        commit(substream);
+        if (state.winningSubstream == substream) {
+          masterListener.closed(status, trailers);
+        }
         return;
       }
 
