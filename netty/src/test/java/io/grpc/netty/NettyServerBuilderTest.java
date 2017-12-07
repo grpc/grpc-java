@@ -21,8 +21,6 @@ import static org.mockito.Mockito.when;
 
 import io.netty.handler.ssl.SslContext;
 import java.util.concurrent.TimeUnit;
-
-import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -38,12 +36,7 @@ public class NettyServerBuilderTest {
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
-  private NettyServerBuilder builder = null;
-
-  @Before
-  public void setUp() {
-    builder = NettyServerBuilder.forPort(8080);
-  }
+  private NettyServerBuilder builder = NettyServerBuilder.forPort(8080);
 
   @Test
   public void sslContextCanBeNull() {
