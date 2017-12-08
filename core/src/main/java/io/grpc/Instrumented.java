@@ -16,12 +16,12 @@
 
 package io.grpc;
 
-import java.util.concurrent.Future;
+import com.google.common.util.concurrent.ListenableFuture;
 
 /**
  * An interface for types that <b>may</b> support instrumentation. If the actual type does not
  * support instrumentation, then the future will return a {@code null}.
  */
 interface Instrumented<T> extends WithLogId {
-  Future<T> getStats();
+  ListenableFuture<T> getStats();
 }

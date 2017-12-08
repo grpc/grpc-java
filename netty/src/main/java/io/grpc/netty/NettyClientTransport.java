@@ -21,6 +21,7 @@ import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -51,9 +52,7 @@ import io.netty.util.AsciiString;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.util.Map;
-import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Future;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
@@ -312,21 +311,22 @@ class NettyClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public Future<InternalTransportStats> getStats() {
+  public ListenableFuture<InternalTransportStats> getStats() {
+    final SettableFuture<InternalTransportStats> result = SettableFuture.create();
     if (channel.eventLoop().inEventLoop()) {
       // This is necessary, otherwise we will block forever if we get the future from inside
       // the event loop.
-      SettableFuture<InternalTransportStats> result = SettableFuture.create();
       result.set(transportTracer.getStats());
       return result;
     }
-    return channel.eventLoop().submit(
-        new Callable<InternalTransportStats>() {
+    channel.eventLoop().submit(
+        new Runnable() {
           @Override
-          public InternalTransportStats call() throws Exception {
-            return transportTracer.getStats();
+          public void run() {
+            result.set(transportTracer.getStats());
           }
         });
+    return result;
   }
 
   @VisibleForTesting
