@@ -16,15 +16,9 @@
 
 package io.grpc;
 
-import java.util.concurrent.Future;
-
 /**
  * This is an gRPC internal interface. Do not use this.
- *
- * <p>An interface for types that <b>may</b> support instrumentation. If the actual type does not
- * support instrumentation, then the future will return a {@code null}.
  */
 @Internal
-public interface InternalInstrumented<T> extends InternalWithLogId {
-  Future<T> getStats();
+public interface InternalInstrumented<T> extends Instrumented<T>, InternalWithLogId {
 }

@@ -16,22 +16,12 @@
 
 package io.grpc;
 
-/**
- * Do not use this. This is an internal accessor class.
- */
-@Internal
-public final class InternalLogId extends LogId {
-  private InternalLogId(String tag, long id) {
-    super(tag, id);
-  }
+import java.util.concurrent.Future;
 
-  /**
-   * An accessor method for {@link LogId#allocate(String)}.
-   *
-   * @param tag a loggable tag associated with this tag. The ID that is allocated is guaranteed
-   *            to be unique and increasing, irrespective of the tag.
-   */
-  public static InternalLogId allocate(String tag) {
-    return new InternalLogId(tag, LogId.getNextId());
-  }
+/**
+ * An interface for types that <b>may</b> support instrumentation. If the actual type does not
+ * support instrumentation, then the future will return a {@code null}.
+ */
+interface Instrumented<T> extends WithLogId {
+  Future<T> getStats();
 }

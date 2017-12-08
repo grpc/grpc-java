@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2016, gRPC Authors All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,21 +17,15 @@
 package io.grpc;
 
 /**
- * Do not use this. This is an internal accessor class.
+ * An object that has an ID that is unique within the JVM, primarily for debug logging.
  */
-@Internal
-public final class InternalLogId extends LogId {
-  private InternalLogId(String tag, long id) {
-    super(tag, id);
-  }
-
+interface WithLogId {
   /**
-   * An accessor method for {@link LogId#allocate(String)}.
+   * Returns an ID that is primarily used in debug logs. It usually contains the class name and a
+   * numeric ID that is unique among the instances.
    *
-   * @param tag a loggable tag associated with this tag. The ID that is allocated is guaranteed
-   *            to be unique and increasing, irrespective of the tag.
+   * <p>The subclasses of this interface usually want to include the log ID in their {@link
+   * #toString} results.
    */
-  public static InternalLogId allocate(String tag) {
-    return new InternalLogId(tag, LogId.getNextId());
-  }
+  LogId getLogId();
 }
