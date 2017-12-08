@@ -705,6 +705,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
   // TODO(zdapeng): add test coverage for shutdown during retry backoff once retry backoff is
   //                implemented.
   private final class UncommittedRetriableStreamsRegistry {
+    // TODO(zdapeng): This means we would acquire a lock for each new retry-able stream,
+    // it's worthwhile to look for a lock-free approach.
     final Object lock = new Object();
 
     @GuardedBy("lock")
@@ -720,6 +722,9 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
           return;
         }
         shutdownStatus = reason;
+        // Keep the delayedTransport open until there is no more uncommitted streams, b/c those
+        // retriable streams, which may be in backoff and not using any transport, are already
+        // started RPCs.
         if (uncommittedRetriableStreams.isEmpty()) {
           shouldShutdownDelayedTransport = true;
         }
@@ -728,7 +733,6 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
       if (shouldShutdownDelayedTransport) {
         delayedTransport.shutdown(reason);
       }
-      channelExecutor.drain();
     }
 
     void onShutdownNow(Status reason) {
