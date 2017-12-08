@@ -162,7 +162,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
 
   // reprocess() must be run from channelExecutor
   private final DelayedClientTransport delayedTransport;
-  private final RetriableTransport retriableTransport = new RetriableTransport();
+  private final UncommittedRetriableStreamsRegistry uncommittedRetriableStreamsRegistry
+      = new UncommittedRetriableStreamsRegistry();
 
   // Shutdown states.
   //
@@ -403,12 +404,12 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
       return new RetriableStream<ReqT>(method) {
         @Override
         Status prestart() {
-          return retriableTransport.addUncommittedRetriableStream(this);
+          return uncommittedRetriableStreamsRegistry.add(this);
         }
 
         @Override
         void postCommit() {
-          retriableTransport.removeUncommittedRetriableStream(this);
+          uncommittedRetriableStreamsRegistry.remove(this);
         }
 
         @Override
@@ -527,9 +528,9 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
     phantom.shutdown = true;
 
     // Put gotoState(SHUTDOWN) as early into the channelExecutor's queue as possible.
-    // retriableTransport.shutdown() may also add some tasks into the queue. But some things inside
-    // retriableTransport.shutdown() like setting delayedTransport.shutdown = true are not run in
-    // the channelExecutor's queue and should not be blocked, so we do not drain() immediately here.
+    // delayedTransport.shutdown() may also add some tasks into the queue. But some things inside
+    // delayedTransport.shutdown() like setting delayedTransport.shutdown = true are not run in the
+    // channelExecutor's queue and should not be blocked, so we do not drain() immediately here.
     channelExecutor.executeLater(new Runnable() {
       @Override
       public void run() {
@@ -539,7 +540,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
       }
     });
 
-    retriableTransport.shutdown(SHUTDOWN_STATUS);
+    uncommittedRetriableStreamsRegistry.onShutdown(SHUTDOWN_STATUS);
     channelExecutor.executeLater(new Runnable() {
         @Override
         public void run() {
@@ -560,7 +561,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
     logger.log(Level.FINE, "[{0}] shutdownNow() called", getLogId());
     shutdown();
     phantom.shutdownNow = true;
-    retriableTransport.shutdownNow(SHUTDOWN_NOW_STATUS);
+    uncommittedRetriableStreamsRegistry.onShutdownNow(SHUTDOWN_NOW_STATUS);
     channelExecutor.executeLater(new Runnable() {
         @Override
         public void run() {
@@ -698,10 +699,12 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
   }
 
   /**
-   * A logical "transport" that prevents channel shutdown from killing existing retry attempts that
-   * are in backoff.
+   * A registry that prevents channel shutdown from killing existing retry attempts that are in
+   * backoff.
    */
-  private final class RetriableTransport {
+  // TODO(zdapeng): add test coverage for shutdown during retry backoff once retry backoff is
+  //                implemented.
+  private final class UncommittedRetriableStreamsRegistry {
     final Object lock = new Object();
 
     @GuardedBy("lock")
@@ -710,7 +713,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
     @GuardedBy("lock")
     Status shutdownStatus;
 
-    void shutdown(Status reason) {
+    void onShutdown(Status reason) {
       boolean shouldShutdownDelayedTransport = false;
       synchronized (lock) {
         if (shutdownStatus != null) {
@@ -728,8 +731,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
       channelExecutor.drain();
     }
 
-    void shutdownNow(Status reason) {
-      shutdown(reason);
+    void onShutdownNow(Status reason) {
+      onShutdown(reason);
       Collection<ClientStream> streams;
 
       synchronized (lock) {
@@ -747,7 +750,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
      * shutdown Status.
      */
     @Nullable
-    Status addUncommittedRetriableStream(RetriableStream<?> retriableStream) {
+    Status add(RetriableStream<?> retriableStream) {
       synchronized (lock) {
         if (shutdownStatus != null) {
           return shutdownStatus;
@@ -757,7 +760,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Internal
       }
     }
 
-    void removeUncommittedRetriableStream(RetriableStream<?> retriableStream) {
+    void remove(RetriableStream<?> retriableStream) {
       Status shutdownStatusCopy = null;
 
       synchronized (lock) {
