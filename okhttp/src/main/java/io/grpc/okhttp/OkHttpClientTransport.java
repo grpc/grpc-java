@@ -892,7 +892,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public ListenableFuture<InternalTransportStats> getTransportStats() {
+  public ListenableFuture<InternalTransportStats> getStats() {
     synchronized (lock) {
       SettableFuture<InternalTransportStats> ret = SettableFuture.create();
       ret.set(transportTracer.getStats());
