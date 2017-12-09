@@ -23,7 +23,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Verify;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.Grpc;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.SharedResourceHolder.Resource;
@@ -167,7 +166,6 @@ final class DnsNameResolver extends NameResolver {
           }
           ResolutionResults resolvedInetAddrs;
           try {
-            logger.log(Level.SEVERE, "RESOVLING");
             resolvedInetAddrs = delegateResolver.resolve(host);
           } catch (Exception e) {
             synchronized (DnsNameResolver.this) {
@@ -193,7 +191,8 @@ final class DnsNameResolver extends NameResolver {
 
           Attributes.Builder attrs = Attributes.newBuilder();
           if (!resolvedInetAddrs.txtRecords.isEmpty()) {
-            attrs.set(Grpc.NAME_RESOLVER_ATTR_TXT,
+            attrs.set(
+                GrpcAttributes.NAME_RESOLVER_ATTR_TXT,
                 Collections.unmodifiableList(new ArrayList<String>(resolvedInetAddrs.txtRecords)));
           }
           savedListener.onAddresses(servers, attrs.build());
@@ -366,7 +365,7 @@ final class DnsNameResolver extends NameResolver {
   @VisibleForTesting
   static final class JndiResolver extends DelegateResolver {
 
-    private static final Pattern whitespace = Pattern.compile("\\s*");
+    private static final Pattern whitespace = Pattern.compile("\\s+");
 
     @Override
     ResolutionResults resolve(String host) throws NamingException {
@@ -397,18 +396,20 @@ final class DnsNameResolver extends NameResolver {
         for (String srvRecord : grpclbSrvRecords) {
           try {
             String[] parts = whitespace.split(srvRecord);
-            Verify.verify(parts.length == 8, "Bad SRV Record: %s, ", srvRecord);
-            String srvHostname = parts[7];
-            int port = Integer.parseInt(parts[6]);
+            Verify.verify(parts.length == 4, "Bad SRV Record: %s, ", srvRecord);
+            String srvHostname = parts[3];
+            int port = Integer.parseInt(parts[2]);
 
             InetAddress[] addrs = InetAddress.getAllByName(srvHostname);
             List<SocketAddress> sockaddrs = new ArrayList<SocketAddress>(addrs.length);
             for (InetAddress addr : addrs) {
               sockaddrs.add(new InetSocketAddress(addr, port));
             }
+            Attributes attrs = Attributes.newBuilder()
+                .set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, srvHostname)
+                .build();
             balancerAddresses.add(
-                new EquivalentAddressGroup(
-                    Collections.unmodifiableList(sockaddrs), Attributes.newBuilder().build()));
+                new EquivalentAddressGroup(Collections.unmodifiableList(sockaddrs), attrs));
           } catch (UnknownHostException e) {
             logger.log(Level.WARNING, "Can't find address for SRV record" + srvRecord, e);
           } catch (RuntimeException e) {

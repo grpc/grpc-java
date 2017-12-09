@@ -17,7 +17,6 @@
 package io.grpc;
 
 import java.net.SocketAddress;
-import java.util.List;
 import javax.net.ssl.SSLSession;
 
 /**
@@ -41,11 +40,4 @@ public final class Grpc {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1710")
   public static final Attributes.Key<SSLSession> TRANSPORT_ATTR_SSL_SESSION =
           Attributes.Key.of("ssl-session");
-
-  /**
-   * Attribute key TXT DNS records.
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9999")
-  public static final Attributes.Key<List<String>> NAME_RESOLVER_ATTR_TXT =
-      Attributes.Key.of("dns-txt");
 }
