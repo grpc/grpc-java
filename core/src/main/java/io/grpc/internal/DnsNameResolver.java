@@ -20,14 +20,18 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Verify;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.Grpc;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -38,6 +42,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.naming.NamingEnumeration;
@@ -49,7 +54,7 @@ import javax.naming.directory.InitialDirContext;
  * A DNS-based {@link NameResolver}.
  *
  * <p>Each {@code A} or {@code AAAA} record emits an {@link EquivalentAddressGroup} in the list
- * passed to {@link NameResolver.Listener#onUpdate}
+ * passed to {@link NameResolver.Listener#onAddresses(List, Attributes)}
  *
  * @see DnsNameResolverProvider
  */
@@ -59,8 +64,13 @@ final class DnsNameResolver extends NameResolver {
 
   private static final boolean JNDI_AVAILABLE = jndiAvailable();
 
+  // From https://github.com/grpc/proposal/blob/master/A2-service-configs-in-dns.md
+  private static final String SERVICE_CONFIG_NAME_PREFIX = "_grpc_config.";
+  // From https://github.com/grpc/proposal/blob/master/A5-grpclb-in-dns.md
+  private static final String GRPCLB_NAME_PREFIX = "_grpclb._tcp.";
+
   @VisibleForTesting
-  static boolean enableJndi = false;
+  static boolean enableJndi = true;
 
   private DelegateResolver delegateResolver = pickDelegateResolver();
 
@@ -157,6 +167,7 @@ final class DnsNameResolver extends NameResolver {
           }
           ResolutionResults resolvedInetAddrs;
           try {
+            logger.log(Level.SEVERE, "RESOVLING");
             resolvedInetAddrs = delegateResolver.resolve(host);
           } catch (Exception e) {
             synchronized (DnsNameResolver.this) {
@@ -174,11 +185,18 @@ final class DnsNameResolver extends NameResolver {
             return;
           }
           // Each address forms an EAG
-          ArrayList<EquivalentAddressGroup> servers = new ArrayList<EquivalentAddressGroup>();
+          List<EquivalentAddressGroup> servers = new ArrayList<EquivalentAddressGroup>();
           for (InetAddress inetAddr : resolvedInetAddrs.addresses) {
             servers.add(new EquivalentAddressGroup(new InetSocketAddress(inetAddr, port)));
           }
-          savedListener.onAddresses(servers, Attributes.EMPTY);
+          servers.addAll(resolvedInetAddrs.srvRecords);
+
+          Attributes.Builder attrs = Attributes.newBuilder();
+          if (!resolvedInetAddrs.txtRecords.isEmpty()) {
+            attrs.set(Grpc.NAME_RESOLVER_ATTR_TXT,
+                Collections.unmodifiableList(new ArrayList<String>(resolvedInetAddrs.txtRecords)));
+          }
+          savedListener.onAddresses(servers, attrs.build());
         } finally {
           synchronized (DnsNameResolver.this) {
             resolving = false;
@@ -278,10 +296,15 @@ final class DnsNameResolver extends NameResolver {
   static final class ResolutionResults {
     final List<InetAddress> addresses;
     final List<String> txtRecords;
+    final List<EquivalentAddressGroup> srvRecords;
 
-    ResolutionResults(List<InetAddress> addresses, List<String> txtRecords) {
+    ResolutionResults(
+        List<InetAddress> addresses,
+        List<String> txtRecords,
+        List<EquivalentAddressGroup> srvRecords) {
       this.addresses = Collections.unmodifiableList(checkNotNull(addresses, "addresses"));
       this.txtRecords = Collections.unmodifiableList(checkNotNull(txtRecords, "txtRecords"));
+      this.srvRecords = Collections.unmodifiableList(checkNotNull(srvRecords, "srvRecords"));
     }
   }
 
@@ -305,14 +328,16 @@ final class DnsNameResolver extends NameResolver {
       ResolutionResults jdkResults = jdkResovler.resolve(host);
       List<InetAddress> addresses = jdkResults.addresses;
       List<String> txtRecords = Collections.emptyList();
+      List<EquivalentAddressGroup> srvRecords = Collections.emptyList();
       try {
         ResolutionResults jdniResults = jndiResovler.resolve(host);
         txtRecords = jdniResults.txtRecords;
+        srvRecords = jdniResults.srvRecords;
       } catch (Exception e) {
         logger.log(Level.SEVERE, "Failed to resolve TXT results", e);
       }
 
-      return new ResolutionResults(addresses, txtRecords);
+      return new ResolutionResults(addresses, txtRecords, srvRecords);
     }
   }
 
@@ -328,7 +353,8 @@ final class DnsNameResolver extends NameResolver {
     ResolutionResults resolve(String host) throws Exception {
       return new ResolutionResults(
           Arrays.asList(InetAddress.getAllByName(host)),
-          Collections.<String>emptyList());
+          Collections.<String>emptyList(),
+          Collections.<EquivalentAddressGroup>emptyList());
     }
   }
 
@@ -340,26 +366,82 @@ final class DnsNameResolver extends NameResolver {
   @VisibleForTesting
   static final class JndiResolver extends DelegateResolver {
 
-    private static final String[] rrTypes = new String[]{"TXT"};
+    private static final Pattern whitespace = Pattern.compile("\\s*");
 
     @Override
     ResolutionResults resolve(String host) throws NamingException {
+      List<String> serviceConfigTxtRecords = Collections.emptyList();
+      String serviceConfigHostname = SERVICE_CONFIG_NAME_PREFIX + host;
+      if (logger.isLoggable(Level.FINER)) {
+        logger.log(
+            Level.FINER, "About to query TXT records for {0}", new Object[]{serviceConfigHostname});
+      }
+      try {
+        serviceConfigTxtRecords = getAllRecords("TXT", "dns:///" + serviceConfigHostname);
+      } catch (NamingException e) {
 
+        if (logger.isLoggable(Level.FINE)) {
+          logger.log(Level.FINE, "Unable to look up " + serviceConfigHostname, e);
+        }
+      }
+
+      String grpclbHostname = GRPCLB_NAME_PREFIX + host;
+      if (logger.isLoggable(Level.FINER)) {
+        logger.log(
+            Level.FINER, "About to query SRV records for {0}", new Object[]{grpclbHostname});
+      }
+      List<EquivalentAddressGroup> balancerAddresses = Collections.emptyList();
+      try {
+        List<String> grpclbSrvRecords = getAllRecords("SRV", "dns:///" + grpclbHostname);
+        balancerAddresses = new ArrayList<EquivalentAddressGroup>(grpclbSrvRecords.size());
+        for (String srvRecord : grpclbSrvRecords) {
+          try {
+            String[] parts = whitespace.split(srvRecord);
+            Verify.verify(parts.length == 8, "Bad SRV Record: %s, ", srvRecord);
+            String srvHostname = parts[7];
+            int port = Integer.parseInt(parts[6]);
+
+            InetAddress[] addrs = InetAddress.getAllByName(srvHostname);
+            List<SocketAddress> sockaddrs = new ArrayList<SocketAddress>(addrs.length);
+            for (InetAddress addr : addrs) {
+              sockaddrs.add(new InetSocketAddress(addr, port));
+            }
+            balancerAddresses.add(
+                new EquivalentAddressGroup(
+                    Collections.unmodifiableList(sockaddrs), Attributes.newBuilder().build()));
+          } catch (UnknownHostException e) {
+            logger.log(Level.WARNING, "Can't find address for SRV record" + srvRecord, e);
+          } catch (RuntimeException e) {
+            logger.log(Level.WARNING, "Failed to construct SRV record" + srvRecord, e);
+          }
+        }
+      } catch (NamingException e) {
+        if (logger.isLoggable(Level.FINE)) {
+          logger.log(Level.FINE, "Unable to look up " + serviceConfigHostname, e);
+        }
+      }
+
+      return new ResolutionResults(
+          /*addresses=*/ Collections.<InetAddress>emptyList(),
+          serviceConfigTxtRecords,
+          Collections.unmodifiableList(balancerAddresses));
+    }
+
+    private List<String> getAllRecords(String recordType, String name) throws NamingException {
       InitialDirContext dirContext = new InitialDirContext();
-      javax.naming.directory.Attributes attrs = dirContext.getAttributes("dns:///" + host, rrTypes);
-      List<InetAddress> addresses = new ArrayList<InetAddress>();
-      List<String> txtRecords = new ArrayList<String>();
+      String[] rrType = new String[]{recordType};
+      javax.naming.directory.Attributes attrs = dirContext.getAttributes(name, rrType);
+      List<String> records = new ArrayList<String>();
 
       NamingEnumeration<? extends Attribute> rrGroups = attrs.getAll();
       try {
         while (rrGroups.hasMore()) {
           Attribute rrEntry = rrGroups.next();
-          assert Arrays.asList(rrTypes).contains(rrEntry.getID());
+          assert Arrays.asList(rrType).contains(rrEntry.getID());
           NamingEnumeration<?> rrValues = rrEntry.getAll();
           try {
             while (rrValues.hasMore()) {
-              String rrValue = (String) rrValues.next();
-              txtRecords.add(rrValue);
+              records.add(String.valueOf(rrValues.next()));
             }
           } finally {
             rrValues.close();
@@ -368,8 +450,7 @@ final class DnsNameResolver extends NameResolver {
       } finally {
         rrGroups.close();
       }
-
-      return new ResolutionResults(addresses, txtRecords);
+      return records;
     }
   }
 }
