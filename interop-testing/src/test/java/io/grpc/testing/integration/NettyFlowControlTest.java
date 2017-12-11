@@ -44,6 +44,7 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -76,6 +77,8 @@ public class NettyFlowControlTest {
 
   @BeforeClass
   public static void setUp() {
+    // TODO(carl-mastrangelo): reenabled after https://github.com/grpc/grpc-java/issues/3856 is
+    // fixed.
     InternalHandlerSettings.enable(true);
     InternalHandlerSettings.autoWindowOn(true);
   }
@@ -98,6 +101,7 @@ public class NettyFlowControlTest {
   }
 
   @Test
+  @Ignore // https://github.com/grpc/grpc-java/issues/3856
   public void largeBdp() throws InterruptedException, IOException {
     proxy = new TrafficControlProxy(serverPort, HIGH_BAND, MED_LAT, TimeUnit.MILLISECONDS);
     proxy.start();
@@ -107,6 +111,7 @@ public class NettyFlowControlTest {
   }
 
   @Test
+  @Ignore // https://github.com/grpc/grpc-java/issues/3856
   public void smallBdp() throws InterruptedException, IOException {
     proxy = new TrafficControlProxy(serverPort, LOW_BAND, MED_LAT, TimeUnit.MILLISECONDS);
     proxy.start();
@@ -116,6 +121,7 @@ public class NettyFlowControlTest {
   }
 
   @Test
+  @Ignore // https://github.com/grpc/grpc-java/issues/3856
   public void verySmallWindowMakesProgress() throws InterruptedException, IOException {
     proxy = new TrafficControlProxy(serverPort, HIGH_BAND, MED_LAT, TimeUnit.MILLISECONDS);
     proxy.start();

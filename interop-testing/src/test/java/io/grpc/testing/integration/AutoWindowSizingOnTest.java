@@ -18,7 +18,6 @@ package io.grpc.testing.integration;
 
 import io.grpc.ManagedChannel;
 import io.grpc.internal.AbstractServerImplBuilder;
-import io.grpc.netty.InternalHandlerSettings;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
@@ -31,8 +30,11 @@ public class AutoWindowSizingOnTest extends AbstractInteropTest {
 
   @BeforeClass
   public static void turnOnAutoWindow() {
-    InternalHandlerSettings.enable(true);
-    InternalHandlerSettings.autoWindowOn(true);
+    // TODO(carl-mastrangelo): Reenable this when https://github.com/grpc/grpc-java/issues/3856 is
+    // fixed.
+
+    // InternalHandlerSettings.enable(true);
+    // InternalHandlerSettings.autoWindowOn(true);
   }
 
   @Override
