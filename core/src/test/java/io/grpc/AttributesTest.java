@@ -55,15 +55,15 @@ public class AttributesTest {
   @Test
   @SuppressWarnings("BoxedPrimitiveConstructor")
   public void valueEquality() {
-    Attributes.Key<Integer> INT_KEY = Attributes.Key.of("ints");
+    Attributes.Key<Integer> key = Attributes.Key.of("ints");
     Integer v1 = new Integer(100000);
     Integer v2 = new Integer(100000);
 
     assertNotSame(v1, v2);
     assertEquals(v1, v2);
 
-    Attributes attr1 = Attributes.newBuilder().set(INT_KEY, v1).build();
-    Attributes attr2 = Attributes.newBuilder().set(INT_KEY, v2).build();
+    Attributes attr1 = Attributes.newBuilder().set(key, v1).build();
+    Attributes attr2 = Attributes.newBuilder().set(key, v2).build();
 
     assertEquals(attr1, attr2);
   }
