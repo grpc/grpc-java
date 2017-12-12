@@ -53,6 +53,7 @@ public class AttributesTest {
   }
 
   @Test
+  @SuppressWarnings("BoxedPrimitiveConstructor")
   public void valueEquality() {
     Attributes.Key<Integer> INT_KEY = Attributes.Key.of("ints");
     Integer v1 = new Integer(100000);
