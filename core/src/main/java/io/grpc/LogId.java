@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * A loggable ID, unique for the duration of the program.
  */
- // not final so that InternalLogId can make this class visible outside of io.grpc
+// not final so that InternalLogId can make this class visible outside of io.grpc
 class LogId {
   private static final AtomicLong idAlloc = new AtomicLong();
 
