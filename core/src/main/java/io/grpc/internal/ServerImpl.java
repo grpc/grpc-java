@@ -34,6 +34,7 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
@@ -63,7 +64,8 @@ import javax.annotation.concurrent.GuardedBy;
  * <pre><code>public class TcpTransportServerFactory {
  *   public static Server newServer(Executor executor, HandlerRegistry registry,
  *       String configuration) {
- *     return new ServerImpl(executor, registry, new TcpTransportServer(configuration));
+ *     return new ServerImpl(
+ *         executor, registry, new TcpTransportServer(configuration), BinaryLogProvider.provider());
  *   }
  * }</code></pre>
  *
@@ -104,6 +106,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
 
   private final DecompressorRegistry decompressorRegistry;
   private final CompressorRegistry compressorRegistry;
+  private final BinaryLogProvider binlogProvider;
 
   /**
    * Construct a server.
@@ -115,7 +118,8 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
   ServerImpl(
       AbstractServerImplBuilder<?> builder,
       InternalServer transportServer,
-      Context rootContext) {
+      Context rootContext,
+      BinaryLogProvider binlogProvider) {
     this.executorPool = Preconditions.checkNotNull(builder.executorPool, "executorPool");
     this.registry = Preconditions.checkNotNull(builder.registryBuilder.build(), "registryBuilder");
     this.fallbackRegistry =
@@ -131,6 +135,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
     this.interceptors =
         builder.interceptors.toArray(new ServerInterceptor[builder.interceptors.size()]);
     this.handshakeTimeoutMillis = builder.handshakeTimeoutMillis;
+    this.binlogProvider = binlogProvider;
   }
 
   /**
@@ -508,10 +513,6 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
     private <ReqT, RespT> ServerStreamListener startCall(ServerStream stream, String fullMethodName,
         ServerMethodDefinition<ReqT, RespT> methodDef, Metadata headers,
         Context.CancellableContext context, StatsTraceContext statsTraceCtx) {
-      // TODO(ejona86): should we update fullMethodName to have the canonical path of the method?
-      ServerCallImpl<ReqT, RespT> call = new ServerCallImpl<ReqT, RespT>(
-          stream, methodDef.getMethodDescriptor(), headers, context,
-          decompressorRegistry, compressorRegistry);
       ServerCallHandler<ReqT, RespT> callHandler = methodDef.getServerCallHandler();
       statsTraceCtx.serverCallStarted(
           new ServerCallInfoImpl<ReqT, RespT>(
@@ -522,6 +523,41 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       for (ServerInterceptor interceptor : interceptors) {
         callHandler = InternalServerInterceptors.interceptCallHandler(interceptor, callHandler);
       }
+
+      ServerInterceptor binlogInterceptor = binlogProvider.getServerInterceptor(fullMethodName);
+      if (binlogInterceptor == null) {
+        return createListener(
+            stream, fullMethodName, methodDef.getMethodDescriptor(), headers, context,
+            statsTraceCtx, callHandler);
+      } else {
+        // This modified MethodDescriptor is not visible to users:
+        // The HandlerRegistry and ServerInterceptor APIs return the original MethodDescriptor.
+        MethodDescriptor<InputStream, InputStream> binaryMethod =
+            BinaryLogProvider.wrapMethod(methodDef.getMethodDescriptor());
+        ServerCallHandler<InputStream, InputStream> binaryCallHandler =
+            InternalServerInterceptors.wrapHandler(
+                callHandler, methodDef.getMethodDescriptor(), binaryMethod);
+        binaryCallHandler = InternalServerInterceptors.interceptCallHandler(
+            binlogInterceptor, binaryCallHandler);
+        return createListener(
+            stream, fullMethodName, binaryMethod, headers, context,
+            statsTraceCtx, binaryCallHandler);
+      }
+    }
+
+    private <ReqT, RespT> ServerStreamListener createListener(
+        ServerStream stream,
+        String fullMethodName,
+        MethodDescriptor<ReqT, RespT> method,
+        Metadata headers,
+        Context.CancellableContext context,
+        StatsTraceContext statsTraceCtx,
+        ServerCallHandler<ReqT, RespT> callHandler) {
+      // TODO(ejona86): should we update fullMethodName to have the canonical path of the method?
+      ServerCallImpl<ReqT, RespT> call = new ServerCallImpl<ReqT, RespT>(
+          stream, method, headers, context,
+          decompressorRegistry, compressorRegistry);
+      statsTraceCtx.serverCallStarted(call);
       ServerCall.Listener<ReqT> listener = callHandler.startCall(call, headers);
       if (listener == null) {
         throw new NullPointerException(

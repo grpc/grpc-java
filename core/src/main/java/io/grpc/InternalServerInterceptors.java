@@ -26,6 +26,13 @@ public final class InternalServerInterceptors {
     return ServerInterceptors.InterceptCallHandler.create(interceptor, callHandler);
   }
 
+  public static <OReqT, ORespT, WReqT, WRespT> ServerCallHandler<WReqT, WRespT> wrapHandler(
+      ServerCallHandler<OReqT, ORespT> originalHandler,
+      MethodDescriptor<OReqT, ORespT> originalMethod,
+      MethodDescriptor<WReqT, WRespT> wrappedMethod) {
+    return ServerInterceptors.wrapHandler(originalHandler, originalMethod, wrappedMethod);
+  }
+
   private InternalServerInterceptors() {
   }
 }

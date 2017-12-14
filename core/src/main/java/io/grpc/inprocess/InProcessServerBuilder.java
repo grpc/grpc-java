@@ -16,10 +16,12 @@
 
 package io.grpc.inprocess;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.ExperimentalApi;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractServerImplBuilder;
+import io.grpc.internal.BinaryLogProvider;
 import io.grpc.internal.GrpcUtil;
 import java.io.File;
 import java.util.List;
@@ -98,5 +100,11 @@ public final class InProcessServerBuilder
   @Override
   public InProcessServerBuilder useTransportSecurity(File certChain, File privateKey) {
     throw new UnsupportedOperationException("TLS not supported in InProcessServer");
+  }
+
+  @Override
+  @VisibleForTesting
+  protected void setBinaryLogProvider(BinaryLogProvider value) {
+    super.setBinaryLogProvider(value);
   }
 }

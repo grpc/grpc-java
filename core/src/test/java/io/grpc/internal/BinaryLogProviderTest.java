@@ -39,6 +39,9 @@ import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.ReplacingClassLoader;
+import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
+import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.NoopClientCall.NoopClientCallListener;
@@ -56,6 +59,14 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link BinaryLogProvider}. */
 @RunWith(JUnit4.class)
 public class BinaryLogProviderTest {
+  private static final MethodDescriptor<Integer, Integer> INCREMENT_BY_ONE =
+      MethodDescriptor.<Integer, Integer>newBuilder()
+          .setType(MethodDescriptor.MethodType.UNARY)
+          .setFullMethodName("some/incrementbyone")
+          .setRequestMarshaller(new IntegerMarshaller())
+          .setResponseMarshaller(new IntegerMarshaller())
+          .build();
+
   private final String serviceFile = "META-INF/services/io.grpc.internal.BinaryLogProvider";
   private final Marshaller<String> reqMarshaller = spy(StringMarshaller.INSTANCE);
   private final Marshaller<Integer> respMarshaller = spy(IntegerMarshaller.INSTANCE);
@@ -217,6 +228,134 @@ public class BinaryLogProviderTest {
     assertEquals(method.isIdempotent(), wMethod.isIdempotent());
     assertEquals(method.isSafe(), wMethod.isSafe());
     assertEquals(method.isSampledToLocalTracing(), wMethod.isSampledToLocalTracing());
+  }
+
+  @Test
+  public void serverInterceptorFirstAndIsInputstream() throws Exception {
+    String serverName = getClass().getName() + "-serverInterceptor";
+    ServerInterceptor interceptor = new TracingServerInterceptor(req, resp, methods);
+    InProcessServerBuilder builder = InProcessServerBuilder
+        .forName(serverName)
+        .addService(service)
+        .intercept(interceptor);
+    TestBinaryLogProvider binlog = new TestBinaryLogProvider(req, resp, binaryMethods);
+    InternalInProcessServerBuilder.setBinaryLogProvider(builder, binlog);
+    server = builder.build();
+    server.start();
+    channel = InProcessChannelBuilder.forName(serverName).build();
+    int request = 10;
+    int result = ClientCalls.blockingUnaryCall(
+        channel.newCall(INCREMENT_BY_ONE, CallOptions.DEFAULT),
+        request);
+    assertEquals(request + 1, result);
+
+    // The binlog interceptor must operate on binary data (InputStream)
+    assertThat(binaryMethods).hasSize(1);
+    assertSame(BinaryLogProvider.IDENTITY_MARSHALLER, binaryMethods.get(0).getRequestMarshaller());
+    assertSame(BinaryLogProvider.IDENTITY_MARSHALLER, binaryMethods.get(0).getResponseMarshaller());
+
+    // The user supplied interceptor must still operate on the original message types
+    assertThat(methods).hasSize(1);
+    assertSame(serverReqMarshaller, methods.get(0).getRequestMarshaller());
+    assertSame(serverRespMarshaller, methods.get(0).getResponseMarshaller());
+
+    // The original marshallers should have only been invoked once each
+    assertEquals(1, serverReqMarshaller.parseInvocations);
+    assertEquals(0, serverReqMarshaller.streamInvocations);
+    assertEquals(0, serverRespMarshaller.parseInvocations);
+    assertEquals(1, serverRespMarshaller.streamInvocations);
+
+    // The binlog interceptor must be closest to the transport
+    assertThat(req).hasSize(2);
+    assertThat(req.get(0)).isInstanceOf(InputStream.class);
+    assertEquals(request, req.get(1));
+
+    assertThat(resp).hasSize(2);
+    assertEquals(result, resp.get(0));
+    assertThat(resp.get(1)).isInstanceOf(InputStream.class);
+  }
+
+  /**
+   * A server interceptor that logs tracing information when events pass through it.
+   */
+  private static final class TracingServerInterceptor implements ServerInterceptor {
+    private final List<Object> req;
+    private final List<Object> resp;
+    private final List<MethodDescriptor<?, ?>> methods;
+
+    TracingServerInterceptor(
+        List<Object> req, List<Object> resp, List<MethodDescriptor<?, ?>> methods) {
+      this.req = req;
+      this.resp = resp;
+      this.methods = methods;
+    }
+
+    @Override
+    public <ReqT, RespT> Listener<ReqT> interceptCall(
+        final ServerCall<ReqT, RespT> call,
+        Metadata headers,
+        ServerCallHandler<ReqT, RespT> next) {
+      methods.add(call.getMethodDescriptor());
+      ForwardingServerCall<ReqT, RespT> wCall = new ForwardingServerCall<ReqT, RespT>() {
+        @Override
+        public void sendMessage(RespT message) {
+          resp.add(message);
+          super.sendMessage(message);
+        }
+
+        @Override
+        public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
+          return call.getMethodDescriptor();
+        }
+
+        @Override
+        protected ServerCall<ReqT, RespT> delegate() {
+          return call;
+        }
+      };
+      final Listener<ReqT> oListener = next.startCall(wCall, headers);
+      return new ForwardingServerCallListener<ReqT>() {
+        @Override
+        public void onMessage(ReqT message) {
+          req.add(message);
+          super.onMessage(message);
+        }
+
+        @Override
+        protected Listener<ReqT> delegate() {
+          return oListener;
+        }
+      };
+    }
+  }
+
+  /**
+   * A provider that returns tracing interceptors, designed for testing.
+   */
+  private static final class TestBinaryLogProvider extends BinaryLogProvider {
+    private final ServerInterceptor serverInterceptor;
+    private final ClientInterceptor clientInterceptor = null;
+
+    TestBinaryLogProvider(
+        List<Object> incoming, List<Object> outgoing, List<MethodDescriptor<?, ?>> methods) {
+      serverInterceptor = new TracingServerInterceptor(incoming, outgoing, methods);
+    }
+
+    @Override
+    public ServerInterceptor getServerInterceptor(String fullMethodName) {
+      return serverInterceptor;
+    }
+
+    @Nullable
+    @Override
+    public ClientInterceptor getClientInterceptor(String fullMethodName) {
+      return clientInterceptor;
+    }
+
+    @Override
+    protected int priority() {
+      return 0;
+    }
   }
 
   public static final class Provider0 extends BaseProvider {

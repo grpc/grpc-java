@@ -113,7 +113,11 @@ public abstract class BinaryLogProvider {
   /**
    * Returns a {@link ServerInterceptor} for binary logging. gRPC is free to cache the interceptor,
    * so the interceptor must be reusable across calls. At runtime, the request and response
+<<<<<<< HEAD
    * marshallers are always {@code Marshaller<InputStream>}.
+=======
+   * marshallers are always {@code Marshaller<Inputstream>}.
+>>>>>>> core: hook up BinaryLogProvider's server interceptor
    * Returns {@code null} if this method is not binary logged.
    */
   // TODO(zpencer): ensure the interceptor properly handles retries and hedging
@@ -123,7 +127,11 @@ public abstract class BinaryLogProvider {
   /**
    * Returns a {@link ClientInterceptor} for binary logging. gRPC is free to cache the interceptor,
    * so the interceptor must be reusable across calls. At runtime, the request and response
+<<<<<<< HEAD
    * marshallers are always {@code Marshaller<InputStream>}.
+=======
+   * marshallers are always {@code Marshaller<Inputstream>}.
+>>>>>>> core: hook up BinaryLogProvider's server interceptor
    * Returns {@code null} if this method is not binary logged.
    */
   // TODO(zpencer): ensure the interceptor properly handles retries and hedging

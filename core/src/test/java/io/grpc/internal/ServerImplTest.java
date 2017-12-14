@@ -1226,7 +1226,7 @@ public class ServerImplTest {
 
     builder.fallbackHandlerRegistry(fallbackRegistry);
     builder.executorPool = executorPool;
-    server = new ServerImpl(builder, transportServer, SERVER_CONTEXT);
+    server = new ServerImpl(builder, transportServer, SERVER_CONTEXT, BinaryLogProvider.provider());
   }
 
   private void verifyExecutorsAcquired() {
