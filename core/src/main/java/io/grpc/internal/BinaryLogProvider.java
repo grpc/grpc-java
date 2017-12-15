@@ -91,9 +91,7 @@ public abstract class BinaryLogProvider {
   /**
    * Returns a {@link ServerInterceptor} for binary logging. gRPC is free to cache the interceptor,
    * so the interceptor must be reusable across server calls. At runtime, the request and response
-   * types passed into the interceptor is always {@link java.io.InputStream}. The interceptor is
-   * responsible for ensuring the contents of the original InputStream are forwarded to the next
-   * handler.
+   * types passed into the interceptor is always {@link java.io.InputStream}.
    * Returns {@code null} if this method is not binary logged.
    */
   @Nullable
@@ -102,9 +100,7 @@ public abstract class BinaryLogProvider {
   /**
    * Returns a {@link ClientInterceptor} for binary logging. gRPC is free to cache the interceptor,
    * so the interceptor must be reusable across server calls. At runtime, the request and response
-   * types passed into the interceptor is always {@link java.io.InputStream}. The interceptor is
-   * responsible for ensuring the contents of the original InputStream are forwarded to the next
-   * handler.
+   * types passed into the interceptor is always {@link java.io.InputStream}.
    * Returns {@code null} if this method is not binary logged.
    */
   @Nullable

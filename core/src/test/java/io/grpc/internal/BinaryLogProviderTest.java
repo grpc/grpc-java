@@ -23,7 +23,11 @@ import io.grpc.ReplacingClassLoader;
 import io.grpc.ServerInterceptor;
 import javax.annotation.Nullable;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
+/** Unit tests for {@link BinaryLogProvider}. */
+@RunWith(JUnit4.class)
 public class BinaryLogProviderTest {
   private final String serviceFile = "META-INF/services/io.grpc.internal.BinaryLogProvider";
 
