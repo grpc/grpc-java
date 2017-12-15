@@ -49,6 +49,8 @@ fi
 [ -f "$CONF" ] && . "$CONF"
 
 if [ -z "$USERNAME" -o -z "$PASSWORD" ]; then
+  # TODO(ejona86): if people would use it, could prompt for values to avoid
+  # having passwords in plain-text.
   echo "You must create '$CONF' with keys USERNAME and PASSWORD" >&2
   exit 1
 fi
