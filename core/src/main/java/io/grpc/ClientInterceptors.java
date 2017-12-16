@@ -17,6 +17,8 @@
 package io.grpc;
 
 import com.google.common.base.Preconditions;
+import io.grpc.internal.ManagedChannelChain;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -83,10 +85,16 @@ public class ClientInterceptors {
    */
   public static Channel intercept(Channel channel, List<? extends ClientInterceptor> interceptors) {
     Preconditions.checkNotNull(channel, "channel");
+    Channel newChannel = channel;
     for (ClientInterceptor interceptor : interceptors) {
-      channel = new InterceptorChannel(channel, interceptor);
+      newChannel = new InterceptorChannel(newChannel, interceptor);
     }
-    return channel;
+
+    if (channel instanceof ManagedChannel) {
+      return new ManagedChannelChain(newChannel, (ManagedChannel) channel);
+    } else {
+      return newChannel;
+    }
   }
 
   private static class InterceptorChannel extends Channel {
