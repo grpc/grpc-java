@@ -341,7 +341,7 @@ public class DnsNameResolverTest {
 
     assertThat(results.addresses).containsExactlyElementsIn(jdkAnswer).inOrder();
     assertThat(results.txtRecords).containsExactly("jnditxt");
-    assertThat(results.srvRecords).hasSize(1);
+    assertThat(results.balancerAddresses).hasSize(1);
   }
 
   @Test
