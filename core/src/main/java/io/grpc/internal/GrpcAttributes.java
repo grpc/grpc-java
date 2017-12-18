@@ -26,7 +26,7 @@ public final class GrpcAttributes {
   /**
    * Attribute key TXT DNS records.
    */
-  public static final Attributes.Key<List<String>> NAME_RESOLVER_ATTR_TXT =
+  public static final Attributes.Key<List<String>> NAME_RESOLVER_ATTR_DNS_TXT =
       Attributes.Key.of("dns-txt");
 
   /**

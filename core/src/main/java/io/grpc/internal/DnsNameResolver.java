@@ -190,12 +190,12 @@ final class DnsNameResolver extends NameResolver {
           for (InetAddress inetAddr : resolvedInetAddrs.addresses) {
             servers.add(new EquivalentAddressGroup(new InetSocketAddress(inetAddr, port)));
           }
-          servers.addAll(resolvedInetAddrs.srvRecords);
+          servers.addAll(resolvedInetAddrs.balancerAddresses);
 
           Attributes.Builder attrs = Attributes.newBuilder();
           if (!resolvedInetAddrs.txtRecords.isEmpty()) {
             attrs.set(
-                GrpcAttributes.NAME_RESOLVER_ATTR_TXT,
+                GrpcAttributes.NAME_RESOLVER_ATTR_DNS_TXT,
                 Collections.unmodifiableList(new ArrayList<String>(resolvedInetAddrs.txtRecords)));
           }
           savedListener.onAddresses(servers, attrs.build());
@@ -298,15 +298,16 @@ final class DnsNameResolver extends NameResolver {
   static final class ResolutionResults {
     final List<InetAddress> addresses;
     final List<String> txtRecords;
-    final List<EquivalentAddressGroup> srvRecords;
+    final List<EquivalentAddressGroup> balancerAddresses;
 
     ResolutionResults(
         List<InetAddress> addresses,
         List<String> txtRecords,
-        List<EquivalentAddressGroup> srvRecords) {
+        List<EquivalentAddressGroup> balancerAddresses) {
       this.addresses = Collections.unmodifiableList(checkNotNull(addresses, "addresses"));
       this.txtRecords = Collections.unmodifiableList(checkNotNull(txtRecords, "txtRecords"));
-      this.srvRecords = Collections.unmodifiableList(checkNotNull(srvRecords, "srvRecords"));
+      this.balancerAddresses =
+          Collections.unmodifiableList(checkNotNull(balancerAddresses, "balancerAddresses"));
     }
   }
 
@@ -330,16 +331,16 @@ final class DnsNameResolver extends NameResolver {
       ResolutionResults jdkResults = jdkResovler.resolve(host);
       List<InetAddress> addresses = jdkResults.addresses;
       List<String> txtRecords = Collections.emptyList();
-      List<EquivalentAddressGroup> srvRecords = Collections.emptyList();
+      List<EquivalentAddressGroup> balancerAddresses = Collections.emptyList();
       try {
         ResolutionResults jdniResults = jndiResovler.resolve(host);
         txtRecords = jdniResults.txtRecords;
-        srvRecords = jdniResults.srvRecords;
+        balancerAddresses = jdniResults.balancerAddresses;
       } catch (Exception e) {
         logger.log(Level.SEVERE, "Failed to resolve TXT results", e);
       }
 
-      return new ResolutionResults(addresses, txtRecords, srvRecords);
+      return new ResolutionResults(addresses, txtRecords, balancerAddresses);
     }
   }
 
