@@ -29,7 +29,9 @@ import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerMethodDefinition;
+import java.io.Closeable;
 import java.io.InputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -41,7 +43,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
-public abstract class BinaryLogProvider {
+public abstract class BinaryLogProvider implements Closeable {
   private static final Logger logger = Logger.getLogger(BinaryLogProvider.class.getName());
   private static final BinaryLogProvider PROVIDER = load(BinaryLogProvider.class.getClassLoader());
   @VisibleForTesting
@@ -185,6 +187,11 @@ public abstract class BinaryLogProvider {
     @Override
     protected int priority() {
       return 0;
+    }
+
+    @Override
+    public void close() throws IOException {
+      // noop
     }
   }
 
