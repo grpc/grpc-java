@@ -212,6 +212,7 @@ subprojects {
                 junit: 'junit:junit:4.12',
                 mockito: 'org.mockito:mockito-core:1.9.5',
                 truth: 'com.google.truth:truth:0.36',
+                conscrypt: 'org.conscrypt:conscrypt-openjdk-uber:1.0.0.RC14',
 
                 // Benchmark dependencies
                 hdrhistogram: 'org.hdrhistogram:HdrHistogram:2.1.10',
