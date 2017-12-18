@@ -21,6 +21,7 @@ import static org.junit.Assert.assertSame;
 import io.grpc.ClientInterceptor;
 import io.grpc.ReplacingClassLoader;
 import io.grpc.ServerInterceptor;
+import java.io.IOException;
 import javax.annotation.Nullable;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -90,6 +91,11 @@ public class BinaryLogProviderTest {
     @Override
     protected int priority() {
       return priority;
+    }
+
+    @Override
+    public void close() throws IOException {
+      // noop
     }
   }
 }
