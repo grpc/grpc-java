@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2017, gRPC Authors All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@ import io.grpc.InternalChannelStats;
 import io.grpc.InternalLogId;
 import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
-
 import java.util.concurrent.TimeUnit;
 
 public class ManagedChannelChain extends ManagedChannel {

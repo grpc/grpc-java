@@ -18,7 +18,6 @@ package io.grpc;
 
 import com.google.common.base.Preconditions;
 import io.grpc.internal.ManagedChannelChain;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
