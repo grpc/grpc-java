@@ -18,51 +18,16 @@ package io.grpc.internal;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
-import java.util.Collections;
 import java.util.List;
+import javax.annotation.Nullable;
 
 /**
  * Represents a ServiceConfig as described at
  * https://github.com/grpc/grpc/blob/master/doc/service_config.md
  */
-public final class ServiceConfigFile {
+public final class ServiceConfiguration {
 
-  @Override
-  public boolean equals(Object o) {
-    if (this == o) {
-      return true;
-    }
-    if (o == null || getClass() != o.getClass()) {
-      return false;
-    }
-    ServiceConfigFile that = (ServiceConfigFile) o;
-    return Objects.equal(choice, that.choice);
-  }
-
-  @Override
-  public int hashCode() {
-    return Objects.hashCode(choice);
-  }
-
-  private List<ServiceConfigChoice> choice;
-
-  /**
-   * Constructs a {@link ServiceConfigFile}.
-   */
-  public ServiceConfigFile(List<ServiceConfigChoice> choice) {
-    this.choice = choice;
-  }
-
-  public List<ServiceConfigChoice> getChoice() {
-    return choice == null ? null : Collections.unmodifiableList(choice);
-  }
-
-  @Override
-  public String toString() {
-    return MoreObjects.toStringHelper(this)
-        .add("choice", choice)
-        .toString();
-  }
+  private ServiceConfiguration() {}
 
   /**
    * Represents a {@link Name}.
@@ -73,8 +38,12 @@ public final class ServiceConfigFile {
 
     /**
      * Constructs a {@link Name}.
+     *
+     * @param service required
+     * @param method required
+     *
      */
-    public Name(String service, String method) {
+    public Name(@Nullable String service, @Nullable String method) {
       this.service = service;
       this.method = method;
     }
@@ -118,13 +87,15 @@ public final class ServiceConfigFile {
 
     /**
      * Constructs a {@link RetryPolicy}.
+     *
+     * @param retryableStatusCodes cannot be empty
      */
     public RetryPolicy(
         int maxRetryAttempts,
-        String initialBackoff,
-        String maxBackoff,
+        @Nullable String initialBackoff,
+        @Nullable String maxBackoff,
         float backoffMultiplier,
-        List<String> retryableStatusCodes) {
+        @Nullable List<String> retryableStatusCodes) {
       this.maxRetryAttempts = maxRetryAttempts;
       this.initialBackoff = initialBackoff;
       this.maxBackoff = maxBackoff;
@@ -174,11 +145,15 @@ public final class ServiceConfigFile {
     private String hedgingDelay;
     private List<String> nonFatalStatusCodes;
 
-
     /**
      * Constructs a {@link RetryPolicy}.
+     *
+     * @param nonFatalStatusCodes must not be empty
      */
-    public HedgingPolicy(int maxRequests, String hedgingDelay, List<String> nonFatalStatusCodes) {
+    public HedgingPolicy(
+        int maxRequests,
+        @Nullable String hedgingDelay,
+        @Nullable List<String> nonFatalStatusCodes) {
       this.maxRequests = maxRequests;
       this.hedgingDelay = hedgingDelay;
       this.nonFatalStatusCodes = nonFatalStatusCodes;
@@ -229,13 +204,13 @@ public final class ServiceConfigFile {
      * Constructs a {@link MethodConfig}.
      */
     public MethodConfig(
-        List<Name> name,
-        Boolean waitForReady,
-        String timeout,
-        Integer maxRequestMessageBytes,
-        Integer maxResponseMessageBytes,
-        RetryPolicy retryPolicy,
-        HedgingPolicy hedgingPolicy) {
+        @Nullable List<Name> name,
+        @Nullable Boolean waitForReady,
+        @Nullable String timeout,
+        @Nullable Integer maxRequestMessageBytes,
+        @Nullable Integer maxResponseMessageBytes,
+        @Nullable RetryPolicy retryPolicy,
+        @Nullable HedgingPolicy hedgingPolicy) {
       this.name = name;
       this.waitForReady = waitForReady;
       this.timeout = timeout;
@@ -338,9 +313,9 @@ public final class ServiceConfigFile {
      * Constructs a {@link ServiceConfig}.
      */
     public ServiceConfig(
-        String loadBalancingPolicy,
-        List<MethodConfig> methodConfig,
-        RetryThrottlingPolicy retryThrottling) {
+        @Nullable String loadBalancingPolicy,
+        @Nullable List<MethodConfig> methodConfig,
+        @Nullable RetryThrottlingPolicy retryThrottling) {
       this.loadBalancingPolicy = loadBalancingPolicy;
       this.methodConfig = methodConfig;
       this.retryThrottling = retryThrottling;
@@ -371,65 +346,6 @@ public final class ServiceConfigFile {
           .add("loadBalancingPolicy", loadBalancingPolicy)
           .add("methodConfig", methodConfig)
           .add("retryThrottling", retryThrottling)
-          .toString();
-    }
-  }
-
-  /**
-   * Represents a {@link ServiceConfigChoice}.
-   */
-  public static final class ServiceConfigChoice {
-    private List<String> clientCluster;
-    private List<String> clientUser;
-    private List<String> clientLanguage;
-    private Integer percentage;
-    private ServiceConfig config;
-
-    /**
-     * Constructs a {@link ServiceConfigChoice}.
-     */
-    public ServiceConfigChoice(
-        List<String> clientCluster,
-        List<String> clientUser,
-        List<String> clientLanguage,
-        Integer percentage,
-        ServiceConfig config) {
-      this.clientCluster = clientCluster;
-      this.clientUser = clientUser;
-      this.clientLanguage = clientLanguage;
-      this.percentage = percentage;
-      this.config = config;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      ServiceConfigChoice that = (ServiceConfigChoice) o;
-      return Objects.equal(clientCluster, that.clientCluster)
-          && Objects.equal(clientUser, that.clientUser)
-          && Objects.equal(clientLanguage, that.clientLanguage)
-          && Objects.equal(percentage, that.percentage)
-          && Objects.equal(config, that.config);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(clientCluster, clientUser, clientLanguage, percentage, config);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("clientCluster", clientCluster)
-          .add("clientUser", clientUser)
-          .add("clientLanguage", clientLanguage)
-          .add("percentage", percentage)
-          .add("config", config)
           .toString();
     }
   }

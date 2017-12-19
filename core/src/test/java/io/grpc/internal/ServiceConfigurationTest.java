@@ -19,19 +19,19 @@ package io.grpc.internal;
 import static org.junit.Assert.assertEquals;
 
 import com.google.gson.Gson;
-import io.grpc.internal.ServiceConfigFile.MethodConfig;
-import io.grpc.internal.ServiceConfigFile.Name;
-import io.grpc.internal.ServiceConfigFile.ServiceConfig;
+import io.grpc.internal.ServiceConfiguration.MethodConfig;
+import io.grpc.internal.ServiceConfiguration.Name;
+import io.grpc.internal.ServiceConfiguration.ServiceConfig;
 import java.util.Arrays;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * Tests for {@link ServiceConfigFile}.
+ * Tests for {@link ServiceConfiguration}.
  */
 @RunWith(JUnit4.class)
-public class ServiceConfigFileTest {
+public class ServiceConfigurationTest {
 
   @Test
   public void parses() {
