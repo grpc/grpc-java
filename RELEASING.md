@@ -76,7 +76,6 @@ $ VERSION_FILES=(
   )
 ```
 
-
 Branching the Release
 ---------------------
 The first step in the release process is to create a release branch and bump
@@ -169,6 +168,12 @@ Tagging the Release
    $ ./gradlew build
    $ git commit -a -m "Bump version to $MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT"
    ```
+5. If `netty-tcnative` was updated, then update the related files:
+    ```
+    examples/google-app-engine/gae-jdk8/build.gradle
+    examples/google-app-engine/gae-jdk8/pom.xml
+    repositories.bzl
+    ```
 5. Go through PR review and push the release tag and updated release branch to
    GitHub:
 

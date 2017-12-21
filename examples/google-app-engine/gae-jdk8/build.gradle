@@ -38,7 +38,7 @@ apply plugin: 'com.google.cloud.tools.appengine'  // App Engine tasks
 apply plugin: 'com.google.protobuf'               // Protobuf compiler plugin
 apply plugin: 'idea'                              // Inform IntelliJ projects about the generated code.
 
-def grpcVersion = '1.8.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.10.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 
 dependencies {
   providedCompile group: 'javax.servlet', name: 'servlet-api', version:'2.5'
@@ -47,7 +47,8 @@ dependencies {
   compile "io.grpc:grpc-protobuf:${grpcVersion}"
   compile "io.grpc:grpc-stub:${grpcVersion}"
   compile "io.grpc:grpc-netty:${grpcVersion}"
-  compile 'io.netty:netty-tcnative-boringssl-static:2.0.6.Final'
+  compile 'io.netty:netty-tcnative-boringssl-static:2.0.7.Final'
+  runtime "io.opencensus:opencensus-impl:0.10.0"
 }
 
 // For more information about how to configure the protobuf plugin:
