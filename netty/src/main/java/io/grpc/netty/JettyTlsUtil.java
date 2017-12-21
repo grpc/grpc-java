@@ -19,7 +19,6 @@ package io.grpc.netty;
 import java.lang.reflect.Method;
 import java.security.AccessController;
 import java.security.PrivilegedExceptionAction;
-
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 
@@ -27,7 +26,6 @@ import javax.net.ssl.SSLEngine;
  * Utility class for determining support for Jetty TLS ALPN/NPN.
  */
 final class JettyTlsUtil {
-
   private JettyTlsUtil() {
   }
 
@@ -56,7 +54,6 @@ final class JettyTlsUtil {
         return t;
       }
     }
-
   }
 
   /**
@@ -111,5 +108,4 @@ final class JettyTlsUtil {
   static Throwable getJava9AlpnUnavailabilityCause() {
     return Java9AlpnUnavailabilityCauseHolder.cause;
   }
-
 }
