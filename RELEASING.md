@@ -101,14 +101,14 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
      $(git log --pretty=format:%H --grep "^Start $MAJOR.$((MINOR+1)).0 development cycle$" upstream/master)^
    $ git push upstream v$MAJOR.$MINOR.x
    ```
-6. Go to [Travis CI settings](https://travis-ci.org/grpc/grpc-java/settings) and
+4. Go to [Travis CI settings](https://travis-ci.org/grpc/grpc-java/settings) and
    add a _Cron Job_:
    * Branch: `v$MAJOR.$MINOR.x`
    * Interval: `weekly`
    * Options: `Do not run if there has been a build in the last 24h`
    * Click _Add_ button
-7. Continue with Google-internal steps at go/grpc/java/releasing.
-8. Move items out of the release milestone that didn't make the cut. Issues that
+5. Continue with Google-internal steps at go/grpc/java/releasing.
+6. Move items out of the release milestone that didn't make the cut. Issues that
    may be backported should stay in the release milestone. Treat issues with the
    'release blocker' label with special care.
 
