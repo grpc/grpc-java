@@ -674,14 +674,22 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           return;
         }
         substream.bufferNeeded += bytes;
-        if (substream.bufferNeeded > perRpcBufferUsed) {
+        if (substream.bufferNeeded <= perRpcBufferUsed) {
+          return;
+        }
+
+        if (substream.bufferNeeded > perRpcBufferLimit) {
+          substream.bufferLimitExceeded = true;
+        } else {
+          // Only update channelBufferUsed when perRpcBufferUsed is not exceeding perRpcBufferLimit.
           long savedChannelBufferUsed =
               channelBufferUsed.addAndGet(substream.bufferNeeded - perRpcBufferUsed);
-          perRpcBufferUsed = substream.bufferNeeded;
-          if (perRpcBufferUsed > perRpcBufferLimit || savedChannelBufferUsed > channelBufferLimit) {
+
+          if (savedChannelBufferUsed > channelBufferLimit) {
             substream.bufferLimitExceeded = true;
           }
         }
+        perRpcBufferUsed = substream.bufferNeeded;
       }
 
       if (substream.bufferLimitExceeded) {
