@@ -49,7 +49,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   /** Must be held when updating state, accessing state.buffer, or certain substream attributes. */
   private final Object lock = new Object();
 
-  private final AtomicLong channelBufferUsed;
+  private final ChannelBufferMeter channelBufferUsed;
   private final long perRpcBufferLimit;
   private final long channelBufferLimit;
 
@@ -64,8 +64,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private ClientStreamListener masterListener;
 
   RetriableStream(
-      MethodDescriptor<ReqT, ?> method, AtomicLong channelBufferUsed, long perRpcBufferLimit,
-      long channelBufferLimit) {
+      MethodDescriptor<ReqT, ?> method, ChannelBufferMeter channelBufferUsed,
+      long perRpcBufferLimit, long channelBufferLimit) {
     this.method = method;
     this.channelBufferUsed = channelBufferUsed;
     this.perRpcBufferLimit = perRpcBufferLimit;
@@ -695,6 +695,14 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       if (substream.bufferLimitExceeded) {
         commit(substream);
       }
+    }
+  }
+
+  static final class ChannelBufferMeter {
+    private final AtomicLong bufferUsed = new AtomicLong();
+
+    public long addAndGet(long newBytesUsed) {
+      return bufferUsed.addAndGet(newBytesUsed);
     }
   }
 }

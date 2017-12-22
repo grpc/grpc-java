@@ -41,11 +41,11 @@ import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
+import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.StreamListener.MessageProducer;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -76,7 +76,7 @@ public class RetriableStreamTest {
           .setRequestMarshaller(new StringMarshaller())
           .setResponseMarshaller(new StringMarshaller())
           .build();
-  private final AtomicLong channelBufferUsed = new AtomicLong();
+  private final ChannelBufferMeter channelBufferUsed = new ChannelBufferMeter();
   private final RetriableStream<String> retriableStream =
       new RetriableStream<String>(
           method, channelBufferUsed, PER_RPC_BUFFER_LIMIT, CHANNEL_BUFFER_LIMIT) {
@@ -761,8 +761,8 @@ public class RetriableStreamTest {
     retriableStream.start(masterListener);
 
     bufferSizeTracer.outboundWireSize(1);
+    channelBufferUsed.addAndGet(CHANNEL_BUFFER_LIMIT);
     verify(retriableStreamRecorder, never()).postCommit();
-    channelBufferUsed.set(CHANNEL_BUFFER_LIMIT);
     bufferSizeTracer.outboundWireSize(1);
     verify(retriableStreamRecorder).postCommit();
   }

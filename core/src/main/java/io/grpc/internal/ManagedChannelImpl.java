@@ -54,6 +54,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
+import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.SoftReference;
@@ -72,7 +73,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
@@ -203,7 +203,7 @@ public final class ManagedChannelImpl
   private final ChannelTracer channelTracer;
 
   // One instance per channel.
-  private final AtomicLong channelBufferUsed = new AtomicLong();
+  private final ChannelBufferMeter channelBufferUsed = new ChannelBufferMeter();
 
   private final long perRpcBufferLimit;
   private final long channelBufferLimit;
