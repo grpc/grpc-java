@@ -56,6 +56,7 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ClientTransportFilter;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
@@ -229,7 +230,8 @@ public class ManagedChannelImplTest {
     checkState(channel == null);
     channel = new ManagedChannelImpl(
         builder, mockTransportFactory, new FakeBackoffPolicyProvider(),
-        oobExecutorPool, timer.getStopwatchSupplier(), interceptors, GrpcUtil.NOOP_PROXY_DETECTOR,
+        oobExecutorPool, timer.getStopwatchSupplier(), interceptors,
+        Collections.<ClientTransportFilter>emptyList(), GrpcUtil.NOOP_PROXY_DETECTOR,
         channelStatsFactory);
 
     if (requestConnection) {

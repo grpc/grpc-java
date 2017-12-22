@@ -48,6 +48,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import io.grpc.ClientTransportFilter;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusException;
@@ -78,6 +79,7 @@ import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
@@ -682,6 +684,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         maxHeaderListSize,
         stopwatchSupplier,
         tooManyPingsRunnable,
+        new ArrayList<ClientTransportFilter>(),
         transportTracer);
   }
 

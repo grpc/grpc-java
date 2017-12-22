@@ -27,6 +27,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Attributes;
+import io.grpc.ClientTransportFilter;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
 import io.grpc.NameResolver;
@@ -47,6 +48,7 @@ import io.netty.handler.ssl.SslContext;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -322,7 +324,7 @@ public final class NettyChannelBuilder
     return new NettyTransportFactory(dynamicParamsFactory, channelType, channelOptions,
         negotiationType, sslContext, eventLoopGroup, flowControlWindow, maxInboundMessageSize(),
         maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
-        transportTracerFactory.create());
+        transportFilters, transportTracerFactory.create());
   }
 
   @Override
@@ -458,6 +460,7 @@ public final class NettyChannelBuilder
     private final AtomicBackoff keepAliveTimeNanos;
     private final long keepAliveTimeoutNanos;
     private final boolean keepAliveWithoutCalls;
+    private final List<ClientTransportFilter> transportFilters;
     private final TransportTracer transportTracer;
 
     private boolean closed;
@@ -467,10 +470,11 @@ public final class NettyChannelBuilder
         NegotiationType negotiationType, SslContext sslContext, EventLoopGroup group,
         int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
         long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
-        TransportTracer transportTracer) {
+        List<ClientTransportFilter> transportFilters, TransportTracer transportTracer) {
       this.channelType = channelType;
       this.negotiationType = negotiationType;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
+      this.transportFilters = transportFilters;
       this.transportTracer = transportTracer;
 
       if (transportCreationParamsFilterFactory == null) {
@@ -515,7 +519,7 @@ public final class NettyChannelBuilder
           dparams.getProtocolNegotiator(), flowControlWindow,
           maxMessageSize, maxHeaderListSize, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos,
           keepAliveWithoutCalls, dparams.getAuthority(), dparams.getUserAgent(),
-          tooManyPingsRunnable, transportTracer);
+          tooManyPingsRunnable, transportFilters, transportTracer);
       return transport;
     }
 
