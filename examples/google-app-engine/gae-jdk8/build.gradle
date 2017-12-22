@@ -1,0 +1,104 @@
+// Copyright 2017, gRPC Authors All rights reserved.
+//
+//  Licensed under the Apache License, Version 2.0 (the "License");
+//  you may not use this file except in compliance with the License.
+//  You may obtain a copy of the License at
+//
+//        http://www.apache.org/licenses/LICENSE-2.0
+//
+//  Unless required by applicable law or agreed to in writing, software
+//  distributed under the License is distributed on an "AS IS" BASIS,
+//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//  See the License for the specific language governing permissions and
+//  limitations under the License.
+// [START gradle]
+repositories {   // repositories for Jar's you access in your code
+  mavenLocal()
+  maven {
+    url 'https://maven-central.storage.googleapis.com'             // Google's mirror of Maven Central
+  }
+  jcenter()
+  mavenCentral()
+}
+
+buildscript {    // Configuration for building
+  repositories {
+    jcenter()    // Bintray's repository - a fast Maven Central mirror & more
+    mavenCentral()
+  }
+  dependencies {
+    classpath 'com.google.cloud.tools:appengine-gradle-plugin:+'    // latest App Engine Gradle tasks
+    classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.3' // Current protobuf plugin version
+  }
+}
+
+apply plugin: 'java'                              // standard Java tasks
+apply plugin: 'war'                               // standard Web Archive plugin
+apply plugin: 'com.google.cloud.tools.appengine'  // App Engine tasks
+apply plugin: 'com.google.protobuf'               // Protobuf compiler plugin
+apply plugin: 'idea'                              // Inform IntelliJ projects about the generated code.
+
+def grpcVersion = '1.10.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+
+dependencies {
+  providedCompile group: 'javax.servlet', name: 'servlet-api', version:'2.5'
+  compile 'com.google.appengine:appengine:+'
+  compile "com.google.api.grpc:proto-google-common-protos:0.1.9"
+  compile "io.grpc:grpc-protobuf:${grpcVersion}"
+  compile "io.grpc:grpc-stub:${grpcVersion}"
+  compile "io.grpc:grpc-netty:${grpcVersion}"
+  compile 'io.netty:netty-tcnative-boringssl-static:2.0.7.Final'
+  runtime "io.opencensus:opencensus-impl:0.10.0"
+}
+
+// For more information about how to configure the protobuf plugin:
+//   https://github.com/google/protobuf-gradle-plugin
+protobuf {
+  protoc {
+    artifact = 'com.google.protobuf:protoc:3.4.0'
+  }
+  plugins {
+    grpc {
+      artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}"
+    }
+  }
+  generateProtoTasks {
+    all()*.plugins {
+      grpc {
+        // To generate deprecated interfaces and static bindService method,
+        // turn the enable_deprecated option to true below:
+        option 'enable_deprecated=false'
+      }
+    }
+  }
+}
+
+idea {
+  module {
+    // Not using generatedSourceDirs because of
+    // https://discuss.gradle.org/t/support-for-intellij-2016/15294/8
+    sourceDirs += file("${projectDir}/build/generated/source/proto/main/java");
+    sourceDirs += file("${projectDir}/build/generated/source/proto/main/grpc");
+  }
+}
+
+// [START model]
+appengine {  // App Engine tasks configuration
+  run {      // local (dev_appserver) configuration (standard environments only)
+    port = 8080                 // default
+  }
+
+  deploy {   // deploy configuration
+    stopPreviousVersion = true  // default - stop the current version
+    promote = true              // default - & make this the current version
+  }
+}
+// [END model]
+
+group = 'com.example.appengine'   // Generated output GroupId
+version = '1.0-SNAPSHOT'          // Version in generated output
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+// [END gradle]
+

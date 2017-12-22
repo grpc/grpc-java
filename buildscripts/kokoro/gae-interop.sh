@@ -21,6 +21,7 @@ function cleanup() {
 trap cleanup SIGHUP SIGINT SIGTERM EXIT
 
 cd ./github/grpc-java
+pushd .
 
 ##
 ## Deploy the dummy 'default' version of the service
@@ -66,3 +67,51 @@ echo "<?xml version='1.0' encoding='utf-8'?>
 cat ./gae-interop-testing/gae-jdk7/src/main/webapp/WEB-INF/appengine-web.xml
 # Deploy and test the real app (jdk7)
 ./gradlew --stacktrace -DgaeDeployVersion=$KOKORO_GAE_APP_VERSION -DgaeStopPreviousVersion=false -DgaePromote=false -PskipCodegen=true :grpc-gae-interop-testing-jdk7:runInteropTestRemote
+
+APP_URL="https://$KOKORO_GAE_APP_VERSION-$KOKORO_GAE_SERVICE-dot-grpc-java-test.appspot.com/"
+
+## Install current snapshot for example projects
+./gradlew install
+
+##
+## Make sure JDK8 example works
+##
+pushd examples/google-app-engine/gae-jdk8/
+echo "<?xml version='1.0' encoding='utf-8'?>
+<appengine-web-app xmlns='http://appengine.google.com/ns/1.0'>
+  <threadsafe>true</threadsafe>
+  <service>$KOKORO_GAE_SERVICE</service>
+  <runtime>java8</runtime>
+</appengine-web-app>
+" > ./src/main/webapp/WEB-INF/appengine-web.xml
+./gradlew appengineDeploy
+if [[ $(curl --connect-timeout 20 --retry 5 -o /dev/null -w "%{http_code}" $APP_URL) != "200" ]]; then
+    exit 1
+fi
+mvn appengine:update
+if [[ $(curl --connect-timeout 20 --retry 5 -o /dev/null -w "%{http_code}" $APP_URL) != "200" ]]; then
+    exit 1
+fi
+popd
+
+##
+## Make sure JDK7 example works
+##
+pushd examples/google-app-engine/gae-jdk7/
+echo "<?xml version='1.0' encoding='utf-8'?>
+<appengine-web-app xmlns='http://appengine.google.com/ns/1.0'>
+  <threadsafe>true</threadsafe>
+  <service>$KOKORO_GAE_SERVICE</service>
+  <runtime>java7</runtime>
+</appengine-web-app>
+" > ./src/main/webapp/WEB-INF/appengine-web.xml
+./gradlew appengineDeploy
+if [[ $(curl --connect-timeout 20 --retry 5 -o /dev/null -w "%{http_code}" $APP_URL) != "200" ]]; then
+    exit 1
+fi
+mvn appengine:update
+if [[ $(curl --connect-timeout 20 --retry 5 -o /dev/null -w "%{http_code}" $APP_URL) != "200" ]]; then
+    exit 1
+fi
+popd
+

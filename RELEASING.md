@@ -69,9 +69,12 @@ $ VERSION_FILES=(
   examples/pom.xml
   examples/android/helloworld/app/build.gradle
   examples/android/routeguide/app/build.gradle
+  examples/google-app-engine/gae-jdk7/pom.xml
+  examples/google-app-engine/gae-jdk7/build.gradle
+  examples/google-app-engine/gae-jdk8/pom.xml
+  examples/google-app-engine/gae-jdk8/build.gradle
   )
 ```
-
 
 Branching the Release
 ---------------------
@@ -165,6 +168,12 @@ Tagging the Release
    $ ./gradlew build
    $ git commit -a -m "Bump version to $MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT"
    ```
+5. If `netty-tcnative` was updated, then update the related files:
+    ```
+    examples/google-app-engine/gae-jdk8/build.gradle
+    examples/google-app-engine/gae-jdk8/pom.xml
+    repositories.bzl
+    ```
 5. Go through PR review and push the release tag and updated release branch to
    GitHub:
 
