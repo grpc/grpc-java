@@ -669,6 +669,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         return;
       }
 
+      // TODO(zdapeng): avoid using the same lock for both in-bound and out-bound.
       synchronized (lock) {
         if (state.winningSubstream != null || substream.closed) {
           return;
@@ -693,7 +694,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       }
 
       if (substream.bufferLimitExceeded) {
-        commit(substream);
+        commitAndRun(substream);
       }
     }
   }
