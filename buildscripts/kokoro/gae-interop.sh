@@ -70,6 +70,9 @@ cat ./gae-interop-testing/gae-jdk7/src/main/webapp/WEB-INF/appengine-web.xml
 
 APP_URL="https://$KOKORO_GAE_APP_VERSION-$KOKORO_GAE_SERVICE-dot-grpc-java-test.appspot.com/"
 
+## Install current snapshot for example projects
+./gradlew install
+
 ##
 ## Make sure JDK8 example works
 ##
