@@ -16,9 +16,13 @@
 
 package io.grpc;
 
+import com.google.common.util.concurrent.ListenableFuture;
+
 /**
- * This is an gRPC internal interface. Do not use this.
+ * An interface for types that <b>may</b> support instrumentation. If the actual type does not
+ * support instrumentation, then the future will return a {@code null}.
  */
 @Internal
-public interface InternalInstrumented<T> extends Instrumented<T>, InternalWithLogId {
+public interface InternalInstrumented<T> extends InternalWithLogId {
+  ListenableFuture<T> getStats();
 }

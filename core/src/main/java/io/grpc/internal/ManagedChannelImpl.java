@@ -41,6 +41,7 @@ import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelStats;
+import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.PickResult;
@@ -80,7 +81,8 @@ import javax.annotation.concurrent.ThreadSafe;
 
 /** A communication channel for making outgoing RPCs. */
 @ThreadSafe
-public final class ManagedChannelImpl extends ManagedChannel {
+public final class ManagedChannelImpl extends ManagedChannel
+    implements InternalInstrumented<InternalChannelStats> {
   static final Logger logger = Logger.getLogger(ManagedChannelImpl.class.getName());
 
   // Matching this pattern means the target string is a URI target or at least intended to be one.
@@ -114,6 +116,7 @@ public final class ManagedChannelImpl extends ManagedChannel {
   private final Executor executor;
   private final ObjectPool<? extends Executor> executorPool;
   private final ObjectPool<? extends Executor> oobExecutorPool;
+  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
 
   private final ChannelExecutor channelExecutor = new ChannelExecutor();
 
@@ -974,6 +977,11 @@ public final class ManagedChannelImpl extends ManagedChannel {
     }
   }
 
+  @Override
+  public InternalLogId getLogId() {
+    return logId;
+  }
+
   private class NameResolverListenerImpl implements NameResolver.Listener {
     final LoadBalancer balancer;
     final LoadBalancer.Helper helper;
@@ -1145,7 +1153,7 @@ public final class ManagedChannelImpl extends ManagedChannel {
           ENABLE_ALLOCATION_TRACKING
               ? new RuntimeException("ManagedChannel allocation site")
               : missingCallSite);
-      logId = chan.getLogId();
+      logId = chan.logId;
       target = chan.target;
       refs.put(this, this);
       cleanQueue();
