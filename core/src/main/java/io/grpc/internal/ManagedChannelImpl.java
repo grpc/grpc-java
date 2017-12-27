@@ -640,7 +640,7 @@ public final class ManagedChannelImpl
               callOptions,
               transportProvider,
               terminated ? null : transportFactory.getScheduledExecutorService(),
-          channelTracer)
+              channelTracer)
           .setFullStreamDecompression(fullStreamDecompression)
           .setDecompressorRegistry(decompressorRegistry)
           .setCompressorRegistry(compressorRegistry);
@@ -859,7 +859,8 @@ public final class ManagedChannelImpl
                 inUseStateAggregator.updateObjectInUse(is, false);
               }
             },
-            proxyDetector);
+            proxyDetector,
+            channelTracerFactory.create());
       subchannel.subchannel = internalSubchannel;
       logger.log(Level.FINE, "[{0}] {1} created for {2}",
           new Object[] {getLogId(), internalSubchannel.getLogId(), addressGroup});
@@ -941,7 +942,8 @@ public final class ManagedChannelImpl
               oobChannel.handleSubchannelStateChange(newState);
             }
           },
-          proxyDetector);
+          proxyDetector,
+          channelTracerFactory.create());
       oobChannel.setSubchannel(internalSubchannel);
       runSerialized(new Runnable() {
           @Override
@@ -1043,7 +1045,9 @@ public final class ManagedChannelImpl
     }
   }
 
-  private final class SubchannelImpl extends AbstractSubchannel {
+  private final class SubchannelImpl
+      extends AbstractSubchannel implements InternalInstrumented<InternalChannelStats> {
+    private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
     // Set right after SubchannelImpl is created.
     InternalSubchannel subchannel;
     final Object shutdownLock = new Object();
@@ -1122,6 +1126,16 @@ public final class ManagedChannelImpl
     @Override
     public String toString() {
       return subchannel.getLogId().toString();
+    }
+
+    @Override
+    public InternalLogId getLogId() {
+      return logId;
+    }
+
+    @Override
+    public ListenableFuture<InternalChannelStats> getStats() {
+      return subchannel.getStats();
     }
   }
 

@@ -20,6 +20,7 @@ import com.google.common.base.Preconditions;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
+import io.grpc.internal.ChannelTracer;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
@@ -138,7 +139,11 @@ public final class InProcessChannelBuilder extends
 
     @Override
     public ConnectionClientTransport newClientTransport(
-        SocketAddress addr, String authority, String userAgent, ProxyParameters proxy) {
+        SocketAddress addr,
+        String authority,
+        String userAgent,
+        ProxyParameters proxy,
+        ChannelTracer subchannelTracer) {
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
       }

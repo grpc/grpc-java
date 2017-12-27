@@ -20,6 +20,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.InternalTransportStats;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 
 /**
  * A class for gathering statistics about a transport. This is an experimental feature.
@@ -47,13 +48,19 @@ public final class TransportTracer {
   // deframing happens on the application thread, and there's no easy way to avoid synchronization
   private final LongCounter messagesReceived = LongCounterFactory.create();
   private volatile long lastMessageReceivedTimeNanos;
+  // null if server transport
+  @Nullable
+  private final ChannelTracer subchannelTracer;
 
-  public TransportTracer() {
+  public TransportTracer(@Nullable ChannelTracer subchannelTracer) {
     this.timeProvider = SYSTEM_TIME_PROVIDER;
+    this.subchannelTracer = subchannelTracer;
   }
 
-  private TransportTracer(TimeProvider timeProvider) {
+  private TransportTracer(TimeProvider timeProvider, @Nullable ChannelTracer subchannelTracer) {
     this.timeProvider = timeProvider;
+    this.subchannelTracer = subchannelTracer;
+
   }
 
   /**
@@ -85,6 +92,9 @@ public final class TransportTracer {
   public void reportStreamStarted() {
     streamsStarted++;
     lastStreamCreatedTimeNanos = currentTimeNanos();
+    if (subchannelTracer != null) {
+      subchannelTracer.reportCallStarted();
+    }
   }
 
   /**
@@ -95,6 +105,9 @@ public final class TransportTracer {
       streamsSucceeded++;
     } else {
       streamsFailed++;
+    }
+    if (subchannelTracer != null) {
+      subchannelTracer.reportCallEnded(success);
     }
   }
 
@@ -174,8 +187,16 @@ public final class TransportTracer {
       this.timeProvider = timeProvider;
     }
 
-    public TransportTracer create() {
-      return new TransportTracer(timeProvider);
+    /**
+     * Returns a {@code TransportTracer} that also reports stats to the specified
+     * {@link ChannelTracer} for the subchannel.
+     */
+    public TransportTracer createClientTracer(ChannelTracer subchannelTracer) {
+      return new TransportTracer(timeProvider, subchannelTracer);
+    }
+
+    public TransportTracer createServerTracer() {
+      return new TransportTracer(timeProvider, null);
     }
   }
 

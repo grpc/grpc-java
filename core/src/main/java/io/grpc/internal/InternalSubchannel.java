@@ -26,12 +26,15 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.SettableFuture;
 import com.google.errorprone.annotations.ForOverride;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.InternalChannelStats;
+import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
-import io.grpc.InternalWithLogId;
 import io.grpc.Status;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -50,7 +53,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * Transports for a single {@link SocketAddress}.
  */
 @ThreadSafe
-final class InternalSubchannel implements InternalWithLogId {
+final class InternalSubchannel implements InternalInstrumented<InternalChannelStats> {
   private static final Logger log = Logger.getLogger(InternalSubchannel.class.getName());
 
   private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
@@ -149,12 +152,16 @@ final class InternalSubchannel implements InternalWithLogId {
   @GuardedBy("lock")
   private Status shutdownReason;
 
+  /**
+   * The {@link ChannelTracer} to gather stats associated with this subchannel.
+   */
+  private final ChannelTracer subchannelTracer;
 
   InternalSubchannel(EquivalentAddressGroup addressGroup, String authority, String userAgent,
       BackoffPolicy.Provider backoffPolicyProvider,
       ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
       Supplier<Stopwatch> stopwatchSupplier, ChannelExecutor channelExecutor, Callback callback,
-      ProxyDetector proxyDetector) {
+      ProxyDetector proxyDetector, ChannelTracer subchannelTracer) {
     this.addressGroup = Preconditions.checkNotNull(addressGroup, "addressGroup");
     this.authority = authority;
     this.userAgent = userAgent;
@@ -165,6 +172,7 @@ final class InternalSubchannel implements InternalWithLogId {
     this.channelExecutor = channelExecutor;
     this.callback = callback;
     this.proxyDetector = proxyDetector;
+    this.subchannelTracer = subchannelTracer;
   }
 
   /**
@@ -208,7 +216,7 @@ final class InternalSubchannel implements InternalWithLogId {
 
     ProxyParameters proxy = proxyDetector.proxyFor(address);
     ConnectionClientTransport transport =
-        transportFactory.newClientTransport(address, authority, userAgent, proxy);
+        transportFactory.newClientTransport(address, authority, userAgent, proxy, subchannelTracer);
     if (log.isLoggable(Level.FINE)) {
       log.log(Level.FINE, "[{0}] Created {1} for {2}",
           new Object[] {logId, transport.getLogId(), address});
@@ -447,6 +455,13 @@ final class InternalSubchannel implements InternalWithLogId {
     } finally {
       channelExecutor.drain();
     }
+  }
+
+  @Override
+  public ListenableFuture<InternalChannelStats> getStats() {
+    SettableFuture<InternalChannelStats> ret = SettableFuture.create();
+    ret.set(subchannelTracer.getStats());
+    return ret;
   }
 
   /** Listener for real transports. */

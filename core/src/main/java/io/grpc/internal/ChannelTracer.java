@@ -22,7 +22,7 @@ import io.grpc.InternalChannelStats;
 /**
  * A collection of channel level stats for channelz.
  */
-final class ChannelTracer {
+public final class ChannelTracer {
   private final TimeProvider timeProvider;
   private final LongCounter callsStarted = LongCounterFactory.create();
   private final LongCounter callsSucceeded = LongCounterFactory.create();
@@ -33,12 +33,12 @@ final class ChannelTracer {
     this.timeProvider = timeProvider;
   }
 
-  public void reportCallStarted() {
+  void reportCallStarted() {
     callsStarted.add(1);
     lastCallStartedMillis = timeProvider.currentTimeMillis();
   }
 
-  public void reportCallEnded(boolean success) {
+  void reportCallEnded(boolean success) {
     if (success) {
       callsSucceeded.add(1);
     } else {
@@ -46,7 +46,7 @@ final class ChannelTracer {
     }
   }
 
-  public InternalChannelStats getStats() {
+  InternalChannelStats getStats() {
     return new InternalChannelStats(
         callsStarted.value(), callsSucceeded.value(), callsFailed.value(), lastCallStartedMillis);
   }
