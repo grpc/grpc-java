@@ -16,6 +16,7 @@
 
 package io.grpc;
 
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.concurrent.ThreadSafe;
@@ -85,9 +86,10 @@ public abstract class ManagedChannel
     throw new UnsupportedOperationException("Not implemented");
   }
 
+  @Internal
   @Override
   public ListenableFuture<InternalChannelStats> getStats() {
-    throw new UnsupportedOperationException("Not implemented");
+    return Futures.immediateFuture(null);
   }
 
   /**
@@ -122,8 +124,9 @@ public abstract class ManagedChannel
   @ExperimentalApi
   public void resetConnectBackoff() {}
 
+  @Internal
   @Override
   public InternalLogId getLogId() {
-    throw new UnsupportedOperationException("Not implemented");
+    return InternalLogId.allocate(getClass().getName());
   }
 }
