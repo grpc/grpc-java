@@ -16,6 +16,7 @@
 
 package io.grpc;
 
+import com.google.common.util.concurrent.ListenableFuture;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -84,6 +85,11 @@ public abstract class ManagedChannel
     throw new UnsupportedOperationException("Not implemented");
   }
 
+  @Override
+  public ListenableFuture<InternalChannelStats> getStats() {
+    throw new UnsupportedOperationException("Not implemented");
+  }
+
   /**
    * Registers a one-off callback that will be run if the connectivity state of the channel diverges
    * from the given {@code source}, which is typically what has just been returned by {@link
@@ -115,4 +121,9 @@ public abstract class ManagedChannel
    */
   @ExperimentalApi
   public void resetConnectBackoff() {}
+
+  @Override
+  public InternalLogId getLogId() {
+    throw new UnsupportedOperationException("Not implemented");
+  }
 }
