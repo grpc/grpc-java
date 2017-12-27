@@ -346,6 +346,7 @@ public abstract class AbstractManagedChannelImplBuilder
         GrpcUtil.STOPWATCH_SUPPLIER,
         getEffectiveInterceptors(),
         GrpcUtil.getProxyDetector(),
+        ChannelTracer.getDefaultFactory().create(),
         ChannelTracer.getDefaultFactory());
   }
 

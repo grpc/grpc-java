@@ -51,6 +51,7 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
+import io.grpc.internal.ChannelTracer.Factory;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -98,6 +99,12 @@ public class ManagedChannelImplIdlenessTest {
   private final ObjectPool<Executor> oobExecutorPool =
       new FixedObjectPool<Executor>(oobExecutor.getScheduledExecutorService());
   private final ChannelTracer subchannelTracer = ChannelTracer.getDefaultFactory().create();
+  private final ChannelTracer.Factory tracerFactory = new Factory() {
+    @Override
+    public ChannelTracer create() {
+      return subchannelTracer;
+    }
+  };
 
   @Mock private ClientTransportFactory mockTransportFactory;
   @Mock private LoadBalancer mockLoadBalancer;
@@ -144,7 +151,8 @@ public class ManagedChannelImplIdlenessTest {
         builder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         oobExecutorPool, timer.getStopwatchSupplier(),
         Collections.<ClientInterceptor>emptyList(),
-        GrpcUtil.NOOP_PROXY_DETECTOR, ChannelTracer.getDefaultFactory());
+        GrpcUtil.NOOP_PROXY_DETECTOR, ChannelTracer.getDefaultFactory().create(),
+        tracerFactory);
     newTransports = TestUtils.captureTransports(mockTransportFactory);
 
     for (int i = 0; i < 2; i++) {
