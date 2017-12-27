@@ -27,6 +27,8 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 public abstract class ManagedChannel
     extends Channel implements InternalInstrumented<InternalChannelStats> {
+  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+
   /**
    * Initiates an orderly shutdown in which preexisting calls continue but new calls are immediately
    * cancelled.
@@ -128,7 +130,7 @@ public abstract class ManagedChannel
 
   @Internal
   @Override
-  public InternalLogId getLogId() {
-    return InternalLogId.allocate(getClass().getName());
+  public final InternalLogId getLogId() {
+    return logId;
   }
 }
