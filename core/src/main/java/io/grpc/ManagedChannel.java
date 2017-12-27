@@ -16,8 +16,8 @@
 
 package io.grpc;
 
-import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.SettableFuture;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -89,7 +89,9 @@ public abstract class ManagedChannel
   @Internal
   @Override
   public ListenableFuture<InternalChannelStats> getStats() {
-    return Futures.immediateFuture(null);
+    SettableFuture<InternalChannelStats> ret = SettableFuture.create();
+    ret.set(null);
+    return ret;
   }
 
   /**
