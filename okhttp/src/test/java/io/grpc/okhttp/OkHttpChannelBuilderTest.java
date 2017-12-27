@@ -22,6 +22,7 @@ import static org.junit.Assert.assertNull;
 
 import com.squareup.okhttp.ConnectionSpec;
 import io.grpc.NameResolver;
+import io.grpc.internal.ChannelTracer;
 import io.grpc.internal.GrpcUtil;
 import java.net.InetSocketAddress;
 import org.junit.Rule;
@@ -37,6 +38,7 @@ import org.junit.runners.JUnit4;
 public class OkHttpChannelBuilderTest {
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
+  private final ChannelTracer subchannelTracer = ChannelTracer.getDefaultFactory().create();
 
   @Test
   public void authorityIsReadable() {
@@ -110,7 +112,7 @@ public class OkHttpChannelBuilderTest {
   public void usePlaintext_newClientTransportAllowed() {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("host", 1234).usePlaintext(true);
     builder.buildTransportFactory().newClientTransport(new InetSocketAddress(5678),
-        "dummy_authority", "dummy_userAgent", null /* proxy */);
+        "dummy_authority", "dummy_userAgent", null /* proxy */, subchannelTracer);
   }
 
   @Test

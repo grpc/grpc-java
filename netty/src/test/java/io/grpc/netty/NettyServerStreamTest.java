@@ -39,6 +39,7 @@ import com.google.common.collect.ListMultimap;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.internal.ChannelTracer;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
@@ -299,7 +300,10 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
     }).when(writeQueue).enqueue(any(QueuedCommand.class), any(ChannelPromise.class), anyBoolean());
     when(writeQueue.enqueue(any(QueuedCommand.class), anyBoolean())).thenReturn(future);
     StatsTraceContext statsTraceCtx = StatsTraceContext.NOOP;
-    TransportTracer transportTracer = new TransportTracer();
+    TransportTracer transportTracer = 
+        TransportTracer
+            .getDefaultFactory()
+            .createClientTracer(ChannelTracer.getDefaultFactory().create());
     NettyServerStream.TransportState state = new NettyServerStream.TransportState(
         handler, channel.eventLoop(), http2Stream, DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx,
         transportTracer);

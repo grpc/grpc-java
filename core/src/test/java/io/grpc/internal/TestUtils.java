@@ -90,7 +90,7 @@ final class TestUtils {
       }
     }).when(mockTransportFactory)
         .newClientTransport(any(SocketAddress.class), any(String.class), any(String.class),
-            any(ProxyParameters.class));
+            any(ProxyParameters.class), any(ChannelTracer.class));
 
     return captor;
   }

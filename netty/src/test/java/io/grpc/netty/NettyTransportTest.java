@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import io.grpc.ServerStreamTracer;
+import io.grpc.internal.ChannelTracer;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.InternalServer;
@@ -43,6 +44,7 @@ public class NettyTransportTest extends AbstractTransportTest {
           return fakeClock.currentTimeMillis();
         }
       });
+  private final ChannelTracer subchannelTracer = ChannelTracer.getDefaultFactory().create();
   // Avoid LocalChannel for testing because LocalChannel can fail with
   // io.netty.channel.ChannelException instead of java.net.ConnectException which breaks
   // serverNotListening test.
@@ -106,7 +108,8 @@ public class NettyTransportTest extends AbstractTransportTest {
         new InetSocketAddress("localhost", port),
         testAuthority(server),
         null /* agent */,
-        null /* proxy */);
+        null /* proxy */,
+        subchannelTracer);
   }
 
   @Test

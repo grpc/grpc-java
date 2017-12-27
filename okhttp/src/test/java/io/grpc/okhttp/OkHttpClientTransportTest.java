@@ -62,6 +62,7 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusException;
 import io.grpc.internal.AbstractStream;
+import io.grpc.internal.ChannelTracer;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.GrpcUtil;
@@ -137,7 +138,10 @@ public class OkHttpClientTransportTest {
   private final InetSocketAddress proxyAddr = null;
   private final String proxyUser = null;
   private final String proxyPassword = null;
-  private final TransportTracer transportTracer = new TransportTracer();
+  private final TransportTracer transportTracer = 
+      TransportTracer
+          .getDefaultFactory()
+          .createClientTracer(ChannelTracer.getDefaultFactory().create());
   private OkHttpClientTransport clientTransport;
   private MockFrameReader frameReader;
   private ExecutorService executor = Executors.newCachedThreadPool();
@@ -203,7 +207,7 @@ public class OkHttpClientTransportTest {
         connectedFuture,
         maxMessageSize,
         tooManyPingsRunnable,
-        new TransportTracer());
+        transportTracer);
     clientTransport.start(transportListener);
     if (waitingForConnected) {
       connectedFuture.get(TIME_OUT_MS, TimeUnit.MILLISECONDS);
@@ -1475,7 +1479,7 @@ public class OkHttpClientTransportTest {
         proxyUser,
         proxyPassword,
         tooManyPingsRunnable,
-        new TransportTracer());
+        transportTracer);
 
     ManagedClientTransport.Listener listener = mock(ManagedClientTransport.Listener.class);
     clientTransport.start(listener);

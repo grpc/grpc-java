@@ -52,7 +52,7 @@ public final class TransportTracer {
   @Nullable
   private final ChannelTracer subchannelTracer;
 
-  public TransportTracer(@Nullable ChannelTracer subchannelTracer) {
+  private TransportTracer(@Nullable ChannelTracer subchannelTracer) {
     this.timeProvider = SYSTEM_TIME_PROVIDER;
     this.subchannelTracer = subchannelTracer;
   }

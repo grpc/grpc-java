@@ -92,6 +92,7 @@ public class CallCredentialsApplyingTest {
   private static final Metadata.Key<String> CREDS_KEY =
       Metadata.Key.of("test-creds", Metadata.ASCII_STRING_MARSHALLER);
   private static final String CREDS_VALUE = "some credentials";
+  private final ChannelTracer subchannelTracer = ChannelTracer.getDefaultFactory().create();
 
   private final Metadata origHeaders = new Metadata();
   private ForwardingConnectionClientTransport transport;
@@ -101,16 +102,18 @@ public class CallCredentialsApplyingTest {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     origHeaders.put(ORIG_HEADER_KEY, ORIG_HEADER_VALUE);
-    when(mockTransportFactory.newClientTransport(address, AUTHORITY, USER_AGENT, NO_PROXY))
+    when(mockTransportFactory
+        .newClientTransport(address, AUTHORITY, USER_AGENT, NO_PROXY, subchannelTracer))
         .thenReturn(mockTransport);
     when(mockTransport.newStream(same(method), any(Metadata.class), any(CallOptions.class)))
         .thenReturn(mockStream);
     ClientTransportFactory transportFactory = new CallCredentialsApplyingTransportFactory(
         mockTransportFactory, mockExecutor);
     transport = (ForwardingConnectionClientTransport) transportFactory.newClientTransport(
-        address, AUTHORITY, USER_AGENT, NO_PROXY);
+        address, AUTHORITY, USER_AGENT, NO_PROXY, subchannelTracer);
     callOptions = CallOptions.DEFAULT.withCallCredentials(mockCreds);
-    verify(mockTransportFactory).newClientTransport(address, AUTHORITY, USER_AGENT, NO_PROXY);
+    verify(mockTransportFactory)
+        .newClientTransport(address, AUTHORITY, USER_AGENT, NO_PROXY, subchannelTracer);
     assertSame(mockTransport, transport.delegate());
   }
 

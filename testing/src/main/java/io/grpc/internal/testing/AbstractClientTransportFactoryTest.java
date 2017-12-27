@@ -16,6 +16,7 @@
 
 package io.grpc.internal.testing;
 
+import io.grpc.internal.ChannelTracer;
 import io.grpc.internal.ClientTransportFactory;
 import java.net.InetSocketAddress;
 import org.junit.Test;
@@ -24,6 +25,8 @@ import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public abstract class AbstractClientTransportFactoryTest {
+
+  private final ChannelTracer subchannelTracer = ChannelTracer.getDefaultFactory().create();
 
   protected abstract ClientTransportFactory newClientTransportFactory();
 
@@ -40,6 +43,10 @@ public abstract class AbstractClientTransportFactoryTest {
     ClientTransportFactory transportFactory = newClientTransportFactory();
     transportFactory.close();
     transportFactory.newClientTransport(
-        new InetSocketAddress("localhost", 12345), "localhost:" + 12345, "agent", null);
+        new InetSocketAddress("localhost", 12345),
+        "localhost:" + 12345,
+        "agent",
+        null,
+        subchannelTracer);
   }
 }
