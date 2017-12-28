@@ -114,4 +114,21 @@ public abstract class ManagedChannel extends Channel {
    */
   @ExperimentalApi
   public void resetConnectBackoff() {}
+
+  /**
+   * Shutdown existing transports while keeping the channel active. This allows on-going RPCs on the
+   * channel to continue while new RPCs will trigger creation of a new transport.
+   *
+   * <p>This is primarily intended for Android users when a device is transitioning from a cellular
+   * to a wifi connection. Initially the device will maintain both the cellular and wifi
+   * connections, but the OS also issues a notification that after a short time the cellular
+   * connection will be terminated. Apps may invoke this method to ensure that new RPCs are created
+   * using the wifi connection, rather than the soon-to-be-disconnected cellular network.
+   *
+   * <p>No-op if not supported by implementation.
+   *
+   * @since 1.10.0
+   */
+  @ExperimentalApi
+  public void shutdownTransports() {}
 }
