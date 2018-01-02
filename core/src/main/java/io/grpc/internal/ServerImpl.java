@@ -118,8 +118,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
   ServerImpl(
       AbstractServerImplBuilder<?> builder,
       InternalServer transportServer,
-      Context rootContext,
-      BinaryLogProvider binlogProvider) {
+      Context rootContext) {
     this.executorPool = Preconditions.checkNotNull(builder.executorPool, "executorPool");
     this.registry = Preconditions.checkNotNull(builder.registryBuilder.build(), "registryBuilder");
     this.fallbackRegistry =
@@ -135,7 +134,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
     this.interceptors =
         builder.interceptors.toArray(new ServerInterceptor[builder.interceptors.size()]);
     this.handshakeTimeoutMillis = builder.handshakeTimeoutMillis;
-    this.binlogProvider = binlogProvider;
+    this.binlogProvider = builder.binlogProvider;
   }
 
   /**
@@ -513,52 +512,41 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
     private <ReqT, RespT> ServerStreamListener startCall(ServerStream stream, String fullMethodName,
         ServerMethodDefinition<ReqT, RespT> methodDef, Metadata headers,
         Context.CancellableContext context, StatsTraceContext statsTraceCtx) {
-      ServerCallHandler<ReqT, RespT> callHandler = methodDef.getServerCallHandler();
+      ServerCallHandler<ReqT, RespT> handler = methodDef.getServerCallHandler();
+      for (ServerInterceptor interceptor : interceptors) {
+        handler = InternalServerInterceptors.interceptCallHandler(interceptor, handler);
+      }
+      ServerMethodDefinition<?, ?> wMethodDef = binlogProvider
+          .wrapMethodDefinition(methodDef.withServerCallHandler(handler));
+      return startWrappedCall(fullMethodName, methodDef, wMethodDef, stream, headers, context,
+          statsTraceCtx);
+    }
+
+    private <OReqT, ORespT, WReqT, WRespT> ServerStreamListener startWrappedCall(
+        String fullMethodName,
+        ServerMethodDefinition<OReqT, ORespT> oMethodDef,
+        ServerMethodDefinition<WReqT, WRespT> wMethodDef,
+        ServerStream stream,
+        Metadata headers,
+        Context.CancellableContext context,
+        StatsTraceContext statsTraceCtx) {
+      ServerCallImpl<WReqT, WRespT> call = new ServerCallImpl<WReqT, WRespT>(
+          stream,
+          wMethodDef.getMethodDescriptor(),
+          headers,
+          context,
+          decompressorRegistry, compressorRegistry);
+
+      // We must not reveal the modified method descriptor to public APIs
+      MethodDescriptor<OReqT, ORespT> oMethodDescriptor = oMethodDef.getMethodDescriptor();
       statsTraceCtx.serverCallStarted(
-          new ServerCallInfoImpl<ReqT, RespT>(
-              methodDef.getMethodDescriptor(),
+          new ServerCallInfoImpl<OReqT, ORespT>(
+              oMethodDescriptor,
               call.getAttributes(),
               call.getAuthority()));
 
-      for (ServerInterceptor interceptor : interceptors) {
-        callHandler = InternalServerInterceptors.interceptCallHandler(interceptor, callHandler);
-      }
-
-      ServerInterceptor binlogInterceptor = binlogProvider.getServerInterceptor(fullMethodName);
-      if (binlogInterceptor == null) {
-        return createListener(
-            stream, fullMethodName, methodDef.getMethodDescriptor(), headers, context,
-            statsTraceCtx, callHandler);
-      } else {
-        // This modified MethodDescriptor is not visible to users:
-        // The HandlerRegistry and ServerInterceptor APIs return the original MethodDescriptor.
-        MethodDescriptor<InputStream, InputStream> binaryMethod =
-            BinaryLogProvider.wrapMethod(methodDef.getMethodDescriptor());
-        ServerCallHandler<InputStream, InputStream> binaryCallHandler =
-            InternalServerInterceptors.wrapHandler(
-                callHandler, methodDef.getMethodDescriptor(), binaryMethod);
-        binaryCallHandler = InternalServerInterceptors.interceptCallHandler(
-            binlogInterceptor, binaryCallHandler);
-        return createListener(
-            stream, fullMethodName, binaryMethod, headers, context,
-            statsTraceCtx, binaryCallHandler);
-      }
-    }
-
-    private <ReqT, RespT> ServerStreamListener createListener(
-        ServerStream stream,
-        String fullMethodName,
-        MethodDescriptor<ReqT, RespT> method,
-        Metadata headers,
-        Context.CancellableContext context,
-        StatsTraceContext statsTraceCtx,
-        ServerCallHandler<ReqT, RespT> callHandler) {
-      // TODO(ejona86): should we update fullMethodName to have the canonical path of the method?
-      ServerCallImpl<ReqT, RespT> call = new ServerCallImpl<ReqT, RespT>(
-          stream, method, headers, context,
-          decompressorRegistry, compressorRegistry);
-      statsTraceCtx.serverCallStarted(call);
-      ServerCall.Listener<ReqT> listener = callHandler.startCall(call, headers);
+      ServerCall.Listener<WReqT> listener =
+          wMethodDef.getServerCallHandler().startCall(call, headers);
       if (listener == null) {
         throw new NullPointerException(
             "startCall() returned a null listener for method " + fullMethodName);

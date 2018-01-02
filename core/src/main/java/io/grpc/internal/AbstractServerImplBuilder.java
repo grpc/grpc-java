@@ -106,8 +106,8 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   private boolean recordStartedRpcs = true;
   private boolean recordFinishedRpcs = true;
   private boolean tracingEnabled = true;
-  private BinaryLogProvider binlogProvider = BinaryLogProvider.provider();
 
+  protected BinaryLogProvider binlogProvider = BinaryLogProvider.provider();
   protected TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
 
   @Override
@@ -233,21 +233,12 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
     tracingEnabled = value;
   }
 
-  /**
-   * Sets the binary log provider.
-   */
-  @VisibleForTesting
-  protected void setBinaryLogProvider(BinaryLogProvider value) {
-    binlogProvider = value;
-  }
-
   @Override
   public Server build() {
     ServerImpl server = new ServerImpl(
         this,
         buildTransportServer(Collections.unmodifiableList(getTracerFactories())),
-        Context.ROOT,
-        binlogProvider);
+        Context.ROOT);
     for (InternalNotifyOnServerBuild notifyTarget : notifyOnBuildList) {
       notifyTarget.notifyOnBuild(server);
     }

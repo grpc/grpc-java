@@ -102,9 +102,8 @@ public final class InProcessServerBuilder
     throw new UnsupportedOperationException("TLS not supported in InProcessServer");
   }
 
-  @Override
   @VisibleForTesting
-  protected void setBinaryLogProvider(BinaryLogProvider value) {
-    super.setBinaryLogProvider(value);
+  void setBinaryLogProvider(BinaryLogProvider binlogProvider) {
+    this.binlogProvider = binlogProvider;
   }
 }
