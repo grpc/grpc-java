@@ -70,6 +70,11 @@ $ VERSION_FILES=(
   examples/android/helloworld/app/build.gradle
   examples/android/routeguide/app/build.gradle
   )
+$ CODEGEN_FILES=(
+  compiler/src/test/golden/TestService.java.txt
+  compiler/src/testLite/golden/TestService.java.txt
+  compiler/src/testNano/golden/TestService.java.txt
+  )
 ```
 
 
@@ -89,9 +94,12 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
    # Change version to next minor (and keep -SNAPSHOT)
    $ sed -i 's/[0-9]\+\.[0-9]\+\.[0-9]\+\(.*CURRENT_GRPC_VERSION\)/'$MAJOR.$((MINOR+1)).0'\1/' \
      "${VERSION_FILES[@]}"
+   $ sed -i 's/\(gRPC proto compiler.*version\) [0-9]\+\.[0-9]\+\.[0-9]/\1 '$MAJOR.$((MINOR+1)).0'/' \
+     "${CODEGEN_FILES[@]}"
    $ ./gradlew build
    $ git commit -a -m "Start $MAJOR.$((MINOR+1)).0 development cycle"
    ```
+
 2. Go through PR review and submit.
 3. Create the release branch starting just before your commit and push it to GitHub:
 
