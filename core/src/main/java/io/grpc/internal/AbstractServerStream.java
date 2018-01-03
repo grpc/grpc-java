@@ -163,6 +163,11 @@ public abstract class AbstractServerStream extends AbstractStream
     transportState().setDecompressor(Preconditions.checkNotNull(decompressor, "decompressor"));
   }
 
+  @Override
+  public final void setFullStreamDecompressor() {
+    transportState().enableFullStreamDecompressor();
+  }
+
   @Override public Attributes getAttributes() {
     return Attributes.EMPTY;
   }

@@ -147,7 +147,12 @@ public class MessageDeframer implements Closeable, Deframer {
   }
 
   @Override
-  public void setFullStreamDecompressor(GzipInflatingBuffer fullStreamDecompressor) {
+  public void enableFullStreamDecompression() {
+    setFullStreamDecompressor(new GzipInflatingBuffer());
+  }
+
+  @VisibleForTesting
+  void setFullStreamDecompressor(GzipInflatingBuffer fullStreamDecompressor) {
     checkState(decompressor == Codec.Identity.NONE, "per-message decompressor already set");
     checkState(this.fullStreamDecompressor == null, "full stream decompressor already set");
     this.fullStreamDecompressor =

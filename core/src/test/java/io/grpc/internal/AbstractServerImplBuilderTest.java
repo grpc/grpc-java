@@ -18,6 +18,8 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
@@ -81,6 +83,28 @@ public class AbstractServerImplBuilderTest {
     builder.setStatsEnabled(false);
     List<ServerStreamTracer.Factory> factories = builder.getTracerFactories();
     assertThat(factories).containsExactly(DUMMY_USER_TRACER);
+  }
+
+  @Test
+  public void fullStreamCompression_default() {
+    assertFalse(builder.fullStreamCompression);
+  }
+
+  @Test
+  public void fullStreamCompression_enabled() {
+    assertEquals(builder, builder.enableFullStreamCompression());
+    assertTrue(builder.fullStreamCompression);
+  }
+
+  @Test
+  public void fullStreamDecompression_default() {
+    assertFalse(builder.fullStreamDecompression);
+  }
+
+  @Test
+  public void fullStreamDecompression_enabled() {
+    assertEquals(builder, builder.enableFullStreamDecompression());
+    assertTrue(builder.fullStreamDecompression);
   }
 
   static class Builder extends AbstractServerImplBuilder<Builder> {

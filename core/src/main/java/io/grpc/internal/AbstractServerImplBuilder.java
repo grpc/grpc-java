@@ -97,6 +97,9 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
 
   CompressorRegistry compressorRegistry = DEFAULT_COMPRESSOR_REGISTRY;
 
+  boolean fullStreamCompression;
+  boolean fullStreamDecompression;
+
   long handshakeTimeoutMillis = DEFAULT_HANDSHAKE_TIMEOUT_MILLIS;
 
   @Nullable
@@ -183,6 +186,18 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
     } else {
       compressorRegistry = DEFAULT_COMPRESSOR_REGISTRY;
     }
+    return thisT();
+  }
+
+  @Override
+  public T enableFullStreamCompression() {
+    this.fullStreamCompression = true;
+    return thisT();
+  }
+
+  @Override
+  public T enableFullStreamDecompression() {
+    this.fullStreamDecompression = true;
     return thisT();
   }
 

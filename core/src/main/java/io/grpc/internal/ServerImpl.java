@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static io.grpc.Contexts.statusFromCancelled;
 import static io.grpc.Status.DEADLINE_EXCEEDED;
+import static io.grpc.internal.GrpcUtil.CONTENT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
@@ -27,6 +28,7 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
+import io.grpc.Codec;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.Decompressor;
@@ -106,6 +108,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalWithLogI
 
   private final DecompressorRegistry decompressorRegistry;
   private final CompressorRegistry compressorRegistry;
+  private final boolean fullStreamCompression;
+  private final boolean fullStreamDecompression;
 
   /**
    * Construct a server.
@@ -128,6 +132,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalWithLogI
     this.rootContext = Preconditions.checkNotNull(rootContext, "rootContext").fork();
     this.decompressorRegistry = builder.decompressorRegistry;
     this.compressorRegistry = builder.compressorRegistry;
+    this.fullStreamCompression = builder.fullStreamCompression;
+    this.fullStreamDecompression = builder.fullStreamDecompression;
     this.transportFilters = Collections.unmodifiableList(
         new ArrayList<ServerTransportFilter>(builder.transportFilters));
     this.interceptors =
@@ -399,6 +405,23 @@ public final class ServerImpl extends io.grpc.Server implements InternalWithLogI
     @Override
     public void streamCreated(
         final ServerStream stream, final String methodName, final Metadata headers) {
+      boolean compressedStream = false;
+      if (fullStreamDecompression) {
+        String streamEncoding = headers.get(CONTENT_ENCODING_KEY);
+        if (streamEncoding != null) {
+          if (streamEncoding.equalsIgnoreCase("gzip")) {
+            stream.setFullStreamDecompressor();
+            compressedStream = true;
+          } else if (!streamEncoding.equalsIgnoreCase("identity")) {
+            stream.close(
+                Status.UNIMPLEMENTED.withDescription(
+                    String.format("Can't find full stream decompressor for %s", streamEncoding)),
+                new Metadata());
+            return;
+          }
+        }
+      }
+
       if (headers.containsKey(MESSAGE_ENCODING_KEY)) {
         String encoding = headers.get(MESSAGE_ENCODING_KEY);
         Decompressor decompressor = decompressorRegistry.lookupDecompressor(encoding);
@@ -408,8 +431,16 @@ public final class ServerImpl extends io.grpc.Server implements InternalWithLogI
                   String.format("Can't find decompressor for %s", encoding)),
               new Metadata());
           return;
+        } else if (decompressor != Codec.Identity.NONE) {
+          if (compressedStream) {
+            stream.close(
+                Status.INTERNAL.withDescription(
+                    String.format("Full stream and gRPC message encoding cannot both be set")),
+                new Metadata());
+            return;
+          }
+          stream.setDecompressor(decompressor);
         }
-        stream.setDecompressor(decompressor);
       }
 
       final StatsTraceContext statsTraceCtx = Preconditions.checkNotNull(
@@ -511,9 +542,15 @@ public final class ServerImpl extends io.grpc.Server implements InternalWithLogI
         ServerMethodDefinition<ReqT, RespT> methodDef, Metadata headers,
         Context.CancellableContext context, StatsTraceContext statsTraceCtx) {
       // TODO(ejona86): should we update fullMethodName to have the canonical path of the method?
-      ServerCallImpl<ReqT, RespT> call = new ServerCallImpl<ReqT, RespT>(
-          stream, methodDef.getMethodDescriptor(), headers, context,
-          decompressorRegistry, compressorRegistry);
+      ServerCallImpl<ReqT, RespT> call =
+          new ServerCallImpl<ReqT, RespT>(
+              stream,
+              methodDef.getMethodDescriptor(),
+              headers,
+              context,
+              decompressorRegistry,
+              compressorRegistry,
+              fullStreamCompression);
       ServerCallHandler<ReqT, RespT> callHandler = methodDef.getServerCallHandler();
       statsTraceCtx.serverCallStarted(call);
       for (ServerInterceptor interceptor : interceptors) {

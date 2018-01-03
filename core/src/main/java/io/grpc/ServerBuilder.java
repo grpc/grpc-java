@@ -173,6 +173,35 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
   public abstract T compressorRegistry(@Nullable CompressorRegistry registry);
 
   /**
+   * Enables full-stream compression of outbound RPCs, if the client advertises support for this
+   * feature.
+   *
+   * <p>EXPERIMENTAL: This method is here to enable an experimental feature, and may be changed or
+   * removed once the feature is stable.
+   *
+   * @throws UnsupportedOperationException if unsupported
+   * @since 1.10.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3399")
+  public T enableFullStreamCompression() {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * /** Enables full-stream decompression of inbound GZIP compressed streams.
+   *
+   * <p>EXPERIMENTAL: This method is here to enable an experimental feature, and may be changed or
+   * removed once the feature is stable.
+   *
+   * @throws UnsupportedOperationException if unsupported
+   * @since 1.10.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3399")
+  public T enableFullStreamDecompression() {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
    * Sets the permitted time for new connections to complete negotiation handshakes before being
    * killed.
    *

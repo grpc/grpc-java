@@ -311,18 +311,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
-  public final void setFullStreamDecompression(final boolean fullStreamDecompression) {
-    class FullStreamDecompressionEntry implements BufferEntry {
-      @Override
-      public void runWith(Substream substream) {
-        substream.stream.setFullStreamDecompression(fullStreamDecompression);
-      }
-    }
-
-    delayOrExecute(new FullStreamDecompressionEntry());
-  }
-
-  @Override
   public final void setMessageCompression(final boolean enable) {
     class MessageCompressionEntry implements BufferEntry {
       @Override
@@ -332,6 +320,30 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
 
     delayOrExecute(new MessageCompressionEntry());
+  }
+
+  @Override
+  public final void setFullStreamCompression(final boolean enable) {
+    class StreamCompressionEntry implements BufferEntry {
+      @Override
+      public void runWith(Substream substream) {
+        substream.stream.setFullStreamCompression(enable);
+      }
+    }
+
+    delayOrExecute(new StreamCompressionEntry());
+  }
+
+  @Override
+  public final void setFullStreamDecompression(final boolean fullStreamDecompression) {
+    class FullStreamDecompressionEntry implements BufferEntry {
+      @Override
+      public void runWith(Substream substream) {
+        substream.stream.setFullStreamDecompression(fullStreamDecompression);
+      }
+    }
+
+    delayOrExecute(new FullStreamDecompressionEntry());
   }
 
   @Override

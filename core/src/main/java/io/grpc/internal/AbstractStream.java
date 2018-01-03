@@ -46,6 +46,16 @@ public abstract class AbstractStream implements Stream {
   }
 
   @Override
+  public final void setFullStreamCompression(boolean enable) {
+    framer().setStreamCompression(enable);
+  }
+
+  @Override
+  public final void setFullStreamDecompression(boolean enable) {
+    transportState().setFullStreamDecompression(enable);
+  }
+
+  @Override
   public final void writeMessage(InputStream message) {
     checkNotNull(message, "message");
     if (!framer().isClosed()) {
@@ -104,6 +114,8 @@ public abstract class AbstractStream implements Stream {
     @VisibleForTesting
     public static final int DEFAULT_ONREADY_THRESHOLD = 32 * 1024;
 
+    protected boolean fullStreamDecompression;
+
     private Deframer deframer;
     private final Object onReadyLock = new Object();
     private final StatsTraceContext statsTraceCtx;
@@ -143,8 +155,8 @@ public abstract class AbstractStream implements Stream {
           getClass().getName());
     }
 
-    protected void setFullStreamDecompressor(GzipInflatingBuffer fullStreamDecompressor) {
-      deframer.setFullStreamDecompressor(fullStreamDecompressor);
+    protected void enableFullStreamDecompressor() {
+      deframer.enableFullStreamDecompression();
       deframer = new ApplicationThreadDeframer(this, this, (MessageDeframer) deframer);
     }
 
@@ -211,6 +223,10 @@ public abstract class AbstractStream implements Stream {
 
     protected final void setDecompressor(Decompressor decompressor) {
       deframer.setDecompressor(decompressor);
+    }
+
+    private void setFullStreamDecompression(boolean fullStreamDecompression) {
+      this.fullStreamDecompression = fullStreamDecompression;
     }
 
     private boolean isReady() {

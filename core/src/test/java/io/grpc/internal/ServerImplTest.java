@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static io.grpc.internal.GrpcUtil.CONTENT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -482,6 +483,7 @@ public class ServerImplTest {
     Metadata responseHeaders = new Metadata();
     responseHeaders.put(metadataKey, "response value");
     call.sendHeaders(responseHeaders);
+    verify(stream).setFullStreamCompression(false);
     verify(stream).writeHeaders(responseHeaders);
     verify(stream).setCompressor(isA(Compressor.class));
 
@@ -1192,6 +1194,80 @@ public class ServerImplTest {
       assertSame(expectedT, t);
       ensureServerStateNotLeaked();
     }
+  }
+
+  @Test
+  public void streamCreated_contentEncodingIsCaseInsensitive() throws Exception {
+    builder.enableFullStreamDecompression();
+    createAndStartServer();
+    ServerTransportListener transportListener =
+        transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
+    Metadata requestHeaders = new Metadata();
+    requestHeaders.put(CONTENT_ENCODING_KEY, "gZiP");
+    StatsTraceContext statsTraceCtx =
+        StatsTraceContext.newServerContext(
+            streamTracerFactories, "Waiter/nonexist", requestHeaders);
+    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
+
+    transportListener.streamCreated(stream, "Waiter/nonexist", requestHeaders);
+
+    verify(stream).setFullStreamDecompressor();
+    assertEquals(1, executor.runDueTasks());
+  }
+
+  @Test
+  public void streamCreated_invalidContentEncodingFails() throws Exception {
+    builder.enableFullStreamDecompression();
+    createAndStartServer();
+    ServerTransportListener transportListener =
+        transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
+    Metadata requestHeaders = new Metadata();
+    requestHeaders.put(CONTENT_ENCODING_KEY, "NON_EXISTENT_DECOMPRESSOR");
+    StatsTraceContext statsTraceCtx =
+        StatsTraceContext.newServerContext(
+            streamTracerFactories, "Waiter/nonexist", requestHeaders);
+    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
+
+    transportListener.streamCreated(stream, "Waiter/nonexist", requestHeaders);
+
+    verify(stream).close(statusCaptor.capture(), any(Metadata.class));
+    Status status = statusCaptor.getValue();
+    assertEquals(Status.Code.UNIMPLEMENTED, status.getCode());
+    assertTrue(
+        "unexpected deframe failed description",
+        status.getDescription().startsWith("Can't find full stream decompressor for"));
+    verifyNoMoreInteractions(stream);
+  }
+
+  @Test
+  public void streamCreated_contentAndMessageEncodingFails() throws Exception {
+    builder.enableFullStreamDecompression();
+    createAndStartServer();
+    ServerTransportListener transportListener =
+        transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
+    Metadata requestHeaders = new Metadata();
+    requestHeaders.put(CONTENT_ENCODING_KEY, "gzip");
+    requestHeaders.put(MESSAGE_ENCODING_KEY, "gzip");
+    StatsTraceContext statsTraceCtx =
+        StatsTraceContext.newServerContext(
+            streamTracerFactories, "Waiter/nonexist", requestHeaders);
+    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
+
+    transportListener.streamCreated(stream, "Waiter/nonexist", requestHeaders);
+
+    verify(stream).setFullStreamDecompressor();
+    verify(stream).close(statusCaptor.capture(), any(Metadata.class));
+    Status status = statusCaptor.getValue();
+    assertEquals(Status.Code.INTERNAL, status.getCode());
+    assertTrue(
+        "unexpected deframe failed description",
+        status
+            .getDescription()
+            .startsWith("Full stream and gRPC message encoding cannot both be set"));
+    verifyNoMoreInteractions(stream);
   }
 
   private void createAndStartServer() throws IOException {

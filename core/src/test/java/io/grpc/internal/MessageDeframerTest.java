@@ -102,21 +102,21 @@ public class MessageDeframerTest {
     @Before
     public void setUp() {
       if (useGzipInflatingBuffer) {
-        deframer.setFullStreamDecompressor(new GzipInflatingBuffer() {
-          @Override
-          public void addGzippedBytes(ReadableBuffer buffer) {
-            try {
-              ByteArrayOutputStream gzippedOutputStream = new ByteArrayOutputStream();
-              OutputStream gzipCompressingStream = new GZIPOutputStream(
-                      gzippedOutputStream);
-              buffer.readBytes(gzipCompressingStream, buffer.readableBytes());
-              gzipCompressingStream.close();
-              super.addGzippedBytes(ReadableBuffers.wrap(gzippedOutputStream.toByteArray()));
-            } catch (IOException e) {
-              throw new RuntimeException(e);
-            }
-          }
-        });
+        deframer.setFullStreamDecompressor(
+            new GzipInflatingBuffer() {
+              @Override
+              void addGzippedBytes(ReadableBuffer buffer) {
+                try {
+                  ByteArrayOutputStream gzippedOutputStream = new ByteArrayOutputStream();
+                  OutputStream gzipCompressingStream = new GZIPOutputStream(gzippedOutputStream);
+                  buffer.readBytes(gzipCompressingStream, buffer.readableBytes());
+                  gzipCompressingStream.close();
+                  super.addGzippedBytes(ReadableBuffers.wrap(gzippedOutputStream.toByteArray()));
+                } catch (IOException e) {
+                  throw new RuntimeException(e);
+                }
+              }
+            });
       }
     }
 

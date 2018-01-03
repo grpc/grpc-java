@@ -46,6 +46,9 @@ public interface Framer {
   /** Set the compressor used for compression. */
   Framer setCompressor(Compressor compressor);
 
+  /** Enable or disable full-stream compression. */
+  Framer setStreamCompression(boolean enable);
+
   /** Set a size limit for each outbound message. */ 
   void setMaxOutboundMessageSize(int maxSize);
 }

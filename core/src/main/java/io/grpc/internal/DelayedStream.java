@@ -347,6 +347,21 @@ class DelayedStream implements ClientStream {
     }
   }
 
+  @Override
+  public void setFullStreamCompression(final boolean enable) {
+    if (passThrough) {
+      realStream.setFullStreamCompression(enable);
+    } else {
+      delayOrExecute(
+          new Runnable() {
+            @Override
+            public void run() {
+              realStream.setFullStreamCompression(enable);
+            }
+          });
+    }
+  }
+
   @VisibleForTesting
   ClientStream getRealStream() {
     return realStream;

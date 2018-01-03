@@ -120,6 +120,7 @@ public final class ManagedChannelImpl
 
   private final ChannelExecutor channelExecutor = new ChannelExecutor();
 
+  private boolean fullStreamCompression;
   private boolean fullStreamDecompression;
 
   private final DecompressorRegistry decompressorRegistry;
@@ -480,6 +481,7 @@ public final class ManagedChannelImpl
           "invalid idleTimeoutMillis %s", builder.idleTimeoutMillis);
       this.idleTimeoutMillis = builder.idleTimeoutMillis;
     }
+    this.fullStreamCompression = builder.fullStreamCompression;
     this.fullStreamDecompression = builder.fullStreamDecompression;
     this.decompressorRegistry = checkNotNull(builder.decompressorRegistry, "decompressorRegistry");
     this.compressorRegistry = checkNotNull(builder.compressorRegistry, "compressorRegistry");
@@ -640,7 +642,8 @@ public final class ManagedChannelImpl
               callOptions,
               transportProvider,
               terminated ? null : transportFactory.getScheduledExecutorService(),
-          channelTracer)
+              channelTracer)
+          .setFullStreamCompression(fullStreamCompression)
           .setFullStreamDecompression(fullStreamDecompression)
           .setDecompressorRegistry(decompressorRegistry)
           .setCompressorRegistry(compressorRegistry);

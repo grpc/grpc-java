@@ -81,6 +81,7 @@ public class TestServiceClient {
   private String defaultServiceAccount;
   private String serviceAccountKeyFile;
   private String oauthScope;
+  private boolean fullStreamCompression;
   private boolean fullStreamDecompression;
 
   private Tester tester = new Tester();
@@ -132,6 +133,8 @@ public class TestServiceClient {
         serviceAccountKeyFile = value;
       } else if ("oauth_scope".equals(key)) {
         oauthScope = value;
+      } else if ("full_stream_compression".equals(key)) {
+        fullStreamCompression = Boolean.parseBoolean(value);
       } else if ("full_stream_decompression".equals(key)) {
         fullStreamDecompression = Boolean.parseBoolean(value);
       } else {
@@ -162,6 +165,8 @@ public class TestServiceClient {
           + "\n  --service_account_key_file  Path to service account json key file."
             + c.serviceAccountKeyFile
           + "\n  --oauth_scope               Scope for OAuth tokens. Default " + c.oauthScope
+          + "\n  --full_stream_compression Enable full-stream compression. Default "
+            + c.fullStreamCompression
           + "\n  --full_stream_decompression Enable full-stream decompression. Default "
             + c.fullStreamDecompression
       );
@@ -336,6 +341,9 @@ public class TestServiceClient {
         if (serverHostOverride != null) {
           nettyBuilder.overrideAuthority(serverHostOverride);
         }
+        if (fullStreamCompression) {
+          nettyBuilder.enableFullStreamCompression();
+        }
         if (fullStreamDecompression) {
           nettyBuilder.enableFullStreamDecompression();
         }
@@ -359,6 +367,9 @@ public class TestServiceClient {
           }
         } else {
           okBuilder.usePlaintext(true);
+        }
+        if (fullStreamCompression) {
+          okBuilder.enableFullStreamCompression();
         }
         if (fullStreamDecompression) {
           okBuilder.enableFullStreamDecompression();

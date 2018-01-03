@@ -80,6 +80,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private final ClientTransportProvider clientTransportProvider;
   private final CancellationListener cancellationListener = new ContextCancellationListener();
   private ScheduledExecutorService deadlineCancellationExecutor;
+  private boolean fullStreamCompression;
   private boolean fullStreamDecompression;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
@@ -133,6 +134,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   }
 
+  ClientCallImpl<ReqT, RespT> setFullStreamCompression(boolean fullStreamCompression) {
+    this.fullStreamCompression = fullStreamCompression;
+    return this;
+  }
+
   ClientCallImpl<ReqT, RespT> setFullStreamDecompression(boolean fullStreamDecompression) {
     this.fullStreamDecompression = fullStreamDecompression;
     return this;
@@ -153,9 +159,15 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       Metadata headers,
       DecompressorRegistry decompressorRegistry,
       Compressor compressor,
+      boolean fullStreamCompression,
       boolean fullStreamDecompression) {
+    headers.discardAll(CONTENT_ENCODING_KEY);
+    if (fullStreamCompression) {
+      headers.put(CONTENT_ENCODING_KEY, "gzip");
+    }
+
     headers.discardAll(MESSAGE_ENCODING_KEY);
-    if (compressor != Codec.Identity.NONE) {
+    if (!fullStreamCompression && compressor != Codec.Identity.NONE) {
       headers.put(MESSAGE_ENCODING_KEY, compressor.getMessageEncoding());
     }
 
@@ -166,7 +178,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       headers.put(MESSAGE_ACCEPT_ENCODING_KEY, advertisedEncodings);
     }
 
-    headers.discardAll(CONTENT_ENCODING_KEY);
     headers.discardAll(CONTENT_ACCEPT_ENCODING_KEY);
     if (fullStreamDecompression) {
       headers.put(CONTENT_ACCEPT_ENCODING_KEY, FULL_STREAM_DECOMPRESSION_ENCODINGS);
@@ -225,7 +236,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     } else {
       compressor = Codec.Identity.NONE;
     }
-    prepareHeaders(headers, decompressorRegistry, compressor, fullStreamDecompression);
+    prepareHeaders(
+        headers, decompressorRegistry, compressor, fullStreamCompression, fullStreamDecompression);
 
     Deadline effectiveDeadline = effectiveDeadline();
     boolean deadlineExceeded = effectiveDeadline != null && effectiveDeadline.isExpired();
@@ -259,6 +271,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       stream.setMaxOutboundMessageSize(callOptions.getMaxOutboundMessageSize());
     }
     stream.setCompressor(compressor);
+    stream.setFullStreamCompression(fullStreamCompression);
     stream.setFullStreamDecompression(fullStreamDecompression);
     stream.setDecompressorRegistry(decompressorRegistry);
     channelTracer.reportCallStarted();

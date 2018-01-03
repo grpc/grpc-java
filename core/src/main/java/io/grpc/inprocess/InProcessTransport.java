@@ -463,10 +463,23 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       }
 
       @Override
+      public void setFullStreamCompression(boolean enable) {
+        // noop
+      }
+
+      @Override
+      public void setFullStreamDecompression(boolean enable) {
+        // noop
+      }
+
+      @Override
       public void setCompressor(Compressor compressor) {}
 
       @Override
       public void setDecompressor(Decompressor decompressor) {}
+
+      @Override
+      public void setFullStreamDecompressor() {}
 
       @Override public Attributes getAttributes() {
         return serverStreamAttributes;
@@ -653,6 +666,9 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       @Override
       public void setCompressor(Compressor compressor) {}
+
+      @Override
+      public void setFullStreamCompression(boolean enable) {}
 
       @Override
       public void setFullStreamDecompression(boolean fullStreamDecompression) {}

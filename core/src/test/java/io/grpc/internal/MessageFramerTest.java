@@ -31,9 +31,12 @@ import io.grpc.StreamTracer;
 import io.grpc.internal.testing.TestStreamTracer.TestBaseStreamTracer;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
+import java.util.zip.GZIPOutputStream;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -82,6 +85,133 @@ public class MessageFramerTest {
 
     verify(sink).deliverFrame(toWriteBuffer(new byte[] {0, 0, 0, 0, 2, 3, 14}), false, true, 1);
     assertEquals(1, allocator.allocCount);
+    verifyNoMoreInteractions(sink);
+    checkStats(2, 2);
+  }
+
+  @Test
+  public void streamCompression() throws Exception {
+    framer.setStreamCompression(true);
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    GZIPOutputStream gzipOutputStream;
+    try {
+      gzipOutputStream =
+          GZIPOutputStream.class
+              .getConstructor(OutputStream.class, boolean.class)
+              .newInstance(bos, true);
+    } catch (Throwable t) {
+      // The two-arg GZIPOutputStream constructor is not available on JDK6
+      gzipOutputStream = new GZIPOutputStream(bos);
+    }
+    gzipOutputStream.write(new byte[] {0, 0, 0, 0, 2, 3, 14});
+    gzipOutputStream.flush();
+    byte[] gzippedBytesAfterFlush = bos.toByteArray();
+    gzipOutputStream.close();
+    byte[] completeGzippedBytes = bos.toByteArray();
+
+    writeKnownLength(framer, new byte[] {3, 14});
+    verifyNoMoreInteractions(sink);
+
+    framer.flush();
+    verify(sink).deliverFrame(toWriteBuffer(gzippedBytesAfterFlush), false, true, 1);
+
+    framer.close(); // closes the gzip output stream and delivers the gzip trailer
+    assertEquals(2, allocator.allocCount);
+    verify(sink)
+        .deliverFrame(
+            toWriteBuffer(
+                Arrays.copyOfRange(
+                    completeGzippedBytes,
+                    gzippedBytesAfterFlush.length,
+                    completeGzippedBytes.length)),
+            true,
+            true,
+            0);
+    verifyNoMoreInteractions(sink);
+    checkStats(0, 2);
+  }
+
+  @Test
+  public void streamCompression_messagesShareContext() throws Exception {
+    framer.setStreamCompression(true);
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    GZIPOutputStream gzipOutputStream;
+    try {
+      gzipOutputStream =
+          GZIPOutputStream.class
+              .getConstructor(OutputStream.class, boolean.class)
+              .newInstance(bos, true);
+    } catch (Throwable t) {
+      // The two-arg GZIPOutputStream constructor is not available on JDK6
+      gzipOutputStream = new GZIPOutputStream(bos);
+    }
+    gzipOutputStream.write(new byte[] {0, 0, 0, 0, 0});
+    gzipOutputStream.flush();
+    byte[] gzippedBytesAfterFirstFlush = bos.toByteArray();
+    gzipOutputStream.write(new byte[] {0, 0, 0, 0, 2, 3, 14});
+    gzipOutputStream.flush();
+    byte[] gzippedBytesAfterSecondFlush = bos.toByteArray();
+    gzipOutputStream.close();
+    byte[] completeGzippedBytes = bos.toByteArray();
+
+    writeKnownLength(framer, new byte[0]);
+    verifyNoMoreInteractions(sink);
+
+    framer.flush();
+    verify(sink).deliverFrame(toWriteBuffer(gzippedBytesAfterFirstFlush), false, true, 1);
+    writeKnownLength(framer, new byte[] {3, 14});
+    verifyNoMoreInteractions(sink);
+
+    framer.flush();
+    verify(sink)
+        .deliverFrame(
+            toWriteBuffer(
+                Arrays.copyOfRange(
+                    gzippedBytesAfterSecondFlush,
+                    gzippedBytesAfterFirstFlush.length,
+                    gzippedBytesAfterSecondFlush.length)),
+            false,
+            true,
+            1);
+
+    framer.close(); // closes the gzip output stream and delivers the gzip trailer
+    assertEquals(3, allocator.allocCount);
+    verify(sink)
+        .deliverFrame(
+            toWriteBuffer(
+                Arrays.copyOfRange(
+                    completeGzippedBytes,
+                    gzippedBytesAfterSecondFlush.length,
+                    completeGzippedBytes.length)),
+            true,
+            true,
+            0);
+    verifyNoMoreInteractions(sink);
+    checkStats(0, 0, 0, 2);
+  }
+
+  @Test
+  public void streamCompression_unknownLength() throws Exception {
+    framer.setStreamCompression(true);
+    ByteArrayOutputStream headerBos = new ByteArrayOutputStream();
+    GZIPOutputStream gzipOutputStream = new GZIPOutputStream(headerBos);
+    gzipOutputStream.write(new byte[] {0, 0, 0, 0, 2});
+    gzipOutputStream.close();
+    ByteArrayOutputStream messageBos = new ByteArrayOutputStream();
+    gzipOutputStream = new GZIPOutputStream(messageBos);
+    gzipOutputStream.write(new byte[] {3, 14});
+    gzipOutputStream.close();
+
+    writeUnknownLength(framer, new byte[] {3, 14});
+    verify(sink).deliverFrame(toWriteBuffer(headerBos.toByteArray()), false, false, 0);
+    verifyNoMoreInteractions(sink);
+
+    framer.flush();
+    verify(sink).deliverFrame(toWriteBuffer(messageBos.toByteArray()), false, true, 1);
+
+    framer.close();
+    assertEquals(2, allocator.allocCount);
+    verify(sink).deliverFrame(null, true, true, 0);
     verifyNoMoreInteractions(sink);
     checkStats(2, 2);
   }
@@ -138,15 +268,38 @@ public class MessageFramerTest {
     allocator = new BytesWritableBufferAllocator(12, 12);
     framer = new MessageFramer(sink, allocator, statsTraceCtx);
     writeKnownLength(framer, new byte[]{3, 14, 1, 5, 9, 2, 6, 5});
-    verify(sink).deliverFrame(
-        toWriteBuffer(new byte[] {0, 0, 0, 0, 8, 3, 14, 1, 5, 9, 2, 6}), false, false, 1);
+    verify(sink)
+        .deliverFrame(
+            toWriteBuffer(new byte[] {0, 0, 0, 0, 8, 3, 14, 1, 5, 9, 2, 6}), false, false, 0);
     verifyNoMoreInteractions(sink);
 
     framer.flush();
-    verify(sink).deliverFrame(toWriteBuffer(new byte[] {5}), false, true, 0);
+    verify(sink).deliverFrame(toWriteBuffer(new byte[] {5}), false, true, 1);
     verifyNoMoreInteractions(sink);
     assertEquals(2, allocator.allocCount);
     checkStats(8, 8);
+  }
+
+  @Test
+  public void unknownLength_previousBufferIsSent() {
+    allocator = new BytesWritableBufferAllocator(12, 12);
+    framer = new MessageFramer(sink, allocator, statsTraceCtx);
+    writeKnownLength(framer, new byte[] {3, 14, 1, 5, 9, 2, 6, 5});
+    verify(sink)
+        .deliverFrame(
+            toWriteBuffer(new byte[] {0, 0, 0, 0, 8, 3, 14, 1, 5, 9, 2, 6}), false, false, 0);
+    verifyNoMoreInteractions(sink);
+
+    writeUnknownLength(framer, new byte[] {1});
+    verify(sink).deliverFrame(toWriteBuffer(new byte[] {5}), false, false, 1);
+    verify(sink).deliverFrame(toWriteBuffer(new byte[] {0, 0, 0, 0, 1}), false, false, 0);
+    verifyNoMoreInteractions(sink);
+    framer.flush();
+    verify(sink).deliverFrame(toWriteBufferWithMinSize(new byte[] {1}, 12), false, true, 1);
+    assertEquals(4, allocator.allocCount);
+
+    framer.flush();
+    verifyNoMoreInteractions(sink);
   }
 
   @Test
@@ -155,12 +308,13 @@ public class MessageFramerTest {
     framer = new MessageFramer(sink, allocator, statsTraceCtx);
     writeKnownLength(framer, new byte[]{3, 14, 1});
     writeKnownLength(framer, new byte[]{3});
-    verify(sink).deliverFrame(
-            toWriteBuffer(new byte[] {0, 0, 0, 0, 3, 3, 14, 1, 0, 0, 0, 0}), false, false, 2);
+    verify(sink)
+        .deliverFrame(
+            toWriteBuffer(new byte[] {0, 0, 0, 0, 3, 3, 14, 1, 0, 0, 0, 0}), false, false, 1);
     verifyNoMoreInteractions(sink);
 
     framer.flush();
-    verify(sink).deliverFrame(toWriteBufferWithMinSize(new byte[] {1, 3}, 12), false, true, 0);
+    verify(sink).deliverFrame(toWriteBufferWithMinSize(new byte[] {1, 3}, 12), false, true, 1);
     verifyNoMoreInteractions(sink);
     assertEquals(2, allocator.allocCount);
     checkStats(3, 3, 1, 1);
@@ -223,10 +377,11 @@ public class MessageFramerTest {
     allocator = new BytesWritableBufferAllocator(500, 500);
     framer = new MessageFramer(sink, allocator, statsTraceCtx);
     writeUnknownLength(framer, new byte[1000]);
-    framer.flush();
     // Header and first chunk written with flush = false
     verify(sink, times(2)).deliverFrame(frameCaptor.capture(), eq(false), eq(false), eq(0));
-    // On flush third buffer written with flish = true
+
+    framer.flush();
+    // On flush third buffer written with flush = true
     // The message count is only bumped when a message is completely written.
     verify(sink).deliverFrame(frameCaptor.capture(), eq(false), eq(true), eq(1));
 

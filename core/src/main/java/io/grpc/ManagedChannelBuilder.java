@@ -205,6 +205,21 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T loadBalancerFactory(LoadBalancer.Factory loadBalancerFactory);
 
   /**
+   * Enables full-stream compression of outbound streams. This requires server support for
+   * full-stream compression.
+   *
+   * <p>EXPERIMENTAL: This method is here to enable an experimental feature, and may be changed or
+   * removed once the feature is stable.
+   *
+   * @throws UnsupportedOperationException if unsupported
+   * @since 1.10.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3399")
+  public T enableFullStreamCompression() {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
    * Enables full-stream decompression of inbound streams. This will cause the channel's outbound
    * headers to advertise support for GZIP compressed streams, and gRPC servers which support the
    * feature may respond with a GZIP compressed stream.

@@ -17,6 +17,8 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Charsets.UTF_8;
+import static io.grpc.internal.GrpcUtil.CONTENT_ACCEPT_ENCODING_KEY;
+import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -86,8 +88,15 @@ public class ServerCallImplTest {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     context = Context.ROOT.withCancellation();
-    call = new ServerCallImpl<Long, Long>(stream, UNARY_METHOD, requestHeaders, context,
-        DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance());
+    call =
+        new ServerCallImpl<Long, Long>(
+            stream,
+            UNARY_METHOD,
+            requestHeaders,
+            context,
+            DecompressorRegistry.getDefaultInstance(),
+            CompressorRegistry.getDefaultInstance(),
+            false);
   }
 
   @Test
@@ -123,6 +132,52 @@ public class ServerCallImplTest {
     thrown.expectMessage("call is closed");
 
     call.sendHeaders(new Metadata());
+  }
+
+  @Test
+  public void sendHeader_contentEncoding() {
+    Metadata inboundHeaders = new Metadata();
+    inboundHeaders.put(CONTENT_ACCEPT_ENCODING_KEY, "gzip".getBytes(GrpcUtil.US_ASCII));
+    ServerCallImpl<Long, Long> serverCall =
+        new ServerCallImpl<Long, Long>(
+            stream,
+            UNARY_METHOD,
+            inboundHeaders,
+            context,
+            DecompressorRegistry.getDefaultInstance(),
+            CompressorRegistry.getDefaultInstance(),
+            true);
+
+    serverCall.sendHeaders(new Metadata());
+
+    verify(stream).setFullStreamCompression(true);
+    ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
+    verify(stream).writeHeaders(metadataCaptor.capture());
+    assertEquals(metadataCaptor.getValue().get(GrpcUtil.CONTENT_ENCODING_KEY), "gzip");
+  }
+
+  @Test
+  public void sendHeader_contentEncodingSupersedesMessageEncoding() {
+    Metadata inboundHeaders = new Metadata();
+    inboundHeaders.put(MESSAGE_ACCEPT_ENCODING_KEY, "gzip".getBytes(GrpcUtil.US_ASCII));
+    inboundHeaders.put(CONTENT_ACCEPT_ENCODING_KEY, "gzip".getBytes(GrpcUtil.US_ASCII));
+    ServerCallImpl<Long, Long> serverCall =
+        new ServerCallImpl<Long, Long>(
+            stream,
+            UNARY_METHOD,
+            inboundHeaders,
+            context,
+            DecompressorRegistry.getDefaultInstance(),
+            CompressorRegistry.getDefaultInstance(),
+            true);
+
+    serverCall.sendHeaders(new Metadata());
+
+    verify(stream).setFullStreamCompression(true);
+    ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
+    verify(stream).writeHeaders(metadataCaptor.capture());
+    assertEquals(metadataCaptor.getValue().get(GrpcUtil.CONTENT_ENCODING_KEY), "gzip");
+    assertEquals(metadataCaptor.getValue().get(GrpcUtil.MESSAGE_ENCODING_KEY), "identity");
   }
 
   @Test
@@ -175,13 +230,15 @@ public class ServerCallImplTest {
 
   private void sendMessage_serverSendsOne_closeOnSecondCall(
       MethodDescriptor<Long, Long> method) {
-    ServerCallImpl<Long, Long> serverCall = new ServerCallImpl<Long, Long>(
-        stream,
-        method,
-        requestHeaders,
-        context,
-        DecompressorRegistry.getDefaultInstance(),
-        CompressorRegistry.getDefaultInstance());
+    ServerCallImpl<Long, Long> serverCall =
+        new ServerCallImpl<Long, Long>(
+            stream,
+            method,
+            requestHeaders,
+            context,
+            DecompressorRegistry.getDefaultInstance(),
+            CompressorRegistry.getDefaultInstance(),
+            false);
     serverCall.sendHeaders(new Metadata());
     serverCall.sendMessage(1L);
     verify(stream, times(1)).writeMessage(any(InputStream.class));
@@ -210,13 +267,15 @@ public class ServerCallImplTest {
 
   private void sendMessage_serverSendsOne_closeOnSecondCall_appRunToCompletion(
       MethodDescriptor<Long, Long> method) {
-    ServerCallImpl<Long, Long> serverCall = new ServerCallImpl<Long, Long>(
-        stream,
-        method,
-        requestHeaders,
-        context,
-        DecompressorRegistry.getDefaultInstance(),
-        CompressorRegistry.getDefaultInstance());
+    ServerCallImpl<Long, Long> serverCall =
+        new ServerCallImpl<Long, Long>(
+            stream,
+            method,
+            requestHeaders,
+            context,
+            DecompressorRegistry.getDefaultInstance(),
+            CompressorRegistry.getDefaultInstance(),
+            false);
     serverCall.sendHeaders(new Metadata());
     serverCall.sendMessage(1L);
     serverCall.sendMessage(1L);
@@ -246,13 +305,15 @@ public class ServerCallImplTest {
 
   private void serverSendsOne_okFailsOnMissingResponse(
       MethodDescriptor<Long, Long> method) {
-    ServerCallImpl<Long, Long> serverCall = new ServerCallImpl<Long, Long>(
-        stream,
-        method,
-        requestHeaders,
-        context,
-        DecompressorRegistry.getDefaultInstance(),
-        CompressorRegistry.getDefaultInstance());
+    ServerCallImpl<Long, Long> serverCall =
+        new ServerCallImpl<Long, Long>(
+            stream,
+            method,
+            requestHeaders,
+            context,
+            DecompressorRegistry.getDefaultInstance(),
+            CompressorRegistry.getDefaultInstance(),
+            false);
     serverCall.close(Status.OK, new Metadata());
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);

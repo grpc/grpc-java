@@ -124,13 +124,17 @@ public class TestServiceServer {
       sslContext = GrpcSslContexts.forServer(
               TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key")).build();
     }
-    server = NettyServerBuilder.forPort(port)
-        .sslContext(sslContext)
-        .maxMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
-        .addService(ServerInterceptors.intercept(
-            new TestServiceImpl(executor),
-            TestServiceImpl.interceptors()))
-        .build().start();
+    server =
+        NettyServerBuilder.forPort(port)
+            .sslContext(sslContext)
+            .maxMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
+            .enableFullStreamCompression()
+            .enableFullStreamDecompression()
+            .addService(
+                ServerInterceptors.intercept(
+                    new TestServiceImpl(executor), TestServiceImpl.interceptors()))
+            .build()
+            .start();
   }
 
   @VisibleForTesting

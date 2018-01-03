@@ -141,6 +141,17 @@ public class AbstractManagedChannelImplBuilderTest {
   }
 
   @Test
+  public void fullStreamCompression_default() {
+    assertFalse(builder.fullStreamCompression);
+  }
+
+  @Test
+  public void fullStreamCompression_enabled() {
+    assertEquals(builder, builder.enableFullStreamCompression());
+    assertTrue(builder.fullStreamCompression);
+  }
+
+  @Test
   public void fullStreamDecompression_default() {
     assertFalse(builder.fullStreamDecompression);
   }

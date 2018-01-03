@@ -77,4 +77,15 @@ public interface Stream {
    * but may not have any effect if compression is not enabled on the call.
    */
   void setMessageCompression(boolean enable);
+
+  /**
+   * Enables full-stream GZIP compression for outbound RPCs.
+   */
+  void setFullStreamCompression(boolean enable);
+
+  /**
+   * Enables full-stream decompression, using {@link GzipInflatingBuffer} to decode inbound GZIP
+   * compressed streams.
+   */
+  void setFullStreamDecompression(boolean enable);
 }

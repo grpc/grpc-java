@@ -343,7 +343,7 @@ public class ClientCallImplTest {
   public void prepareHeaders_userAgentIgnored() {
     Metadata m = new Metadata();
     m.put(GrpcUtil.USER_AGENT_KEY, "batmobile");
-    ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, false);
+    ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, false, false);
 
     // User Agent is removed and set by the transport
     assertThat(m.get(GrpcUtil.USER_AGENT_KEY)).isNotNull();
@@ -352,7 +352,7 @@ public class ClientCallImplTest {
   @Test
   public void prepareHeaders_ignoreIdentityEncoding() {
     Metadata m = new Metadata();
-    ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, false);
+    ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, false, false);
 
     assertNull(m.get(GrpcUtil.MESSAGE_ENCODING_KEY));
   }
@@ -395,7 +395,7 @@ public class ClientCallImplTest {
           }
         }, false); // not advertised
 
-    ClientCallImpl.prepareHeaders(m, customRegistry, Codec.Identity.NONE, false);
+    ClientCallImpl.prepareHeaders(m, customRegistry, Codec.Identity.NONE, false, false);
 
     Iterable<String> acceptedEncodings = ACCEPT_ENCODING_SPLITTER.split(
         new String(m.get(GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY), GrpcUtil.US_ASCII));
@@ -407,7 +407,7 @@ public class ClientCallImplTest {
   @Test
   public void prepareHeaders_noAcceptedContentEncodingsWithoutFullStreamDecompressionEnabled() {
     Metadata m = new Metadata();
-    ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, false);
+    ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, false, false);
 
     assertNull(m.get(GrpcUtil.CONTENT_ACCEPT_ENCODING_KEY));
   }
@@ -457,7 +457,7 @@ public class ClientCallImplTest {
                 },
                 false); // not advertised
 
-    ClientCallImpl.prepareHeaders(m, customRegistry, Codec.Identity.NONE, true);
+    ClientCallImpl.prepareHeaders(m, customRegistry, Codec.Identity.NONE, false, true);
 
     Iterable<String> acceptedMessageEncodings =
         ACCEPT_ENCODING_SPLITTER.split(
@@ -481,12 +481,21 @@ public class ClientCallImplTest {
     m.put(GrpcUtil.CONTENT_ACCEPT_ENCODING_KEY, "gzip".getBytes(GrpcUtil.US_ASCII));
 
     ClientCallImpl.prepareHeaders(
-        m, DecompressorRegistry.emptyInstance(), Codec.Identity.NONE, false);
+        m, DecompressorRegistry.emptyInstance(), Codec.Identity.NONE, false, false);
 
     assertNull(m.get(GrpcUtil.MESSAGE_ENCODING_KEY));
     assertNull(m.get(GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY));
     assertNull(m.get(GrpcUtil.CONTENT_ENCODING_KEY));
     assertNull(m.get(GrpcUtil.CONTENT_ACCEPT_ENCODING_KEY));
+  }
+
+  @Test
+  public void prepareHeaders_contentEncodingAdded() {
+    Metadata m = new Metadata();
+    ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, true, false);
+
+    // User Agent is removed and set by the transport
+    assertThat(m.get(GrpcUtil.CONTENT_ENCODING_KEY)).isEqualTo("gzip");
   }
 
   @Test

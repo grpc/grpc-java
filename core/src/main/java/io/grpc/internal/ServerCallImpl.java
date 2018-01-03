@@ -20,6 +20,8 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.ACCEPT_ENCODING_SPLITTER;
+import static io.grpc.internal.GrpcUtil.CONTENT_ACCEPT_ENCODING_KEY;
+import static io.grpc.internal.GrpcUtil.CONTENT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 
@@ -51,9 +53,11 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private final ServerStream stream;
   private final MethodDescriptor<ReqT, RespT> method;
   private final Context.CancellableContext context;
+  private final byte[] contentAcceptEncoding;
   private final byte[] messageAcceptEncoding;
   private final DecompressorRegistry decompressorRegistry;
   private final CompressorRegistry compressorRegistry;
+  private final boolean fullStreamCompression;
 
   // state
   private volatile boolean cancelled;
@@ -62,15 +66,22 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private Compressor compressor;
   private boolean messageSent;
 
-  ServerCallImpl(ServerStream stream, MethodDescriptor<ReqT, RespT> method,
-      Metadata inboundHeaders, Context.CancellableContext context,
-      DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry) {
+  ServerCallImpl(
+      ServerStream stream,
+      MethodDescriptor<ReqT, RespT> method,
+      Metadata inboundHeaders,
+      Context.CancellableContext context,
+      DecompressorRegistry decompressorRegistry,
+      CompressorRegistry compressorRegistry,
+      boolean fullStreamCompression) {
     this.stream = stream;
     this.method = method;
     this.context = context;
+    this.contentAcceptEncoding = inboundHeaders.get(CONTENT_ACCEPT_ENCODING_KEY);
     this.messageAcceptEncoding = inboundHeaders.get(MESSAGE_ACCEPT_ENCODING_KEY);
     this.decompressorRegistry = decompressorRegistry;
     this.compressorRegistry = compressorRegistry;
+    this.fullStreamCompression = fullStreamCompression;
   }
 
   @Override
@@ -83,27 +94,48 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     checkState(!sendHeadersCalled, "sendHeaders has already been called");
     checkState(!closeCalled, "call is closed");
 
-    headers.discardAll(MESSAGE_ENCODING_KEY);
-    if (compressor == null) {
-      compressor = Codec.Identity.NONE;
-    } else {
-      if (messageAcceptEncoding != null) {
-        // TODO(carl-mastrangelo): remove the string allocation.
-        if (!GrpcUtil.iterableContains(
-            ACCEPT_ENCODING_SPLITTER.split(new String(messageAcceptEncoding, GrpcUtil.US_ASCII)),
-            compressor.getMessageEncoding())) {
-          // resort to using no compression.
-          compressor = Codec.Identity.NONE;
+    headers.discardAll(CONTENT_ENCODING_KEY);
+    boolean compressStream = false;
+    if (fullStreamCompression) {
+      if (contentAcceptEncoding != null) {
+        String encodings = new String(contentAcceptEncoding, GrpcUtil.US_ASCII).toLowerCase();
+        if (GrpcUtil.iterableContains(ACCEPT_ENCODING_SPLITTER.split(encodings), "gzip")) {
+          compressStream = true;
         }
-      } else {
-        compressor = Codec.Identity.NONE;
       }
     }
 
-    // Always put compressor, even if it's identity.
-    headers.put(MESSAGE_ENCODING_KEY, compressor.getMessageEncoding());
+    headers.discardAll(MESSAGE_ENCODING_KEY);
+    if (!compressStream || compressor == Codec.Identity.NONE) {
+      // full-stream compression supersedes per-message compression
+      if (compressor == null) {
+        compressor = Codec.Identity.NONE;
+      } else {
+        if (messageAcceptEncoding != null) {
+          // TODO(carl-mastrangelo): remove the string allocation.
+          if (!GrpcUtil.iterableContains(
+              ACCEPT_ENCODING_SPLITTER.split(new String(messageAcceptEncoding, GrpcUtil.US_ASCII)),
+              compressor.getMessageEncoding())) {
+            // resort to using no compression.
+            compressor = Codec.Identity.NONE;
+          }
+        } else {
+          compressor = Codec.Identity.NONE;
+        }
+      }
+    }
 
-    stream.setCompressor(compressor);
+    if (compressStream) {
+      headers.put(CONTENT_ENCODING_KEY, "gzip");
+      headers.put(MESSAGE_ENCODING_KEY, Codec.Identity.NONE.getMessageEncoding());
+    } else {
+      // Always put compressor, even if it's identity.
+      headers.put(CONTENT_ENCODING_KEY, Codec.Identity.NONE.getMessageEncoding());
+      headers.put(MESSAGE_ENCODING_KEY, compressor.getMessageEncoding());
+      stream.setCompressor(compressor);
+    }
+
+    stream.setFullStreamCompression(compressStream);
 
     headers.discardAll(MESSAGE_ACCEPT_ENCODING_KEY);
     byte[] advertisedEncodings =

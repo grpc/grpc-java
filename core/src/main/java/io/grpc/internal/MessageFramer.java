@@ -33,6 +33,7 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.zip.GZIPOutputStream;
 import javax.annotation.Nullable;
 
 /**
@@ -51,17 +52,14 @@ public class MessageFramer implements Framer {
     /**
      * Delivers a frame via the transport.
      *
-     * @param frame a non-empty buffer to deliver or {@code null} if the framer is being
-     *              closed and there is no data to deliver.
+     * @param frame a non-empty buffer to deliver or {@code null} if the framer is being closed and
+     *     there is no data to deliver.
      * @param endOfStream whether the frame is the last one for the GRPC stream
      * @param flush {@code true} if more data may not be arriving soon
      * @param numMessages the number of messages that this series of frames represents
      */
     void deliverFrame(
-        @Nullable WritableBuffer frame,
-        boolean endOfStream,
-        boolean flush,
-        int numMessages);
+        @Nullable WritableBuffer frame, boolean endOfStream, boolean flush, int numMessages);
   }
 
   private static final int HEADER_LENGTH = 5;
@@ -74,15 +72,19 @@ public class MessageFramer implements Framer {
   private WritableBuffer buffer;
   private Compressor compressor = Codec.Identity.NONE;
   private boolean messageCompression = true;
+  private boolean streamCompression = false;
   private final OutputStreamAdapter outputStreamAdapter = new OutputStreamAdapter();
   private final byte[] headerScratch = new byte[HEADER_LENGTH];
   private final WritableBufferAllocator bufferAllocator;
   private final StatsTraceContext statsTraceCtx;
   // transportTracer is nullable until it is integrated with client transports
   private boolean closed;
+  private final OutputStreamAdapter gzipOutputStreamAdapter = new OutputStreamAdapter();
+  private GZIPOutputStream gzipOutputStream;
+  private boolean gzipCloseOnFlush;
 
   // Tracing and stats-related states
-  private int messagesBuffered;
+  private int completeMessagesInBuffer;
   private int currentMessageSeqNo = -1;
   private long currentMessageWireSize;
 
@@ -106,6 +108,12 @@ public class MessageFramer implements Framer {
   }
 
   @Override
+  public Framer setStreamCompression(boolean enable) {
+    streamCompression = enable;
+    return this;
+  }
+
+  @Override
   public MessageFramer setMessageCompression(boolean enable) {
     messageCompression = enable;
     return this;
@@ -125,7 +133,6 @@ public class MessageFramer implements Framer {
   @Override
   public void writePayload(InputStream message) {
     verifyNotClosed();
-    messagesBuffered++;
     currentMessageSeqNo++;
     currentMessageWireSize = 0;
     statsTraceCtx.outboundMessage(currentMessageSeqNo);
@@ -163,18 +170,27 @@ public class MessageFramer implements Framer {
 
   private int writeUncompressed(InputStream message, int messageLength) throws IOException {
     if (messageLength != -1) {
-      currentMessageWireSize = messageLength;
       return writeKnownLengthUncompressed(message, messageLength);
     }
     BufferChainOutputStream bufferChain = new BufferChainOutputStream();
-    int written = writeToOutputStream(message, bufferChain);
+    int written;
+    if (streamCompression) {
+      // "Full stream" compression with unknown length reduces to separate concatenated gzip blocks
+      // for each header and message, as without an extra copy we can't include the gRPC header
+      // with message length until after the message has been sent to the GZIPOutputStream.
+      GZIPOutputStream gzipOutputStream = new GZIPOutputStream(bufferChain);
+      written = writeToOutputStream(message, gzipOutputStream);
+      gzipOutputStream.close();
+    } else {
+      written = writeToOutputStream(message, bufferChain);
+    }
     if (maxOutboundMessageSize >= 0 && written > maxOutboundMessageSize) {
       throw Status.RESOURCE_EXHAUSTED
           .withDescription(
               String.format("message too large %d > %d", written , maxOutboundMessageSize))
           .asRuntimeException();
     }
-    writeBufferChain(bufferChain, false);
+    writeBufferChain(bufferChain, false, written);
     return written;
   }
 
@@ -195,7 +211,7 @@ public class MessageFramer implements Framer {
           .asRuntimeException();
     }
 
-    writeBufferChain(bufferChain, true);
+    writeBufferChain(bufferChain, true, 0);
     return written;
   }
 
@@ -225,32 +241,65 @@ public class MessageFramer implements Framer {
     if (buffer == null) {
       buffer = bufferAllocator.allocate(header.position() + messageLength);
     }
-    writeRaw(headerScratch, 0, header.position());
-    return writeToOutputStream(message, outputStreamAdapter);
+    OutputStream outputStreamToWrite;
+    if (streamCompression) {
+      if (gzipOutputStream == null) {
+        try {
+          gzipOutputStream =
+              GZIPOutputStream.class
+                  .getConstructor(OutputStream.class, boolean.class)
+                  .newInstance(gzipOutputStreamAdapter, true);
+        } catch (Throwable t) {
+          // The two-arg GZIPOutputStream constructor is not available on JDK6
+          gzipOutputStream = new GZIPOutputStream(gzipOutputStreamAdapter);
+          // GZIPOutputStream#flush on JDK6 does not flush the compressor
+          gzipCloseOnFlush = true;
+        }
+      }
+      gzipOutputStream.write(headerScratch);
+      outputStreamToWrite = gzipOutputStream;
+    } else {
+      currentMessageWireSize = messageLength;
+      writeRaw(headerScratch, 0, header.position());
+      outputStreamToWrite = outputStreamAdapter;
+    }
+    int bytesWritten = writeToOutputStream(message, outputStreamToWrite);
+    completeMessagesInBuffer++;
+    return bytesWritten;
   }
 
-  /**
-   * Write a message that has been serialized to a sequence of buffers.
-   */
-  private void writeBufferChain(BufferChainOutputStream bufferChain, boolean compressed) {
+  /** Write a message that has been serialized to a sequence of buffers. */
+  private void writeBufferChain(
+      BufferChainOutputStream bufferChain, boolean compressed, int uncompressedSize)
+      throws IOException {
     ByteBuffer header = ByteBuffer.wrap(headerScratch);
     header.put(compressed ? COMPRESSED : UNCOMPRESSED);
-    int messageLength = bufferChain.readableBytes();
+    int messageLength = (compressed ? bufferChain.readableBytes() : uncompressedSize);
     header.putInt(messageLength);
-    WritableBuffer writeableHeader = bufferAllocator.allocate(HEADER_LENGTH);
-    writeableHeader.write(headerScratch, 0, header.position());
-    if (messageLength == 0) {
-      // the payload had 0 length so make the header the current buffer.
-      buffer = writeableHeader;
-      return;
+
+    if (streamCompression) {
+      GZIPOutputStream gzippedStream = new GZIPOutputStream(outputStreamAdapter);
+      gzippedStream.write(headerScratch);
+      gzippedStream.close();
+      sendCurrentBuffer();
+    } else {
+      WritableBuffer writeableHeader = bufferAllocator.allocate(HEADER_LENGTH);
+      writeableHeader.write(headerScratch, 0, header.position());
+      sendCurrentBuffer();
+      if (messageLength == 0) {
+        // // the payload had 0 length so make the header the current buffer.
+        buffer = writeableHeader;
+        completeMessagesInBuffer++;
+        return;
+      }
+      // Note that we are always delivering a small message to the transport here which
+      // may incur transport framing overhead as it may be sent separately to the contents
+      // of the GRPC frame.
+      // The final message may not be completely written because we do not flush the last buffer.
+      // Do not report the last message as sent.
+      sink.deliverFrame(writeableHeader, false, false, 0 /* header only, zero complete messages */);
     }
-    // Note that we are always delivering a small message to the transport here which
-    // may incur transport framing overhead as it may be sent separately to the contents
-    // of the GRPC frame.
-    // The final message may not be completely written because we do not flush the last buffer.
-    // Do not report the last message as sent.
-    sink.deliverFrame(writeableHeader, false, false, messagesBuffered - 1);
-    messagesBuffered = 1;
+
     // Commit all except the last buffer to the sink
     List<WritableBuffer> bufferList = bufferChain.bufferList;
     for (int i = 0; i < bufferList.size() - 1; i++) {
@@ -260,6 +309,13 @@ public class MessageFramer implements Framer {
     // for future writes or written with end-of-stream=true on close.
     buffer = bufferList.get(bufferList.size() - 1);
     currentMessageWireSize = messageLength;
+    completeMessagesInBuffer++;
+  }
+
+  private void sendCurrentBuffer() {
+    if (buffer != null && buffer.readableBytes() > 0) {
+      commitToSink(false, false);
+    }
   }
 
   private static int writeToOutputStream(InputStream message, OutputStream outputStream)
@@ -296,6 +352,17 @@ public class MessageFramer implements Framer {
    */
   @Override
   public void flush() {
+    if (gzipOutputStream != null) {
+      if (gzipCloseOnFlush) {
+        closeGzipOutputStream();
+      } else {
+        try {
+          gzipOutputStream.flush();
+        } catch (IOException e) {
+          closeGzipOutputStream();
+        }
+      }
+    }
     if (buffer != null && buffer.readableBytes() > 0) {
       commitToSink(false, true);
     }
@@ -318,8 +385,7 @@ public class MessageFramer implements Framer {
   public void close() {
     if (!isClosed()) {
       closed = true;
-      // With the current code we don't expect readableBytes > 0 to be possible here, added
-      // defensively to prevent buffer leak issues if the framer code changes later.
+      closeGzipOutputStream(); // This may flush bytes from the compressor to buffer
       if (buffer != null && buffer.readableBytes() == 0) {
         releaseBuffer();
       }
@@ -334,6 +400,7 @@ public class MessageFramer implements Framer {
   @Override
   public void dispose() {
     closed = true;
+    closeGzipOutputStream();
     releaseBuffer();
   }
 
@@ -344,11 +411,22 @@ public class MessageFramer implements Framer {
     }
   }
 
+  private void closeGzipOutputStream() {
+    if (gzipOutputStream != null) {
+      try {
+        gzipOutputStream.close();
+        gzipOutputStream = null;
+      } catch (IOException e) {
+        // do nothing
+      }
+    }
+  }
+
   private void commitToSink(boolean endOfStream, boolean flush) {
     WritableBuffer buf = buffer;
     buffer = null;
-    sink.deliverFrame(buf, endOfStream, flush, messagesBuffered);
-    messagesBuffered = 0;
+    sink.deliverFrame(buf, endOfStream, flush, completeMessagesInBuffer);
+    completeMessagesInBuffer = 0;
   }
 
   private void verifyNotClosed() {

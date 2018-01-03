@@ -127,11 +127,6 @@ public abstract class AbstractClientStream extends AbstractStream
   }
 
   @Override
-  public final void setFullStreamDecompression(boolean fullStreamDecompression) {
-    transportState().setFullStreamDecompression(fullStreamDecompression);
-  }
-
-  @Override
   public final void setDecompressorRegistry(DecompressorRegistry decompressorRegistry) {
     transportState().setDecompressorRegistry(decompressorRegistry);
   }
@@ -202,7 +197,6 @@ public abstract class AbstractClientStream extends AbstractStream
     private final StatsTraceContext statsTraceCtx;
     private boolean listenerClosed;
     private ClientStreamListener listener;
-    private boolean fullStreamDecompression;
     private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
 
     private boolean deframerClosed = false;
@@ -220,10 +214,6 @@ public abstract class AbstractClientStream extends AbstractStream
         TransportTracer transportTracer) {
       super(maxMessageSize, statsTraceCtx, transportTracer);
       this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
-    }
-
-    private void setFullStreamDecompression(boolean fullStreamDecompression) {
-      this.fullStreamDecompression = fullStreamDecompression;
     }
 
     private void setDecompressorRegistry(DecompressorRegistry decompressorRegistry) {
@@ -262,18 +252,20 @@ public abstract class AbstractClientStream extends AbstractStream
       statsTraceCtx.clientInboundHeaders();
 
       boolean compressedStream = false;
-      String streamEncoding = headers.get(CONTENT_ENCODING_KEY);
-      if (fullStreamDecompression && streamEncoding != null) {
-        if (streamEncoding.equalsIgnoreCase("gzip")) {
-          setFullStreamDecompressor(new GzipInflatingBuffer());
-          compressedStream = true;
-        } else if (!streamEncoding.equalsIgnoreCase("identity")) {
-          deframeFailed(
-              Status.INTERNAL
-                  .withDescription(
-                      String.format("Can't find full stream decompressor for %s", streamEncoding))
-                  .asRuntimeException());
-          return;
+      if (fullStreamDecompression) {
+        String streamEncoding = headers.get(CONTENT_ENCODING_KEY);
+        if (streamEncoding != null) {
+          if (streamEncoding.equalsIgnoreCase("gzip")) {
+            enableFullStreamDecompressor();
+            compressedStream = true;
+          } else if (!streamEncoding.equalsIgnoreCase("identity")) {
+            deframeFailed(
+                Status.INTERNAL
+                    .withDescription(
+                        String.format("Can't find full stream decompressor for %s", streamEncoding))
+                    .asRuntimeException());
+            return;
+          }
         }
       }
 
@@ -466,6 +458,12 @@ public abstract class AbstractClientStream extends AbstractStream
 
     @Override
     public Framer setCompressor(Compressor compressor) {
+      return this;
+    }
+
+    // Compression is not supported for GET encoding.
+    @Override
+    public Framer setStreamCompression(boolean enable) {
       return this;
     }
 

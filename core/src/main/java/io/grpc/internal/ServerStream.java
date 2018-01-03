@@ -67,6 +67,9 @@ public interface ServerStream extends Stream {
    */
   void setDecompressor(Decompressor decompressor);
 
+  /** Enables the decompressor for compressed streams on the deframer. */
+  void setFullStreamDecompressor();
+
   /**
    * Attributes describing stream.  This is inherited from the transport attributes, and used
    * as the basis of {@link io.grpc.ServerCall#getAttributes}.

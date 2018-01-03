@@ -64,8 +64,8 @@ public class ApplicationThreadDeframer implements Deframer, MessageDeframer.List
   }
 
   @Override
-  public void setFullStreamDecompressor(GzipInflatingBuffer fullStreamDecompressor) {
-    deframer.setFullStreamDecompressor(fullStreamDecompressor);
+  public void enableFullStreamDecompression() {
+    deframer.enableFullStreamDecompression();
   }
 
   @Override
