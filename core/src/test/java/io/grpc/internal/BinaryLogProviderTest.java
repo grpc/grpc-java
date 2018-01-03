@@ -16,9 +16,12 @@
 
 package io.grpc.internal;
 
+<<<<<<< HEAD
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+=======
+>>>>>>> move tests to ServerImplTest
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
@@ -27,6 +30,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+<<<<<<< HEAD
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -59,6 +63,11 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+=======
+import io.grpc.ClientInterceptor;
+import io.grpc.ReplacingClassLoader;
+import io.grpc.ServerInterceptor;
+>>>>>>> move tests to ServerImplTest
 import javax.annotation.Nullable;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -67,14 +76,8 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link BinaryLogProvider}. */
 @RunWith(JUnit4.class)
 public class BinaryLogProviderTest {
-  private static final MethodDescriptor<Integer, Integer> INCREMENT_BY_ONE =
-      MethodDescriptor.<Integer, Integer>newBuilder()
-          .setType(MethodDescriptor.MethodType.UNARY)
-          .setFullMethodName("some/incrementbyone")
-          .setRequestMarshaller(new InvocationCountMarshaller())
-          .setResponseMarshaller(new InvocationCountMarshaller())
-          .build();
   private final String serviceFile = "META-INF/services/io.grpc.internal.BinaryLogProvider";
+<<<<<<< HEAD
   private final InvocationCountMarshaller reqMarshaller = new InvocationCountMarshaller();
   private final Marshaller<Integer> respMarshaller = spy(IntegerMarshaller.INSTANCE);
   private final MethodDescriptor<String, Integer> method =
@@ -107,6 +110,8 @@ public class BinaryLogProviderTest {
         return 0;
       }
     };
+=======
+>>>>>>> move tests to ServerImplTest
 
   @Test
   public void noProvider() {
@@ -237,136 +242,6 @@ public class BinaryLogProviderTest {
     assertEquals(method.isSampledToLocalTracing(), wMethod.isSampledToLocalTracing());
   }
 
-  @Test
-  public void serverInterceptorFirstAndIsInputstream() throws Exception {
-    List<Object> capturedReqs = new ArrayList<Object>();
-    List<Object> capturedResp = new ArrayList<Object>();
-    List<MethodDescriptor<?, ?>> capturedMethods =
-        new ArrayList<MethodDescriptor<?, ?>>();
-    List<MethodDescriptor<?, ?>> capturedBinaryMethods =
-        new ArrayList<MethodDescriptor<?, ?>>();
-
-    ServerInterceptor interceptor =
-        new TracingServerInterceptor(capturedReqs, capturedResp, capturedMethods);
-
-    String serverName = getClass().getName() + "-serverInterceptor";
-    InProcessServerBuilder builder = InProcessServerBuilder
-        .forName(serverName)
-        .directExecutor()
-        .addService(service)
-        .intercept(interceptor);
-    TestBinaryLogProvider binlog =
-        new TestBinaryLogProvider(capturedReqs, capturedResp, capturedBinaryMethods);
-    InternalInProcessServerBuilder.setBinaryLogProvider(builder, binlog);
-    server = builder.build();
-    server.start();
-    channel = InProcessChannelBuilder
-        .forName(serverName)
-        .directExecutor()
-        .build();
-    int request = 10;
-    int result = ClientCalls.blockingUnaryCall(
-        channel.newCall(INCREMENT_BY_ONE, CallOptions.DEFAULT),
-        request);
-    assertEquals(request + 1, result);
-
-    // The binlog interceptor must operate on binary data (InputStream)
-    assertThat(capturedBinaryMethods).hasSize(1);
-    assertSame(
-        BinaryLogProvider.IDENTITY_MARSHALLER,
-        capturedBinaryMethods.get(0).getRequestMarshaller());
-    assertSame(
-        BinaryLogProvider.IDENTITY_MARSHALLER,
-        capturedBinaryMethods.get(0).getResponseMarshaller());
-
-    // The user supplied interceptor must still operate on the original message types
-    assertThat(capturedMethods).hasSize(1);
-    assertSame(serverReqMarshaller, capturedMethods.get(0).getRequestMarshaller());
-    assertSame(serverRespMarshaller, capturedMethods.get(0).getResponseMarshaller());
-
-    // The original marshallers should have only been invoked once each
-    assertEquals(1, serverReqMarshaller.parseInvocations);
-    assertEquals(0, serverReqMarshaller.streamInvocations);
-    assertEquals(0, serverRespMarshaller.parseInvocations);
-    assertEquals(1, serverRespMarshaller.streamInvocations);
-
-    // The binlog interceptor must be closest to the transport
-    assertThat(capturedReqs).hasSize(2);
-    assertThat(capturedReqs.get(0)).isInstanceOf(InputStream.class);
-    assertEquals(request, capturedReqs.get(1));
-
-    assertThat(capturedResp).hasSize(2);
-    assertEquals(result, capturedResp.get(0));
-    assertThat(capturedResp.get(1)).isInstanceOf(InputStream.class);
-  }
-
-  /**
-   * A server interceptor that logs tracing information when events pass through it.
-   */
-  private static final class TracingServerInterceptor implements ServerInterceptor {
-    private final List<Object> req;
-    private final List<Object> resp;
-    private final List<MethodDescriptor<?, ?>> methods;
-
-    TracingServerInterceptor(
-        List<Object> req, List<Object> resp, List<MethodDescriptor<?, ?>> methods) {
-      this.req = req;
-      this.resp = resp;
-      this.methods = methods;
-    }
-
-    @Override
-    public <ReqT, RespT> Listener<ReqT> interceptCall(
-        final ServerCall<ReqT, RespT> call,
-        Metadata headers,
-        ServerCallHandler<ReqT, RespT> next) {
-      methods.add(call.getMethodDescriptor());
-      ServerCall<ReqT, RespT> wCall = new SimpleForwardingServerCall<ReqT, RespT>(call) {
-        @Override
-        public void sendMessage(RespT message) {
-          resp.add(message);
-          super.sendMessage(message);
-        }
-      };
-      final Listener<ReqT> oListener = next.startCall(wCall, headers);
-      return new SimpleForwardingServerCallListener<ReqT>(oListener) {
-        @Override
-        public void onMessage(ReqT message) {
-          req.add(message);
-          super.onMessage(message);
-        }
-      };
-    }
-  }
-
-  /**
-   * A provider that returns tracing interceptors, designed for testing.
-   */
-  private static final class TestBinaryLogProvider extends BinaryLogProvider {
-    private final ServerInterceptor serverInterceptor;
-
-    TestBinaryLogProvider(
-        List<Object> incoming, List<Object> outgoing, List<MethodDescriptor<?, ?>> methods) {
-      serverInterceptor = new TracingServerInterceptor(incoming, outgoing, methods);
-    }
-
-    @Override
-    protected ServerInterceptor getServerInterceptor(String fullMethodName) {
-      return serverInterceptor;
-    }
-
-    @Nullable
-    @Override
-    protected ClientInterceptor getClientInterceptor(String fullMethodName) {
-      return null;
-    }
-
-    @Override
-    protected int priority() {
-      return 0;
-    }
-  }
-
   public static final class Provider0 extends BaseProvider {
     public Provider0() {
       super(0);
@@ -409,6 +284,7 @@ public class BinaryLogProviderTest {
       return priority;
     }
   }
+<<<<<<< HEAD
 
   private final class TestBinaryLogClientInterceptor implements ClientInterceptor {
     @Override
@@ -458,4 +334,6 @@ public class BinaryLogProviderTest {
       };
     }
   }
+=======
+>>>>>>> move tests to ServerImplTest
 }

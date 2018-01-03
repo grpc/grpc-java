@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -37,23 +38,28 @@ import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.common.truth.Truth;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
+import io.grpc.ClientInterceptor;
 import io.grpc.Compressor;
 import io.grpc.Context;
+import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
+import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener;
 import io.grpc.Grpc;
 import io.grpc.HandlerRegistry;
 import io.grpc.IntegerMarshaller;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MethodDescriptor.Marshaller;
+import io.grpc.Server;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
@@ -74,6 +80,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
@@ -102,15 +109,6 @@ import org.mockito.MockitoAnnotations;
 /** Unit tests for {@link ServerImpl}. */
 @RunWith(JUnit4.class)
 public class ServerImplTest {
-  private static final IntegerMarshaller INTEGER_MARSHALLER = IntegerMarshaller.INSTANCE;
-  private static final StringMarshaller STRING_MARSHALLER = StringMarshaller.INSTANCE;
-  private static final MethodDescriptor<String, Integer> METHOD =
-      MethodDescriptor.<String, Integer>newBuilder()
-          .setType(MethodDescriptor.MethodType.UNKNOWN)
-          .setFullMethodName("Waiter/serve")
-          .setRequestMarshaller(STRING_MARSHALLER)
-          .setResponseMarshaller(INTEGER_MARSHALLER)
-          .build();
   private static final Context.Key<String> SERVER_ONLY = Context.key("serverOnly");
   private static final Context.Key<String> SERVER_TRACER_ADDED_KEY = Context.key("tracer-added");
   private static final Context.CancellableContext SERVER_CONTEXT =
@@ -123,6 +121,16 @@ public class ServerImplTest {
         }
       };
   private static final String AUTHORITY = "some_authority";
+
+  private final Marshaller<String> serverStringMarshaller = spy(StringMarshaller.INSTANCE);
+  private final Marshaller<Integer> serverIntegerMarshaller = spy(IntegerMarshaller.INSTANCE);
+  private final MethodDescriptor<String, Integer> method =
+      MethodDescriptor.<String, Integer>newBuilder()
+          .setType(MethodDescriptor.MethodType.UNKNOWN)
+          .setFullMethodName("Waiter/serve")
+          .setRequestMarshaller(serverStringMarshaller)
+          .setResponseMarshaller(serverIntegerMarshaller)
+          .build();
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
@@ -149,22 +157,20 @@ public class ServerImplTest {
   private ObjectPool<Executor> executorPool;
   private Builder builder = new Builder();
   private MutableHandlerRegistry mutableFallbackRegistry = new MutableHandlerRegistry();
-  private HandlerRegistry fallbackRegistry = mock(
-      HandlerRegistry.class,
-      delegatesTo(new HandlerRegistry() {
-        @Override
-        public ServerMethodDefinition<?, ?> lookupMethod(
-            String methodName, @Nullable String authority) {
-          return mutableFallbackRegistry.lookupMethod(methodName, authority);
-        }
+  private HandlerRegistry fallbackRegistry = spy(new HandlerRegistry() {
+    @Override
+    public ServerMethodDefinition<?, ?> lookupMethod(
+        String methodName, @Nullable String authority) {
+      return mutableFallbackRegistry.lookupMethod(methodName, authority);
+    }
 
-        @Override
-        public List<ServerServiceDefinition> getServices() {
-          return mutableFallbackRegistry.getServices();
-        }
-      }));
+    @Override
+    public List<ServerServiceDefinition> getServices() {
+      return mutableFallbackRegistry.getServices();
+    }
+  });
   private SimpleServer transportServer = new SimpleServer();
-  private ServerImpl server;
+  private Server server;
 
   @Captor
   private ArgumentCaptor<Status> statusCaptor;
@@ -443,15 +449,23 @@ public class ServerImplTest {
   @Test
   public void basicExchangeSuccessful() throws Exception {
     createAndStartServer();
+    basicExchangeHelper(method, "Lots of pizza, please", 314, 50);
+  }
+
+  private void basicExchangeHelper(
+      MethodDescriptor<String, Integer> method,
+      String request,
+      int firstResponse,
+      int extraResponse) throws Exception {
     final Metadata.Key<String> metadataKey
         = Metadata.Key.of("inception", Metadata.ASCII_STRING_MARSHALLER);
     final AtomicReference<ServerCall<String, Integer>> callReference
         = new AtomicReference<ServerCall<String, Integer>>();
     final AtomicReference<Context> callContextReference = new AtomicReference<Context>();
     mutableFallbackRegistry.addService(ServerServiceDefinition.builder(
-        new ServiceDescriptor("Waiter", METHOD))
+        new ServiceDescriptor("Waiter", method))
         .addMethod(
-            METHOD,
+            method,
             new ServerCallHandler<String, Integer>() {
               @Override
               public ServerCall.Listener<String> startCall(
@@ -497,10 +511,12 @@ public class ServerImplTest {
     assertNotNull(callContext);
     assertEquals("context added by tracer", SERVER_TRACER_ADDED_KEY.get(callContext));
 
-    String order = "Lots of pizza, please";
-    streamListener.messagesAvailable(new SingleMessageProducer(STRING_MARSHALLER.stream(order)));
+    verify(serverStringMarshaller, never()).parse(any(InputStream.class));
+    streamListener.messagesAvailable(
+        new SingleMessageProducer(StringMarshaller.INSTANCE.stream(request)));
     assertEquals(1, executor.runDueTasks());
-    verify(callListener).onMessage(order);
+    verify(callListener).onMessage(request);
+    verify(serverStringMarshaller, times(1)).parse(any(InputStream.class));
 
     Metadata responseHeaders = new Metadata();
     responseHeaders.put(metadataKey, "response value");
@@ -508,20 +524,27 @@ public class ServerImplTest {
     verify(stream).writeHeaders(responseHeaders);
     verify(stream).setCompressor(isA(Compressor.class));
 
-    call.sendMessage(314);
+    verify(serverIntegerMarshaller, never()).stream(any(Integer.class));
+    call.sendMessage(firstResponse);
     ArgumentCaptor<InputStream> inputCaptor = ArgumentCaptor.forClass(InputStream.class);
     verify(stream).writeMessage(inputCaptor.capture());
     verify(stream).flush();
-    assertEquals(314, INTEGER_MARSHALLER.parse(inputCaptor.getValue()).intValue());
+    assertEquals(
+        firstResponse,
+        IntegerMarshaller.INSTANCE.parse(inputCaptor.getValue()).intValue());
+    verify(serverIntegerMarshaller, times(1)).stream(any(Integer.class));
 
     streamListener.halfClosed(); // All full; no dessert.
     assertEquals(1, executor.runDueTasks());
     verify(callListener).onHalfClose();
 
-    call.sendMessage(50);
+    call.sendMessage(extraResponse);
     verify(stream, times(2)).writeMessage(inputCaptor.capture());
     verify(stream, times(2)).flush();
-    assertEquals(50, INTEGER_MARSHALLER.parse(inputCaptor.getValue()).intValue());
+    assertEquals(
+        extraResponse,
+        IntegerMarshaller.INSTANCE.parse(inputCaptor.getValue()).intValue());
+    verify(serverIntegerMarshaller, times(2)).stream(any(Integer.class));
 
     Metadata trailers = new Metadata();
     trailers.put(metadataKey, "another value");
@@ -664,8 +687,8 @@ public class ServerImplTest {
       };
 
     mutableFallbackRegistry.addService(
-        ServerServiceDefinition.builder(new ServiceDescriptor("Waiter", METHOD))
-            .addMethod(METHOD, callHandler).build());
+        ServerServiceDefinition.builder(new ServiceDescriptor("Waiter", method))
+            .addMethod(method, callHandler).build());
     builder.intercept(intercepter2);
     builder.intercept(intercepter1);
     createServer();
@@ -706,8 +729,9 @@ public class ServerImplTest {
     createAndStartServer();
     final Status status = Status.ABORTED.withDescription("Oh, no!");
     mutableFallbackRegistry.addService(ServerServiceDefinition.builder(
-        new ServiceDescriptor("Waiter", METHOD))
-        .addMethod(METHOD,
+        new ServiceDescriptor("Waiter", method))
+        .addMethod(
+            method,
             new ServerCallHandler<String, Integer>() {
               @Override
               public ServerCall.Listener<String> startCall(
@@ -827,9 +851,9 @@ public class ServerImplTest {
     final AtomicBoolean onHalfCloseCalled = new AtomicBoolean(false);
     final AtomicBoolean onCancelCalled = new AtomicBoolean(false);
     mutableFallbackRegistry.addService(ServerServiceDefinition.builder(
-        new ServiceDescriptor("Waiter", METHOD))
+        new ServiceDescriptor("Waiter", method))
         .addMethod(
-            METHOD,
+            method,
             new ServerCallHandler<String, Integer>() {
               @Override
               public ServerCall.Listener<String> startCall(
@@ -933,8 +957,9 @@ public class ServerImplTest {
     };
 
     mutableFallbackRegistry.addService(ServerServiceDefinition.builder(
-        new ServiceDescriptor("Waiter", METHOD))
-        .addMethod(METHOD,
+        new ServiceDescriptor("Waiter", method))
+        .addMethod(
+            method,
             new ServerCallHandler<String, Integer>() {
               @Override
               public ServerCall.Listener<String> startCall(
@@ -1019,7 +1044,7 @@ public class ServerImplTest {
     };
     createAndStartServer();
 
-    Truth.assertThat(server.getPort()).isEqualTo(65535);
+    assertThat(server.getPort()).isEqualTo(65535);
   }
 
   @Test
@@ -1046,8 +1071,8 @@ public class ServerImplTest {
   public void handlerRegistryPriorities() throws Exception {
     fallbackRegistry = mock(HandlerRegistry.class);
     builder.addService(
-        ServerServiceDefinition.builder(new ServiceDescriptor("Waiter", METHOD))
-            .addMethod(METHOD, callHandler).build());
+        ServerServiceDefinition.builder(new ServiceDescriptor("Waiter", method))
+            .addMethod(method, callHandler).build());
     transportServer = new SimpleServer();
     createAndStartServer();
 
@@ -1216,6 +1241,52 @@ public class ServerImplTest {
     }
   }
 
+  @Test
+  public void binaryLogTest() throws Exception {
+    List<Object> capturedReqs = new ArrayList<Object>();
+    List<Object> capturedResp = new ArrayList<Object>();
+    List<MethodDescriptor<?, ?>> capturedMethods =
+        new ArrayList<MethodDescriptor<?, ?>>();
+    List<MethodDescriptor<?, ?>> capturedBinaryMethods =
+        new ArrayList<MethodDescriptor<?, ?>>();
+    builder.intercept(new TracingServerInterceptor(capturedReqs, capturedResp, capturedMethods));
+    builder.binlogProvider =
+        new TestBinaryLogProvider(capturedReqs, capturedResp, capturedBinaryMethods);
+    createAndStartServer();
+
+    // Begin: basic exchange
+    String request = "Lots of pizza, please";
+    int response = 314;
+    int extraResponse = 50;
+    basicExchangeHelper(method, request, response, extraResponse);
+    // End: basic exchange
+
+    // The binlog interceptor must operate on binary data (InputStream)
+    assertThat(capturedBinaryMethods).hasSize(1);
+    assertSame(
+        BinaryLogProvider.IDENTITY_MARSHALLER,
+        capturedBinaryMethods.get(0).getRequestMarshaller());
+    assertSame(
+        BinaryLogProvider.IDENTITY_MARSHALLER,
+        capturedBinaryMethods.get(0).getResponseMarshaller());
+
+    // The user supplied interceptor must still operate on the original message types
+    assertThat(capturedMethods).hasSize(1);
+    assertSame(serverStringMarshaller, capturedMethods.get(0).getRequestMarshaller());
+    assertSame(serverIntegerMarshaller, capturedMethods.get(0).getResponseMarshaller());
+
+    // The binlog interceptor must be closest to the transport
+    assertThat(capturedReqs).hasSize(2);
+    assertThat(capturedReqs.get(0)).isInstanceOf(InputStream.class);
+    assertEquals(request, capturedReqs.get(1));
+
+    assertThat(capturedResp).hasSize(4);
+    assertEquals(response, capturedResp.get(0));
+    assertThat(capturedResp.get(1)).isInstanceOf(InputStream.class);
+    assertEquals(extraResponse, capturedResp.get(2));
+    assertThat(capturedResp.get(3)).isInstanceOf(InputStream.class);
+  }
+
   private void createAndStartServer() throws IOException {
     createServer();
     server.start();
@@ -1317,4 +1388,71 @@ public class ServerImplTest {
 
   /** Allows more precise catch blocks than plain Error to avoid catching AssertionError. */
   private static final class TestError extends Error {}
+
+  /**
+   * A server interceptor that logs tracing information when events pass through it.
+   */
+  private static final class TracingServerInterceptor implements ServerInterceptor {
+    private final List<Object> req;
+    private final List<Object> resp;
+    private final List<MethodDescriptor<?, ?>> methods;
+
+    TracingServerInterceptor(
+        List<Object> req, List<Object> resp, List<MethodDescriptor<?, ?>> methods) {
+      this.req = req;
+      this.resp = resp;
+      this.methods = methods;
+    }
+
+    @Override
+    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+        final ServerCall<ReqT, RespT> call,
+        Metadata headers,
+        ServerCallHandler<ReqT, RespT> next) {
+      methods.add(call.getMethodDescriptor());
+      ServerCall<ReqT, RespT> wCall = new SimpleForwardingServerCall<ReqT, RespT>(call) {
+        @Override
+        public void sendMessage(RespT message) {
+          resp.add(message);
+          super.sendMessage(message);
+        }
+      };
+      final ServerCall.Listener<ReqT> oListener = next.startCall(wCall, headers);
+      return new SimpleForwardingServerCallListener<ReqT>(oListener) {
+        @Override
+        public void onMessage(ReqT message) {
+          req.add(message);
+          super.onMessage(message);
+        }
+      };
+    }
+  }
+
+  /**
+   * A provider that returns tracing interceptors, designed for testing.
+   */
+  private static final class TestBinaryLogProvider extends BinaryLogProvider {
+    private final ServerInterceptor serverInterceptor;
+
+    TestBinaryLogProvider(
+        List<Object> incoming, List<Object> outgoing, List<MethodDescriptor<?, ?>> methods) {
+      serverInterceptor = new TracingServerInterceptor(incoming, outgoing, methods);
+    }
+
+    @Override
+    protected ServerInterceptor getServerInterceptor(String fullMethodName) {
+      return serverInterceptor;
+    }
+
+    @Nullable
+    @Override
+    protected ClientInterceptor getClientInterceptor(String fullMethodName) {
+      return null;
+    }
+
+    @Override
+    protected int priority() {
+      return 0;
+    }
+  }
 }
