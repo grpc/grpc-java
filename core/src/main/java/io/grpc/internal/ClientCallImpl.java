@@ -95,7 +95,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     // See https://github.com/grpc/grpc-java/issues/368
     this.callExecutor = executor == directExecutor()
         ? new SerializeReentrantCallsDirectExecutor()
-        : new SerializingExecutor(executor);
+        : (executor instanceof SerializingExecutor
+          ? executor : new SerializingExecutor(executor));
     this.channelTracer = channelTracer;
     // Propagate the context from the thread which initiated the call to all callbacks.
     this.context = Context.current();
