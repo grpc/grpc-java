@@ -849,7 +849,7 @@ public class CensusModulesTest {
     Context filteredContext = serverStreamTracer.filterContext(Context.ROOT);
     assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));
 
-    FakeServerCall<String, String> fakeCall = new FakeServerCall<String, String>(sampledMethod);
+    FakeServerCall<String, String> fakeCall = new FakeServerCall<String, String>(method);
     serverStreamTracer.serverCallStarted(
         createServerCallInfo(
             fakeCall.getMethodDescriptor(),
