@@ -34,6 +34,7 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
 import io.grpc.InternalLogId;
 import io.grpc.InternalServerInterceptors;
+import io.grpc.InternalServerStreamTracer;
 import io.grpc.InternalWithLogId;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -515,7 +516,14 @@ public final class ServerImpl extends io.grpc.Server implements InternalWithLogI
           stream, methodDef.getMethodDescriptor(), headers, context,
           decompressorRegistry, compressorRegistry);
       ServerCallHandler<ReqT, RespT> callHandler = methodDef.getServerCallHandler();
-      statsTraceCtx.serverCallStarted(call);
+      statsTraceCtx.serverCallStarted(
+          InternalServerStreamTracer.createServerCallInfo(
+              methodDef.getMethodDescriptor(),
+              call.getAttributes(),
+              call.isReady(),
+              call.isCancelled(),
+              call.getAuthority()));
+
       for (ServerInterceptor interceptor : interceptors) {
         callHandler = InternalServerInterceptors.interceptCallHandler(interceptor, callHandler);
       }

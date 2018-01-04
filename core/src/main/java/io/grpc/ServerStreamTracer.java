@@ -16,6 +16,7 @@
 
 package io.grpc;
 
+import com.google.common.base.Objects;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -37,6 +38,20 @@ public abstract class ServerStreamTracer extends StreamTracer {
    * the {@code ServerCall}.  Called after {@link #filterContext} and before the application call
    * handler.
    */
+  @SuppressWarnings("deprecation")
+  public void serverCallStarted(final ServerCallInfo<?, ?> callInfo) {
+    serverCallStarted(ReadOnlyServerCall.create(callInfo));
+  }
+
+  /**
+   * Called when {@link ServerCall} is created.  This is for the tracer to access information about
+   * the {@code ServerCall}.  Called after {@link #filterContext} and before the application call
+   * handler.
+   *
+   * @deprecated Implement {@link #serverCallStarted(ServerCallInfo)} instead. This method will be
+   *     removed in a future release of gRPC.
+   */
+  @Deprecated
   public void serverCallStarted(ServerCall<?, ?> call) {
   }
 
@@ -53,5 +68,117 @@ public abstract class ServerStreamTracer extends StreamTracer {
      */
     public abstract ServerStreamTracer newServerStreamTracer(
         String fullMethodName, Metadata headers);
+  }
+
+  /**
+   * A data class with info about the started {@link ServerCall}.
+   */
+  public static final class ServerCallInfo<ReqT, RespT> {
+    private final MethodDescriptor<ReqT, RespT> methodDescriptor;
+    private final Attributes attributes;
+    private final boolean isReady;
+    private final boolean isCancelled;
+    private final String authority;
+
+    ServerCallInfo(
+        MethodDescriptor<ReqT, RespT> methodDescriptor,
+        Attributes attributes,
+        boolean isReady,
+        boolean isCancelled,
+        String authority) {
+      this.methodDescriptor = methodDescriptor;
+      this.attributes = attributes;
+      this.isReady = isReady;
+      this.isCancelled = isCancelled;
+      this.authority = authority;
+    }
+
+    public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
+      return methodDescriptor;
+    }
+
+    public Attributes getAttributes() {
+      return attributes;
+    }
+
+    public boolean isReady() {
+      return isReady;
+    }
+
+    public String getAuthority() {
+      return authority;
+    }
+
+    public boolean isCancelled() {
+      return isCancelled;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      if (!(other instanceof ServerCallInfo)) {
+        return false;
+      }
+      ServerCallInfo<?, ?> that = (ServerCallInfo) other;
+      return Objects.equal(methodDescriptor, that.methodDescriptor)
+          && Objects.equal(attributes, that.attributes)
+          && Objects.equal(isReady, that.isReady)
+          && Objects.equal(isCancelled, that.isCancelled)
+          && Objects.equal(authority, that.authority);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(methodDescriptor, attributes, isReady, isCancelled, authority);
+    }
+  }
+
+  /**
+   * This class exists solely to help transition to the {@link ServerCallInfo} based API.
+   *
+   * @deprecated Will be deleted when {@link #serverCallStarted(ServerCall)} is removed.
+   */
+  @Deprecated
+  private static final class ReadOnlyServerCall<ReqT, RespT>
+      extends ForwardingServerCall<ReqT, RespT> {
+    private final ServerCallInfo<ReqT, RespT> callInfo;
+
+    private static <ReqT, RespT> ReadOnlyServerCall<ReqT, RespT> create(
+        ServerCallInfo<ReqT, RespT> callInfo) {
+      return new ReadOnlyServerCall<ReqT, RespT>(callInfo);
+    }
+
+    private ReadOnlyServerCall(ServerCallInfo<ReqT, RespT> callInfo) {
+      this.callInfo = callInfo;
+    }
+
+    @Override
+    public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
+      return callInfo.getMethodDescriptor();
+    }
+
+    @Override
+    public Attributes getAttributes() {
+      return callInfo.getAttributes();
+    }
+
+    @Override
+    public boolean isReady() {
+      return callInfo.isReady();
+    }
+
+    @Override
+    public boolean isCancelled() {
+      return callInfo.isCancelled();
+    }
+
+    @Override
+    public String getAuthority() {
+      return callInfo.getAuthority();
+    }
+
+    @Override
+    protected ServerCall<ReqT, RespT> delegate() {
+      throw new UnsupportedOperationException();
+    }
   }
 }

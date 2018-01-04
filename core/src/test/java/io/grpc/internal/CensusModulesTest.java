@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static io.grpc.InternalServerStreamTracer.createServerCallInfo;
 import static io.opencensus.tags.unsafe.ContextUtils.TAG_CONTEXT_KEY;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.Assert.assertEquals;
@@ -848,7 +849,14 @@ public class CensusModulesTest {
     Context filteredContext = serverStreamTracer.filterContext(Context.ROOT);
     assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));
 
-    serverStreamTracer.serverCallStarted(new FakeServerCall<String, String>(method));
+    FakeServerCall<String, String> fakeCall = new FakeServerCall<String, String>(sampledMethod);
+    serverStreamTracer.serverCallStarted(
+        createServerCallInfo(
+            fakeCall.getMethodDescriptor(),
+            fakeCall.getAttributes(),
+            fakeCall.isReady(),
+            fakeCall.isCancelled(),
+            fakeCall.getAuthority()));
 
     verify(spyServerSpan, never()).end(any(EndSpanOptions.class));
 
@@ -889,7 +897,16 @@ public class CensusModulesTest {
         tracerFactory.newServerStreamTracer(sampledMethod.getFullMethodName(), new Metadata());
 
     serverStreamTracer.filterContext(Context.ROOT);
-    serverStreamTracer.serverCallStarted(new FakeServerCall<String, String>(sampledMethod));
+
+    FakeServerCall<String, String> fakeCall = new FakeServerCall<String, String>(sampledMethod);
+    serverStreamTracer.serverCallStarted(
+        createServerCallInfo(
+            fakeCall.getMethodDescriptor(),
+            fakeCall.getAttributes(),
+            fakeCall.isReady(),
+            fakeCall.isCancelled(),
+            fakeCall.getAuthority()));
+
     serverStreamTracer.streamClosed(Status.CANCELLED);
 
     verify(spyServerSpan).end(
@@ -997,7 +1014,7 @@ public class CensusModulesTest {
 
     @Override
     public boolean isCancelled() {
-      throw new AssertionError("Should not be called");
+      return false;
     }
 
     @Override
