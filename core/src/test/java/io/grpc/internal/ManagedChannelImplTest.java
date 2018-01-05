@@ -1169,7 +1169,7 @@ public class ManagedChannelImplTest {
       Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
       subchannel.requestConnection();
     }
-    
+
     MockClientTransportInfo transportInfo = transports.poll();
     assertNotNull(transportInfo);
 

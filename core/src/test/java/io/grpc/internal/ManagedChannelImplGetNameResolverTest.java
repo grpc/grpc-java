@@ -107,7 +107,8 @@ public class ManagedChannelImplGetNameResolverTest {
     };
     try {
       ManagedChannelImpl.getNameResolver(
-          "foo.googleapis.com:8080", nameResolverFactory, NAME_RESOLVER_PARAMS);
+          "foo.googleapis.com:8080", nameResolverFactory,
+          NAME_RESOLVER_PARAMS, GrpcUtil.NOOP_PROXY_DETECTOR);
       fail("Should fail");
     } catch (IllegalArgumentException e) {
       // expected
@@ -117,7 +118,7 @@ public class ManagedChannelImplGetNameResolverTest {
   private void testValidTarget(String target, String expectedUriString, URI expectedUri) {
     Factory nameResolverFactory = new FakeNameResolverFactory(expectedUri.getScheme());
     FakeNameResolver nameResolver = (FakeNameResolver) ManagedChannelImpl.getNameResolver(
-        target, nameResolverFactory, NAME_RESOLVER_PARAMS);
+        target, nameResolverFactory, NAME_RESOLVER_PARAMS, GrpcUtil.NOOP_PROXY_DETECTOR);
     assertNotNull(nameResolver);
     assertEquals(expectedUri, nameResolver.uri);
     assertEquals(expectedUriString, nameResolver.uri.toString());
@@ -128,7 +129,7 @@ public class ManagedChannelImplGetNameResolverTest {
 
     try {
       FakeNameResolver nameResolver = (FakeNameResolver) ManagedChannelImpl.getNameResolver(
-          target, nameResolverFactory, NAME_RESOLVER_PARAMS);
+          target, nameResolverFactory, NAME_RESOLVER_PARAMS, GrpcUtil.NOOP_PROXY_DETECTOR);
       fail("Should have failed, but got resolver with " + nameResolver.uri);
     } catch (IllegalArgumentException e) {
       // expected

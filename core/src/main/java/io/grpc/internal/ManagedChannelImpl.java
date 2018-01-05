@@ -298,7 +298,8 @@ public final class ManagedChannelImpl
       // did not cancel idleModeTimer, both of which are bugs.
       nameResolver.shutdown();
       nameResolverStarted = false;
-      nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
+      nameResolver =
+          getNameResolver(target, nameResolverFactory, nameResolverParams, proxyDetector);
       lbHelper.lb.shutdown();
       lbHelper = null;
       subchannelPicker = null;
@@ -458,7 +459,8 @@ public final class ManagedChannelImpl
     this.target = checkNotNull(builder.target, "target");
     this.nameResolverFactory = builder.getNameResolverFactory();
     this.nameResolverParams = checkNotNull(builder.getNameResolverParams(), "nameResolverParams");
-    this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
+    this.nameResolver =
+        getNameResolver(target, nameResolverFactory, nameResolverParams, proxyDetector);
     this.loadBalancerFactory =
         checkNotNull(builder.loadBalancerFactory, "loadBalancerFactory");
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
@@ -494,7 +496,7 @@ public final class ManagedChannelImpl
 
   @VisibleForTesting
   static NameResolver getNameResolver(String target, NameResolver.Factory nameResolverFactory,
-      Attributes nameResolverParams) {
+      Attributes nameResolverParams, ProxyDetector proxyDetector) {
     // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
     // "dns:///".
     URI targetUri = null;
@@ -509,7 +511,8 @@ public final class ManagedChannelImpl
       uriSyntaxErrors.append(e.getMessage());
     }
     if (targetUri != null) {
-      NameResolver resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverParams);
+      NameResolver resolver = nameResolverFactory.newNameResolver(
+          targetUri, nameResolverParams, proxyDetector);
       if (resolver != null) {
         return resolver;
       }
@@ -527,7 +530,8 @@ public final class ManagedChannelImpl
         // Should not be possible.
         throw new IllegalArgumentException(e);
       }
-      NameResolver resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverParams);
+      NameResolver resolver = nameResolverFactory.newNameResolver(
+          targetUri, nameResolverParams, proxyDetector);
       if (resolver != null) {
         return resolver;
       }

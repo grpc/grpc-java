@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -43,6 +44,7 @@ import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
+
 
 /**
  * The base class for channel builders.
@@ -128,6 +130,9 @@ public abstract class AbstractManagedChannelImplBuilder
 
   private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 
+  @VisibleForTesting
+  ProxyDetector proxyDetector = GrpcUtil.getProxyDetector();
+
   /**
    * Sets the maximum message size allowed for a single gRPC frame. If an inbound messages
    * larger than this limit is received it will not be processed and the RPC will fail with
@@ -143,6 +148,13 @@ public abstract class AbstractManagedChannelImplBuilder
 
   protected final int maxInboundMessageSize() {
     return maxInboundMessageSize;
+  }
+
+  @Override
+  public T proxyDetector(ProxyDetector proxyDetector) {
+    checkNotNull(proxyDetector, "proxy detector cannot be null");
+    this.proxyDetector = proxyDetector;
+    return thisT();
   }
 
   private boolean statsEnabled = true;
@@ -243,7 +255,7 @@ public abstract class AbstractManagedChannelImplBuilder
       this.decompressorRegistry = registry;
     } else {
       this.decompressorRegistry = DEFAULT_DECOMPRESSOR_REGISTRY;
-    } 
+    }
     return thisT();
   }
 
@@ -345,7 +357,7 @@ public abstract class AbstractManagedChannelImplBuilder
         SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
         GrpcUtil.STOPWATCH_SUPPLIER,
         getEffectiveInterceptors(),
-        GrpcUtil.getProxyDetector(),
+        proxyDetector,
         ChannelTracer.getDefaultFactory());
   }
 

@@ -196,6 +196,19 @@ public class AbstractManagedChannelImplBuilderTest {
   }
 
   @Test
+  public void proxyDetector_normal() {
+    ProxyDetector defaultValue = builder.proxyDetector;
+    builder.proxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR);
+    assertNotEquals(defaultValue, builder.proxyDetector);
+    assertEquals(GrpcUtil.NOOP_PROXY_DETECTOR, builder.proxyDetector);
+  }
+
+  @Test(expected = NullPointerException.class)
+  public void proxyDetector_null() {
+    builder.proxyDetector(null);
+  }
+
+  @Test
   public void userAgent_default() {
     assertNull(builder.userAgent);
   }
