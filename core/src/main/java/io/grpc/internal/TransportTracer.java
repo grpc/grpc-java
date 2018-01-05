@@ -53,7 +53,7 @@ public final class TransportTracer {
   private final ChannelTracer subchannelTracer;
 
   /**
-   * Creates a {code TransportTracer}. The {@link ChannelTracer} is null for server transports.
+   * The {@link ChannelTracer} is null for server transports.
    */
   private TransportTracer(TimeProvider timeProvider, @Nullable ChannelTracer subchannelTracer) {
     this.timeProvider = timeProvider;
