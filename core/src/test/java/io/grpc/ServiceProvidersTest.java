@@ -172,7 +172,7 @@ public class ServiceProvidersTest {
   }
 
   /**
-   * A concrete provider class for this unit test.
+   * A provider class for this unit test.
    */
   public abstract static class FooProvider implements ServiceProvider {}
 

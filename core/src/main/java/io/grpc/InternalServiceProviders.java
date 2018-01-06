@@ -16,7 +16,6 @@
 
 package io.grpc;
 
-import com.google.common.annotations.VisibleForTesting;
 import java.util.List;
 
 @Internal
@@ -29,21 +28,5 @@ public final class InternalServiceProviders {
   public static <T extends ServiceProvider> List<T> loadAll(
       Class<T> klass, List<String> hardCodedClasses, ClassLoader classLoader) {
     return ServiceProviders.loadAll(klass, hardCodedClasses, classLoader);
-  }
-
-  public static boolean isAndroid(ClassLoader cl) {
-    return ServiceProviders.isAndroid(cl);
-  }
-
-  @VisibleForTesting
-  public static <T> Iterable<T> getCandidatesViaServiceLoader(
-      Class<T> klass, ClassLoader classLoader) {
-    return ServiceProviders.getCandidatesViaServiceLoader(klass, classLoader);
-  }
-
-  @VisibleForTesting
-  public static <T> Iterable<T> getCandidatesViaHardCoded(
-      Class<T> klass, List<String> classNames, ClassLoader classLoader) {
-    return ServiceProviders.getCandidatesViaHardCoded(klass, classNames, classLoader);
   }
 }
