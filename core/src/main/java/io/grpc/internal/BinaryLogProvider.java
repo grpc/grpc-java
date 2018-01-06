@@ -214,7 +214,6 @@ public abstract class BinaryLogProvider {
     @Override
     public InputStream parse(InputStream stream) {
       return stream;
-
     }
   }
 

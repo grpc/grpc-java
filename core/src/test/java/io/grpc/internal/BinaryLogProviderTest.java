@@ -17,11 +17,16 @@
 package io.grpc.internal;
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 =======
 >>>>>>> move tests to ServerImplTest
+=======
+import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertEquals;
+>>>>>>> split out some tests specific to BinaryLogProvider.wrapMethodDefinition
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
@@ -35,8 +40,13 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
+<<<<<<< HEAD
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
+=======
+import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
+import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener;
+>>>>>>> split out some tests specific to BinaryLogProvider.wrapMethodDefinition
 import io.grpc.IntegerMarshaller;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -44,6 +54,7 @@ import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.ReplacingClassLoader;
 import io.grpc.ServerCall;
+<<<<<<< HEAD
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
@@ -59,15 +70,26 @@ import io.grpc.inprocess.InternalInProcessServerBuilder;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.ServerCalls;
 import io.grpc.stub.StreamObserver;
+=======
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
+import io.grpc.ServerMethodDefinition;
+import io.grpc.StringMarshaller;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+>>>>>>> split out some tests specific to BinaryLogProvider.wrapMethodDefinition
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+<<<<<<< HEAD
 =======
 import io.grpc.ClientInterceptor;
 import io.grpc.ReplacingClassLoader;
 import io.grpc.ServerInterceptor;
 >>>>>>> move tests to ServerImplTest
+=======
+>>>>>>> split out some tests specific to BinaryLogProvider.wrapMethodDefinition
 import javax.annotation.Nullable;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -78,7 +100,11 @@ import org.junit.runners.JUnit4;
 public class BinaryLogProviderTest {
   private final String serviceFile = "META-INF/services/io.grpc.internal.BinaryLogProvider";
 <<<<<<< HEAD
+<<<<<<< HEAD
   private final InvocationCountMarshaller reqMarshaller = new InvocationCountMarshaller();
+=======
+  private final Marshaller<String> reqMarshaller = spy(StringMarshaller.INSTANCE);
+>>>>>>> split out some tests specific to BinaryLogProvider.wrapMethodDefinition
   private final Marshaller<Integer> respMarshaller = spy(IntegerMarshaller.INSTANCE);
   private final MethodDescriptor<String, Integer> method =
       MethodDescriptor
@@ -92,6 +118,7 @@ public class BinaryLogProviderTest {
           .build();
   private final List<byte[]> binlogReq = new ArrayList<byte[]>();
   private final List<byte[]> binlogResp = new ArrayList<byte[]>();
+<<<<<<< HEAD
   private final TestBinaryLogClientInterceptor clientBinlogInterceptor =
       new TestBinaryLogClientInterceptor();
   private final BinaryLogProvider binlogProvider = new BinaryLogProvider() {
@@ -103,6 +130,19 @@ public class BinaryLogProviderTest {
       @Override
       public ClientInterceptor getClientInterceptor(String fullMethodName) {
         return clientBinlogInterceptor;
+=======
+  private final TestBinaryLogServerInterceptor serverBinlogInterceptor =
+      new TestBinaryLogServerInterceptor();
+  private final BinaryLogProvider binlogProvider = new BinaryLogProvider() {
+      @Override
+      protected ServerInterceptor getServerInterceptor(String fullMethodName) {
+        return serverBinlogInterceptor;
+      }
+
+      @Override
+      protected ClientInterceptor getClientInterceptor(String fullMethodName) {
+        return null;
+>>>>>>> split out some tests specific to BinaryLogProvider.wrapMethodDefinition
       }
 
       @Override
@@ -110,8 +150,11 @@ public class BinaryLogProviderTest {
         return 0;
       }
     };
+<<<<<<< HEAD
 =======
 >>>>>>> move tests to ServerImplTest
+=======
+>>>>>>> split out some tests specific to BinaryLogProvider.wrapMethodDefinition
 
   @Test
   public void noProvider() {
@@ -242,6 +285,113 @@ public class BinaryLogProviderTest {
     assertEquals(method.isSampledToLocalTracing(), wMethod.isSampledToLocalTracing());
   }
 
+  @Test
+  public void wrapMethodDefinition_methodDescriptor() throws Exception {
+    ServerMethodDefinition<String, Integer> methodDef =
+        ServerMethodDefinition.create(
+            method,
+            new ServerCallHandler<String, Integer>() {
+              @Override
+              public ServerCall.Listener<String> startCall(
+                  ServerCall<String, Integer> call, Metadata headers) {
+                throw new UnsupportedOperationException();
+              }
+            });
+    ServerMethodDefinition<?, ?> wMethodDef = binlogProvider.wrapMethodDefinition(methodDef);
+    validateWrappedMethod(wMethodDef.getMethodDescriptor());
+  }
+
+  @Test
+  public void wrapMethodDefinition_handler() throws Exception {
+    // The request as seen by the user supplied server code
+    final List<String> observedRequest = new ArrayList<String>();
+    final AtomicReference<ServerCall<String, Integer>> serverCall =
+        new AtomicReference<ServerCall<String, Integer>>();
+    ServerMethodDefinition<String, Integer> methodDef =
+        ServerMethodDefinition.create(
+            method,
+            new ServerCallHandler<String, Integer>() {
+              @Override
+              public ServerCall.Listener<String> startCall(
+                  ServerCall<String, Integer> call, Metadata headers) {
+                serverCall.set(call);
+                return new ServerCall.Listener<String>() {
+                  @Override
+                  public void onMessage(String message) {
+                    observedRequest.add(message);
+                  }
+                };
+              }
+            });
+    ServerMethodDefinition<?, ?> wDef = binlogProvider.wrapMethodDefinition(methodDef);
+    List<Object> serializedResp = new ArrayList<Object>();
+    ServerCall.Listener<?> wListener = startServerCallHelper(wDef, serializedResp);
+
+    String actualRequest = "hello world";
+    assertThat(binlogReq).isEmpty();
+    assertThat(observedRequest).isEmpty();
+    verify(reqMarshaller, never()).parse(any(InputStream.class));
+    onServerMessageHelper(wListener, StringMarshaller.INSTANCE.stream(actualRequest));
+    // it is unacceptably expensive for the binlog to double parse every logged message
+    verify(reqMarshaller, never()).stream(any(String.class));
+    verify(reqMarshaller, times(1)).parse(any(InputStream.class));
+    assertThat(binlogReq).hasSize(1);
+    assertThat(observedRequest).hasSize(1);
+    assertEquals(
+        actualRequest,
+        StringMarshaller.INSTANCE.parse(new ByteArrayInputStream(binlogReq.get(0))));
+    assertEquals(actualRequest, observedRequest.get(0));
+
+    int actualResponse = 12345;
+    assertThat(binlogResp).isEmpty();
+    assertThat(serializedResp).isEmpty();
+    verify(respMarshaller, never()).stream(any(Integer.class));
+    serverCall.get().sendMessage(actualResponse);
+    // it is unacceptably expensive for the binlog to double parse every logged message
+    verify(respMarshaller, times(1)).stream(any(Integer.class));
+    verify(respMarshaller, never()).parse(any(InputStream.class));
+    assertThat(binlogResp).hasSize(1);
+    assertThat(serializedResp).hasSize(1);
+    assertEquals(
+        actualResponse,
+        (int) IntegerMarshaller.INSTANCE.parse(new ByteArrayInputStream(binlogResp.get(0))));
+    assertEquals(actualResponse, (int) method.parseResponse((InputStream) serializedResp.get(0)));
+  }
+
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  private static void onServerMessageHelper(ServerCall.Listener listener, Object request) {
+    listener.onMessage(request);
+  }
+
+  // Used to validate server and client side methods
+  private void validateWrappedMethod(MethodDescriptor<?, ?> wMethod) {
+    assertSame(BinaryLogProvider.IDENTITY_MARSHALLER, wMethod.getRequestMarshaller());
+    assertSame(BinaryLogProvider.IDENTITY_MARSHALLER, wMethod.getResponseMarshaller());
+    assertEquals(method.getType(), wMethod.getType());
+    assertEquals(method.getFullMethodName(), wMethod.getFullMethodName());
+    assertEquals(method.getSchemaDescriptor(), wMethod.getSchemaDescriptor());
+    assertEquals(method.isIdempotent(), wMethod.isIdempotent());
+    assertEquals(method.isSafe(), wMethod.isSafe());
+    assertEquals(method.isSampledToLocalTracing(), wMethod.isSampledToLocalTracing());
+  }
+
+  private static <ReqT, RespT> ServerCall.Listener<ReqT> startServerCallHelper(
+      final ServerMethodDefinition<ReqT, RespT> methodDef,
+      final List<Object> serializedResp) {
+    ServerCall<ReqT, RespT> serverCall = new NoopServerCall<ReqT, RespT>() {
+      @Override
+      public void sendMessage(RespT message) {
+        serializedResp.add(message);
+      }
+
+      @Override
+      public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
+        return methodDef.getMethodDescriptor();
+      }
+    };
+    return methodDef.getServerCallHandler().startCall(serverCall, new Metadata());
+  }
+
   public static final class Provider0 extends BaseProvider {
     public Provider0() {
       super(0);
@@ -275,7 +425,7 @@ public class BinaryLogProviderTest {
 
     @Nullable
     @Override
-    protected ClientInterceptor getClientInterceptor(String fullMethodName) {
+    public ClientInterceptor getClientInterceptor(String fullMethodName) {
       throw new UnsupportedOperationException();
     }
 
@@ -284,6 +434,7 @@ public class BinaryLogProviderTest {
       return priority;
     }
   }
+<<<<<<< HEAD
 <<<<<<< HEAD
 
   private final class TestBinaryLogClientInterceptor implements ClientInterceptor {
@@ -319,12 +470,29 @@ public class BinaryLogProviderTest {
 
         @Override
         public void sendMessage(ReqT message) {
+=======
+
+  private final class TestBinaryLogServerInterceptor implements ServerInterceptor {
+    @Override
+    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+        final ServerCall<ReqT, RespT> call,
+        Metadata headers,
+        ServerCallHandler<ReqT, RespT> next) {
+      assertSame(
+          BinaryLogProvider.IDENTITY_MARSHALLER,
+          call.getMethodDescriptor().getRequestMarshaller());
+      assertSame(
+          BinaryLogProvider.IDENTITY_MARSHALLER,
+          call.getMethodDescriptor().getResponseMarshaller());
+      ServerCall<ReqT, RespT> wCall = new SimpleForwardingServerCall<ReqT, RespT>(call) {
+        @Override
+        public void sendMessage(RespT message) {
           assertTrue(message instanceof InputStream);
           try {
             byte[] bytes = IoUtils.toByteArray((InputStream) message);
-            binlogReq.add(bytes);
+            binlogResp.add(bytes);
             ByteArrayInputStream input = new ByteArrayInputStream(bytes);
-            ReqT dup = method.parseRequest(input);
+            RespT dup = call.getMethodDescriptor().parseResponse(input);
             assertSame(input, dup);
             super.sendMessage(dup);
           } catch (IOException e) {
@@ -332,8 +500,35 @@ public class BinaryLogProviderTest {
           }
         }
       };
+      final ServerCall.Listener<ReqT> oListener = next.startCall(wCall, headers);
+      return new SimpleForwardingServerCallListener<ReqT>(oListener) {
+        @Override
+        public void onMessage(ReqT message) {
+>>>>>>> split out some tests specific to BinaryLogProvider.wrapMethodDefinition
+          assertTrue(message instanceof InputStream);
+          try {
+            byte[] bytes = IoUtils.toByteArray((InputStream) message);
+            binlogReq.add(bytes);
+            ByteArrayInputStream input = new ByteArrayInputStream(bytes);
+<<<<<<< HEAD
+            ReqT dup = method.parseRequest(input);
+            assertSame(input, dup);
+            super.sendMessage(dup);
+=======
+            ReqT dup = call.getMethodDescriptor().parseRequest(input);
+            assertSame(input, dup);
+            super.onMessage(dup);
+>>>>>>> split out some tests specific to BinaryLogProvider.wrapMethodDefinition
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        }
+      };
     }
   }
+<<<<<<< HEAD
 =======
 >>>>>>> move tests to ServerImplTest
+=======
+>>>>>>> split out some tests specific to BinaryLogProvider.wrapMethodDefinition
 }
