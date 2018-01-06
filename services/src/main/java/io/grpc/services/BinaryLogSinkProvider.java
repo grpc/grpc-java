@@ -27,7 +27,12 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 public abstract class BinaryLogSinkProvider implements Closeable {
 
+  /**
+   * Returns the {@code BinaryLogSinkProvider} that should be used.
+   */
   public static BinaryLogSinkProvider provider() {
+    // TODO(zpencer): either implement the service provider here, or use a generic helper
+    // See: https://github.com/grpc/grpc-java/pull/3886
     return null;
   }
 

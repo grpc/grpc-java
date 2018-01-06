@@ -153,7 +153,7 @@ final class BinaryLog {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(maxHeaderBytes, maxMessageBytes, sink);
+    return Objects.hashCode(maxHeaderBytes, maxMessageBytes);
   }
 
   @Override

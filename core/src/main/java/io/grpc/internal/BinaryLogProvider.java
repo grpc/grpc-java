@@ -31,7 +31,6 @@ import io.grpc.ServerInterceptor;
 import io.grpc.ServerMethodDefinition;
 import java.io.Closeable;
 import java.io.InputStream;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -190,7 +189,7 @@ public abstract class BinaryLogProvider implements Closeable {
     }
 
     @Override
-    public void close() throws IOException {
+    public void close() {
       // noop
     }
   }
