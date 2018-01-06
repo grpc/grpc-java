@@ -421,6 +421,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalWithLogI
       // that comes with SerializingExecutor.
       if (executor == directExecutor()) {
         wrappedExecutor = new SerializeReentrantCallsDirectExecutor();
+      } else if (executor instanceof SerializingExecutor) {
+        wrappedExecutor = executor;
       } else {
         wrappedExecutor = new SerializingExecutor(executor);
       }
