@@ -19,6 +19,7 @@ package io.grpc.services;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Splitter;
 import com.google.common.primitives.Bytes;
 import com.google.protobuf.ByteString;
 import io.grpc.InternalMetadata;
@@ -145,8 +146,7 @@ final class BinaryLog {
       Map<String, BinaryLog> perServiceLogs = new HashMap<String, BinaryLog>();
       Map<String, BinaryLog> perMethodLogs = new HashMap<String, BinaryLog>();
 
-      String[] configurations = configurationString.split(",");
-      for (String configuration : configurations) {
+      for (String configuration : Splitter.on(',').split(configurationString)) {
         Matcher configMatcher = configRe.matcher(configuration);
         if (!configMatcher.matches()) {
           throw new IllegalArgumentException("Bad input: " + configuration);
