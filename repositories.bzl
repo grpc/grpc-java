@@ -46,7 +46,7 @@ def grpc_java_repositories(
   if not omit_com_google_protobuf:
     com_google_protobuf()
   if omit_com_google_protobuf_java:
-    fail("omit_com_google_protobuf_java is deprecated and must be not be passed to grpc_java_repositories()")
+    fail("omit_com_google_protobuf_java is no longer supported and must be not be passed to grpc_java_repositories()")
   if not omit_com_google_protobuf_nano_protobuf_javanano:
     com_google_protobuf_nano_protobuf_javanano()
   if not omit_com_google_truth_truth:
