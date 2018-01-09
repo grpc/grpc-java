@@ -1,4 +1,4 @@
-sudo: false
+sudo: required
 
 language: java
 
@@ -6,6 +6,11 @@ addons:
   apt:
     packages:
       - wget
+
+matrix:
+  include:
+    - env: TARGET="bazel"
+    - env: TARGET="gradle"
 
 env:
   global:
@@ -17,37 +22,19 @@ env:
     - LD_LIBRARY_PATH=/tmp/protobuf/lib
 
 before_install:
-  - mkdir -p $HOME/.gradle/caches &&
-    ln -s /tmp/gradle-caches-modules-2 $HOME/.gradle/caches/modules-2
-  - mkdir -p $HOME/.gradle &&
-    ln -s /tmp/gradle-wrapper $HOME/.gradle/wrapper
-    # Work around https://github.com/travis-ci/travis-ci/issues/2317
-  - if \[ "$TRAVIS_OS_NAME" = linux \]; then jdk_switcher use oraclejdk8; fi
-  - buildscripts/make_dependencies.sh # build protoc into /tmp/protobuf-${PROTOBUF_VERSION}
-  - ln -s "/tmp/protobuf-${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)" /tmp/protobuf
-  - mkdir -p $HOME/.gradle
-  - echo "checkstyle.ignoreFailures=false" >> $HOME/.gradle/gradle.properties
-  - echo "failOnWarnings=true" >> $HOME/.gradle/gradle.properties
-  - echo "errorProne=true" >> $HOME/.gradle/gradle.properties
-  - mkdir -p /tmp/bazel
-  - wget -nc "https://github.com/bazelbuild/bazel/releases/download/${BAZEL_VERSION}/bazel_${BAZEL_VERSION}-linux-x86_64.deb" -P /tmp/bazel
-  - sudo dpkg -i "/tmp/bazel/bazel_${BAZEL_VERSION}-linux-x86_64.deb"
+  - buildscripts/travis-before_install.sh
 
 install:
-  - ./gradlew assemble generateTestProto install
-  - pushd examples && ./gradlew build && popd
-  - pushd examples && mvn verify && popd
+  - buildscripts/travis-install.sh
 
 before_script:
   - test -z "$(git status --porcelain)" || (git status && echo Error Working directory is not clean. Forget to commit generated files? && false)
 
 script:
-  - ./gradlew check :grpc-all:jacocoTestReport
-  - bazel build //...
+  - buildscripts/travis-script.sh
 
 after_success:
-  - if \[ "$TRAVIS_OS_NAME" = linux \]; then ./gradlew :grpc-all:coveralls; fi
-  - bash <(curl -s https://codecov.io/bash)
+  - buildscripts/travis-after_success.sh
 
 os:
   - linux
@@ -63,6 +50,4 @@ cache:
     - /tmp/gradle-wrapper
 
 before_cache:
-  # The lock changes based on folder name; normally $HOME/.gradle/caches/modules-2/modules-2.lock
-  - rm /tmp/gradle-caches-modules-2/gradle-caches-modules-2.lock
-  - find $HOME/.gradle/wrapper -not -name "*-all.zip" -and -not -name "*-bin.zip" -delete
+  - buildscripts/travis-before_cache.sh
