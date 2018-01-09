@@ -373,15 +373,11 @@ public final class BinaryLogTest {
   public void metadataToProto_truncated() throws Exception {
     // 0 byte limit not enough for any metadata
     assertEquals(
-        io.grpc.binarylog.Metadata
-            .newBuilder()
-            .build(),
+        io.grpc.binarylog.Metadata.getDefaultInstance(),
         BinaryLog.metadataToProto(metadata, 0));
     // not enough bytes for first key value
     assertEquals(
-        io.grpc.binarylog.Metadata
-            .newBuilder()
-            .build(),
+        io.grpc.binarylog.Metadata.getDefaultInstance(),
         BinaryLog.metadataToProto(metadata, 9));
     // enough for first key value
     assertEquals(

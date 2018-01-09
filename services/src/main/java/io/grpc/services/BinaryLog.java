@@ -273,7 +273,8 @@ final class BinaryLog {
   // TODO(zpencer): verify int64 representation with other gRPC languages
   static Uint128 callIdToProto(byte[] bytes) {
     Preconditions.checkArgument(
-        bytes.length == 16, "can only convert from 16 byte input, actual length =" + bytes.length);
+        bytes.length == 16,
+        String.format("can only convert from 16 byte input, actual length = %d", bytes.length));
     ByteBuffer bb = ByteBuffer.wrap(bytes);
     long high = bb.getLong();
     long low = bb.getLong();
