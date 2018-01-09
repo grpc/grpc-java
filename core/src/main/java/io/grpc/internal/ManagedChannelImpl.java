@@ -138,7 +138,8 @@ public final class ManagedChannelImpl
 
   /**
    * We delegate to this channel, so that we can have interceptors as necessary. If there aren't
-   * any interceptors this will just be {@link RealChannel}.
+   * any interceptors and the {@link BinaryLogProvider} is {@code null} then this will just be a
+   * {@link RealChannel}.
    */
   private final Channel interceptorChannel;
   @Nullable private final String userAgent;
@@ -488,7 +489,11 @@ public final class ManagedChannelImpl
     this.backoffPolicyProvider = backoffPolicyProvider;
     this.transportFactory =
         new CallCredentialsApplyingTransportFactory(clientTransportFactory, this.executor);
-    this.interceptorChannel = ClientInterceptors.intercept(new RealChannel(), interceptors);
+    Channel channel = new RealChannel();
+    if (builder.binlogProvider != null) {
+      channel = builder.binlogProvider.wrapChannel(channel);
+    }
+    this.interceptorChannel = ClientInterceptors.intercept(channel, interceptors);
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     if (builder.idleTimeoutMillis == IDLE_TIMEOUT_MILLIS_DISABLE) {
       this.idleTimeoutMillis = builder.idleTimeoutMillis;
