@@ -43,7 +43,7 @@ before_script:
 
 script:
   - ./gradlew check :grpc-all:jacocoTestReport
-  - bazel build //compiler:all //context:all //core:all //netty:all //okhttp:all //protobuf:all //protobuf-lite:all //protobuf-nano:all //stub:all //testing:all
+  - bazel build //...
 
 after_success:
   - if \[ "$TRAVIS_OS_NAME" = linux \]; then ./gradlew :grpc-all:coveralls; fi
