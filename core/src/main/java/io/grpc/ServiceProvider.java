@@ -18,17 +18,16 @@ package io.grpc;
 
 /**
  * An interface for classes that are loaded via {@link java.util.ServiceLoader}. This is not meant
- * to be implemented directly, but should be used to modify an {@code abstract class}
- * or {@code interface}.
- * The {@link ServiceProviders} utility class should be used to create concrete implementations
- * of the class.
+ * to be implemented directly, but should be used to modify an {@code abstract class}.
+ * The {@link ServiceProviders} utility class should be used to get instances of classes that
+ * subclass this.
  */
-interface ServiceProvider {
+abstract class ServiceProvider {
   /**
    * Whether this provider is available for use, taking the current environment into consideration.
    * If {@code false}, no other methods are safe to be called.
    */
-  boolean isAvailable();
+  protected abstract boolean isAvailable();
 
   /**
    * A priority, from 0 to 10 that this provider should be used, taking the current environment into
@@ -36,5 +35,5 @@ interface ServiceProvider {
    * detection. A priority of 0 does not imply that the provider wouldn't work; just that it should
    * be last in line.
    */
-  int priority();
+  protected abstract int priority();
 }

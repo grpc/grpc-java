@@ -21,12 +21,12 @@ import java.util.List;
 @Internal
 public final class InternalServiceProviders {
   public static <T extends ServiceProvider> T load(
-      Class<T> klass, List<String> hardCodedClasses, ClassLoader classLoader) {
-    return ServiceProviders.load(klass, hardCodedClasses, classLoader);
+      Class<T> klass, List<Class<?>> hardcoded, ClassLoader classLoader) {
+    return ServiceProviders.load(klass, hardcoded, classLoader);
   }
 
   public static <T extends ServiceProvider> List<T> loadAll(
-      Class<T> klass, List<String> hardCodedClasses, ClassLoader classLoader) {
+      Class<T> klass, List<Class<?>> hardCodedClasses, ClassLoader classLoader) {
     return ServiceProviders.loadAll(klass, hardCodedClasses, classLoader);
   }
 }

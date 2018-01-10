@@ -23,11 +23,11 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import com.google.common.collect.ImmutableList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.ServiceConfigurationError;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.regex.Pattern;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -35,7 +35,7 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link ServiceProviders}. */
 @RunWith(JUnit4.class)
 public class ServiceProvidersTest {
-  private static final List<String> NO_HARDCODED = Collections.emptyList();
+  private static final List<Class<?>> NO_HARDCODED = Collections.emptyList();
   private final String serviceFile = "META-INF/services/io.grpc.ServiceProvidersTest$FooProvider";
 
   @Test
@@ -77,7 +77,7 @@ public class ServiceProvidersTest {
   }
 
   @Test
-  public void multipleProvider() {
+  public void multipleProvider() throws Exception {
     ClassLoader cl = new ReplacingClassLoader(getClass().getClassLoader(), serviceFile,
         "io/grpc/ServiceProvidersTest$FooProvider-multipleProvider.txt");
     assertSame(
@@ -111,51 +111,58 @@ public class ServiceProvidersTest {
 
   @Test
   public void failAtInitProvider() {
+    // Even though there is a working provider, if any providers fail then we should fail completely
+    // to avoid returning something unexpected.
     ClassLoader cl = new ReplacingClassLoader(getClass().getClassLoader(), serviceFile,
         "io/grpc/ServiceProvidersTest$FooProvider-failAtInitProvider.txt");
     assertNull(ServiceProviders.load(FooProvider.class, NO_HARDCODED, cl));
   }
 
   @Test
-  public void getCandidatesViaHardCoded_triesToLoadClasses() throws Exception {
-    ClassLoader cl = getClass().getClassLoader();
-    final AtomicBoolean classLoaded = new AtomicBoolean();
-    cl = new ClassLoader(cl) {
-      @Override
-      public Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-        if (name.equals(Available0Provider.class.getCanonicalName())) {
-          classLoaded.set(true);
-        }
-        return super.loadClass(name, resolve);
-      }
-    };
-    cl = new StaticTestingClassLoader(cl, Pattern.compile("io\\.grpc\\..*"));
-    ServiceProviders.getCandidatesViaHardCoded(
-        FooProvider.class,
-        Collections.singletonList(Available0Provider.class.getCanonicalName()),
-        cl);
-    assertTrue(classLoaded.get());
+  public void failAtPriorityProvider() {
+    // Even though there is a working provider, if any providers fail then we should fail completely
+    // to avoid returning something unexpected.
+    ClassLoader cl = new ReplacingClassLoader(getClass().getClassLoader(), serviceFile,
+        "io/grpc/ServiceProvidersTest$FooProvider-failAtPriorityProvider.txt");
+    assertNull(ServiceProviders.load(FooProvider.class, NO_HARDCODED, cl));
   }
 
   @Test
-  public void getCandidatesViaHardCoded_ignoresMissingClasses() throws Exception {
-    ClassLoader cl = getClass().getClassLoader();
-    cl = new ClassLoader(cl) {
-      @Override
-      public Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-        if (name.contains(Available0Provider.class.getSimpleName())) {
-          throw new ClassNotFoundException();
-        } else {
-          return super.loadClass(name, resolve);
-        }
-      }
-    };
-    cl = new StaticTestingClassLoader(cl, Pattern.compile("io\\.grpc\\.[^.]*"));
-    Iterable<?> i = ServiceProviders.getCandidatesViaHardCoded(
+  public void failAtAvailableProvider() {
+    // Even though there is a working provider, if any providers fail then we should fail completely
+    // to avoid returning something unexpected.
+    ClassLoader cl = new ReplacingClassLoader(getClass().getClassLoader(), serviceFile,
+        "io/grpc/ServiceProvidersTest$FooProvider-failAtAvailableProvider.txt");
+    assertNull(ServiceProviders.load(FooProvider.class, NO_HARDCODED, cl));
+  }
+
+  @Test
+  public void getCandidatesViaHardCoded_multipleProvider() throws Exception {
+    Iterator<FooProvider> candidates = ServiceProviders.getCandidatesViaHardCoded(
         FooProvider.class,
-        Collections.singletonList(Available0Provider.class.getCanonicalName()),
-        cl);
-    assertFalse("Iterator should be empty", i.iterator().hasNext());
+        ImmutableList.<Class<?>>of(
+            Available7Provider.class,
+            Available0Provider.class))
+        .iterator();
+    assertEquals(Available7Provider.class, candidates.next().getClass());
+    assertEquals(Available0Provider.class, candidates.next().getClass());
+    assertFalse(candidates.hasNext());
+  }
+
+  @Test
+  public void getCandidatesViaHardCoded_failAtInitOnly() throws Exception {
+    Iterable<FooProvider> i = ServiceProviders.getCandidatesViaHardCoded(
+        FooProvider.class,
+        Collections.<Class<?>>singletonList(FailAtInitProvider.class));
+    assertFalse(i.iterator().hasNext());
+  }
+
+  @Test
+  public void getCandidatesViaHardCoded_failAtInitSome() throws Exception {
+    Iterable<FooProvider> i = ServiceProviders.getCandidatesViaHardCoded(
+        FooProvider.class,
+        ImmutableList.<Class<?>>of(FailAtInitProvider.class, Available0Provider.class));
+    assertFalse(i.iterator().hasNext());
   }
 
   @Test
@@ -174,7 +181,7 @@ public class ServiceProvidersTest {
   /**
    * A provider class for this unit test.
    */
-  public abstract static class FooProvider implements ServiceProvider {}
+  public abstract static class FooProvider extends ServiceProvider {}
 
   private static class BaseProvider extends FooProvider {
     private final boolean isAvailable;
@@ -196,38 +203,62 @@ public class ServiceProvidersTest {
     }
   }
 
-  public static class Available0Provider extends BaseProvider {
+  public static final class Available0Provider extends BaseProvider {
     public Available0Provider() {
       super(true, 0);
     }
   }
 
-  public static class Available5Provider extends BaseProvider {
+  public static final class Available5Provider extends BaseProvider {
     public Available5Provider() {
       super(true, 5);
     }
   }
 
-  public static class Available7Provider extends BaseProvider {
+  public static final class Available7Provider extends BaseProvider {
     public Available7Provider() {
       super(true, 7);
     }
   }
 
-  public static class UnavailableProvider extends BaseProvider {
+  public static final class UnavailableProvider extends BaseProvider {
     public UnavailableProvider() {
       super(false, 10);
     }
   }
 
-  public static class FailAtInitProvider extends FooProvider {
+  public static final class FailAtInitProvider extends FooProvider {
     public FailAtInitProvider() {
-      throw new RuntimeException("purposefully broken");
+      throw new RuntimeException("intentionally broken");
     }
 
     @Override
     public boolean isAvailable() {
       return true;
+    }
+
+    @Override
+    public int priority() {
+      return 0;
+    }
+  }
+
+  public static final class FailAtPriorityProvider extends FooProvider {
+    @Override
+    public boolean isAvailable() {
+      return true;
+    }
+
+    @Override
+    public int priority() {
+      throw new RuntimeException("intentionally broken");
+    }
+  }
+
+  public static final class FailAtAvailableProvider extends FooProvider {
+    @Override
+    public boolean isAvailable() {
+      throw new RuntimeException("intentionally broken");
     }
 
     @Override

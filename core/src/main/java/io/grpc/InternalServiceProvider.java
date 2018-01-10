@@ -17,5 +17,5 @@
 package io.grpc;
 
 @Internal
-public interface InternalServiceProvider extends ServiceProvider {
+public abstract class InternalServiceProvider extends ServiceProvider {
 }

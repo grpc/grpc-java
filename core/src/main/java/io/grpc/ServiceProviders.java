@@ -37,12 +37,11 @@ final class ServiceProviders {
   /**
    * If this is not Android, returns the highest priority implementation of the class via
    * {@link ServiceLoader}.
-   * If this is Android, returns the highest priority class in the hardcoded
-   * {@code androidClassses}.
+   * If this is Android, returns an instance of the highest priority class in {@code hardcoded}.
    */
   public static <T extends ServiceProvider> T load(
-      Class<T> klass, List<String> androidClasses, ClassLoader cl) {
-    List<T> candidates = loadAll(klass, androidClasses, cl);
+      Class<T> klass, List<Class<?>> hardcoded, ClassLoader cl) {
+    List<T> candidates = loadAll(klass, hardcoded, cl);
     if (candidates.isEmpty()) {
       return null;
     }
@@ -52,40 +51,47 @@ final class ServiceProviders {
   /**
    * If this is not Android, returns all available implementations discovered via
    * {@link ServiceLoader}.
-   * If this is Android, returns all available implementations in the hardcoded
-   * {@code androidClasses}.
+   * If this is Android, returns all available implementations in {@code hardcoded}.
    * The list is sorted in descending priority order.
+   *
+   * <p>If a failure was encountered while initializing any class, then the result is empty.
    */
   public static <T extends ServiceProvider> List<T> loadAll(
-      Class<T> klass, List<String> androidClasses, ClassLoader cl) {
+      Class<T> klass, List<Class<?>> hardcoded, ClassLoader cl) {
     Iterable<T> candidates;
     if (isAndroid(cl)) {
-      candidates = getCandidatesViaHardCoded(klass, androidClasses, cl);
+      candidates = getCandidatesViaHardCoded(klass, hardcoded);
     } else {
       candidates = getCandidatesViaServiceLoader(klass, cl);
     }
     List<T> list = new ArrayList<T>();
     Iterator<T> iter = candidates.iterator();
-    while (iter.hasNext()) {
-      try {
+    try {
+      while (iter.hasNext()) {
         T current = iter.next();
         if (!current.isAvailable()) {
           continue;
         }
         list.add(current);
-      } catch (Throwable t) {
-        // The iterator from ServiceLoader may throw ServiceConfigurationError
-        logger.log(Level.SEVERE, "caught exception trying to load: " + klass, t);
       }
+
+      // Sort descending based on priority.
+      Collections.sort(list, Collections.reverseOrder(new Comparator<ServiceProvider>() {
+        @Override
+        public int compare(ServiceProvider f1, ServiceProvider f2) {
+          return f1.priority() - f2.priority();
+        }
+      }));
+      return Collections.unmodifiableList(list);
+    } catch (Throwable t) {
+      // The iterator from ServiceLoader may throw ServiceConfigurationError, or
+      // the ServiceProvider may thrown some runtime exception when its methods are called
+      logger.log(
+          Level.SEVERE,
+          String.format("caught exception trying to load: %s. Will now abort.", klass),
+          t);
+      return Collections.emptyList();
     }
-    // Sort descending based on priority.
-    Collections.sort(list, Collections.reverseOrder(new Comparator<ServiceProvider>() {
-      @Override
-      public int compare(ServiceProvider f1, ServiceProvider f2) {
-        return f1.priority() - f2.priority();
-      }
-    }));
-    return Collections.unmodifiableList(list);
   }
 
   /**
@@ -121,17 +127,17 @@ final class ServiceProviders {
    * problems on Android (see https://github.com/grpc/grpc-java/issues/2037).
    */
   @VisibleForTesting
-  static <T> Iterable<T> getCandidatesViaHardCoded(
-      Class<T> klass, List<String> classNames, ClassLoader cl) {
+  static <T> Iterable<T> getCandidatesViaHardCoded(Class<T> klass, List<Class<?>> hardcoded) {
     // Class.forName(String) is used to remove the need for ProGuard configuration. Note that
     // ProGuard does not detect usages of Class.forName(String, boolean, ClassLoader):
     // https://sourceforge.net/p/proguard/bugs/418/
     List<T> list = new ArrayList<T>();
-    for (String name : classNames) {
+    for (Class<?> candidate : hardcoded) {
       try {
-        list.add(create(klass, cl.loadClass(name)));
+        list.add(create(klass, candidate));
       } catch (Throwable t) {
         logger.log(Level.SEVERE, "caught exception trying to create via hardcoded: " + klass, t);
+        return Collections.emptyList();
       }
     }
     return list;
@@ -143,7 +149,7 @@ final class ServiceProviders {
       return rawClass.asSubclass(klass).getConstructor().newInstance();
     } catch (Throwable t) {
       throw new ServiceConfigurationError(
-          "Provider " + rawClass.getName() + " could not be instantiated: " + t, t);
+          String.format("Provider %s could not be instantiated %s", rawClass.getName(), t), t);
     }
   }
 }
