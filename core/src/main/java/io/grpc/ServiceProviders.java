@@ -20,16 +20,11 @@ import com.google.common.annotations.VisibleForTesting;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.Iterator;
 import java.util.List;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 final class ServiceProviders {
-  private static final Logger logger = Logger.getLogger(ServiceProviders.class.getName());
-
   private ServiceProviders() {
     // do not instantiate
   }
@@ -53,8 +48,6 @@ final class ServiceProviders {
    * {@link ServiceLoader}.
    * If this is Android, returns all available implementations in {@code hardcoded}.
    * The list is sorted in descending priority order.
-   *
-   * <p>If a failure was encountered while initializing any class, then the result is empty.
    */
   public static <T extends ServiceProvider> List<T> loadAll(
       Class<T> klass, List<Class<?>> hardcoded, ClassLoader cl) {
@@ -65,33 +58,21 @@ final class ServiceProviders {
       candidates = getCandidatesViaServiceLoader(klass, cl);
     }
     List<T> list = new ArrayList<T>();
-    Iterator<T> iter = candidates.iterator();
-    try {
-      while (iter.hasNext()) {
-        T current = iter.next();
-        if (!current.isAvailable()) {
-          continue;
-        }
-        list.add(current);
+    for (T current: candidates) {
+      if (!current.isAvailable()) {
+        continue;
       }
-
-      // Sort descending based on priority.
-      Collections.sort(list, Collections.reverseOrder(new Comparator<ServiceProvider>() {
-        @Override
-        public int compare(ServiceProvider f1, ServiceProvider f2) {
-          return f1.priority() - f2.priority();
-        }
-      }));
-      return Collections.unmodifiableList(list);
-    } catch (Throwable t) {
-      // The iterator from ServiceLoader may throw ServiceConfigurationError, or
-      // the ServiceProvider may thrown some runtime exception when its methods are called
-      logger.log(
-          Level.SEVERE,
-          String.format("caught exception trying to load: %s. Will now abort.", klass),
-          t);
-      return Collections.emptyList();
+      list.add(current);
     }
+
+    // Sort descending based on priority.
+    Collections.sort(list, Collections.reverseOrder(new Comparator<T>() {
+      @Override
+      public int compare(T f1, T f2) {
+        return f1.priority() - f2.priority();
+      }
+    }));
+    return Collections.unmodifiableList(list);
   }
 
   /**
@@ -133,12 +114,7 @@ final class ServiceProviders {
     // https://sourceforge.net/p/proguard/bugs/418/
     List<T> list = new ArrayList<T>();
     for (Class<?> candidate : hardcoded) {
-      try {
-        list.add(create(klass, candidate));
-      } catch (Throwable t) {
-        logger.log(Level.SEVERE, "caught exception trying to create via hardcoded: " + klass, t);
-        return Collections.emptyList();
-      }
+      list.add(create(klass, candidate));
     }
     return list;
   }

@@ -106,34 +106,52 @@ public class ServiceProvidersTest {
   public void unknownClassProvider() {
     ClassLoader cl = new ReplacingClassLoader(getClass().getClassLoader(), serviceFile,
         "io/grpc/ServiceProvidersTest$FooProvider-unknownClassProvider.txt");
-    assertNull(ServiceProviders.load(FooProvider.class, NO_HARDCODED, cl));
+    try {
+      FooProvider ignored = ServiceProviders.load(FooProvider.class, NO_HARDCODED, cl);
+      fail("Exception expected");
+    } catch (ServiceConfigurationError e) {
+      // noop
+    }
   }
 
   @Test
-  public void failAtInitProvider() {
-    // Even though there is a working provider, if any providers fail then we should fail completely
-    // to avoid returning something unexpected.
+  public void exceptionSurfacedToCaller_failAtInit() {
     ClassLoader cl = new ReplacingClassLoader(getClass().getClassLoader(), serviceFile,
         "io/grpc/ServiceProvidersTest$FooProvider-failAtInitProvider.txt");
-    assertNull(ServiceProviders.load(FooProvider.class, NO_HARDCODED, cl));
+    try {
+      // Even though there is a working provider, if any providers fail then we should fail
+      // completely to avoid returning something unexpected.
+      FooProvider ignored = ServiceProviders.load(FooProvider.class, NO_HARDCODED, cl);
+      fail("Expected exception");
+    } catch (ServiceConfigurationError expected) {
+      // noop
+    }
   }
 
   @Test
-  public void failAtPriorityProvider() {
-    // Even though there is a working provider, if any providers fail then we should fail completely
-    // to avoid returning something unexpected.
+  public void exceptionSurfacedToCaller_failAtPriority() {
     ClassLoader cl = new ReplacingClassLoader(getClass().getClassLoader(), serviceFile,
         "io/grpc/ServiceProvidersTest$FooProvider-failAtPriorityProvider.txt");
-    assertNull(ServiceProviders.load(FooProvider.class, NO_HARDCODED, cl));
+    try {
+      // The exception should be surfaced to the caller
+      FooProvider ignored = ServiceProviders.load(FooProvider.class, NO_HARDCODED, cl);
+      fail("Expected exception");
+    } catch (FailAtPriorityProvider.PriorityException expected) {
+      // noop
+    }
   }
 
   @Test
-  public void failAtAvailableProvider() {
-    // Even though there is a working provider, if any providers fail then we should fail completely
-    // to avoid returning something unexpected.
+  public void exceptionSurfacedToCaller_failAtAvailable() {
     ClassLoader cl = new ReplacingClassLoader(getClass().getClassLoader(), serviceFile,
         "io/grpc/ServiceProvidersTest$FooProvider-failAtAvailableProvider.txt");
-    assertNull(ServiceProviders.load(FooProvider.class, NO_HARDCODED, cl));
+    try {
+      // The exception should be surfaced to the caller
+      FooProvider ignored = ServiceProviders.load(FooProvider.class, NO_HARDCODED, cl);
+      fail("Expected exception");
+    } catch (FailAtAvailableProvider.AvailableException expected) {
+      // noop
+    }
   }
 
   @Test
@@ -150,19 +168,27 @@ public class ServiceProvidersTest {
   }
 
   @Test
-  public void getCandidatesViaHardCoded_failAtInitOnly() throws Exception {
-    Iterable<FooProvider> i = ServiceProviders.getCandidatesViaHardCoded(
-        FooProvider.class,
-        Collections.<Class<?>>singletonList(FailAtInitProvider.class));
-    assertFalse(i.iterator().hasNext());
+  public void getCandidatesViaHardCoded_failAtInit() throws Exception {
+    try {
+      Iterable<FooProvider> ignored = ServiceProviders.getCandidatesViaHardCoded(
+          FooProvider.class,
+          Collections.<Class<?>>singletonList(FailAtInitProvider.class));
+      fail("Expected exception");
+    } catch (ServiceConfigurationError expected) {
+      // noop
+    }
   }
 
   @Test
-  public void getCandidatesViaHardCoded_failAtInitSome() throws Exception {
-    Iterable<FooProvider> i = ServiceProviders.getCandidatesViaHardCoded(
-        FooProvider.class,
-        ImmutableList.<Class<?>>of(FailAtInitProvider.class, Available0Provider.class));
-    assertFalse(i.iterator().hasNext());
+  public void getCandidatesViaHardCoded_failAtInit_moreCandidates() throws Exception {
+    try {
+      Iterable<FooProvider> ignored = ServiceProviders.getCandidatesViaHardCoded(
+          FooProvider.class,
+          ImmutableList.<Class<?>>of(FailAtInitProvider.class, Available0Provider.class));
+      fail("Expected exception");
+    } catch (ServiceConfigurationError expected) {
+      // noop
+    }
   }
 
   @Test
@@ -172,9 +198,9 @@ public class ServiceProvidersTest {
     try {
       FooProvider ignored = ServiceProviders.create(FooProvider.class, PrivateClass.class);
       fail("Expected exception");
-    } catch (ServiceConfigurationError e) {
-      assertTrue("Expected ClassCastException cause: " + e.getCause(),
-          e.getCause() instanceof ClassCastException);
+    } catch (ServiceConfigurationError expected) {
+      assertTrue("Expected ClassCastException cause: " + expected.getCause(),
+          expected.getCause() instanceof ClassCastException);
     }
   }
 
@@ -251,19 +277,23 @@ public class ServiceProvidersTest {
 
     @Override
     public int priority() {
-      throw new RuntimeException("intentionally broken");
+      throw new PriorityException();
     }
+
+    public static final class PriorityException extends RuntimeException {}
   }
 
   public static final class FailAtAvailableProvider extends FooProvider {
     @Override
     public boolean isAvailable() {
-      throw new RuntimeException("intentionally broken");
+      throw new AvailableException();
     }
 
     @Override
     public int priority() {
       return 0;
     }
+
+    public static final class AvailableException extends RuntimeException {}
   }
 }
