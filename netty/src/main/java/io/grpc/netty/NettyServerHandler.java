@@ -243,8 +243,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       long maxConnectionAgeInNanos,
       long maxConnectionAgeGraceInNanos,
       final KeepAliveEnforcer keepAliveEnforcer) {
-    super(decoder, encoder, settings);
-    this.channelUnused = channelUnused;
+    super(channelUnused, decoder, encoder, settings);
 
     final MaxConnectionIdleManager maxConnectionIdleManager;
     if (maxConnectionIdleInNanos == MAX_CONNECTION_IDLE_NANOS_DISABLED) {

@@ -157,22 +157,6 @@ class NettyServer implements InternalServer, InternalWithLogId {
       @Override
       public void initChannel(Channel ch) throws Exception {
 
-        /**
-         * Releases the event loop if the channel is "done", possibly due to the channel closing.
-         */
-        final class LoopReleaser implements ChannelFutureListener {
-          boolean done;
-
-          @Override
-          public void operationComplete(ChannelFuture future) throws Exception {
-            if (!done) {
-              done = true;
-              eventLoopReferenceCounter.release();
-            }
-          }
-        }
-
-        ChannelFutureListener loopReleaser = new LoopReleaser();
         ChannelPromise channelDone = ch.newPromise();
 
         long maxConnectionAgeInNanos = NettyServer.this.maxConnectionAgeInNanos;
@@ -214,7 +198,23 @@ class NettyServer implements InternalServer, InternalWithLogId {
           transportListener = listener.transportCreated(transport);
         }
 
+        /**
+         * Releases the event loop if the channel is "done", possibly due to the channel closing.
+         */
+        final class LoopReleaser implements ChannelFutureListener {
+          boolean done;
+
+          @Override
+          public void operationComplete(ChannelFuture future) throws Exception {
+            if (!done) {
+              done = true;
+              eventLoopReferenceCounter.release();
+            }
+          }
+        }
+
         transport.start(transportListener);
+        ChannelFutureListener loopReleaser = new LoopReleaser();
         channelDone.addListener(loopReleaser);
         ch.closeFuture().addListener(loopReleaser);
       }

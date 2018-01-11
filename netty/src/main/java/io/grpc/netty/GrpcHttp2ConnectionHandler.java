@@ -23,19 +23,25 @@ import io.netty.handler.codec.http2.Http2ConnectionDecoder;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2ConnectionHandler;
 import io.netty.handler.codec.http2.Http2Settings;
+import javax.annotation.Nullable;
 
 /**
  * gRPC wrapper for {@link Http2ConnectionHandler}.
  */
 @Internal
 public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler {
-  public GrpcHttp2ConnectionHandler(Http2ConnectionDecoder decoder,
+
+  @Nullable
+  protected final ChannelPromise channelUnused;
+
+  public GrpcHttp2ConnectionHandler(
+      ChannelPromise channelUnused,
+      Http2ConnectionDecoder decoder,
       Http2ConnectionEncoder encoder,
       Http2Settings initialSettings) {
     super(decoder, encoder, initialSettings);
+    this.channelUnused = channelUnused;
   }
-
-  protected ChannelPromise channelUnused;
 
   /**
    * Triggered on protocol negotiation completion.
