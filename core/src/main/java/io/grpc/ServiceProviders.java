@@ -34,9 +34,12 @@ final class ServiceProviders {
    * {@link ServiceLoader}.
    * If this is Android, returns an instance of the highest priority class in {@code hardcoded}.
    */
-  public static <T extends ServiceProvider> T load(
-      Class<T> klass, List<Class<?>> hardcoded, ClassLoader cl) {
-    List<T> candidates = loadAll(klass, hardcoded, cl);
+  public static <T> T load(
+      Class<T> klass,
+      Iterable<Class<?>> hardcoded,
+      ClassLoader cl,
+      PriorityAccessor<T> priorityAccessor) {
+    List<T> candidates = loadAll(klass, hardcoded, cl, priorityAccessor);
     if (candidates.isEmpty()) {
       return null;
     }
@@ -49,8 +52,11 @@ final class ServiceProviders {
    * If this is Android, returns all available implementations in {@code hardcoded}.
    * The list is sorted in descending priority order.
    */
-  public static <T extends ServiceProvider> List<T> loadAll(
-      Class<T> klass, List<Class<?>> hardcoded, ClassLoader cl) {
+  public static <T> List<T> loadAll(
+      Class<T> klass,
+      Iterable<Class<?>> hardcoded,
+      ClassLoader cl,
+      final PriorityAccessor<T> priorityAccessor) {
     Iterable<T> candidates;
     if (isAndroid(cl)) {
       candidates = getCandidatesViaHardCoded(klass, hardcoded);
@@ -59,7 +65,7 @@ final class ServiceProviders {
     }
     List<T> list = new ArrayList<T>();
     for (T current: candidates) {
-      if (!current.isAvailable()) {
+      if (!priorityAccessor.isAvailable(current)) {
         continue;
       }
       list.add(current);
@@ -69,7 +75,7 @@ final class ServiceProviders {
     Collections.sort(list, Collections.reverseOrder(new Comparator<T>() {
       @Override
       public int compare(T f1, T f2) {
-        return f1.priority() - f2.priority();
+        return priorityAccessor.getPriority(f1) - priorityAccessor.getPriority(f2);
       }
     }));
     return Collections.unmodifiableList(list);
@@ -90,7 +96,7 @@ final class ServiceProviders {
   }
 
   /**
-   * Loads service providers for the {@link ServiceProvider} service using {@link ServiceLoader}.
+   * Loads service providers for the {@code klass} service using {@link ServiceLoader}.
    */
   @VisibleForTesting
   public static <T> Iterable<T> getCandidatesViaServiceLoader(Class<T> klass, ClassLoader cl) {
@@ -108,10 +114,7 @@ final class ServiceProviders {
    * problems on Android (see https://github.com/grpc/grpc-java/issues/2037).
    */
   @VisibleForTesting
-  static <T> Iterable<T> getCandidatesViaHardCoded(Class<T> klass, List<Class<?>> hardcoded) {
-    // Class.forName(String) is used to remove the need for ProGuard configuration. Note that
-    // ProGuard does not detect usages of Class.forName(String, boolean, ClassLoader):
-    // https://sourceforge.net/p/proguard/bugs/418/
+  static <T> Iterable<T> getCandidatesViaHardCoded(Class<T> klass, Iterable<Class<?>> hardcoded) {
     List<T> list = new ArrayList<T>();
     for (Class<?> candidate : hardcoded) {
       list.add(create(klass, candidate));
@@ -127,5 +130,24 @@ final class ServiceProviders {
       throw new ServiceConfigurationError(
           String.format("Provider %s could not be instantiated %s", rawClass.getName(), t), t);
     }
+  }
+
+  /**
+   * An interface that allows us to get priority information about a provider.
+   */
+  public interface PriorityAccessor<T> {
+    /**
+     * Checks this provider is available for use, taking the current environment into consideration.
+     * If {@code false}, no other methods are safe to be called.
+     */
+    boolean isAvailable(T provider);
+
+    /**
+     * A priority, from 0 to 10 that this provider should be used, taking the current environment
+     * into consideration. 5 should be considered the default, and then tweaked based on environment
+     * detection. A priority of 0 does not imply that the provider wouldn't work; just that it
+     * should be last in line.
+     */
+    int getPriority(T provider);
   }
 }
