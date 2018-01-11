@@ -117,9 +117,9 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     frameWriter = spy(new DefaultHttp2FrameWriter());
     frameReader = new DefaultHttp2FrameReader(headersDecoder);
 
+    channel = new FakeClockSupportedChanel();
     handler = newHandler();
-
-    channel = new FakeClockSupportedChanel(handler);
+    channel.pipeline().addLast(handler);
     ctx = channel.pipeline().context(handler);
 
     writeQueue = initWriteQueue();
