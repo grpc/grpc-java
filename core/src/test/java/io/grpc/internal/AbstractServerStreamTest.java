@@ -70,7 +70,7 @@ public class AbstractServerStreamTest {
 
   @Before
   public void setUp() {
-    transportTracer = new TransportTracer();
+    transportTracer = TransportTracer.getDefaultFactory().createServerTracer();
     stream = new AbstractServerStreamBase(
         allocator,
         sink,

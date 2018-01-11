@@ -18,6 +18,7 @@ package io.grpc.okhttp;
 
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AccessProtectedHack;
+import io.grpc.internal.ChannelTracer;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.InternalServer;
@@ -45,6 +46,7 @@ public class OkHttpTransportTest extends AbstractTransportTest {
           return fakeClock.currentTimeMillis();
         }
       });
+  private final ChannelTracer subchannelTracer = ChannelTracer.getDefaultFactory().create();
   private ClientTransportFactory clientFactory = OkHttpChannelBuilder
       // Although specified here, address is ignored because we never call build.
       .forAddress("localhost", 0)
@@ -91,7 +93,8 @@ public class OkHttpTransportTest extends AbstractTransportTest {
         new InetSocketAddress("localhost", port),
         testAuthority(server),
         null /* agent */,
-        null /* proxy */);
+        null /* proxy */,
+        subchannelTracer);
   }
 
   @Override

@@ -62,7 +62,10 @@ public class AbstractClientStreamTest {
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final StatsTraceContext statsTraceCtx = StatsTraceContext.NOOP;
-  private final TransportTracer transportTracer = new TransportTracer();
+  private final TransportTracer transportTracer =
+      TransportTracer
+          .getDefaultFactory()
+          .createClientTracer(ChannelTracer.getDefaultFactory().create());
   @Mock private ClientStreamListener mockListener;
 
   @Before

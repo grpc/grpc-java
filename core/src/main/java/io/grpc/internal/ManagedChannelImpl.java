@@ -196,7 +196,7 @@ public final class ManagedChannelImpl
 
   private final ManagedChannelReference phantom;
 
-  private final ChannelTracer.Factory channelTracerFactory; // new tracer for each oobchannel
+  private final ChannelTracer.Factory subchannelTracerFactory; // new tracer for each oobchannel
   private final ChannelTracer channelTracer;
 
   // Called from channelExecutor
@@ -454,7 +454,8 @@ public final class ManagedChannelImpl
       Supplier<Stopwatch> stopwatchSupplier,
       List<ClientInterceptor> interceptors,
       ProxyDetector proxyDetector,
-      ChannelTracer.Factory channelTracerFactory) {
+      ChannelTracer channelTracer,
+      ChannelTracer.Factory subchannelTracerFactory) {
     this.target = checkNotNull(builder.target, "target");
     this.nameResolverFactory = builder.getNameResolverFactory();
     this.nameResolverParams = checkNotNull(builder.getNameResolverParams(), "nameResolverParams");
@@ -487,8 +488,8 @@ public final class ManagedChannelImpl
     this.proxyDetector = proxyDetector;
 
     phantom = new ManagedChannelReference(this);
-    this.channelTracerFactory = channelTracerFactory;
-    channelTracer = channelTracerFactory.create();
+    this.channelTracer = channelTracer;
+    this.subchannelTracerFactory = subchannelTracerFactory;
     logger.log(Level.FINE, "[{0}] Created with target {1}", new Object[] {getLogId(), target});
   }
 
@@ -640,7 +641,7 @@ public final class ManagedChannelImpl
               callOptions,
               transportProvider,
               terminated ? null : transportFactory.getScheduledExecutorService(),
-          channelTracer)
+              channelTracer)
           .setFullStreamDecompression(fullStreamDecompression)
           .setDecompressorRegistry(decompressorRegistry)
           .setCompressorRegistry(compressorRegistry);
@@ -859,7 +860,8 @@ public final class ManagedChannelImpl
                 inUseStateAggregator.updateObjectInUse(is, false);
               }
             },
-            proxyDetector);
+            proxyDetector,
+            subchannelTracerFactory.create());
       subchannel.subchannel = internalSubchannel;
       logger.log(Level.FINE, "[{0}] {1} created for {2}",
           new Object[] {getLogId(), internalSubchannel.getLogId(), addressGroup});
@@ -922,7 +924,7 @@ public final class ManagedChannelImpl
       checkState(!terminated, "Channel is terminated");
       final OobChannel oobChannel = new OobChannel(
           authority, oobExecutorPool, transportFactory.getScheduledExecutorService(),
-          channelExecutor, channelTracerFactory.create());
+          channelExecutor, channelTracer);
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
           addressGroup, authority, userAgent, backoffPolicyProvider, transportFactory,
           transportFactory.getScheduledExecutorService(), stopwatchSupplier, channelExecutor,
@@ -941,7 +943,8 @@ public final class ManagedChannelImpl
               oobChannel.handleSubchannelStateChange(newState);
             }
           },
-          proxyDetector);
+          proxyDetector,
+          subchannelTracerFactory.create());
       oobChannel.setSubchannel(internalSubchannel);
       runSerialized(new Runnable() {
           @Override
@@ -1043,7 +1046,9 @@ public final class ManagedChannelImpl
     }
   }
 
-  private final class SubchannelImpl extends AbstractSubchannel {
+  private final class SubchannelImpl
+      extends AbstractSubchannel implements InternalInstrumented<InternalChannelStats> {
+    private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
     // Set right after SubchannelImpl is created.
     InternalSubchannel subchannel;
     final Object shutdownLock = new Object();
@@ -1122,6 +1127,16 @@ public final class ManagedChannelImpl
     @Override
     public String toString() {
       return subchannel.getLogId().toString();
+    }
+
+    @Override
+    public InternalLogId getLogId() {
+      return logId;
+    }
+
+    @Override
+    public ListenableFuture<InternalChannelStats> getStats() {
+      return subchannel.getStats();
     }
   }
 

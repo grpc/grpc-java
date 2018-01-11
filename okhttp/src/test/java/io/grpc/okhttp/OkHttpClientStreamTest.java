@@ -30,6 +30,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
+import io.grpc.internal.ChannelTracer;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.StatsTraceContext;
@@ -63,7 +64,10 @@ public class OkHttpClientStreamTest {
   @Captor private ArgumentCaptor<List<Header>> headersCaptor;
 
   private final Object lock = new Object();
-  private final TransportTracer transportTracer = new TransportTracer();
+  private final TransportTracer transportTracer = 
+      TransportTracer
+          .getDefaultFactory()
+          .createClientTracer(ChannelTracer.getDefaultFactory().create());
 
   private MethodDescriptor<?, ?> methodDescriptor;
   private OkHttpClientStream stream;

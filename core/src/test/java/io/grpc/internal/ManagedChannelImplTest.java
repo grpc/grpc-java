@@ -77,6 +77,8 @@ import io.grpc.NameResolver;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
+import io.grpc.internal.ChannelTracer.Factory;
+import io.grpc.internal.ChannelTracer.TimeProvider;
 import io.grpc.internal.ManagedChannelImpl.ManagedChannelReference;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import java.net.SocketAddress;
@@ -140,15 +142,31 @@ public class ManagedChannelImplTest {
   private final FakeClock timer = new FakeClock();
   private final FakeClock executor = new FakeClock();
   private final FakeClock oobExecutor = new FakeClock();
-  private final ChannelTracer.Factory channelStatsFactory = new ChannelTracer.Factory() {
-    @Override
-    public ChannelTracer create() {
-      return new ChannelTracer(new ChannelTracer.TimeProvider() {
+  // The tracer for the ManagedChannelImpl
+  private final ChannelTracer channelTracer = new ChannelTracer(
+      new ChannelTracer.TimeProvider() {
         @Override
         public long currentTimeMillis() {
           return executor.currentTimeMillis();
         }
       });
+  private final ChannelTracer.Factory subchannelTracerFactory = new ChannelTracer.Factory() {
+    @Override
+    public ChannelTracer create() {
+      return new ChannelTracer(
+          new TimeProvider() {
+            @Override
+            public long currentTimeMillis() {
+              return executor.currentTimeMillis();
+            }
+          });
+    }
+  };
+  private ChannelTracer dummyTracer = ChannelTracer.getDefaultFactory().create();
+  private ChannelTracer.Factory singletonTracerFactory = new Factory() {
+    @Override
+    public ChannelTracer create() {
+      return dummyTracer;
     }
   };
 
@@ -196,12 +214,35 @@ public class ManagedChannelImplTest {
       NameResolver.Factory nameResolverFactory, List<ClientInterceptor> interceptors) {
     createChannel(
         nameResolverFactory, interceptors, true /* requestConnection */,
-        ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE);
+        ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE,
+        subchannelTracerFactory);
+  }
+
+  private void createChannel(
+      NameResolver.Factory nameResolverFactory,
+      List<ClientInterceptor> interceptors,
+      ChannelTracer.Factory customTracerFactory) {
+    createChannel(
+        nameResolverFactory, interceptors, true /* requestConnection */,
+        ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE,
+        customTracerFactory);
   }
 
   private void createChannel(
       NameResolver.Factory nameResolverFactory, List<ClientInterceptor> interceptors,
       boolean requestConnection, long idleTimeoutMillis) {
+    createChannel(
+        nameResolverFactory,
+        interceptors,
+        requestConnection,
+        idleTimeoutMillis,
+        subchannelTracerFactory);
+  }
+
+  private void createChannel(
+      NameResolver.Factory nameResolverFactory, List<ClientInterceptor> interceptors,
+      boolean requestConnection, long idleTimeoutMillis,
+      ChannelTracer.Factory subtracerFactory) {
     class Builder extends AbstractManagedChannelImplBuilder<Builder> {
       Builder(String target) {
         super(target);
@@ -230,7 +271,8 @@ public class ManagedChannelImplTest {
     channel = new ManagedChannelImpl(
         builder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         oobExecutorPool, timer.getStopwatchSupplier(), interceptors, GrpcUtil.NOOP_PROXY_DETECTOR,
-        channelStatsFactory);
+        channelTracer,
+        subtracerFactory);
 
     if (requestConnection) {
       // Force-exit the initial idle-mode
@@ -345,7 +387,8 @@ public class ManagedChannelImplTest {
     Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
     subchannel.requestConnection();
     verify(mockTransportFactory).newClientTransport(
-        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class));
+        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class),
+        any(ChannelTracer.class));
     MockClientTransportInfo transportInfo = transports.poll();
     ConnectionClientTransport mockTransport = transportInfo.transport;
     verify(mockTransport).start(any(ManagedClientTransport.Listener.class));
@@ -366,7 +409,8 @@ public class ManagedChannelImplTest {
     // First RPC, will be pending
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     verify(mockTransportFactory).newClientTransport(
-        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class));
+        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class),
+        any(ChannelTracer.class));
     call.start(mockCallListener, headers);
 
     verify(mockTransport, never())
@@ -454,7 +498,8 @@ public class ManagedChannelImplTest {
     verifyNoMoreInteractions(oobExecutorPool);
 
     verify(mockTransportFactory).newClientTransport(
-        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class));
+        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class),
+        any(ChannelTracer.class));
     verify(mockTransportFactory).close();
     verify(mockTransport, atLeast(0)).getLogId();
     verifyNoMoreInteractions(mockTransport);
@@ -476,7 +521,8 @@ public class ManagedChannelImplTest {
     subchannel1.requestConnection();
     subchannel2.requestConnection();
     verify(mockTransportFactory, times(2)).newClientTransport(
-        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class));
+        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class),
+        any(ChannelTracer.class));
     MockClientTransportInfo transportInfo1 = transports.poll();
     MockClientTransportInfo transportInfo2 = transports.poll();
 
@@ -539,10 +585,12 @@ public class ManagedChannelImplTest {
     // Make the transport available
     Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
     verify(mockTransportFactory, never()).newClientTransport(
-        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class));
+        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class),
+        any(ChannelTracer.class));
     subchannel.requestConnection();
     verify(mockTransportFactory).newClientTransport(
-        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class));
+        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class),
+        any(ChannelTracer.class));
     MockClientTransportInfo transportInfo = transports.poll();
     ConnectionClientTransport mockTransport = transportInfo.transport;
     ManagedClientTransport.Listener transportListener = transportInfo.listener;
@@ -683,10 +731,12 @@ public class ManagedChannelImplTest {
     // The channel will starts with the first address (badAddress)
     verify(mockTransportFactory)
         .newClientTransport(same(badAddress), any(String.class), any(String.class),
-            any(ProxyParameters.class));
+            any(ProxyParameters.class),
+            any(ChannelTracer.class));
     verify(mockTransportFactory, times(0))
           .newClientTransport(same(goodAddress), any(String.class), any(String.class),
-              any(ProxyParameters.class));
+              any(ProxyParameters.class),
+              any(ChannelTracer.class));
 
     MockClientTransportInfo badTransportInfo = transports.poll();
     // Which failed to connect
@@ -696,7 +746,8 @@ public class ManagedChannelImplTest {
     // The channel then try the second address (goodAddress)
     verify(mockTransportFactory)
           .newClientTransport(same(goodAddress), any(String.class), any(String.class),
-              any(ProxyParameters.class));
+              any(ProxyParameters.class),
+              any(ChannelTracer.class));
     MockClientTransportInfo goodTransportInfo = transports.poll();
     when(goodTransportInfo.transport.newStream(
             any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class)))
@@ -828,17 +879,20 @@ public class ManagedChannelImplTest {
     // Connecting to server1, which will fail
     verify(mockTransportFactory)
         .newClientTransport(same(addr1), any(String.class), any(String.class),
-            any(ProxyParameters.class));
+            any(ProxyParameters.class),
+            any(ChannelTracer.class));
     verify(mockTransportFactory, times(0))
         .newClientTransport(same(addr2), any(String.class), any(String.class),
-            any(ProxyParameters.class));
+            any(ProxyParameters.class),
+            any(ChannelTracer.class));
     MockClientTransportInfo transportInfo1 = transports.poll();
     transportInfo1.listener.transportShutdown(Status.UNAVAILABLE);
 
     // Connecting to server2, which will fail too
     verify(mockTransportFactory)
         .newClientTransport(same(addr2), any(String.class), any(String.class),
-            any(ProxyParameters.class));
+            any(ProxyParameters.class),
+            any(ChannelTracer.class));
     MockClientTransportInfo transportInfo2 = transports.poll();
     Status server2Error = Status.UNAVAILABLE.withDescription("Server2 failed to connect");
     transportInfo2.listener.transportShutdown(server2Error);
@@ -870,7 +924,10 @@ public class ManagedChannelImplTest {
 
   @Test
   public void subchannels() {
-    createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+    createChannel(
+        new FakeNameResolverFactory(true),
+        NO_INTERCEPTOR,
+        singletonTracerFactory);
 
     // createSubchannel() always return a new Subchannel
     Attributes attrs1 = Attributes.newBuilder().set(SUBCHANNEL_ATTR_KEY, "attr1").build();
@@ -886,22 +943,24 @@ public class ManagedChannelImplTest {
 
     // requestConnection()
     verify(mockTransportFactory, never()).newClientTransport(
-        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class));
+        any(SocketAddress.class), any(String.class), any(String.class), any(ProxyParameters.class),
+        any(ChannelTracer.class));
     sub1.requestConnection();
-    verify(mockTransportFactory).newClientTransport(socketAddress, authority, userAgent, noProxy);
+    verify(mockTransportFactory)
+        .newClientTransport(socketAddress, authority, userAgent, noProxy, dummyTracer);
     MockClientTransportInfo transportInfo1 = transports.poll();
     assertNotNull(transportInfo1);
 
     sub2.requestConnection();
     verify(mockTransportFactory, times(2)).newClientTransport(socketAddress, authority, userAgent,
-        noProxy);
+        noProxy, dummyTracer);
     MockClientTransportInfo transportInfo2 = transports.poll();
     assertNotNull(transportInfo2);
 
     sub1.requestConnection();
     sub2.requestConnection();
     verify(mockTransportFactory, times(2)).newClientTransport(socketAddress, authority, userAgent,
-        noProxy);
+        noProxy, dummyTracer);
 
     // shutdown() has a delay
     sub1.shutdown();
@@ -969,7 +1028,7 @@ public class ManagedChannelImplTest {
     sub2.shutdown();
     assertTrue(channel.isTerminated());
     verify(mockTransportFactory, never()).newClientTransport(any(SocketAddress.class), anyString(),
-        anyString(), any(ProxyParameters.class));
+        anyString(), any(ProxyParameters.class), any(ChannelTracer.class));
   }
 
   @Test
@@ -984,12 +1043,15 @@ public class ManagedChannelImplTest {
     // Therefore, channel is terminated without relying on LoadBalancer to shutdown subchannels.
     assertTrue(channel.isTerminated());
     verify(mockTransportFactory, never()).newClientTransport(any(SocketAddress.class), anyString(),
-        anyString(), any(ProxyParameters.class));
+        anyString(), any(ProxyParameters.class), any(ChannelTracer.class));
   }
 
   @Test
   public void oobchannels() {
-    createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+    createChannel(
+        new FakeNameResolverFactory(true),
+        NO_INTERCEPTOR,
+        singletonTracerFactory);
 
     ManagedChannel oob1 = helper.createOobChannel(addressGroup, "oob1authority");
     ManagedChannel oob2 = helper.createOobChannel(addressGroup, "oob2authority");
@@ -1003,7 +1065,7 @@ public class ManagedChannelImplTest {
     ClientCall<String, Integer> call = oob1.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, headers);
     verify(mockTransportFactory).newClientTransport(socketAddress, "oob1authority", userAgent,
-        noProxy);
+        noProxy, dummyTracer);
     MockClientTransportInfo transportInfo = transports.poll();
     assertNotNull(transportInfo);
 
@@ -1024,7 +1086,7 @@ public class ManagedChannelImplTest {
         oob1.newCall(method, CallOptions.DEFAULT.withWaitForReady());
     call3.start(mockCallListener3, headers);
     verify(mockTransportFactory, times(2)).newClientTransport(
-        socketAddress, "oob1authority", userAgent, noProxy);
+        socketAddress, "oob1authority", userAgent, noProxy, dummyTracer);
     transportInfo = transports.poll();
     assertNotNull(transportInfo);
 
@@ -1129,7 +1191,7 @@ public class ManagedChannelImplTest {
     assertTrue(oob2.isTerminated());
     assertTrue(channel.isTerminated());
     verify(mockTransportFactory, never()).newClientTransport(any(SocketAddress.class), anyString(),
-        anyString(), any(ProxyParameters.class));
+        anyString(), any(ProxyParameters.class), any(ChannelTracer.class));
   }
 
   @Test
@@ -1144,7 +1206,7 @@ public class ManagedChannelImplTest {
     // Channel's shutdownNow() will call shutdownNow() on all subchannels and oobchannels.
     // Therefore, channel is terminated without relying on LoadBalancer to shutdown oobchannels.
     verify(mockTransportFactory, never()).newClientTransport(any(SocketAddress.class), anyString(),
-        anyString(), any(ProxyParameters.class));
+        anyString(), any(ProxyParameters.class), any(ChannelTracer.class));
   }
 
   @Test
@@ -1206,7 +1268,11 @@ public class ManagedChannelImplTest {
    */
   @Test
   public void informationPropagatedToNewStreamAndCallCredentials() {
-    createChannel(new FakeNameResolverFactory(true), NO_INTERCEPTOR);
+    createChannel(
+        new FakeNameResolverFactory(true),
+        NO_INTERCEPTOR,
+        singletonTracerFactory);
+
     CallOptions callOptions = CallOptions.DEFAULT.withCallCredentials(creds);
     final Context.Key<String> testKey = Context.key("testing");
     Context ctx = Context.current().withValue(testKey, "testValue");
@@ -1237,7 +1303,7 @@ public class ManagedChannelImplTest {
     Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
     subchannel.requestConnection();
     verify(mockTransportFactory).newClientTransport(
-        same(socketAddress), eq(authority), eq(userAgent), eq(noProxy));
+        same(socketAddress), eq(authority), eq(userAgent), eq(noProxy), eq(dummyTracer));
     MockClientTransportInfo transportInfo = transports.poll();
     final ConnectionClientTransport transport = transportInfo.transport;
     when(transport.getAttributes()).thenReturn(Attributes.EMPTY);
@@ -1384,7 +1450,8 @@ public class ManagedChannelImplTest {
   public void getState_withRequestConnect() {
     createChannel(
         new FakeNameResolverFactory(false), NO_INTERCEPTOR, false /* requestConnection */,
-        ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE);
+        ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE,
+        subchannelTracerFactory);
 
     assertEquals(IDLE, channel.getState(false));
     verify(mockLoadBalancerFactory, never()).newLoadBalancer(any(Helper.class));
@@ -1734,10 +1801,12 @@ public class ManagedChannelImplTest {
 
     assertEquals(0, getStats(channel).callsStarted);
     call.start(mockCallListener, new Metadata());
-    // only oob channel stats updated
-    assertEquals(1, getStats(oob1).callsStarted);
-    assertEquals(0, getStats(channel).callsStarted);
-    assertEquals(executor.currentTimeMillis(), getStats(oob1).lastCallStartedMillis);
+    // subchannel channel stats updated when the transport stats are updated.
+    // Since this test does not exercise the transport code path we don't expect them to be updated.
+    assertEquals(0, getStats(oob1).callsStarted);
+    // stats on the channel should be updated
+    assertEquals(1, getStats(channel).callsStarted);
+    assertEquals(executor.currentTimeMillis(), getStats(channel).lastCallStartedMillis);
   }
 
   @Test
@@ -1771,10 +1840,12 @@ public class ManagedChannelImplTest {
     assertEquals(0, getStats(oobChannel).callsFailed);
     streamListener.closed(Status.OK, new Metadata());
     callExecutor.runDueTasks();
-    // only oob channel stats updated
-    assertEquals(1, getStats(oobChannel).callsSucceeded);
+    // subchannel channel stats updated when the transport stats are updated.
+    // Since this test does not exercise the transport code path we don't expect them to be updated.
+    assertEquals(0, getStats(oobChannel).callsSucceeded);
     assertEquals(0, getStats(oobChannel).callsFailed);
-    assertEquals(0, getStats(channel).callsSucceeded);
+    // stats on the channel should be updated
+    assertEquals(1, getStats(channel).callsSucceeded);
     assertEquals(0, getStats(channel).callsFailed);
   }
 
@@ -1789,12 +1860,14 @@ public class ManagedChannelImplTest {
     assertEquals(0, getStats(channel).callsSucceeded);
     assertEquals(0, getStats(channel).callsFailed);
     oobExecutor.runDueTasks();
-    // only oob channel stats updated
-    verify(mockCallListener).onClose(any(Status.class), any(Metadata.class));
+    // subchannel channel stats updated when the transport stats are updated.
+    // Since this test does not exercise the transport code path we don't expect them to be updated.
     assertEquals(0, getStats(oob1).callsSucceeded);
-    assertEquals(1, getStats(oob1).callsFailed);
+    assertEquals(0, getStats(oob1).callsFailed);
+    // stats on the channel should be updated
+    verify(mockCallListener).onClose(any(Status.class), any(Metadata.class));
     assertEquals(0, getStats(channel).callsSucceeded);
-    assertEquals(0, getStats(channel).callsFailed);
+    assertEquals(1, getStats(channel).callsFailed);
   }
 
   private static class FakeBackoffPolicyProvider implements BackoffPolicy.Provider {

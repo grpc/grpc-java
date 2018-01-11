@@ -165,7 +165,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
 
         NettyServerTransport transport =
             new NettyServerTransport(
-                ch, protocolNegotiator, streamTracerFactories, transportTracerFactory.create(),
+                ch, protocolNegotiator, streamTracerFactories,
+                transportTracerFactory.createServerTracer(),
                 maxStreamsPerConnection,
                 flowControlWindow, maxMessageSize, maxHeaderListSize,
                 keepAliveTimeInNanos, keepAliveTimeoutInNanos,

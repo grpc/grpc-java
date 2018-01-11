@@ -47,6 +47,7 @@ import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.internal.ChannelTracer;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.StatsTraceContext;
@@ -99,7 +100,10 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
       .setResponseMarshaller(marshaller)
       .build();
 
-  private final TransportTracer transportTracer = new TransportTracer();
+  private final TransportTracer transportTracer = 
+      TransportTracer
+          .getDefaultFactory()
+          .createClientTracer(ChannelTracer.getDefaultFactory().create());
 
   /** Set up for test. */
   @Before

@@ -32,6 +32,7 @@ import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.AtomicBackoff;
+import io.grpc.internal.ChannelTracer;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
@@ -322,7 +323,7 @@ public final class NettyChannelBuilder
     return new NettyTransportFactory(dynamicParamsFactory, channelType, channelOptions,
         negotiationType, sslContext, eventLoopGroup, flowControlWindow, maxInboundMessageSize(),
         maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
-        transportTracerFactory.create());
+        transportTracerFactory);
   }
 
   @Override
@@ -458,7 +459,7 @@ public final class NettyChannelBuilder
     private final AtomicBackoff keepAliveTimeNanos;
     private final long keepAliveTimeoutNanos;
     private final boolean keepAliveWithoutCalls;
-    private final TransportTracer transportTracer;
+    private final TransportTracer.Factory transportTracerFactory;
 
     private boolean closed;
 
@@ -467,11 +468,11 @@ public final class NettyChannelBuilder
         NegotiationType negotiationType, SslContext sslContext, EventLoopGroup group,
         int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
         long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
-        TransportTracer transportTracer) {
+        TransportTracer.Factory transportTracerFactory) {
       this.channelType = channelType;
       this.negotiationType = negotiationType;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
-      this.transportTracer = transportTracer;
+      this.transportTracerFactory = transportTracerFactory;
 
       if (transportCreationParamsFilterFactory == null) {
         transportCreationParamsFilterFactory =
@@ -497,8 +498,9 @@ public final class NettyChannelBuilder
     @Override
     public ConnectionClientTransport newClientTransport(
         SocketAddress serverAddress, String authority, @Nullable String userAgent,
-        @Nullable ProxyParameters proxy) {
+        @Nullable ProxyParameters proxy, ChannelTracer subchannelTracer) {
       checkState(!closed, "The transport factory is closed.");
+      checkNotNull(subchannelTracer, "subchannel tracer must not be null");
 
       TransportCreationParamsFilter dparams =
           transportCreationParamsFilterFactory.create(serverAddress, authority, userAgent, proxy);
@@ -515,7 +517,7 @@ public final class NettyChannelBuilder
           dparams.getProtocolNegotiator(), flowControlWindow,
           maxMessageSize, maxHeaderListSize, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos,
           keepAliveWithoutCalls, dparams.getAuthority(), dparams.getUserAgent(),
-          tooManyPingsRunnable, transportTracer);
+          tooManyPingsRunnable, transportTracerFactory.createClientTracer(subchannelTracer));
       return transport;
     }
 

@@ -30,6 +30,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.InternalTransportStats;
+import io.grpc.internal.ChannelTracer;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.MessageFramer;
 import io.grpc.internal.StatsTraceContext;
@@ -99,7 +100,10 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
    */
   protected void manualSetUp() throws Exception {}
 
-  protected final TransportTracer transportTracer = new TransportTracer();
+  protected final TransportTracer transportTracer = 
+      TransportTracer
+          .getDefaultFactory()
+          .createClientTracer(ChannelTracer.getDefaultFactory().create());
   protected int flowControlWindow = DEFAULT_WINDOW_SIZE;
 
   private final FakeClock fakeClock = new FakeClock();

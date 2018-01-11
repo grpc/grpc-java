@@ -56,7 +56,10 @@ public class Http2ClientStreamTransportStateTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    transportTracer = new TransportTracer();
+    transportTracer = 
+      TransportTracer
+          .getDefaultFactory()
+          .createClientTracer(ChannelTracer.getDefaultFactory().create());
 
     doAnswer(new Answer<Void>() {
       @Override

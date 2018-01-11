@@ -31,6 +31,7 @@ import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.AtomicBackoff;
+import io.grpc.internal.ChannelTracer;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
@@ -427,7 +428,8 @@ public class OkHttpChannelBuilder extends
     @Override
     public ConnectionClientTransport newClientTransport(
         SocketAddress addr, String authority, @Nullable String userAgent,
-        @Nullable ProxyParameters proxy) {
+        @Nullable ProxyParameters proxy, ChannelTracer subchannelTracer) {
+      Preconditions.checkNotNull(subchannelTracer, "subchannel tracer must not be null");
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
       }
@@ -452,7 +454,7 @@ public class OkHttpChannelBuilder extends
           proxy == null ? null : proxy.username,
           proxy == null ? null : proxy.password,
           tooManyPingsRunnable,
-          transportTracerFactory.create());
+          transportTracerFactory.createClientTracer(subchannelTracer));
       if (enableKeepAlive) {
         transport.enableKeepAlive(
             true, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos, keepAliveWithoutCalls);

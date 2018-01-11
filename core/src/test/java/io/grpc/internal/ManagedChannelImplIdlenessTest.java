@@ -51,6 +51,7 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
+import io.grpc.internal.ChannelTracer.Factory;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -97,6 +98,13 @@ public class ManagedChannelImplIdlenessTest {
       new FixedObjectPool<Executor>(executor.getScheduledExecutorService());
   private final ObjectPool<Executor> oobExecutorPool =
       new FixedObjectPool<Executor>(oobExecutor.getScheduledExecutorService());
+  private final ChannelTracer subchannelTracer = ChannelTracer.getDefaultFactory().create();
+  private final ChannelTracer.Factory tracerFactory = new Factory() {
+    @Override
+    public ChannelTracer create() {
+      return subchannelTracer;
+    }
+  };
 
   @Mock private ClientTransportFactory mockTransportFactory;
   @Mock private LoadBalancer mockLoadBalancer;
@@ -143,7 +151,8 @@ public class ManagedChannelImplIdlenessTest {
         builder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         oobExecutorPool, timer.getStopwatchSupplier(),
         Collections.<ClientInterceptor>emptyList(),
-        GrpcUtil.NOOP_PROXY_DETECTOR, ChannelTracer.getDefaultFactory());
+        GrpcUtil.NOOP_PROXY_DETECTOR, ChannelTracer.getDefaultFactory().create(),
+        tracerFactory);
     newTransports = TestUtils.captureTransports(mockTransportFactory);
 
     for (int i = 0; i < 2; i++) {
@@ -157,7 +166,8 @@ public class ManagedChannelImplIdlenessTest {
     // Verify the initial idleness
     verify(mockLoadBalancerFactory, never()).newLoadBalancer(any(Helper.class));
     verify(mockTransportFactory, never()).newClientTransport(
-        any(SocketAddress.class), anyString(), anyString(), any(ProxyParameters.class));
+        any(SocketAddress.class), anyString(), anyString(), any(ProxyParameters.class),
+        any(ChannelTracer.class));
     verify(mockNameResolver, never()).start(any(NameResolver.Listener.class));
   }
 
@@ -355,12 +365,12 @@ public class ManagedChannelImplIdlenessTest {
     ManagedChannel oob = helper.createOobChannel(servers.get(0), "oobauthority");
     verify(mockTransportFactory, never())
         .newClientTransport(any(SocketAddress.class), same("oobauthority"), same(USER_AGENT),
-            same(NO_PROXY));
+            same(NO_PROXY), same(subchannelTracer));
     ClientCall<String, Integer> oobCall = oob.newCall(method, CallOptions.DEFAULT);
     oobCall.start(mockCallListener2, new Metadata());
     verify(mockTransportFactory)
         .newClientTransport(any(SocketAddress.class), same("oobauthority"), same(USER_AGENT),
-            same(NO_PROXY));
+            same(NO_PROXY), same(subchannelTracer));
     MockClientTransportInfo oobTransportInfo = newTransports.poll();
     assertEquals(0, newTransports.size());
     // The OOB transport reports in-use state

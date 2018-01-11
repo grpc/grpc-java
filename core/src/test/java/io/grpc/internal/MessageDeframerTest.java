@@ -91,7 +91,10 @@ public class MessageDeframerTest {
     private Listener listener = mock(Listener.class);
     private TestBaseStreamTracer tracer = new TestBaseStreamTracer();
     private StatsTraceContext statsTraceCtx = new StatsTraceContext(new StreamTracer[]{tracer});
-    private TransportTracer transportTracer = new TransportTracer();
+    private TransportTracer transportTracer =
+        TransportTracer
+            .getDefaultFactory()
+            .createClientTracer(ChannelTracer.getDefaultFactory().create());
 
     private MessageDeframer deframer = new MessageDeframer(listener, Codec.Identity.NONE,
             DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx, transportTracer, "test");

@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
@@ -245,9 +244,7 @@ final class OobChannel
 
   @Override
   public ListenableFuture<InternalChannelStats> getStats() {
-    SettableFuture<InternalChannelStats> ret = SettableFuture.create();
-    ret.set(channelTracer.getStats());
-    return ret;
+    return subchannel.getStats();
   }
 
   @Override
