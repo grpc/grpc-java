@@ -21,7 +21,7 @@ import java.util.List;
 
 @Internal
 public final class InternalServiceProviders {
-  private InternalServiceProviders {
+  private InternalServiceProviders() {
   }
 
   /**
