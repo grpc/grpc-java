@@ -158,6 +158,7 @@ Tagging the Release
    $ git push upstream v$MAJOR.$MINOR.$PATCH
    $ git push upstream v$MAJOR.$MINOR.x
    ```
+6. Close the release milestone.
 
 Setup Build Environment
 ---------------------------
