@@ -136,6 +136,11 @@ final class OobChannel extends ManagedChannel implements Instrumented<ChannelSta
         }
 
         @Override
+        CallTracer getSubchannelTracer() {
+          return subchannelCallsTracer;
+        }
+
+        @Override
         public void requestConnection() {
           subchannel.obtainActiveTransport();
         }

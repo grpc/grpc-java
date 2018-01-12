@@ -34,6 +34,11 @@ abstract class AbstractSubchannel extends LoadBalancer.Subchannel
   @Nullable
   abstract ClientTransport obtainActiveTransport();
 
+  /**
+   * Returns the {@link CallTracer} for this subchannel. Never {@code null}.
+   */
+  abstract CallTracer getSubchannelTracer();
+
   @Override
   public LogId getLogId() {
     return logId;

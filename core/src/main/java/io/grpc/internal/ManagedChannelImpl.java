@@ -1129,6 +1129,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
     }
 
     @Override
+    CallTracer getSubchannelTracer() {
+      return subchannelCallTracer;
+    }
+
+    @Override
     public void shutdown() {
       synchronized (shutdownLock) {
         if (shutdownRequested) {

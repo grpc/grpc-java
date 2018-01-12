@@ -24,7 +24,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.CallOptions;
@@ -50,7 +49,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.util.Collection;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -658,38 +656,66 @@ public final class GrpcUtil {
   @Nullable
   static ClientTransport getTransportFromPickResult(PickResult result, boolean isWaitForReady) {
     final ClientTransport transport;
-    Subchannel subchannel = result.getSubchannel();
+    final Subchannel subchannel = result.getSubchannel();
+    final CallTracer subchannelTracer;
     if (subchannel != null) {
       transport = ((AbstractSubchannel) subchannel).obtainActiveTransport();
+      subchannelTracer = ((AbstractSubchannel) subchannel).getSubchannelTracer();
     } else {
       transport = null;
+      subchannelTracer = null;
     }
     if (transport != null) {
-      final ClientStreamTracer.Factory streamTracerFactory = result.getStreamTracerFactory();
-      if (streamTracerFactory == null) {
-        return transport;
-      }
-      return new ClientTransport() {
+      final ClientTransport subchannelStatsTransport = new ForwardingClientTransport() {
         @Override
         public ClientStream newStream(
             MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
-          return transport.newStream(
+          final ClientStream streamDelegate = transport.newStream(method, headers, callOptions);
+          return new ForwardingClientStream() {
+            @Override
+            protected ClientStream delegate() {
+              return streamDelegate;
+            }
+
+            @Override
+            public void start(final ClientStreamListener listener) {
+              subchannelTracer.reportCallStarted();
+              super.start(new ForwardingClientStreamListener() {
+                @Override
+                protected ClientStreamListener delegate() {
+                  return listener;
+                }
+
+                @Override
+                public void closed(Status status, Metadata trailers) {
+                  subchannelTracer.reportCallEnded(status.isOk());
+                  super.closed(status, trailers);
+                }
+              });
+            }
+          };
+        }
+
+        @Override
+        protected ClientTransport delegate() {
+          return transport;
+        }
+      };
+      final ClientStreamTracer.Factory streamTracerFactory = result.getStreamTracerFactory();
+      if (streamTracerFactory == null) {
+        return subchannelStatsTransport;
+      }
+      return new ForwardingClientTransport() {
+        @Override
+        public ClientStream newStream(
+            MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
+          return subchannelStatsTransport.newStream(
               method, headers, callOptions.withStreamTracerFactory(streamTracerFactory));
         }
 
         @Override
-        public void ping(PingCallback callback, Executor executor) {
-          transport.ping(callback, executor);
-        }
-
-        @Override
-        public LogId getLogId() {
-          return transport.getLogId();
-        }
-
-        @Override
-        public ListenableFuture<TransportStats> getStats() {
-          return transport.getStats();
+        protected ClientTransport delegate() {
+          return subchannelStatsTransport;
         }
       };
     }

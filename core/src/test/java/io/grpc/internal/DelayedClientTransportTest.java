@@ -110,6 +110,7 @@ public class DelayedClientTransportTest {
         .thenReturn(mockRealStream);
     when(mockRealTransport2.newStream(same(method2), same(headers2), same(callOptions2)))
         .thenReturn(mockRealStream2);
+    when(mockSubchannel.getSubchannelTracer()).thenReturn(CallTracer.getDefaultFactory().create());
     delayedTransport.start(transportListener);
   }
 
@@ -149,7 +150,9 @@ public class DelayedClientTransportTest {
     assertEquals(1, fakeExecutor.runDueTasks());
     verify(mockRealTransport).newStream(same(method), same(headers), same(callOptions));
     stream.start(streamListener);
-    verify(mockRealStream).start(same(streamListener));
+    verify(mockRealStream).start(listenerCaptor.capture());
+    assertSame(
+        streamListener, ((ForwardingClientStreamListener) listenerCaptor.getValue()).delegate());
   }
 
   @Test public void transportTerminatedThenAssignTransport() {
@@ -373,8 +376,8 @@ public class DelayedClientTransportTest {
     // ff1 and wfr1 went through
     verify(mockRealTransport).newStream(method, headers, failFastCallOptions);
     verify(mockRealTransport2).newStream(method, headers, waitForReadyCallOptions);
-    assertSame(mockRealStream, ff1.getRealStream());
-    assertSame(mockRealStream2, wfr1.getRealStream());
+    assertSame(mockRealStream, ((ForwardingClientStream) ff1.getRealStream()).delegate());
+    assertSame(mockRealStream2, ((ForwardingClientStream) wfr1.getRealStream()).delegate());
     // The ff2 has failed due to picker returning an error
     assertSame(Status.UNAVAILABLE, ((FailingClientStream) ff2.getRealStream()).getError());
     // Other streams are still buffered
@@ -408,15 +411,15 @@ public class DelayedClientTransportTest {
     inOrder.verifyNoMoreInteractions();
     fakeExecutor.runDueTasks();
     assertEquals(0, fakeExecutor.numPendingTasks());
-    assertSame(mockRealStream, ff3.getRealStream());
-    assertSame(mockRealStream2, ff4.getRealStream());
-    assertSame(mockRealStream2, wfr2.getRealStream());
-    assertSame(mockRealStream2, wfr4.getRealStream());
+    assertSame(mockRealStream, ((ForwardingClientStream) ff3.getRealStream()).delegate());
+    assertSame(mockRealStream2, ((ForwardingClientStream) ff4.getRealStream()).delegate());
+    assertSame(mockRealStream2, ((ForwardingClientStream) wfr2.getRealStream()).delegate());
+    assertSame(mockRealStream2, ((ForwardingClientStream) wfr4.getRealStream()).delegate());
 
     // If there is an executor in the CallOptions, it will be used to create the real stream.
     assertNull(wfr3.getRealStream());
     wfr3Executor.runDueTasks();
-    assertSame(mockRealStream, wfr3.getRealStream());
+    assertSame(mockRealStream, ((ForwardingClientStream) wfr3.getRealStream()).delegate());
 
     // New streams will use the last picker
     DelayedStream wfr5 = (DelayedStream) delayedTransport.newStream(
@@ -439,7 +442,7 @@ public class DelayedClientTransportTest {
     verify(picker).pickSubchannel(
         new PickSubchannelArgsImpl(method, headers, waitForReadyCallOptions));
     fakeExecutor.runDueTasks();
-    assertSame(mockRealStream, wfr5.getRealStream());
+    assertSame(mockRealStream, ((ForwardingClientStream) wfr5.getRealStream()).delegate());
     assertEquals(0, delayedTransport.getPendingStreamsCount());
     verify(transportListener).transportTerminated();
   }
@@ -461,7 +464,7 @@ public class DelayedClientTransportTest {
     ClientStream stream = delayedTransport.newStream(method, headers, CallOptions.DEFAULT);
     verify(picker).pickSubchannel(new PickSubchannelArgsImpl(method, headers, CallOptions.DEFAULT));
     verify(subchannel).obtainActiveTransport();
-    assertSame(mockRealStream, stream);
+    assertSame(mockRealStream, ((ForwardingClientStream) stream).delegate());
   }
 
   @Test
