@@ -670,7 +670,7 @@ public final class GrpcUtil {
         @Override
         public ClientStream newStream(
             MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
-          final ClientStream streamDelegate = transport.newStream(method, headers, callOptions);
+          final ClientStream streamDelegate = super.newStream(method, headers, callOptions);
           return new ForwardingClientStream() {
             @Override
             protected ClientStream delegate() {
@@ -709,7 +709,7 @@ public final class GrpcUtil {
         @Override
         public ClientStream newStream(
             MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
-          return subchannelStatsTransport.newStream(
+          return super.newStream(
               method, headers, callOptions.withStreamTracerFactory(streamTracerFactory));
         }
 
