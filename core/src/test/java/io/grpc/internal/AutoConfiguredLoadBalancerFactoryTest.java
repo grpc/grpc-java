@@ -41,6 +41,7 @@ import org.junit.runners.JUnit4;
 /**
  * Unit tests for {@link AutoConfiguredLoadBalancerFactory}.
  */
+// TODO(carl-mastrangelo): Add tests for selection logic.
 @RunWith(JUnit4.class)
 public class AutoConfiguredLoadBalancerFactoryTest {
   private final AutoConfiguredLoadBalancerFactory lbf = new AutoConfiguredLoadBalancerFactory();
