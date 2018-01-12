@@ -16,6 +16,7 @@
 
 package io.grpc;
 
+import io.grpc.internal.ProxyDetector;
 import java.net.URI;
 import java.util.List;
 import javax.annotation.Nullable;
@@ -104,6 +105,12 @@ public abstract class NameResolver {
      */
     @Nullable
     public abstract NameResolver newNameResolver(URI targetUri, Attributes params);
+
+    @Nullable
+    public NameResolver newNameResolver(URI targetUri, Attributes params,
+        ProxyDetector proxyDetector) {
+      return newNameResolver(targetUri, params);
+    }
 
     /**
      * Returns the default scheme, which will be used to construct a URI when {@link
