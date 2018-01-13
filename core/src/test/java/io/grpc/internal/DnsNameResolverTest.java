@@ -37,6 +37,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.DnsNameResolver.DelegateResolver;
+import io.grpc.internal.DnsNameResolver.JndiResolver;
 import io.grpc.internal.DnsNameResolver.ResolutionResults;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.net.InetAddress;
@@ -383,6 +384,17 @@ public class DnsNameResolverTest {
     assertThat(eag.getAddresses()).hasSize(1);
     SocketAddress socketAddress = eag.getAddresses().get(0);
     assertTrue(((InetSocketAddress) socketAddress).isUnresolved());
+  }
+
+  @Test
+  public void unquoteRemovesJndiFormatting() {
+    assertEquals("blah", JndiResolver.unquote("blah"));
+    assertEquals("", JndiResolver.unquote("\"\""));
+    assertEquals("blahblah", JndiResolver.unquote("blah blah"));
+    assertEquals("blahfoo blah", JndiResolver.unquote("blah \"foo blah\""));
+    assertEquals("blah blah", JndiResolver.unquote("\"blah blah\""));
+    assertEquals("blah\"blah", JndiResolver.unquote("\"blah\\\"blah\""));
+    assertEquals("blah\\blah", JndiResolver.unquote("\"blah\\\\blah\""));
   }
 
   private void testInvalidUri(URI uri) {
