@@ -1694,7 +1694,7 @@ public class ManagedChannelImplTest {
     transportInfo.listener.transportReady();
     assertEquals(READY, getStats(subchannel).state);
 
-    assertEquals(CONNECTING, getStats(subchannel).state);
+    assertEquals(CONNECTING, getStats(channel).state);
     helper.updateBalancingState(READY, mockPicker);
     assertEquals(READY, getStats(channel).state);
 

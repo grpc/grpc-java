@@ -271,10 +271,11 @@ public final class ManagedChannelImpl
   @Override
   public ListenableFuture<InternalChannelStats> getStats() {
     SettableFuture<InternalChannelStats> ret = SettableFuture.create();
-    ret.set(channelTracer.getStatsBuilder()
-        .setTarget(target)
-        .setState(channelStateManager.getState())
-        .build());
+    InternalChannelStats.Builder builder = new InternalChannelStats.Builder();
+    channelTracer.updateBuilder(builder);
+    builder.setTarget(target)
+        .setState(channelStateManager.getState());
+    ret.set(builder.build());
     return ret;
   }
 
@@ -1132,10 +1133,11 @@ public final class ManagedChannelImpl
     @Override
     public ListenableFuture<InternalChannelStats> getStats() {
       SettableFuture<InternalChannelStats> ret = SettableFuture.create();
-      ret.set(subchannelTracer.getStatsBuilder()
-          .setTarget(target)
-          .setState(subchannel.getState())
-          .build());
+      InternalChannelStats.Builder builder = new InternalChannelStats.Builder();
+      subchannelTracer.updateBuilder(builder);
+      builder.setTarget(target)
+          .setState(subchannel.getState());
+      ret.set(builder.build());
       return ret;
     }
   }
