@@ -46,9 +46,13 @@ final class ChannelTracer {
     }
   }
 
-  public InternalChannelStats getStats() {
-    return new InternalChannelStats(
-        callsStarted.value(), callsSucceeded.value(), callsFailed.value(), lastCallStartedMillis);
+  public InternalChannelStats.Builder getStatsBuilder() {
+    return new InternalChannelStats
+        .Builder()
+        .setCallsStarted(callsStarted.value())
+        .setCallsSucceeded(callsSucceeded.value())
+        .setCallsFailed(callsFailed.value())
+        .setLastCallStartedMillis(lastCallStartedMillis);
   }
 
   @VisibleForTesting
