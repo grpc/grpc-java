@@ -40,6 +40,7 @@ import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
 import io.grpc.internal.testing.StatsTestUtils.FakeTagContextBinarySerializer;
 import io.grpc.internal.testing.StatsTestUtils.FakeTagger;
 import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.List;
@@ -62,7 +63,8 @@ public class AbstractManagedChannelImplBuilderTest {
       };
 
   private Builder builder = new Builder("fake");
-  private Builder directAddressBuilder = new Builder(new SocketAddress(){}, "fake");
+  private Builder directAddressBuilder = new Builder(new SocketAddress() {
+  }, "fake");
 
   @Test
   public void executor_default() {
@@ -198,14 +200,16 @@ public class AbstractManagedChannelImplBuilderTest {
   @Test
   public void proxyDetector_normal() {
     ProxyDetector defaultValue = builder.proxyDetector;
-    builder.proxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR);
+    Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress("some.host", 100));
+    builder.proxy(proxy);
     assertNotEquals(defaultValue, builder.proxyDetector);
-    assertEquals(GrpcUtil.NOOP_PROXY_DETECTOR, builder.proxyDetector);
+    assertEquals(proxy.address(),
+        builder.proxyDetector.proxyFor(new InetSocketAddress("some.other.host", 200)).proxyAddress);
   }
 
   @Test(expected = NullPointerException.class)
   public void proxyDetector_null() {
-    builder.proxyDetector(null);
+    builder.proxy(null);
   }
 
   @Test

@@ -81,7 +81,7 @@ final class DnsNameResolver extends NameResolver {
   private final int port;
   private final Resource<ScheduledExecutorService> timerServiceResource;
   private final Resource<ExecutorService> executorResource;
-  private final ProxyDetector proxyDetector;
+  private final boolean usingProxy;
   @GuardedBy("this")
   private boolean shutdown;
   @GuardedBy("this")
@@ -95,14 +95,20 @@ final class DnsNameResolver extends NameResolver {
   @GuardedBy("this")
   private Listener listener;
 
-  DnsNameResolver(@Nullable String nsAuthority, String name, Attributes params,
+  DnsNameResolver(@Nullable String nsAuthority, URI targetUri, Attributes params,
       Resource<ScheduledExecutorService> timerServiceResource,
       Resource<ExecutorService> executorResource,
-      ProxyDetector proxyDetector) {
+      boolean usingProxy) {
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
     this.timerServiceResource = timerServiceResource;
     this.executorResource = executorResource;
+    this.usingProxy = usingProxy;
+
+    String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
+    Preconditions.checkArgument(targetPath.startsWith("/"),
+        "the path component (%s) of the target (%s) must start with '/'", targetPath, targetUri);
+    String name = targetPath.substring(1);
     // Must prepend a "//" to the name when constructing a URI, otherwise it will be treated as an
     // opaque URI, thus the authority and host of the resulted URI would be null.
     URI nameUri = URI.create("//" + name);
@@ -120,7 +126,6 @@ final class DnsNameResolver extends NameResolver {
     } else {
       port = nameUri.getPort();
     }
-    this.proxyDetector = proxyDetector;
   }
 
   @Override
@@ -160,9 +165,8 @@ final class DnsNameResolver extends NameResolver {
           resolving = true;
         }
         try {
-          InetSocketAddress destination = InetSocketAddress.createUnresolved(host, port);
-          ProxyParameters proxy = proxyDetector.proxyFor(destination);
-          if (proxy != null) {
+          if (usingProxy) {
+            InetSocketAddress destination = InetSocketAddress.createUnresolved(host, port);
             EquivalentAddressGroup server = new EquivalentAddressGroup(destination);
             savedListener.onAddresses(Collections.singletonList(server), Attributes.EMPTY);
             return;

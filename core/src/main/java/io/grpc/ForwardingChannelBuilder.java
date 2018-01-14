@@ -16,7 +16,7 @@
 
 package io.grpc;
 
-import io.grpc.internal.ProxyDetector;
+import java.net.Proxy;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -146,8 +146,8 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
     return thisT();
   }
 
-  @Override public T proxyDetector(ProxyDetector proxyDetector) {
-    delegate().proxyDetector(proxyDetector);
+  @Override public T proxy(Proxy proxy) {
+    delegate().proxy(proxy);
     return thisT();
   }
 

@@ -587,6 +587,46 @@ public final class GrpcUtil {
   }
 
   /**
+   * Constructs a {@link InetSocketAddress} from a {@link URI} without resolving the address.
+   * @param uri the uri
+   * @param defaultPort the default port to use if {@param uri} doesn't contain a port
+   * @return the unresolved addresss
+   */
+  public static @Nullable InetSocketAddress unresolvedAddress(URI uri,
+      @Nullable Integer defaultPort) {
+    if (uri.getPath() == null) {
+      // todo(snowp): handle localhost here instead of just returning null?
+      return null;
+    }
+    String targetPath = Preconditions.checkNotNull(uri.getRawPath(), "uri");
+    Preconditions.checkArgument(targetPath.startsWith("/"),
+        "the path component (%s) of the target (%s) must start with '/'", targetPath, uri);
+    String name = targetPath.substring(1);
+    // Must prepend a "//" to the name when constructing a URI, otherwise it will be treated as an
+    // opaque URI, thus the authority and host of the resulted URI would be null.
+    URI nameUri = URI.create("//" + name);
+
+    int port;
+    if (nameUri.getPort() == -1) {
+      if (defaultPort != null) {
+        port = defaultPort;
+      } else {
+        throw new IllegalArgumentException(
+            "address '" + uri + "' doesn't contain a port, and default port is not provided");
+      }
+    } else {
+      port = nameUri.getPort();
+    }
+
+    String host = nameUri.getHost();
+    if (host != null) {
+      return InetSocketAddress.createUnresolved(host, port);
+    } else {
+      return null;
+    }
+  }
+
+  /**
    * Marshals a nanoseconds representation of the timeout to and from a string representation,
    * consisting of an ASCII decimal representation of a number with at most 8 digits, followed by a
    * unit:

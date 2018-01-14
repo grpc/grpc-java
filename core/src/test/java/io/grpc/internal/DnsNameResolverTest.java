@@ -28,7 +28,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Iterables;
@@ -112,21 +111,21 @@ public class DnsNameResolverTest {
   private ArgumentCaptor<Status> statusCaptor;
 
   private DnsNameResolver newResolver(String name, int port) {
-    return newResolver(name, port, mockResolver, GrpcUtil.NOOP_PROXY_DETECTOR);
+    return newResolver(name, port, mockResolver, false);
   }
 
   private DnsNameResolver newResolver(
       String name,
       int port,
       DelegateResolver delegateResolver,
-      ProxyDetector proxyDetector) {
+      boolean proxy) {
     DnsNameResolver dnsResolver = new DnsNameResolver(
         null,
-        name,
+        URI.create("/" + name),
         Attributes.newBuilder().set(NameResolver.Factory.PARAMS_DEFAULT_PORT, port).build(),
         fakeTimerServiceResource,
         fakeExecutorResource,
-        proxyDetector);
+        proxy);
     dnsResolver.setDelegateResolver(delegateResolver);
     return dnsResolver;
   }
@@ -363,15 +362,9 @@ public class DnsNameResolverTest {
   public void doNotResolveWhenProxyDetected() throws Exception {
     final String name = "foo.googleapis.com";
     final int port = 81;
-    ProxyDetector alwaysDetectProxy = mock(ProxyDetector.class);
-    ProxyParameters proxyParameters = new ProxyParameters(
-        InetSocketAddress.createUnresolved("proxy.example.com", 1000),
-        "username",
-        "password");
-    when(alwaysDetectProxy.proxyFor(any(SocketAddress.class)))
-        .thenReturn(proxyParameters);
+
     DelegateResolver unusedResolver = mock(DelegateResolver.class);
-    DnsNameResolver resolver = newResolver(name, port, unusedResolver, alwaysDetectProxy);
+    DnsNameResolver resolver = newResolver(name, port, unusedResolver, true);
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
     verify(unusedResolver, never()).resolve(any(String.class));

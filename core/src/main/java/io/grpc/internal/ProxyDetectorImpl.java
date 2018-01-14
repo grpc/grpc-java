@@ -20,6 +20,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Supplier;
+import com.google.common.collect.ImmutableList;
+import java.io.IOException;
 import java.net.Authenticator;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -90,6 +92,14 @@ class ProxyDetectorImpl implements ProxyDetector {
    */
   public ProxyDetectorImpl() {
     this(DEFAULT_PROXY_SELECTOR, DEFAULT_AUTHENTICATOR, System.getenv(GRPC_PROXY_ENV_VAR));
+  }
+
+  /**
+   * A proxy selector that always returns the provided proxy and
+   * {@link ProxyDetectorImpl.AuthenticationProvider} to detect proxy paramters
+   */
+  public ProxyDetectorImpl(Proxy proxy) {
+    this(proxySelectorSupplier(proxy), DEFAULT_AUTHENTICATOR, System.getenv(GRPC_PROXY_ENV_VAR));
   }
 
   @VisibleForTesting
@@ -186,6 +196,22 @@ class ProxyDetectorImpl implements ProxyDetector {
             + "this JVM.");
     // Return an unresolved InetSocketAddress to avoid DNS lookup
     return InetSocketAddress.createUnresolved(parts[0], port);
+  }
+
+  private static Supplier<ProxySelector> proxySelectorSupplier(final Proxy proxy) {
+    return new Supplier<ProxySelector>() {
+      @Override public ProxySelector get() {
+        return new ProxySelector() {
+          @Override public List<Proxy> select(URI uri) {
+            return ImmutableList.of(proxy);
+          }
+
+          @Override public void connectFailed(URI uri, SocketAddress sa, IOException ioe) {
+            // do nothing
+          }
+        };
+      }
+    };
   }
 
   /**

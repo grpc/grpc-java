@@ -16,7 +16,7 @@
 
 package io.grpc;
 
-import io.grpc.internal.ProxyDetector;
+import java.net.Proxy;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -281,13 +281,13 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Sets the {@link ProxyDetector} to use when resolving proxy parameters for outgoing
+   * Sets the {@link Proxy} to use when resolving proxy parameters for outgoing
    * connections.
    *
-   * @param proxyDetector the proxy detector to use
+   * @param proxy the proxy to use
    * @return this
    */
-  public T proxyDetector(ProxyDetector proxyDetector) {
+  public T proxy(Proxy proxy) {
     // intentional nop
     return thisT();
   }

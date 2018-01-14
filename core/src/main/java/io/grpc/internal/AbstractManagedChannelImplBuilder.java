@@ -34,6 +34,7 @@ import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.PickFirstBalancerFactory;
 import io.opencensus.trace.Tracing;
+import java.net.Proxy;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -151,9 +152,9 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   @Override
-  public T proxyDetector(ProxyDetector proxyDetector) {
-    checkNotNull(proxyDetector, "proxy detector cannot be null");
-    this.proxyDetector = proxyDetector;
+  public T proxy(final Proxy proxy) {
+    checkNotNull(proxy, "proxy cannot be null");
+    this.proxyDetector = new ProxyDetectorImpl(proxy);
     return thisT();
   }
 

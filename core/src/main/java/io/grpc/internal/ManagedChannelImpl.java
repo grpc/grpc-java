@@ -501,6 +501,7 @@ public final class ManagedChannelImpl
     // "dns:///".
     URI targetUri = null;
     StringBuilder uriSyntaxErrors = new StringBuilder();
+    Integer defaultPort = nameResolverParams.get(NameResolver.Factory.PARAMS_DEFAULT_PORT);
     try {
       targetUri = new URI(target);
       // For "localhost:8080" this would likely cause newNameResolver to return null, because
@@ -511,8 +512,8 @@ public final class ManagedChannelImpl
       uriSyntaxErrors.append(e.getMessage());
     }
     if (targetUri != null) {
-      NameResolver resolver = nameResolverFactory.newNameResolver(
-          targetUri, nameResolverParams, proxyDetector);
+      NameResolver resolver = null;
+      resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverParams);
       if (resolver != null) {
         return resolver;
       }
@@ -531,7 +532,8 @@ public final class ManagedChannelImpl
         throw new IllegalArgumentException(e);
       }
       NameResolver resolver = nameResolverFactory.newNameResolver(
-          targetUri, nameResolverParams, proxyDetector);
+          targetUri, nameResolverParams,
+          proxyDetector.proxyFor(GrpcUtil.unresolvedAddress(targetUri, defaultPort)) != null);
       if (resolver != null) {
         return resolver;
       }

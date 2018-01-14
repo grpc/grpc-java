@@ -16,7 +16,6 @@
 
 package io.grpc;
 
-import io.grpc.internal.ProxyDetector;
 import java.net.URI;
 import java.util.List;
 import javax.annotation.Nullable;
@@ -107,8 +106,7 @@ public abstract class NameResolver {
     public abstract NameResolver newNameResolver(URI targetUri, Attributes params);
 
     @Nullable
-    public NameResolver newNameResolver(URI targetUri, Attributes params,
-        ProxyDetector proxyDetector) {
+    public NameResolver newNameResolver(URI targetUri, Attributes params, boolean usingProxy) {
       return newNameResolver(targetUri, params);
     }
 
