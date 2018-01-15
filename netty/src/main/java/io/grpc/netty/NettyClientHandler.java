@@ -24,6 +24,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import io.grpc.Attributes;
+import io.grpc.ClientTransportFilter;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusException;
@@ -69,6 +70,7 @@ import io.netty.handler.codec.http2.StreamBufferingEncoder;
 import io.netty.handler.codec.http2.WeightedFairQueueByteDistributor;
 import io.netty.handler.logging.LogLevel;
 import java.nio.channels.ClosedChannelException;
+import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -99,6 +101,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   private final KeepAliveManager keepAliveManager;
   // Returns new unstarted stopwatches
   private final Supplier<Stopwatch> stopwatchFactory;
+  private final List<ClientTransportFilter> transportFilters;
   private final TransportTracer transportTracer;
   private WriteQueue clientWriteQueue;
   private Http2Ping ping;
@@ -111,6 +114,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       int maxHeaderListSize,
       Supplier<Stopwatch> stopwatchFactory,
       Runnable tooManyPingsRunnable,
+      List<ClientTransportFilter> transportFilters,
       TransportTracer transportTracer) {
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive");
     Http2HeadersDecoder headersDecoder = new GrpcHttp2ClientHeadersDecoder(maxHeaderListSize);
@@ -133,6 +137,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         maxHeaderListSize,
         stopwatchFactory,
         tooManyPingsRunnable,
+        transportFilters,
         transportTracer);
   }
 
@@ -147,6 +152,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       int maxHeaderListSize,
       Supplier<Stopwatch> stopwatchFactory,
       Runnable tooManyPingsRunnable,
+      List<ClientTransportFilter> transportFilters,
       TransportTracer transportTracer) {
     Preconditions.checkNotNull(connection, "connection");
     Preconditions.checkNotNull(frameReader, "frameReader");
@@ -196,6 +202,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         keepAliveManager,
         stopwatchFactory,
         tooManyPingsRunnable,
+        transportFilters,
         transportTracer);
   }
 
@@ -207,11 +214,13 @@ class NettyClientHandler extends AbstractNettyHandler {
       KeepAliveManager keepAliveManager,
       Supplier<Stopwatch> stopwatchFactory,
       final Runnable tooManyPingsRunnable,
+      List<ClientTransportFilter> transportFilters,
       TransportTracer transportTracer) {
     super(/* channelUnused= */ null, decoder, encoder, settings);
     this.lifecycleManager = lifecycleManager;
     this.keepAliveManager = keepAliveManager;
     this.stopwatchFactory = stopwatchFactory;
+    this.transportFilters = Preconditions.checkNotNull(transportFilters);
     this.transportTracer = Preconditions.checkNotNull(transportTracer);
 
     // Set the frame listener on the decoder.
@@ -370,6 +379,10 @@ class NettyClientHandler extends AbstractNettyHandler {
    */
   @Override
   public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+    for (ClientTransportFilter filter : transportFilters) {
+      filter.transportTerminated(attributes);
+    }
+
     try {
       logger.fine("Network channel is closed");
       Status status = Status.UNAVAILABLE.withDescription("Network closed for unknown reason");
@@ -696,6 +709,13 @@ class NettyClientHandler extends AbstractNettyHandler {
       if (firstSettings) {
         firstSettings = false;
         lifecycleManager.notifyReady();
+
+        Attributes temporary = attributes;
+        for (ClientTransportFilter filter : transportFilters) {
+          temporary = Preconditions.checkNotNull(filter.transportReady(temporary),
+              "Filter %s returned null", filter);
+        }
+        attributes = temporary;
       }
     }
 

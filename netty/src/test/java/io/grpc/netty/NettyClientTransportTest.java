@@ -38,6 +38,7 @@ import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ClientTransportFilter;
 import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
@@ -80,6 +81,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -171,7 +173,7 @@ public class NettyClientTransportTest {
         address, NioSocketChannel.class, channelOptions, group, newNegotiator(),
         DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
         KEEPALIVE_TIME_NANOS_DISABLED, 1L, false, authority, null /* user agent */,
-        tooManyPingsRunnable, new TransportTracer());
+        tooManyPingsRunnable, new ArrayList<ClientTransportFilter>(), new TransportTracer());
     transports.add(transport);
     callMeMaybe(transport.start(clientTransportListener));
 
@@ -375,7 +377,7 @@ public class NettyClientTransportTest {
         address, CantConstructChannel.class, new HashMap<ChannelOption<?>, Object>(), group,
         newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1, false, authority,
-        null, tooManyPingsRunnable, new TransportTracer());
+        null, tooManyPingsRunnable, new ArrayList<ClientTransportFilter>(), new TransportTracer());
     transports.add(transport);
 
     // Should not throw
@@ -513,6 +515,43 @@ public class NettyClientTransportTest {
     assertNull(transport.keepAliveManager());
   }
 
+  @Test
+  public void transportFilter() throws Exception {
+    startServer();
+
+    final CountDownLatch countDownLatch = new CountDownLatch(2);
+
+    ClientTransportFilter transportFilter = new ClientTransportFilter() {
+      @Override
+      public Attributes transportReady(Attributes transportAttrs) {
+        countDownLatch.countDown();
+        return transportAttrs;
+      }
+
+      @Override
+      public void transportTerminated(Attributes transportAttrs) {
+        countDownLatch.countDown();
+      }
+    };
+
+    List<ClientTransportFilter> transportFilters = new ArrayList<ClientTransportFilter>();
+    transportFilters.add(transportFilter);
+
+    NettyClientTransport transport = new NettyClientTransport(
+        address, NioSocketChannel.class, new HashMap<ChannelOption<?>, Object>(), group,
+        newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
+        GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
+        KEEPALIVE_TIME_NANOS_DISABLED, 1L, false, authority,
+        null, tooManyPingsRunnable, transportFilters, new TransportTracer());
+
+    callMeMaybe(transport.start(clientTransportListener));
+    Rpc rpc = new Rpc(transport).halfClose();
+    rpc.waitForResponse();
+
+    transport.shutdown(Status.UNAVAILABLE);
+    countDownLatch.await();
+  }
+
   private Throwable getRootCause(Throwable t) {
     if (t.getCause() == null) {
       return t;
@@ -544,7 +583,7 @@ public class NettyClientTransportTest {
         DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize,
         keepAliveTimeNano, keepAliveTimeoutNano,
         false, authority, userAgent, tooManyPingsRunnable,
-        new TransportTracer());
+        new ArrayList<ClientTransportFilter>(), new TransportTracer());
     transports.add(transport);
     return transport;
   }

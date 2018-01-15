@@ -121,6 +121,15 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T intercept(ClientInterceptor... interceptors);
 
   /**
+   * Adds a {@link ClientTransportFilter}. The order of filters being added is the order they will
+   * be executed.
+   *
+   * @return this
+   * @since 1.10.0
+   */
+  public abstract T addTransportFilter(ClientTransportFilter filter);
+
+  /**
    * Provides a custom {@code User-Agent} for the application.
    *
    * <p>It's an optional parameter. The library will provide a user agent independent of this

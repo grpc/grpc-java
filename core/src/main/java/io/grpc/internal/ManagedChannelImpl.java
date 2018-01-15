@@ -34,6 +34,7 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
+import io.grpc.ClientTransportFilter;
 import io.grpc.CompressorRegistry;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -139,6 +140,7 @@ public final class ManagedChannelImpl
    * any interceptors this will just be {@link RealChannel}.
    */
   private final Channel interceptorChannel;
+  private final List<ClientTransportFilter> transportFilters;
   @Nullable private final String userAgent;
 
   // Only null after channel is terminated. Must be assigned from the channelExecutor.
@@ -454,6 +456,7 @@ public final class ManagedChannelImpl
       ObjectPool<? extends Executor> oobExecutorPool,
       Supplier<Stopwatch> stopwatchSupplier,
       List<ClientInterceptor> interceptors,
+      List<ClientTransportFilter> transportFilters,
       ProxyDetector proxyDetector,
       ChannelTracer.Factory channelTracerFactory) {
     this.target = checkNotNull(builder.target, "target");
@@ -474,6 +477,7 @@ public final class ManagedChannelImpl
     this.transportFactory =
         new CallCredentialsApplyingTransportFactory(clientTransportFactory, this.executor);
     this.interceptorChannel = ClientInterceptors.intercept(new RealChannel(), interceptors);
+    this.transportFilters = checkNotNull(transportFilters, "transportFilters");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     if (builder.idleTimeoutMillis == IDLE_TIMEOUT_MILLIS_DISABLE) {
       this.idleTimeoutMillis = builder.idleTimeoutMillis;

@@ -23,6 +23,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.ClientInterceptor;
+import io.grpc.ClientTransportFilter;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
@@ -93,6 +94,9 @@ public abstract class AbstractManagedChannelImplBuilder
   ObjectPool<? extends Executor> executorPool = DEFAULT_EXECUTOR_POOL;
 
   private final List<ClientInterceptor> interceptors = new ArrayList<ClientInterceptor>();
+
+  protected final List<ClientTransportFilter> transportFilters =
+      new ArrayList<ClientTransportFilter>();
 
   // Access via getter, which may perform authority override as needed
   private NameResolver.Factory nameResolverFactory = DEFAULT_NAME_RESOLVER_FACTORY;
@@ -198,6 +202,12 @@ public abstract class AbstractManagedChannelImplBuilder
   @Override
   public final T intercept(ClientInterceptor... interceptors) {
     return intercept(Arrays.asList(interceptors));
+  }
+
+  @Override
+  public final T addTransportFilter(ClientTransportFilter filter) {
+    this.transportFilters.add(filter);
+    return thisT();
   }
 
   @Override
@@ -336,6 +346,7 @@ public abstract class AbstractManagedChannelImplBuilder
         SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
         GrpcUtil.STOPWATCH_SUPPLIER,
         getEffectiveInterceptors(),
+        this.transportFilters,
         GrpcUtil.getProxyDetector(),
         ChannelTracer.getDefaultFactory());
   }

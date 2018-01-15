@@ -25,6 +25,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ClientTransportFilter;
 import io.grpc.InternalLogId;
 import io.grpc.InternalTransportStats;
 import io.grpc.Metadata;
@@ -51,6 +52,7 @@ import io.netty.handler.codec.http2.StreamBufferingEncoder.Http2ChannelClosedExc
 import io.netty.util.AsciiString;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.logging.Logger;
@@ -87,6 +89,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private Status statusExplainingWhyTheChannelIsNull;
   /** Since not thread-safe, may only be used from event loop. */
   private ClientTransportLifecycleManager lifecycleManager;
+  private List<ClientTransportFilter> transportFilters;
   /** Since not thread-safe, may only be used from event loop. */
   private final TransportTracer transportTracer;
 
@@ -96,7 +99,8 @@ class NettyClientTransport implements ConnectionClientTransport {
       ProtocolNegotiator negotiator, int flowControlWindow, int maxMessageSize,
       int maxHeaderListSize, long keepAliveTimeNanos, long keepAliveTimeoutNanos,
       boolean keepAliveWithoutCalls, String authority, @Nullable String userAgent,
-      Runnable tooManyPingsRunnable, TransportTracer transportTracer) {
+      Runnable tooManyPingsRunnable, List<ClientTransportFilter> transportFilters,
+      TransportTracer transportTracer) {
     this.negotiator = Preconditions.checkNotNull(negotiator, "negotiator");
     this.address = Preconditions.checkNotNull(address, "address");
     this.group = Preconditions.checkNotNull(group, "group");
@@ -112,6 +116,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.userAgent = new AsciiString(GrpcUtil.getGrpcUserAgent("netty", userAgent));
     this.tooManyPingsRunnable =
         Preconditions.checkNotNull(tooManyPingsRunnable, "tooManyPingsRunnable");
+    this.transportFilters = Preconditions.checkNotNull(transportFilters, "transportFilters");
     this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
   }
 
@@ -192,6 +197,7 @@ class NettyClientTransport implements ConnectionClientTransport {
         maxHeaderListSize,
         GrpcUtil.STOPWATCH_SUPPLIER,
         tooManyPingsRunnable,
+        transportFilters,
         transportTracer);
     NettyHandlerSettings.setAutoWindow(handler);
 
