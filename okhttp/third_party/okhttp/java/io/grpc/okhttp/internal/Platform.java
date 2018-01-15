@@ -36,7 +36,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
 import okio.Buffer;
@@ -63,14 +62,26 @@ public class Platform {
   public static final Logger logger = Logger.getLogger(Platform.class.getName());
 
   /**
-   * List of security providers to use in order of preference.
+   * List of preferred security provider names, in order of preference. These will be used, if
+   * present, followed by {@code SECONDARY_ANDROID_SECURITY_PROVIDER_CLASSES} if these are
+   * unavailable.
    */
-  private static final String[] ANDROID_SECURITY_PROVIDERS = new String[]{
-      // See https://developer.android.com/training/articles/security-gms-provider.html
-      "com.google.android.gms.org.conscrypt.OpenSSLProvider",
-      "com.android.org.conscrypt.OpenSSLProvider",
-      "org.conscrypt.OpenSSLProvider",
-      "org.apache.harmony.xnet.provider.jsse.OpenSSLProvider"};
+  private static final String[] ANDROID_SECURITY_PROVIDERS =
+      new String[] {
+        // See https://developer.android.com/training/articles/security-gms-provider.html
+        "GmsCore_OpenSSL",
+        "Conscrypt"
+      };
+  /**
+   * List of secondary security provider class names to use in order of preference, if the
+   * preferred providers are unavailable.
+   */
+  private static final String[] SECONDARY_ANDROID_SECURITY_PROVIDER_CLASSES =
+      new String[] {
+        "com.android.org.conscrypt.OpenSSLProvider",
+        "org.conscrypt.OpenSSLProvider",
+        "org.apache.harmony.xnet.provider.jsse.OpenSSLProvider"
+      };
 
   private static final Platform PLATFORM = findPlatform();
 
@@ -199,11 +210,18 @@ public class Platform {
   }
 
   /**
-   * Select from the available security providers in preference order. If a preferred provider
-   * is not found then warn but continue.
+   * Select from the available security providers in preference order. If a preferred provider is
+   * not found then warn but continue.
    */
   private static Provider getAndroidSecurityProvider() {
-    for (String providerClassName : ANDROID_SECURITY_PROVIDERS) {
+    for (String providerName : ANDROID_SECURITY_PROVIDERS) {
+      Provider provider = Security.getProvider(providerName);
+      if (provider != null) {
+        logger.log(Level.FINE, "Found registered provider {0}", provider);
+        return provider;
+      }
+    }
+    for (String providerClassName : SECONDARY_ANDROID_SECURITY_PROVIDER_CLASSES) {
       Provider[] providers = Security.getProviders();
       for (Provider availableProvider : providers) {
         if (providerClassName.equals(availableProvider.getClass().getName())) {

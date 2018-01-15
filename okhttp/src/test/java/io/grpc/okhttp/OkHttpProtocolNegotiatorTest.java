@@ -54,6 +54,7 @@ public class OkHttpProtocolNegotiatorTest {
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final Provider fakeSecurityProvider = new Provider("GmsCore_OpenSSL", 1.0, "info") {};
+  private final Provider fakeConscrypt = new Provider("Conscrypt", 1.0, "info") {};
   private final SSLSocket sock = mock(SSLSocket.class);
   private final Platform platform = mock(Platform.class);
 
@@ -227,6 +228,31 @@ public class OkHttpProtocolNegotiatorTest {
         AndroidNegotiator.pickTlsExtensionType(cl);
 
     assertEquals(TlsExtensionType.NPN, tlsExtensionType);
+  }
+
+  @Test
+  public void pickTlsExtensionType_android41WithConscrypt() throws Exception {
+    Security.removeProvider(fakeSecurityProvider.getName());
+    Security.addProvider(fakeConscrypt);
+    ClassLoader cl =
+        new ClassLoader(this.getClass().getClassLoader()) {
+          @Override
+          protected Class<?> findClass(String name) throws ClassNotFoundException {
+            // Just don't throw.
+            if ("android.app.ActivityOptions".equals(name)) {
+              return null;
+            }
+            return super.findClass(name);
+          }
+        };
+
+    AndroidNegotiator.TlsExtensionType tlsExtensionType =
+        AndroidNegotiator.pickTlsExtensionType(cl);
+
+    assertEquals(TlsExtensionType.ALPN_AND_NPN, tlsExtensionType);
+
+    // Clean up
+    Security.removeProvider(fakeConscrypt.getName());
   }
 
   @Test

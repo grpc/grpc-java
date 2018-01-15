@@ -25,7 +25,6 @@ import io.grpc.okhttp.internal.Protocol;
 import io.grpc.okhttp.internal.Util;
 import java.io.IOException;
 import java.net.Socket;
-import java.security.Provider;
 import java.security.Security;
 import java.util.List;
 import java.util.logging.Level;
@@ -221,14 +220,17 @@ class OkHttpProtocolNegotiator {
     static TlsExtensionType pickTlsExtensionType(ClassLoader loader) {
       // Decide which TLS Extension (APLN and NPN) we will use, follow the rules:
       // 1. If Google Play Services Security Provider is installed, use both
-      // 2. If on Android 5.0 or later, use both, else
-      // 3. If on Android 4.1 or later, use NPN, else
-      // 4. Fail.
-      // TODO(madongfly): Logging.
+      // 2. If Conscrypt is installed, use both
+      // 3. If on Android 5.0 or later, use both, else
+      // 4. If on Android 4.1 or later, use NPN, else
+      // 5. Fail.
 
       // Check if Google Play Services Security Provider is installed.
-      Provider provider = Security.getProvider("GmsCore_OpenSSL");
-      if (provider != null) {
+      if (Security.getProvider("GmsCore_OpenSSL") != null) {
+        return TlsExtensionType.ALPN_AND_NPN;
+      }
+
+      if (Security.getProvider("Conscrypt") != null) {
         return TlsExtensionType.ALPN_AND_NPN;
       }
 
