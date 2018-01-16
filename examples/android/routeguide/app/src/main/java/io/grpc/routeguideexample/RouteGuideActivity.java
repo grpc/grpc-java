@@ -27,18 +27,15 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
-
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.routeguideexample.RouteGuideGrpc.RouteGuideBlockingStub;
 import io.grpc.routeguideexample.RouteGuideGrpc.RouteGuideStub;
 import io.grpc.stub.StreamObserver;
-
-import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.ref.WeakReference;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -46,15 +43,12 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 public class RouteGuideActivity extends AppCompatActivity {
-    private static final Logger logger = Logger.getLogger(RouteGuideActivity.class.getName());
     private EditText mHostEdit;
     private EditText mPortEdit;
     private Button mStartRouteGuideButton;
-    private Button mExitRouteGuideButton;    
+    private Button mExitRouteGuideButton;
     private Button mGetFeatureButton;
     private Button mListFeaturesButton;
     private Button mRecordRouteButton;
@@ -62,7 +56,7 @@ public class RouteGuideActivity extends AppCompatActivity {
     private TextView mResultText;
 
     private ManagedChannel mChannel;
-        
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -79,7 +73,7 @@ public class RouteGuideActivity extends AppCompatActivity {
         mResultText.setMovementMethod(new ScrollingMovementMethod());
         disableButtons();
     }
-    
+
     public void startRouteGuide(View view) {
         String host = mHostEdit.getText().toString();
         String portStr = mPortEdit.getText().toString();
@@ -92,7 +86,7 @@ public class RouteGuideActivity extends AppCompatActivity {
         mStartRouteGuideButton.setEnabled(false);
         enableButtons();
     }
-    
+
     public void exitRouteGuide(View view) {
         mChannel.shutdown();
         disableButtons();
@@ -102,21 +96,33 @@ public class RouteGuideActivity extends AppCompatActivity {
     }
 
     public void getFeature(View view) {
-        new GrpcTask(new GetFeatureRunnable()).execute();
+        setResultText("");
+        disableButtons();
+        new GrpcTask(new GetFeatureRunnable(), mChannel, this).execute();
     }
 
     public void listFeatures(View view) {
-        new GrpcTask(new ListFeaturesRunnable()).execute();
+        setResultText("");
+        disableButtons();
+        new GrpcTask(new ListFeaturesRunnable(), mChannel, this).execute();
     }
 
     public void recordRoute(View view) {
-        new GrpcTask(new RecordRouteRunnable()).execute();
+        setResultText("");
+        disableButtons();
+        new GrpcTask(new RecordRouteRunnable(), mChannel, this).execute();
     }
 
     public void routeChat(View view) {
-        new GrpcTask(new RouteChatRunnable()).execute();
+        setResultText("");
+        disableButtons();
+        new GrpcTask(new RouteChatRunnable(), mChannel, this).execute();
     }
-    
+
+    private void setResultText(String text) {
+        mResultText.setText(text);
+    }
+
     private void disableButtons() {
         mGetFeatureButton.setEnabled(false);
         mListFeaturesButton.setEnabled(false);
@@ -124,7 +130,7 @@ public class RouteGuideActivity extends AppCompatActivity {
         mRouteChatButton.setEnabled(false);
         mExitRouteGuideButton.setEnabled(false);
     }
-    
+
     private void enableButtons() {
         mExitRouteGuideButton.setEnabled(true);
         mGetFeatureButton.setEnabled(true);
@@ -133,17 +139,15 @@ public class RouteGuideActivity extends AppCompatActivity {
         mRouteChatButton.setEnabled(true);
     }
 
-    private class GrpcTask extends AsyncTask<Void, Void, String> {
+    private static class GrpcTask extends AsyncTask<Void, Void, String> {
         private final GrpcRunnable mGrpc;
+        private final ManagedChannel mChannel;
+        private final WeakReference<RouteGuideActivity> mActivityReference;
 
-        GrpcTask(GrpcRunnable grpc) {
+        GrpcTask(GrpcRunnable grpc, ManagedChannel channel, RouteGuideActivity activity) {
             this.mGrpc = grpc;
-        }
-
-        @Override
-        protected void onPreExecute() {
-            mResultText.setText("");
-            disableButtons();
+            this.mChannel = channel;
+            this.mActivityReference = new WeakReference<RouteGuideActivity>(activity);
         }
 
         @Override
@@ -151,20 +155,24 @@ public class RouteGuideActivity extends AppCompatActivity {
             try {
                 String logs = mGrpc.run(RouteGuideGrpc.newBlockingStub(mChannel),
                         RouteGuideGrpc.newStub(mChannel));
-                return "Success!" + System.lineSeparator() + logs;
+                return "Success!\n" + logs;
             } catch (Exception e) {
                 StringWriter sw = new StringWriter();
                 PrintWriter pw = new PrintWriter(sw);
                 e.printStackTrace(pw);
                 pw.flush();
-                return "Failed... : " + System.lineSeparator() + sw;
+                return "Failed... :\n" + sw;
             }
         }
 
         @Override
         protected void onPostExecute(String result) {
-            mResultText.setText(result);
-            enableButtons();
+            RouteGuideActivity activity = mActivityReference.get();
+            if (activity == null) {
+              return;
+            }
+            activity.setResultText(result);
+            activity.enableButtons();
         }
     }
 
@@ -175,7 +183,7 @@ public class RouteGuideActivity extends AppCompatActivity {
         String run(RouteGuideBlockingStub blockingStub, RouteGuideStub asyncStub) throws Exception;
     }
 
-    private class GetFeatureRunnable implements GrpcRunnable {
+    private static class GetFeatureRunnable implements GrpcRunnable {
         @Override
         public String run(RouteGuideBlockingStub blockingStub, RouteGuideStub asyncStub)
                 throws Exception {
@@ -205,16 +213,16 @@ public class RouteGuideActivity extends AppCompatActivity {
                         RouteGuideUtil.getLongitude(feature.getLocation()));
             }
             return logs.toString();
-        }    
+        }
     }
 
-    private class ListFeaturesRunnable implements GrpcRunnable {
+    private static class ListFeaturesRunnable implements GrpcRunnable {
         @Override
         public String run(RouteGuideBlockingStub blockingStub, RouteGuideStub asyncStub)
                 throws Exception {
             return listFeatures(400000000, -750000000, 420000000, -730000000, blockingStub);
         }
-        
+
         /**
          * Blocking server-streaming example. Calls listFeatures with a rectangle of interest.
          * Prints each response feature as it arrives.
@@ -240,7 +248,7 @@ public class RouteGuideActivity extends AppCompatActivity {
         }
     }
 
-    private class RecordRouteRunnable implements GrpcRunnable {
+    private static class RecordRouteRunnable implements GrpcRunnable {
         private Throwable failed;
 
         @Override
@@ -255,7 +263,7 @@ public class RouteGuideActivity extends AppCompatActivity {
                     .setLatitude(413628156).setLongitude(-749015468).build());
             return recordRoute(points, 5, asyncStub);
         }
-        
+
         /**
          * Async client-streaming example. Sends {@code numPoints} randomly chosen points from
          * {@code features} with a variable delay in between. Prints the statistics when they are
@@ -320,7 +328,7 @@ public class RouteGuideActivity extends AppCompatActivity {
                 throw new RuntimeException(
                        "Could not finish rpc within 1 minute, the server is likely down");
             }
-            
+
             if (failed != null) {
                 throw new RuntimeException(failed);
             }
@@ -328,7 +336,7 @@ public class RouteGuideActivity extends AppCompatActivity {
         }
     }
 
-    private class RouteChatRunnable implements GrpcRunnable {
+    private static class RouteChatRunnable implements GrpcRunnable {
         private Throwable failed;
 
         @Override
@@ -336,7 +344,7 @@ public class RouteGuideActivity extends AppCompatActivity {
                 throws Exception {
             return routeChat(asyncStub);
         }
-        
+
         /**
          * Bi-directional example, which can only be asynchronous. Send some chat messages, and
          * print any chat messages that are sent from the server.
@@ -392,7 +400,7 @@ public class RouteGuideActivity extends AppCompatActivity {
                 throw new RuntimeException(
                         "Could not finish rpc within 1 minute, the server is likely down");
             }
-            
+
             if (failed != null) {
                 throw new RuntimeException(failed);
             }
@@ -407,7 +415,7 @@ public class RouteGuideActivity extends AppCompatActivity {
         } else {
             logs.append(msg);
         }
-        logs.append(System.lineSeparator());
+        logs.append("\n");
     }
 
     private static RouteNote newNote(String message, int lat, int lon) {

@@ -16,6 +16,7 @@
 
 package io.grpc.helloworldexample;
 
+import android.app.Activity;
 import android.content.Context;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -27,15 +28,14 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
-
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
-
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.ref.WeakReference;
 import java.util.concurrent.TimeUnit;
 
 public class HelloworldActivity extends AppCompatActivity {
@@ -61,33 +61,35 @@ public class HelloworldActivity extends AppCompatActivity {
         ((InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE))
                 .hideSoftInputFromWindow(mHostEdit.getWindowToken(), 0);
         mSendButton.setEnabled(false);
-        new GrpcTask().execute();
+        mResultText.setText("");
+        new GrpcTask(this)
+            .execute(
+                mHostEdit.getText().toString(),
+                mMessageEdit.getText().toString(),
+                mPortEdit.getText().toString());
     }
 
-    private class GrpcTask extends AsyncTask<Void, Void, String> {
-        private String mHost;
-        private String mMessage;
-        private int mPort;
+    private static class GrpcTask extends AsyncTask<String, Void, String> {
+        private final WeakReference<Activity> mActivityReference;
         private ManagedChannel mChannel;
 
-        @Override
-        protected void onPreExecute() {
-            mHost = mHostEdit.getText().toString();
-            mMessage = mMessageEdit.getText().toString();
-            String portStr = mPortEdit.getText().toString();
-            mPort = TextUtils.isEmpty(portStr) ? 0 : Integer.valueOf(portStr);
-            mResultText.setText("");
+        private GrpcTask(Activity activity) {
+            this.mActivityReference = new WeakReference<Activity>(activity);
         }
 
         @Override
-        protected String doInBackground(Void... nothing) {
+        protected String doInBackground(String... params) {
+            String host = params[0];
+            String message = params[1];
+            String portStr = params[2];
+            int port = TextUtils.isEmpty(portStr) ? 0 : Integer.valueOf(portStr);
             try {
-                mChannel = ManagedChannelBuilder.forAddress(mHost, mPort)
+                mChannel = ManagedChannelBuilder.forAddress(host, port)
                     .usePlaintext(true)
                     .build();
                 GreeterGrpc.GreeterBlockingStub stub = GreeterGrpc.newBlockingStub(mChannel);
-                HelloRequest message = HelloRequest.newBuilder().setName(mMessage).build();
-                HelloReply reply = stub.sayHello(message);
+                HelloRequest request = HelloRequest.newBuilder().setName(message).build();
+                HelloReply reply = stub.sayHello(request);
                 return reply.getMessage();
             } catch (Exception e) {
                 StringWriter sw = new StringWriter();
@@ -105,8 +107,14 @@ public class HelloworldActivity extends AppCompatActivity {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-            mResultText.setText(result);
-            mSendButton.setEnabled(true);
+            Activity activity = mActivityReference.get();
+            if (activity == null) {
+                return;
+            }
+            TextView resultText = (TextView) activity.findViewById(R.id.grpc_response_text);
+            Button sendButton = (Button) activity.findViewById(R.id.send_button);
+            resultText.setText(result);
+            sendButton.setEnabled(true);
         }
     }
 }
