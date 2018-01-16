@@ -113,7 +113,7 @@ public final class ClientCacheExampleActivity extends AppCompatActivity {
         channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext(true).build();
         Channel channelToUse =
             ClientInterceptors.intercept(
-                    channel, SafeMethodCachingInterceptor.newSafeMethodCachingInterceptor(cache));
+                channel, SafeMethodCachingInterceptor.newSafeMethodCachingInterceptor(cache));
         HelloRequest request = HelloRequest.newBuilder().setName(message).build();
         HelloReply reply;
         if (useGet) {
