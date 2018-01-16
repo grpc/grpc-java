@@ -45,116 +45,115 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 public class RouteGuideActivity extends AppCompatActivity {
-    private EditText mHostEdit;
-    private EditText mPortEdit;
-    private Button mStartRouteGuideButton;
-    private Button mExitRouteGuideButton;
-    private Button mGetFeatureButton;
-    private Button mListFeaturesButton;
-    private Button mRecordRouteButton;
-    private Button mRouteChatButton;
-    private TextView mResultText;
-
-    private ManagedChannel mChannel;
+    private EditText hostEdit;
+    private EditText portEdit;
+    private Button startRouteGuideButton;
+    private Button exitRouteGuideButton;
+    private Button getFeatureButton;
+    private Button listFeaturesButton;
+    private Button recordRouteButton;
+    private Button routeChatButton;
+    private TextView resultText;
+    private ManagedChannel channel;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_routeguide);
-        mHostEdit = (EditText) findViewById(R.id.host_edit_text);
-        mPortEdit = (EditText) findViewById(R.id.port_edit_text);
-        mStartRouteGuideButton = (Button) findViewById(R.id.start_route_guide_button);
-        mExitRouteGuideButton = (Button) findViewById(R.id.exit_route_guide_button);
-        mGetFeatureButton = (Button) findViewById(R.id.get_feature_button);
-        mListFeaturesButton = (Button) findViewById(R.id.list_features_button);
-        mRecordRouteButton = (Button) findViewById(R.id.record_route_button);
-        mRouteChatButton = (Button) findViewById(R.id.route_chat_button);
-        mResultText = (TextView) findViewById(R.id.result_text);
-        mResultText.setMovementMethod(new ScrollingMovementMethod());
+        hostEdit = (EditText) findViewById(R.id.host_edit_text);
+        portEdit = (EditText) findViewById(R.id.port_edit_text);
+        startRouteGuideButton = (Button) findViewById(R.id.start_route_guide_button);
+        exitRouteGuideButton = (Button) findViewById(R.id.exit_route_guide_button);
+        getFeatureButton = (Button) findViewById(R.id.get_feature_button);
+        listFeaturesButton = (Button) findViewById(R.id.list_features_button);
+        recordRouteButton = (Button) findViewById(R.id.record_route_button);
+        routeChatButton = (Button) findViewById(R.id.route_chat_button);
+        resultText = (TextView) findViewById(R.id.result_text);
+        resultText.setMovementMethod(new ScrollingMovementMethod());
         disableButtons();
     }
 
     public void startRouteGuide(View view) {
-        String host = mHostEdit.getText().toString();
-        String portStr = mPortEdit.getText().toString();
+        String host = hostEdit.getText().toString();
+        String portStr = portEdit.getText().toString();
         int port = TextUtils.isEmpty(portStr) ? 0 : Integer.valueOf(portStr);
         ((InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE))
-                .hideSoftInputFromWindow(mHostEdit.getWindowToken(), 0);
-        mChannel = ManagedChannelBuilder.forAddress(host, port).usePlaintext(true).build();
-        mHostEdit.setEnabled(false);
-        mPortEdit.setEnabled(false);
-        mStartRouteGuideButton.setEnabled(false);
+                .hideSoftInputFromWindow(hostEdit.getWindowToken(), 0);
+        channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext(true).build();
+        hostEdit.setEnabled(false);
+        portEdit.setEnabled(false);
+        startRouteGuideButton.setEnabled(false);
         enableButtons();
     }
 
     public void exitRouteGuide(View view) {
-        mChannel.shutdown();
+        channel.shutdown();
         disableButtons();
-        mHostEdit.setEnabled(true);
-        mPortEdit.setEnabled(true);
-        mStartRouteGuideButton.setEnabled(true);
+        hostEdit.setEnabled(true);
+        portEdit.setEnabled(true);
+        startRouteGuideButton.setEnabled(true);
     }
 
     public void getFeature(View view) {
         setResultText("");
         disableButtons();
-        new GrpcTask(new GetFeatureRunnable(), mChannel, this).execute();
+        new GrpcTask(new GetFeatureRunnable(), channel, this).execute();
     }
 
     public void listFeatures(View view) {
         setResultText("");
         disableButtons();
-        new GrpcTask(new ListFeaturesRunnable(), mChannel, this).execute();
+        new GrpcTask(new ListFeaturesRunnable(), channel, this).execute();
     }
 
     public void recordRoute(View view) {
         setResultText("");
         disableButtons();
-        new GrpcTask(new RecordRouteRunnable(), mChannel, this).execute();
+        new GrpcTask(new RecordRouteRunnable(), channel, this).execute();
     }
 
     public void routeChat(View view) {
         setResultText("");
         disableButtons();
-        new GrpcTask(new RouteChatRunnable(), mChannel, this).execute();
+        new GrpcTask(new RouteChatRunnable(), channel, this).execute();
     }
 
     private void setResultText(String text) {
-        mResultText.setText(text);
+        resultText.setText(text);
     }
 
     private void disableButtons() {
-        mGetFeatureButton.setEnabled(false);
-        mListFeaturesButton.setEnabled(false);
-        mRecordRouteButton.setEnabled(false);
-        mRouteChatButton.setEnabled(false);
-        mExitRouteGuideButton.setEnabled(false);
+        getFeatureButton.setEnabled(false);
+        listFeaturesButton.setEnabled(false);
+        recordRouteButton.setEnabled(false);
+        routeChatButton.setEnabled(false);
+        exitRouteGuideButton.setEnabled(false);
     }
 
     private void enableButtons() {
-        mExitRouteGuideButton.setEnabled(true);
-        mGetFeatureButton.setEnabled(true);
-        mListFeaturesButton.setEnabled(true);
-        mRecordRouteButton.setEnabled(true);
-        mRouteChatButton.setEnabled(true);
+        exitRouteGuideButton.setEnabled(true);
+        getFeatureButton.setEnabled(true);
+        listFeaturesButton.setEnabled(true);
+        recordRouteButton.setEnabled(true);
+        routeChatButton.setEnabled(true);
     }
 
     private static class GrpcTask extends AsyncTask<Void, Void, String> {
-        private final GrpcRunnable mGrpc;
-        private final ManagedChannel mChannel;
-        private final WeakReference<RouteGuideActivity> mActivityReference;
+        private final GrpcRunnable grpcRunnable;
+        private final ManagedChannel channel;
+        private final WeakReference<RouteGuideActivity> activityReference;
 
-        GrpcTask(GrpcRunnable grpc, ManagedChannel channel, RouteGuideActivity activity) {
-            this.mGrpc = grpc;
-            this.mChannel = channel;
-            this.mActivityReference = new WeakReference<RouteGuideActivity>(activity);
+        GrpcTask(GrpcRunnable grpcRunnable, ManagedChannel channel, RouteGuideActivity activity) {
+            this.grpcRunnable = grpcRunnable;
+            this.channel = channel;
+            this.activityReference = new WeakReference<RouteGuideActivity>(activity);
         }
 
         @Override
         protected String doInBackground(Void... nothing) {
             try {
-                String logs = mGrpc.run(RouteGuideGrpc.newBlockingStub(mChannel),
-                        RouteGuideGrpc.newStub(mChannel));
+                String logs = grpcRunnable.run(RouteGuideGrpc.newBlockingStub(channel),
+                        RouteGuideGrpc.newStub(channel));
                 return "Success!\n" + logs;
             } catch (Exception e) {
                 StringWriter sw = new StringWriter();
@@ -167,7 +166,7 @@ public class RouteGuideActivity extends AppCompatActivity {
 
         @Override
         protected void onPostExecute(String result) {
-            RouteGuideActivity activity = mActivityReference.get();
+            RouteGuideActivity activity = activityReference.get();
             if (activity == null) {
               return;
             }
@@ -178,7 +177,7 @@ public class RouteGuideActivity extends AppCompatActivity {
 
     private interface GrpcRunnable {
         /**
-         * Perform a grpc and return all the logs.
+         * Perform a grpcRunnable and return all the logs.
          */
         String run(RouteGuideBlockingStub blockingStub, RouteGuideStub asyncStub) throws Exception;
     }

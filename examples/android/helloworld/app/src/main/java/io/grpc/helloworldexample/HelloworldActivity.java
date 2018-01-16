@@ -39,42 +39,42 @@ import java.lang.ref.WeakReference;
 import java.util.concurrent.TimeUnit;
 
 public class HelloworldActivity extends AppCompatActivity {
-    private Button mSendButton;
-    private EditText mHostEdit;
-    private EditText mPortEdit;
-    private EditText mMessageEdit;
-    private TextView mResultText;
+    private Button sendButton;
+    private EditText hostEdit;
+    private EditText portEdit;
+    private EditText messageEdit;
+    private TextView resultText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_helloworld);
-        mSendButton = (Button) findViewById(R.id.send_button);
-        mHostEdit = (EditText) findViewById(R.id.host_edit_text);
-        mPortEdit = (EditText) findViewById(R.id.port_edit_text);
-        mMessageEdit = (EditText) findViewById(R.id.message_edit_text);
-        mResultText = (TextView) findViewById(R.id.grpc_response_text);
-        mResultText.setMovementMethod(new ScrollingMovementMethod());
+        sendButton = (Button) findViewById(R.id.send_button);
+        hostEdit = (EditText) findViewById(R.id.host_edit_text);
+        portEdit = (EditText) findViewById(R.id.port_edit_text);
+        messageEdit = (EditText) findViewById(R.id.message_edit_text);
+        resultText = (TextView) findViewById(R.id.grpc_response_text);
+        resultText.setMovementMethod(new ScrollingMovementMethod());
     }
 
     public void sendMessage(View view) {
         ((InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE))
-                .hideSoftInputFromWindow(mHostEdit.getWindowToken(), 0);
-        mSendButton.setEnabled(false);
-        mResultText.setText("");
+                .hideSoftInputFromWindow(hostEdit.getWindowToken(), 0);
+        sendButton.setEnabled(false);
+        resultText.setText("");
         new GrpcTask(this)
             .execute(
-                mHostEdit.getText().toString(),
-                mMessageEdit.getText().toString(),
-                mPortEdit.getText().toString());
+                hostEdit.getText().toString(),
+                messageEdit.getText().toString(),
+                portEdit.getText().toString());
     }
 
     private static class GrpcTask extends AsyncTask<String, Void, String> {
-        private final WeakReference<Activity> mActivityReference;
-        private ManagedChannel mChannel;
+        private final WeakReference<Activity> activityReference;
+        private ManagedChannel channel;
 
         private GrpcTask(Activity activity) {
-            this.mActivityReference = new WeakReference<Activity>(activity);
+            this.activityReference = new WeakReference<Activity>(activity);
         }
 
         @Override
@@ -84,10 +84,10 @@ public class HelloworldActivity extends AppCompatActivity {
             String portStr = params[2];
             int port = TextUtils.isEmpty(portStr) ? 0 : Integer.valueOf(portStr);
             try {
-                mChannel = ManagedChannelBuilder.forAddress(host, port)
+                channel = ManagedChannelBuilder.forAddress(host, port)
                     .usePlaintext(true)
                     .build();
-                GreeterGrpc.GreeterBlockingStub stub = GreeterGrpc.newBlockingStub(mChannel);
+                GreeterGrpc.GreeterBlockingStub stub = GreeterGrpc.newBlockingStub(channel);
                 HelloRequest request = HelloRequest.newBuilder().setName(message).build();
                 HelloReply reply = stub.sayHello(request);
                 return reply.getMessage();
@@ -103,11 +103,11 @@ public class HelloworldActivity extends AppCompatActivity {
         @Override
         protected void onPostExecute(String result) {
             try {
-                mChannel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-            Activity activity = mActivityReference.get();
+            Activity activity = activityReference.get();
             if (activity == null) {
                 return;
             }

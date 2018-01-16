@@ -48,11 +48,11 @@ import java.util.concurrent.TimeUnit;
 public final class ClientCacheExampleActivity extends AppCompatActivity {
   private static final int CACHE_SIZE_IN_BYTES = 1 * 1024 * 1024; // 1MB
   private static final String TAG = "grpcCacheExample";
-  private Button mSendButton;
-  private EditText mHostEdit;
-  private EditText mPortEdit;
-  private EditText mMessageEdit;
-  private TextView mResultText;
+  private Button sendButton;
+  private EditText hostEdit;
+  private EditText portEdit;
+  private EditText messageEdit;
+  private TextView resultText;
   private CheckBox getCheckBox;
   private CheckBox noCacheCheckBox;
   private CheckBox onlyIfCachedCheckBox;
@@ -62,30 +62,29 @@ public final class ClientCacheExampleActivity extends AppCompatActivity {
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     setContentView(R.layout.activity_clientcacheexample);
-    mSendButton = (Button) findViewById(R.id.send_button);
-    mHostEdit = (EditText) findViewById(R.id.host_edit_text);
-    mPortEdit = (EditText) findViewById(R.id.port_edit_text);
-    mMessageEdit = (EditText) findViewById(R.id.message_edit_text);
+    sendButton = (Button) findViewById(R.id.send_button);
+    hostEdit = (EditText) findViewById(R.id.host_edit_text);
+    portEdit = (EditText) findViewById(R.id.port_edit_text);
+    messageEdit = (EditText) findViewById(R.id.message_edit_text);
     getCheckBox = (CheckBox) findViewById(R.id.get_checkbox);
     noCacheCheckBox = (CheckBox) findViewById(R.id.no_cache_checkbox);
     onlyIfCachedCheckBox = (CheckBox) findViewById(R.id.only_if_cached_checkbox);
-    mResultText = (TextView) findViewById(R.id.grpc_response_text);
-    mResultText.setMovementMethod(new ScrollingMovementMethod());
-
+    resultText = (TextView) findViewById(R.id.grpc_response_text);
+    resultText.setMovementMethod(new ScrollingMovementMethod());
     cache = SafeMethodCachingInterceptor.newLruCache(CACHE_SIZE_IN_BYTES);
   }
 
   /** Sends RPC. Invoked when app button is pressed. */
   public void sendMessage(View view) {
     ((InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE))
-        .hideSoftInputFromWindow(mHostEdit.getWindowToken(), 0);
-    mSendButton.setEnabled(false);
-    mResultText.setText("");
+        .hideSoftInputFromWindow(hostEdit.getWindowToken(), 0);
+    sendButton.setEnabled(false);
+    resultText.setText("");
     new GrpcTask(this, cache)
         .execute(
-            mHostEdit.getText().toString(),
-            mMessageEdit.getText().toString(),
-            mPortEdit.getText().toString(),
+            hostEdit.getText().toString(),
+            messageEdit.getText().toString(),
+            portEdit.getText().toString(),
             getCheckBox.isChecked(),
             noCacheCheckBox.isChecked(),
             onlyIfCachedCheckBox.isChecked());
