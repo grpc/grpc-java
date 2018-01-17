@@ -21,7 +21,6 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.internal.ProxyParameters;
 import io.grpc.netty.InternalNettyChannelBuilder.OverrideAuthorityChecker;
 import io.grpc.netty.ProtocolNegotiators.TlsNegotiator;
@@ -46,13 +45,6 @@ public class NettyChannelBuilderTest {
   private void shutdown(ManagedChannel mc) throws Exception {
     mc.shutdownNow();
     assertTrue(mc.awaitTermination(1, TimeUnit.SECONDS));
-  }
-
-  @Test
-  public void bang() throws Exception {
-    ManagedChannel b = ManagedChannelBuilder.forTarget("pxrs.org").build();
-    b.getState(true);
-    b.awaitTermination(100, TimeUnit.SECONDS);
   }
 
   @Test

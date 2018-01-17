@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -32,12 +33,14 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Iterables;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.DnsNameResolver.DelegateResolver;
-import io.grpc.internal.DnsNameResolver.JndiResolver;
 import io.grpc.internal.DnsNameResolver.ResolutionResults;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.net.InetAddress;
@@ -51,6 +54,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
+import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -59,6 +63,7 @@ import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -71,7 +76,8 @@ import org.mockito.MockitoAnnotations;
 @RunWith(JUnit4.class)
 public class DnsNameResolverTest {
 
-  @Rule public final Timeout globalTimeout = Timeout.seconds(10);
+  @Rule public final Timeout globalTimeout = Timeout.seconds(100000);
+  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private static final int DEFAULT_PORT = 887;
   private static final Attributes NAME_RESOLVER_PARAMS =
@@ -388,13 +394,145 @@ public class DnsNameResolverTest {
 
   @Test
   public void unquoteRemovesJndiFormatting() {
-    assertEquals("blah", JndiResolver.unquote("blah"));
-    assertEquals("", JndiResolver.unquote("\"\""));
-    assertEquals("blahblah", JndiResolver.unquote("blah blah"));
-    assertEquals("blahfoo blah", JndiResolver.unquote("blah \"foo blah\""));
-    assertEquals("blah blah", JndiResolver.unquote("\"blah blah\""));
-    assertEquals("blah\"blah", JndiResolver.unquote("\"blah\\\"blah\""));
-    assertEquals("blah\\blah", JndiResolver.unquote("\"blah\\\\blah\""));
+    assertEquals("blah", DnsNameResolver.unquote("blah"));
+    assertEquals("", DnsNameResolver.unquote("\"\""));
+    assertEquals("blahblah", DnsNameResolver.unquote("blah blah"));
+    assertEquals("blahfoo blah", DnsNameResolver.unquote("blah \"foo blah\""));
+    assertEquals("blah blah", DnsNameResolver.unquote("\"blah blah\""));
+    assertEquals("blah\"blah", DnsNameResolver.unquote("\"blah\\\"blah\""));
+    assertEquals("blah\\blah", DnsNameResolver.unquote("\"blah\\\\blah\""));
+  }
+
+  @Test
+  public void maybeChooseServiceConfig_failsOnMisspelling() {
+    JsonObject bad = new JsonObject();
+    bad.add("parcentage", new JsonPrimitive(1));
+    thrown.expectMessage("Bad key");
+
+    DnsNameResolver.maybeChooseServiceConfig(bad, new Random(), "host");
+  }
+
+  @Test
+  public void maybeChooseServiceConfig_clientLanguageMatchesJava() {
+    JsonObject choice = new JsonObject();
+    JsonArray langs = new JsonArray();
+    langs.add("java");
+    choice.add("clientLanguage", langs);
+    choice.add("serviceConfig", new JsonObject());
+
+    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "host"));
+  }
+
+  @Test
+  public void maybeChooseServiceConfig_clientLanguageDoesntMatchGo() {
+    JsonObject choice = new JsonObject();
+    JsonArray langs = new JsonArray();
+    langs.add("go");
+    choice.add("clientLanguage", langs);
+    choice.add("serviceConfig", new JsonObject());
+
+    assertNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "host"));
+  }
+
+  @Test
+  public void maybeChooseServiceConfig_clientLanguageCaseInsensitive() {
+    JsonObject choice = new JsonObject();
+    JsonArray langs = new JsonArray();
+    langs.add("JAVA");
+    choice.add("clientLanguage", langs);
+    choice.add("serviceConfig", new JsonObject());
+
+    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "host"));
+  }
+
+  @Test
+  public void maybeChooseServiceConfig_clientLanguageMatchesEmtpy() {
+    JsonObject choice = new JsonObject();
+    JsonArray langs = new JsonArray();
+    choice.add("clientLanguage", langs);
+    choice.add("serviceConfig", new JsonObject());
+
+    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "host"));
+  }
+
+  @Test
+  public void maybeChooseServiceConfig_clientLanguageMatchesMulti() {
+    JsonObject choice = new JsonObject();
+    JsonArray langs = new JsonArray();
+    langs.add("go");
+    langs.add("java");
+    choice.add("clientLanguage", langs);
+    choice.add("serviceConfig", new JsonObject());
+
+    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "host"));
+  }
+
+  @Test
+  public void maybeChooseServiceConfig_percentageZeroAlwaysFails() {
+    JsonObject choice = new JsonObject();
+    choice.add("percentage", new JsonPrimitive(0));
+    choice.add("serviceConfig", new JsonObject());
+
+    assertNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "host"));
+  }
+
+  @Test
+  public void maybeChooseServiceConfig_percentageHundredAlwaysSucceeds() {
+    JsonObject choice = new JsonObject();
+    choice.add("percentage", new JsonPrimitive(100));
+    choice.add("serviceConfig", new JsonObject());
+
+    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "host"));
+  }
+
+  @Test
+  public void maybeChooseServiceConfig_percentageAboveMatches() {
+    JsonObject choice = new JsonObject();
+    choice.add("percentage", new JsonPrimitive(50));
+    choice.add("serviceConfig", new JsonObject());
+
+    Random r = new Random() {
+      @Override
+      public int nextInt(int bound) {
+        return 49;
+      }
+    };
+
+    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, r, "host"));
+  }
+
+  @Test
+  public void maybeChooseServiceConfig_percentageAtMatches() {
+    JsonObject choice = new JsonObject();
+    choice.add("percentage", new JsonPrimitive(50));
+    choice.add("serviceConfig", new JsonObject());
+
+    Random r = new Random() {
+      @Override
+      public int nextInt(int bound) {
+        return 50;
+      }
+    };
+
+    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, r, "host"));
+  }
+
+  @Test
+  public void maybeChooseServiceConfig_percentageBelowFails() {
+    JsonObject choice = new JsonObject();
+    choice.add("percentage", new JsonPrimitive(50));
+    choice.add("serviceConfig", new JsonObject());
+
+    Random r = new Random() {
+      @Override
+      public int nextInt(int bound) {
+        return 51;
+      }
+    };
+
+    Object res = DnsNameResolver.maybeChooseServiceConfig(choice, r, "host");
+
+    assertNull(res);
   }
 
   private void testInvalidUri(URI uri) {

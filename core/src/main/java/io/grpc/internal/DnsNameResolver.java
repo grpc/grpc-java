@@ -532,6 +532,7 @@ final class DnsNameResolver extends NameResolver {
    */
   @VisibleForTesting
   @Nullable
+  @SuppressWarnings("BetaApi") // Verify isn't all that beta
   static JsonObject maybeChooseServiceConfig(JsonObject choice, Random random, String hostname) {
     for (Entry<String, ?> entry : choice.entrySet()) {
       Verify.verify(SERVICE_CONFIG_CHOICE_KEYS.contains(entry.getKey()), "Bad key: %s", entry);
