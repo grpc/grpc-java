@@ -46,7 +46,7 @@ final class CallTracer {
     }
   }
 
-  void updateInternalChannelStatsBuilder(InternalChannelStats.Builder builder) {
+  void updateBuilder(InternalChannelStats.Builder builder) {
     builder
         .setCallsStarted(callsStarted.value())
         .setCallsSucceeded(callsSucceeded.value())

@@ -273,7 +273,7 @@ public final class ManagedChannelImpl
   public ListenableFuture<InternalChannelStats> getStats() {
     SettableFuture<InternalChannelStats> ret = SettableFuture.create();
     InternalChannelStats.Builder builder = new InternalChannelStats.Builder();
-    channelCallTracer.updateInternalChannelStatsBuilder(builder);
+    channelCallTracer.updateBuilder(builder);
     builder.setTarget(target).setState(channelStateManager.getState());
     ret.set(builder.build());
     return ret;
@@ -1136,7 +1136,7 @@ public final class ManagedChannelImpl
     public ListenableFuture<InternalChannelStats> getStats() {
       SettableFuture<InternalChannelStats> ret = SettableFuture.create();
       InternalChannelStats.Builder builder = new InternalChannelStats.Builder();
-      subchannelCallTracer.updateInternalChannelStatsBuilder(builder);
+      subchannelCallTracer.updateBuilder(builder);
       builder.setTarget(target).setState(subchannel.getState());
       ret.set(builder.build());
       return ret;

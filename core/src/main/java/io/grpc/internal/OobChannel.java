@@ -157,7 +157,7 @@ final class OobChannel
         public ListenableFuture<InternalChannelStats> getStats() {
           SettableFuture<InternalChannelStats> ret = SettableFuture.create();
           InternalChannelStats.Builder builder = new InternalChannelStats.Builder();
-          subchannelCallsTracer.updateInternalChannelStatsBuilder(builder);
+          subchannelCallsTracer.updateBuilder(builder);
           builder.setTarget(authority).setState(subchannel.getState());
           ret.set(builder.build());
           return ret;
@@ -259,7 +259,7 @@ final class OobChannel
   public ListenableFuture<InternalChannelStats> getStats() {
     SettableFuture<InternalChannelStats> ret = SettableFuture.create();
     InternalChannelStats.Builder builder = new InternalChannelStats.Builder();
-    channelCallsTracer.updateInternalChannelStatsBuilder(builder);
+    channelCallsTracer.updateBuilder(builder);
     builder.setTarget(authority).setState(subchannel.getState());
     ret.set(builder.build());
     return ret;
