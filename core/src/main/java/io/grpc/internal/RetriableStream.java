@@ -83,12 +83,12 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
       state = state.committed(winningSubstream);
 
+      // subtract the share of this RPC from channelBufferUsed.
+      channelBufferUsed.addAndGet(-perRpcBufferUsed);
+
       class CommitTask implements Runnable {
         @Override
         public void run() {
-          // subtract the share of this RPC from channelBufferUsed.
-          channelBufferUsed.addAndGet(-perRpcBufferUsed);
-
           // For hedging only, not needed for normal retry
           // TODO(zdapeng): also cancel all the scheduled hedges.
           for (Substream substream : savedDrainedSubstreams) {
@@ -482,7 +482,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       // handle a race between buffer limit exceeded and closed, when setting
       // substream.bufferLimitExceeded = true happens before state.substreamClosed(substream).
       if (substream.bufferLimitExceeded) {
-        commit(substream);
+        commitAndRun(substream);
         if (state.winningSubstream == substream) {
           masterListener.closed(status, trailers);
         }
@@ -669,6 +669,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         return;
       }
 
+      Runnable postCommitTask = null;
+
       // TODO(zdapeng): avoid using the same lock for both in-bound and out-bound.
       synchronized (lock) {
         if (state.winningSubstream != null || substream.closed) {
@@ -691,10 +693,14 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           }
         }
         perRpcBufferUsed = substream.bufferNeeded;
+
+        if (substream.bufferLimitExceeded) {
+          postCommitTask = commit(substream);
+        }
       }
 
-      if (substream.bufferLimitExceeded) {
-        commitAndRun(substream);
+      if (postCommitTask != null) {
+        postCommitTask.run();
       }
     }
   }
