@@ -446,14 +446,14 @@ public final class ManagedChannelImpl
         }
 
         @Override
-        ClientStream newStream(ClientStreamTracer.Factory tracerFactory) {
-          // TODO(zdapeng): only add tracer when retry is enabled.
+        ClientStream newSubstream(ClientStreamTracer.Factory tracerFactory, int previousAttempts) {
           CallOptions newOptions = callOptions.withStreamTracerFactory(tracerFactory);
+          Metadata newHeaders = updateHeaders(headers, previousAttempts);
           ClientTransport transport =
-              get(new PickSubchannelArgsImpl(method, headers, newOptions));
+              get(new PickSubchannelArgsImpl(method, newHeaders, newOptions));
           Context origContext = context.attach();
           try {
-            return transport.newStream(method, headers, newOptions);
+            return transport.newStream(method, newHeaders, newOptions);
           } finally {
             context.detach(origContext);
           }

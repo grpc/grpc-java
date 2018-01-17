@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
@@ -45,6 +46,10 @@ import javax.annotation.concurrent.GuardedBy;
 
 /** A logical {@link ClientStream} that is retriable. */
 abstract class RetriableStream<ReqT> implements ClientStream {
+  @VisibleForTesting
+  static final Metadata.Key<String> GRPC_PREVIOUS_RPC_ATTEMPTS =
+      Metadata.Key.of("grpc-previous-rpc-attempts", Metadata.ASCII_STRING_MARSHALLER);
+
   private static final Status CANCELLED_BECAUSE_COMMITTED =
       Status.CANCELLED.withDescription("Stream thrown away because RetriableStream committed");
 
@@ -128,16 +133,14 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
   }
 
-  private void retry() {
-    Substream substream = createSubstream();
-
-    // TODO(zdapeng): update "grpc-retry-attempts" header
-
+  private void retry(int previousAttempts) {
+    Substream substream = createSubstream(previousAttempts);
     drain(substream);
   }
 
-  private Substream createSubstream() {
-    Substream sub = new Substream();
+
+  private Substream createSubstream(int previousAttempts) {
+    Substream sub = new Substream(previousAttempts);
     // one tracer per substream
     final ClientStreamTracer bufferSizeTracer = new BufferSizeTracer(sub);
     ClientStreamTracer.Factory tracerFactory = new ClientStreamTracer.Factory() {
@@ -147,14 +150,27 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       }
     };
     // NOTICE: This set _must_ be done before stream.start() and it actually is.
-    sub.stream = newStream(tracerFactory);
+    sub.stream = newSubstream(tracerFactory, previousAttempts);
     return sub;
   }
 
   /**
-   * Creates a new physical ClientStream that represents a retry/hedging attempt.
+   * Creates a new physical ClientStream that represents a retry/hedging attempt. The returned
+   * Client stream must not be started already.
    */
-  abstract ClientStream newStream(ClientStreamTracer.Factory tracerFactory);
+  abstract ClientStream newSubstream(
+      ClientStreamTracer.Factory tracerFactory, int previousAttempts);
+
+  /** Adds grpc-previous-rpc-attempts in the headers of a retry/hedging RPC. */
+  final Metadata updateHeaders(Metadata originalHeaders, int previousAttempts) {
+    Metadata newHeaders = originalHeaders;
+    if (previousAttempts > 0) {
+      newHeaders = new Metadata();
+      newHeaders.merge(originalHeaders);
+      newHeaders.put(GRPC_PREVIOUS_RPC_ATTEMPTS, String.valueOf(previousAttempts));
+    }
+    return newHeaders;
+  }
 
   private void drain(Substream substream) {
     int index = 0;
@@ -237,7 +253,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       state.buffer.add(new StartEntry());
     }
 
-    Substream substream = createSubstream();
+    Substream substream = createSubstream(0);
     drain(substream);
 
     // TODO(zdapeng): schedule hedging if needed
@@ -245,7 +261,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   @Override
   public final void cancel(Status reason) {
-    Substream noopSubstream = new Substream();
+    Substream noopSubstream = new Substream(0 /* previousAttempts doesn't matter here*/);
     noopSubstream.stream = new NoopClientStream();
     Runnable runnable = commit(noopSubstream);
 
@@ -517,7 +533,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
                 callExecutor.execute(new Runnable() {
                   @Override
                   public void run() {
-                    retry();
+                    retry(substream.previousAttempts + 1);
                   }
                 });
               }
@@ -673,6 +689,13 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     // setting to true must be GuardedBy RetriableStream.lock
     boolean bufferLimitExceeded;
+
+    // TODO(zdapeng): add transparent-retry-attempts
+    final int previousAttempts;
+
+    Substream(int previousAttempts) {
+      this.previousAttempts = previousAttempts;
+    }
   }
 
 
