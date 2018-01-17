@@ -564,15 +564,17 @@ final class DnsNameResolver extends NameResolver {
     }
     if (choice.has("clientHostname")) {
       JsonArray clientHostnames = choice.get("clientHostname").getAsJsonArray();
-      boolean hostnamePresent = false;
-      for (JsonElement clientHostname : clientHostnames) {
-        if (clientHostname.getAsString().equals(hostname)) {
-          hostnamePresent = true;
-          break;
+      if (clientHostnames.size() != 0) {
+        boolean hostnamePresent = false;
+        for (JsonElement clientHostname : clientHostnames) {
+          if (clientHostname.getAsString().equals(hostname)) {
+            hostnamePresent = true;
+            break;
+          }
         }
-      }
-      if (!hostnamePresent) {
-        return null;
+        if (!hostnamePresent) {
+          return null;
+        }
       }
     }
     return choice.getAsJsonObject("serviceConfig");

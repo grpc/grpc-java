@@ -530,9 +530,62 @@ public class DnsNameResolverTest {
       }
     };
 
-    Object res = DnsNameResolver.maybeChooseServiceConfig(choice, r, "host");
+    assertNull(DnsNameResolver.maybeChooseServiceConfig(choice, r, "host"));
+  }
 
-    assertNull(res);
+  @Test
+  public void maybeChooseServiceConfig_hostnameMatches() {
+    JsonObject choice = new JsonObject();
+    JsonArray hosts = new JsonArray();
+    hosts.add("localhost");
+    choice.add("clientHostname", hosts);
+    choice.add("serviceConfig", new JsonObject());
+
+    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "localhost"));
+  }
+
+  @Test
+  public void maybeChooseServiceConfig_hostnameDoesntMatch() {
+    JsonObject choice = new JsonObject();
+    JsonArray hosts = new JsonArray();
+    hosts.add("localhorse");
+    choice.add("clientHostname", hosts);
+    choice.add("serviceConfig", new JsonObject());
+
+    assertNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "localhost"));
+  }
+
+  @Test
+  public void maybeChooseServiceConfig_clientLanguageCaseSensitive() {
+    JsonObject choice = new JsonObject();
+    JsonArray hosts = new JsonArray();
+    hosts.add("LOCALHOST");
+    choice.add("clientHostname", hosts);
+    choice.add("serviceConfig", new JsonObject());
+
+    assertNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "localhost"));
+  }
+
+  @Test
+  public void maybeChooseServiceConfig_hostnameMatchesEmtpy() {
+    JsonObject choice = new JsonObject();
+    JsonArray hosts = new JsonArray();
+    choice.add("clientHostname", hosts);
+    choice.add("serviceConfig", new JsonObject());
+
+    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "host"));
+  }
+
+  @Test
+  public void maybeChooseServiceConfig_hostnameMatchesMulti() {
+    JsonObject choice = new JsonObject();
+    JsonArray langs = new JsonArray();
+    langs.add("localhorse");
+    langs.add("localhost");
+    choice.add("clientHostname", langs);
+    choice.add("serviceConfig", new JsonObject());
+
+    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "localhost"));
   }
 
   private void testInvalidUri(URI uri) {
