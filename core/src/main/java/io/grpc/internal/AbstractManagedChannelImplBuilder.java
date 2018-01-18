@@ -90,8 +90,8 @@ public abstract class AbstractManagedChannelImplBuilder
   private static final CompressorRegistry DEFAULT_COMPRESSOR_REGISTRY =
       CompressorRegistry.getDefaultInstance();
 
-  private static final long DEFAULT_RETRY_BUFFER_SIZE_IN_BYTES = 1 << 24;  // 16M
-  private static final long DEFAULT_PER_RPC_BUFFER_LIMIT_IN_BYTES = 1 << 20; // 1M
+  private static final long DEFAULT_RETRY_BUFFER_SIZE_IN_BYTES = 1L << 24;  // 16M
+  private static final long DEFAULT_PER_RPC_BUFFER_LIMIT_IN_BYTES = 1L << 20; // 1M
 
   ObjectPool<? extends Executor> executorPool = DEFAULT_EXECUTOR_POOL;
 
@@ -281,12 +281,14 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Override
   public final T retryBufferSize(long bytes) {
+    checkArgument(bytes > 0L, "retry buffer size must be positive");
     retryBufferSize = bytes;
     return thisT();
   }
 
   @Override
   public final T perRpcBufferLimit(long bytes) {
+    checkArgument(bytes > 0L, "per RPC buffer limit must be positive");
     perRpcBufferLimit = bytes;
     return thisT();
   }
