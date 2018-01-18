@@ -666,7 +666,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
      */
     @Override
     public void outboundWireSize(long bytes) {
-      if (state.winningSubstream != null || substream.closed) {
+      if (state.winningSubstream != null) {
         return;
       }
 
