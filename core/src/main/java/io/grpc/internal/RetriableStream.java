@@ -641,7 +641,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     // GuardedBy RetriableStream.lock
     boolean closed;
 
-    long bufferNeeded;
     // setting to true must be GuardedBy RetriableStream.lock
     boolean bufferLimitExceeded;
   }
@@ -653,6 +652,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   class BufferSizeTracer extends ClientStreamTracer {
     // Each buffer size tracer is dedicated to one specific substream.
     private final Substream substream;
+
+    long bufferNeeded;
 
     BufferSizeTracer(Substream substream) {
       this.substream = substream;
@@ -676,23 +677,23 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         if (state.winningSubstream != null || substream.closed) {
           return;
         }
-        substream.bufferNeeded += bytes;
-        if (substream.bufferNeeded <= perRpcBufferUsed) {
+        bufferNeeded += bytes;
+        if (bufferNeeded <= perRpcBufferUsed) {
           return;
         }
 
-        if (substream.bufferNeeded > perRpcBufferLimit) {
+        if (bufferNeeded > perRpcBufferLimit) {
           substream.bufferLimitExceeded = true;
         } else {
           // Only update channelBufferUsed when perRpcBufferUsed is not exceeding perRpcBufferLimit.
           long savedChannelBufferUsed =
-              channelBufferUsed.addAndGet(substream.bufferNeeded - perRpcBufferUsed);
+              channelBufferUsed.addAndGet(bufferNeeded - perRpcBufferUsed);
 
           if (savedChannelBufferUsed > channelBufferLimit) {
             substream.bufferLimitExceeded = true;
           }
         }
-        perRpcBufferUsed = substream.bufferNeeded;
+        perRpcBufferUsed = bufferNeeded;
 
         if (substream.bufferLimitExceeded) {
           postCommitTask = commit(substream);
