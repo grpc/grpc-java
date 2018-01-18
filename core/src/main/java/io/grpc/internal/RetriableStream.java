@@ -688,12 +688,12 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           // Only update channelBufferUsed when perRpcBufferUsed is not exceeding perRpcBufferLimit.
           long savedChannelBufferUsed =
               channelBufferUsed.addAndGet(bufferNeeded - perRpcBufferUsed);
+          perRpcBufferUsed = bufferNeeded;
 
           if (savedChannelBufferUsed > channelBufferLimit) {
             substream.bufferLimitExceeded = true;
           }
         }
-        perRpcBufferUsed = bufferNeeded;
 
         if (substream.bufferLimitExceeded) {
           postCommitTask = commit(substream);

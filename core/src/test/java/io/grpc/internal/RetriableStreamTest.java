@@ -748,9 +748,15 @@ public class RetriableStreamTest {
     retriableStream.start(masterListener);
 
     bufferSizeTracer.outboundWireSize(PER_RPC_BUFFER_LIMIT);
+
+    assertEquals(PER_RPC_BUFFER_LIMIT, channelBufferUsed.addAndGet(0));
+
     verify(retriableStreamRecorder, never()).postCommit();
     bufferSizeTracer.outboundWireSize(2);
     verify(retriableStreamRecorder).postCommit();
+
+    // verify channel buffer is adjusted
+    assertEquals(0, channelBufferUsed.addAndGet(0));
   }
 
   @Test
@@ -760,11 +766,17 @@ public class RetriableStreamTest {
 
     retriableStream.start(masterListener);
 
-    bufferSizeTracer.outboundWireSize(1);
-    channelBufferUsed.addAndGet(CHANNEL_BUFFER_LIMIT);
+    bufferSizeTracer.outboundWireSize(100);
+
+    assertEquals(100, channelBufferUsed.addAndGet(0));
+
+    channelBufferUsed.addAndGet(CHANNEL_BUFFER_LIMIT - 200);
     verify(retriableStreamRecorder, never()).postCommit();
-    bufferSizeTracer.outboundWireSize(1);
+    bufferSizeTracer.outboundWireSize(100 + 1);
     verify(retriableStreamRecorder).postCommit();
+
+    // verify channel buffer is adjusted
+    assertEquals(CHANNEL_BUFFER_LIMIT - 200, channelBufferUsed.addAndGet(0));
   }
 
   /**
