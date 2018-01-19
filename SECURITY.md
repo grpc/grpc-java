@@ -39,7 +39,7 @@ import org.conscrypt.Conscrypt;
 import java.security.Security;
 ...
 
-Security.addProvider(Conscrypt.newProvider());
+Security.insertProviderAt(Conscrypt.newProvider(), 1);
 ```
 
 ## TLS with OpenSSL
