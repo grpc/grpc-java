@@ -854,8 +854,6 @@ public class CensusModulesTest {
         createServerCallInfo(
             fakeCall.getMethodDescriptor(),
             fakeCall.getAttributes(),
-            fakeCall.isReady(),
-            fakeCall.isCancelled(),
             fakeCall.getAuthority()));
 
     verify(spyServerSpan, never()).end(any(EndSpanOptions.class));
@@ -903,8 +901,6 @@ public class CensusModulesTest {
         createServerCallInfo(
             fakeCall.getMethodDescriptor(),
             fakeCall.getAttributes(),
-            fakeCall.isReady(),
-            fakeCall.isCancelled(),
             fakeCall.getAuthority()));
 
     serverStreamTracer.streamClosed(Status.CANCELLED);

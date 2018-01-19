@@ -26,11 +26,8 @@ public class InternalServerStreamTracer {
   public static <ReqT, RespT> ServerCallInfo<ReqT, RespT> createServerCallInfo(
       MethodDescriptor<ReqT, RespT> methodDescriptor,
       Attributes attributes,
-      boolean isReady,
-      boolean isCancelled,
       String authority) {
-    return new ServerCallInfo<ReqT, RespT>(
-        methodDescriptor, attributes, isReady, isCancelled, authority);
+    return new ServerCallInfo<ReqT, RespT>(methodDescriptor, attributes, authority);
   }
 
   private InternalServerStreamTracer() {

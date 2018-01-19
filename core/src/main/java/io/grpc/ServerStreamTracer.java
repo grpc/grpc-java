@@ -39,7 +39,7 @@ public abstract class ServerStreamTracer extends StreamTracer {
    * handler.
    */
   @SuppressWarnings("deprecation")
-  public void serverCallStarted(final ServerCallInfo<?, ?> callInfo) {
+  public void serverCallStarted(ServerCallInfo<?, ?> callInfo) {
     serverCallStarted(ReadOnlyServerCall.create(callInfo));
   }
 
@@ -76,20 +76,14 @@ public abstract class ServerStreamTracer extends StreamTracer {
   public static final class ServerCallInfo<ReqT, RespT> {
     private final MethodDescriptor<ReqT, RespT> methodDescriptor;
     private final Attributes attributes;
-    private final boolean isReady;
-    private final boolean isCancelled;
     private final String authority;
 
     ServerCallInfo(
         MethodDescriptor<ReqT, RespT> methodDescriptor,
         Attributes attributes,
-        boolean isReady,
-        boolean isCancelled,
         String authority) {
       this.methodDescriptor = methodDescriptor;
       this.attributes = attributes;
-      this.isReady = isReady;
-      this.isCancelled = isCancelled;
       this.authority = authority;
     }
 
@@ -101,16 +95,8 @@ public abstract class ServerStreamTracer extends StreamTracer {
       return attributes;
     }
 
-    public boolean isReady() {
-      return isReady;
-    }
-
     public String getAuthority() {
       return authority;
-    }
-
-    public boolean isCancelled() {
-      return isCancelled;
     }
 
     @Override
@@ -121,14 +107,12 @@ public abstract class ServerStreamTracer extends StreamTracer {
       ServerCallInfo<?, ?> that = (ServerCallInfo) other;
       return Objects.equal(methodDescriptor, that.methodDescriptor)
           && Objects.equal(attributes, that.attributes)
-          && Objects.equal(isReady, that.isReady)
-          && Objects.equal(isCancelled, that.isCancelled)
           && Objects.equal(authority, that.authority);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(methodDescriptor, attributes, isReady, isCancelled, authority);
+      return Objects.hashCode(methodDescriptor, attributes, authority);
     }
   }
 
@@ -163,12 +147,14 @@ public abstract class ServerStreamTracer extends StreamTracer {
 
     @Override
     public boolean isReady() {
-      return callInfo.isReady();
+      // a dummy value
+      return false;
     }
 
     @Override
     public boolean isCancelled() {
-      return callInfo.isCancelled();
+      // a dummy value
+      return false;
     }
 
     @Override

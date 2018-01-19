@@ -520,8 +520,6 @@ public final class ServerImpl extends io.grpc.Server implements InternalWithLogI
           InternalServerStreamTracer.createServerCallInfo(
               methodDef.getMethodDescriptor(),
               call.getAttributes(),
-              call.isReady(),
-              call.isCancelled(),
               call.getAuthority()));
 
       for (ServerInterceptor interceptor : interceptors) {

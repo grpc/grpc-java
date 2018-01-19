@@ -491,8 +491,6 @@ public class ServerImplTest {
         InternalServerStreamTracer.createServerCallInfo(
             call.getMethodDescriptor(),
             call.getAttributes(),
-            call.isReady(),
-            call.isCancelled(),
             call.getAuthority()),
         streamTracer.getServerCallInfo());
     verify(fallbackRegistry).lookupMethod("Waiter/serve", AUTHORITY);
