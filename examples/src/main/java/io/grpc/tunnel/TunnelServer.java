@@ -75,7 +75,7 @@ public class TunnelServer {
     }
 
     @Override public ServerCall.Listener<byte[]> startCall(
-        ServerCall<byte[], byte[]> call, Metadata headers) {
+        final ServerCall<byte[], byte[]> call, Metadata headers) {
       final EventLoopGroup eventLoopGroup = new DefaultEventLoop();
       final SettableFuture<io.netty.channel.Channel> nettyChannelFuture = SettableFuture.create();
       ChannelHandler handler = new ChannelInboundHandlerAdapter() {
@@ -198,7 +198,7 @@ public class TunnelServer {
       }
     };
     int port = 50051;
-    Server server = ServerBuilder.forPort(port)
+    final Server server = ServerBuilder.forPort(port)
         .addService(createService("io.grpc.Tunnel/new", listener))
         .build()
         .start();
