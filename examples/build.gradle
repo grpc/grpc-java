@@ -97,6 +97,20 @@ task helloWorldClient(type: CreateStartScripts) {
   classpath = jar.outputs.files + project.configurations.runtime
 }
 
+task tunnelServer(type: CreateStartScripts) {
+  mainClassName = 'io.grpc.tunnel.TunnelServer'
+  applicationName = 'tunnel-server'
+  outputDir = new File(project.buildDir, 'tmp')
+  classpath = jar.outputs.files + project.configurations.runtime
+}
+
+task tunnelClient(type: CreateStartScripts) {
+  mainClassName = 'io.grpc.tunnel.TunnelClient'
+  applicationName = 'tunnel-client'
+  outputDir = new File(project.buildDir, 'tmp')
+  classpath = jar.outputs.files + project.configurations.runtime
+}
+
 task compressingHelloWorldClient(type: CreateStartScripts) {
   mainClassName = 'io.grpc.examples.experimental.CompressingHelloWorldClient'
   applicationName = 'compressing-hello-world-client'
@@ -108,7 +122,8 @@ applicationDistribution.into('bin') {
   from(routeGuideServer)
   from(routeGuideClient)
   from(helloWorldServer)
-  from(helloWorldClient)
+  from(tunnelServer)
+  from(tunnelClient)
   from(compressingHelloWorldClient)
   fileMode = 0755
 }

@@ -42,7 +42,7 @@ public class HelloWorldClient {
   }
 
   /** Construct client for accessing RouteGuide server using the existing channel. */
-  HelloWorldClient(ManagedChannel channel) {
+  public HelloWorldClient(ManagedChannel channel) {
     this.channel = channel;
     blockingStub = GreeterGrpc.newBlockingStub(channel);
   }
