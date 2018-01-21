@@ -75,7 +75,7 @@ public class TunnelServer {
     }
 
     @Override public ServerCall.Listener<byte[]> startCall(
-        final ServerCall<byte[], byte[]> call, Metadata headers) {
+        final ServerCall<byte[], byte[]> call, final Metadata headers) {
       final EventLoopGroup eventLoopGroup = new DefaultEventLoop();
       final SettableFuture<io.netty.channel.Channel> nettyChannelFuture = SettableFuture.create();
       ChannelHandler handler = new ChannelInboundHandlerAdapter() {
