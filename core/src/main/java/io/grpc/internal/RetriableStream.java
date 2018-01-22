@@ -653,6 +653,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     // Each buffer size tracer is dedicated to one specific substream.
     private final Substream substream;
 
+    @GuardedBy("lock")
     long bufferNeeded;
 
     BufferSizeTracer(Substream substream) {
@@ -706,6 +707,11 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
   }
 
+
+  /**
+   *  Used to keep track of the total amount of memory used to buffer retryable or hedged RPCs for
+   *  the Channel. There should be a single instance of it for each channel.
+   */
   static final class ChannelBufferMeter {
     private final AtomicLong bufferUsed = new AtomicLong();
 
