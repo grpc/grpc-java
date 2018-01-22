@@ -72,6 +72,7 @@ final class DnsNameResolver extends NameResolver {
   private static final Logger logger = Logger.getLogger(DnsNameResolver.class.getName());
 
   private static final boolean JNDI_AVAILABLE = jndiAvailable();
+  private static final String LOCAL_HOST_NAME = getHostName();
 
   // From https://github.com/grpc/proposal/blob/master/A2-service-configs-in-dns.md
   private static final String SERVICE_CONFIG_NAME_PREFIX = "_grpc_config.";
@@ -111,8 +112,7 @@ final class DnsNameResolver extends NameResolver {
   @GuardedBy("this")
   private Listener listener;
 
-  @VisibleForTesting
-  Random random = new Random();
+  private final Random random = new Random();
 
   DnsNameResolver(@Nullable String nsAuthority, String name, Attributes params,
       Resource<ScheduledExecutorService> timerServiceResource,
@@ -219,7 +219,7 @@ final class DnsNameResolver extends NameResolver {
               for (JsonElement serviceConfigChoice : allServiceConfigChoices) {
                 try {
                   serviceConfig = maybeChooseServiceConfig(
-                      serviceConfigChoice.getAsJsonObject(), random, null);
+                      serviceConfigChoice.getAsJsonObject(), random, LOCAL_HOST_NAME);
                   if (serviceConfig != null) {
                     break;
                   }
@@ -608,5 +608,13 @@ final class DnsNameResolver extends NameResolver {
       sb.append(c);
     }
     return sb.toString();
+  }
+
+  private static final String getHostName() {
+    try {
+      return InetAddress.getLocalHost().getHostName();
+    } catch (UnknownHostException e) {
+      throw new RuntimeException(e);
+    }
   }
 }
