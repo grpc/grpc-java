@@ -52,7 +52,7 @@ public class TunnelClient {
   public static Server createServer(Channel channel, String methodName, CallOptions options,
       HandlerRegistry registry) throws IOException {
     LocalAddress address = new LocalAddress("" + Math.random());
-    Server server = NettyServerBuilder.forAddress(address)
+    final Server server = NettyServerBuilder.forAddress(address)
         .channelType(LocalServerChannel.class)
         .fallbackHandlerRegistry(registry)
         .build()
