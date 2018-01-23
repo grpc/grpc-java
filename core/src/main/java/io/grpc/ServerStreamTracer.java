@@ -17,6 +17,7 @@
 package io.grpc;
 
 import com.google.common.base.Objects;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -81,7 +82,7 @@ public abstract class ServerStreamTracer extends StreamTracer {
     ServerCallInfo(
         MethodDescriptor<ReqT, RespT> methodDescriptor,
         Attributes attributes,
-        String authority) {
+        @Nullable String authority) {
       this.methodDescriptor = methodDescriptor;
       this.attributes = attributes;
       this.authority = authority;
@@ -95,6 +96,7 @@ public abstract class ServerStreamTracer extends StreamTracer {
       return attributes;
     }
 
+    @Nullable
     public String getAuthority() {
       return authority;
     }

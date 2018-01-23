@@ -41,6 +41,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
+import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -849,12 +850,7 @@ public class CensusModulesTest {
     Context filteredContext = serverStreamTracer.filterContext(Context.ROOT);
     assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));
 
-    FakeServerCall<String, String> fakeCall = new FakeServerCall<String, String>(method);
-    serverStreamTracer.serverCallStarted(
-        createServerCallInfo(
-            fakeCall.getMethodDescriptor(),
-            fakeCall.getAttributes(),
-            fakeCall.getAuthority()));
+    serverStreamTracer.serverCallStarted(createServerCallInfo(method, Attributes.EMPTY, null));
 
     verify(spyServerSpan, never()).end(any(EndSpanOptions.class));
 
@@ -896,12 +892,8 @@ public class CensusModulesTest {
 
     serverStreamTracer.filterContext(Context.ROOT);
 
-    FakeServerCall<String, String> fakeCall = new FakeServerCall<String, String>(sampledMethod);
     serverStreamTracer.serverCallStarted(
-        createServerCallInfo(
-            fakeCall.getMethodDescriptor(),
-            fakeCall.getAttributes(),
-            fakeCall.getAuthority()));
+        createServerCallInfo(sampledMethod, Attributes.EMPTY, null));
 
     serverStreamTracer.streamClosed(Status.CANCELLED);
 
@@ -979,43 +971,5 @@ public class CensusModulesTest {
     assertNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_SERVER_ELAPSED_TIME));
     assertNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES));
     assertNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
-  }
-
-  private static class FakeServerCall<ReqT, RespT> extends ServerCall<ReqT, RespT> {
-    final MethodDescriptor<ReqT, RespT> method;
-
-    FakeServerCall(MethodDescriptor<ReqT, RespT> method) {
-      this.method = method;
-    }
-
-    @Override
-    public void request(int numMessages) {
-      throw new AssertionError("Should not be called");
-    }
-
-    @Override
-    public void sendHeaders(Metadata headers) {
-      throw new AssertionError("Should not be called");
-    }
-
-    @Override
-    public void sendMessage(RespT message) {
-      throw new AssertionError("Should not be called");
-    }
-
-    @Override
-    public void close(Status status, Metadata trailers) {
-      throw new AssertionError("Should not be called");
-    }
-
-    @Override
-    public boolean isCancelled() {
-      return false;
-    }
-
-    @Override
-    public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
-      return method;
-    }
   }
 }

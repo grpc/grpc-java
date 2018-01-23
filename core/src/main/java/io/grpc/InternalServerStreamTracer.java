@@ -17,6 +17,7 @@
 package io.grpc;
 
 import io.grpc.ServerStreamTracer.ServerCallInfo;
+import javax.annotation.Nullable;
 
 /**
  * Accessor for {@link ServerStreamTracer}.
@@ -26,7 +27,7 @@ public class InternalServerStreamTracer {
   public static <ReqT, RespT> ServerCallInfo<ReqT, RespT> createServerCallInfo(
       MethodDescriptor<ReqT, RespT> methodDescriptor,
       Attributes attributes,
-      String authority) {
+      @Nullable String authority) {
     return new ServerCallInfo<ReqT, RespT>(methodDescriptor, attributes, authority);
   }
 
