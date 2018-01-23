@@ -22,12 +22,17 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.internal.RetriableStream.RetryPolicy.DEFAULT;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -50,9 +55,11 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.internal.Channelz.ChannelStats;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
+import io.grpc.internal.RetriableStream.RetryPolicy;
 import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.SoftReference;
@@ -61,8 +68,10 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -75,6 +84,7 @@ import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
@@ -204,6 +214,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
 
   private final long perRpcBufferLimit;
   private final long channelBufferLimit;
+
+  private RetryPolicies retryPolicies;
 
   // Called from channelExecutor
   private final ManagedClientTransport.Listener delayedTransportListener =
@@ -429,9 +441,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
         final CallOptions callOptions,
         final Metadata headers,
         final Context context) {
+      RetryPolicy retryPolicy = retryPolicies == null ? DEFAULT : retryPolicies.get(method);
       return new RetriableStream<ReqT>(
           method, headers, channelBufferUsed, perRpcBufferLimit, channelBufferLimit,
-          getCallExecutor(callOptions), transportFactory.getScheduledExecutorService()) {
+          getCallExecutor(callOptions), transportFactory.getScheduledExecutorService(),
+          retryPolicy) {
         @Override
         Status prestart() {
           return uncommittedRetriableStreamsRegistry.add(this);
@@ -1031,6 +1045,16 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
           if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
             return;
           }
+
+          try {
+            retryPolicies = getRetryPolicies(config);
+          } catch (RuntimeException re) {
+            logger.log(
+                Level.WARNING,
+                "[" + getLogId() + "] Unexpected exception from parsing service config",
+                re);
+          }
+
           try {
             helper.lb.handleResolvedAddressGroups(servers, config);
           } catch (Throwable e) {
@@ -1063,6 +1087,104 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
           }
         }).drain();
     }
+  }
+
+  private static RetryPolicies getRetryPolicies(Attributes config) {
+    JsonObject serviceConfig = config.get(GrpcAttributes.NAME_RESOLVER_ATTR_SERVICE_CONFIG);
+    return getRetryPolicies(serviceConfig);
+  }
+
+  // TODO(zdapeng): maybe move it to a more appropriate place
+  @VisibleForTesting
+  static RetryPolicies getRetryPolicies(JsonObject serviceConfig) {
+    final Map<String, RetryPolicy> fullMethodNameMap = new HashMap<String, RetryPolicy>();
+    final Map<String, RetryPolicy> serviceNameMap = new HashMap<String, RetryPolicy>();
+
+    if (serviceConfig != null) {
+      JsonArray methodConfigs = serviceConfig.getAsJsonArray("methodConfig");
+
+      /* schema as follows
+      {
+        "methodConfig": [
+          {
+            "name": [
+              {
+                "service": string,
+                "method": string,         // Optional
+              }
+            ],
+            "retryPolicy": {
+              "maxAttempts": number,
+              "initialBackoff": string,   // Long decimal with "s" appended
+              "maxBackoff": string,       // Long decimal with "s" appended
+              "backoffMultiplier": number
+              "retryableStatusCodes": []
+            }
+          }
+        ]
+      }
+      */
+
+      if (methodConfigs != null) {
+        for (JsonElement methodConfig : methodConfigs) {
+          JsonArray names = methodConfig.getAsJsonObject().getAsJsonArray("name");
+          JsonObject retryPolicy = methodConfig.getAsJsonObject().getAsJsonObject("retryPolicy");
+          if (retryPolicy != null) {
+            int maxAttempts = retryPolicy.getAsJsonPrimitive("maxAttempts").getAsInt();
+            String initialBackoffStr =
+                retryPolicy.getAsJsonPrimitive("initialBackoff").getAsString();
+            checkState(
+                initialBackoffStr.charAt(initialBackoffStr.length() - 1) == 's',
+                "invalid value of initialBackoff");
+            double initialBackoff =
+                Double.parseDouble(initialBackoffStr.substring(0, initialBackoffStr.length() - 1));
+            String maxBackoffStr =
+                retryPolicy.getAsJsonPrimitive("maxBackoff").getAsString();
+            checkState(
+                maxBackoffStr.charAt(maxBackoffStr.length() - 1) == 's',
+                "invalid value of maxBackoff");
+            double maxBackoff =
+                Double.parseDouble(maxBackoffStr.substring(0, maxBackoffStr.length() - 1));
+            double backoffMultiplier =
+                retryPolicy.getAsJsonPrimitive("backoffMultiplier").getAsDouble();
+            JsonArray retryableStatusCodes = retryPolicy.getAsJsonArray("retryableStatusCodes");
+            Set<Code> codeSet = new HashSet<Code>(retryableStatusCodes.size());
+            for (JsonElement retryableStatusCode : retryableStatusCodes) {
+              codeSet.add(Code.valueOf(retryableStatusCode.getAsString()));
+            }
+            RetryPolicy pojoPolicy = new RetryPolicy(
+                maxAttempts, initialBackoff, maxBackoff, backoffMultiplier, codeSet);
+
+            for (JsonElement name : names) {
+              String service = name.getAsJsonObject().getAsJsonPrimitive("service").getAsString();
+              JsonPrimitive method = name.getAsJsonObject().getAsJsonPrimitive("method");
+              if (method != null && !method.getAsString().isEmpty()) {
+                fullMethodNameMap.put(
+                    MethodDescriptor.generateFullMethodName(service, method.getAsString()),
+                    pojoPolicy);
+              } else {
+                serviceNameMap.put(service, pojoPolicy);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return new RetryPolicies() {
+      @Override
+      public RetryPolicy get(MethodDescriptor<?, ?> method) {
+        RetryPolicy retryPolicy = fullMethodNameMap.get(method.getFullMethodName());
+        if (retryPolicy == null) {
+          retryPolicy = serviceNameMap
+              .get(MethodDescriptor.extractFullServiceName(method.getFullMethodName()));
+        }
+        if (retryPolicy == null) {
+          retryPolicy = DEFAULT;
+        }
+        return retryPolicy;
+      }
+    };
   }
 
   private final class SubchannelImpl extends AbstractSubchannel {
@@ -1250,5 +1372,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
       e.setStackTrace(new StackTraceElement[0]);
       return e;
     }
+  }
+
+  @VisibleForTesting
+  interface RetryPolicies {
+    @Nonnull
+    RetryPolicy get(MethodDescriptor<?, ?> method);
   }
 }
