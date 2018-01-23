@@ -56,6 +56,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final MethodDescriptor<ReqT, ?> method;
   private final Executor callExecutor;
   private final ScheduledExecutorService scheduledExecutorService;
+  // Must not modify it.
+  private final Metadata headers;
 
   /** Must be held when updating state, accessing state.buffer, or certain substream attributes. */
   private final Object lock = new Object();
@@ -76,8 +78,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private Future<?> scheduledRetry;
 
   RetriableStream(
-      MethodDescriptor<ReqT, ?> method, ChannelBufferMeter channelBufferUsed,
-      long perRpcBufferLimit, long channelBufferLimit,
+      MethodDescriptor<ReqT, ?> method, Metadata headers,
+      ChannelBufferMeter channelBufferUsed, long perRpcBufferLimit, long channelBufferLimit,
       Executor callExecutor, ScheduledExecutorService scheduledExecutorService) {
     this.method = method;
     this.channelBufferUsed = channelBufferUsed;
@@ -85,6 +87,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     this.channelBufferLimit = channelBufferLimit;
     this.callExecutor = callExecutor;
     this.scheduledExecutorService = scheduledExecutorService;
+    this.headers = headers;
   }
 
   @Nullable // null if already committed
@@ -138,7 +141,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     drain(substream);
   }
 
-
   private Substream createSubstream(int previousAttempts) {
     Substream sub = new Substream(previousAttempts);
     // one tracer per substream
@@ -149,8 +151,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         return bufferSizeTracer;
       }
     };
+
+    Metadata newHeaders = updateHeaders(headers, previousAttempts);
     // NOTICE: This set _must_ be done before stream.start() and it actually is.
-    sub.stream = newSubstream(tracerFactory, previousAttempts);
+    sub.stream = newSubstream(tracerFactory, newHeaders);
     return sub;
   }
 
@@ -159,9 +163,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
    * Client stream must not be started already.
    */
   abstract ClientStream newSubstream(
-      ClientStreamTracer.Factory tracerFactory, int previousAttempts);
+      ClientStreamTracer.Factory tracerFactory, Metadata headers);
 
   /** Adds grpc-previous-rpc-attempts in the headers of a retry/hedging RPC. */
+  @VisibleForTesting
   final Metadata updateHeaders(Metadata originalHeaders, int previousAttempts) {
     Metadata newHeaders = originalHeaders;
     if (previousAttempts > 0) {

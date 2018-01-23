@@ -85,7 +85,7 @@ public class RetriableStreamTest {
   private final FakeClock fakeClock = new FakeClock();
   private final RetriableStream<String> retriableStream =
       new RetriableStream<String>(
-          method, channelBufferUsed, PER_RPC_BUFFER_LIMIT, CHANNEL_BUFFER_LIMIT,
+          method, new Metadata(),channelBufferUsed, PER_RPC_BUFFER_LIMIT, CHANNEL_BUFFER_LIMIT,
           MoreExecutors.directExecutor(), fakeClock.getScheduledExecutorService()) {
         @Override
         void postCommit() {
@@ -93,10 +93,12 @@ public class RetriableStreamTest {
         }
 
         @Override
-        ClientStream newSubstream(ClientStreamTracer.Factory tracerFactory, int previousAttempts) {
+        ClientStream newSubstream(ClientStreamTracer.Factory tracerFactory, Metadata metadata) {
           bufferSizeTracer =
               tracerFactory.newClientStreamTracer(CallOptions.DEFAULT, new Metadata());
-          return retriableStreamRecorder.newSubstream(previousAttempts);
+          int actualPreviousRpcAttemptsInHeader = metadata.get(GRPC_PREVIOUS_RPC_ATTEMPTS) == null
+              ? 0 : Integer.valueOf(metadata.get(GRPC_PREVIOUS_RPC_ATTEMPTS));
+          return retriableStreamRecorder.newSubstream(actualPreviousRpcAttemptsInHeader);
         }
 
         @Override
