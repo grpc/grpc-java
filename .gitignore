@@ -2,6 +2,7 @@
 build
 .gradle
 local.properties
+gradle.properties
 out
 
 # Maven (examples)
