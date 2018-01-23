@@ -17,7 +17,6 @@
 package io.grpc.examples.helloworldtls;
 
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
@@ -29,11 +28,10 @@ import io.netty.handler.ssl.SslProvider;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.util.logging.Logger;
 
 /**
- * Server that manages startup/shutdown of a {@code Greeter} server.
+ * Server that manages startup/shutdown of a {@code Greeter} server with TLS enabled.
  */
 public class HelloWorldServerTls {
   private static final Logger logger = Logger.getLogger(HelloWorldServerTls.class.getName());
