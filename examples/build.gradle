@@ -8,7 +8,7 @@ buildscript {
   dependencies {
     // ASSUMES GRADLE 2.12 OR HIGHER. Use plugin version 0.7.5 with earlier
     // gradle versions
-    classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.3'
+    classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.1'
   }
 }
 
@@ -22,13 +22,17 @@ repositories {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.10.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.9.0' // CURRENT_GRPC_VERSION
+def nettyTcNativeVersion = '2.0.7.Final' // CURRENT NETTY TCNATIVE VERSION
 
 dependencies {
   compile "com.google.api.grpc:proto-google-common-protos:1.0.0"
   compile "io.grpc:grpc-netty:${grpcVersion}"
   compile "io.grpc:grpc-protobuf:${grpcVersion}"
   compile "io.grpc:grpc-stub:${grpcVersion}"
+
+  // Used for TLS in HelloWorldServerTls
+  compile "io.netty:netty-tcnative-boringssl-static:${nettyTcNativeVersion}"
 
   testCompile "io.grpc:grpc-testing:${grpcVersion}"
   testCompile "junit:junit:4.12"
@@ -97,6 +101,20 @@ task helloWorldClient(type: CreateStartScripts) {
   classpath = jar.outputs.files + project.configurations.runtime
 }
 
+task helloWorldServerTls(type: CreateStartScripts) {
+  mainClassName = 'io.grpc.examples.helloworldtls.HelloWorldServerTls'
+  applicationName = 'hello-world-server-tls'
+  outputDir = new File(project.buildDir, 'tmp')
+  classpath = jar.outputs.files + project.configurations.runtime
+}
+
+task helloWorldClientTls(type: CreateStartScripts) {
+  mainClassName = 'io.grpc.examples.helloworldtls.HelloWorldClientTls'
+  applicationName = 'hello-world-client-tls'
+  outputDir = new File(project.buildDir, 'tmp')
+  classpath = jar.outputs.files + project.configurations.runtime
+}
+
 task compressingHelloWorldClient(type: CreateStartScripts) {
   mainClassName = 'io.grpc.examples.experimental.CompressingHelloWorldClient'
   applicationName = 'compressing-hello-world-client'
@@ -109,6 +127,8 @@ applicationDistribution.into('bin') {
   from(routeGuideClient)
   from(helloWorldServer)
   from(helloWorldClient)
+  from(helloWorldServerTls)
+  from(helloWorldClientTls)
   from(compressingHelloWorldClient)
   fileMode = 0755
 }
