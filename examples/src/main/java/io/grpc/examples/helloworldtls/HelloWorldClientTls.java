@@ -22,8 +22,11 @@ import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.examples.helloworld.HelloWorldServer;
+import io.grpc.netty.GrpcSslContexts;
+import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 
+import javax.net.ssl.SSLException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -38,10 +41,12 @@ public class HelloWorldClientTls {
   private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
   /** Construct client connecting to HelloWorld server at {@code host:port}. */
-  public HelloWorldClientTls(String host, int port) {
+  public HelloWorldClientTls(String host, int port) throws SSLException {
     this(NettyChannelBuilder.forAddress(host, port)
         // Channels are secure by default (via SSL/TLS). For the example we disable TLS to avoid
         // needing certificates.
+        .negotiationType(NegotiationType.TLS)
+        .sslContext(GrpcSslContexts.forClient().build())
         .build());
   }
 
