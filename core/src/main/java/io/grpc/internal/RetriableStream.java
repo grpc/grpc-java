@@ -160,7 +160,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   /**
    * Creates a new physical ClientStream that represents a retry/hedging attempt. The returned
-   * Client stream must not be started already.
+   * Client stream is not yet started.
    */
   abstract ClientStream newSubstream(
       ClientStreamTracer.Factory tracerFactory, Metadata headers);
