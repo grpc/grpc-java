@@ -14,19 +14,22 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
+package io.grpc;
 
 import com.google.common.util.concurrent.ListenableFuture;
-import io.grpc.CallOptions;
-import io.grpc.Channel;
-import io.grpc.ClientCall;
-import io.grpc.InternalChannelStats;
-import io.grpc.InternalLogId;
-import io.grpc.ManagedChannel;
-import io.grpc.MethodDescriptor;
+
 import java.util.concurrent.TimeUnit;
 
-public class ManagedChannelChain extends ManagedChannel {
+/**
+ * {@code ManagedChannelChain} helps solve the problem where, by wrapping a {@link ManagedChannel}
+ * in multiple layers of {@link io.grpc.ClientInterceptors.InterceptorChannel}, you lose the
+ * "ManagedChannel-ness" of the the channel chain.
+ *
+ * <br>{@code ManagedChannelChain} is used to help {@code AbstractStub} preserve the
+ * "ManagedChannel-ness" of its {@code getChannel()} method result, when the stub is built around a
+ * {@code ManagedChannel} and the {@code AbstractStub.withInterceptors()} is used.
+ */
+class ManagedChannelChain extends ManagedChannel {
   private final ManagedChannel base;
   private final Channel head;
 
