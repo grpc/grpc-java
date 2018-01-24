@@ -75,14 +75,4 @@ class ManagedChannelChain extends ManagedChannel {
   public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
     return base.awaitTermination(timeout, unit);
   }
-
-  @Override
-  public ListenableFuture<InternalChannelStats> getStats() {
-    return base.getStats();
-  }
-
-  @Override
-  public InternalLogId getLogId() {
-    return base.getLogId();
-  }
 }
