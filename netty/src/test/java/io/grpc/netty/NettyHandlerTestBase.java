@@ -25,7 +25,6 @@ import static org.mockito.Matchers.anyLong;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -114,12 +113,12 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
    */
   protected final void initChannel(Http2HeadersDecoder headersDecoder) throws Exception {
     content = Unpooled.copiedBuffer("hello world", UTF_8);
-    frameWriter = spy(new DefaultHttp2FrameWriter());
+    frameWriter = mock(Http2FrameWriter.class, delegatesTo(new DefaultHttp2FrameWriter()));
     frameReader = new DefaultHttp2FrameReader(headersDecoder);
 
+    channel = new FakeClockSupportedChanel();
     handler = newHandler();
-
-    channel = new FakeClockSupportedChanel(handler);
+    channel.pipeline().addLast(handler);
     ctx = channel.pipeline().context(handler);
 
     writeQueue = initWriteQueue();

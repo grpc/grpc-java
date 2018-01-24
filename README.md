@@ -1,9 +1,11 @@
 gRPC-Java - An RPC library and framework
 ========================================
 
-gRPC-Java works with JDK 6. TLS usage typically requires using Java 8, or Play
-Services Dynamic Security Provider on Android. Please see the [Security
-Readme](SECURITY.md).
+gRPC-Java works with JDK 6. On Android, gRPC-Java supports Android API levels
+14 and up (Ice Cream Sandwich and later).
+
+TLS usage typically requires using Java 8, or Play Services Dynamic Security
+Provider on Android. Please see the [Security Readme](SECURITY.md).
 
 <table>
   <tr>
@@ -28,37 +30,37 @@ Download [the JARs][]. Or for Maven with non-Android, add to your `pom.xml`:
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-netty</artifactId>
-  <version>1.8.0</version>
+  <version>1.9.0</version>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-protobuf</artifactId>
-  <version>1.8.0</version>
+  <version>1.9.0</version>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-stub</artifactId>
-  <version>1.8.0</version>
+  <version>1.9.0</version>
 </dependency>
 ```
 
 Or for Gradle with non-Android, add to your dependencies:
 ```gradle
-compile 'io.grpc:grpc-netty:1.8.0'
-compile 'io.grpc:grpc-protobuf:1.8.0'
-compile 'io.grpc:grpc-stub:1.8.0'
+compile 'io.grpc:grpc-netty:1.9.0'
+compile 'io.grpc:grpc-protobuf:1.9.0'
+compile 'io.grpc:grpc-stub:1.9.0'
 ```
 
 For Android client, use `grpc-okhttp` instead of `grpc-netty` and
 `grpc-protobuf-lite` or `grpc-protobuf-nano` instead of `grpc-protobuf`:
 ```gradle
-compile 'io.grpc:grpc-okhttp:1.8.0'
-compile 'io.grpc:grpc-protobuf-lite:1.8.0'
-compile 'io.grpc:grpc-stub:1.8.0'
+compile 'io.grpc:grpc-okhttp:1.9.0'
+compile 'io.grpc:grpc-protobuf-lite:1.9.0'
+compile 'io.grpc:grpc-stub:1.9.0'
 ```
 
 [the JARs]:
-http://search.maven.org/#search%7Cga%7C1%7Cg%3A%22io.grpc%22%20AND%20v%3A%221.8.0%22
+http://search.maven.org/#search%7Cga%7C1%7Cg%3A%22io.grpc%22%20AND%20v%3A%221.9.0%22
 
 Development snapshots are available in [Sonatypes's snapshot
 repository](https://oss.sonatype.org/content/repositories/snapshots/).
@@ -85,9 +87,9 @@ For protobuf-based codegen integrated with the Maven build system, you can use
       <artifactId>protobuf-maven-plugin</artifactId>
       <version>0.5.0</version>
       <configuration>
-        <protocArtifact>com.google.protobuf:protoc:3.5.0:exe:${os.detected.classifier}</protocArtifact>
+        <protocArtifact>com.google.protobuf:protoc:3.5.1-1:exe:${os.detected.classifier}</protocArtifact>
         <pluginId>grpc-java</pluginId>
-        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.8.0:exe:${os.detected.classifier}</pluginArtifact>
+        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.9.0:exe:${os.detected.classifier}</pluginArtifact>
       </configuration>
       <executions>
         <execution>
@@ -117,17 +119,17 @@ buildscript {
   dependencies {
     // ASSUMES GRADLE 2.12 OR HIGHER. Use plugin version 0.7.5 with earlier
     // gradle versions
-    classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.1'
+    classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.3'
   }
 }
 
 protobuf {
   protoc {
-    artifact = "com.google.protobuf:protoc:3.5.0"
+    artifact = "com.google.protobuf:protoc:3.5.1-1"
   }
   plugins {
     grpc {
-      artifact = 'io.grpc:protoc-gen-grpc-java:1.8.0'
+      artifact = 'io.grpc:protoc-gen-grpc-java:1.9.0'
     }
   }
   generateProtoTasks {

@@ -2,6 +2,7 @@
 
 def grpc_java_repositories(
     omit_com_google_api_grpc_google_common_protos=False,
+    omit_com_google_auth_google_auth_library_credentials=False,
     omit_com_google_code_findbugs_jsr305=False,
     omit_com_google_code_gson=False,
     omit_com_google_errorprone_error_prone_annotations=False,
@@ -30,6 +31,8 @@ def grpc_java_repositories(
   """Imports dependencies for grpc-java."""
   if not omit_com_google_api_grpc_google_common_protos:
     com_google_api_grpc_google_common_protos()
+  if not omit_com_google_auth_google_auth_library_credentials:
+    com_google_auth_google_auth_library_credentials()
   if not omit_com_google_code_findbugs_jsr305:
     com_google_code_findbugs_jsr305()
   if not omit_com_google_code_gson:
@@ -42,8 +45,8 @@ def grpc_java_repositories(
     com_google_instrumentation_api()
   if not omit_com_google_protobuf:
     com_google_protobuf()
-  if not omit_com_google_protobuf_java:
-    com_google_protobuf_java()
+  if omit_com_google_protobuf_java:
+    fail("omit_com_google_protobuf_java is no longer supported and must be not be passed to grpc_java_repositories()")
   if not omit_com_google_protobuf_nano_protobuf_javanano:
     com_google_protobuf_nano_protobuf_javanano()
   if not omit_com_google_truth_truth:
@@ -97,6 +100,13 @@ def com_google_api_grpc_google_common_protos():
       sha1 = "86f070507e28b930e50d218ee5b6788ef0dd05e6",
   )
 
+def com_google_auth_google_auth_library_credentials():
+  native.maven_jar(
+      name = "com_google_auth_google_auth_library_credentials",
+      artifact = "com.google.auth:google-auth-library-credentials:0.9.0",
+      sha1 = "8e2b181feff6005c9cbc6f5c1c1e2d3ec9138d46",
+  )
+
 def com_google_code_findbugs_jsr305():
   native.maven_jar(
       name = "com_google_code_findbugs_jsr305",
@@ -138,19 +148,9 @@ def com_google_protobuf():
   # This statement defines the @com_google_protobuf repo.
   native.http_archive(
       name = "com_google_protobuf",
-      sha256 = "cef7f1b5a7c5fba672bec2a319246e8feba471f04dcebfe362d55930ee7c1c30",
-      strip_prefix = "protobuf-3.5.0",
-      urls = ["https://github.com/google/protobuf/archive/v3.5.0.zip"],
-  )
-
-def com_google_protobuf_java():
-  # java_proto_library rules implicitly depend on @com_google_protobuf_java//:java_toolchain,
-  # which is the Java proto runtime (base classes and common utilities).
-  native.http_archive(
-      name = "com_google_protobuf_java",
-      sha256 = "cef7f1b5a7c5fba672bec2a319246e8feba471f04dcebfe362d55930ee7c1c30",
-      strip_prefix = "protobuf-3.5.0",
-      urls = ["https://github.com/google/protobuf/archive/v3.5.0.zip"],
+      sha256 = "1f8b9b202e9a4e467ff0b0f25facb1642727cdf5e69092038f15b37c75b99e45",
+      strip_prefix = "protobuf-3.5.1",
+      urls = ["https://github.com/google/protobuf/archive/v3.5.1.zip"],
   )
 
 def com_google_protobuf_nano_protobuf_javanano():
@@ -184,71 +184,71 @@ def com_squareup_okio():
 def io_netty_codec_http2():
   native.maven_jar(
       name = "io_netty_netty_codec_http2",
-      artifact = "io.netty:netty-codec-http2:4.1.16.Final",
-      sha1 = "45c27cddac120a4fcda8f699659e59389f7b9736",
+      artifact = "io.netty:netty-codec-http2:4.1.17.Final",
+      sha1 = "f9844005869c6d9049f4b677228a89fee4c6eab3",
   )
 
 def io_netty_buffer():
   native.maven_jar(
       name = "io_netty_netty_buffer",
-      artifact = "io.netty:netty-buffer:4.1.16.Final",
-      sha1 = "63b5fa95c74785e16f2c30ce268bc222e35c8cb5",
+      artifact = "io.netty:netty-buffer:4.1.17.Final",
+      sha1 = "fdd68fb3defd7059a7392b9395ee941ef9bacc25",
   )
 
 def io_netty_common():
   native.maven_jar(
       name = "io_netty_netty_common",
-      artifact = "io.netty:netty-common:4.1.16.Final",
-      sha1 = "177a6b30cca92f6f5f9873c9befd681377a4c328",
+      artifact = "io.netty:netty-common:4.1.17.Final",
+      sha1 = "581c8ee239e4dc0976c2405d155f475538325098",
   )
 
 def io_netty_transport():
   native.maven_jar(
       name = "io_netty_netty_transport",
-      artifact = "io.netty:netty-transport:4.1.16.Final",
-      sha1 = "3c8ee2c4d4a1cbb947a5c184c7aeb2204260958b",
+      artifact = "io.netty:netty-transport:4.1.17.Final",
+      sha1 = "9585776b0a8153182412b5d5366061ff486914c1",
   )
 
 def io_netty_codec():
   native.maven_jar(
       name = "io_netty_netty_codec",
-      artifact = "io.netty:netty-codec:4.1.16.Final",
-      sha1 = "d84a1f21768b7309c2954521cf5a1f46c2309eb1",
+      artifact = "io.netty:netty-codec:4.1.17.Final",
+      sha1 = "1d00f56dc9e55203a4bde5aae3d0828fdeb818e7",
   )
 
 def io_netty_codec_socks():
   native.maven_jar(
       name = "io_netty_netty_codec_socks",
-      artifact = "io.netty:netty-codec-socks:4.1.16.Final",
-      sha1 = "f42aabfb1dcae4eaf1700f2c2d047eab3c1b8523",
+      artifact = "io.netty:netty-codec-socks:4.1.17.Final",
+      sha1 = "a159bf1f3d5019e0d561c92fbbec8400967471fa",
   )
 
 def io_netty_codec_http():
   native.maven_jar(
       name = "io_netty_netty_codec_http",
-      artifact = "io.netty:netty-codec-http:4.1.16.Final",
-      sha1 = "d64312378b438dfdad84267c599a053327c6f02a",
+      artifact = "io.netty:netty-codec-http:4.1.17.Final",
+      sha1 = "251d7edcb897122b9b23f24ff793cd0739056b9e",
   )
 
 def io_netty_handler():
   native.maven_jar(
       name = "io_netty_netty_handler",
-      artifact = "io.netty:netty-handler:4.1.16.Final",
-      sha1 = "fec0e63e7dd7f4eeef7ea8dc47a1ff32dfc7ebc2",
+      artifact = "io.netty:netty-handler:4.1.17.Final",
+      sha1 = "18c40ffb61a1d1979eca024087070762fdc4664a",
   )
 
 def io_netty_handler_proxy():
   native.maven_jar(
       name = "io_netty_netty_handler_proxy",
-      artifact = "io.netty:netty-handler-proxy:4.1.16.Final",
-      sha1 = "e3007ed3368748ccdc35c1f38c7d6c089768373a",
+      artifact = "io.netty:netty-handler-proxy:4.1.17.Final",
+      sha1 = "9330ee60c4e48ca60aac89b7bc5ec2567e84f28e",
   )
 
 def io_netty_resolver():
   native.maven_jar(
       name = "io_netty_netty_resolver",
-      artifact = "io.netty:netty-resolver:4.1.16.Final",
-      sha1 = "f6eb553b53fb3a90a8ac1170697093fed82eae28",
+      artifact = "io.netty:netty-resolver:4.1.17.Final",
+      sha1 = "8f386c80821e200f542da282ae1d3cde5cad8368",
   )
 
 def io_netty_tcnative_boringssl_static():

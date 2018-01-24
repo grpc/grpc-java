@@ -29,6 +29,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.same;
@@ -37,7 +38,6 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -71,6 +71,7 @@ import io.grpc.grpclb.GrpclbState.RoundRobinPicker;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.stub.StreamObserver;
@@ -164,24 +165,25 @@ public class GrpclbLoadBalancerTest {
         .thenReturn(pickFirstBalancer);
     when(roundRobinBalancerFactory.newLoadBalancer(any(Helper.class)))
         .thenReturn(roundRobinBalancer);
-    mockLbService = spy(new LoadBalancerGrpc.LoadBalancerImplBase() {
-        @Override
-        public StreamObserver<LoadBalanceRequest> balanceLoad(
-            final StreamObserver<LoadBalanceResponse> responseObserver) {
-          StreamObserver<LoadBalanceRequest> requestObserver =
-              mock(StreamObserver.class);
-          Answer<Void> closeRpc = new Answer<Void>() {
-              @Override
-              public Void answer(InvocationOnMock invocation) {
-                responseObserver.onCompleted();
-                return null;
-              }
-            };
-          doAnswer(closeRpc).when(requestObserver).onCompleted();
-          lbRequestObservers.add(requestObserver);
-          return requestObserver;
-        }
-      });
+    mockLbService = mock(LoadBalancerGrpc.LoadBalancerImplBase.class, delegatesTo(
+        new LoadBalancerGrpc.LoadBalancerImplBase() {
+          @Override
+          public StreamObserver<LoadBalanceRequest> balanceLoad(
+              final StreamObserver<LoadBalanceResponse> responseObserver) {
+            StreamObserver<LoadBalanceRequest> requestObserver =
+                mock(StreamObserver.class);
+            Answer<Void> closeRpc = new Answer<Void>() {
+                @Override
+                public Void answer(InvocationOnMock invocation) {
+                  responseObserver.onCompleted();
+                  return null;
+                }
+              };
+            doAnswer(closeRpc).when(requestObserver).onCompleted();
+            lbRequestObservers.add(requestObserver);
+            return requestObserver;
+          }
+        }));
     fakeLbServer = InProcessServerBuilder.forName("fakeLb")
         .directExecutor().addService(mockLbService).build().start();
     doAnswer(new Answer<ManagedChannel>() {
@@ -1623,7 +1625,7 @@ public class GrpclbLoadBalancerTest {
 
   private static Attributes lbAttributes(String authority) {
     return Attributes.newBuilder()
-        .set(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY, authority)
+        .set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, authority)
         .build();
   }
 

@@ -9,7 +9,8 @@ buildscript {
   dependencies {
     classpath 'com.google.gradle:osdetector-gradle-plugin:1.4.0'
     classpath 'ru.vyarus:gradle-animalsniffer-plugin:1.4.0'
-    classpath 'net.ltgt.gradle:gradle-errorprone-plugin:0.0.11'
+    classpath 'net.ltgt.gradle:gradle-errorprone-plugin:0.0.13'
+    classpath 'net.ltgt.gradle:gradle-apt-plugin:0.13'
     classpath "me.champeau.gradle:jmh-gradle-plugin:0.4.4"
     classpath 'me.champeau.gradle:japicmp-gradle-plugin:0.2.5'
   }
@@ -29,11 +30,13 @@ subprojects {
     apply plugin: "ru.vyarus.animalsniffer"
     if (!rootProject.hasProperty('errorProne') || rootProject.errorProne.toBoolean()) {
       apply plugin: "net.ltgt.errorprone"
+      apply plugin: "net.ltgt.apt"
 
       dependencies {
         // The ErrorProne plugin defaults to the latest, which would break our
         // build if error prone releases a new version with a new check
-        errorprone 'com.google.errorprone:error_prone_core:2.0.21'
+        errorprone 'com.google.errorprone:error_prone_core:2.2.0'
+        apt 'com.google.guava:guava-beta-checker:1.0'
       }
     } else {
       // Remove per-project error-prone checker config
@@ -50,7 +53,7 @@ subprojects {
     idea.module.inheritOutputDirs = true
 
     group = "io.grpc"
-    version = "1.9.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.10.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     sourceCompatibility = 1.6
     targetCompatibility = 1.6
@@ -73,7 +76,8 @@ subprojects {
 
     compileTestJava {
       // serialVersionUID is basically guaranteed to be useless in our tests
-      options.compilerArgs += ["-Xlint:-serial"]
+      // LinkedList doesn't hurt much in tests and has lots of usages
+      options.compilerArgs += ["-Xlint:-serial", "-Xep:JdkObsolete:OFF"]
     }
 
     jar.manifest {
@@ -98,8 +102,8 @@ subprojects {
 
         nettyVersion = '4.1.17.Final'
         guavaVersion = '19.0'
-        protobufVersion = '3.5.0'
-        protocVersion = protobufVersion
+        protobufVersion = '3.5.1'
+        protocVersion = '3.5.1-1'
         protobufNanoVersion = '3.0.0-alpha-5'
 
         configureProtoCompilation = {
@@ -183,6 +187,7 @@ subprojects {
         }
         libraries = [
                 errorprone: "com.google.errorprone:error_prone_annotations:2.1.2",
+                gson: "com.google.code.gson:gson:2.7",
                 guava: "com.google.guava:guava:${guavaVersion}",
                 hpack: 'com.twitter:hpack:0.10.1',
                 jsr305: 'com.google.code.findbugs:jsr305:3.0.0',
@@ -200,7 +205,7 @@ subprojects {
                 protobuf_lite: "com.google.protobuf:protobuf-lite:3.0.1",
                 protoc_lite: "com.google.protobuf:protoc-gen-javalite:3.0.0",
                 protobuf_nano: "com.google.protobuf.nano:protobuf-javanano:${protobufNanoVersion}",
-                protobuf_plugin: 'com.google.protobuf:protobuf-gradle-plugin:0.8.1',
+                protobuf_plugin: 'com.google.protobuf:protobuf-gradle-plugin:0.8.3',
                 protobuf_util: "com.google.protobuf:protobuf-java-util:${protobufVersion}",
 
                 netty: "io.netty:netty-codec-http2:[${nettyVersion}]",

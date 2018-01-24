@@ -39,9 +39,9 @@ import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import java.util.Random;
@@ -179,7 +179,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       public void onNext(StreamingOutputCallRequest request) {
         if (request.hasResponseStatus()) {
           dispatcher.cancel();
-          responseObserver.onError(Status.fromCodeValue(request.getResponseStatus().getCode())
+          dispatcher.onError(Status.fromCodeValue(request.getResponseStatus().getCode())
               .withDescription(request.getResponseStatus().getMessage())
               .asRuntimeException());
           return;
@@ -197,7 +197,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
       @Override
       public void onError(Throwable cause) {
-        responseObserver.onError(cause);
+        dispatcher.onError(cause);
       }
     };
   }
@@ -209,7 +209,8 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   @Override
   public StreamObserver<Messages.StreamingOutputCallRequest> halfDuplexCall(
       final StreamObserver<Messages.StreamingOutputCallResponse> responseObserver) {
-    final Queue<Chunk> chunks = new LinkedList<Chunk>();
+    final ResponseDispatcher dispatcher = new ResponseDispatcher(responseObserver);
+    final Queue<Chunk> chunks = new ArrayDeque<Chunk>();
     return new StreamObserver<StreamingOutputCallRequest>() {
       @Override
       public void onNext(StreamingOutputCallRequest request) {
@@ -219,12 +220,12 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       @Override
       public void onCompleted() {
         // Dispatch all of the chunks in one shot.
-        new ResponseDispatcher(responseObserver).enqueue(chunks).completeInput();
+        dispatcher.enqueue(chunks).completeInput();
       }
 
       @Override
       public void onError(Throwable cause) {
-        responseObserver.onError(cause);
+        dispatcher.onError(cause);
       }
     };
   }
@@ -269,6 +270,11 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       }
     };
 
+    /**
+     * The {@link StreamObserver} will be used to send the queue of response chunks. Since calls to
+     * {@link StreamObserver} must be synchronized across threads, no further calls should be made
+     * directly on {@code responseStream} after it is provided to the {@link ResponseDispatcher}.
+     */
     public ResponseDispatcher(StreamObserver<StreamingOutputCallResponse> responseStream) {
       this.chunks = Queues.newLinkedBlockingQueue();
       this.responseStream = responseStream;
@@ -307,6 +313,10 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
     public synchronized boolean isCancelled() {
       return cancelled;
+    }
+
+    private synchronized void onError(Throwable cause) {
+      responseStream.onError(cause);
     }
 
     /**
@@ -371,7 +381,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
    * Breaks down the request and creates a queue of response chunks for the given request.
    */
   public Queue<Chunk> toChunkQueue(StreamingOutputCallRequest request) {
-    Queue<Chunk> chunkQueue = new LinkedList<Chunk>();
+    Queue<Chunk> chunkQueue = new ArrayDeque<Chunk>();
     int offset = 0;
     boolean compressable = compressableResponse(request.getResponseType());
     for (ResponseParameters params : request.getResponseParametersList()) {

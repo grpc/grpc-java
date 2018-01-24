@@ -20,16 +20,16 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.InternalChannelStats;
 
 /**
- * A collection of channel level stats for channelz.
+ * A collection of call stats for channelz.
  */
-final class ChannelTracer {
+final class CallTracer {
   private final TimeProvider timeProvider;
   private final LongCounter callsStarted = LongCounterFactory.create();
   private final LongCounter callsSucceeded = LongCounterFactory.create();
   private final LongCounter callsFailed = LongCounterFactory.create();
   private volatile long lastCallStartedMillis;
 
-  ChannelTracer(TimeProvider timeProvider) {
+  CallTracer(TimeProvider timeProvider) {
     this.timeProvider = timeProvider;
   }
 
@@ -46,9 +46,12 @@ final class ChannelTracer {
     }
   }
 
-  public InternalChannelStats getStats() {
-    return new InternalChannelStats(
-        callsStarted.value(), callsSucceeded.value(), callsFailed.value(), lastCallStartedMillis);
+  void updateBuilder(InternalChannelStats.Builder builder) {
+    builder
+        .setCallsStarted(callsStarted.value())
+        .setCallsSucceeded(callsSucceeded.value())
+        .setCallsFailed(callsFailed.value())
+        .setLastCallStartedMillis(lastCallStartedMillis);
   }
 
   @VisibleForTesting
@@ -58,7 +61,7 @@ final class ChannelTracer {
   }
 
   public interface Factory {
-    ChannelTracer create();
+    CallTracer create();
   }
 
   static final TimeProvider SYSTEM_TIME_PROVIDER = new TimeProvider() {
@@ -70,8 +73,8 @@ final class ChannelTracer {
 
   static final Factory DEFAULT_FACTORY = new Factory() {
     @Override
-    public ChannelTracer create() {
-      return new ChannelTracer(SYSTEM_TIME_PROVIDER);
+    public CallTracer create() {
+      return new CallTracer(SYSTEM_TIME_PROVIDER);
     }
   };
 

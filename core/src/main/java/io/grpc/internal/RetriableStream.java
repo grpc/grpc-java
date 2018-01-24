@@ -19,7 +19,10 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
+import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.Compressor;
 import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
@@ -32,81 +35,147 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 
 /** A logical {@link ClientStream} that is retriable. */
 abstract class RetriableStream<ReqT> implements ClientStream {
+  @VisibleForTesting
+  static final Metadata.Key<String> GRPC_PREVIOUS_RPC_ATTEMPTS =
+      Metadata.Key.of("grpc-previous-rpc-attempts", Metadata.ASCII_STRING_MARSHALLER);
+
   private static final Status CANCELLED_BECAUSE_COMMITTED =
       Status.CANCELLED.withDescription("Stream thrown away because RetriableStream committed");
 
   private final MethodDescriptor<ReqT, ?> method;
+  private final Executor callExecutor;
+  private final ScheduledExecutorService scheduledExecutorService;
+  // Must not modify it.
+  private final Metadata headers;
 
   /** Must be held when updating state, accessing state.buffer, or certain substream attributes. */
   private final Object lock = new Object();
 
-  private volatile State state =
-      new State(
-          new ArrayList<BufferEntry>(), Collections.<Substream>emptySet(), null, false, false);
+  private final ChannelBufferMeter channelBufferUsed;
+  private final long perRpcBufferLimit;
+  private final long channelBufferLimit;
+
+  private volatile State state = new State(
+      new ArrayList<BufferEntry>(), Collections.<Substream>emptySet(), null, false, false);
+
+  // Used for recording the share of buffer used for the current call out of the channel buffer.
+  // This field would not be necessary if there is no channel buffer limit.
+  @GuardedBy("lock")
+  private long perRpcBufferUsed;
 
   private ClientStreamListener masterListener;
+  private Future<?> scheduledRetry;
 
-  RetriableStream(MethodDescriptor<ReqT, ?> method) {
+  RetriableStream(
+      MethodDescriptor<ReqT, ?> method, Metadata headers,
+      ChannelBufferMeter channelBufferUsed, long perRpcBufferLimit, long channelBufferLimit,
+      Executor callExecutor, ScheduledExecutorService scheduledExecutorService) {
     this.method = method;
+    this.channelBufferUsed = channelBufferUsed;
+    this.perRpcBufferLimit = perRpcBufferLimit;
+    this.channelBufferLimit = channelBufferLimit;
+    this.callExecutor = callExecutor;
+    this.scheduledExecutorService = scheduledExecutorService;
+    this.headers = headers;
   }
 
-  private boolean commit(Substream winningSubstream) {
-    if (commit0(winningSubstream)) {
-      postCommit();
-      return true;
-    }
-    return false;
-  }
-
-  private boolean commit0(Substream winningSubstream) {
-    Collection<Substream> savedDrainedSubstreams;
+  @Nullable // null if already committed
+  @CheckReturnValue
+  private Runnable commit(final Substream winningSubstream) {
     synchronized (lock) {
       if (state.winningSubstream != null) {
-        return false;
+        return null;
       }
-
-      savedDrainedSubstreams = state.drainedSubstreams;
+      final Collection<Substream> savedDrainedSubstreams = state.drainedSubstreams;
 
       state = state.committed(winningSubstream);
-    }
 
-    // For hedging only, not needed for normal retry
-    // TODO(zdapeng): also cancel all the scheduled hedges.
-    for (Substream substream : savedDrainedSubstreams) {
-      if (substream != winningSubstream) {
-        substream.stream.cancel(CANCELLED_BECAUSE_COMMITTED);
+      // subtract the share of this RPC from channelBufferUsed.
+      channelBufferUsed.addAndGet(-perRpcBufferUsed);
+
+      class CommitTask implements Runnable {
+        @Override
+        public void run() {
+          // For hedging only, not needed for normal retry
+          // TODO(zdapeng): also cancel all the scheduled hedges.
+          for (Substream substream : savedDrainedSubstreams) {
+            if (substream != winningSubstream) {
+              substream.stream.cancel(CANCELLED_BECAUSE_COMMITTED);
+            }
+          }
+
+          postCommit();
+        }
       }
+
+      return new CommitTask();
     }
-    return true;
   }
 
   abstract void postCommit();
 
-  private void retry() {
-    Substream substream = createSubstream();
+  /**
+   * Calls commit() and if successful runs the post commit task.
+   */
+  private void commitAndRun(Substream winningSubstream) {
+    Runnable postCommitTask = commit(winningSubstream);
 
-    // TODO(zdapeng): update "grpc-retry-attempts" header
+    if (postCommitTask != null) {
+      postCommitTask.run();
+    }
+  }
 
+  private void retry(int previousAttempts) {
+    Substream substream = createSubstream(previousAttempts);
     drain(substream);
   }
 
-  private Substream createSubstream() {
-    Substream sub = new Substream();
+  private Substream createSubstream(int previousAttempts) {
+    Substream sub = new Substream(previousAttempts);
+    // one tracer per substream
+    final ClientStreamTracer bufferSizeTracer = new BufferSizeTracer(sub);
+    ClientStreamTracer.Factory tracerFactory = new ClientStreamTracer.Factory() {
+      @Override
+      public ClientStreamTracer newClientStreamTracer(CallOptions callOptions, Metadata headers) {
+        return bufferSizeTracer;
+      }
+    };
+
+    Metadata newHeaders = updateHeaders(headers, previousAttempts);
     // NOTICE: This set _must_ be done before stream.start() and it actually is.
-    sub.stream = newStream();
+    sub.stream = newSubstream(tracerFactory, newHeaders);
     return sub;
   }
 
   /**
-   * Creates a new physical ClientStream that represents a retry/hedging attempt.
+   * Creates a new physical ClientStream that represents a retry/hedging attempt. The returned
+   * Client stream is not yet started.
    */
-  abstract ClientStream newStream();
+  abstract ClientStream newSubstream(
+      ClientStreamTracer.Factory tracerFactory, Metadata headers);
+
+  /** Adds grpc-previous-rpc-attempts in the headers of a retry/hedging RPC. */
+  @VisibleForTesting
+  final Metadata updateHeaders(Metadata originalHeaders, int previousAttempts) {
+    Metadata newHeaders = originalHeaders;
+    if (previousAttempts > 0) {
+      newHeaders = new Metadata();
+      newHeaders.merge(originalHeaders);
+      newHeaders.put(GRPC_PREVIOUS_RPC_ATTEMPTS, String.valueOf(previousAttempts));
+    }
+    return newHeaders;
+  }
 
   private void drain(Substream substream) {
     int index = 0;
@@ -189,7 +258,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       state.buffer.add(new StartEntry());
     }
 
-    Substream substream = createSubstream();
+    Substream substream = createSubstream(0);
     drain(substream);
 
     // TODO(zdapeng): schedule hedging if needed
@@ -197,11 +266,18 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   @Override
   public final void cancel(Status reason) {
-    Substream noopSubstream = new Substream();
+    Substream noopSubstream = new Substream(0 /* previousAttempts doesn't matter here*/);
     noopSubstream.stream = new NoopClientStream();
-    if (commit0(noopSubstream)) {
+    Runnable runnable = commit(noopSubstream);
+
+    if (runnable != null) {
+      Future<?> savedScheduledRetry = scheduledRetry;
+      if (savedScheduledRetry != null) {
+        savedScheduledRetry.cancel(false);
+        scheduledRetry = null;
+      }
       masterListener.closed(reason, new Metadata());
-      postCommit();
+      runnable.run();
       return;
     }
 
@@ -427,7 +503,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     @Override
     public void headersRead(Metadata headers) {
-      if (commit(substream)) {
+      commitAndRun(substream);
+      if (state.winningSubstream == substream) {
         masterListener.headersRead(headers);
       }
     }
@@ -438,13 +515,38 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         state = state.substreamClosed(substream);
       }
 
+      // handle a race between buffer limit exceeded and closed, when setting
+      // substream.bufferLimitExceeded = true happens before state.substreamClosed(substream).
+      if (substream.bufferLimitExceeded) {
+        commitAndRun(substream);
+        if (state.winningSubstream == substream) {
+          masterListener.closed(status, trailers);
+        }
+        return;
+      }
+
       if (state.winningSubstream == null && shouldRetry()) {
         // The check state.winningSubstream == null, checking if is not already committed, is racy,
         // but is still safe b/c the retry will also handle committed/cancellation
-        // TODO(zdapeng): backoff and schedule; retry() should run in an executor
-        retry();
+        // TODO(zdapeng): compute backoff
+        long backoffInMillis = 0L;
+        scheduledRetry = scheduledExecutorService.schedule(
+            new Runnable() {
+              @Override
+              public void run() {
+                scheduledRetry = null;
+                callExecutor.execute(new Runnable() {
+                  @Override
+                  public void run() {
+                    retry(substream.previousAttempts + 1);
+                  }
+                });
+              }
+            },
+            backoffInMillis,
+            TimeUnit.MILLISECONDS);
       } else if (!hasHedging()) {
-        commit(substream);
+        commitAndRun(substream);
         if (state.winningSubstream == substream) {
           masterListener.closed(status, trailers);
         }
@@ -589,5 +691,90 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     // GuardedBy RetriableStream.lock
     boolean closed;
+
+    // setting to true must be GuardedBy RetriableStream.lock
+    boolean bufferLimitExceeded;
+
+    // TODO(zdapeng): add transparent-retry-attempts
+    final int previousAttempts;
+
+    Substream(int previousAttempts) {
+      this.previousAttempts = previousAttempts;
+    }
+  }
+
+
+  /**
+   * Traces the buffer used by a substream.
+   */
+  class BufferSizeTracer extends ClientStreamTracer {
+    // Each buffer size tracer is dedicated to one specific substream.
+    private final Substream substream;
+
+    @GuardedBy("lock")
+    long bufferNeeded;
+
+    BufferSizeTracer(Substream substream) {
+      this.substream = substream;
+    }
+
+    /**
+     * A message is sent to the wire, so its reference would be released if no retry or
+     * hedging were involved. So at this point we have to hold the reference of the message longer
+     * for retry, and we need to increment {@code substream.bufferNeeded}.
+     */
+    @Override
+    public void outboundWireSize(long bytes) {
+      if (state.winningSubstream != null) {
+        return;
+      }
+
+      Runnable postCommitTask = null;
+
+      // TODO(zdapeng): avoid using the same lock for both in-bound and out-bound.
+      synchronized (lock) {
+        if (state.winningSubstream != null || substream.closed) {
+          return;
+        }
+        bufferNeeded += bytes;
+        if (bufferNeeded <= perRpcBufferUsed) {
+          return;
+        }
+
+        if (bufferNeeded > perRpcBufferLimit) {
+          substream.bufferLimitExceeded = true;
+        } else {
+          // Only update channelBufferUsed when perRpcBufferUsed is not exceeding perRpcBufferLimit.
+          long savedChannelBufferUsed =
+              channelBufferUsed.addAndGet(bufferNeeded - perRpcBufferUsed);
+          perRpcBufferUsed = bufferNeeded;
+
+          if (savedChannelBufferUsed > channelBufferLimit) {
+            substream.bufferLimitExceeded = true;
+          }
+        }
+
+        if (substream.bufferLimitExceeded) {
+          postCommitTask = commit(substream);
+        }
+      }
+
+      if (postCommitTask != null) {
+        postCommitTask.run();
+      }
+    }
+  }
+
+
+  /**
+   *  Used to keep track of the total amount of memory used to buffer retryable or hedged RPCs for
+   *  the Channel. There should be a single instance of it for each channel.
+   */
+  static final class ChannelBufferMeter {
+    private final AtomicLong bufferUsed = new AtomicLong();
+
+    public long addAndGet(long newBytesUsed) {
+      return bufferUsed.addAndGet(newBytesUsed);
+    }
   }
 }
