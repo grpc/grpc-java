@@ -27,6 +27,7 @@ import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 
 import javax.net.ssl.SSLException;
+import java.io.File;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -46,7 +47,11 @@ public class HelloWorldClientTls {
         // Channels are secure by default (via SSL/TLS). For the example we disable TLS to avoid
         // needing certificates.
         .negotiationType(NegotiationType.TLS)
-        .sslContext(GrpcSslContexts.forClient().build())
+        .sslContext(GrpcSslContexts.forClient()
+            .trustManager(new File(".." + File.separator +
+                "testing" + File.separator + "src" + File.separator + "main" + File.separator + "resources" + File
+                .separator + "certs" + File.separator + "ca.pem"))
+            .build())
         .build());
   }
 
