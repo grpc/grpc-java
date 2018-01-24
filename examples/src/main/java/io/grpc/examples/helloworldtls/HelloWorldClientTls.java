@@ -43,8 +43,6 @@ public class HelloWorldClientTls {
   /** Construct client connecting to HelloWorld server at {@code host:port}. */
   public HelloWorldClientTls(String host, int port) throws SSLException {
     this(NettyChannelBuilder.forAddress(host, port)
-        // Channels are secure by default (via SSL/TLS). For the example we disable TLS to avoid
-        // needing certificates.
         .negotiationType(NegotiationType.TLS)
         .sslContext(GrpcSslContexts.forClient().build())
         .build());
