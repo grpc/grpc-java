@@ -16,8 +16,6 @@
 
 package io.grpc;
 
-import com.google.common.util.concurrent.ListenableFuture;
-
 import java.util.concurrent.TimeUnit;
 
 /**
