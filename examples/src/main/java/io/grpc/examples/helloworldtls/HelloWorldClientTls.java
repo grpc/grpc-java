@@ -49,6 +49,12 @@ public class HelloWorldClientTls {
             .trustManager(new File(".." + File.separator +
                 "testing" + File.separator + "src" + File.separator + "main" + File.separator + "resources" + File
                 .separator + "certs" + File.separator + "ca.pem"))
+            .keyManager(new File(".." + File.separator +
+                    "testing" + File.separator + "src" + File.separator + "main" + File.separator + "resources" + File
+                    .separator + "certs" + File.separator + "server0.pem"),
+                new File(".." + File.separator +
+                    "testing" + File.separator + "src" + File.separator + "main" + File.separator + "resources" + File
+                    .separator + "certs" + File.separator + "server0.key"))
             .build())
         .build());
   }
