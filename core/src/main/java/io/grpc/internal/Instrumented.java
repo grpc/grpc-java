@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import com.google.common.util.concurrent.ListenableFuture;
-import io.grpc.internal.WithLogId;
 
 /**
  * An interface for types that <b>may</b> support instrumentation. If the actual type does not

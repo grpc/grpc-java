@@ -33,7 +33,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * {@link Listener#transportTerminated}.
  */
 @ThreadSafe
-public interface ManagedClientTransport extends ClientTransport, WithLogId {
+public interface ManagedClientTransport extends ClientTransport {
 
   /**
    * Starts transport. This method may only be called once.
