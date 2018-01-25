@@ -33,8 +33,27 @@ And in a different terminal window run:
 $ ./build/install/examples/bin/hello-world-client
 ```
 
-For the TLS hello world examples, you can use the following script to 
-generate self-signed certificates will need:
+### Hello World with TLS 
+
+Running the hello world with TLS is the same as the normal hello world, but takes additional args:
+
+**hello-world-server-tls**:
+
+```text
+USAGE: HelloWorldServerTls host port certChainFilePath privateKeyFilePath [clientCertChainFilePath]
+  Note: You only need to supply clientCertChainFilePath if you want to enable Mutual TLS.
+```
+
+**hello-world-client-tls**:
+
+```text
+USAGE: HelloWorldClientTls host port [trustCertCollectionFilePath] [clientCertChainFilePath] [clientPrivateKeyFilePath]
+  Note: clientCertChainFilePath and clientPrivateKeyFilePath are only needed if mutual auth is desired. And if you specify clientCertChainFilePath you must also specify clientPrivateKeyFilePath
+```
+
+#### Generating self-signed certificates for use with grpc
+
+You can use the following script to generate self-signed certificates for grpc-java including the hello world with TLS examples:
 
 ```bash
 # Changes these CN's to match your hosts in your environment if needed.
@@ -60,43 +79,33 @@ openssl genrsa -passout pass:1111 -des3 -out client.key 4096
 echo Generate client signing request:
 openssl req -passin pass:1111 -new -key client.key -out client.csr -subj "/CN=${CLIENT_CN}"
 echo Self-signed client certificate:
-# Generates client.crt which is the certChainFile for the client (Mutual TLS only)
+# Generates client.crt which is the clientCertChainFile for the client (need for mutual TLS only)
 openssl x509 -passin pass:1111 -req -days 365 -in client.csr -CA ca.crt -CAkey ca.key -set_serial 01 -out client.crt
 echo Remove passphrase from client key:
 openssl rsa -passin pass:1111 -in client.key -out client.key
 echo Converting the private keys to X.509:
-# Generates client.pem which is the privateKey for the Client (mutual TLS only)
+# Generates client.pem which is the clientPrivateKeyFile for the Client (needed for mutual TLS only)
 openssl pkcs8 -topk8 -nocrypt -in client.key -out client.pem
-# Generates server.pem which is the privateKey for the Server
+# Generates server.pem which is the privateKeyFile for the Server
 openssl pkcs8 -topk8 -nocrypt -in server.key -out server.pem
 ```
 
-Running the hello world with TLS is the same as the normal hello world, but takes additional args:
+#### Hello world example with TLS (no mutual auth):
 
-Server with TLS: 
-
-```
-$ ./build/install/examples/bin/hello-world-server-tls
-USAGE: HelloWorldClientTls host port certChainFilePath privateKeyFilePath [certChainFilePath]
-```
-
-E.g. 
-
-```
-./build/install/examples/bin/hello-world-sever-tls myhostname 50502 /grpc-home/certs/server.crt /grpc-home/certs/server.pem
+```bash
+# Server
+./build/install/examples/bin/hello-world-server-tls mate 50440 ~/Downloads/sslcert/server.crt ~/Downloads/sslcert/server.pem
+# Client
+./build/install/examples/bin/hello-world-client-tls mate 50440 ~/Downloads/sslcert/ca.crt
 ```
 
-Client with TLS: 
+#### Hello world example with TLS with mutual auth:
 
-```
-$ ./build/install/examples/bin/hello-world-client-tls
-USAGE: HelloWorldClientTls host port trustCertCollectionFilePath certChainFilePath privateKeyFilePath
-```
-
-E.g. 
-
-```
-./build/install/examples/bin/hello-world-client-tls myhostname 50502 /grpc-home/certs/ca.crt /grpc-home/certs/server.crt /grpc-home/certs/server.pem
+```bash
+# Server
+./build/install/examples/bin/hello-world-server-tls mate 54440 ~/Downloads/sslcert/server.crt ~/Downloads/sslcert/server.pem ~/Downloads/sslcert/client.crt
+# Client
+./build/install/examples/bin/hello-world-client-tls mate 54440 ~/Downloads/sslcert/ca.crt ~/Downloads/sslcert/client.crt ~/Downloads/sslcert/client.pem
 ```
 
 That's it!

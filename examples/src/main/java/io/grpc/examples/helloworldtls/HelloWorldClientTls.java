@@ -25,6 +25,8 @@ import io.grpc.examples.helloworld.HelloWorldServer;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
 
 import javax.net.ssl.SSLException;
 import java.io.File;
@@ -41,21 +43,29 @@ public class HelloWorldClientTls {
   private final ManagedChannel channel;
   private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
+  private static SslContext buildSslContext(String trustCertCollectionFilePath,
+                                            String clientCertChainFilePath,
+                                            String clientPrivateKeyFilePath) throws SSLException {
+    SslContextBuilder builder = GrpcSslContexts.forClient();
+    if (trustCertCollectionFilePath != null) {
+      builder.trustManager(new File(trustCertCollectionFilePath));
+    }
+    if (clientCertChainFilePath != null && clientPrivateKeyFilePath != null) {
+      builder.keyManager(new File(clientCertChainFilePath), new File(clientPrivateKeyFilePath));
+    }
+    return builder.build();
+  }
+
   /**
    * Construct client connecting to HelloWorld server at {@code host:port}.
    */
   public HelloWorldClientTls(String host,
                              int port,
-                             String trustCertCollectionFilePath,
-                             String certChainFilePath,
-                             String privateKeyFilePath) throws SSLException {
+                             SslContext sslContext) throws SSLException {
+
     this(NettyChannelBuilder.forAddress(host, port)
         .negotiationType(NegotiationType.TLS)
-        .sslContext(GrpcSslContexts.forClient()
-            .trustManager(new File(trustCertCollectionFilePath))
-            .keyManager(new File(certChainFilePath),
-                new File(privateKeyFilePath))
-            .build())
+        .sslContext(sslContext)
         .build());
   }
 
@@ -93,13 +103,17 @@ public class HelloWorldClientTls {
    */
   public static void main(String[] args) throws Exception {
 
-    if (args.length != 5) {
-      System.out.println("USAGE: HelloWorldClientTls host port trustCertCollectionFilePath certChainFilePath " +
-          "privateKeyFilePath");
+    if (args.length < 2 || args.length == 4 || args.length > 5) {
+      System.out.println("USAGE: HelloWorldClientTls host port [trustCertCollectionFilePath] [clientCertChainFilePath] " +
+          "[clientPrivateKeyFilePath]\n  Note: clientCertChainFilePath and clientPrivateKeyFilePath are only needed " +
+          "if mutual auth is desired. And if you specify clientCertChainFilePath you must also specify " +
+          "clientPrivateKeyFilePath");
       System.exit(0);
     }
 
-    HelloWorldClientTls client = new HelloWorldClientTls(args[0], Integer.parseInt(args[1]), args[2], args[3], args[4]);
+    HelloWorldClientTls client = new HelloWorldClientTls(args[0],
+        Integer.parseInt(args[1]),
+        buildSslContext(args.length > 2 ? args[2] : null, args.length > 3 ? args[3] : null, args.length > 4 ? args[4] : null));
     try {
       /* Access a service running on the local machine on port 50051 */
       String user = "world";

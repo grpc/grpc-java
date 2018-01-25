@@ -46,7 +46,11 @@ public class HelloWorldServerTls {
   private final String privateKeyFilePath;
   private final String clientCertChainFilePath;
 
-  public HelloWorldServerTls(String host, int port, String certChainFilePath, String privateKeyFilePath, String clientCertChainFilePath) {
+  public HelloWorldServerTls(String host,
+                             int port,
+                             String certChainFilePath,
+                             String privateKeyFilePath,
+                             String clientCertChainFilePath) {
     this.host = host;
     this.port = port;
     this.certChainFilePath = certChainFilePath;
@@ -105,7 +109,8 @@ public class HelloWorldServerTls {
 
     if (args.length < 4 || args.length > 5) {
       System.out.println(
-          "USAGE: HelloWorldServerTls host port certChainFilePath privateKeyFilePath [clientCertChainFilePath]");
+          "USAGE: HelloWorldServerTls host port certChainFilePath privateKeyFilePath [clientCertChainFilePath]\n  " +
+              "Note: You only need to supply clientCertChainFilePath if you want to enable Mutual TLS.");
       System.exit(0);
     }
 
