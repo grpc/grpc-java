@@ -39,15 +39,19 @@ public class HelloWorldServerTls {
 
   private Server server;
 
+  private final String certChainFilePath;
+  private final String privateKeyFilePath;
+
+  public HelloWorldServerTls(String certChainFilePath, String privateKeyFilePath) {
+    this.certChainFilePath = certChainFilePath;
+    this.privateKeyFilePath = privateKeyFilePath;
+  }
+
   private SslContextBuilder getSslContextBuilder() {
-    SslContextBuilder sslClientContextBuilder = SslContextBuilder.forServer(
-        new File(".." + File.separator +
-            "testing" + File.separator + "src" + File.separator + "main" + File.separator + "resources" + File
-            .separator + "certs" + File.separator + "server0.pem"),
-        new File(".." + File.separator +
-            "testing" + File.separator + "src" + File.separator + "main" + File.separator + "resources" + File
-            .separator + "certs" + File.separator + "server0.key"));
-    return GrpcSslContexts.configure(sslClientContextBuilder, SslProvider.OPENSSL);
+    SslContextBuilder sslClientContextBuilder = SslContextBuilder.forServer(new File(certChainFilePath),
+        new File(privateKeyFilePath));
+    return GrpcSslContexts.configure(sslClientContextBuilder,
+        SslProvider.OPENSSL);
   }
 
   private void start() throws IOException {
@@ -90,7 +94,13 @@ public class HelloWorldServerTls {
    * Main launches the server from the command line.
    */
   public static void main(String[] args) throws IOException, InterruptedException {
-    final HelloWorldServerTls server = new HelloWorldServerTls();
+
+    if (args.length < 2) {
+      System.out.println("USAGE: Expects 2 args: certChainFilePath privateKeyFilePath");
+      System.exit(0);
+    }
+
+    final HelloWorldServerTls server = new HelloWorldServerTls(args[0], args[1]);
     server.start();
     server.blockUntilShutdown();
   }

@@ -41,25 +41,27 @@ public class HelloWorldClientTls {
   private final ManagedChannel channel;
   private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
-  /** Construct client connecting to HelloWorld server at {@code host:port}. */
-  public HelloWorldClientTls(String host, int port) throws SSLException {
+  /**
+   * Construct client connecting to HelloWorld server at {@code host:port}.
+   */
+  public HelloWorldClientTls(String host,
+                             int port,
+                             String trustCertCollectionFilePath,
+                             String certChainFilePath,
+                             String privateKeyFilePath) throws SSLException {
     this(NettyChannelBuilder.forAddress(host, port)
         .negotiationType(NegotiationType.TLS)
         .sslContext(GrpcSslContexts.forClient()
-            .trustManager(new File(".." + File.separator +
-                "testing" + File.separator + "src" + File.separator + "main" + File.separator + "resources" + File
-                .separator + "certs" + File.separator + "ca.pem"))
-            .keyManager(new File(".." + File.separator +
-                    "testing" + File.separator + "src" + File.separator + "main" + File.separator + "resources" + File
-                    .separator + "certs" + File.separator + "server0.pem"),
-                new File(".." + File.separator +
-                    "testing" + File.separator + "src" + File.separator + "main" + File.separator + "resources" + File
-                    .separator + "certs" + File.separator + "server0.key"))
+            .trustManager(new File(trustCertCollectionFilePath))
+            .keyManager(new File(certChainFilePath),
+                new File(privateKeyFilePath))
             .build())
         .build());
   }
 
-  /** Construct client for accessing RouteGuide server using the existing channel. */
+  /**
+   * Construct client for accessing RouteGuide server using the existing channel.
+   */
   HelloWorldClientTls(ManagedChannel channel) {
     this.channel = channel;
     blockingStub = GreeterGrpc.newBlockingStub(channel);
@@ -69,7 +71,9 @@ public class HelloWorldClientTls {
     channel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
   }
 
-  /** Say hello to server. */
+  /**
+   * Say hello to server.
+   */
   public void greet(String name) {
     logger.info("Will try to greet " + name + " ...");
     HelloRequest request = HelloRequest.newBuilder().setName(name).build();
@@ -88,7 +92,14 @@ public class HelloWorldClientTls {
    * greeting.
    */
   public static void main(String[] args) throws Exception {
-    HelloWorldClientTls client = new HelloWorldClientTls("localhost", 50051);
+
+    if (args.length < 4) {
+      System.out.println("USAGE: Expects 4 args: host trustCertCollectionFilePath certChainFilePath " +
+          "privateKeyFilePath");
+      System.exit(0);
+    }
+
+    HelloWorldClientTls client = new HelloWorldClientTls(args[0], 50051, args[1], args[2], args[3]);
     try {
       /* Access a service running on the local machine on port 50051 */
       String user = "world";
