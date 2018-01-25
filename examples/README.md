@@ -69,7 +69,6 @@ echo Converting the private keys to X.509:
 openssl pkcs8 -topk8 -nocrypt -in client.key -out client.pem
 # Generates server.pem which is the privateKey for the Server
 openssl pkcs8 -topk8 -nocrypt -in server.key -out server.pem
-
 ```
 
 That's it!

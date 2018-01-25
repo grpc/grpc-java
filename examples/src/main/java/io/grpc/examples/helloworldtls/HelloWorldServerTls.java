@@ -23,6 +23,7 @@ import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.StreamObserver;
+import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 
@@ -43,17 +44,23 @@ public class HelloWorldServerTls {
   private final int port;
   private final String certChainFilePath;
   private final String privateKeyFilePath;
+  private final String clientCertChainFilePath;
 
-  public HelloWorldServerTls(String host, int port, String certChainFilePath, String privateKeyFilePath) {
+  public HelloWorldServerTls(String host, int port, String certChainFilePath, String privateKeyFilePath, String clientCertChainFilePath) {
     this.host = host;
     this.port = port;
     this.certChainFilePath = certChainFilePath;
     this.privateKeyFilePath = privateKeyFilePath;
+    this.clientCertChainFilePath = clientCertChainFilePath;
   }
 
   private SslContextBuilder getSslContextBuilder() {
     SslContextBuilder sslClientContextBuilder = SslContextBuilder.forServer(new File(certChainFilePath),
         new File(privateKeyFilePath));
+    if (clientCertChainFilePath != null) {
+      sslClientContextBuilder.trustManager(new File(clientCertChainFilePath));
+      sslClientContextBuilder.clientAuth(ClientAuth.OPTIONAL);
+    }
     return GrpcSslContexts.configure(sslClientContextBuilder,
         SslProvider.OPENSSL);
   }
@@ -98,12 +105,17 @@ public class HelloWorldServerTls {
    */
   public static void main(String[] args) throws IOException, InterruptedException {
 
-    if (args.length < 4) {
-      System.out.println("USAGE: Expects 4 args: host port certChainFilePath privateKeyFilePath");
+    if (args.length < 4 || args.length > 5) {
+      System.out.println(
+          "USAGE: HelloWorldServerTls host port certChainFilePath privateKeyFilePath [clientCertChainFilePath]");
       System.exit(0);
     }
 
-    final HelloWorldServerTls server = new HelloWorldServerTls(args[0], Integer.parseInt(args[1]), args[2], args[3]);
+    final HelloWorldServerTls server = new HelloWorldServerTls(args[0],
+        Integer.parseInt(args[1]),
+        args[2],
+        args[3],
+        args.length == 5 ? args[4] : null);
     server.start();
     server.blockUntilShutdown();
   }
