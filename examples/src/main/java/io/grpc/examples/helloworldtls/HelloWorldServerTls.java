@@ -41,8 +41,12 @@ public class HelloWorldServerTls {
 
   private SslContextBuilder getSslContextBuilder() {
     SslContextBuilder sslClientContextBuilder = SslContextBuilder.forServer(
-        new File("/home/ndipiazza/Downloads/sslforfree/certificate.crt"),
-        new File("/home/ndipiazza/Downloads/sslforfree/private.key"));
+        new File(".." + File.separator +
+            "testing" + File.separator + "src" + File.separator + "main" + File.separator + "resources" + File
+            .separator + "certs" + File.separator + "server0.pem"),
+        new File(".." + File.separator +
+            "testing" + File.separator + "src" + File.separator + "main" + File.separator + "resources" + File
+            .separator + "certs" + File.separator + "server0.key"));
     return GrpcSslContexts.configure(sslClientContextBuilder, SslProvider.OPENSSL);
   }
 
