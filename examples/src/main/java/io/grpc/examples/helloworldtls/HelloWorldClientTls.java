@@ -93,8 +93,8 @@ public class HelloWorldClientTls {
    */
   public static void main(String[] args) throws Exception {
 
-    if (args.length < 5) {
-      System.out.println("USAGE: Expects 5 args: host port trustCertCollectionFilePath certChainFilePath " +
+    if (args.length != 5) {
+      System.out.println("USAGE: HelloWorldClientTls host port trustCertCollectionFilePath certChainFilePath " +
           "privateKeyFilePath");
       System.exit(0);
     }

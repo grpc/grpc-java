@@ -77,7 +77,7 @@ Server with TLS:
 
 ```
 $ ./build/install/examples/bin/hello-world-server-tls
-Server: USAGE: Expects 4 args: host port certChainFilePath privateKeyFilePath
+USAGE: HelloWorldClientTls host port certChainFilePath privateKeyFilePath [certChainFilePath]
 ```
 
 E.g. 
@@ -90,7 +90,7 @@ Client with TLS:
 
 ```
 $ ./build/install/examples/bin/hello-world-client-tls
-Client: USAGE: Expects 5 args: host port trustCertCollectionFilePath certChainFilePath privateKeyFilePath
+USAGE: HelloWorldClientTls host port trustCertCollectionFilePath certChainFilePath privateKeyFilePath
 ```
 
 E.g. 
