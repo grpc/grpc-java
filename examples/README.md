@@ -34,7 +34,7 @@ $ ./build/install/examples/bin/hello-world-client
 ```
 
 For the TLS hello world examples, you can use the following script to 
-generate self-signed certificates you can use to test this:
+generate self-signed certificates will need:
 
 ```bash
 # Changes these CN's to match your hosts in your environment if needed.
@@ -69,7 +69,34 @@ echo Converting the private keys to X.509:
 openssl pkcs8 -topk8 -nocrypt -in client.key -out client.pem
 # Generates server.pem which is the privateKey for the Server
 openssl pkcs8 -topk8 -nocrypt -in server.key -out server.pem
+```
 
+Running the hello world with TLS is the same as the normal hello world, but takes additional args:
+
+Server with TLS: 
+
+```
+$ ./build/install/examples/bin/hello-world-server-tls
+Server: USAGE: Expects 4 args: host port certChainFilePath privateKeyFilePath
+```
+
+E.g. 
+
+```
+./build/install/examples/bin/hello-world-sever-tls myhostname 50502 /grpc-home/certs/server.crt /grpc-home/certs/server.pem
+```
+
+Client with TLS: 
+
+```
+$ ./build/install/examples/bin/hello-world-client-tls
+Client: USAGE: Expects 5 args: host port trustCertCollectionFilePath certChainFilePath privateKeyFilePath
+```
+
+E.g. 
+
+```
+./build/install/examples/bin/hello-world-client-tls myhostname 50502 /grpc-home/certs/ca.crt /grpc-home/certs/server.crt /grpc-home/certs/server.pem
 ```
 
 That's it!
