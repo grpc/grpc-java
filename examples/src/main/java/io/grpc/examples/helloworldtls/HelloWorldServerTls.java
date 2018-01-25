@@ -28,6 +28,7 @@ import io.netty.handler.ssl.SslProvider;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.util.logging.Logger;
 
 /**
@@ -39,12 +40,9 @@ public class HelloWorldServerTls {
   private Server server;
 
   private SslContextBuilder getSslContextBuilder() {
-    SslContextBuilder sslClientContextBuilder = SslContextBuilder.forServer(new File(".." + File.separator +
-            "testing" + File.separator + "src" + File.separator + "main" + File.separator + "resources" + File
-            .separator + "certs" + File.separator + "server0.pem"),
-        new File(".." + File.separator +
-            "testing" + File.separator + "src" + File.separator + "main" + File.separator + "resources" + File
-            .separator + "certs" + File.separator + "server0.key"));
+    SslContextBuilder sslClientContextBuilder = SslContextBuilder.forServer(
+        new File("/home/ndipiazza/Downloads/sslforfree/certificate.crt"),
+        new File("/home/ndipiazza/Downloads/sslforfree/private.key"));
     return GrpcSslContexts.configure(sslClientContextBuilder, SslProvider.OPENSSL);
   }
 
@@ -52,7 +50,7 @@ public class HelloWorldServerTls {
     /* The port on which the server should run */
     int port = 50051;
 
-    server = NettyServerBuilder.forPort(port)
+    server = NettyServerBuilder.forAddress(new InetSocketAddress("localhost", port))
         .addService(new GreeterImpl())
         .sslContext(getSslContextBuilder().build())
         .build()

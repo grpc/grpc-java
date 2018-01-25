@@ -46,15 +46,9 @@ public class HelloWorldClientTls {
     this(NettyChannelBuilder.forAddress(host, port)
         .negotiationType(NegotiationType.TLS)
         .sslContext(GrpcSslContexts.forClient()
-            .trustManager(new File(".." + File.separator +
-                "testing" + File.separator + "src" + File.separator + "main" + File.separator + "resources" + File
-                .separator + "certs" + File.separator + "ca.pem"))
-            .keyManager(new File(".." + File.separator +
-                    "testing" + File.separator + "src" + File.separator + "main" + File.separator + "resources" + File
-                    .separator + "certs" + File.separator + "server0.pem"),
-                new File(".." + File.separator +
-                    "testing" + File.separator + "src" + File.separator + "main" + File.separator + "resources" + File
-                    .separator + "certs" + File.separator + "server0.key"))
+            .trustManager(new File("/home/ndipiazza/Downloads/sslforfree/ca_bundle.crt"))
+            .keyManager(new File("/home/ndipiazza/Downloads/sslforfree/certificate.crt"),
+                new File("/home/ndipiazza/Downloads/sslforfree/private.key"))
             .build())
         .build());
   }
@@ -88,7 +82,7 @@ public class HelloWorldClientTls {
    * greeting.
    */
   public static void main(String[] args) throws Exception {
-    HelloWorldClientTls client = new HelloWorldClientTls("localhost", 50051);
+    HelloWorldClientTls client = new HelloWorldClientTls("fusionis.life", 50051);
     try {
       /* Access a service running on the local machine on port 50051 */
       String user = "world";
