@@ -216,6 +216,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
   private final long channelBufferLimit;
 
   private RetryPolicies retryPolicies;
+  // Temporary false flag that can skip the retry code path.
+  private boolean retryEnabled;
 
   // Called from channelExecutor
   private final ManagedClientTransport.Listener delayedTransportListener =
@@ -1047,7 +1049,9 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
           }
 
           try {
-            retryPolicies = getRetryPolicies(config);
+            if (retryEnabled) {
+              retryPolicies = getRetryPolicies(config);
+            }
           } catch (RuntimeException re) {
             logger.log(
                 Level.WARNING,
