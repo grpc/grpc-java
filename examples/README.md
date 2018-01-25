@@ -37,31 +37,38 @@ For the TLS hello world examples, you can use the following script to
 generate self-signed certificates you can use to test this:
 
 ```bash
-COMPUTERNAME=localhost
-CLIENTCOMPUTERNAME=localhost # Used when doing mutual TLS
+# Changes these CN's to match your hosts in your environment if needed.
+SERVER_CN=localhost
+CLIENT_CN=localhost # Used when doing mutual TLS
 
 echo Generate CA key:
 openssl genrsa -passout pass:1111 -des3 -out ca.key 4096
 echo Generate CA certificate:
-openssl req -passin pass:1111 -new -x509 -days 365 -key ca.key -out ca.crt -subj "/CN=${COMPUTERNAME}" # ca.crt is the trustCertCollectionFile
+# Generates ca.crt which is the trustCertCollectionFile
+openssl req -passin pass:1111 -new -x509 -days 365 -key ca.key -out ca.crt -subj "/CN=${SERVER_CN}"
 echo Generate server key:
 openssl genrsa -passout pass:1111 -des3 -out server.key 4096
 echo Generate server signing request:
-openssl req -passin pass:1111 -new -key server.key -out server.csr -subj "/CN=${COMPUTERNAME}"
+openssl req -passin pass:1111 -new -key server.key -out server.csr -subj "/CN=${SERVER_CN}"
 echo Self-signed server certificate:
-openssl x509 -req -passin pass:1111 -days 365 -in server.csr -CA ca.crt -CAkey ca.key -set_serial 01 -out server.crt # server.crt is the certChainFile for the server
+# Generates server.crt which is the certChainFile for the server
+openssl x509 -req -passin pass:1111 -days 365 -in server.csr -CA ca.crt -CAkey ca.key -set_serial 01 -out server.crt 
 echo Remove passphrase from server key:
 openssl rsa -passin pass:1111 -in server.key -out server.key
 echo Generate client key
 openssl genrsa -passout pass:1111 -des3 -out client.key 4096
 echo Generate client signing request:
-openssl req -passin pass:1111 -new -key client.key -out client.csr -subj "/CN=${CLIENTCOMPUTERNAME}"
+openssl req -passin pass:1111 -new -key client.key -out client.csr -subj "/CN=${CLIENT_CN}"
 echo Self-signed client certificate:
-openssl x509 -passin pass:1111 -req -days 365 -in client.csr -CA ca.crt -CAkey ca.key -set_serial 01 -out client.crt # client.crt is the certChainFile for the client (Mutual TLS only)
+# Generates client.crt which is the certChainFile for the client (Mutual TLS only)
+openssl x509 -passin pass:1111 -req -days 365 -in client.csr -CA ca.crt -CAkey ca.key -set_serial 01 -out client.crt
 echo Remove passphrase from client key:
 openssl rsa -passin pass:1111 -in client.key -out client.key
-openssl pkcs8 -topk8 -nocrypt -in client.key -out client.pem # client.pem is the privateKey for the Client (mutual TLS only)
-openssl pkcs8 -topk8 -nocrypt -in server.key -out server.pem # server.pem is the privateKey for the Server
+echo Converting the private keys to X.509:
+# Generates client.pem which is the privateKey for the Client (mutual TLS only)
+openssl pkcs8 -topk8 -nocrypt -in client.key -out client.pem
+# Generates server.pem which is the privateKey for the Server
+openssl pkcs8 -topk8 -nocrypt -in server.key -out server.pem
 
 ```
 
