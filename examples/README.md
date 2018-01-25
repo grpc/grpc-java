@@ -15,7 +15,8 @@ To build the examples, run in this directory:
 $ ./gradlew installDist
 ```
 
-This creates the scripts `hello-world-server`, `hello-world-client`,
+This creates the scripts `hello-world-server`, `hello-world-client`, 
+`hello-world-server-tls`, `hello-world-client-tls`,
 `route-guide-server`, and `route-guide-client` in the
 `build/install/examples/bin/` directory that run the examples. Each
 example requires the server to be running before starting the client.
@@ -30,6 +31,38 @@ And in a different terminal window run:
 
 ```
 $ ./build/install/examples/bin/hello-world-client
+```
+
+For the TLS hello world examples, you can use the following script to 
+generate self-signed certificates you can use to test this:
+
+```bash
+COMPUTERNAME=localhost
+CLIENTCOMPUTERNAME=localhost # Used when doing mutual TLS
+
+echo Generate CA key:
+openssl genrsa -passout pass:1111 -des3 -out ca.key 4096
+echo Generate CA certificate:
+openssl req -passin pass:1111 -new -x509 -days 365 -key ca.key -out ca.crt -subj "/CN=${COMPUTERNAME}" # ca.crt is the trustCertCollectionFile
+echo Generate server key:
+openssl genrsa -passout pass:1111 -des3 -out server.key 4096
+echo Generate server signing request:
+openssl req -passin pass:1111 -new -key server.key -out server.csr -subj "/CN=${COMPUTERNAME}"
+echo Self-signed server certificate:
+openssl x509 -req -passin pass:1111 -days 365 -in server.csr -CA ca.crt -CAkey ca.key -set_serial 01 -out server.crt # server.crt is the certChainFile for the server
+echo Remove passphrase from server key:
+openssl rsa -passin pass:1111 -in server.key -out server.key
+echo Generate client key
+openssl genrsa -passout pass:1111 -des3 -out client.key 4096
+echo Generate client signing request:
+openssl req -passin pass:1111 -new -key client.key -out client.csr -subj "/CN=${CLIENTCOMPUTERNAME}"
+echo Self-signed client certificate:
+openssl x509 -passin pass:1111 -req -days 365 -in client.csr -CA ca.crt -CAkey ca.key -set_serial 01 -out client.crt # client.crt is the certChainFile for the client (Mutual TLS only)
+echo Remove passphrase from client key:
+openssl rsa -passin pass:1111 -in client.key -out client.key
+openssl pkcs8 -topk8 -nocrypt -in client.key -out client.pem # client.pem is the privateKey for the Client (mutual TLS only)
+openssl pkcs8 -topk8 -nocrypt -in server.key -out server.pem # server.pem is the privateKey for the Server
+
 ```
 
 That's it!
