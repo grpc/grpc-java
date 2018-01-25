@@ -39,10 +39,14 @@ public class HelloWorldServerTls {
 
   private Server server;
 
+  private final String host;
+  private final int port;
   private final String certChainFilePath;
   private final String privateKeyFilePath;
 
-  public HelloWorldServerTls(String certChainFilePath, String privateKeyFilePath) {
+  public HelloWorldServerTls(String host, int port, String certChainFilePath, String privateKeyFilePath) {
+    this.host = host;
+    this.port = port;
     this.certChainFilePath = certChainFilePath;
     this.privateKeyFilePath = privateKeyFilePath;
   }
@@ -56,9 +60,8 @@ public class HelloWorldServerTls {
 
   private void start() throws IOException {
     /* The port on which the server should run */
-    int port = 50051;
 
-    server = NettyServerBuilder.forAddress(new InetSocketAddress("localhost", port))
+    server = NettyServerBuilder.forAddress(new InetSocketAddress(host, port))
         .addService(new GreeterImpl())
         .sslContext(getSslContextBuilder().build())
         .build()
@@ -95,12 +98,12 @@ public class HelloWorldServerTls {
    */
   public static void main(String[] args) throws IOException, InterruptedException {
 
-    if (args.length < 2) {
-      System.out.println("USAGE: Expects 2 args: certChainFilePath privateKeyFilePath");
+    if (args.length < 4) {
+      System.out.println("USAGE: Expects 4 args: host port certChainFilePath privateKeyFilePath");
       System.exit(0);
     }
 
-    final HelloWorldServerTls server = new HelloWorldServerTls(args[0], args[1]);
+    final HelloWorldServerTls server = new HelloWorldServerTls(args[0], Integer.parseInt(args[1]), args[2], args[3]);
     server.start();
     server.blockUntilShutdown();
   }

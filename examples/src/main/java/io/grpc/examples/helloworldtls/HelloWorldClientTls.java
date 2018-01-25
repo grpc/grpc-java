@@ -93,13 +93,13 @@ public class HelloWorldClientTls {
    */
   public static void main(String[] args) throws Exception {
 
-    if (args.length < 4) {
-      System.out.println("USAGE: Expects 4 args: host trustCertCollectionFilePath certChainFilePath " +
+    if (args.length < 5) {
+      System.out.println("USAGE: Expects 5 args: host port trustCertCollectionFilePath certChainFilePath " +
           "privateKeyFilePath");
       System.exit(0);
     }
 
-    HelloWorldClientTls client = new HelloWorldClientTls(args[0], 50051, args[1], args[2], args[3]);
+    HelloWorldClientTls client = new HelloWorldClientTls(args[0], Integer.parseInt(args[1]), args[2], args[3], args[4]);
     try {
       /* Access a service running on the local machine on port 50051 */
       String user = "world";
