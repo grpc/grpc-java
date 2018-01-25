@@ -86,7 +86,7 @@ final class DnsNameResolver extends NameResolver {
               Arrays.asList("clientLanguage", "percentage", "clientHostname", "serviceConfig")));
 
   private static final String JNDI_PROPERTY =
-      System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi", "true");
+      System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi", "false");
 
   @VisibleForTesting
   static boolean enableJndi = Boolean.parseBoolean(JNDI_PROPERTY);
