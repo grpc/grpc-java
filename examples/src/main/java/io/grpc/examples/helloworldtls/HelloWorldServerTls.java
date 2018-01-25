@@ -59,8 +59,6 @@ public class HelloWorldServerTls {
   }
 
   private void start() throws IOException {
-    /* The port on which the server should run */
-
     server = NettyServerBuilder.forAddress(new InetSocketAddress(host, port))
         .addService(new GreeterImpl())
         .sslContext(getSslContextBuilder().build())
