@@ -14,14 +14,15 @@
  * limitations under the License.
  */
 
-package io.grpc;
+package io.grpc.internal;
 
 import com.google.common.util.concurrent.ListenableFuture;
+import io.grpc.internal.WithLogId;
 
 /**
  * An interface for types that <b>may</b> support instrumentation. If the actual type does not
  * support instrumentation, then the future will return a {@code null}.
  */
-interface Instrumented<T> extends WithLogId {
+public interface Instrumented<T> extends WithLogId {
   ListenableFuture<T> getStats();
 }
