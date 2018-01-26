@@ -52,7 +52,6 @@ import io.grpc.Grpc;
 import io.grpc.HandlerRegistry;
 import io.grpc.IntegerMarshaller;
 import io.grpc.InternalLogId;
-import io.grpc.InternalServerStreamTracer;
 import io.grpc.InternalTransportStats;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -488,7 +487,7 @@ public class ServerImplTest {
     ServerCall<String, Integer> call = callReference.get();
     assertNotNull(call);
     assertEquals(
-        InternalServerStreamTracer.createServerCallInfo(
+        new ServerCallInfoImpl<String, Integer>(
             call.getMethodDescriptor(),
             call.getAttributes(),
             call.getAuthority()),

@@ -16,7 +16,6 @@
 
 package io.grpc;
 
-import com.google.common.base.Objects;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -74,48 +73,13 @@ public abstract class ServerStreamTracer extends StreamTracer {
   /**
    * A data class with info about the started {@link ServerCall}.
    */
-  public static final class ServerCallInfo<ReqT, RespT> {
-    private final MethodDescriptor<ReqT, RespT> methodDescriptor;
-    private final Attributes attributes;
-    private final String authority;
+  public abstract static class ServerCallInfo<ReqT, RespT> {
+    public abstract MethodDescriptor<ReqT, RespT> getMethodDescriptor();
 
-    ServerCallInfo(
-        MethodDescriptor<ReqT, RespT> methodDescriptor,
-        Attributes attributes,
-        @Nullable String authority) {
-      this.methodDescriptor = methodDescriptor;
-      this.attributes = attributes;
-      this.authority = authority;
-    }
-
-    public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
-      return methodDescriptor;
-    }
-
-    public Attributes getAttributes() {
-      return attributes;
-    }
+    public abstract Attributes getAttributes();
 
     @Nullable
-    public String getAuthority() {
-      return authority;
-    }
-
-    @Override
-    public boolean equals(Object other) {
-      if (!(other instanceof ServerCallInfo)) {
-        return false;
-      }
-      ServerCallInfo<?, ?> that = (ServerCallInfo) other;
-      return Objects.equal(methodDescriptor, that.methodDescriptor)
-          && Objects.equal(attributes, that.attributes)
-          && Objects.equal(authority, that.authority);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(methodDescriptor, attributes, authority);
-    }
+    public abstract String getAuthority();
   }
 
   /**

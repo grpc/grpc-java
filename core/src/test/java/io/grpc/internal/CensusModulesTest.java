@@ -16,7 +16,6 @@
 
 package io.grpc.internal;
 
-import static io.grpc.InternalServerStreamTracer.createServerCallInfo;
 import static io.opencensus.tags.unsafe.ContextUtils.TAG_CONTEXT_KEY;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.Assert.assertEquals;
@@ -850,7 +849,8 @@ public class CensusModulesTest {
     Context filteredContext = serverStreamTracer.filterContext(Context.ROOT);
     assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));
 
-    serverStreamTracer.serverCallStarted(createServerCallInfo(method, Attributes.EMPTY, null));
+    serverStreamTracer.serverCallStarted(
+        new ServerCallInfoImpl<String, String>(method, Attributes.EMPTY, null));
 
     verify(spyServerSpan, never()).end(any(EndSpanOptions.class));
 
@@ -893,7 +893,7 @@ public class CensusModulesTest {
     serverStreamTracer.filterContext(Context.ROOT);
 
     serverStreamTracer.serverCallStarted(
-        createServerCallInfo(sampledMethod, Attributes.EMPTY, null));
+        new ServerCallInfoImpl<String, String>(sampledMethod, Attributes.EMPTY, null));
 
     serverStreamTracer.streamClosed(Status.CANCELLED);
 
