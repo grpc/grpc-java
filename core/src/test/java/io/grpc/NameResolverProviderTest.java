@@ -17,20 +17,18 @@
 package io.grpc;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import com.google.common.collect.ImmutableSet;
 import io.grpc.NameResolverProvider.HardcodedClasses;
 import io.grpc.internal.DnsNameResolverProvider;
 import java.net.URI;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.Callable;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -90,37 +88,10 @@ public class NameResolverProviderTest {
 
   @Test
   public void getClassesViaHardcoded_triesToLoadClasses() throws Exception {
-    ClassLoader cl = getClass().getClassLoader();
-    Set<String> classLoaderHistory = new HashSet<String>();
-    Iterator<?> classIter = ServiceProvidersTestUtil
-        .invokeCallable(
-            HardcodedClassesCallable.class.getName(), cl, classLoaderHistory);
-    assertTrue(classIter.hasNext());
-    Class<?> klass = (Class) classIter.next();
-    assertEquals(DnsNameResolverProvider.class.getName(), klass.getName());
-    assertFalse(classIter.hasNext());
-    assertTrue(classLoaderHistory.contains(DnsNameResolverProvider.class.getName()));
-  }
-
-  @Test
-  public void getClassesViaHardCoded_ignoresMissingClasses() throws Exception {
-    ClassLoader cl = getClass().getClassLoader();
-    Set<String> classLoaderHistory = new HashSet<String>();
-    cl = new ClassLoader(cl) {
-      @Override
-      public Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-        if (name.equals(DnsNameResolverProvider.class.getName())) {
-          throw new ClassNotFoundException();
-        } else {
-          return super.loadClass(name, resolve);
-        }
-      }
-    };
-    Iterator<?> classIter = ServiceProvidersTestUtil
-        .invokeCallable(
-            HardcodedClassesCallable.class.getName(), cl, classLoaderHistory);
-    assertFalse("Iterator should be empty", classIter.hasNext());
-    assertTrue(classLoaderHistory.contains(DnsNameResolverProvider.class.getName()));
+    ServiceProvidersTestUtil.testHardcodedClasses(
+        HardcodedClassesCallable.class.getName(),
+        getClass().getClassLoader(),
+        ImmutableSet.of("io.grpc.internal.DnsNameResolverProvider"));
   }
 
   public static final class HardcodedClassesCallable implements Callable<Iterator<Class<?>>> {

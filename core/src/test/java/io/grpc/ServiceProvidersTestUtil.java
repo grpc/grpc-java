@@ -16,32 +16,58 @@
 
 package io.grpc;
 
+import static com.google.common.truth.Truth.assertWithMessage;
+
+import com.google.common.collect.Iterators;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.regex.Pattern;
 
 public final class ServiceProvidersTestUtil {
-
   /**
-   * Creates an iterator of the iterable class {@code callableClassName} via reflection.
+   * Creates an iterator from the callable class via reflection, and checks that all expected
+   * classes were loaded.
+   *
+   * <p>{@code callableClassName} is a {@code Callable<Iterable<Class<?>>} rather than the iterable
+   * class name itself so that the iterable class can be non-public.
+   *
+   * <p>We accept class names as input so that we can test against classes not in the
+   * testing class path.
    */
-  public static Iterator<?> invokeCallable(
+  static void testHardcodedClasses(
       String callableClassName,
       ClassLoader cl,
-      final Set<String> classLoaderHistory) throws Exception {
+      Set<String> hardcodedClassNames) throws Exception {
+    final Set<String> notLoaded = new HashSet<String>(hardcodedClassNames);
     cl = new ClassLoader(cl) {
       @Override
       public Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-        classLoaderHistory.add(name);
-        return super.loadClass(name, resolve);
+        if (notLoaded.remove(name)) {
+          throw new ClassNotFoundException();
+        } else {
+          return super.loadClass(name, resolve);
+        }
       }
     };
-
     cl = new StaticTestingClassLoader(cl, Pattern.compile("io\\.grpc\\.[^.]*"));
-
-    return invokeIteratorCallable(callableClassName, cl);
+    // Some classes fall back to the context class loader.
+    // Ensure that the context class loader is not an accidental backdoor.
+    ClassLoader ccl = Thread.currentThread().getContextClassLoader();
+    try {
+      Thread.currentThread().setContextClassLoader(cl);
+      Object[] results = Iterators.toArray(
+          invokeIteratorCallable(callableClassName, cl), Object.class);
+      assertWithMessage("The Iterable loaded a class that was not in hardcodedClassNames")
+          .that(results).isEmpty();
+      assertWithMessage(
+          "The Iterable did not attempt to load some classes from hardcodedClassNames")
+          .that(notLoaded).isEmpty();
+    } finally {
+      Thread.currentThread().setContextClassLoader(ccl);
+    }
   }
 
   private static Iterator<?> invokeIteratorCallable(
