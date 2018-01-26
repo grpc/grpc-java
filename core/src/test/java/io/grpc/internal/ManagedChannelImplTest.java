@@ -1671,7 +1671,7 @@ public class ManagedChannelImplTest {
     assertEquals(target, getStats(channel).target);
 
     Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
-    assertEquals(target, getStats((AbstractSubchannel) subchannel).target);
+    assertEquals(authority, getStats((AbstractSubchannel) subchannel).target);
   }
 
   @Test
@@ -2069,6 +2069,10 @@ public class ManagedChannelImplTest {
     public String getDefaultScheme() {
       return "fake";
     }
+  }
+
+  private static ChannelStats getStats(AbstractSubchannel subchannel) throws Exception {
+    return subchannel.getStats().get();
   }
 
   private static ChannelStats getStats(
