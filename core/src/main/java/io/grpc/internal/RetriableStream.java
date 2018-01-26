@@ -803,13 +803,12 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       this.initialBackoffInSeconds = initialBackoffInSeconds;
       checkArgument(
           maxBackoffInSeconds >= initialBackoffInSeconds,
-          "maxBackoofInSeconds should be at least initialBackoffInSeconds");
+          "maxBackoffInSeconds should be at least initialBackoffInSeconds");
       this.maxBackoffInSeconds = maxBackoffInSeconds;
       checkArgument(backoffMultiplier > 0D, "backoffMultiplier");
       this.backoffMultiplier = backoffMultiplier;
-      this.retryableStatusCodes =
-          Collections.unmodifiableSet(
-              new HashSet<Status.Code>(checkNotNull(retryableStatusCodes, "retryableStatusCodes")));
+      this.retryableStatusCodes = Collections.unmodifiableSet(
+          new HashSet<Status.Code>(checkNotNull(retryableStatusCodes, "retryableStatusCodes")));
     }
 
     /** No retry. */
@@ -836,7 +835,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     public int hashCode() {
       return Objects.hashCode(
           maxAttempts, initialBackoffInSeconds, maxBackoffInSeconds, backoffMultiplier,
-                              retryableStatusCodes);
+          retryableStatusCodes);
     }
   }
 }
