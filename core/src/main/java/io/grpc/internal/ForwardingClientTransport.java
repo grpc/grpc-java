@@ -18,10 +18,9 @@ package io.grpc.internal;
 
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.CallOptions;
-import io.grpc.InternalTransportStats;
-import io.grpc.LogId;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.internal.Channelz.TransportStats;
 import java.util.concurrent.Executor;
 
 abstract class ForwardingClientTransport implements ClientTransport {
@@ -33,7 +32,7 @@ abstract class ForwardingClientTransport implements ClientTransport {
   }
 
   @Override
-  public ListenableFuture<InternalTransportStats> getStats() {
+  public ListenableFuture<TransportStats> getStats() {
     return delegate().getStats();
   }
 
