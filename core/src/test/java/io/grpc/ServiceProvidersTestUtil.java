@@ -26,7 +26,7 @@ import java.util.Iterator;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-public final class ServiceProvidersTestUtil {
+final class ServiceProvidersTestUtil {
   /**
    * Creates an iterator from the callable class via reflection, and checks that all expected
    * classes were loaded.
