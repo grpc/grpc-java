@@ -25,7 +25,7 @@ import javax.annotation.Nullable;
 /**
  * An implementation of {@link ServerCallInfo}.
  */
-public final class ServerCallInfoImpl<ReqT, RespT> extends ServerCallInfo<ReqT, RespT> {
+final class ServerCallInfoImpl<ReqT, RespT> extends ServerCallInfo<ReqT, RespT> {
   private final MethodDescriptor<ReqT, RespT> methodDescriptor;
   private final Attributes attributes;
   private final String authority;
