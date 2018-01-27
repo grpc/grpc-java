@@ -142,6 +142,12 @@ final class InternalSubchannel implements InternalWithLogId {
   private volatile ManagedClientTransport activeTransport;
 
   @GuardedBy("lock")
+  private ManagedClientTransport activeTransportToShutdown;
+
+  @GuardedBy("lock")
+  private ConnectionClientTransport pendingTransportToShutdown;
+
+  @GuardedBy("lock")
   private ConnectivityStateInfo state = ConnectivityStateInfo.forNonError(IDLE);
 
   private final ProxyDetector proxyDetector;
@@ -296,6 +302,12 @@ final class InternalSubchannel implements InternalWithLogId {
         }
         savedActiveTransport = activeTransport;
         savedPendingTransport = pendingTransport;
+        // Save a reference to the transports for the TransportListener.transportShutdown() callback
+        activeTransportToShutdown = activeTransport;
+        pendingTransportToShutdown = pendingTransport;
+        activeTransport = null;
+        pendingTransport = null;
+        addressIndex = 0;
       }
     } finally {
       channelExecutor.drain();
@@ -526,14 +538,16 @@ final class InternalSubchannel implements InternalWithLogId {
           if (state.getState() == SHUTDOWN) {
             return;
           }
-          if (activeTransport == transport) {
+          if (activeTransport == transport || activeTransportToShutdown == transport) {
             gotoNonErrorState(IDLE);
             activeTransport = null;
+            activeTransportToShutdown = null;
             addressIndex = 0;
-          } else if (pendingTransport == transport) {
+          } else if (pendingTransport == transport || pendingTransportToShutdown == transport) {
             Preconditions.checkState(state.getState() == CONNECTING,
                 "Expected state is CONNECTING, actual state is %s", state.getState());
             addressIndex++;
+            pendingTransportToShutdown = null;
             // Continue reconnect if there are still addresses to try.
             if (addressIndex >= addressGroup.getAddresses().size()) {
               pendingTransport = null;

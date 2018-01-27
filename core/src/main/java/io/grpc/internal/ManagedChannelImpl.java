@@ -727,23 +727,25 @@ public final class ManagedChannelImpl
 
   @Override
   public void shutdownTransports() {
-    channelExecutor
-        .executeLater(
-            new Runnable() {
-              @Override
-              public void run() {
-                if (shutdown.get()) {
-                  return;
-                }
-                for (InternalSubchannel subchannel : subchannels) {
-                  subchannel.shutdownTransports(SHUTDOWN_TRANSPORTS_STATUS);
-                }
-                for (InternalSubchannel oobChannel : oobChannels) {
-                  oobChannel.shutdownTransports(SHUTDOWN_TRANSPORTS_STATUS);
-                }
-              }
-            })
-        .drain();
+    class ShutdownTransportsRunnable implements Runnable {
+      @Override
+      public void run() {
+        if (shutdown.get()) {
+          return;
+        }
+        if (nameResolverStarted) {
+          nameResolver.refresh();
+        }
+        for (InternalSubchannel subchannel : subchannels) {
+          subchannel.shutdownTransports(SHUTDOWN_TRANSPORTS_STATUS);
+        }
+        for (InternalSubchannel oobChannel : oobChannels) {
+          oobChannel.shutdownTransports(SHUTDOWN_TRANSPORTS_STATUS);
+        }
+      }
+    }
+
+    channelExecutor.executeLater(new ShutdownTransportsRunnable()).drain();
   }
 
   /**
