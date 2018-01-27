@@ -38,7 +38,6 @@ import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -58,7 +57,6 @@ import io.grpc.HandlerRegistry;
 import io.grpc.IntegerMarshaller;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.Server;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
@@ -104,6 +102,7 @@ import org.mockito.Captor;
 import org.mockito.Matchers;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.mockito.Spy;
 
 /** Unit tests for {@link ServerImpl}. */
 @RunWith(JUnit4.class)
@@ -155,7 +154,8 @@ public class ServerImplTest {
   private ObjectPool<Executor> executorPool;
   private Builder builder = new Builder();
   private MutableHandlerRegistry mutableFallbackRegistry = new MutableHandlerRegistry();
-  private HandlerRegistry fallbackRegistry = spy(new HandlerRegistry() {
+  @Spy
+  private HandlerRegistry fallbackRegistry = new HandlerRegistry() {
     @Override
     public ServerMethodDefinition<?, ?> lookupMethod(
         String methodName, @Nullable String authority) {
@@ -166,9 +166,9 @@ public class ServerImplTest {
     public List<ServerServiceDefinition> getServices() {
       return mutableFallbackRegistry.getServices();
     }
-  });
+  };
   private SimpleServer transportServer = new SimpleServer();
-  private Server server;
+  private ServerImpl server;
 
   @Captor
   private ArgumentCaptor<Status> statusCaptor;
@@ -718,8 +718,7 @@ public class ServerImplTest {
     final Status status = Status.ABORTED.withDescription("Oh, no!");
     mutableFallbackRegistry.addService(ServerServiceDefinition.builder(
         new ServiceDescriptor("Waiter", METHOD))
-        .addMethod(
-            METHOD,
+        .addMethod(METHOD,
             new ServerCallHandler<String, Integer>() {
               @Override
               public ServerCall.Listener<String> startCall(
@@ -946,8 +945,7 @@ public class ServerImplTest {
 
     mutableFallbackRegistry.addService(ServerServiceDefinition.builder(
         new ServiceDescriptor("Waiter", METHOD))
-        .addMethod(
-            METHOD,
+        .addMethod(METHOD,
             new ServerCallHandler<String, Integer>() {
               @Override
               public ServerCall.Listener<String> startCall(

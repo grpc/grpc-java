@@ -29,11 +29,6 @@ import static org.junit.Assert.assertEquals;
 >>>>>>> split out some tests specific to BinaryLogProvider.wrapMethodDefinition
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 
 <<<<<<< HEAD
 import io.grpc.CallOptions;
@@ -101,11 +96,28 @@ public class BinaryLogProviderTest {
   private final String serviceFile = "META-INF/services/io.grpc.internal.BinaryLogProvider";
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
   private final InvocationCountMarshaller reqMarshaller = new InvocationCountMarshaller();
 =======
   private final Marshaller<String> reqMarshaller = spy(StringMarshaller.INSTANCE);
 >>>>>>> split out some tests specific to BinaryLogProvider.wrapMethodDefinition
   private final Marshaller<Integer> respMarshaller = spy(IntegerMarshaller.INSTANCE);
+=======
+  private final InvocationCountMarshaller<String> reqMarshaller =
+      new InvocationCountMarshaller<String>() {
+        @Override
+        Marshaller<String> delegate() {
+          return StringMarshaller.INSTANCE;
+        }
+      };
+  private final InvocationCountMarshaller<Integer> respMarshaller =
+      new InvocationCountMarshaller<Integer>() {
+        @Override
+        Marshaller<Integer> delegate() {
+          return IntegerMarshaller.INSTANCE;
+        }
+      };
+>>>>>>> avoid spy(), remove unneeded changes
   private final MethodDescriptor<String, Integer> method =
       MethodDescriptor
           .newBuilder(reqMarshaller, respMarshaller)
@@ -330,11 +342,11 @@ public class BinaryLogProviderTest {
     String actualRequest = "hello world";
     assertThat(binlogReq).isEmpty();
     assertThat(observedRequest).isEmpty();
-    verify(reqMarshaller, never()).parse(any(InputStream.class));
+    assertEquals(0, reqMarshaller.parseInvocations);
     onServerMessageHelper(wListener, StringMarshaller.INSTANCE.stream(actualRequest));
     // it is unacceptably expensive for the binlog to double parse every logged message
-    verify(reqMarshaller, never()).stream(any(String.class));
-    verify(reqMarshaller, times(1)).parse(any(InputStream.class));
+    assertEquals(1, reqMarshaller.parseInvocations);
+    assertEquals(0, reqMarshaller.streamInvocations);
     assertThat(binlogReq).hasSize(1);
     assertThat(observedRequest).hasSize(1);
     assertEquals(
@@ -345,11 +357,11 @@ public class BinaryLogProviderTest {
     int actualResponse = 12345;
     assertThat(binlogResp).isEmpty();
     assertThat(serializedResp).isEmpty();
-    verify(respMarshaller, never()).stream(any(Integer.class));
+    assertEquals(0, respMarshaller.streamInvocations);
     serverCall.get().sendMessage(actualResponse);
     // it is unacceptably expensive for the binlog to double parse every logged message
-    verify(respMarshaller, times(1)).stream(any(Integer.class));
-    verify(respMarshaller, never()).parse(any(InputStream.class));
+    assertEquals(0, respMarshaller.parseInvocations);
+    assertEquals(1, respMarshaller.streamInvocations);
     assertThat(binlogResp).hasSize(1);
     assertThat(serializedResp).hasSize(1);
     assertEquals(
@@ -527,8 +539,31 @@ public class BinaryLogProviderTest {
     }
   }
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> move tests to ServerImplTest
 =======
 >>>>>>> split out some tests specific to BinaryLogProvider.wrapMethodDefinition
+=======
+
+  private abstract static class InvocationCountMarshaller<T>
+      implements MethodDescriptor.Marshaller<T> {
+    private int streamInvocations = 0;
+    private int parseInvocations = 0;
+
+    abstract MethodDescriptor.Marshaller<T> delegate();
+
+    @Override
+    public InputStream stream(T value) {
+      streamInvocations++;
+      return delegate().stream(value);
+    }
+
+    @Override
+    public T parse(InputStream stream) {
+      parseInvocations++;
+      return delegate().parse(stream);
+    }
+  }
+>>>>>>> avoid spy(), remove unneeded changes
 }
