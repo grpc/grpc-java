@@ -20,6 +20,9 @@ import static com.google.common.truth.Truth.assertThat;
 
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
+import io.grpc.ServerServiceDefinition;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
@@ -161,11 +164,48 @@ public class GrpcServerRuleTest {
     assertThat(grpcServerRule.getServiceRegistry()).isNull();
   }
 
+  @Test
+  public void withServerBuilderSetupApplies() throws Throwable {
+    final ServerServiceDefinition service = new TestServiceImpl().bindService();
+
+    GrpcServerRule grpcServerRule = new GrpcServerRule()
+        .withServerBuilderSetup(new GrpcServerRule.ServerBuilderSetup() {
+          @Override
+          public void apply(InProcessServerBuilder serverBuilder) {
+            serverBuilder.addService(service);
+          }
+        });
+
+    TestStatement statement = new TestStatement(grpcServerRule);
+    grpcServerRule.apply(statement, null).evaluate();
+
+    // Note: addService()/getImmutableServices() is one of the few ServerBuilder options that is
+    // visible in the Server after calling build().
+    assertThat(statement.server.getImmutableServices()).containsExactly(service);
+  }
+
+  @Test
+  public void withChannelBuilderSetupApplies() throws Throwable {
+    GrpcServerRule grpcServerRule = new GrpcServerRule()
+        .withChannelBuilderSetup(new GrpcServerRule.ChannelBuilderSetup() {
+          @Override
+          public void apply(InProcessChannelBuilder channelBuilder) {
+            channelBuilder.overrideAuthority("bananas");
+          }
+        });
+
+    TestStatement statement = new TestStatement(grpcServerRule);
+    grpcServerRule.apply(statement, null).evaluate();
+
+    assertThat(statement.channelAuthority).isEqualTo("bananas");
+  }
+
   private static class TestStatement extends Statement {
 
     private final GrpcServerRule grpcServerRule;
 
     private ManagedChannel channel;
+    private String channelAuthority;
     private Server server;
 
     private TestStatement(GrpcServerRule grpcServerRule) {
@@ -175,6 +215,7 @@ public class GrpcServerRuleTest {
     @Override
     public void evaluate() throws Throwable {
       channel = grpcServerRule.getChannel();
+      channelAuthority = channel.authority();
       server = grpcServerRule.getServer();
     }
   }

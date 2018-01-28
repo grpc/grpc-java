@@ -16,6 +16,7 @@
 
 package io.grpc.testing;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import io.grpc.BindableService;
@@ -50,12 +51,59 @@ public class GrpcServerRule extends ExternalResource {
   private boolean useDirectExecutor;
 
   /**
+   * Allows for customization of a {@link GrpcServerRule}'s {@link InProcessServerBuilder} during
+   * rule initialization.
+   */
+  public interface ServerBuilderSetup {
+    void apply(InProcessServerBuilder serverBuilder);
+  }
+
+  /**
+   * Allows for customization of a {@link GrpcServerRule}'s {@link InProcessChannelBuilder} during
+   * rule initialization.
+   */
+  public interface ChannelBuilderSetup {
+    void apply(InProcessChannelBuilder channelBuilder);
+  }
+
+  private ServerBuilderSetup serverBuilderSetup;
+  private ChannelBuilderSetup channelBuilderSetup;
+
+  /**
    * Returns {@code this} configured to use a direct executor for the {@link ManagedChannel} and
    * {@link Server}. This can only be called at the rule instantiation.
    */
   public final GrpcServerRule directExecutor() {
-    checkState(serverName == null, "directExecutor() can only be called at the rule instantiation");
+    checkState(
+        serverName == null,
+        "directExecutor() can only be called at the rule instantiation");
     useDirectExecutor = true;
+    return this;
+  }
+
+  /**
+   * Returns {@code this} configured to apply a custom {@link ServerBuilderSetup} configuration each
+   * time a test is run. This can only be called at the rule instantiation.
+   */
+  public final GrpcServerRule withServerBuilderSetup(ServerBuilderSetup serverBuilderSetup) {
+    checkNotNull(serverBuilderSetup, "serverBuilderSetup");
+    checkState(
+        serverName == null,
+        "withServerBuilderSetup() can only be called at the rule instantiation");
+    this.serverBuilderSetup = serverBuilderSetup;
+    return this;
+  }
+
+  /**
+   * Returns {@code this} configured to apply a custom {@link ChannelBuilderSetup} configuration
+   * each time a test is run. This can only be called at the rule instantiation.
+   */
+  public final GrpcServerRule withChannelBuilderSetup(ChannelBuilderSetup channelBuilderSetup) {
+    checkNotNull(channelBuilderSetup, "channelBuilderSetup");
+    checkState(
+        serverName == null,
+        "withChannelBuilderSetup() can only be called at the rule instantiation");
+    this.channelBuilderSetup = channelBuilderSetup;
     return this;
   }
 
@@ -130,12 +178,20 @@ public class GrpcServerRule extends ExternalResource {
       serverBuilder.directExecutor();
     }
 
+    if (serverBuilderSetup != null) {
+      serverBuilderSetup.apply(serverBuilder);
+    }
+
     server = serverBuilder.build().start();
 
     InProcessChannelBuilder channelBuilder = InProcessChannelBuilder.forName(serverName);
 
     if (useDirectExecutor) {
       channelBuilder.directExecutor();
+    }
+
+    if (channelBuilderSetup != null) {
+      channelBuilderSetup.apply(channelBuilder);
     }
 
     channel = channelBuilder.build();
