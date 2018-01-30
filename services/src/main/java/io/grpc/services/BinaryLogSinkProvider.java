@@ -17,7 +17,6 @@
 package io.grpc.services;
 
 import io.grpc.InternalServiceProviders;
-import io.grpc.internal.BinaryLogProvider;
 import java.util.Collections;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
@@ -31,7 +30,7 @@ final class BinaryLogSinkProvider {
   private static final BinaryLogSink INSTANCE = InternalServiceProviders.load(
       BinaryLogSink.class,
       Collections.<Class<?>>emptyList(),
-      BinaryLogProvider.class.getClassLoader(),
+      BinaryLogSinkProvider.class.getClassLoader(),
       new InternalServiceProviders.PriorityAccessor<BinaryLogSink>() {
         @Override
         public boolean isAvailable(BinaryLogSink provider) {
