@@ -39,6 +39,7 @@ import io.grpc.Status;
 import io.grpc.internal.Channelz.TransportStats;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.StreamListener.MessageProducer;
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
@@ -707,10 +708,10 @@ public final class GrpcUtil {
     }
   }
 
-  /** Closes an InputStream, ignoring IOExceptions. */
-  static void closeQuietly(InputStream message) {
+  /** Closes a Closeable, ignoring IOExceptions. */
+  static void closeQuietly(Closeable closeable) {
     try {
-      message.close();
+      closeable.close();
     } catch (IOException ioException) {
       // do nothing
     }

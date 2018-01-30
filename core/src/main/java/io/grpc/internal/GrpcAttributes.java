@@ -16,17 +16,15 @@
 
 package io.grpc.internal;
 
-import com.google.gson.JsonObject;
 import io.grpc.Attributes;
+import java.util.Map;
 
 /**
  * Special attributes that are only useful to gRPC.
  */
 public final class GrpcAttributes {
-  /**
-   * Attribute key TXT DNS records.
-   */
-  public static final Attributes.Key<JsonObject> NAME_RESOLVER_ATTR_SERVICE_CONFIG =
+  /** Attribute key TXT DNS records. */
+  public static final Attributes.Key<Map<String, Object>> NAME_RESOLVER_ATTR_SERVICE_CONFIG =
       Attributes.Key.of("service-config");
 
   /**
