@@ -50,7 +50,6 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public final class BinaryLogTest {
   private static final Charset US_ASCII = Charset.forName("US-ASCII");
-  private static final BinaryLogSinkProvider DUMMY_SINK = mock(BinaryLogSinkProvider.class);
   private static final BinaryLog HEADER_FULL = new Builder().header(Integer.MAX_VALUE).build();
   private static final BinaryLog HEADER_256 = new Builder().header(256).build();
   private static final BinaryLog MSG_FULL = new Builder().msg(Integer.MAX_VALUE).build();
@@ -97,7 +96,7 @@ public final class BinaryLogTest {
   private static final int MESSAGE_LIMIT = Integer.MAX_VALUE;
 
   private final Metadata metadata = new Metadata();
-  private final BinaryLogSinkProvider sink = mock(BinaryLogSinkProvider.class);
+  private final BinaryLogSink sink = mock(BinaryLogSink.class);
   private final BinaryLog binaryLog = new BinaryLog(sink, HEADER_LIMIT, MESSAGE_LIMIT);
   private final byte[] message = new byte[100];
 
@@ -110,98 +109,98 @@ public final class BinaryLogTest {
 
   @Test
   public void configBinLog_global() throws Exception {
-    assertSameLimits(BOTH_FULL, new FactoryImpl("*").getLog("p.s/m"));
-    assertSameLimits(BOTH_FULL, new FactoryImpl("*{h;m}").getLog("p.s/m"));
-    assertSameLimits(HEADER_FULL, new FactoryImpl("*{h}").getLog("p.s/m"));
-    assertSameLimits(MSG_FULL, new FactoryImpl("*{m}").getLog("p.s/m"));
-    assertSameLimits(HEADER_256, new FactoryImpl("*{h:256}").getLog("p.s/m"));
-    assertSameLimits(MSG_256, new FactoryImpl("*{m:256}").getLog("p.s/m"));
-    assertSameLimits(BOTH_256, new FactoryImpl("*{h:256;m:256}").getLog("p.s/m"));
+    assertSameLimits(BOTH_FULL, makeFactory("*").getLog("p.s/m"));
+    assertSameLimits(BOTH_FULL, makeFactory("*{h;m}").getLog("p.s/m"));
+    assertSameLimits(HEADER_FULL, makeFactory("*{h}").getLog("p.s/m"));
+    assertSameLimits(MSG_FULL, makeFactory("*{m}").getLog("p.s/m"));
+    assertSameLimits(HEADER_256, makeFactory("*{h:256}").getLog("p.s/m"));
+    assertSameLimits(MSG_256, makeFactory("*{m:256}").getLog("p.s/m"));
+    assertSameLimits(BOTH_256, makeFactory("*{h:256;m:256}").getLog("p.s/m"));
     assertSameLimits(
         new Builder().header(Integer.MAX_VALUE).msg(256).build(),
-        new FactoryImpl("*{h;m:256}").getLog("p.s/m"));
+        makeFactory("*{h;m:256}").getLog("p.s/m"));
     assertSameLimits(
         new Builder().header(256).msg(Integer.MAX_VALUE).build(),
-        new FactoryImpl("*{h:256;m}").getLog("p.s/m"));
+        makeFactory("*{h:256;m}").getLog("p.s/m"));
   }
 
   @Test
   public void configBinLog_method() throws Exception {
-    assertSameLimits(BOTH_FULL, new FactoryImpl("p.s/m").getLog("p.s/m"));
-    assertSameLimits(BOTH_FULL, new FactoryImpl("p.s/m{h;m}").getLog("p.s/m"));
-    assertSameLimits(HEADER_FULL, new FactoryImpl("p.s/m{h}").getLog("p.s/m"));
-    assertSameLimits(MSG_FULL, new FactoryImpl("p.s/m{m}").getLog("p.s/m"));
-    assertSameLimits(HEADER_256, new FactoryImpl("p.s/m{h:256}").getLog("p.s/m"));
-    assertSameLimits(MSG_256, new FactoryImpl("p.s/m{m:256}").getLog("p.s/m"));
-    assertSameLimits(BOTH_256, new FactoryImpl("p.s/m{h:256;m:256}").getLog("p.s/m"));
+    assertSameLimits(BOTH_FULL, makeFactory("p.s/m").getLog("p.s/m"));
+    assertSameLimits(BOTH_FULL, makeFactory("p.s/m{h;m}").getLog("p.s/m"));
+    assertSameLimits(HEADER_FULL, makeFactory("p.s/m{h}").getLog("p.s/m"));
+    assertSameLimits(MSG_FULL, makeFactory("p.s/m{m}").getLog("p.s/m"));
+    assertSameLimits(HEADER_256, makeFactory("p.s/m{h:256}").getLog("p.s/m"));
+    assertSameLimits(MSG_256, makeFactory("p.s/m{m:256}").getLog("p.s/m"));
+    assertSameLimits(BOTH_256, makeFactory("p.s/m{h:256;m:256}").getLog("p.s/m"));
     assertSameLimits(
         new Builder().header(Integer.MAX_VALUE).msg(256).build(),
-        new FactoryImpl("p.s/m{h;m:256}").getLog("p.s/m"));
+        makeFactory("p.s/m{h;m:256}").getLog("p.s/m"));
     assertSameLimits(
         new Builder().header(256).msg(Integer.MAX_VALUE).build(),
-        new FactoryImpl("p.s/m{h:256;m}").getLog("p.s/m"));
+        makeFactory("p.s/m{h:256;m}").getLog("p.s/m"));
   }
 
   @Test
   public void configBinLog_method_absent() throws Exception {
-    assertNull(new FactoryImpl("p.s/m").getLog("p.s/absent"));
+    assertNull(makeFactory("p.s/m").getLog("p.s/absent"));
   }
 
   @Test
   public void configBinLog_service() throws Exception {
-    assertSameLimits(BOTH_FULL, new FactoryImpl("p.s/*").getLog("p.s/m"));
-    assertSameLimits(BOTH_FULL, new FactoryImpl("p.s/*{h;m}").getLog("p.s/m"));
-    assertSameLimits(HEADER_FULL, new FactoryImpl("p.s/*{h}").getLog("p.s/m"));
-    assertSameLimits(MSG_FULL, new FactoryImpl("p.s/*{m}").getLog("p.s/m"));
-    assertSameLimits(HEADER_256, new FactoryImpl("p.s/*{h:256}").getLog("p.s/m"));
-    assertSameLimits(MSG_256, new FactoryImpl("p.s/*{m:256}").getLog("p.s/m"));
-    assertSameLimits(BOTH_256, new FactoryImpl("p.s/*{h:256;m:256}").getLog("p.s/m"));
+    assertSameLimits(BOTH_FULL, makeFactory("p.s/*").getLog("p.s/m"));
+    assertSameLimits(BOTH_FULL, makeFactory("p.s/*{h;m}").getLog("p.s/m"));
+    assertSameLimits(HEADER_FULL, makeFactory("p.s/*{h}").getLog("p.s/m"));
+    assertSameLimits(MSG_FULL, makeFactory("p.s/*{m}").getLog("p.s/m"));
+    assertSameLimits(HEADER_256, makeFactory("p.s/*{h:256}").getLog("p.s/m"));
+    assertSameLimits(MSG_256, makeFactory("p.s/*{m:256}").getLog("p.s/m"));
+    assertSameLimits(BOTH_256, makeFactory("p.s/*{h:256;m:256}").getLog("p.s/m"));
     assertSameLimits(
         new Builder().header(Integer.MAX_VALUE).msg(256).build(),
-        new FactoryImpl("p.s/*{h;m:256}").getLog("p.s/m"));
+        makeFactory("p.s/*{h;m:256}").getLog("p.s/m"));
     assertSameLimits(
         new Builder().header(256).msg(Integer.MAX_VALUE).build(),
-        new FactoryImpl("p.s/*{h:256;m}").getLog("p.s/m"));
+        makeFactory("p.s/*{h:256;m}").getLog("p.s/m"));
   }
 
   @Test
   public void configBinLog_service_absent() throws Exception {
-    assertNull(new FactoryImpl("p.s/*").getLog("p.other/m"));
+    assertNull(makeFactory("p.s/*").getLog("p.other/m"));
   }
 
   @Test
   public void createLogFromOptionString() throws Exception {
-    assertSameLimits(BOTH_FULL, FactoryImpl.createBinaryLog(/*logConfig=*/ null));
-    assertSameLimits(HEADER_FULL, FactoryImpl.createBinaryLog("{h}"));
-    assertSameLimits(MSG_FULL, FactoryImpl.createBinaryLog("{m}"));
-    assertSameLimits(HEADER_256, FactoryImpl.createBinaryLog("{h:256}"));
-    assertSameLimits(MSG_256, FactoryImpl.createBinaryLog("{m:256}"));
-    assertSameLimits(BOTH_256, FactoryImpl.createBinaryLog("{h:256;m:256}"));
+    assertSameLimits(BOTH_FULL, FactoryImpl.createBinaryLog(sink, /*logConfig=*/ null));
+    assertSameLimits(HEADER_FULL, FactoryImpl.createBinaryLog(sink, "{h}"));
+    assertSameLimits(MSG_FULL, FactoryImpl.createBinaryLog(sink, "{m}"));
+    assertSameLimits(HEADER_256, FactoryImpl.createBinaryLog(sink, "{h:256}"));
+    assertSameLimits(MSG_256, FactoryImpl.createBinaryLog(sink, "{m:256}"));
+    assertSameLimits(BOTH_256, FactoryImpl.createBinaryLog(sink, "{h:256;m:256}"));
     assertSameLimits(
         new Builder().header(Integer.MAX_VALUE).msg(256).build(),
-        FactoryImpl.createBinaryLog("{h;m:256}"));
+        FactoryImpl.createBinaryLog(sink, "{h;m:256}"));
     assertSameLimits(
         new Builder().header(256).msg(Integer.MAX_VALUE).build(),
-        FactoryImpl.createBinaryLog("{h:256;m}"));
+        FactoryImpl.createBinaryLog(sink, "{h:256;m}"));
   }
 
   @Test
   public void createLogFromOptionString_malformed() throws Exception {
-    assertNull(FactoryImpl.createBinaryLog("bad"));
-    assertNull(FactoryImpl.createBinaryLog("{bad}"));
-    assertNull(FactoryImpl.createBinaryLog("{x;y}"));
-    assertNull(FactoryImpl.createBinaryLog("{h:abc}"));
-    assertNull(FactoryImpl.createBinaryLog("{2}"));
-    assertNull(FactoryImpl.createBinaryLog("{2;2}"));
+    assertNull(FactoryImpl.createBinaryLog(sink, "bad"));
+    assertNull(FactoryImpl.createBinaryLog(sink, "{bad}"));
+    assertNull(FactoryImpl.createBinaryLog(sink, "{x;y}"));
+    assertNull(FactoryImpl.createBinaryLog(sink, "{h:abc}"));
+    assertNull(FactoryImpl.createBinaryLog(sink, "{2}"));
+    assertNull(FactoryImpl.createBinaryLog(sink, "{2;2}"));
     // The grammar specifies that if both h and m are present, h comes before m
-    assertNull(FactoryImpl.createBinaryLog("{m:123;h:123}"));
+    assertNull(FactoryImpl.createBinaryLog(sink, "{m:123;h:123}"));
     // NumberFormatException
-    assertNull(FactoryImpl.createBinaryLog("{h:99999999999999}"));
+    assertNull(FactoryImpl.createBinaryLog(sink, "{h:99999999999999}"));
   }
 
   @Test
   public void configBinLog_multiConfig_withGlobal() throws Exception {
-    FactoryImpl factory = new FactoryImpl(
+    FactoryImpl factory = makeFactory(
         "*{h},"
         + "package.both256/*{h:256;m:256},"
         + "package.service1/both128{h:128;m:128},"
@@ -224,7 +223,7 @@ public final class BinaryLogTest {
 
   @Test
   public void configBinLog_multiConfig_noGlobal() throws Exception {
-    FactoryImpl factory = new FactoryImpl(
+    FactoryImpl factory = makeFactory(
         "package.both256/*{h:256;m:256},"
         + "package.service1/both128{h:128;m:128},"
         + "package.service2/method_messageOnly{m}");
@@ -246,7 +245,7 @@ public final class BinaryLogTest {
 
   @Test
   public void configBinLog_ignoreDuplicates_global() throws Exception {
-    FactoryImpl factory = new FactoryImpl("*{h},p.s/m,*{h:256}");
+    FactoryImpl factory = makeFactory("*{h},p.s/m,*{h:256}");
     // The duplicate
     assertSameLimits(HEADER_FULL, factory.getLog("p.other1/m"));
     assertSameLimits(HEADER_FULL, factory.getLog("p.other2/m"));
@@ -256,7 +255,7 @@ public final class BinaryLogTest {
 
   @Test
   public void configBinLog_ignoreDuplicates_service() throws Exception {
-    FactoryImpl factory = new FactoryImpl("p.s/*,*{h:256},p.s/*{h}");
+    FactoryImpl factory = makeFactory("p.s/*,*{h:256},p.s/*{h}");
     // The duplicate
     assertSameLimits(BOTH_FULL, factory.getLog("p.s/m1"));
     assertSameLimits(BOTH_FULL, factory.getLog("p.s/m2"));
@@ -267,7 +266,7 @@ public final class BinaryLogTest {
 
   @Test
   public void configBinLog_ignoreDuplicates_method() throws Exception {
-    FactoryImpl factory = new FactoryImpl("p.s/m,*{h:256},p.s/m{h}");
+    FactoryImpl factory = makeFactory("p.s/m,*{h:256},p.s/m{h}");
     // The duplicate
     assertSameLimits(BOTH_FULL, factory.getLog("p.s/m"));
     // Other
@@ -632,6 +631,10 @@ public final class BinaryLogTest {
     verifyNoMoreInteractions(sink);
   }
 
+  private BinaryLog.FactoryImpl makeFactory(String configStr) {
+    return new BinaryLog.FactoryImpl(sink, configStr);
+  } 
+
   /** A builder class to make unit test code more readable. */
   private static final class Builder {
     int maxHeaderBytes = 0;
@@ -648,7 +651,7 @@ public final class BinaryLogTest {
     }
 
     BinaryLog build() {
-      return new BinaryLog(DUMMY_SINK, maxHeaderBytes, maxMessageBytes);
+      return new BinaryLog(mock(BinaryLogSink.class), maxHeaderBytes, maxMessageBytes);
     }
   }
 

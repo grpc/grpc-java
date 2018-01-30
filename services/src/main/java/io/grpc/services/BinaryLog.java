@@ -54,6 +54,7 @@ import javax.annotation.concurrent.ThreadSafe;
 /**
  * A binary log class that is configured for a specific {@link MethodDescriptor}.
  */
+// TODO(zpencer): this is really a per-method logger class, make the class name more clear.
 @ThreadSafe
 final class BinaryLog {
   private static final Logger logger = Logger.getLogger(BinaryLog.class.getName());
@@ -61,14 +62,14 @@ final class BinaryLog {
   private static final int IP_PORT_UPPER_MASK = 0xff00;
   private static final int IP_PORT_LOWER_MASK = 0xff;
 
-  private final BinaryLogSinkProvider sink;
+  private final BinaryLogSink sink;
   @VisibleForTesting
   final int maxHeaderBytes;
   @VisibleForTesting
   final int maxMessageBytes;
 
   @VisibleForTesting
-  BinaryLog(BinaryLogSinkProvider sink, int maxHeaderBytes, int maxMessageBytes) {
+  BinaryLog(BinaryLogSink sink, int maxHeaderBytes, int maxMessageBytes) {
     this.sink = sink;
     this.maxHeaderBytes = maxHeaderBytes;
     this.maxMessageBytes = maxMessageBytes;
@@ -172,8 +173,10 @@ final class BinaryLog {
     Factory defaultFactory = NULL_FACTORY;
     try {
       String configStr = System.getenv("GRPC_BINARY_LOG_CONFIG");
-      if (configStr != null && configStr.length() > 0) {
-        defaultFactory = new FactoryImpl(configStr);
+      // TODO(zpencer): make BinaryLog.java implement isAvailable, and put this check there
+      BinaryLogSink sink = BinaryLogSinkProvider.provider();
+      if (sink != null && configStr != null && configStr.length() > 0) {
+        defaultFactory = new FactoryImpl(sink, configStr);
       }
     } catch (Throwable t) {
       logger.log(Level.SEVERE, "Failed to initialize binary log. Disabling binary log.", t);
@@ -218,7 +221,7 @@ final class BinaryLog {
      * Accepts a string in the format specified by the binary log spec.
      */
     @VisibleForTesting
-    FactoryImpl(String configurationString) {
+    FactoryImpl(BinaryLogSink sink, String configurationString) {
       Preconditions.checkState(configurationString != null && configurationString.length() > 0);
       BinaryLog globalLog = null;
       Map<String, BinaryLog> perServiceLogs = new HashMap<String, BinaryLog>();
@@ -231,7 +234,7 @@ final class BinaryLog {
         }
         String methodOrSvc = configMatcher.group(1);
         String binlogOptionStr = configMatcher.group(2);
-        BinaryLog binLog = createBinaryLog(binlogOptionStr);
+        BinaryLog binLog = createBinaryLog(sink, binlogOptionStr);
         if (binLog == null) {
           continue;
         }
@@ -293,10 +296,9 @@ final class BinaryLog {
      */
     @VisibleForTesting
     @Nullable
-    static BinaryLog createBinaryLog(@Nullable String logConfig) {
+    static BinaryLog createBinaryLog(BinaryLogSink sink, @Nullable String logConfig) {
       if (logConfig == null) {
-        return new BinaryLog(
-            BinaryLogSinkProvider.provider(), Integer.MAX_VALUE, Integer.MAX_VALUE);
+        return new BinaryLog(sink, Integer.MAX_VALUE, Integer.MAX_VALUE);
       }
       try {
         Matcher headerMatcher;
@@ -323,7 +325,7 @@ final class BinaryLog {
           logger.log(Level.SEVERE, "Illegal log config pattern: " + logConfig);
           return null;
         }
-        return new BinaryLog(BinaryLogSinkProvider.provider(), maxHeaderBytes, maxMsgBytes);
+        return new BinaryLog(sink, maxHeaderBytes, maxMsgBytes);
       } catch (NumberFormatException e) {
         logger.log(Level.SEVERE, "Illegal log config pattern: " + logConfig);
         return null;

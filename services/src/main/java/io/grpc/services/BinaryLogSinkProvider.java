@@ -16,8 +16,10 @@
 
 package io.grpc.services;
 
-import com.google.protobuf.MessageLite;
-import java.io.Closeable;
+import io.grpc.InternalServiceProviders;
+import io.grpc.internal.BinaryLogProvider;
+import java.util.Collections;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -25,33 +27,28 @@ import javax.annotation.concurrent.ThreadSafe;
  * the appropriate destination.
  */
 @ThreadSafe
-public abstract class BinaryLogSinkProvider implements Closeable {
+final class BinaryLogSinkProvider {
+  private static final BinaryLogSink INSTANCE = InternalServiceProviders.load(
+      BinaryLogSink.class,
+      Collections.<Class<?>>emptyList(),
+      BinaryLogProvider.class.getClassLoader(),
+      new InternalServiceProviders.PriorityAccessor<BinaryLogSink>() {
+        @Override
+        public boolean isAvailable(BinaryLogSink provider) {
+          return provider.isAvailable();
+        }
+
+        @Override
+        public int getPriority(BinaryLogSink provider) {
+          return provider.priority();
+        }
+      });
 
   /**
-   * Returns the {@code BinaryLogSinkProvider} that should be used.
+   * Returns the {@code BinaryLogSink} that should be used.
    */
-  public static BinaryLogSinkProvider provider() {
-    // TODO(zpencer): either implement the service provider here, or use a generic helper
-    // See: https://github.com/grpc/grpc-java/pull/3886
-    return null;
+  @Nullable
+  static BinaryLogSink provider() {
+    return INSTANCE;
   }
-
-  /**
-   * Writes the {@code message} to the destination.
-   */
-  public abstract void write(MessageLite message);
-
-  /**
-   * Whether this provider is available for use, taking the current environment into consideration.
-   * If {@code false}, no other methods are safe to be called.
-   */
-  protected abstract boolean isAvailable();
-
-  /**
-   * A priority, from 0 to 10 that this provider should be used, taking the current environment into
-   * consideration. 5 should be considered the default, and then tweaked based on environment
-   * detection. A priority of 0 does not imply that the provider wouldn't work; just that it should
-   * be last in line.
-   */
-  protected abstract int priority();
 }
