@@ -22,9 +22,16 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.primitives.Bytes;
 import com.google.protobuf.ByteString;
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
 import io.grpc.binarylog.GrpcLogEntry;
 import io.grpc.binarylog.GrpcLogEntry.Type;
 import io.grpc.binarylog.Message;
@@ -52,12 +59,11 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * A binary log class that is configured for a specific {@link MethodDescriptor}.
+ * A binary log class that is configured for a specific method name.
  */
-// TODO(zpencer): this is really a per-method logger class, make the class name more clear.
 @ThreadSafe
-final class BinaryLog {
-  private static final Logger logger = Logger.getLogger(BinaryLog.class.getName());
+final class BinaryLogInterceptor implements ServerInterceptor, ClientInterceptor {
+  private static final Logger logger = Logger.getLogger(BinaryLogInterceptor.class.getName());
   private static final int IP_PORT_BYTES = 2;
   private static final int IP_PORT_UPPER_MASK = 0xff00;
   private static final int IP_PORT_LOWER_MASK = 0xff;
@@ -68,8 +74,22 @@ final class BinaryLog {
   @VisibleForTesting
   final int maxMessageBytes;
 
+  @Override
+  public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+      ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+    // TODO(zpencer): log the data
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+      MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+    // TODO(zpencer): log the data
+    throw new UnsupportedOperationException();
+  }
+
   @VisibleForTesting
-  BinaryLog(BinaryLogSink sink, int maxHeaderBytes, int maxMessageBytes) {
+  BinaryLogInterceptor(BinaryLogSink sink, int maxHeaderBytes, int maxMessageBytes) {
     this.sink = sink;
     this.maxHeaderBytes = maxHeaderBytes;
     this.maxMessageBytes = maxMessageBytes;
@@ -79,7 +99,8 @@ final class BinaryLog {
    * Logs the initial metadata. This method logs the appropriate number of bytes
    * as determined by the binary logging configuration.
    */
-  public void logInitialMetadata(
+  @VisibleForTesting
+  void logInitialMetadata(
       Metadata metadata, boolean isServer, byte[] callId, SocketAddress peerSocket) {
     GrpcLogEntry entry = GrpcLogEntry
         .newBuilder()
@@ -96,7 +117,8 @@ final class BinaryLog {
    * Logs the trailing metadata. This method logs the appropriate number of bytes
    * as determined by the binary logging configuration.
    */
-  public void logTrailingMetadata(Metadata metadata, boolean isServer, byte[] callId) {
+  @VisibleForTesting
+  void logTrailingMetadata(Metadata metadata, boolean isServer, byte[] callId) {
     GrpcLogEntry entry = GrpcLogEntry
         .newBuilder()
         .setType(Type.SEND_TRAILING_METADATA)
@@ -112,7 +134,8 @@ final class BinaryLog {
    * {@code message}, and returns an {@link InputStream} that contains the original message.
    * The number of bytes logged is determined by the binary logging configuration.
    */
-  public void logOutboundMessage(
+  @VisibleForTesting
+  void logOutboundMessage(
       byte[] message, boolean compressed, boolean isServer, byte[] callId) {
     GrpcLogEntry entry = GrpcLogEntry
         .newBuilder()
@@ -129,7 +152,8 @@ final class BinaryLog {
    * {@code message}, and returns an {@link InputStream} that contains the original message.
    * The number of bytes logged is determined by the binary logging configuration.
    */
-  public void logInboundMessage(
+  @VisibleForTesting
+  void logInboundMessage(
       byte[] message, boolean compressed, boolean isServer, byte[] callId) {
     GrpcLogEntry entry = GrpcLogEntry
         .newBuilder()
@@ -143,10 +167,10 @@ final class BinaryLog {
 
   @Override
   public boolean equals(Object o) {
-    if (!(o instanceof BinaryLog)) {
+    if (!(o instanceof BinaryLogInterceptor)) {
       return false;
     }
-    BinaryLog that = (BinaryLog) o;
+    BinaryLogInterceptor that = (BinaryLogInterceptor) o;
     return this.maxHeaderBytes == that.maxHeaderBytes
         && this.maxMessageBytes == that.maxMessageBytes
         && this.sink.equals(that.sink);
@@ -166,39 +190,7 @@ final class BinaryLog {
         + "]";
   }
 
-  private static final Factory DEFAULT_FACTORY;
-  private static final Factory NULL_FACTORY = new NullFactory();
-
-  static {
-    Factory defaultFactory = NULL_FACTORY;
-    try {
-      String configStr = System.getenv("GRPC_BINARY_LOG_CONFIG");
-      // TODO(zpencer): make BinaryLog.java implement isAvailable, and put this check there
-      BinaryLogSink sink = BinaryLogSinkProvider.provider();
-      if (sink != null && configStr != null && configStr.length() > 0) {
-        defaultFactory = new FactoryImpl(sink, configStr);
-      }
-    } catch (Throwable t) {
-      logger.log(Level.SEVERE, "Failed to initialize binary log. Disabling binary log.", t);
-      defaultFactory = NULL_FACTORY;
-    }
-    DEFAULT_FACTORY = defaultFactory;
-  }
-
-  /**
-   * Accepts the fullMethodName and returns the binary log that should be used. The log may be
-   * a log that does nothing.
-   */
-  static BinaryLog getLog(String fullMethodName) {
-    return DEFAULT_FACTORY.getLog(fullMethodName);
-  }
-
-  interface Factory {
-    @Nullable
-    BinaryLog getLog(String fullMethodName);
-  }
-
-  static final class FactoryImpl implements Factory {
+  static final class Factory {
     // '*' for global, 'service/*' for service glob, or 'service/method' for fully qualified.
     private static final Pattern logPatternRe = Pattern.compile("[^{]+");
     // A curly brace wrapped expression. Will be further matched with the more specified REs below.
@@ -213,19 +205,20 @@ final class BinaryLog {
     // The form: {h:256,m:256}
     private static final Pattern bothRe = Pattern.compile("\\{h(?::(\\d+))?;m(?::(\\d+))?}");
 
-    private final BinaryLog globalLog;
-    private final Map<String, BinaryLog> perServiceLogs;
-    private final Map<String, BinaryLog> perMethodLogs;
+    private final BinaryLogInterceptor global;
+    private final Map<String, BinaryLogInterceptor> perService;
+    private final Map<String, BinaryLogInterceptor> perMethod;
 
     /**
      * Accepts a string in the format specified by the binary log spec.
      */
     @VisibleForTesting
-    FactoryImpl(BinaryLogSink sink, String configurationString) {
+    Factory(BinaryLogSink sink, String configurationString) {
       Preconditions.checkState(configurationString != null && configurationString.length() > 0);
-      BinaryLog globalLog = null;
-      Map<String, BinaryLog> perServiceLogs = new HashMap<String, BinaryLog>();
-      Map<String, BinaryLog> perMethodLogs = new HashMap<String, BinaryLog>();
+      Preconditions.checkNotNull(sink);
+      BinaryLogInterceptor global = null;
+      Map<String, BinaryLogInterceptor> perService = new HashMap<String, BinaryLogInterceptor>();
+      Map<String, BinaryLogInterceptor> perMethod = new HashMap<String, BinaryLogInterceptor>();
 
       for (String configuration : Splitter.on(',').split(configurationString)) {
         Matcher configMatcher = configRe.matcher(configuration);
@@ -234,55 +227,54 @@ final class BinaryLog {
         }
         String methodOrSvc = configMatcher.group(1);
         String binlogOptionStr = configMatcher.group(2);
-        BinaryLog binLog = createBinaryLog(sink, binlogOptionStr);
+        BinaryLogInterceptor binLog = createInterceptor(sink, binlogOptionStr);
         if (binLog == null) {
           continue;
         }
         if (methodOrSvc.equals("*")) {
-          if (globalLog != null) {
+          if (global != null) {
             logger.log(Level.SEVERE, "Ignoring duplicate entry: " + configuration);
             continue;
           }
-          globalLog = binLog;
-          logger.info("Global binlog: " + globalLog);
+          global = binLog;
+          logger.info("Global binlog: " + global);
         } else if (isServiceGlob(methodOrSvc)) {
           String service = MethodDescriptor.extractFullServiceName(methodOrSvc);
-          if (perServiceLogs.containsKey(service)) {
+          if (perService.containsKey(service)) {
             logger.log(Level.SEVERE, "Ignoring duplicate entry: " + configuration);
             continue;
           }
-          perServiceLogs.put(service, binLog);
+          perService.put(service, binLog);
           logger.info(String.format("Service binlog: service=%s log=%s", service, binLog));
         } else {
           // assume fully qualified method name
-          if (perMethodLogs.containsKey(methodOrSvc)) {
+          if (perMethod.containsKey(methodOrSvc)) {
             logger.log(Level.SEVERE, "Ignoring duplicate entry: " + configuration);
             continue;
           }
-          perMethodLogs.put(methodOrSvc, binLog);
+          perMethod.put(methodOrSvc, binLog);
           logger.info(String.format("Method binlog: method=%s log=%s", methodOrSvc, binLog));
         }
       }
-      this.globalLog = globalLog;
-      this.perServiceLogs = Collections.unmodifiableMap(perServiceLogs);
-      this.perMethodLogs = Collections.unmodifiableMap(perMethodLogs);
+      this.global = global;
+      this.perService = Collections.unmodifiableMap(perService);
+      this.perMethod = Collections.unmodifiableMap(perMethod);
     }
 
     /**
      * Accepts a full method name and returns the log that should be used.
      */
-    @Override
-    public BinaryLog getLog(String fullMethodName) {
-      BinaryLog methodLog = perMethodLogs.get(fullMethodName);
+    public BinaryLogInterceptor getInterceptor(String fullMethodName) {
+      BinaryLogInterceptor methodLog = perMethod.get(fullMethodName);
       if (methodLog != null) {
         return methodLog;
       }
-      BinaryLog serviceLog = perServiceLogs.get(
+      BinaryLogInterceptor serviceLog = perService.get(
           MethodDescriptor.extractFullServiceName(fullMethodName));
       if (serviceLog != null) {
         return serviceLog;
       }
-      return globalLog;
+      return global;
     }
 
     /**
@@ -296,9 +288,9 @@ final class BinaryLog {
      */
     @VisibleForTesting
     @Nullable
-    static BinaryLog createBinaryLog(BinaryLogSink sink, @Nullable String logConfig) {
+    static BinaryLogInterceptor createInterceptor(BinaryLogSink sink, @Nullable String logConfig) {
       if (logConfig == null) {
-        return new BinaryLog(sink, Integer.MAX_VALUE, Integer.MAX_VALUE);
+        return new BinaryLogInterceptor(sink, Integer.MAX_VALUE, Integer.MAX_VALUE);
       }
       try {
         Matcher headerMatcher;
@@ -325,7 +317,7 @@ final class BinaryLog {
           logger.log(Level.SEVERE, "Illegal log config pattern: " + logConfig);
           return null;
         }
-        return new BinaryLog(sink, maxHeaderBytes, maxMsgBytes);
+        return new BinaryLogInterceptor(sink, maxHeaderBytes, maxMsgBytes);
       } catch (NumberFormatException e) {
         logger.log(Level.SEVERE, "Illegal log config pattern: " + logConfig);
         return null;
@@ -337,13 +329,6 @@ final class BinaryLog {
      */
     static boolean isServiceGlob(String input) {
       return input.endsWith("/*");
-    }
-  }
-
-  private static final class NullFactory implements Factory {
-    @Override
-    public BinaryLog getLog(String fullMethodName) {
-      return null;
     }
   }
 

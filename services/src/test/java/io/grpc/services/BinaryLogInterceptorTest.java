@@ -33,7 +33,7 @@ import io.grpc.binarylog.MetadataEntry;
 import io.grpc.binarylog.Peer;
 import io.grpc.binarylog.Peer.PeerType;
 import io.grpc.binarylog.Uint128;
-import io.grpc.services.BinaryLog.FactoryImpl;
+import io.grpc.services.BinaryLogInterceptor.Factory;
 import io.netty.channel.unix.DomainSocketAddress;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -46,16 +46,17 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Tests for {@link BinaryLog}. */
+/** Tests for {@link BinaryLogInterceptor}. */
 @RunWith(JUnit4.class)
-public final class BinaryLogTest {
+public final class BinaryLogInterceptorTest {
   private static final Charset US_ASCII = Charset.forName("US-ASCII");
-  private static final BinaryLog HEADER_FULL = new Builder().header(Integer.MAX_VALUE).build();
-  private static final BinaryLog HEADER_256 = new Builder().header(256).build();
-  private static final BinaryLog MSG_FULL = new Builder().msg(Integer.MAX_VALUE).build();
-  private static final BinaryLog MSG_256 = new Builder().msg(256).build();
-  private static final BinaryLog BOTH_256 = new Builder().header(256).msg(256).build();
-  private static final BinaryLog BOTH_FULL =
+  private static final BinaryLogInterceptor HEADER_FULL =
+      new Builder().header(Integer.MAX_VALUE).build();
+  private static final BinaryLogInterceptor HEADER_256 = new Builder().header(256).build();
+  private static final BinaryLogInterceptor MSG_FULL = new Builder().msg(Integer.MAX_VALUE).build();
+  private static final BinaryLogInterceptor MSG_256 = new Builder().msg(256).build();
+  private static final BinaryLogInterceptor BOTH_256 = new Builder().header(256).msg(256).build();
+  private static final BinaryLogInterceptor BOTH_FULL =
       new Builder().header(Integer.MAX_VALUE).msg(Integer.MAX_VALUE).build();
 
   private static final String DATA_A = "aaaaaaaaa";
@@ -97,7 +98,8 @@ public final class BinaryLogTest {
 
   private final Metadata metadata = new Metadata();
   private final BinaryLogSink sink = mock(BinaryLogSink.class);
-  private final BinaryLog binaryLog = new BinaryLog(sink, HEADER_LIMIT, MESSAGE_LIMIT);
+  private final BinaryLogInterceptor interceptor =
+      new BinaryLogInterceptor(sink, HEADER_LIMIT, MESSAGE_LIMIT);
   private final byte[] message = new byte[100];
 
   @Before
@@ -109,169 +111,171 @@ public final class BinaryLogTest {
 
   @Test
   public void configBinLog_global() throws Exception {
-    assertSameLimits(BOTH_FULL, makeFactory("*").getLog("p.s/m"));
-    assertSameLimits(BOTH_FULL, makeFactory("*{h;m}").getLog("p.s/m"));
-    assertSameLimits(HEADER_FULL, makeFactory("*{h}").getLog("p.s/m"));
-    assertSameLimits(MSG_FULL, makeFactory("*{m}").getLog("p.s/m"));
-    assertSameLimits(HEADER_256, makeFactory("*{h:256}").getLog("p.s/m"));
-    assertSameLimits(MSG_256, makeFactory("*{m:256}").getLog("p.s/m"));
-    assertSameLimits(BOTH_256, makeFactory("*{h:256;m:256}").getLog("p.s/m"));
+    assertSameLimits(BOTH_FULL, makeFactory("*").getInterceptor("p.s/m"));
+    assertSameLimits(BOTH_FULL, makeFactory("*{h;m}").getInterceptor("p.s/m"));
+    assertSameLimits(HEADER_FULL, makeFactory("*{h}").getInterceptor("p.s/m"));
+    assertSameLimits(MSG_FULL, makeFactory("*{m}").getInterceptor("p.s/m"));
+    assertSameLimits(HEADER_256, makeFactory("*{h:256}").getInterceptor("p.s/m"));
+    assertSameLimits(MSG_256, makeFactory("*{m:256}").getInterceptor("p.s/m"));
+    assertSameLimits(BOTH_256, makeFactory("*{h:256;m:256}").getInterceptor("p.s/m"));
     assertSameLimits(
         new Builder().header(Integer.MAX_VALUE).msg(256).build(),
-        makeFactory("*{h;m:256}").getLog("p.s/m"));
+        makeFactory("*{h;m:256}").getInterceptor("p.s/m"));
     assertSameLimits(
         new Builder().header(256).msg(Integer.MAX_VALUE).build(),
-        makeFactory("*{h:256;m}").getLog("p.s/m"));
+        makeFactory("*{h:256;m}").getInterceptor("p.s/m"));
   }
 
   @Test
   public void configBinLog_method() throws Exception {
-    assertSameLimits(BOTH_FULL, makeFactory("p.s/m").getLog("p.s/m"));
-    assertSameLimits(BOTH_FULL, makeFactory("p.s/m{h;m}").getLog("p.s/m"));
-    assertSameLimits(HEADER_FULL, makeFactory("p.s/m{h}").getLog("p.s/m"));
-    assertSameLimits(MSG_FULL, makeFactory("p.s/m{m}").getLog("p.s/m"));
-    assertSameLimits(HEADER_256, makeFactory("p.s/m{h:256}").getLog("p.s/m"));
-    assertSameLimits(MSG_256, makeFactory("p.s/m{m:256}").getLog("p.s/m"));
-    assertSameLimits(BOTH_256, makeFactory("p.s/m{h:256;m:256}").getLog("p.s/m"));
+    assertSameLimits(BOTH_FULL, makeFactory("p.s/m").getInterceptor("p.s/m"));
+    assertSameLimits(BOTH_FULL, makeFactory("p.s/m{h;m}").getInterceptor("p.s/m"));
+    assertSameLimits(HEADER_FULL, makeFactory("p.s/m{h}").getInterceptor("p.s/m"));
+    assertSameLimits(MSG_FULL, makeFactory("p.s/m{m}").getInterceptor("p.s/m"));
+    assertSameLimits(HEADER_256, makeFactory("p.s/m{h:256}").getInterceptor("p.s/m"));
+    assertSameLimits(MSG_256, makeFactory("p.s/m{m:256}").getInterceptor("p.s/m"));
+    assertSameLimits(BOTH_256, makeFactory("p.s/m{h:256;m:256}").getInterceptor("p.s/m"));
     assertSameLimits(
         new Builder().header(Integer.MAX_VALUE).msg(256).build(),
-        makeFactory("p.s/m{h;m:256}").getLog("p.s/m"));
+        makeFactory("p.s/m{h;m:256}").getInterceptor("p.s/m"));
     assertSameLimits(
         new Builder().header(256).msg(Integer.MAX_VALUE).build(),
-        makeFactory("p.s/m{h:256;m}").getLog("p.s/m"));
+        makeFactory("p.s/m{h:256;m}").getInterceptor("p.s/m"));
   }
 
   @Test
   public void configBinLog_method_absent() throws Exception {
-    assertNull(makeFactory("p.s/m").getLog("p.s/absent"));
+    assertNull(makeFactory("p.s/m").getInterceptor("p.s/absent"));
   }
 
   @Test
   public void configBinLog_service() throws Exception {
-    assertSameLimits(BOTH_FULL, makeFactory("p.s/*").getLog("p.s/m"));
-    assertSameLimits(BOTH_FULL, makeFactory("p.s/*{h;m}").getLog("p.s/m"));
-    assertSameLimits(HEADER_FULL, makeFactory("p.s/*{h}").getLog("p.s/m"));
-    assertSameLimits(MSG_FULL, makeFactory("p.s/*{m}").getLog("p.s/m"));
-    assertSameLimits(HEADER_256, makeFactory("p.s/*{h:256}").getLog("p.s/m"));
-    assertSameLimits(MSG_256, makeFactory("p.s/*{m:256}").getLog("p.s/m"));
-    assertSameLimits(BOTH_256, makeFactory("p.s/*{h:256;m:256}").getLog("p.s/m"));
+    assertSameLimits(BOTH_FULL, makeFactory("p.s/*").getInterceptor("p.s/m"));
+    assertSameLimits(BOTH_FULL, makeFactory("p.s/*{h;m}").getInterceptor("p.s/m"));
+    assertSameLimits(HEADER_FULL, makeFactory("p.s/*{h}").getInterceptor("p.s/m"));
+    assertSameLimits(MSG_FULL, makeFactory("p.s/*{m}").getInterceptor("p.s/m"));
+    assertSameLimits(HEADER_256, makeFactory("p.s/*{h:256}").getInterceptor("p.s/m"));
+    assertSameLimits(MSG_256, makeFactory("p.s/*{m:256}").getInterceptor("p.s/m"));
+    assertSameLimits(BOTH_256, makeFactory("p.s/*{h:256;m:256}").getInterceptor("p.s/m"));
     assertSameLimits(
         new Builder().header(Integer.MAX_VALUE).msg(256).build(),
-        makeFactory("p.s/*{h;m:256}").getLog("p.s/m"));
+        makeFactory("p.s/*{h;m:256}").getInterceptor("p.s/m"));
     assertSameLimits(
         new Builder().header(256).msg(Integer.MAX_VALUE).build(),
-        makeFactory("p.s/*{h:256;m}").getLog("p.s/m"));
+        makeFactory("p.s/*{h:256;m}").getInterceptor("p.s/m"));
   }
 
   @Test
   public void configBinLog_service_absent() throws Exception {
-    assertNull(makeFactory("p.s/*").getLog("p.other/m"));
+    assertNull(makeFactory("p.s/*").getInterceptor("p.other/m"));
   }
 
   @Test
   public void createLogFromOptionString() throws Exception {
-    assertSameLimits(BOTH_FULL, FactoryImpl.createBinaryLog(sink, /*logConfig=*/ null));
-    assertSameLimits(HEADER_FULL, FactoryImpl.createBinaryLog(sink, "{h}"));
-    assertSameLimits(MSG_FULL, FactoryImpl.createBinaryLog(sink, "{m}"));
-    assertSameLimits(HEADER_256, FactoryImpl.createBinaryLog(sink, "{h:256}"));
-    assertSameLimits(MSG_256, FactoryImpl.createBinaryLog(sink, "{m:256}"));
-    assertSameLimits(BOTH_256, FactoryImpl.createBinaryLog(sink, "{h:256;m:256}"));
+    assertSameLimits(BOTH_FULL, Factory.createInterceptor(sink, /*logConfig=*/ null));
+    assertSameLimits(HEADER_FULL, Factory.createInterceptor(sink, "{h}"));
+    assertSameLimits(MSG_FULL, Factory.createInterceptor(sink, "{m}"));
+    assertSameLimits(HEADER_256, Factory.createInterceptor(sink, "{h:256}"));
+    assertSameLimits(MSG_256, Factory.createInterceptor(sink, "{m:256}"));
+    assertSameLimits(BOTH_256, Factory.createInterceptor(sink, "{h:256;m:256}"));
     assertSameLimits(
         new Builder().header(Integer.MAX_VALUE).msg(256).build(),
-        FactoryImpl.createBinaryLog(sink, "{h;m:256}"));
+        Factory.createInterceptor(sink, "{h;m:256}"));
     assertSameLimits(
         new Builder().header(256).msg(Integer.MAX_VALUE).build(),
-        FactoryImpl.createBinaryLog(sink, "{h:256;m}"));
+        Factory.createInterceptor(sink, "{h:256;m}"));
   }
 
   @Test
   public void createLogFromOptionString_malformed() throws Exception {
-    assertNull(FactoryImpl.createBinaryLog(sink, "bad"));
-    assertNull(FactoryImpl.createBinaryLog(sink, "{bad}"));
-    assertNull(FactoryImpl.createBinaryLog(sink, "{x;y}"));
-    assertNull(FactoryImpl.createBinaryLog(sink, "{h:abc}"));
-    assertNull(FactoryImpl.createBinaryLog(sink, "{2}"));
-    assertNull(FactoryImpl.createBinaryLog(sink, "{2;2}"));
+    assertNull(Factory.createInterceptor(sink, "bad"));
+    assertNull(Factory.createInterceptor(sink, "{bad}"));
+    assertNull(Factory.createInterceptor(sink, "{x;y}"));
+    assertNull(Factory.createInterceptor(sink, "{h:abc}"));
+    assertNull(Factory.createInterceptor(sink, "{2}"));
+    assertNull(Factory.createInterceptor(sink, "{2;2}"));
     // The grammar specifies that if both h and m are present, h comes before m
-    assertNull(FactoryImpl.createBinaryLog(sink, "{m:123;h:123}"));
+    assertNull(Factory.createInterceptor(sink, "{m:123;h:123}"));
     // NumberFormatException
-    assertNull(FactoryImpl.createBinaryLog(sink, "{h:99999999999999}"));
+    assertNull(Factory.createInterceptor(sink, "{h:99999999999999}"));
   }
 
   @Test
   public void configBinLog_multiConfig_withGlobal() throws Exception {
-    FactoryImpl factory = makeFactory(
+    Factory factory = makeFactory(
         "*{h},"
         + "package.both256/*{h:256;m:256},"
         + "package.service1/both128{h:128;m:128},"
         + "package.service2/method_messageOnly{m}");
-    assertSameLimits(HEADER_FULL, factory.getLog("otherpackage.service/method"));
+    assertSameLimits(HEADER_FULL, factory.getInterceptor("otherpackage.service/method"));
 
-    assertSameLimits(BOTH_256, factory.getLog("package.both256/method1"));
-    assertSameLimits(BOTH_256, factory.getLog("package.both256/method2"));
-    assertSameLimits(BOTH_256, factory.getLog("package.both256/method3"));
+    assertSameLimits(BOTH_256, factory.getInterceptor("package.both256/method1"));
+    assertSameLimits(BOTH_256, factory.getInterceptor("package.both256/method2"));
+    assertSameLimits(BOTH_256, factory.getInterceptor("package.both256/method3"));
 
     assertSameLimits(
-        new Builder().header(128).msg(128).build(), factory.getLog("package.service1/both128"));
+        new Builder().header(128).msg(128).build(),
+        factory.getInterceptor("package.service1/both128"));
     // the global config is in effect
-    assertSameLimits(HEADER_FULL, factory.getLog("package.service1/absent"));
+    assertSameLimits(HEADER_FULL, factory.getInterceptor("package.service1/absent"));
 
-    assertSameLimits(MSG_FULL, factory.getLog("package.service2/method_messageOnly"));
+    assertSameLimits(MSG_FULL, factory.getInterceptor("package.service2/method_messageOnly"));
     // the global config is in effect
-    assertSameLimits(HEADER_FULL, factory.getLog("package.service2/absent"));
+    assertSameLimits(HEADER_FULL, factory.getInterceptor("package.service2/absent"));
   }
 
   @Test
   public void configBinLog_multiConfig_noGlobal() throws Exception {
-    FactoryImpl factory = makeFactory(
+    Factory factory = makeFactory(
         "package.both256/*{h:256;m:256},"
         + "package.service1/both128{h:128;m:128},"
         + "package.service2/method_messageOnly{m}");
-    assertNull(factory.getLog("otherpackage.service/method"));
+    assertNull(factory.getInterceptor("otherpackage.service/method"));
 
-    assertSameLimits(BOTH_256, factory.getLog("package.both256/method1"));
-    assertSameLimits(BOTH_256, factory.getLog("package.both256/method2"));
-    assertSameLimits(BOTH_256, factory.getLog("package.both256/method3"));
+    assertSameLimits(BOTH_256, factory.getInterceptor("package.both256/method1"));
+    assertSameLimits(BOTH_256, factory.getInterceptor("package.both256/method2"));
+    assertSameLimits(BOTH_256, factory.getInterceptor("package.both256/method3"));
 
     assertSameLimits(
-        new Builder().header(128).msg(128).build(), factory.getLog("package.service1/both128"));
+        new Builder().header(128).msg(128).build(),
+        factory.getInterceptor("package.service1/both128"));
     // no global config in effect
-    assertNull(factory.getLog("package.service1/absent"));
+    assertNull(factory.getInterceptor("package.service1/absent"));
 
-    assertSameLimits(MSG_FULL, factory.getLog("package.service2/method_messageOnly"));
+    assertSameLimits(MSG_FULL, factory.getInterceptor("package.service2/method_messageOnly"));
     // no global config in effect
-    assertNull(factory.getLog("package.service2/absent"));
+    assertNull(factory.getInterceptor("package.service2/absent"));
   }
 
   @Test
   public void configBinLog_ignoreDuplicates_global() throws Exception {
-    FactoryImpl factory = makeFactory("*{h},p.s/m,*{h:256}");
+    Factory factory = makeFactory("*{h},p.s/m,*{h:256}");
     // The duplicate
-    assertSameLimits(HEADER_FULL, factory.getLog("p.other1/m"));
-    assertSameLimits(HEADER_FULL, factory.getLog("p.other2/m"));
+    assertSameLimits(HEADER_FULL, factory.getInterceptor("p.other1/m"));
+    assertSameLimits(HEADER_FULL, factory.getInterceptor("p.other2/m"));
     // Other
-    assertSameLimits(BOTH_FULL, factory.getLog("p.s/m"));
+    assertSameLimits(BOTH_FULL, factory.getInterceptor("p.s/m"));
   }
 
   @Test
   public void configBinLog_ignoreDuplicates_service() throws Exception {
-    FactoryImpl factory = makeFactory("p.s/*,*{h:256},p.s/*{h}");
+    Factory factory = makeFactory("p.s/*,*{h:256},p.s/*{h}");
     // The duplicate
-    assertSameLimits(BOTH_FULL, factory.getLog("p.s/m1"));
-    assertSameLimits(BOTH_FULL, factory.getLog("p.s/m2"));
+    assertSameLimits(BOTH_FULL, factory.getInterceptor("p.s/m1"));
+    assertSameLimits(BOTH_FULL, factory.getInterceptor("p.s/m2"));
     // Other
-    assertSameLimits(HEADER_256, factory.getLog("p.other1/m"));
-    assertSameLimits(HEADER_256, factory.getLog("p.other2/m"));
+    assertSameLimits(HEADER_256, factory.getInterceptor("p.other1/m"));
+    assertSameLimits(HEADER_256, factory.getInterceptor("p.other2/m"));
   }
 
   @Test
   public void configBinLog_ignoreDuplicates_method() throws Exception {
-    FactoryImpl factory = makeFactory("p.s/m,*{h:256},p.s/m{h}");
+    Factory factory = makeFactory("p.s/m,*{h:256},p.s/m{h}");
     // The duplicate
-    assertSameLimits(BOTH_FULL, factory.getLog("p.s/m"));
+    assertSameLimits(BOTH_FULL, factory.getInterceptor("p.s/m"));
     // Other
-    assertSameLimits(HEADER_256, factory.getLog("p.other1/m"));
-    assertSameLimits(HEADER_256, factory.getLog("p.other2/m"));
+    assertSameLimits(HEADER_256, factory.getInterceptor("p.other1/m"));
+    assertSameLimits(HEADER_256, factory.getInterceptor("p.other2/m"));
   }
 
   @Test
@@ -285,14 +289,14 @@ public final class BinaryLogTest {
             .setHigh(0x1112131415161718L)
             .setLow(0x19101a1b1c1d1e1fL)
             .build(),
-        BinaryLog.callIdToProto(callId));
+        BinaryLogInterceptor.callIdToProto(callId));
 
   }
 
   @Test
   public void callIdToProto_invalid_shorter_len() {
     try {
-      BinaryLog.callIdToProto(new byte[14]);
+      BinaryLogInterceptor.callIdToProto(new byte[14]);
       fail();
     } catch (IllegalArgumentException expected) {
       assertTrue(
@@ -303,7 +307,7 @@ public final class BinaryLogTest {
   @Test
   public void callIdToProto_invalid_longer_len() {
     try {
-      BinaryLog.callIdToProto(new byte[18]);
+      BinaryLogInterceptor.callIdToProto(new byte[18]);
       fail();
     } catch (IllegalArgumentException expected) {
       assertTrue(
@@ -325,7 +329,7 @@ public final class BinaryLogTest {
             .setPeerType(Peer.PeerType.PEER_IPV4)
             .setPeer(ByteString.copyFrom(Bytes.concat(addressBytes, portUnsignedBytes)))
             .build(),
-        BinaryLog.socketToProto(socketAddress));
+        BinaryLogInterceptor.socketToProto(socketAddress));
   }
 
   @Test
@@ -343,7 +347,7 @@ public final class BinaryLogTest {
             .setPeerType(Peer.PeerType.PEER_IPV6)
             .setPeer(ByteString.copyFrom(Bytes.concat(addressBytes, portUnsignedBytes)))
             .build(),
-        BinaryLog.socketToProto(socketAddress));
+        BinaryLogInterceptor.socketToProto(socketAddress));
   }
 
   @Test
@@ -356,7 +360,7 @@ public final class BinaryLogTest {
             .setPeerType(Peer.PeerType.PEER_UNIX)
             .setPeer(ByteString.copyFrom(path.getBytes(US_ASCII)))
             .build(),
-        BinaryLog.socketToProto(socketAddress)
+        BinaryLogInterceptor.socketToProto(socketAddress)
     );
   }
 
@@ -368,7 +372,7 @@ public final class BinaryLogTest {
             .setPeerType(PeerType.UNKNOWN_PEERTYPE)
             .setPeer(ByteString.copyFrom(unknownSocket.toString(), US_ASCII))
             .build(),
-        BinaryLog.socketToProto(unknownSocket));
+        BinaryLogInterceptor.socketToProto(unknownSocket));
   }
 
   @Test
@@ -380,7 +384,7 @@ public final class BinaryLogTest {
             .addEntry(ENTRY_B)
             .addEntry(ENTRY_C)
             .build(),
-        BinaryLog.metadataToProto(metadata, Integer.MAX_VALUE));
+        BinaryLogInterceptor.metadataToProto(metadata, Integer.MAX_VALUE));
   }
 
   @Test
@@ -388,39 +392,39 @@ public final class BinaryLogTest {
     // 0 byte limit not enough for any metadata
     assertEquals(
         io.grpc.binarylog.Metadata.getDefaultInstance(),
-        BinaryLog.metadataToProto(metadata, 0));
+        BinaryLogInterceptor.metadataToProto(metadata, 0));
     // not enough bytes for first key value
     assertEquals(
         io.grpc.binarylog.Metadata.getDefaultInstance(),
-        BinaryLog.metadataToProto(metadata, 9));
+        BinaryLogInterceptor.metadataToProto(metadata, 9));
     // enough for first key value
     assertEquals(
         io.grpc.binarylog.Metadata
             .newBuilder()
             .addEntry(ENTRY_A)
             .build(),
-        BinaryLog.metadataToProto(metadata, 10));
+        BinaryLogInterceptor.metadataToProto(metadata, 10));
     // Test edge cases for >= 2 key values
     assertEquals(
         io.grpc.binarylog.Metadata
             .newBuilder()
             .addEntry(ENTRY_A)
             .build(),
-        BinaryLog.metadataToProto(metadata, 19));
+        BinaryLogInterceptor.metadataToProto(metadata, 19));
     assertEquals(
         io.grpc.binarylog.Metadata
             .newBuilder()
             .addEntry(ENTRY_A)
             .addEntry(ENTRY_B)
             .build(),
-        BinaryLog.metadataToProto(metadata, 20));
+        BinaryLogInterceptor.metadataToProto(metadata, 20));
     assertEquals(
         io.grpc.binarylog.Metadata
             .newBuilder()
             .addEntry(ENTRY_A)
             .addEntry(ENTRY_B)
             .build(),
-        BinaryLog.metadataToProto(metadata, 29));
+        BinaryLogInterceptor.metadataToProto(metadata, 29));
     assertEquals(
         io.grpc.binarylog.Metadata
             .newBuilder()
@@ -428,14 +432,14 @@ public final class BinaryLogTest {
             .addEntry(ENTRY_B)
             .addEntry(ENTRY_C)
             .build(),
-        BinaryLog.metadataToProto(metadata, 30));
+        BinaryLogInterceptor.metadataToProto(metadata, 30));
   }
 
   @Test
   public void messageToProto() throws Exception {
     byte[] bytes = "this is a long message: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
         .getBytes(US_ASCII);
-    Message message = BinaryLog.messageToProto(bytes, false, Integer.MAX_VALUE);
+    Message message = BinaryLogInterceptor.messageToProto(bytes, false, Integer.MAX_VALUE);
     assertEquals(
         Message
             .newBuilder()
@@ -456,7 +460,7 @@ public final class BinaryLogTest {
             .setFlags(0)
             .setLength(bytes.length)
             .build(),
-        BinaryLog.messageToProto(bytes, false, 0));
+        BinaryLogInterceptor.messageToProto(bytes, false, 0));
 
     int limit = 10;
     assertEquals(
@@ -466,13 +470,13 @@ public final class BinaryLogTest {
             .setFlags(0)
             .setLength(bytes.length)
             .build(),
-        BinaryLog.messageToProto(bytes, false, limit));
+        BinaryLogInterceptor.messageToProto(bytes, false, limit));
   }
 
   @Test
   public void toFlag() throws Exception {
-    assertEquals(0, BinaryLog.flagsForMessage(IS_UNCOMPRESSED));
-    assertEquals(1, BinaryLog.flagsForMessage(IS_COMPRESSED));
+    assertEquals(0, BinaryLogInterceptor.flagsForMessage(IS_UNCOMPRESSED));
+    assertEquals(1, BinaryLogInterceptor.flagsForMessage(IS_COMPRESSED));
   }
 
   @Test
@@ -480,15 +484,15 @@ public final class BinaryLogTest {
     InetAddress address = InetAddress.getByName("127.0.0.1");
     int port = 12345;
     InetSocketAddress socketAddress = new InetSocketAddress(address, port);
-    binaryLog.logInitialMetadata(metadata, IS_SERVER, CALL_ID, socketAddress);
+    interceptor.logInitialMetadata(metadata, IS_SERVER, CALL_ID, socketAddress);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.SEND_INITIAL_METADATA)
             .setLogger(GrpcLogEntry.Logger.SERVER)
-            .setCallId(BinaryLog.callIdToProto(CALL_ID))
-            .setPeer(BinaryLog.socketToProto(socketAddress))
-            .setMetadata(BinaryLog.metadataToProto(metadata, 10))
+            .setCallId(BinaryLogInterceptor.callIdToProto(CALL_ID))
+            .setPeer(BinaryLogInterceptor.socketToProto(socketAddress))
+            .setMetadata(BinaryLogInterceptor.metadataToProto(metadata, 10))
             .build());
   }
 
@@ -497,142 +501,147 @@ public final class BinaryLogTest {
     InetAddress address = InetAddress.getByName("127.0.0.1");
     int port = 12345;
     InetSocketAddress socketAddress = new InetSocketAddress(address, port);
-    binaryLog.logInitialMetadata(metadata, IS_CLIENT, CALL_ID, socketAddress);
+    interceptor.logInitialMetadata(metadata, IS_CLIENT, CALL_ID, socketAddress);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.SEND_INITIAL_METADATA)
             .setLogger(GrpcLogEntry.Logger.CLIENT)
-            .setCallId(BinaryLog.callIdToProto(CALL_ID))
-            .setPeer(BinaryLog.socketToProto(socketAddress))
-            .setMetadata(BinaryLog.metadataToProto(metadata, 10))
+            .setCallId(BinaryLogInterceptor.callIdToProto(CALL_ID))
+            .setPeer(BinaryLogInterceptor.socketToProto(socketAddress))
+            .setMetadata(BinaryLogInterceptor.metadataToProto(metadata, 10))
             .build());
   }
 
   @Test
   public void logTrailingMetadata_server() throws Exception {
-    binaryLog.logTrailingMetadata(metadata, IS_SERVER, CALL_ID);
+    interceptor.logTrailingMetadata(metadata, IS_SERVER, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.SEND_TRAILING_METADATA)
             .setLogger(GrpcLogEntry.Logger.SERVER)
-            .setCallId(BinaryLog.callIdToProto(CALL_ID))
-            .setMetadata(BinaryLog.metadataToProto(metadata, 10))
+            .setCallId(BinaryLogInterceptor.callIdToProto(CALL_ID))
+            .setMetadata(BinaryLogInterceptor.metadataToProto(metadata, 10))
             .build());
   }
 
   @Test
   public void logTrailingMetadata_client() throws Exception {
-    binaryLog.logTrailingMetadata(metadata, IS_CLIENT, CALL_ID);
+    interceptor.logTrailingMetadata(metadata, IS_CLIENT, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.SEND_TRAILING_METADATA)
             .setLogger(GrpcLogEntry.Logger.CLIENT)
-            .setCallId(BinaryLog.callIdToProto(CALL_ID))
-            .setMetadata(BinaryLog.metadataToProto(metadata, 10))
+            .setCallId(BinaryLogInterceptor.callIdToProto(CALL_ID))
+            .setMetadata(BinaryLogInterceptor.metadataToProto(metadata, 10))
             .build());
   }
 
   @Test
   public void logOutboundMessage_server() throws Exception {
-    binaryLog.logOutboundMessage(message, IS_COMPRESSED, IS_SERVER, CALL_ID);
+    interceptor.logOutboundMessage(message, IS_COMPRESSED, IS_SERVER, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.SEND_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.SERVER)
-            .setCallId(BinaryLog.callIdToProto(CALL_ID))
-            .setMessage(BinaryLog.messageToProto(message, IS_COMPRESSED, MESSAGE_LIMIT))
+            .setCallId(BinaryLogInterceptor.callIdToProto(CALL_ID))
+            .setMessage(
+                BinaryLogInterceptor.messageToProto(message, IS_COMPRESSED, MESSAGE_LIMIT))
             .build());
 
-    binaryLog.logOutboundMessage(message, IS_UNCOMPRESSED, IS_SERVER, CALL_ID);
+    interceptor.logOutboundMessage(message, IS_UNCOMPRESSED, IS_SERVER, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.SEND_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.SERVER)
-            .setCallId(BinaryLog.callIdToProto(CALL_ID))
-            .setMessage(BinaryLog.messageToProto(message, IS_UNCOMPRESSED, MESSAGE_LIMIT))
+            .setCallId(BinaryLogInterceptor.callIdToProto(CALL_ID))
+            .setMessage(
+                BinaryLogInterceptor.messageToProto(message, IS_UNCOMPRESSED, MESSAGE_LIMIT))
             .build());
     verifyNoMoreInteractions(sink);
   }
 
   @Test
   public void logOutboundMessage_client() throws Exception {
-    binaryLog.logOutboundMessage(message, IS_COMPRESSED, IS_CLIENT, CALL_ID);
+    interceptor.logOutboundMessage(message, IS_COMPRESSED, IS_CLIENT, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.SEND_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.CLIENT)
-            .setCallId(BinaryLog.callIdToProto(CALL_ID))
-            .setMessage(BinaryLog.messageToProto(message, IS_COMPRESSED, MESSAGE_LIMIT))
+            .setCallId(BinaryLogInterceptor.callIdToProto(CALL_ID))
+            .setMessage(BinaryLogInterceptor.messageToProto(message, IS_COMPRESSED, MESSAGE_LIMIT))
             .build());
 
-    binaryLog.logOutboundMessage(message, IS_UNCOMPRESSED, IS_CLIENT, CALL_ID);
+    interceptor.logOutboundMessage(message, IS_UNCOMPRESSED, IS_CLIENT, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.SEND_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.CLIENT)
-            .setCallId(BinaryLog.callIdToProto(CALL_ID))
-            .setMessage(BinaryLog.messageToProto(message, IS_UNCOMPRESSED, MESSAGE_LIMIT))
+            .setCallId(BinaryLogInterceptor.callIdToProto(CALL_ID))
+            .setMessage(
+                BinaryLogInterceptor.messageToProto(message, IS_UNCOMPRESSED, MESSAGE_LIMIT))
             .build());
     verifyNoMoreInteractions(sink);
   }
 
   @Test
   public void logInboundMessage_server() throws Exception {
-    binaryLog.logInboundMessage(message, IS_COMPRESSED, IS_SERVER, CALL_ID);
+    interceptor.logInboundMessage(message, IS_COMPRESSED, IS_SERVER, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.RECV_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.SERVER)
-            .setCallId(BinaryLog.callIdToProto(CALL_ID))
-            .setMessage(BinaryLog.messageToProto(message, IS_COMPRESSED, MESSAGE_LIMIT))
+            .setCallId(BinaryLogInterceptor.callIdToProto(CALL_ID))
+            .setMessage(BinaryLogInterceptor.messageToProto(message, IS_COMPRESSED, MESSAGE_LIMIT))
             .build());
 
-    binaryLog.logInboundMessage(message, IS_UNCOMPRESSED, IS_SERVER, CALL_ID);
+    interceptor.logInboundMessage(message, IS_UNCOMPRESSED, IS_SERVER, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.RECV_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.SERVER)
-            .setCallId(BinaryLog.callIdToProto(CALL_ID))
-            .setMessage(BinaryLog.messageToProto(message, IS_UNCOMPRESSED, MESSAGE_LIMIT))
+            .setCallId(BinaryLogInterceptor.callIdToProto(CALL_ID))
+            .setMessage(
+                BinaryLogInterceptor.messageToProto(message, IS_UNCOMPRESSED, MESSAGE_LIMIT))
             .build());
     verifyNoMoreInteractions(sink);
   }
 
   @Test
   public void logInboundMessage_client() throws Exception {
-    binaryLog.logInboundMessage(message, IS_COMPRESSED, IS_CLIENT, CALL_ID);
+    interceptor.logInboundMessage(message, IS_COMPRESSED, IS_CLIENT, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.RECV_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.CLIENT)
-            .setCallId(BinaryLog.callIdToProto(CALL_ID))
-            .setMessage(BinaryLog.messageToProto(message, IS_COMPRESSED, MESSAGE_LIMIT))
+            .setCallId(BinaryLogInterceptor.callIdToProto(CALL_ID))
+            .setMessage(BinaryLogInterceptor.messageToProto(message, IS_COMPRESSED, MESSAGE_LIMIT))
             .build());
 
-    binaryLog.logInboundMessage(message, IS_UNCOMPRESSED, IS_CLIENT, CALL_ID);
+    interceptor.logInboundMessage(message, IS_UNCOMPRESSED, IS_CLIENT, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.RECV_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.CLIENT)
-            .setCallId(BinaryLog.callIdToProto(CALL_ID))
-            .setMessage(BinaryLog.messageToProto(message, IS_UNCOMPRESSED, MESSAGE_LIMIT))
+            .setCallId(BinaryLogInterceptor.callIdToProto(CALL_ID))
+            .setMessage(
+                BinaryLogInterceptor.messageToProto(message, IS_UNCOMPRESSED, MESSAGE_LIMIT))
             .build());
     verifyNoMoreInteractions(sink);
   }
 
-  private BinaryLog.FactoryImpl makeFactory(String configStr) {
-    return new BinaryLog.FactoryImpl(sink, configStr);
+  private BinaryLogInterceptor.Factory makeFactory(String configStr) {
+    return new BinaryLogInterceptor.Factory(sink, configStr);
   } 
 
   /** A builder class to make unit test code more readable. */
@@ -650,12 +659,12 @@ public final class BinaryLogTest {
       return this;
     }
 
-    BinaryLog build() {
-      return new BinaryLog(mock(BinaryLogSink.class), maxHeaderBytes, maxMessageBytes);
+    BinaryLogInterceptor build() {
+      return new BinaryLogInterceptor(mock(BinaryLogSink.class), maxHeaderBytes, maxMessageBytes);
     }
   }
 
-  private static void assertSameLimits(BinaryLog a, BinaryLog b) {
+  private static void assertSameLimits(BinaryLogInterceptor a, BinaryLogInterceptor b) {
     assertEquals(a.maxMessageBytes, b.maxMessageBytes);
     assertEquals(a.maxHeaderBytes, b.maxHeaderBytes);
   }

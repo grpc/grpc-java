@@ -14,40 +14,30 @@
  * limitations under the License.
  */
 
-package io.grpc.services;
+package io.grpc;
 
-import io.grpc.InternalServiceProviders;
 import java.util.Collections;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
-/**
- * Subclasses must be thread safe, and are responsible for writing the binary log message to
- * the appropriate destination.
- */
-@ThreadSafe
-final class BinaryLogSinkProvider {
-  private static final BinaryLogSink INSTANCE = InternalServiceProviders.load(
-      BinaryLogSink.class,
+final class BinaryLogProvider {
+  private static final BinaryLog PROVIDER = ServiceProviders.load(
+      BinaryLog.class,
       Collections.<Class<?>>emptyList(),
-      BinaryLogSinkProvider.class.getClassLoader(),
-      new InternalServiceProviders.PriorityAccessor<BinaryLogSink>() {
+      BinaryLogProvider.class.getClassLoader(),
+      new ServiceProviders.PriorityAccessor<BinaryLog>() {
         @Override
-        public boolean isAvailable(BinaryLogSink provider) {
+        public boolean isAvailable(BinaryLog provider) {
           return provider.isAvailable();
         }
 
         @Override
-        public int getPriority(BinaryLogSink provider) {
+        public int getPriority(BinaryLog provider) {
           return provider.priority();
         }
       });
 
-  /**
-   * Returns the {@code BinaryLogSink} that should be used.
-   */
   @Nullable
-  static BinaryLogSink provider() {
-    return INSTANCE;
+  public static BinaryLog provider() {
+    return PROVIDER;
   }
 }
