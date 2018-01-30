@@ -19,7 +19,6 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.gson.JsonObject;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -34,6 +33,7 @@ import io.grpc.Status;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
@@ -145,8 +145,8 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
     @Nullable
     @VisibleForTesting
     static LoadBalancer.Factory decideLoadBalancerFactory(
-        List<EquivalentAddressGroup> servers, JsonObject choice) {
-      boolean loadBalancingPolicyPresent = choice.has("loadBalancingPolicy");
+        List<EquivalentAddressGroup> servers, Map<String, Object> choice) {
+      boolean loadBalancingPolicyPresent = choice.containsKey("loadBalancingPolicy");
 
       // Check for balancer addresses
       boolean haveBalancerAddress = false;
@@ -172,8 +172,7 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
 
       // Check for an explicitly present lb choice
       if (loadBalancingPolicyPresent) {
-        String serviceConfigChoiceBalancingPolicy = null;
-        serviceConfigChoiceBalancingPolicy = choice.get("loadBalancingPolicy").getAsString();
+        String serviceConfigChoiceBalancingPolicy = (String) choice.get("loadBalancingPolicy");
         String policy = checkNotNull(serviceConfigChoiceBalancingPolicy, "policy");
         if (policy.toUpperCase(Locale.ROOT).equals("ROUND_ROBIN")) {
           ClassNotFoundException caught = null;

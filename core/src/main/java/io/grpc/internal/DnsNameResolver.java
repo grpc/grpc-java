@@ -21,16 +21,15 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Verify;
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonSyntaxException;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.SharedResourceHolder.Resource;
+import java.io.IOException;
+import java.io.StringReader;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -39,12 +38,11 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map.Entry;
+import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -80,10 +78,6 @@ final class DnsNameResolver extends NameResolver {
   private static final String GRPCLB_NAME_PREFIX = "_grpclb._tcp.";
   // From https://github.com/grpc/proposal/blob/master/A2-service-configs-in-dns.md
   private static final String SERVICE_CONFIG_PREFIX = "_grpc_config=";
-  private static final Set<String> SERVICE_CONFIG_CHOICE_KEYS =
-      Collections.unmodifiableSet(
-          new HashSet<String>(
-              Arrays.asList("clientLanguage", "percentage", "clientHostname", "serviceConfig")));
 
   private static final String JNDI_PROPERTY =
       System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi", "true");
@@ -213,29 +207,36 @@ final class DnsNameResolver extends NameResolver {
 
           Attributes.Builder attrs = Attributes.newBuilder();
           if (!resolvedInetAddrs.txtRecords.isEmpty()) {
-            JsonObject serviceConfig = null;
-            try {
-              JsonArray allServiceConfigChoices = parseTxtResults(resolvedInetAddrs.txtRecords);
-              for (JsonElement serviceConfigChoice : allServiceConfigChoices) {
+            Map<String, Object> serviceConfig = null;
+            for (String txtRecord : resolvedInetAddrs.txtRecords) {
+              if (txtRecord.startsWith(SERVICE_CONFIG_PREFIX)) {
+                JsonReader reader =
+                    new JsonReader(
+                        new StringReader(txtRecord.substring(SERVICE_CONFIG_PREFIX.length())));
                 try {
-                  serviceConfig = maybeChooseServiceConfig(
-                      serviceConfigChoice.getAsJsonObject(), random, LOCAL_HOST_NAME);
-                  if (serviceConfig != null) {
-                    break;
+                  reader.beginArray();
+                  while (reader.hasNext()) {
+                    serviceConfig = maybeChooseServiceConfig(reader, random, LOCAL_HOST_NAME);
+                    if (serviceConfig != null) {
+                      break;
+                    }
                   }
+                  reader.endArray();
                 } catch (RuntimeException e) {
-                  logger.log(Level.WARNING, "Bad service config choice " + serviceConfigChoice, e);
+                  logger.log(Level.WARNING, "Can't parse service configs", e);
+                } catch (IOException e) {
+                  logger.log(Level.WARNING, "Can't parse service configs", e);
+                } finally {
+                  GrpcUtil.closeQuietly(reader);
                 }
               }
               if (serviceConfig != null) {
                 attrs.set(GrpcAttributes.NAME_RESOLVER_ATTR_SERVICE_CONFIG, serviceConfig);
+                break;
               }
-
-            } catch (RuntimeException e) {
-              logger.log(Level.WARNING, "Can't parse service Configs", e);
             }
           } else {
-            logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});
+            logger.log(Level.FINE, "No TXT records found for {0}", new Object[] {host});
           }
           savedListener.onAddresses(servers, attrs.build());
         } finally {
@@ -501,86 +502,110 @@ final class DnsNameResolver extends NameResolver {
     }
   }
 
-  @VisibleForTesting
-  static JsonArray parseTxtResults(List<String> txtRecords) {
-    JsonArray serviceConfigs = new JsonArray();
-    Gson gson = new Gson();
-
-    for (String txtRecord : txtRecords) {
-      if (txtRecord.startsWith(SERVICE_CONFIG_PREFIX)) {
-        JsonArray choices;
-        try {
-          choices =
-              gson.fromJson(txtRecord.substring(SERVICE_CONFIG_PREFIX.length()), JsonArray.class);
-        } catch (JsonSyntaxException e) {
-          logger.log(Level.WARNING, "Bad service config: " + txtRecord, e);
-          continue;
-        }
-        serviceConfigs.addAll(choices);
-      } else {
-        logger.log(Level.FINE, "Ignoring non service config {0}", new Object[]{txtRecord});
-      }
-    }
-
-    return serviceConfigs;
-  }
-
   /**
    * Determines if a given Service Config choice applies, and if so, returns it.
    *
    * @see <a href="https://github.com/grpc/proposal/blob/master/A2-service-configs-in-dns.md">
-   *   Service Config in DNS</a>
-   * @param choice The service config choice.
+   *     Service Config in DNS</a>
    * @return The service config object or {@code null} if this choice does not apply.
    */
   @VisibleForTesting
   @Nullable
-  @SuppressWarnings("BetaApi") // Verify isn't all that beta
-  static JsonObject maybeChooseServiceConfig(JsonObject choice, Random random, String hostname) {
-    for (Entry<String, ?> entry : choice.entrySet()) {
-      Verify.verify(SERVICE_CONFIG_CHOICE_KEYS.contains(entry.getKey()), "Bad key: %s", entry);
-    }
-    if (choice.has("clientLanguage")) {
-      JsonArray clientLanguages = choice.get("clientLanguage").getAsJsonArray();
-      if (clientLanguages.size() != 0) {
-        boolean javaPresent = false;
-        for (JsonElement clientLanguage : clientLanguages) {
-          String lang = clientLanguage.getAsString().toLowerCase(Locale.ROOT);
-          if ("java".equals(lang)) {
-            javaPresent = true;
-            break;
+  @SuppressWarnings("unchecked")
+  static Map<String, Object> maybeChooseServiceConfig(
+      JsonReader reader, Random random, String hostname) throws ClassCastException, IOException {
+    Map<String, Object> serviceConfig = null;
+    reader.beginObject();
+    while (reader.hasNext()) {
+      String name = reader.nextName();
+      if (name.equals("clientLanguage")) {
+        List<String> clientLanguages = (List<String>) readJsonElement(reader);
+        if (clientLanguages.size() > 0) {
+          boolean javaPresent = false;
+          for (String clientLanguage : clientLanguages) {
+            String lang = clientLanguage.toLowerCase(Locale.ROOT);
+            if ("java".equals(lang)) {
+              javaPresent = true;
+              break;
+            }
+          }
+          if (!javaPresent) {
+            return null;
           }
         }
-        if (!javaPresent) {
+      } else if (name.equals("percentage")) {
+        int pct = reader.nextInt();
+        if (pct < 0 || pct > 100) {
+          throw new IllegalArgumentException("Bad percentage: " + pct);
+        }
+        if (pct == 0) {
+          return null;
+        } else if (pct != 100 && pct < random.nextInt(100)) {
           return null;
         }
-      }
-    }
-    if (choice.has("percentage")) {
-      int pct = choice.get("percentage").getAsInt();
-      Verify.verify(pct >= 0 && pct <= 100, "Bad percentage", choice.get("percentage"));
-      if (pct == 0) {
-        return null;
-      } else if (pct != 100 && pct < random.nextInt(100)) {
-        return null;
-      }
-    }
-    if (choice.has("clientHostname")) {
-      JsonArray clientHostnames = choice.get("clientHostname").getAsJsonArray();
-      if (clientHostnames.size() != 0) {
-        boolean hostnamePresent = false;
-        for (JsonElement clientHostname : clientHostnames) {
-          if (clientHostname.getAsString().equals(hostname)) {
-            hostnamePresent = true;
-            break;
+      } else if (name.equals("clientHostname")) {
+        List<String> clientHostnames = (List<String>) readJsonElement(reader);
+        if (clientHostnames.size() != 0) {
+          boolean hostnamePresent = false;
+          for (String clientHostname : clientHostnames) {
+            if (clientHostname.equals(hostname)) {
+              hostnamePresent = true;
+              break;
+            }
+          }
+          if (!hostnamePresent) {
+            return null;
           }
         }
-        if (!hostnamePresent) {
-          return null;
-        }
+      } else if (name.equals("serviceConfig")) {
+        serviceConfig = (Map<String, Object>) readJsonElement(reader);
+      } else {
+        throw new IllegalArgumentException("Bad key: " + name);
       }
     }
-    return choice.getAsJsonObject("serviceConfig");
+    reader.endObject();
+    return serviceConfig;
+  }
+
+  // TODO(ericgribkoff) Move to a more appropriate location
+  @VisibleForTesting
+  static Object readJsonElement(JsonReader reader) throws IOException {
+    JsonToken nextType = reader.peek();
+    switch (nextType) {
+      case NAME:
+        return readJsonElement(reader);
+      case BEGIN_ARRAY:
+        List<Object> array = new ArrayList<Object>();
+        reader.beginArray();
+        while (reader.hasNext()) {
+          array.add(readJsonElement(reader));
+        }
+        reader.endArray();
+        return array;
+      case BEGIN_OBJECT:
+        Map<String, Object> object = new HashMap<String, Object>();
+        reader.beginObject();
+        while (reader.hasNext()) {
+          object.put(reader.nextName(), readJsonElement(reader));
+        }
+        reader.endObject();
+        return object;
+      case NUMBER:
+        // nextString() will return the string representation of the number
+        return reader.nextString();
+      case STRING:
+        return reader.nextString();
+      case BOOLEAN:
+        return reader.nextBoolean();
+      case NULL:
+        reader.nextNull();
+        return null;
+      case END_ARRAY:
+      case END_OBJECT:
+      case END_DOCUMENT:
+      default:
+        throw new IllegalArgumentException("Invalid service config JSON");
+    }
   }
 
   /**

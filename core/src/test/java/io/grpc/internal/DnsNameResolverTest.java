@@ -33,9 +33,11 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Iterables;
+import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
+import com.google.gson.stream.JsonReader;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
@@ -43,6 +45,9 @@ import io.grpc.Status;
 import io.grpc.internal.DnsNameResolver.DelegateResolver;
 import io.grpc.internal.DnsNameResolver.ResolutionResults;
 import io.grpc.internal.SharedResourceHolder.Resource;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.StringReader;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -53,6 +58,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
@@ -404,59 +410,63 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_failsOnMisspelling() {
+  public void maybeChooseServiceConfig_failsOnMisspelling() throws Exception {
     JsonObject bad = new JsonObject();
     bad.add("parcentage", new JsonPrimitive(1));
     thrown.expectMessage("Bad key");
 
-    DnsNameResolver.maybeChooseServiceConfig(bad, new Random(), "host");
+    DnsNameResolver.maybeChooseServiceConfig(jsonToReader(bad), new Random(), "host");
   }
 
   @Test
-  public void maybeChooseServiceConfig_clientLanguageMatchesJava() {
+  public void maybeChooseServiceConfig_clientLanguageMatchesJava() throws Exception {
     JsonObject choice = new JsonObject();
     JsonArray langs = new JsonArray();
     langs.add("java");
     choice.add("clientLanguage", langs);
     choice.add("serviceConfig", new JsonObject());
 
-    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "host"));
+    assertNotNull(
+        DnsNameResolver.maybeChooseServiceConfig(jsonToReader(choice), new Random(), "host"));
   }
 
   @Test
-  public void maybeChooseServiceConfig_clientLanguageDoesntMatchGo() {
+  public void maybeChooseServiceConfig_clientLanguageDoesntMatchGo() throws Exception {
     JsonObject choice = new JsonObject();
     JsonArray langs = new JsonArray();
     langs.add("go");
     choice.add("clientLanguage", langs);
     choice.add("serviceConfig", new JsonObject());
 
-    assertNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "host"));
+    assertNull(
+        DnsNameResolver.maybeChooseServiceConfig(jsonToReader(choice), new Random(), "host"));
   }
 
   @Test
-  public void maybeChooseServiceConfig_clientLanguageCaseInsensitive() {
+  public void maybeChooseServiceConfig_clientLanguageCaseInsensitive() throws Exception {
     JsonObject choice = new JsonObject();
     JsonArray langs = new JsonArray();
     langs.add("JAVA");
     choice.add("clientLanguage", langs);
     choice.add("serviceConfig", new JsonObject());
 
-    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "host"));
+    assertNotNull(
+        DnsNameResolver.maybeChooseServiceConfig(jsonToReader(choice), new Random(), "host"));
   }
 
   @Test
-  public void maybeChooseServiceConfig_clientLanguageMatchesEmtpy() {
+  public void maybeChooseServiceConfig_clientLanguageMatchesEmtpy() throws Exception {
     JsonObject choice = new JsonObject();
     JsonArray langs = new JsonArray();
     choice.add("clientLanguage", langs);
     choice.add("serviceConfig", new JsonObject());
 
-    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "host"));
+    assertNotNull(
+        DnsNameResolver.maybeChooseServiceConfig(jsonToReader(choice), new Random(), "host"));
   }
 
   @Test
-  public void maybeChooseServiceConfig_clientLanguageMatchesMulti() {
+  public void maybeChooseServiceConfig_clientLanguageMatchesMulti() throws Exception {
     JsonObject choice = new JsonObject();
     JsonArray langs = new JsonArray();
     langs.add("go");
@@ -464,29 +474,32 @@ public class DnsNameResolverTest {
     choice.add("clientLanguage", langs);
     choice.add("serviceConfig", new JsonObject());
 
-    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "host"));
+    assertNotNull(
+        DnsNameResolver.maybeChooseServiceConfig(jsonToReader(choice), new Random(), "host"));
   }
 
   @Test
-  public void maybeChooseServiceConfig_percentageZeroAlwaysFails() {
+  public void maybeChooseServiceConfig_percentageZeroAlwaysFails() throws Exception {
     JsonObject choice = new JsonObject();
     choice.add("percentage", new JsonPrimitive(0));
     choice.add("serviceConfig", new JsonObject());
 
-    assertNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "host"));
+    assertNull(
+        DnsNameResolver.maybeChooseServiceConfig(jsonToReader(choice), new Random(), "host"));
   }
 
   @Test
-  public void maybeChooseServiceConfig_percentageHundredAlwaysSucceeds() {
+  public void maybeChooseServiceConfig_percentageHundredAlwaysSucceeds() throws Exception {
     JsonObject choice = new JsonObject();
     choice.add("percentage", new JsonPrimitive(100));
     choice.add("serviceConfig", new JsonObject());
 
-    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "host"));
+    assertNotNull(
+        DnsNameResolver.maybeChooseServiceConfig(jsonToReader(choice), new Random(), "host"));
   }
 
   @Test
-  public void maybeChooseServiceConfig_percentageAboveMatches() {
+  public void maybeChooseServiceConfig_percentageAboveMatches() throws Exception {
     JsonObject choice = new JsonObject();
     choice.add("percentage", new JsonPrimitive(50));
     choice.add("serviceConfig", new JsonObject());
@@ -498,11 +511,11 @@ public class DnsNameResolverTest {
       }
     };
 
-    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, r, "host"));
+    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(jsonToReader(choice), r, "host"));
   }
 
   @Test
-  public void maybeChooseServiceConfig_percentageAtMatches() {
+  public void maybeChooseServiceConfig_percentageAtMatches() throws Exception {
     JsonObject choice = new JsonObject();
     choice.add("percentage", new JsonPrimitive(50));
     choice.add("serviceConfig", new JsonObject());
@@ -514,11 +527,11 @@ public class DnsNameResolverTest {
       }
     };
 
-    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, r, "host"));
+    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(jsonToReader(choice), r, "host"));
   }
 
   @Test
-  public void maybeChooseServiceConfig_percentageBelowFails() {
+  public void maybeChooseServiceConfig_percentageBelowFails() throws Exception {
     JsonObject choice = new JsonObject();
     choice.add("percentage", new JsonPrimitive(50));
     choice.add("serviceConfig", new JsonObject());
@@ -530,54 +543,58 @@ public class DnsNameResolverTest {
       }
     };
 
-    assertNull(DnsNameResolver.maybeChooseServiceConfig(choice, r, "host"));
+    assertNull(DnsNameResolver.maybeChooseServiceConfig(jsonToReader(choice), r, "host"));
   }
 
   @Test
-  public void maybeChooseServiceConfig_hostnameMatches() {
+  public void maybeChooseServiceConfig_hostnameMatches() throws Exception {
     JsonObject choice = new JsonObject();
     JsonArray hosts = new JsonArray();
     hosts.add("localhost");
     choice.add("clientHostname", hosts);
     choice.add("serviceConfig", new JsonObject());
 
-    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "localhost"));
+    assertNotNull(
+        DnsNameResolver.maybeChooseServiceConfig(jsonToReader(choice), new Random(), "localhost"));
   }
 
   @Test
-  public void maybeChooseServiceConfig_hostnameDoesntMatch() {
+  public void maybeChooseServiceConfig_hostnameDoesntMatch() throws Exception {
     JsonObject choice = new JsonObject();
     JsonArray hosts = new JsonArray();
     hosts.add("localhorse");
     choice.add("clientHostname", hosts);
     choice.add("serviceConfig", new JsonObject());
 
-    assertNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "localhost"));
+    assertNull(
+        DnsNameResolver.maybeChooseServiceConfig(jsonToReader(choice), new Random(), "localhost"));
   }
 
   @Test
-  public void maybeChooseServiceConfig_clientLanguageCaseSensitive() {
+  public void maybeChooseServiceConfig_clientLanguageCaseSensitive() throws Exception {
     JsonObject choice = new JsonObject();
     JsonArray hosts = new JsonArray();
     hosts.add("LOCALHOST");
     choice.add("clientHostname", hosts);
     choice.add("serviceConfig", new JsonObject());
 
-    assertNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "localhost"));
+    assertNull(
+        DnsNameResolver.maybeChooseServiceConfig(jsonToReader(choice), new Random(), "localhost"));
   }
 
   @Test
-  public void maybeChooseServiceConfig_hostnameMatchesEmtpy() {
+  public void maybeChooseServiceConfig_hostnameMatchesEmtpy() throws Exception {
     JsonObject choice = new JsonObject();
     JsonArray hosts = new JsonArray();
     choice.add("clientHostname", hosts);
     choice.add("serviceConfig", new JsonObject());
 
-    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "host"));
+    assertNotNull(
+        DnsNameResolver.maybeChooseServiceConfig(jsonToReader(choice), new Random(), "host"));
   }
 
   @Test
-  public void maybeChooseServiceConfig_hostnameMatchesMulti() {
+  public void maybeChooseServiceConfig_hostnameMatchesMulti() throws Exception {
     JsonObject choice = new JsonObject();
     JsonArray langs = new JsonArray();
     langs.add("localhorse");
@@ -585,7 +602,39 @@ public class DnsNameResolverTest {
     choice.add("clientHostname", langs);
     choice.add("serviceConfig", new JsonObject());
 
-    assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "localhost"));
+    assertNotNull(
+        DnsNameResolver.maybeChooseServiceConfig(jsonToReader(choice), new Random(), "localhost"));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void parseServiceConfig() throws Exception {
+    Reader reader =
+        new InputStreamReader(
+            DnsNameResolverTest.class.getResourceAsStream(
+                "/io/grpc/internal/test_retry_service_config.json"),
+            "UTF-8");
+    JsonReader jsonReader = new JsonReader(reader);
+    Map<String, Object> serviceConfig =
+        (Map<String, Object>) DnsNameResolver.readJsonElement(jsonReader);
+    jsonReader.close();
+
+    assertEquals(
+        "service config did not parse correctly",
+        "{loadBalancingPolicy=round_robin, methodConfig=[{waitForReady=false, "
+            + "retryPolicy={backoffMultiplier=3, maxAttempts=3, initialBackoff=2.1s, "
+            + "retryableStatusCodes=[UNAVAILABLE, RESOURCE_EXHAUSTED], maxBackoff=2.2s}, "
+            + "name=[{service=SimpleService1}]}, {waitForReady=false, "
+            + "name=[{service=SimpleService2}]}, {waitForReady=true, "
+            + "retryPolicy={backoffMultiplier=2, maxAttempts=4, initialBackoff=.1s, "
+            + "retryableStatusCodes=[UNAVAILABLE], maxBackoff=1s}, name=[{method=Foo1, "
+            + "service=SimpleService1}, {method=Foo2, service=SimpleService2}]}]}",
+        serviceConfig.toString());
+  }
+
+  private JsonReader jsonToReader(JsonObject json) {
+    Gson gson = new Gson();
+    return new JsonReader(new StringReader(gson.toJson(json)));
   }
 
   private void testInvalidUri(URI uri) {
