@@ -26,6 +26,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static junit.framework.TestCase.assertNotSame;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -56,6 +57,7 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
@@ -1473,6 +1475,93 @@ public class ManagedChannelImplTest {
 
     timer.forwardNanos(TimeUnit.MILLISECONDS.toNanos(idleTimeoutMillis));
     assertEquals(IDLE, channel.getState(false));
+  }
+
+  @Test
+  public void panic_whenIdle() {
+    subtestPanic(IDLE);
+  }
+
+  @Test
+  public void panic_whenConnecting() {
+    subtestPanic(CONNECTING);
+  }
+
+  @Test
+  public void panic_whenTransientFailure() {
+    subtestPanic(TRANSIENT_FAILURE);
+  }
+
+  @Test
+  public void panic_whenReady() {
+    subtestPanic(READY);
+  }
+
+  private void subtestPanic(ConnectivityState initialState) {
+    assertNotEquals("We don't test panic mode if it's already SHUTDOWN", SHUTDOWN, initialState);
+    long idleTimeoutMillis = 2000L;
+    FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory(true);
+    createChannel(nameResolverFactory, NO_INTERCEPTOR, true, idleTimeoutMillis);
+
+    verify(mockLoadBalancerFactory).newLoadBalancer(any(Helper.class));
+    assertEquals(1, nameResolverFactory.resolvers.size());
+    FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.remove(0);
+
+    Throwable panicReason = new Exception("Simulated uncaught exception");
+    if (initialState == IDLE) {
+      timer.forwardNanos(TimeUnit.MILLISECONDS.toNanos(idleTimeoutMillis));
+    } else {
+      helper.updateBalancingState(initialState, mockPicker);
+    }
+    assertEquals(initialState, channel.getState(false));
+
+    if (initialState == IDLE) {
+      // IDLE mode will shutdown resolver and balancer
+      verify(mockLoadBalancer).shutdown();
+      assertTrue(resolver.shutdown);
+      // A new resolver is created
+      assertEquals(1, nameResolverFactory.resolvers.size());
+      resolver = nameResolverFactory.resolvers.remove(0);
+      assertFalse(resolver.shutdown);
+    } else {
+      verify(mockLoadBalancer, never()).shutdown();
+      assertFalse(resolver.shutdown);
+    }
+
+    // Make channel panic!
+    channel.panic(panicReason);
+
+    // Resolver and balancer are shutdown
+    verify(mockLoadBalancer).shutdown();
+    assertTrue(resolver.shutdown);
+
+    // Channel will stay in TRANSIENT_FAILURE. getState(true) will not revive it.
+    assertEquals(TRANSIENT_FAILURE, channel.getState(true));
+    assertEquals(TRANSIENT_FAILURE, channel.getState(true));
+
+    // New call will fail
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, new Metadata());
+    executor.runDueTasks();
+    verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
+    Status rpcStatus = statusCaptor.getValue();
+    assertEquals(Status.Code.INTERNAL, rpcStatus.getCode());
+    assertSame(panicReason, rpcStatus.getCause());
+    verifyNoMoreInteractions(mockCallListener);
+    verifyZeroInteractions(mockPicker);
+    
+    // No new resolver or balancer are created
+    verifyNoMoreInteractions(mockLoadBalancerFactory);
+    assertEquals(0, nameResolverFactory.resolvers.size());
+
+    // A misbehaving balancer will not be able to revive it.
+    helper.updateBalancingState(READY, mockPicker);
+    assertEquals(TRANSIENT_FAILURE, channel.getState(true));
+
+    // Channel is dead.  No more pending task to possibly revive it.
+    assertEquals(0, timer.numPendingTasks());
+    assertEquals(0, executor.numPendingTasks());
+    assertEquals(0, oobExecutor.numPendingTasks());
   }
 
   @Test
