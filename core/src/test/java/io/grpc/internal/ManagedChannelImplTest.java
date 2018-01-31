@@ -1904,12 +1904,12 @@ public class ManagedChannelImplTest {
     binlogProvider = new BinaryLogProvider() {
       @Nullable
       @Override
-      protected ServerInterceptor getServerInterceptor(String fullMethodName) {
+      public ServerInterceptor getServerInterceptor(String fullMethodName) {
         return null;
       }
 
       @Override
-      protected ClientInterceptor getClientInterceptor(String fullMethodName) {
+      public ClientInterceptor getClientInterceptor(String fullMethodName) {
         return new TracingClientInterceptor();
       }
 

@@ -113,20 +113,22 @@ public abstract class BinaryLogProvider {
   /**
    * Returns a {@link ServerInterceptor} for binary logging. gRPC is free to cache the interceptor,
    * so the interceptor must be reusable across calls. At runtime, the request and response
-   * marshallers are always {@code Marshaller<Inputstream>}.
+   * marshallers are always {@code Marshaller<InputStream>}.
    * Returns {@code null} if this method is not binary logged.
    */
+  // TODO(zpencer): ensure the interceptor properly handles retries and hedging
   @Nullable
-  protected abstract ServerInterceptor getServerInterceptor(String fullMethodName);
+  public abstract ServerInterceptor getServerInterceptor(String fullMethodName);
 
   /**
    * Returns a {@link ClientInterceptor} for binary logging. gRPC is free to cache the interceptor,
    * so the interceptor must be reusable across calls. At runtime, the request and response
-   * marshallers are always {@code Marshaller<Inputstream>}.
+   * marshallers are always {@code Marshaller<InputStream>}.
    * Returns {@code null} if this method is not binary logged.
    */
+  // TODO(zpencer): ensure the interceptor properly handles retries and hedging
   @Nullable
-  protected abstract ClientInterceptor getClientInterceptor(String fullMethodName);
+  public abstract ClientInterceptor getClientInterceptor(String fullMethodName);
 
   /**
    * A priority, from 0 to 10 that this provider should be used, taking the current environment into
@@ -143,12 +145,12 @@ public abstract class BinaryLogProvider {
   static final class NullProvider extends BinaryLogProvider {
     @Nullable
     @Override
-    protected ServerInterceptor getServerInterceptor(String fullMethodName) {
+    public ServerInterceptor getServerInterceptor(String fullMethodName) {
       return null;
     }
 
     @Override
-    protected ClientInterceptor getClientInterceptor(String fullMethodName) {
+    public ClientInterceptor getClientInterceptor(String fullMethodName) {
       return null;
     }
 
