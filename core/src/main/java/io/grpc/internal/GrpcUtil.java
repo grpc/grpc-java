@@ -29,15 +29,14 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
-import io.grpc.InternalLogId;
 import io.grpc.InternalMetadata;
 import io.grpc.InternalMetadata.TrustedAsciiMarshaller;
-import io.grpc.InternalTransportStats;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.internal.Channelz.TransportStats;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.StreamListener.MessageProducer;
 import java.io.IOException;
@@ -195,7 +194,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  private static final String IMPLEMENTATION_VERSION = "1.10.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
+  private static final String IMPLEMENTATION_VERSION = "1.11.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default delay in nanos before we send a keepalive.
@@ -684,12 +683,12 @@ public final class GrpcUtil {
         }
 
         @Override
-        public InternalLogId getLogId() {
+        public LogId getLogId() {
           return transport.getLogId();
         }
 
         @Override
-        public ListenableFuture<InternalTransportStats> getStats() {
+        public ListenableFuture<TransportStats> getStats() {
           return transport.getStats();
         }
       };

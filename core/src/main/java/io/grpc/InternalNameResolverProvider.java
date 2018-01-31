@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2018, gRPC Authors All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,10 @@
 
 package io.grpc;
 
-/**
- * This is an gRPC internal interface. Do not use this.
- */
-@Internal
-public interface InternalInstrumented<T> extends Instrumented<T>, InternalWithLogId {
+import com.google.common.annotations.VisibleForTesting;
+
+public class InternalNameResolverProvider {
+  @VisibleForTesting
+  public static final Iterable<Class<?>> HARDCODED_CLASSES =
+      NameResolverProvider.HARDCODED_CLASSES;
 }

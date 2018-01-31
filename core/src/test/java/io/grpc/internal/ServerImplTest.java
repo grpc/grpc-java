@@ -25,6 +25,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
@@ -51,19 +52,19 @@ import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.HandlerRegistry;
 import io.grpc.IntegerMarshaller;
-import io.grpc.InternalLogId;
-import io.grpc.InternalTransportStats;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
+import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
 import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
+import io.grpc.internal.Channelz.TransportStats;
 import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
 import io.grpc.internal.testing.SingleMessageProducer;
 import io.grpc.internal.testing.TestServerStreamTracer;
@@ -83,6 +84,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -120,6 +122,7 @@ public class ServerImplTest {
           return runnable instanceof ServerImpl.ContextCloser;
         }
       };
+  private static final String AUTHORITY = "some_authority";
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
@@ -146,7 +149,20 @@ public class ServerImplTest {
   private ObjectPool<Executor> executorPool;
   private Builder builder = new Builder();
   private MutableHandlerRegistry mutableFallbackRegistry = new MutableHandlerRegistry();
-  private HandlerRegistry fallbackRegistry = mutableFallbackRegistry;
+  private HandlerRegistry fallbackRegistry = mock(
+      HandlerRegistry.class,
+      delegatesTo(new HandlerRegistry() {
+        @Override
+        public ServerMethodDefinition<?, ?> lookupMethod(
+            String methodName, @Nullable String authority) {
+          return mutableFallbackRegistry.lookupMethod(methodName, authority);
+        }
+
+        @Override
+        public List<ServerServiceDefinition> getServices() {
+          return mutableFallbackRegistry.getServices();
+        }
+      }));
   private SimpleServer transportServer = new SimpleServer();
   private ServerImpl server;
 
@@ -172,6 +188,7 @@ public class ServerImplTest {
     when(executorPool.getObject()).thenReturn(executor.getScheduledExecutorService());
     when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
         .thenReturn(streamTracer);
+    when(stream.getAuthority()).thenReturn(AUTHORITY);
   }
 
   @After
@@ -396,7 +413,7 @@ public class ServerImplTest {
     assertEquals("Method not found: Waiter/nonexist", status.getDescription());
 
     verify(streamTracerFactory).newServerStreamTracer(eq("Waiter/nonexist"), same(requestHeaders));
-    assertNull(streamTracer.getServerCall());
+    assertNull(streamTracer.getServerCallInfo());
     assertEquals(Status.Code.UNIMPLEMENTED, statusCaptor.getValue().getCode());
   }
 
@@ -464,12 +481,18 @@ public class ServerImplTest {
     ServerStreamListener streamListener = streamListenerCaptor.getValue();
     assertNotNull(streamListener);
     verify(stream, atLeast(1)).statsTraceContext();
+    verify(fallbackRegistry, never()).lookupMethod(any(String.class), any(String.class));
 
     assertEquals(1, executor.runDueTasks());
     ServerCall<String, Integer> call = callReference.get();
     assertNotNull(call);
-    assertSame(call, streamTracer.getServerCall());
-    verify(stream).getAuthority();
+    assertEquals(
+        new ServerCallInfoImpl<String, Integer>(
+            call.getMethodDescriptor(),
+            call.getAttributes(),
+            call.getAuthority()),
+        streamTracer.getServerCallInfo());
+    verify(fallbackRegistry).lookupMethod("Waiter/serve", AUTHORITY);
     Context callContext = callContextReference.get();
     assertNotNull(callContext);
     assertEquals("context added by tracer", SERVER_TRACER_ADDED_KEY.get(callContext));
@@ -511,7 +534,6 @@ public class ServerImplTest {
     verify(callListener).onComplete();
 
     verify(stream, atLeast(1)).statsTraceContext();
-    verifyNoMoreInteractions(stream);
     verifyNoMoreInteractions(callListener);
 
     verify(streamTracerFactory).newServerStreamTracer(eq("Waiter/serve"), same(requestHeaders));
@@ -709,12 +731,12 @@ public class ServerImplTest {
     assertNotNull(streamListener);
     verify(stream, atLeast(1)).statsTraceContext();
     verifyNoMoreInteractions(stream);
+    verify(fallbackRegistry, never()).lookupMethod(any(String.class), any(String.class));
 
     assertEquals(1, executor.runDueTasks());
-    verify(stream).getAuthority();
+    verify(fallbackRegistry).lookupMethod("Waiter/serve", AUTHORITY);
     verify(stream).close(same(status), notNull(Metadata.class));
     verify(stream, atLeast(1)).statsTraceContext();
-    verifyNoMoreInteractions(stream);
   }
 
   @Test
@@ -1046,7 +1068,7 @@ public class ServerImplTest {
     // registry.
     transportListener.streamCreated(stream, "Service1/Method2", requestHeaders);
     assertEquals(1, executor.runDueTasks());
-    verify(fallbackRegistry).lookupMethod("Service1/Method2", null);
+    verify(fallbackRegistry).lookupMethod("Service1/Method2", AUTHORITY);
 
     verifyNoMoreInteractions(callHandler);
     verifyNoMoreInteractions(fallbackRegistry);
@@ -1265,7 +1287,7 @@ public class ServerImplTest {
     }
 
     @Override
-    public InternalLogId getLogId() {
+    public LogId getLogId() {
       throw new UnsupportedOperationException();
     }
 
@@ -1275,8 +1297,8 @@ public class ServerImplTest {
     }
 
     @Override
-    public ListenableFuture<InternalTransportStats> getStats() {
-      SettableFuture<InternalTransportStats> ret = SettableFuture.create();
+    public ListenableFuture<TransportStats> getStats() {
+      SettableFuture<TransportStats> ret = SettableFuture.create();
       ret.set(null);
       return ret;
     }

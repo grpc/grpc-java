@@ -26,16 +26,16 @@ import io.grpc.Compressor;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
 import io.grpc.Grpc;
-import io.grpc.InternalLogId;
-import io.grpc.InternalTransportStats;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
+import io.grpc.internal.Channelz.TransportStats;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.LogId;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.NoopClientStream;
 import io.grpc.internal.ObjectPool;
@@ -64,7 +64,7 @@ import javax.annotation.concurrent.ThreadSafe;
 final class InProcessTransport implements ServerTransport, ConnectionClientTransport {
   private static final Logger log = Logger.getLogger(InProcessTransport.class.getName());
 
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final LogId logId = LogId.allocate(getClass().getName());
   private final String name;
   private final String authority;
   private final String userAgent;
@@ -210,7 +210,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   }
 
   @Override
-  public InternalLogId getLogId() {
+  public LogId getLogId() {
     return logId;
   }
 
@@ -225,9 +225,9 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   }
 
   @Override
-  public ListenableFuture<InternalTransportStats> getStats() {
+  public ListenableFuture<TransportStats> getStats() {
     // TODO(zpencer): add transport tracing to in-process server
-    SettableFuture<InternalTransportStats> ret = SettableFuture.create();
+    SettableFuture<TransportStats> ret = SettableFuture.create();
     ret.set(null);
     return ret;
   }

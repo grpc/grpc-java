@@ -31,6 +31,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
+import io.grpc.PickFirstBalancerFactory;
 import io.opencensus.trace.Tracing;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -84,11 +85,17 @@ public abstract class AbstractManagedChannelImplBuilder
   private static final NameResolver.Factory DEFAULT_NAME_RESOLVER_FACTORY =
       NameResolverProvider.asFactory();
 
+  private static final LoadBalancer.Factory DEFAULT_LOAD_BALANCER_FACTORY =
+      PickFirstBalancerFactory.getInstance();
+
   private static final DecompressorRegistry DEFAULT_DECOMPRESSOR_REGISTRY =
       DecompressorRegistry.getDefaultInstance();
 
   private static final CompressorRegistry DEFAULT_COMPRESSOR_REGISTRY =
       CompressorRegistry.getDefaultInstance();
+
+  private static final long DEFAULT_RETRY_BUFFER_SIZE_IN_BYTES = 1L << 24;  // 16M
+  private static final long DEFAULT_PER_RPC_BUFFER_LIMIT_IN_BYTES = 1L << 20; // 1M
 
   ObjectPool<? extends Executor> executorPool = DEFAULT_EXECUTOR_POOL;
 
@@ -109,7 +116,8 @@ public abstract class AbstractManagedChannelImplBuilder
   @Nullable
   String authorityOverride;
 
-  @Nullable LoadBalancer.Factory loadBalancerFactory;
+
+  LoadBalancer.Factory loadBalancerFactory = DEFAULT_LOAD_BALANCER_FACTORY;
 
   boolean fullStreamDecompression;
 
@@ -119,9 +127,14 @@ public abstract class AbstractManagedChannelImplBuilder
 
   long idleTimeoutMillis = IDLE_MODE_DEFAULT_TIMEOUT_MILLIS;
 
+  long retryBufferSize = DEFAULT_RETRY_BUFFER_SIZE_IN_BYTES;
+  long perRpcBufferLimit = DEFAULT_PER_RPC_BUFFER_LIMIT_IN_BYTES;
+
   protected TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
 
   private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
+
+  BinaryLogProvider binlogProvider = BinaryLogProvider.provider();
 
   /**
    * Sets the maximum message size allowed for a single gRPC frame. If an inbound messages
@@ -218,7 +231,11 @@ public abstract class AbstractManagedChannelImplBuilder
     Preconditions.checkState(directServerAddress == null,
         "directServerAddress is set (%s), which forbids the use of LoadBalancer.Factory",
         directServerAddress);
-    this.loadBalancerFactory = loadBalancerFactory;
+    if (loadBalancerFactory != null) {
+      this.loadBalancerFactory = loadBalancerFactory;
+    } else {
+      this.loadBalancerFactory = DEFAULT_LOAD_BALANCER_FACTORY;
+    }
     return thisT();
   }
 
@@ -270,6 +287,20 @@ public abstract class AbstractManagedChannelImplBuilder
     } else {
       this.idleTimeoutMillis = Math.max(unit.toMillis(value), IDLE_MODE_MIN_TIMEOUT_MILLIS);
     }
+    return thisT();
+  }
+
+  @Override
+  public final T retryBufferSize(long bytes) {
+    checkArgument(bytes > 0L, "retry buffer size must be positive");
+    retryBufferSize = bytes;
+    return thisT();
+  }
+
+  @Override
+  public final T perRpcBufferLimit(long bytes) {
+    checkArgument(bytes > 0L, "per RPC buffer limit must be positive");
+    perRpcBufferLimit = bytes;
     return thisT();
   }
 
