@@ -30,7 +30,6 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
-import io.grpc.Status.Code;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -95,7 +94,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     this.callExecutor = callExecutor;
     this.scheduledExecutorService = scheduledExecutorService;
     this.headers = headers;
-    this.retryPolicy = checkNotNull(retryPolicy);
+    this.retryPolicy = checkNotNull(retryPolicy, "retryPolicy");
   }
 
   @Nullable // null if already committed
@@ -813,14 +812,14 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     /** No retry. */
     static final RetryPolicy DEFAULT =
-        new RetryPolicy(1, 0, 0, 1, Collections.<Code>emptyList());
+        new RetryPolicy(1, 0, 0, 1, Collections.<Status.Code>emptyList());
 
     @Override
     public boolean equals(Object o) {
       if (this == o) {
         return true;
       }
-      if (o == null || getClass() != o.getClass()) {
+      if (!(o instanceof RetryPolicy)) {
         return false;
       }
       RetryPolicy that = (RetryPolicy) o;
