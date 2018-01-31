@@ -26,7 +26,6 @@ import io.grpc.InternalClientInterceptors;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
-import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerMethodDefinition;
 import java.io.InputStream;
@@ -81,13 +80,7 @@ public abstract class BinaryLogProvider {
     }
     MethodDescriptor<InputStream, InputStream> wMethod =
         BinaryLogProvider.wrapMethod(oMethodDef.getMethodDescriptor());
-    ServerCallHandler<InputStream, InputStream> wHandler =
-        InternalServerInterceptors.wrapHandler(
-            oMethodDef.getServerCallHandler(),
-            oMethodDef.getMethodDescriptor(),
-            wMethod);
-    wHandler = InternalServerInterceptors.interceptCallHandler(binlogInterceptor, wHandler);
-    return ServerMethodDefinition.create(wMethod, wHandler);
+    return InternalServerInterceptors.wrapMethod(oMethodDef, wMethod);
   }
 
   @VisibleForTesting

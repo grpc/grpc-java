@@ -516,37 +516,42 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       for (ServerInterceptor interceptor : interceptors) {
         handler = InternalServerInterceptors.interceptCallHandler(interceptor, handler);
       }
-      ServerMethodDefinition<?, ?> wMethodDef = binlogProvider
-          .wrapMethodDefinition(methodDef.withServerCallHandler(handler));
-      return startWrappedCall(fullMethodName, methodDef, wMethodDef, stream, headers, context,
-          statsTraceCtx);
+
+      ServerMethodDefinition<ReqT, RespT> interceptedDef = methodDef.withServerCallHandler(handler);
+      ServerStreamListener ret = startCall(
+          fullMethodName,
+          binlogProvider == null
+              ? interceptedDef
+              : binlogProvider.wrapMethodDefinition(interceptedDef),
+          stream,
+          headers,
+          context);
+      // If started, then notify statsTraceCtx with the original method descriptor
+      MethodDescriptor<ReqT, RespT> oMethodDescriptor = methodDef.getMethodDescriptor();
+      statsTraceCtx.serverCallStarted(
+          new ServerCallInfoImpl<ReqT, RespT>(
+              oMethodDescriptor,
+              stream.getAttributes(),
+              stream.getAuthority()));
+      return ret;
     }
 
-    private <OReqT, ORespT, WReqT, WRespT> ServerStreamListener startWrappedCall(
+    private <ReqT, RespT> ServerStreamListener startCall(
         String fullMethodName,
-        ServerMethodDefinition<OReqT, ORespT> oMethodDef,
-        ServerMethodDefinition<WReqT, WRespT> wMethodDef,
+        ServerMethodDefinition<ReqT, RespT> methodDef,
         ServerStream stream,
         Metadata headers,
-        Context.CancellableContext context,
-        StatsTraceContext statsTraceCtx) {
-      ServerCallImpl<WReqT, WRespT> call = new ServerCallImpl<WReqT, WRespT>(
+        Context.CancellableContext context) {
+      ServerCallImpl<ReqT, RespT> call = new ServerCallImpl<ReqT, RespT>(
           stream,
-          wMethodDef.getMethodDescriptor(),
+          methodDef.getMethodDescriptor(),
           headers,
           context,
-          decompressorRegistry, compressorRegistry);
+          decompressorRegistry,
+          compressorRegistry);
 
-      // We must not reveal the modified method descriptor to public APIs
-      MethodDescriptor<OReqT, ORespT> oMethodDescriptor = oMethodDef.getMethodDescriptor();
-      statsTraceCtx.serverCallStarted(
-          new ServerCallInfoImpl<OReqT, ORespT>(
-              oMethodDescriptor,
-              call.getAttributes(),
-              call.getAuthority()));
-
-      ServerCall.Listener<WReqT> listener =
-          wMethodDef.getServerCallHandler().startCall(call, headers);
+      ServerCall.Listener<ReqT> listener =
+          methodDef.getServerCallHandler().startCall(call, headers);
       if (listener == null) {
         throw new NullPointerException(
             "startCall() returned a null listener for method " + fullMethodName);

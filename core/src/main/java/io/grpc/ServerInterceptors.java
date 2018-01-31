@@ -230,7 +230,7 @@ public final class ServerInterceptors {
     }
   }
 
-  private static <OReqT, ORespT, WReqT, WRespT> ServerMethodDefinition<WReqT, WRespT> wrapMethod(
+  static <OReqT, ORespT, WReqT, WRespT> ServerMethodDefinition<WReqT, WRespT> wrapMethod(
       final ServerMethodDefinition<OReqT, ORespT> definition,
       final MethodDescriptor<WReqT, WRespT> wrappedMethod) {
     final ServerCallHandler<WReqT, WRespT> wrappedHandler = wrapHandler(
@@ -240,7 +240,7 @@ public final class ServerInterceptors {
     return ServerMethodDefinition.create(wrappedMethod, wrappedHandler);
   }
 
-  static <OReqT, ORespT, WReqT, WRespT> ServerCallHandler<WReqT, WRespT> wrapHandler(
+  private static <OReqT, ORespT, WReqT, WRespT> ServerCallHandler<WReqT, WRespT> wrapHandler(
       final ServerCallHandler<OReqT, ORespT> originalHandler,
       final MethodDescriptor<OReqT, ORespT> originalMethod,
       final MethodDescriptor<WReqT, WRespT> wrappedMethod) {
