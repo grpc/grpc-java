@@ -635,7 +635,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
       return;
     }
     panicPickResult =
-        PickResult.withDrop(Status.INTERNAL.withDescription("Channel is in panic!").withCause(t));
+        PickResult.withDrop(Status.INTERNAL.withDescription("Panic! This is a bug!").withCause(t));
     cancelIdleTimer();
     if (!channelStateManager.isDisabled()) {
       channelStateManager.gotoState(TRANSIENT_FAILURE);
@@ -1058,16 +1058,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
           if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
             return;
           }
-          try {
-            helper.lb.handleResolvedAddressGroups(servers, config);
-          } catch (Throwable e) {
-            logger.log(
-                Level.WARNING, "[" + getLogId() + "] Unexpected exception from LoadBalancer", e);
-            // It must be a bug! Push the exception back to LoadBalancer in the hope that it may
-            // be propagated to the application.
-            helper.lb.handleNameResolutionError(Status.INTERNAL.withCause(e)
-                .withDescription("Thrown from handleResolvedAddresses(): " + e));
-          }
+          helper.lb.handleResolvedAddressGroups(servers, config);
         }
       }
 

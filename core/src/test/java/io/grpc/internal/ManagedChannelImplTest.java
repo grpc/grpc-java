@@ -616,11 +616,9 @@ public class ManagedChannelImplTest {
     // NameResolver returns addresses.
     nameResolverFactory.allResolved();
 
-    // The LoadBalancer will receive the error that it has thrown.
-    verify(mockLoadBalancer).handleNameResolutionError(statusCaptor.capture());
-    Status status = statusCaptor.getValue();
-    assertSame(Status.Code.INTERNAL, status.getCode());
-    assertSame(ex, status.getCause());
+    // Exception thrown from balancer is caught by ChannelExecutor, making channel enter panic mode.
+    assertEquals(TRANSIENT_FAILURE, channel.getState(false));
+    checkNewCallInPanicMode(ex);
   }
 
   @Test
@@ -1540,15 +1538,7 @@ public class ManagedChannelImplTest {
     assertEquals(TRANSIENT_FAILURE, channel.getState(true));
 
     // New call will fail
-    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
-    call.start(mockCallListener, new Metadata());
-    executor.runDueTasks();
-    verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
-    Status rpcStatus = statusCaptor.getValue();
-    assertEquals(Status.Code.INTERNAL, rpcStatus.getCode());
-    assertSame(panicReason, rpcStatus.getCause());
-    verifyNoMoreInteractions(mockCallListener);
-    verifyZeroInteractions(mockPicker);
+    checkNewCallInPanicMode(panicReason);
     
     // No new resolver or balancer are created
     verifyNoMoreInteractions(mockLoadBalancerFactory);
@@ -1562,6 +1552,18 @@ public class ManagedChannelImplTest {
     assertEquals(0, timer.numPendingTasks());
     assertEquals(0, executor.numPendingTasks());
     assertEquals(0, oobExecutor.numPendingTasks());
+  }
+
+  private void checkNewCallInPanicMode(Throwable cause) {
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, new Metadata());
+    executor.runDueTasks();
+    verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
+    Status rpcStatus = statusCaptor.getValue();
+    assertEquals(Status.Code.INTERNAL, rpcStatus.getCode());
+    assertSame(cause, rpcStatus.getCause());
+    verifyNoMoreInteractions(mockCallListener);
+    verifyZeroInteractions(mockPicker);
   }
 
   @Test
