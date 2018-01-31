@@ -64,8 +64,7 @@ import javax.annotation.concurrent.GuardedBy;
  * <pre><code>public class TcpTransportServerFactory {
  *   public static Server newServer(Executor executor, HandlerRegistry registry,
  *       String configuration) {
- *     return new ServerImpl(
- *         executor, registry, new TcpTransportServer(configuration), BinaryLogProvider.provider());
+ *     return new ServerImpl(executor, registry, new TcpTransportServer(configuration));
  *   }
  * }</code></pre>
  *
@@ -512,6 +511,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
     private <ReqT, RespT> ServerStreamListener startCall(ServerStream stream, String fullMethodName,
         ServerMethodDefinition<ReqT, RespT> methodDef, Metadata headers,
         Context.CancellableContext context, StatsTraceContext statsTraceCtx) {
+      // TODO(ejona86): should we update fullMethodName to have the canonical path of the method?
       ServerCallHandler<ReqT, RespT> handler = methodDef.getServerCallHandler();
       for (ServerInterceptor interceptor : interceptors) {
         handler = InternalServerInterceptors.interceptCallHandler(interceptor, handler);
