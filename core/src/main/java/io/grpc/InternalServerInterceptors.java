@@ -26,9 +26,9 @@ public final class InternalServerInterceptors {
     return ServerInterceptors.InterceptCallHandler.create(interceptor, callHandler);
   }
 
-  public static <OReqT, ORespT, WReqT, WRespT> ServerMethodDefinition<WReqT, WRespT> wrapMethod(
-      ServerMethodDefinition<OReqT, ORespT> definition,
-      MethodDescriptor<WReqT, WRespT> wrappedMethod) {
+  public static <ReqT, RespT> ServerMethodDefinition<ReqT, RespT> wrapMethod(
+      ServerMethodDefinition<?, ?> definition,
+      MethodDescriptor<ReqT, RespT> wrappedMethod) {
     return ServerInterceptors.wrapMethod(definition, wrappedMethod);
   }
 

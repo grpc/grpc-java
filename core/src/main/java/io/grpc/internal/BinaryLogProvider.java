@@ -26,6 +26,7 @@ import io.grpc.InternalClientInterceptors;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
+import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerMethodDefinition;
 import java.io.InputStream;
@@ -63,7 +64,7 @@ public abstract class BinaryLogProvider {
     return ClientInterceptors.intercept(channel, binaryLogShim);
   }
 
-  private static MethodDescriptor<InputStream, InputStream> wrapMethod(
+  private static MethodDescriptor<InputStream, InputStream> toInputStreamMethod(
       MethodDescriptor<?, ?> method) {
     return method.toBuilder(IDENTITY_MARSHALLER, IDENTITY_MARSHALLER).build();
   }
@@ -78,10 +79,15 @@ public abstract class BinaryLogProvider {
     if (binlogInterceptor == null) {
       return oMethodDef;
     }
-    MethodDescriptor<InputStream, InputStream> wMethod =
-        BinaryLogProvider.wrapMethod(oMethodDef.getMethodDescriptor());
-    return InternalServerInterceptors.wrapMethod(oMethodDef, wMethod);
+    MethodDescriptor<InputStream, InputStream> binMethod =
+        BinaryLogProvider.toInputStreamMethod(oMethodDef.getMethodDescriptor());
+    ServerMethodDefinition<InputStream, InputStream> binDef = InternalServerInterceptors
+        .wrapMethod(oMethodDef, binMethod);
+    ServerCallHandler<InputStream, InputStream> binlogHandler = InternalServerInterceptors
+        .interceptCallHandler(binlogInterceptor, binDef.getServerCallHandler());
+    return ServerMethodDefinition.create(binMethod, binlogHandler);
   }
+
 
   @VisibleForTesting
   static BinaryLogProvider load(ClassLoader classLoader) {
@@ -140,7 +146,7 @@ public abstract class BinaryLogProvider {
    */
   // TODO(zpencer): ensure the interceptor properly handles retries and hedging
   @Nullable
-  protected abstract ServerInterceptor getServerInterceptor(String fullMethodName);
+  public abstract ServerInterceptor getServerInterceptor(String fullMethodName);
 
   /**
    * Returns a {@link ClientInterceptor} for binary logging. gRPC is free to cache the interceptor,
@@ -150,7 +156,7 @@ public abstract class BinaryLogProvider {
    */
   // TODO(zpencer): ensure the interceptor properly handles retries and hedging
   @Nullable
-  protected abstract ClientInterceptor getClientInterceptor(String fullMethodName);
+  public abstract ClientInterceptor getClientInterceptor(String fullMethodName);
 
   /**
    * A priority, from 0 to 10 that this provider should be used, taking the current environment into
@@ -167,12 +173,12 @@ public abstract class BinaryLogProvider {
   static final class NullProvider extends BinaryLogProvider {
     @Nullable
     @Override
-    protected ServerInterceptor getServerInterceptor(String fullMethodName) {
+    public ServerInterceptor getServerInterceptor(String fullMethodName) {
       return null;
     }
 
     @Override
-    protected ClientInterceptor getClientInterceptor(String fullMethodName) {
+    public ClientInterceptor getClientInterceptor(String fullMethodName) {
       return null;
     }
 

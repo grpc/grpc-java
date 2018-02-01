@@ -1262,13 +1262,13 @@ public class ServerImplTest {
     builder.intercept(userInterceptor);
     builder.binlogProvider = new BinaryLogProvider() {
       @Override
-      protected ServerInterceptor getServerInterceptor(String fullMethodName) {
+      public ServerInterceptor getServerInterceptor(String fullMethodName) {
         return new TracingServerInterceptor();
       }
 
       @Nullable
       @Override
-      protected ClientInterceptor getClientInterceptor(String fullMethodName) {
+      public ClientInterceptor getClientInterceptor(String fullMethodName) {
         return null;
       }
 

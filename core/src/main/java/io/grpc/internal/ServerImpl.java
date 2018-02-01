@@ -34,7 +34,6 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
-import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
@@ -512,13 +511,18 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
         ServerMethodDefinition<ReqT, RespT> methodDef, Metadata headers,
         Context.CancellableContext context, StatsTraceContext statsTraceCtx) {
       // TODO(ejona86): should we update fullMethodName to have the canonical path of the method?
+      statsTraceCtx.serverCallStarted(
+          new ServerCallInfoImpl<ReqT, RespT>(
+              methodDef.getMethodDescriptor(), // notify with original method descriptor
+              stream.getAttributes(),
+              stream.getAuthority()));
       ServerCallHandler<ReqT, RespT> handler = methodDef.getServerCallHandler();
       for (ServerInterceptor interceptor : interceptors) {
         handler = InternalServerInterceptors.interceptCallHandler(interceptor, handler);
       }
 
       ServerMethodDefinition<ReqT, RespT> interceptedDef = methodDef.withServerCallHandler(handler);
-      ServerStreamListener ret = startCall(
+      return startCall(
           fullMethodName,
           binlogProvider == null
               ? interceptedDef
@@ -526,14 +530,6 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
           stream,
           headers,
           context);
-      // If started, then notify statsTraceCtx with the original method descriptor
-      MethodDescriptor<ReqT, RespT> oMethodDescriptor = methodDef.getMethodDescriptor();
-      statsTraceCtx.serverCallStarted(
-          new ServerCallInfoImpl<ReqT, RespT>(
-              oMethodDescriptor,
-              stream.getAttributes(),
-              stream.getAuthority()));
-      return ret;
     }
 
     private <ReqT, RespT> ServerStreamListener startCall(
