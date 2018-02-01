@@ -118,7 +118,7 @@ public class BinaryLogProviderTest {
     assertNull(BinaryLogProvider.load(cl));
   }
 
-    @Test
+  @Test
   public void wrapChannel_methodDescriptor() throws Exception {
     final AtomicReference<MethodDescriptor<?, ?>> methodRef =
         new AtomicReference<MethodDescriptor<?, ?>>();

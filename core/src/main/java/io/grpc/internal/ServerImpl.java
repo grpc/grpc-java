@@ -520,25 +520,19 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       for (ServerInterceptor interceptor : interceptors) {
         handler = InternalServerInterceptors.interceptCallHandler(interceptor, handler);
       }
-
       ServerMethodDefinition<ReqT, RespT> interceptedDef = methodDef.withServerCallHandler(handler);
-      return startCall(
-          fullMethodName,
-          binlogProvider == null
-              ? interceptedDef
-              : binlogProvider.wrapMethodDefinition(interceptedDef),
-          stream,
-          headers,
-          context);
+      ServerMethodDefinition<?, ?> wMethodDef = binlogProvider == null
+          ? interceptedDef : binlogProvider.wrapMethodDefinition(interceptedDef);
+      return startWrappedCall(fullMethodName, wMethodDef, stream, headers, context);
     }
 
-    private <ReqT, RespT> ServerStreamListener startCall(
+    private <WReqT, WRespT> ServerStreamListener startWrappedCall(
         String fullMethodName,
-        ServerMethodDefinition<ReqT, RespT> methodDef,
+        ServerMethodDefinition<WReqT, WRespT> methodDef,
         ServerStream stream,
         Metadata headers,
         Context.CancellableContext context) {
-      ServerCallImpl<ReqT, RespT> call = new ServerCallImpl<ReqT, RespT>(
+      ServerCallImpl<WReqT, WRespT> call = new ServerCallImpl<WReqT, WRespT>(
           stream,
           methodDef.getMethodDescriptor(),
           headers,
@@ -546,7 +540,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
           decompressorRegistry,
           compressorRegistry);
 
-      ServerCall.Listener<ReqT> listener =
+      ServerCall.Listener<WReqT> listener =
           methodDef.getServerCallHandler().startCall(call, headers);
       if (listener == null) {
         throw new NullPointerException(
