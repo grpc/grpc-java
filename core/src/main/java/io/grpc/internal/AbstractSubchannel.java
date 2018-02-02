@@ -26,7 +26,8 @@ import javax.annotation.Nullable;
  * The base interface of the Subchannels returned by {@link
  * io.grpc.LoadBalancer.Helper#createSubchannel}.
  */
-abstract class AbstractSubchannel extends LoadBalancer.Subchannel {
+abstract class AbstractSubchannel
+    extends LoadBalancer.Subchannel implements Instrumented<ChannelStats> {
 
   /**
    * Same as {@link InternalSubchannel#obtainActiveTransport}.
@@ -37,6 +38,14 @@ abstract class AbstractSubchannel extends LoadBalancer.Subchannel {
   /**
    * Same as {@link InternalSubchannel#getStats()}.
    */
+  @Override
   @VisibleForTesting
-  abstract ListenableFuture<ChannelStats> getStats();
+  public abstract ListenableFuture<ChannelStats> getStats();
+
+  /**
+   * Same as {@link InternalSubchannel#getLogId()}.
+   */
+  @Override
+  @VisibleForTesting
+  public abstract LogId getLogId();
 }

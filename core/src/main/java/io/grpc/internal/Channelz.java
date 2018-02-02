@@ -16,10 +16,80 @@
 
 package io.grpc.internal;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ConnectivityState;
+import java.lang.ref.WeakReference;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.logging.Logger;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 public final class Channelz {
+  private static final Logger log = Logger.getLogger(Channelz.class.getName());
+
+  private final ConcurrentMap<Long, WeakReference<Instrumented<ChannelStats>>>
+      rootChannels =
+      new ConcurrentHashMap<Long, WeakReference<Instrumented<ChannelStats>>>();
+  private final ConcurrentMap<Long, WeakReference<Instrumented<ChannelStats>>>
+      channels =
+      new ConcurrentHashMap<Long, WeakReference<Instrumented<ChannelStats>>>();
+
+  @VisibleForTesting
+  public Channelz() {
+  }
+
+  @Nullable
+  public static Channelz instance() {
+    // not enabled by default until production ready
+    return null;
+  }
+
+
+  public void addChannel(Instrumented<ChannelStats> channel) {
+    add(channels, channel);
+  }
+
+  public void addRootChannel(Instrumented<ChannelStats> rootChannel) {
+    addChannel(rootChannel);
+    add(rootChannels, rootChannel);
+  }
+
+  public void removeChannel(Instrumented<ChannelStats> channel) {
+    remove(channels, channel);
+  }
+
+  public void removeRootChannel(Instrumented<ChannelStats> channel) {
+    removeChannel(channel);
+    remove(rootChannels, channel);
+  }
+
+  @VisibleForTesting
+  public boolean containsChannel(LogId channelRef) {
+    return contains(channels, channelRef);
+  }
+
+  @VisibleForTesting
+  public boolean containsRootChannel(LogId channelRef) {
+    return contains(rootChannels, channelRef);
+  }
+
+  private static <T extends Instrumented<?>> void add(
+      Map<Long, WeakReference<T>> map, T object) {
+    map.put(object.getLogId().getId(), new WeakReference<T>(object));
+  }
+
+  private static <T extends Instrumented<?>> void remove(
+      Map<Long, WeakReference<T>> map, T object) {
+    map.remove(object.getLogId().getId());
+  }
+
+  private static <T extends Instrumented<?>> boolean contains(
+      Map<Long, WeakReference<T>> map, LogId id) {
+    return map.containsKey(id.getId());
+  }
 
   /**
    * A data class to represent a channel's stats.
@@ -32,6 +102,7 @@ public final class Channelz {
     public final long callsSucceeded;
     public final long callsFailed;
     public final long lastCallStartedMillis;
+    public final List<LogId> subchannels;
 
     /**
      * Creates an instance.
@@ -42,13 +113,15 @@ public final class Channelz {
         long callsStarted,
         long callsSucceeded,
         long callsFailed,
-        long lastCallStartedMillis) {
+        long lastCallStartedMillis,
+        List<LogId> subchannels) {
       this.target = target;
       this.state = state;
       this.callsStarted = callsStarted;
       this.callsSucceeded = callsSucceeded;
       this.callsFailed = callsFailed;
       this.lastCallStartedMillis = lastCallStartedMillis;
+      this.subchannels = subchannels;
     }
 
     public static final class Builder {
@@ -58,6 +131,7 @@ public final class Channelz {
       private long callsSucceeded;
       private long callsFailed;
       private long lastCallStartedMillis;
+      public List<LogId> subchannels;
 
       public Builder setTarget(String target) {
         this.target = target;
@@ -89,9 +163,23 @@ public final class Channelz {
         return this;
       }
 
+      public Builder setSubchannels(List<LogId> subchannels) {
+        this.subchannels = subchannels;
+        return this;
+      }
+
+      /**
+       * Builds an instance.
+       */
       public ChannelStats build() {
         return new ChannelStats(
-            target, state, callsStarted,  callsSucceeded,  callsFailed,  lastCallStartedMillis);
+            target,
+            state,
+            callsStarted,
+            callsSucceeded,
+            callsFailed,
+            lastCallStartedMillis,
+            subchannels);
       }
     }
   }

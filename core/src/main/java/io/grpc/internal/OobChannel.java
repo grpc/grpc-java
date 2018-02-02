@@ -38,12 +38,14 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.Channelz.ChannelStats;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
+import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -61,6 +63,8 @@ final class OobChannel extends ManagedChannel implements Instrumented<ChannelSta
   private final LogId logId = LogId.allocate(getClass().getName());
   private final String authority;
   private final DelayedClientTransport delayedTransport;
+  @Nullable
+  private final Channelz channelz;
   private final ObjectPool<? extends Executor> executorPool;
   private final Executor executor;
   private final ScheduledExecutorService deadlineCancellationExecutor;
@@ -87,13 +91,14 @@ final class OobChannel extends ManagedChannel implements Instrumented<ChannelSta
   OobChannel(
       String authority, ObjectPool<? extends Executor> executorPool,
       ScheduledExecutorService deadlineCancellationExecutor, ChannelExecutor channelExecutor,
-      CallTracer callsTracer) {
+      CallTracer callsTracer, Channelz channelz) {
     this.authority = checkNotNull(authority, "authority");
     this.executorPool = checkNotNull(executorPool, "executorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
     this.deadlineCancellationExecutor = checkNotNull(
         deadlineCancellationExecutor, "deadlineCancellationExecutor");
     this.delayedTransport = new DelayedClientTransport(executor, channelExecutor);
+    this.channelz = channelz;
     this.delayedTransport.start(new ManagedClientTransport.Listener() {
         @Override
         public void transportShutdown(Status s) {
@@ -134,7 +139,7 @@ final class OobChannel extends ManagedChannel implements Instrumented<ChannelSta
         }
 
         @Override
-        ListenableFuture<ChannelStats> getStats() {
+        public ListenableFuture<ChannelStats> getStats() {
           return subchannel.getStats();
         }
 
@@ -151,6 +156,11 @@ final class OobChannel extends ManagedChannel implements Instrumented<ChannelSta
         @Override
         public Attributes getAttributes() {
           return Attributes.EMPTY;
+        }
+
+        @Override
+        public LogId getLogId() {
+          return subchannel.getLogId();
         }
     };
 
@@ -234,10 +244,14 @@ final class OobChannel extends ManagedChannel implements Instrumented<ChannelSta
     }
   }
 
+  // must be run from channel executor
   void handleSubchannelTerminated() {
     // When delayedTransport is terminated, it shuts down subchannel.  Therefore, at this point
     // both delayedTransport and subchannel have terminated.
     executorPool.returnObject(executor);
+    if (channelz != null) {
+      channelz.removeChannel(this);
+    }
     terminatedLatch.countDown();
   }
 
@@ -246,12 +260,19 @@ final class OobChannel extends ManagedChannel implements Instrumented<ChannelSta
     return subchannelImpl;
   }
 
+  InternalSubchannel getInternalSubchannel() {
+    return subchannel;
+  }
+
   @Override
   public ListenableFuture<ChannelStats> getStats() {
-    SettableFuture<ChannelStats> ret = SettableFuture.create();
-    ChannelStats.Builder builder = new ChannelStats.Builder();
+    final SettableFuture<ChannelStats> ret = SettableFuture.create();
+    final ChannelStats.Builder builder = new ChannelStats.Builder();
     channelCallsTracer.updateBuilder(builder);
-    builder.setTarget(authority).setState(subchannel.getState());
+    builder
+        .setTarget(authority)
+        .setState(subchannel.getState())
+        .setSubchannels(Collections.singletonList(subchannel.getLogId()));
     ret.set(builder.build());
     return ret;
   }
@@ -259,5 +280,10 @@ final class OobChannel extends ManagedChannel implements Instrumented<ChannelSta
   @Override
   public LogId getLogId() {
     return logId;
+  }
+
+  @Override
+  public void resetConnectBackoff() {
+    subchannel.resetConnectBackoff();
   }
 }
