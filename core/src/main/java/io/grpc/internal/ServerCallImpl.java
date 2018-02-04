@@ -205,7 +205,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
    * on.
    */
   private void internalClose(Status internalError) {
-    stream.close(internalError, new Metadata());
+    stream.cancel(internalError);
   }
 
   /**
