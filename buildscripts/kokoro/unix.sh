@@ -71,9 +71,6 @@ pushd examples/example-kotlin/
 ./gradlew build
 popd
 
-pushd examples/example-kotlin/android/helloworld/
-./gradlew build
-popd
 # TODO(zpencer): also build the GAE examples
 
 LOCAL_MVN_TEMP=$(mktemp -d)
