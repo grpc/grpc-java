@@ -19,6 +19,8 @@ package io.grpc;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener;
+import java.lang.reflect.Method;
+import java.util.Collections;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -43,8 +45,8 @@ public class ForwardingServerCallListenerTest {
 
   @Test
   public void allMethodsForwarded() throws Exception {
-    ForwardingTestUtil.testAllMethodsForwarded(
-        ServerCall.Listener.class, serverCallListener, forwarder);
+    ForwardingTestUtil.testMethodsForwarded(
+        ServerCall.Listener.class, serverCallListener, forwarder, Collections.<Method>emptyList());
   }
 
   @Test

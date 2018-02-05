@@ -23,6 +23,7 @@ import static org.mockito.Mockito.mock;
 import com.google.common.base.Defaults;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.Collections;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -45,8 +46,11 @@ public class ForwardingChannelBuilderTest {
 
   @Test
   public void allMethodsForwarded() throws Exception {
-    ForwardingTestUtil.testAllMethodsForwarded(
-        ManagedChannelBuilder.class, mockDelegate, testChannelBuilder);
+    ForwardingTestUtil.testMethodsForwarded(
+        ManagedChannelBuilder.class,
+        mockDelegate,
+        testChannelBuilder,
+        Collections.<Method>emptyList());
   }
 
   @Test

@@ -26,6 +26,8 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingTestUtil;
 import io.grpc.NameResolver;
 import io.grpc.Status;
+import java.lang.reflect.Method;
+import java.util.Collections;
 import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -42,7 +44,11 @@ public class ForwardingNameResolverTest {
 
   @Test
   public void allMethodsForwarded() throws Exception {
-    ForwardingTestUtil.testAllMethodsForwarded(NameResolver.class, delegate, forwarder);
+    ForwardingTestUtil.testMethodsForwarded(
+        NameResolver.class,
+        delegate,
+        forwarder,
+        Collections.<Method>emptyList());
   }
 
   @Test
@@ -56,10 +62,6 @@ public class ForwardingNameResolverTest {
   @Test
   public void start() {
     NameResolver.Listener listener = new NameResolver.Listener() {
-      @Deprecated
-      @Override
-      public void onUpdate(List<io.grpc.ResolvedServerInfoGroup> servers, Attributes attributes) { }
-
       @Override
       public void onAddresses(List<EquivalentAddressGroup> servers, Attributes attributes) { }
 

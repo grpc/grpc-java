@@ -24,7 +24,9 @@ import static org.mockito.Mockito.when;
 import io.grpc.ForwardingTestUtil;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
+import java.util.Collections;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -49,7 +51,11 @@ public class ForwardingReadableBufferTest {
 
   @Test
   public void allMethodsForwarded() throws Exception {
-    ForwardingTestUtil.testAllMethodsForwarded(ReadableBuffer.class, delegate, buffer);
+    ForwardingTestUtil.testMethodsForwarded(
+        ReadableBuffer.class,
+        delegate,
+        buffer,
+        Collections.<Method>emptyList());
   }
 
   @Test
