@@ -18,7 +18,6 @@ package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ConnectivityState;
-import java.lang.ref.WeakReference;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,12 +29,10 @@ import javax.annotation.concurrent.Immutable;
 public final class Channelz {
   private static final Logger log = Logger.getLogger(Channelz.class.getName());
 
-  private final ConcurrentMap<Long, WeakReference<Instrumented<ChannelStats>>>
-      rootChannels =
-      new ConcurrentHashMap<Long, WeakReference<Instrumented<ChannelStats>>>();
-  private final ConcurrentMap<Long, WeakReference<Instrumented<ChannelStats>>>
-      channels =
-      new ConcurrentHashMap<Long, WeakReference<Instrumented<ChannelStats>>>();
+  private final ConcurrentMap<Long, Instrumented<ChannelStats>> rootChannels =
+      new ConcurrentHashMap<Long, Instrumented<ChannelStats>>();
+  private final ConcurrentMap<Long, Instrumented<ChannelStats>> channels =
+      new ConcurrentHashMap<Long, Instrumented<ChannelStats>>();
 
   @VisibleForTesting
   public Channelz() {
@@ -76,18 +73,15 @@ public final class Channelz {
     return contains(rootChannels, channelRef);
   }
 
-  private static <T extends Instrumented<?>> void add(
-      Map<Long, WeakReference<T>> map, T object) {
-    map.put(object.getLogId().getId(), new WeakReference<T>(object));
+  private static <T extends Instrumented<?>> void add(Map<Long, T> map, T object) {
+    map.put(object.getLogId().getId(), object);
   }
 
-  private static <T extends Instrumented<?>> void remove(
-      Map<Long, WeakReference<T>> map, T object) {
+  private static <T extends Instrumented<?>> void remove(Map<Long, T> map, T object) {
     map.remove(object.getLogId().getId());
   }
 
-  private static <T extends Instrumented<?>> boolean contains(
-      Map<Long, WeakReference<T>> map, LogId id) {
+  private static <T extends Instrumented<?>> boolean contains(Map<Long, T> map, LogId id) {
     return map.containsKey(id.getId());
   }
 
