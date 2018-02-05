@@ -308,6 +308,7 @@ final class InternalSubchannel implements InternalWithLogId {
         activeTransport = null;
         pendingTransport = null;
         addressIndex = 0;
+        cancelReconnectTask();
       }
     } finally {
       channelExecutor.drain();

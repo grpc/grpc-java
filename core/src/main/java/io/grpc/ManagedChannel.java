@@ -127,7 +127,7 @@ public abstract class ManagedChannel extends Channel {
    *
    * <p>No-op if not supported by implementation.
    *
-   * @since 1.10.0
+   * @since 1.11.0
    */
   @ExperimentalApi
   public void shutdownTransports() {}
