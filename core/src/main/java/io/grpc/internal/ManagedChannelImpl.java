@@ -244,6 +244,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
             lbHelper = null;
           }
           if (nameResolver != null) {
+            cancelNameResolverBackoff();
             nameResolver.shutdown();
             nameResolver = null;
             nameResolverStarted = false;
@@ -366,6 +367,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
     // either the idleModeTimer ran twice without exiting the idle mode, or the task in shutdown()
     // did not cancel idleModeTimer, or prepareToLoseNetwork() ran while shutdown or in idle, all of
     // which are bugs.
+    cancelNameResolverBackoff();
     nameResolver.shutdown();
     nameResolverStarted = false;
     nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
@@ -400,6 +402,45 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
             }
           }),
         idleTimeoutMillis, TimeUnit.MILLISECONDS);
+  }
+
+  // Run from channelExecutor
+  private class NameResolverBackoff implements Runnable {
+    // Only mutated from channelExecutor
+    boolean cancelled;
+
+    @Override
+    public void run() {
+      if (cancelled) {
+        // Race detected: this task was scheduled on channelExecutor before
+        // cancelNameResolverBackoff() could cancel the timer.
+        return;
+      }
+      nameResolverBackoffFuture = null;
+      nameResolverBackoff = null;
+      if (nameResolver != null) {
+        nameResolver.refresh();
+      }
+    }
+  }
+
+  // Must be used from channelExecutor
+  @Nullable private ScheduledFuture<?> nameResolverBackoffFuture;
+  // Must be used from channelExecutor
+  @Nullable private NameResolverBackoff nameResolverBackoff;
+  // The policy to control backoff between name resolution attempts. Non-null when an attempt is
+  // scheduled. Must be used from channelExecutor
+  @Nullable private BackoffPolicy nameResolverBackoffPolicy;
+
+  // Must be run from channelExecutor
+  private void cancelNameResolverBackoff() {
+    if (nameResolverBackoffFuture != null) {
+      nameResolverBackoffFuture.cancel(false);
+      nameResolverBackoff.cancelled = true;
+      nameResolverBackoffFuture = null;
+      nameResolverBackoff = null;
+      nameResolverBackoffPolicy = null;
+    }
   }
 
   private final ClientTransportProvider transportProvider = new ClientTransportProvider() {
@@ -745,24 +786,27 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
 
   @Override
   public void resetConnectBackoff() {
-    channelExecutor.executeLater(
-        new Runnable() {
-          @Override
-          public void run() {
-            if (shutdown.get()) {
-              return;
-            }
-            if (nameResolverStarted) {
-              nameResolver.refresh();
-            }
-            for (InternalSubchannel subchannel : subchannels) {
-              subchannel.resetConnectBackoff();
-            }
-            for (InternalSubchannel oobChannel : oobChannels) {
-              oobChannel.resetConnectBackoff();
-            }
-          }
-        }).drain();
+    channelExecutor
+        .executeLater(
+            new Runnable() {
+              @Override
+              public void run() {
+                if (shutdown.get()) {
+                  return;
+                }
+                if (nameResolverBackoffFuture != null) {
+                  cancelNameResolverBackoff();
+                  nameResolver.refresh();
+                }
+                for (InternalSubchannel subchannel : subchannels) {
+                  subchannel.resetConnectBackoff();
+                }
+                for (InternalSubchannel oobChannel : oobChannels) {
+                  oobChannel.resetConnectBackoff();
+                }
+              }
+            })
+        .drain();
   }
 
   @Override
@@ -1072,6 +1116,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
             return;
           }
 
+          nameResolverBackoffPolicy = null;
+
           try {
             if (retryEnabled) {
               retryPolicies = getRetryPolicies(config);
@@ -1105,16 +1151,41 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
       checkArgument(!error.isOk(), "the error status must not be OK");
       logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
           new Object[] {getLogId(), error});
-      channelExecutor.executeLater(new Runnable() {
-          @Override
-          public void run() {
-            // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
-            if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
-              return;
-            }
-            balancer.handleNameResolutionError(error);
-          }
-        }).drain();
+      channelExecutor
+          .executeLater(
+              new Runnable() {
+                @Override
+                public void run() {
+                  // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
+                  if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
+                    return;
+                  }
+                  balancer.handleNameResolutionError(error);
+                  if (nameResolverBackoffFuture != null) {
+                    // The name resolver may invoke onError multiple times, but we only want to
+                    // schedule one backoff attempt
+                    // TODO(ericgribkoff) Update contract of NameResolver.Listener or decide if we
+                    // want to reset the backoff interval upon repeated onError() calls
+                    return;
+                  }
+                  if (nameResolverBackoffPolicy == null) {
+                    nameResolverBackoffPolicy = backoffPolicyProvider.get();
+                  }
+                  long delayNanos = nameResolverBackoffPolicy.nextBackoffNanos();
+                  if (logger.isLoggable(Level.FINE)) {
+                    logger.log(
+                        Level.FINE,
+                        "[{0}] Scheduling DNS resolution backoff for {1} ns",
+                        new Object[] {logId, delayNanos});
+                  }
+                  nameResolverBackoff = new NameResolverBackoff();
+                  nameResolverBackoffFuture =
+                      transportFactory
+                          .getScheduledExecutorService()
+                          .schedule(nameResolverBackoff, delayNanos, TimeUnit.NANOSECONDS);
+                }
+              })
+          .drain();
     }
   }
 

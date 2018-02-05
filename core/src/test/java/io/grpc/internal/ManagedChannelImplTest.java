@@ -101,6 +101,7 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -131,7 +132,7 @@ public class ManagedChannelImplTest {
           .build();
   private static final Attributes.Key<String> SUBCHANNEL_ATTR_KEY =
       Attributes.Key.of("subchannel-attr-key");
-  private static final long RECONNECT_BACKOFF_INTERVAL_NANOS = 1;
+  private static final long RECONNECT_BACKOFF_INTERVAL_NANOS = 10;
   private static int unterminatedChannels;
   private final String serviceName = "fake.example.com";
   private final String authority = serviceName;
@@ -239,11 +240,19 @@ public class ManagedChannelImplTest {
         channelStatsFactory);
 
     if (requestConnection) {
+      int numExpectedTasks = 0;
+
       // Force-exit the initial idle-mode
       channel.exitIdleMode();
-      assertEquals(
-          idleTimeoutMillis == ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE ? 0 : 1,
-          timer.numPendingTasks());
+      if (idleTimeoutMillis != ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE) {
+        numExpectedTasks += 1;
+      }
+
+      if (getNameResolverBackoff() != null) {
+        numExpectedTasks += 1;
+      }
+
+      assertEquals(numExpectedTasks, timer.numPendingTasks());
 
       ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
       verify(mockLoadBalancerFactory).newLoadBalancer(helperCaptor.capture());
@@ -587,10 +596,50 @@ public class ManagedChannelImplTest {
   @Test
   public void nameResolutionFailed() {
     Status error = Status.UNAVAILABLE.withCause(new Throwable("fake name resolution error"));
-
+    FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory(error);
     // Name resolution is started as soon as channel is created.
-    createChannel(new FailingNameResolverFactory(error), NO_INTERCEPTOR);
+    createChannel(nameResolverFactory, NO_INTERCEPTOR);
+    FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
     verify(mockLoadBalancer).handleNameResolutionError(same(error));
+
+    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS);
+
+    assertEquals(1, resolver.refreshCalled);
+    verify(mockLoadBalancer, times(2)).handleNameResolutionError(same(error));
+
+    // Allow the next refresh attempt to succeed
+    resolver.error = null;
+
+    // For the second attempt, the backoff should occur at RECONNECT_BACKOFF_INTERVAL_NANOS * 2
+    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS);
+    assertEquals(1, resolver.refreshCalled);
+    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS);
+    assertEquals(2, resolver.refreshCalled);
+    assertEquals(0, timer.numPendingTasks());
+
+    // Verify that the successful resolution reset the backoff policy
+    resolver.listener.onError(error);
+    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS);
+    assertEquals(3, resolver.refreshCalled);
+    assertEquals(0, timer.numPendingTasks());
+  }
+
+  @Test
+  public void nameResolutionFailed_shutdownCancelsBackoff() {
+    Status error = Status.UNAVAILABLE.withCause(new Throwable("fake name resolution error"));
+
+    FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory(error);
+    // Name resolution is started as soon as channel is created.
+    createChannel(nameResolverFactory, NO_INTERCEPTOR);
+    verify(mockLoadBalancer).handleNameResolutionError(same(error));
+
+    FakeClock.ScheduledTask nameResolverBackoff = getNameResolverBackoff();
+    assertNotNull(nameResolverBackoff);
+    assertFalse(nameResolverBackoff.isCancelled());
+
+    channel.shutdown();
+
+    assertTrue(nameResolverBackoff.isCancelled());
   }
 
   @Test
@@ -1587,7 +1636,35 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void resetConnectBackoff_refreshesNameResolver() {
+  public void resetConnectBackoff() {
+    // Start with a name resolution failure to trigger backoff attempts
+    Status error = Status.UNAVAILABLE.withCause(new Throwable("fake name resolution error"));
+    FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory(error);
+    // Name resolution is started as soon as channel is created.
+    createChannel(nameResolverFactory, NO_INTERCEPTOR);
+    FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
+    verify(mockLoadBalancer).handleNameResolutionError(same(error));
+
+    FakeClock.ScheduledTask nameResolverBackoff = getNameResolverBackoff();
+    assertNotNull("There should be a name resolver backoff task", nameResolverBackoff);
+    assertEquals(0, resolver.refreshCalled);
+
+    // Verify resetConnectBackoff() calls refresh and cancels the scheduled backoff
+    channel.resetConnectBackoff();
+    assertEquals(1, resolver.refreshCalled);
+    assertTrue(nameResolverBackoff.isCancelled());
+
+    // Simulate a race between cancel and the task scheduler. Should be a no-op.
+    nameResolverBackoff.command.run();
+    assertEquals(1, resolver.refreshCalled);
+
+    // Verify that the reconnect policy was recreated and the backoff multiplier reset to 1
+    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS);
+    assertEquals(2, resolver.refreshCalled);
+  }
+
+  @Test
+  public void resetConnectBackoff_noOpWithoutPendingResolverBackoff() {
     FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory(true);
     createChannel(nameResolverFactory, NO_INTERCEPTOR);
     FakeNameResolverFactory.FakeNameResolver nameResolver = nameResolverFactory.resolvers.get(0);
@@ -1595,7 +1672,7 @@ public class ManagedChannelImplTest {
 
     channel.resetConnectBackoff();
 
-    assertEquals(1, nameResolver.refreshCalled);
+    assertEquals(0, nameResolver.refreshCalled);
   }
 
   @Test
@@ -2094,9 +2171,11 @@ public class ManagedChannelImplTest {
     @Override
     public BackoffPolicy get() {
       return new BackoffPolicy() {
+        private int multiplier = 1;
+
         @Override
         public long nextBackoffNanos() {
-          return RECONNECT_BACKOFF_INTERVAL_NANOS;
+          return RECONNECT_BACKOFF_INTERVAL_NANOS * multiplier++;
         }
       };
     }
@@ -2106,20 +2185,31 @@ public class ManagedChannelImplTest {
     final List<EquivalentAddressGroup> servers;
     final boolean resolvedAtStart;
     final ArrayList<FakeNameResolver> resolvers = new ArrayList<FakeNameResolver>();
+    final Status error;
 
     FakeNameResolverFactory(boolean resolvedAtStart) {
       this.resolvedAtStart = resolvedAtStart;
       servers = Collections.singletonList(new EquivalentAddressGroup(socketAddress));
+      error = null;
     }
 
     FakeNameResolverFactory(List<SocketAddress> servers) {
       resolvedAtStart = true;
       this.servers = Collections.singletonList(new EquivalentAddressGroup(servers));
+      error = null;
+    }
+
+    // TODO(ericgribkoff) Use a builder here to avoid having four separate constructors
+    FakeNameResolverFactory(Status error) {
+      resolvedAtStart = true;
+      servers = Collections.singletonList(new EquivalentAddressGroup(socketAddress));
+      this.error = error;
     }
 
     public FakeNameResolverFactory() {
       resolvedAtStart = true;
       this.servers = ImmutableList.of();
+      error = null;
     }
 
     @Override
@@ -2128,7 +2218,7 @@ public class ManagedChannelImplTest {
         return null;
       }
       assertSame(NAME_RESOLVER_PARAMS, params);
-      FakeNameResolver resolver = new FakeNameResolver();
+      FakeNameResolver resolver = new FakeNameResolver(error);
       resolvers.add(resolver);
       return resolver;
     }
@@ -2148,6 +2238,11 @@ public class ManagedChannelImplTest {
       Listener listener;
       boolean shutdown;
       int refreshCalled;
+      Status error;
+
+      FakeNameResolver(Status error) {
+        this.error = error;
+      }
 
       @Override public String getServiceAuthority() {
         return expectedUri.getAuthority();
@@ -2155,6 +2250,10 @@ public class ManagedChannelImplTest {
 
       @Override public void start(final Listener listener) {
         this.listener = listener;
+        if (error != null) {
+          listener.onError(error);
+          return;
+        }
         if (resolvedAtStart) {
           resolved();
         }
@@ -2163,6 +2262,11 @@ public class ManagedChannelImplTest {
       @Override public void refresh() {
         assertNotNull(listener);
         refreshCalled++;
+        if (error != null) {
+          listener.onError(error);
+        } else if (resolvedAtStart) {
+          resolved();
+        }
       }
 
       void resolved() {
@@ -2175,34 +2279,6 @@ public class ManagedChannelImplTest {
     }
   }
 
-  private static class FailingNameResolverFactory extends NameResolver.Factory {
-    final Status error;
-
-    FailingNameResolverFactory(Status error) {
-      this.error = error;
-    }
-
-    @Override
-    public NameResolver newNameResolver(URI notUsedUri, Attributes params) {
-      return new NameResolver() {
-        @Override public String getServiceAuthority() {
-          return "irrelevant-authority";
-        }
-
-        @Override public void start(final Listener listener) {
-          listener.onError(error);
-        }
-
-        @Override public void shutdown() {}
-      };
-    }
-
-    @Override
-    public String getDefaultScheme() {
-      return "fake";
-    }
-  }
-
   private static ChannelStats getStats(AbstractSubchannel subchannel) throws Exception {
     return subchannel.getStats().get();
   }
@@ -2210,5 +2286,18 @@ public class ManagedChannelImplTest {
   private static ChannelStats getStats(
       Instrumented<ChannelStats> instrumented) throws Exception {
     return instrumented.getStats().get();
+  }
+
+  private FakeClock.ScheduledTask getNameResolverBackoff() {
+    FakeClock.ScheduledTask nameResolverBackoff = null;
+    for (FakeClock.ScheduledTask task : timer.getPendingTasks()) {
+      if (task.command.toString().contains("NameResolverBackoff")) {
+        assertNull(
+            "There shouldn't be more than one name resolver backoff task", nameResolverBackoff);
+        assertFalse(task.isDone());
+        nameResolverBackoff = task;
+      }
+    }
+    return nameResolverBackoff;
   }
 }
