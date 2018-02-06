@@ -2027,9 +2027,6 @@ public class ManagedChannelImplTest {
 
     TracingClientInterceptor userInterceptor = new TracingClientInterceptor();
     binlogProvider = new BinaryLogProvider() {
-      @Override
-      public void close() { }
-
       @Nullable
       @Override
       public ServerInterceptor getServerInterceptor(String fullMethodName) {

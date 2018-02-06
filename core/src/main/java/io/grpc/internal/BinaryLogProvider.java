@@ -30,6 +30,7 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerMethodDefinition;
 import java.io.Closeable;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -159,6 +160,12 @@ public abstract class BinaryLogProvider implements Closeable {
   @Nullable
   public abstract ClientInterceptor getClientInterceptor(String fullMethodName);
 
+  @Override
+  public void close() throws IOException {
+    // default impl: noop
+    // TODO(zpencer): make BinaryLogProvider provide a BinaryLog, and this method belongs there
+  }
+
   /**
    * A priority, from 0 to 10 that this provider should be used, taking the current environment into
    * consideration. 5 should be considered the default, and then tweaked based on environment
@@ -186,11 +193,6 @@ public abstract class BinaryLogProvider implements Closeable {
     @Override
     protected int priority() {
       return 0;
-    }
-
-    @Override
-    public void close() {
-      // noop
     }
   }
 

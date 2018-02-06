@@ -367,11 +367,6 @@ public class BinaryLogProviderTest {
     protected int priority() {
       return priority;
     }
-
-    @Override
-    public void close() throws IOException {
-      // noop
-    }
   }
 
   private final class TestBinaryLogClientInterceptor implements ClientInterceptor {
