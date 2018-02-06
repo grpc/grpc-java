@@ -109,169 +109,169 @@ public final class BinaryLogTest {
 
   @Test
   public void configBinLog_global() throws Exception {
-    assertSameLimits(BOTH_FULL, makeFactory("*").getLog("p.s/m"));
-    assertSameLimits(BOTH_FULL, makeFactory("*{h;m}").getLog("p.s/m"));
-    assertSameLimits(HEADER_FULL, makeFactory("*{h}").getLog("p.s/m"));
-    assertSameLimits(MSG_FULL, makeFactory("*{m}").getLog("p.s/m"));
-    assertSameLimits(HEADER_256, makeFactory("*{h:256}").getLog("p.s/m"));
-    assertSameLimits(MSG_256, makeFactory("*{m:256}").getLog("p.s/m"));
-    assertSameLimits(BOTH_256, makeFactory("*{h:256;m:256}").getLog("p.s/m"));
+    assertSameLimits(BOTH_FULL, makeLog("*", "p.s/m"));
+    assertSameLimits(BOTH_FULL, makeLog("*{h;m}", "p.s/m"));
+    assertSameLimits(HEADER_FULL, makeLog("*{h}", "p.s/m"));
+    assertSameLimits(MSG_FULL, makeLog("*{m}", "p.s/m"));
+    assertSameLimits(HEADER_256, makeLog("*{h:256}", "p.s/m"));
+    assertSameLimits(MSG_256, makeLog("*{m:256}", "p.s/m"));
+    assertSameLimits(BOTH_256, makeLog("*{h:256;m:256}", "p.s/m"));
     assertSameLimits(
         new Builder().header(Integer.MAX_VALUE).msg(256).build(),
-        makeFactory("*{h;m:256}").getLog("p.s/m"));
+        makeLog("*{h;m:256}", "p.s/m"));
     assertSameLimits(
         new Builder().header(256).msg(Integer.MAX_VALUE).build(),
-        makeFactory("*{h:256;m}").getLog("p.s/m"));
+        makeLog("*{h:256;m}", "p.s/m"));
   }
 
   @Test
   public void configBinLog_method() throws Exception {
-    assertSameLimits(BOTH_FULL, makeFactory("p.s/m").getLog("p.s/m"));
-    assertSameLimits(BOTH_FULL, makeFactory("p.s/m{h;m}").getLog("p.s/m"));
-    assertSameLimits(HEADER_FULL, makeFactory("p.s/m{h}").getLog("p.s/m"));
-    assertSameLimits(MSG_FULL, makeFactory("p.s/m{m}").getLog("p.s/m"));
-    assertSameLimits(HEADER_256, makeFactory("p.s/m{h:256}").getLog("p.s/m"));
-    assertSameLimits(MSG_256, makeFactory("p.s/m{m:256}").getLog("p.s/m"));
-    assertSameLimits(BOTH_256, makeFactory("p.s/m{h:256;m:256}").getLog("p.s/m"));
+    assertSameLimits(BOTH_FULL, makeLog("p.s/m", "p.s/m"));
+    assertSameLimits(BOTH_FULL, makeLog("p.s/m{h;m}", "p.s/m"));
+    assertSameLimits(HEADER_FULL, makeLog("p.s/m{h}", "p.s/m"));
+    assertSameLimits(MSG_FULL, makeLog("p.s/m{m}", "p.s/m"));
+    assertSameLimits(HEADER_256, makeLog("p.s/m{h:256}", "p.s/m"));
+    assertSameLimits(MSG_256, makeLog("p.s/m{m:256}", "p.s/m"));
+    assertSameLimits(BOTH_256, makeLog("p.s/m{h:256;m:256}", "p.s/m"));
     assertSameLimits(
         new Builder().header(Integer.MAX_VALUE).msg(256).build(),
-        makeFactory("p.s/m{h;m:256}").getLog("p.s/m"));
+        makeLog("p.s/m{h;m:256}", "p.s/m"));
     assertSameLimits(
         new Builder().header(256).msg(Integer.MAX_VALUE).build(),
-        makeFactory("p.s/m{h:256;m}").getLog("p.s/m"));
+        makeLog("p.s/m{h:256;m}", "p.s/m"));
   }
 
   @Test
   public void configBinLog_method_absent() throws Exception {
-    assertNull(makeFactory("p.s/m").getLog("p.s/absent"));
+    assertNull(makeLog("p.s/m", "p.s/absent"));
   }
 
   @Test
   public void configBinLog_service() throws Exception {
-    assertSameLimits(BOTH_FULL, makeFactory("p.s/*").getLog("p.s/m"));
-    assertSameLimits(BOTH_FULL, makeFactory("p.s/*{h;m}").getLog("p.s/m"));
-    assertSameLimits(HEADER_FULL, makeFactory("p.s/*{h}").getLog("p.s/m"));
-    assertSameLimits(MSG_FULL, makeFactory("p.s/*{m}").getLog("p.s/m"));
-    assertSameLimits(HEADER_256, makeFactory("p.s/*{h:256}").getLog("p.s/m"));
-    assertSameLimits(MSG_256, makeFactory("p.s/*{m:256}").getLog("p.s/m"));
-    assertSameLimits(BOTH_256, makeFactory("p.s/*{h:256;m:256}").getLog("p.s/m"));
+    assertSameLimits(BOTH_FULL, makeLog("p.s/*", "p.s/m"));
+    assertSameLimits(BOTH_FULL, makeLog("p.s/*{h;m}", "p.s/m"));
+    assertSameLimits(HEADER_FULL, makeLog("p.s/*{h}", "p.s/m"));
+    assertSameLimits(MSG_FULL, makeLog("p.s/*{m}", "p.s/m"));
+    assertSameLimits(HEADER_256, makeLog("p.s/*{h:256}", "p.s/m"));
+    assertSameLimits(MSG_256, makeLog("p.s/*{m:256}", "p.s/m"));
+    assertSameLimits(BOTH_256, makeLog("p.s/*{h:256;m:256}", "p.s/m"));
     assertSameLimits(
         new Builder().header(Integer.MAX_VALUE).msg(256).build(),
-        makeFactory("p.s/*{h;m:256}").getLog("p.s/m"));
+        makeLog("p.s/*{h;m:256}", "p.s/m"));
     assertSameLimits(
         new Builder().header(256).msg(Integer.MAX_VALUE).build(),
-        makeFactory("p.s/*{h:256;m}").getLog("p.s/m"));
+        makeLog("p.s/*{h:256;m}", "p.s/m"));
   }
 
   @Test
   public void configBinLog_service_absent() throws Exception {
-    assertNull(makeFactory("p.s/*").getLog("p.other/m"));
+    assertNull(makeLog("p.s/*", "p.other/m"));
   }
 
   @Test
   public void createLogFromOptionString() throws Exception {
-    assertSameLimits(BOTH_FULL, FactoryImpl.createBinaryLog(sink, /*logConfig=*/ null));
-    assertSameLimits(HEADER_FULL, FactoryImpl.createBinaryLog(sink, "{h}"));
-    assertSameLimits(MSG_FULL, FactoryImpl.createBinaryLog(sink, "{m}"));
-    assertSameLimits(HEADER_256, FactoryImpl.createBinaryLog(sink, "{h:256}"));
-    assertSameLimits(MSG_256, FactoryImpl.createBinaryLog(sink, "{m:256}"));
-    assertSameLimits(BOTH_256, FactoryImpl.createBinaryLog(sink, "{h:256;m:256}"));
+    assertSameLimits(BOTH_FULL, makeLog(null));
+    assertSameLimits(HEADER_FULL, makeLog("{h}"));
+    assertSameLimits(MSG_FULL, makeLog("{m}"));
+    assertSameLimits(HEADER_256, makeLog("{h:256}"));
+    assertSameLimits(MSG_256, makeLog("{m:256}"));
+    assertSameLimits(BOTH_256, makeLog("{h:256;m:256}"));
     assertSameLimits(
         new Builder().header(Integer.MAX_VALUE).msg(256).build(),
-        FactoryImpl.createBinaryLog(sink, "{h;m:256}"));
+        makeLog("{h;m:256}"));
     assertSameLimits(
         new Builder().header(256).msg(Integer.MAX_VALUE).build(),
-        FactoryImpl.createBinaryLog(sink, "{h:256;m}"));
+        makeLog("{h:256;m}"));
   }
 
   @Test
   public void createLogFromOptionString_malformed() throws Exception {
-    assertNull(FactoryImpl.createBinaryLog(sink, "bad"));
-    assertNull(FactoryImpl.createBinaryLog(sink, "{bad}"));
-    assertNull(FactoryImpl.createBinaryLog(sink, "{x;y}"));
-    assertNull(FactoryImpl.createBinaryLog(sink, "{h:abc}"));
-    assertNull(FactoryImpl.createBinaryLog(sink, "{2}"));
-    assertNull(FactoryImpl.createBinaryLog(sink, "{2;2}"));
+    assertNull(makeLog("bad"));
+    assertNull(makeLog("{bad}"));
+    assertNull(makeLog("{x;y}"));
+    assertNull(makeLog("{h:abc}"));
+    assertNull(makeLog("{2}"));
+    assertNull(makeLog("{2;2}"));
     // The grammar specifies that if both h and m are present, h comes before m
-    assertNull(FactoryImpl.createBinaryLog(sink, "{m:123;h:123}"));
+    assertNull(makeLog("{m:123;h:123}"));
     // NumberFormatException
-    assertNull(FactoryImpl.createBinaryLog(sink, "{h:99999999999999}"));
+    assertNull(makeLog("{h:99999999999999}"));
   }
 
   @Test
   public void configBinLog_multiConfig_withGlobal() throws Exception {
-    FactoryImpl factory = makeFactory(
+    String configStr =
         "*{h},"
         + "package.both256/*{h:256;m:256},"
         + "package.service1/both128{h:128;m:128},"
-        + "package.service2/method_messageOnly{m}");
-    assertSameLimits(HEADER_FULL, factory.getLog("otherpackage.service/method"));
+        + "package.service2/method_messageOnly{m}";
+    assertSameLimits(HEADER_FULL, makeLog(configStr, "otherpackage.service/method"));
 
-    assertSameLimits(BOTH_256, factory.getLog("package.both256/method1"));
-    assertSameLimits(BOTH_256, factory.getLog("package.both256/method2"));
-    assertSameLimits(BOTH_256, factory.getLog("package.both256/method3"));
+    assertSameLimits(BOTH_256, makeLog(configStr, "package.both256/method1"));
+    assertSameLimits(BOTH_256, makeLog(configStr, "package.both256/method2"));
+    assertSameLimits(BOTH_256, makeLog(configStr, "package.both256/method3"));
 
     assertSameLimits(
-        new Builder().header(128).msg(128).build(), factory.getLog("package.service1/both128"));
+        new Builder().header(128).msg(128).build(), makeLog(configStr, "package.service1/both128"));
     // the global config is in effect
-    assertSameLimits(HEADER_FULL, factory.getLog("package.service1/absent"));
+    assertSameLimits(HEADER_FULL, makeLog(configStr, "package.service1/absent"));
 
-    assertSameLimits(MSG_FULL, factory.getLog("package.service2/method_messageOnly"));
+    assertSameLimits(MSG_FULL, makeLog(configStr, "package.service2/method_messageOnly"));
     // the global config is in effect
-    assertSameLimits(HEADER_FULL, factory.getLog("package.service2/absent"));
+    assertSameLimits(HEADER_FULL, makeLog(configStr, "package.service2/absent"));
   }
 
   @Test
   public void configBinLog_multiConfig_noGlobal() throws Exception {
-    FactoryImpl factory = makeFactory(
+    String configStr =
         "package.both256/*{h:256;m:256},"
         + "package.service1/both128{h:128;m:128},"
-        + "package.service2/method_messageOnly{m}");
-    assertNull(factory.getLog("otherpackage.service/method"));
+        + "package.service2/method_messageOnly{m}";
+    assertNull(makeLog(configStr, "otherpackage.service/method"));
 
-    assertSameLimits(BOTH_256, factory.getLog("package.both256/method1"));
-    assertSameLimits(BOTH_256, factory.getLog("package.both256/method2"));
-    assertSameLimits(BOTH_256, factory.getLog("package.both256/method3"));
+    assertSameLimits(BOTH_256, makeLog(configStr, "package.both256/method1"));
+    assertSameLimits(BOTH_256, makeLog(configStr, "package.both256/method2"));
+    assertSameLimits(BOTH_256, makeLog(configStr, "package.both256/method3"));
 
     assertSameLimits(
-        new Builder().header(128).msg(128).build(), factory.getLog("package.service1/both128"));
+        new Builder().header(128).msg(128).build(), makeLog(configStr, "package.service1/both128"));
     // no global config in effect
-    assertNull(factory.getLog("package.service1/absent"));
+    assertNull(makeLog(configStr, "package.service1/absent"));
 
-    assertSameLimits(MSG_FULL, factory.getLog("package.service2/method_messageOnly"));
+    assertSameLimits(MSG_FULL, makeLog(configStr, "package.service2/method_messageOnly"));
     // no global config in effect
-    assertNull(factory.getLog("package.service2/absent"));
+    assertNull(makeLog(configStr, "package.service2/absent"));
   }
 
   @Test
   public void configBinLog_ignoreDuplicates_global() throws Exception {
-    FactoryImpl factory = makeFactory("*{h},p.s/m,*{h:256}");
+    String configStr = "*{h},p.s/m,*{h:256}";
     // The duplicate
-    assertSameLimits(HEADER_FULL, factory.getLog("p.other1/m"));
-    assertSameLimits(HEADER_FULL, factory.getLog("p.other2/m"));
+    assertSameLimits(HEADER_FULL, makeLog(configStr, "p.other1/m"));
+    assertSameLimits(HEADER_FULL, makeLog(configStr, "p.other2/m"));
     // Other
-    assertSameLimits(BOTH_FULL, factory.getLog("p.s/m"));
+    assertSameLimits(BOTH_FULL, makeLog(configStr, "p.s/m"));
   }
 
   @Test
   public void configBinLog_ignoreDuplicates_service() throws Exception {
-    FactoryImpl factory = makeFactory("p.s/*,*{h:256},p.s/*{h}");
+    String configStr = "p.s/*,*{h:256},p.s/*{h}";
     // The duplicate
-    assertSameLimits(BOTH_FULL, factory.getLog("p.s/m1"));
-    assertSameLimits(BOTH_FULL, factory.getLog("p.s/m2"));
+    assertSameLimits(BOTH_FULL, makeLog(configStr, "p.s/m1"));
+    assertSameLimits(BOTH_FULL, makeLog(configStr, "p.s/m2"));
     // Other
-    assertSameLimits(HEADER_256, factory.getLog("p.other1/m"));
-    assertSameLimits(HEADER_256, factory.getLog("p.other2/m"));
+    assertSameLimits(HEADER_256, makeLog(configStr, "p.other1/m"));
+    assertSameLimits(HEADER_256, makeLog(configStr, "p.other2/m"));
   }
 
   @Test
   public void configBinLog_ignoreDuplicates_method() throws Exception {
-    FactoryImpl factory = makeFactory("p.s/m,*{h:256},p.s/m{h}");
+    String configStr = "p.s/m,*{h:256},p.s/m{h}";
     // The duplicate
-    assertSameLimits(BOTH_FULL, factory.getLog("p.s/m"));
+    assertSameLimits(BOTH_FULL, makeLog(configStr, "p.s/m"));
     // Other
-    assertSameLimits(HEADER_256, factory.getLog("p.other1/m"));
-    assertSameLimits(HEADER_256, factory.getLog("p.other2/m"));
+    assertSameLimits(HEADER_256, makeLog(configStr, "p.other1/m"));
+    assertSameLimits(HEADER_256, makeLog(configStr, "p.other2/m"));
   }
 
   @Test
@@ -476,11 +476,11 @@ public final class BinaryLogTest {
   }
 
   @Test
-  public void logInitialMetadata_server() throws Exception {
+  public void logSendInitialMetadata_server() throws Exception {
     InetAddress address = InetAddress.getByName("127.0.0.1");
     int port = 12345;
     InetSocketAddress socketAddress = new InetSocketAddress(address, port);
-    binaryLog.logInitialMetadata(metadata, IS_SERVER, CALL_ID, socketAddress);
+    binaryLog.logSendInitialMetadata(metadata, IS_SERVER, CALL_ID, socketAddress);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
@@ -493,15 +493,49 @@ public final class BinaryLogTest {
   }
 
   @Test
-  public void logInitialMetadata_client() throws Exception {
+  public void logSendInitialMetadata_client() throws Exception {
     InetAddress address = InetAddress.getByName("127.0.0.1");
     int port = 12345;
     InetSocketAddress socketAddress = new InetSocketAddress(address, port);
-    binaryLog.logInitialMetadata(metadata, IS_CLIENT, CALL_ID, socketAddress);
+    binaryLog.logSendInitialMetadata(metadata, IS_CLIENT, CALL_ID, socketAddress);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.SEND_INITIAL_METADATA)
+            .setLogger(GrpcLogEntry.Logger.CLIENT)
+            .setCallId(BinaryLog.callIdToProto(CALL_ID))
+            .setPeer(BinaryLog.socketToProto(socketAddress))
+            .setMetadata(BinaryLog.metadataToProto(metadata, 10))
+            .build());
+  }
+
+  @Test
+  public void logRecvInitialMetadata_server() throws Exception {
+    InetAddress address = InetAddress.getByName("127.0.0.1");
+    int port = 12345;
+    InetSocketAddress socketAddress = new InetSocketAddress(address, port);
+    binaryLog.logRecvInitialMetadata(metadata, IS_SERVER, CALL_ID, socketAddress);
+    verify(sink).write(
+        GrpcLogEntry
+            .newBuilder()
+            .setType(GrpcLogEntry.Type.RECV_INITIAL_METADATA)
+            .setLogger(GrpcLogEntry.Logger.SERVER)
+            .setCallId(BinaryLog.callIdToProto(CALL_ID))
+            .setPeer(BinaryLog.socketToProto(socketAddress))
+            .setMetadata(BinaryLog.metadataToProto(metadata, 10))
+            .build());
+  }
+
+  @Test
+  public void logRecvInitialMetadata_client() throws Exception {
+    InetAddress address = InetAddress.getByName("127.0.0.1");
+    int port = 12345;
+    InetSocketAddress socketAddress = new InetSocketAddress(address, port);
+    binaryLog.logRecvInitialMetadata(metadata, IS_CLIENT, CALL_ID, socketAddress);
+    verify(sink).write(
+        GrpcLogEntry
+            .newBuilder()
+            .setType(GrpcLogEntry.Type.RECV_INITIAL_METADATA)
             .setLogger(GrpcLogEntry.Logger.CLIENT)
             .setCallId(BinaryLog.callIdToProto(CALL_ID))
             .setPeer(BinaryLog.socketToProto(socketAddress))
@@ -528,7 +562,7 @@ public final class BinaryLogTest {
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
-            .setType(GrpcLogEntry.Type.SEND_TRAILING_METADATA)
+            .setType(GrpcLogEntry.Type.RECV_TRAILING_METADATA)
             .setLogger(GrpcLogEntry.Logger.CLIENT)
             .setCallId(BinaryLog.callIdToProto(CALL_ID))
             .setMetadata(BinaryLog.metadataToProto(metadata, 10))
@@ -631,10 +665,6 @@ public final class BinaryLogTest {
     verifyNoMoreInteractions(sink);
   }
 
-  private BinaryLog.FactoryImpl makeFactory(String configStr) {
-    return new BinaryLog.FactoryImpl(sink, configStr);
-  } 
-
   /** A builder class to make unit test code more readable. */
   private static final class Builder {
     int maxHeaderBytes = 0;
@@ -658,5 +688,13 @@ public final class BinaryLogTest {
   private static void assertSameLimits(BinaryLog a, BinaryLog b) {
     assertEquals(a.maxMessageBytes, b.maxMessageBytes);
     assertEquals(a.maxHeaderBytes, b.maxHeaderBytes);
+  }
+
+  private BinaryLog makeLog(String factoryConfigStr, String lookup) {
+    return new BinaryLog.FactoryImpl(sink, factoryConfigStr).getLog(lookup);
+  }
+
+  private BinaryLog makeLog(String logConfigStr) {
+    return FactoryImpl.createBinaryLog(sink, logConfigStr);
   }
 }

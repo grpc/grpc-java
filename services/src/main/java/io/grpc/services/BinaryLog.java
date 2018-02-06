@@ -76,14 +76,31 @@ final class BinaryLog {
   }
 
   /**
-   * Logs the initial metadata. This method logs the appropriate number of bytes
+   * Logs the sending of initial metadata. This method logs the appropriate number of bytes
    * as determined by the binary logging configuration.
    */
-  public void logInitialMetadata(
+  public void logSendInitialMetadata(
       Metadata metadata, boolean isServer, byte[] callId, SocketAddress peerSocket) {
     GrpcLogEntry entry = GrpcLogEntry
         .newBuilder()
         .setType(Type.SEND_INITIAL_METADATA)
+        .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
+        .setCallId(callIdToProto(callId))
+        .setPeer(socketToProto(peerSocket))
+        .setMetadata(metadataToProto(metadata, maxHeaderBytes))
+        .build();
+    sink.write(entry);
+  }
+
+  /**
+   * Logs the receiving of initial metadata. This method logs the appropriate number of bytes
+   * as determined by the binary logging configuration.
+   */
+  public void logRecvInitialMetadata(
+      Metadata metadata, boolean isServer, byte[] callId, SocketAddress peerSocket) {
+    GrpcLogEntry entry = GrpcLogEntry
+        .newBuilder()
+        .setType(Type.RECV_INITIAL_METADATA)
         .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
         .setCallId(callIdToProto(callId))
         .setPeer(socketToProto(peerSocket))
@@ -99,7 +116,7 @@ final class BinaryLog {
   public void logTrailingMetadata(Metadata metadata, boolean isServer, byte[] callId) {
     GrpcLogEntry entry = GrpcLogEntry
         .newBuilder()
-        .setType(Type.SEND_TRAILING_METADATA)
+        .setType(isServer ? Type.SEND_TRAILING_METADATA : Type.RECV_TRAILING_METADATA)
         .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
         .setCallId(callIdToProto(callId))
         .setMetadata(metadataToProto(metadata, maxHeaderBytes))
