@@ -373,7 +373,7 @@ public class GrpclbLoadBalancerTest {
         .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.GRPCLB).build();
     deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
 
-    // Fallback timer is not started as soon as address is resolved.
+    // Fallback timer is started as soon as address is resolved.
     assertEquals(1, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
 
     assertEquals(1, fakeOobChannels.size());
