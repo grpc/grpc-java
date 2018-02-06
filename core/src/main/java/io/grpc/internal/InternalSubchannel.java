@@ -451,7 +451,9 @@ final class InternalSubchannel implements Instrumented<ChannelStats> {
   public ListenableFuture<ChannelStats> getStats() {
     SettableFuture<ChannelStats> ret = SettableFuture.create();
     ChannelStats.Builder builder = new ChannelStats.Builder();
-    builder.setTarget(authority).setState(getState());
+    synchronized (lock) {
+      builder.setTarget(addressGroup.toString()).setState(getState());
+    }
     callsTracer.updateBuilder(builder);
     ret.set(builder.build());
     return ret;

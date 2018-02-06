@@ -1671,7 +1671,7 @@ public class ManagedChannelImplTest {
     assertEquals(target, getStats(channel).target);
 
     Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
-    assertEquals(authority, getStats((AbstractSubchannel) subchannel).target);
+    assertEquals(addressGroup.toString(), getStats((AbstractSubchannel) subchannel).target);
   }
 
   @Test
