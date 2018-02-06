@@ -360,6 +360,34 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
     throw new UnsupportedOperationException();
   }
 
+
+  /**
+   * Disables the retry mechanism provided by the gRPC library. This is designed for the case when
+   * users have their own retry implementation and want to avoid their own retry taking place
+   * simultaneously with the gRPC library layer retry.
+   *
+   * @return {@code this}
+   * @since 1.11.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3982")
+  public T disableRetry() {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Enables the retry mechanism provided by the gRPC library.
+   *
+   * <p>This method may not work as expected for the current release because retry is not fully
+   * implemented yet.
+   *
+   * @return {@code this}
+   * @since 1.11.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3982")
+  public T enableRetry() {
+    throw new UnsupportedOperationException();
+  }
+
   /**
    * Builds a channel using the given parameters.
    *
