@@ -16,7 +16,7 @@ $ ./gradlew installDist
 ```
 
 This creates the scripts `hello-world-server`, `hello-world-client`, 
-`hello-world-server-tls`, `hello-world-client-tls`,
+`hello-world-tls-server`, `hello-world-tls-client`,
 `route-guide-server`, and `route-guide-client` in the
 `build/install/examples/bin/` directory that run the examples. Each
 example requires the server to be running before starting the client.
@@ -37,14 +37,14 @@ $ ./build/install/examples/bin/hello-world-client
 
 Running the hello world with TLS is the same as the normal hello world, but takes additional args:
 
-**hello-world-server-tls**:
+**hello-world-tls-server**:
 
 ```text
 USAGE: HelloWorldServerTls host port certChainFilePath privateKeyFilePath [clientCertChainFilePath]
   Note: You only need to supply clientCertChainFilePath if you want to enable Mutual TLS.
 ```
 
-**hello-world-client-tls**:
+**hello-world-tls-client**:
 
 ```text
 USAGE: HelloWorldClientTls host port [trustCertCollectionFilePath] [clientCertChainFilePath] [clientPrivateKeyFilePath]
