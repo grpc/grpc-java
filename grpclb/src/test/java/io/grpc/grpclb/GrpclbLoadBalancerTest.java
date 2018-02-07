@@ -1209,8 +1209,7 @@ public class GrpclbLoadBalancerTest {
     subtestGrpclbFallbackInitialTimeout(true);
   }
 
-  // Fallback within the period of the initial timeout, where the server list is not received from
-  // the balancer.
+  // Fallback or not within the period of the initial timeout.
   private void subtestGrpclbFallbackInitialTimeout(boolean timerExpires) {
     long loadReportIntervalMillis = 1983;
     InOrder helperInOrder = inOrder(helper);
