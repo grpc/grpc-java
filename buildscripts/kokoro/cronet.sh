@@ -1,10 +1,8 @@
 #!/bin/bash
 
 set -exu -o pipefail
+cat /VERSION
 
-cd ./github/grpc-java
-./gradlew -PskipCodegen=true install
-
-cd cronet
+cd ./github/grpc-java/cronet
 ./cronet_deps.sh
-../gradlew build
+../gradlew --include-build .. build

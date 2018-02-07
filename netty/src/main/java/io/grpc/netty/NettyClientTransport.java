@@ -25,11 +25,10 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
-import io.grpc.InternalLogId;
-import io.grpc.InternalTransportStats;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.internal.Channelz.TransportStats;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.FailingClientStream;
@@ -37,6 +36,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
+import io.grpc.internal.LogId;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.netty.bootstrap.Bootstrap;
@@ -61,7 +61,7 @@ import javax.annotation.Nullable;
  */
 class NettyClientTransport implements ConnectionClientTransport {
   private static final Logger log = Logger.getLogger(NettyServerTransport.class.getName());
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final LogId logId = LogId.allocate(getClass().getName());
   private final Map<ChannelOption<?>, ?> channelOptions;
   private final SocketAddress address;
   private final Class<? extends Channel> channelType;
@@ -300,7 +300,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public InternalLogId getLogId() {
+  public LogId getLogId() {
     return logId;
   }
 
@@ -311,8 +311,8 @@ class NettyClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public ListenableFuture<InternalTransportStats> getStats() {
-    final SettableFuture<InternalTransportStats> result = SettableFuture.create();
+  public ListenableFuture<TransportStats> getStats() {
+    final SettableFuture<TransportStats> result = SettableFuture.create();
     if (channel.eventLoop().inEventLoop()) {
       // This is necessary, otherwise we will block forever if we get the future from inside
       // the event loop.

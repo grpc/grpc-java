@@ -59,10 +59,8 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.IntegerMarshaller;
-import io.grpc.InternalChannelStats;
-import io.grpc.InternalInstrumented;
-import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -75,10 +73,14 @@ import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
 import io.grpc.SecurityLevel;
+import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
+import io.grpc.internal.Channelz.ChannelStats;
 import io.grpc.internal.ManagedChannelImpl.ManagedChannelReference;
+import io.grpc.internal.NoopClientCall.NoopClientCallListener;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
+import java.io.InputStream;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -95,6 +97,7 @@ import java.util.logging.Filter;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
+import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -187,6 +190,7 @@ public class ManagedChannelImplTest {
   private ObjectPool<Executor> oobExecutorPool;
   @Mock
   private CallCredentials creds;
+  private BinaryLogProvider binlogProvider = null;
   private BlockingQueue<MockClientTransportInfo> transports;
 
   private ArgumentCaptor<ClientStreamListener> streamListenerCaptor =
@@ -226,6 +230,7 @@ public class ManagedChannelImplTest {
         .userAgent(userAgent);
     builder.executorPool = executorPool;
     builder.idleTimeoutMillis = idleTimeoutMillis;
+    builder.binlogProvider = binlogProvider;
     checkState(channel == null);
     channel = new ManagedChannelImpl(
         builder, mockTransportFactory, new FakeBackoffPolicyProvider(),
@@ -1611,7 +1616,7 @@ public class ManagedChannelImplTest {
         false, // Don't create a transport, Helper maintains a ref to the channel.
         ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE);
     assertNotNull(channel);
-    InternalLogId logId = channel.getLogId();
+    LogId logId = channel.getLogId();
 
     // Try to capture the log output but without causing terminal noise.  Adding the filter must
     // be done before clearing the ref or else it might be missed.
@@ -1872,6 +1877,72 @@ public class ManagedChannelImplTest {
     assertEquals(SHUTDOWN, getStats(oobChannel).state);
   }
 
+  @Test
+  public void binaryLogTest() throws Exception {
+    final List<Object> capturedReqs = new ArrayList<Object>();
+    final class TracingClientInterceptor implements ClientInterceptor {
+      private final List<MethodDescriptor<?, ?>> interceptedMethods =
+          new ArrayList<MethodDescriptor<?, ?>>();
+
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        interceptedMethods.add(method);
+        return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+          @Override
+          public void sendMessage(ReqT message) {
+            capturedReqs.add(message);
+            super.sendMessage(message);
+          }
+        };
+      }
+    }
+
+    TracingClientInterceptor userInterceptor = new TracingClientInterceptor();
+    binlogProvider = new BinaryLogProvider() {
+      @Nullable
+      @Override
+      public ServerInterceptor getServerInterceptor(String fullMethodName) {
+        return null;
+      }
+
+      @Override
+      public ClientInterceptor getClientInterceptor(String fullMethodName) {
+        return new TracingClientInterceptor();
+      }
+
+      @Override
+      protected int priority() {
+        return 0;
+      }
+    };
+    createChannel(
+        new FakeNameResolverFactory(true),
+        Collections.<ClientInterceptor>singletonList(userInterceptor));
+    ClientCall<String, Integer> call =
+        channel.newCall(method, CallOptions.DEFAULT.withDeadlineAfter(0, TimeUnit.NANOSECONDS));
+    ClientCall.Listener<Integer> listener = new NoopClientCallListener<Integer>();
+    call.start(listener, new Metadata());
+    assertEquals(1, executor.runDueTasks());
+
+    String actualRequest = "hello world";
+    call.sendMessage(actualRequest);
+
+    // The user supplied interceptor must still operate on the original message types
+    assertThat(userInterceptor.interceptedMethods).hasSize(1);
+    assertSame(
+        method.getRequestMarshaller(),
+        userInterceptor.interceptedMethods.get(0).getRequestMarshaller());
+    assertSame(
+        method.getResponseMarshaller(),
+        userInterceptor.interceptedMethods.get(0).getResponseMarshaller());
+
+    // The binlog interceptor must be closest to the transport
+    assertThat(capturedReqs).hasSize(2);
+    // The InputStream is already spent, so just check its type rather than contents
+    assertEquals(actualRequest, capturedReqs.get(0));
+    assertThat(capturedReqs.get(1)).isInstanceOf(InputStream.class);
+  }
 
   private static class FakeBackoffPolicyProvider implements BackoffPolicy.Provider {
     @Override
@@ -1986,8 +2057,8 @@ public class ManagedChannelImplTest {
     }
   }
 
-  private static InternalChannelStats getStats(
-      InternalInstrumented<InternalChannelStats> instrumented) throws Exception {
+  private static ChannelStats getStats(
+      Instrumented<ChannelStats> instrumented) throws Exception {
     return instrumented.getStats().get();
   }
 }

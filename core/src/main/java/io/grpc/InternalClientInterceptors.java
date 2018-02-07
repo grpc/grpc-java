@@ -16,9 +16,21 @@
 
 package io.grpc;
 
+import io.grpc.MethodDescriptor.Marshaller;
+
 /**
- * This is an gRPC internal interface. Do not use this.
+ * Accessor to internal methods of {@link ServerInterceptors}.
  */
 @Internal
-public interface InternalInstrumented<T> extends Instrumented<T>, InternalWithLogId {
+public class InternalClientInterceptors {
+  public static <WReqT, WRespT> ClientInterceptor wrapClientInterceptor(
+      final ClientInterceptor wrappedInterceptor,
+      final Marshaller<WReqT> reqMarshaller,
+      final Marshaller<WRespT> respMarshaller) {
+    return ClientInterceptors.wrapClientInterceptor(
+        wrappedInterceptor, reqMarshaller, respMarshaller);
+  }
+
+  private InternalClientInterceptors() {
+  }
 }

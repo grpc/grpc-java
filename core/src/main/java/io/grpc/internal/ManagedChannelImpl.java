@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.internal.RetriableStream.RetryPolicy.DEFAULT;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -41,9 +42,6 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.InternalChannelStats;
-import io.grpc.InternalInstrumented;
-import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -53,8 +51,10 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
 import io.grpc.Status;
+import io.grpc.internal.Channelz.ChannelStats;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
+import io.grpc.internal.RetriableStream.RetryPolicy;
 import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.SoftReference;
@@ -77,14 +77,14 @@ import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 /** A communication channel for making outgoing RPCs. */
 @ThreadSafe
-public final class ManagedChannelImpl
-    extends ManagedChannel implements InternalInstrumented<InternalChannelStats> {
+public final class ManagedChannelImpl extends ManagedChannel implements Instrumented<ChannelStats> {
   static final Logger logger = Logger.getLogger(ManagedChannelImpl.class.getName());
 
   // Matching this pattern means the target string is a URI target or at least intended to be one.
@@ -110,12 +110,11 @@ public final class ManagedChannelImpl
   static final Status SUBCHANNEL_SHUTDOWN_STATUS =
       Status.UNAVAILABLE.withDescription("Subchannel shutdown invoked");
 
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final LogId logId = LogId.allocate(getClass().getName());
   private final String target;
   private final NameResolver.Factory nameResolverFactory;
   private final Attributes nameResolverParams;
   private final LoadBalancer.Factory loadBalancerFactory;
-
   private final ClientTransportFactory transportFactory;
   private final Executor executor;
   private final ObjectPool<? extends Executor> executorPool;
@@ -138,7 +137,8 @@ public final class ManagedChannelImpl
 
   /**
    * We delegate to this channel, so that we can have interceptors as necessary. If there aren't
-   * any interceptors this will just be {@link RealChannel}.
+   * any interceptors and the {@link BinaryLogProvider} is {@code null} then this will just be a
+   * {@link RealChannel}.
    */
   private final Channel interceptorChannel;
   @Nullable private final String userAgent;
@@ -207,6 +207,10 @@ public final class ManagedChannelImpl
 
   private final long perRpcBufferLimit;
   private final long channelBufferLimit;
+
+  private RetryPolicies retryPolicies;
+  // Temporary false flag that can skip the retry code path.
+  private boolean retryEnabled;
 
   // Called from channelExecutor
   private final ManagedClientTransport.Listener delayedTransportListener =
@@ -278,9 +282,9 @@ public final class ManagedChannelImpl
       };
 
   @Override
-  public ListenableFuture<InternalChannelStats> getStats() {
-    SettableFuture<InternalChannelStats> ret = SettableFuture.create();
-    InternalChannelStats.Builder builder = new InternalChannelStats.Builder();
+  public ListenableFuture<ChannelStats> getStats() {
+    SettableFuture<ChannelStats> ret = SettableFuture.create();
+    ChannelStats.Builder builder = new Channelz.ChannelStats.Builder();
     channelCallTracer.updateBuilder(builder);
     builder.setTarget(target).setState(channelStateManager.getState());
     ret.set(builder.build());
@@ -288,7 +292,7 @@ public final class ManagedChannelImpl
   }
 
   @Override
-  public InternalLogId getLogId() {
+  public LogId getLogId() {
     return logId;
   }
 
@@ -432,9 +436,11 @@ public final class ManagedChannelImpl
         final CallOptions callOptions,
         final Metadata headers,
         final Context context) {
+      RetryPolicy retryPolicy = retryPolicies == null ? DEFAULT : retryPolicies.get(method);
       return new RetriableStream<ReqT>(
           method, headers, channelBufferUsed, perRpcBufferLimit, channelBufferLimit,
-          getCallExecutor(callOptions), transportFactory.getScheduledExecutorService()) {
+          getCallExecutor(callOptions), transportFactory.getScheduledExecutorService(),
+          retryPolicy) {
         @Override
         Status prestart() {
           return uncommittedRetriableStreamsRegistry.add(this);
@@ -475,11 +481,8 @@ public final class ManagedChannelImpl
     this.nameResolverFactory = builder.getNameResolverFactory();
     this.nameResolverParams = checkNotNull(builder.getNameResolverParams(), "nameResolverParams");
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
-    if (builder.loadBalancerFactory == null) {
-      this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory();
-    } else {
-      this.loadBalancerFactory = builder.loadBalancerFactory;
-    }
+    this.loadBalancerFactory =
+        checkNotNull(builder.loadBalancerFactory, "loadBalancerFactory");
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.oobExecutorPool = checkNotNull(oobExecutorPool, "oobExecutorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
@@ -488,7 +491,11 @@ public final class ManagedChannelImpl
     this.backoffPolicyProvider = backoffPolicyProvider;
     this.transportFactory =
         new CallCredentialsApplyingTransportFactory(clientTransportFactory, this.executor);
-    this.interceptorChannel = ClientInterceptors.intercept(new RealChannel(), interceptors);
+    Channel channel = new RealChannel();
+    if (builder.binlogProvider != null) {
+      channel = builder.binlogProvider.wrapChannel(channel);
+    }
+    this.interceptorChannel = ClientInterceptors.intercept(channel, interceptors);
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     if (builder.idleTimeoutMillis == IDLE_TIMEOUT_MILLIS_DISABLE) {
       this.idleTimeoutMillis = builder.idleTimeoutMillis;
@@ -1009,9 +1016,11 @@ public final class ManagedChannelImpl
   }
 
   private class NameResolverListenerImpl implements NameResolver.Listener {
-    final LbHelperImpl helper;
+    final LoadBalancer balancer;
+    final LoadBalancer.Helper helper;
 
     NameResolverListenerImpl(LbHelperImpl helperImpl) {
+      this.balancer = helperImpl.lb;
       this.helper = helperImpl;
     }
 
@@ -1026,7 +1035,6 @@ public final class ManagedChannelImpl
             new Object[]{getLogId(), servers, config});
       }
 
-
       final class NamesResolved implements Runnable {
         @Override
         public void run() {
@@ -1034,14 +1042,26 @@ public final class ManagedChannelImpl
           if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
             return;
           }
+
           try {
-            helper.lb.handleResolvedAddressGroups(servers, config);
+            if (retryEnabled) {
+              retryPolicies = getRetryPolicies(config);
+            }
+          } catch (RuntimeException re) {
+            logger.log(
+                Level.WARNING,
+                "[" + getLogId() + "] Unexpected exception from parsing service config",
+                re);
+          }
+
+          try {
+            balancer.handleResolvedAddressGroups(servers, config);
           } catch (Throwable e) {
             logger.log(
                 Level.WARNING, "[" + getLogId() + "] Unexpected exception from LoadBalancer", e);
             // It must be a bug! Push the exception back to LoadBalancer in the hope that it may
             // be propagated to the application.
-            helper.lb.handleNameResolutionError(Status.INTERNAL.withCause(e)
+            balancer.handleNameResolutionError(Status.INTERNAL.withCause(e)
                 .withDescription("Thrown from handleResolvedAddresses(): " + e));
           }
         }
@@ -1062,10 +1082,20 @@ public final class ManagedChannelImpl
             if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
               return;
             }
-            lbHelper.lb.handleNameResolutionError(error);
+            balancer.handleNameResolutionError(error);
           }
         }).drain();
     }
+  }
+
+  // TODO(zdapeng): implement it once the Gson dependency issue is resolved.
+  private static RetryPolicies getRetryPolicies(Attributes config) {
+    return new RetryPolicies() {
+      @Override
+      public RetryPolicy get(MethodDescriptor<?, ?> method) {
+        return RetryPolicy.DEFAULT;
+      }
+    };
   }
 
   private final class SubchannelImpl extends AbstractSubchannel {
@@ -1152,9 +1182,9 @@ public final class ManagedChannelImpl
     }
 
     @Override
-    public ListenableFuture<InternalChannelStats> getStats() {
-      SettableFuture<InternalChannelStats> ret = SettableFuture.create();
-      InternalChannelStats.Builder builder = new InternalChannelStats.Builder();
+    public ListenableFuture<ChannelStats> getStats() {
+      SettableFuture<ChannelStats> ret = SettableFuture.create();
+      ChannelStats.Builder builder = new Channelz.ChannelStats.Builder();
       subchannelCallTracer.updateBuilder(builder);
       builder.setTarget(target).setState(subchannel.getState());
       ret.set(builder.build());
@@ -1177,7 +1207,7 @@ public final class ManagedChannelImpl
         Boolean.parseBoolean(System.getProperty(ALLOCATION_SITE_PROPERTY_NAME, "true"));
     private static final RuntimeException missingCallSite = missingCallSite();
 
-    private final InternalLogId logId;
+    private final LogId logId;
     private final String target;
     private final Reference<RuntimeException> allocationSite;
     private volatile boolean shutdown;
@@ -1253,5 +1283,11 @@ public final class ManagedChannelImpl
       e.setStackTrace(new StackTraceElement[0]);
       return e;
     }
+  }
+
+  @VisibleForTesting
+  interface RetryPolicies {
+    @Nonnull
+    RetryPolicy get(MethodDescriptor<?, ?> method);
   }
 }

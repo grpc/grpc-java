@@ -31,19 +31,19 @@ import com.squareup.okhttp.Request;
 import com.squareup.okhttp.internal.http.StatusLine;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
-import io.grpc.InternalLogId;
-import io.grpc.InternalTransportStats;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusException;
+import io.grpc.internal.Channelz.TransportStats;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
+import io.grpc.internal.LogId;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.StatsTraceContext;
@@ -134,7 +134,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   private AsyncFrameWriter frameWriter;
   private OutboundFlowController outboundFlow;
   private final Object lock = new Object();
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final LogId logId = LogId.allocate(getClass().getName());
   @GuardedBy("lock")
   private int nextStreamId;
   @GuardedBy("lock")
@@ -604,7 +604,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public InternalLogId getLogId() {
+  public LogId getLogId() {
     return logId;
   }
 
@@ -893,9 +893,9 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public ListenableFuture<InternalTransportStats> getStats() {
+  public ListenableFuture<TransportStats> getStats() {
     synchronized (lock) {
-      SettableFuture<InternalTransportStats> ret = SettableFuture.create();
+      SettableFuture<TransportStats> ret = SettableFuture.create();
       ret.set(transportTracer.getStats());
       return ret;
     }

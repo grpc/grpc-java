@@ -27,9 +27,6 @@ import io.grpc.ClientCall;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.InternalChannelStats;
-import io.grpc.InternalInstrumented;
-import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -39,6 +36,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.internal.Channelz.ChannelStats;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
@@ -53,15 +51,14 @@ import javax.annotation.concurrent.ThreadSafe;
  * to its own RPC needs.
  */
 @ThreadSafe
-final class OobChannel
-    extends ManagedChannel implements InternalInstrumented<InternalChannelStats> {
+final class OobChannel extends ManagedChannel implements Instrumented<ChannelStats> {
   private static final Logger log = Logger.getLogger(OobChannel.class.getName());
 
   private InternalSubchannel subchannel;
   private AbstractSubchannel subchannelImpl;
   private SubchannelPicker subchannelPicker;
 
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final LogId logId = LogId.allocate(getClass().getName());
   private final String authority;
   private final DelayedClientTransport delayedTransport;
   private final ObjectPool<? extends Executor> executorPool;
@@ -154,9 +151,9 @@ final class OobChannel
         }
 
         @Override
-        public ListenableFuture<InternalChannelStats> getStats() {
-          SettableFuture<InternalChannelStats> ret = SettableFuture.create();
-          InternalChannelStats.Builder builder = new InternalChannelStats.Builder();
+        public ListenableFuture<ChannelStats> getStats() {
+          SettableFuture<ChannelStats> ret = SettableFuture.create();
+          ChannelStats.Builder builder = new ChannelStats.Builder();
           subchannelCallsTracer.updateBuilder(builder);
           builder.setTarget(authority).setState(subchannel.getState());
           ret.set(builder.build());
@@ -256,9 +253,9 @@ final class OobChannel
   }
 
   @Override
-  public ListenableFuture<InternalChannelStats> getStats() {
-    SettableFuture<InternalChannelStats> ret = SettableFuture.create();
-    InternalChannelStats.Builder builder = new InternalChannelStats.Builder();
+  public ListenableFuture<ChannelStats> getStats() {
+    SettableFuture<ChannelStats> ret = SettableFuture.create();
+    ChannelStats.Builder builder = new ChannelStats.Builder();
     channelCallsTracer.updateBuilder(builder);
     builder.setTarget(authority).setState(subchannel.getState());
     ret.set(builder.build());
@@ -266,7 +263,7 @@ final class OobChannel
   }
 
   @Override
-  public InternalLogId getLogId() {
+  public LogId getLogId() {
     return logId;
   }
 }
