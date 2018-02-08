@@ -75,7 +75,7 @@ public class ProtocolNegotiatorsTest {
     @Override public void run() {}
   };
 
-  @Rule public final Timeout globalTimeout = Timeout.seconds(50000);
+  @Rule public final Timeout globalTimeout = Timeout.seconds(5);
 
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
