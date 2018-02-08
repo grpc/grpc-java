@@ -75,7 +75,7 @@ public class ProtocolNegotiatorsTest {
     @Override public void run() {}
   };
 
-  @Rule public final Timeout globalTimeout = Timeout.seconds(5);
+  @Rule public final Timeout globalTimeout = Timeout.seconds(50000);
 
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
@@ -261,7 +261,7 @@ public class ProtocolNegotiatorsTest {
     SslContext ctx = GrpcSslContexts.forClient().build();
     TlsNegotiator negotiator = (TlsNegotiator) ProtocolNegotiators.tls(ctx, "authority:1234");
 
-    assertEquals("authority", negotiator.getHost());
+    assertEquals("authority", negotiator.getPortlessAuthority());
     assertEquals(1234, negotiator.getPort());
   }
 
@@ -270,8 +270,27 @@ public class ProtocolNegotiatorsTest {
     SslContext ctx = GrpcSslContexts.forClient().build();
     TlsNegotiator negotiator = (TlsNegotiator) ProtocolNegotiators.tls(ctx, "[::1]");
 
-    assertEquals("[::1]", negotiator.getHost());
+    assertEquals("[::1]", negotiator.getPortlessAuthority());
     assertEquals(-1, negotiator.getPort());
+  }
+
+
+  @Test
+  public void tls_badport() throws SSLException {
+    SslContext ctx = GrpcSslContexts.forClient().build();
+    TlsNegotiator negotiator = (TlsNegotiator) ProtocolNegotiators.tls(ctx, "auth:9999999999");
+
+    assertEquals("auth:9999999999", negotiator.getPortlessAuthority());
+    assertEquals(-1, negotiator.getPort());
+  }
+
+  @Test
+  public void tls_fullAuthority() throws SSLException {
+    SslContext ctx = GrpcSslContexts.forClient().build();
+    TlsNegotiator negotiator = (TlsNegotiator) ProtocolNegotiators.tls(ctx, "user@host:1234");
+
+    assertEquals("user@host", negotiator.getPortlessAuthority());
+    assertEquals(1234, negotiator.getPort());
   }
 
   @Test
@@ -281,7 +300,7 @@ public class ProtocolNegotiatorsTest {
 
     // Even though it looks like a port, we treat it as part of the authority, since the host is
     // invalid.
-    assertEquals("bad_host:1234", negotiator.getHost());
+    assertEquals("bad_host:1234", negotiator.getPortlessAuthority());
     assertEquals(-1, negotiator.getPort());
   }
 

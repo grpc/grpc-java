@@ -181,7 +181,7 @@ public class NettyChannelBuilderTest {
     assertTrue(negotiator instanceof ProtocolNegotiators.TlsNegotiator);
     ProtocolNegotiators.TlsNegotiator n = (TlsNegotiator) negotiator;
 
-    assertEquals("authority", n.getHost());
+    assertEquals("authority", n.getPortlessAuthority());
     assertEquals(1234, n.getPort());
   }
 
@@ -196,7 +196,7 @@ public class NettyChannelBuilderTest {
     assertTrue(negotiator instanceof ProtocolNegotiators.TlsNegotiator);
     ProtocolNegotiators.TlsNegotiator n = (TlsNegotiator) negotiator;
 
-    assertEquals("bad_authority", n.getHost());
+    assertEquals("bad_authority", n.getPortlessAuthority());
     assertEquals(-1, n.getPort());
   }
 
