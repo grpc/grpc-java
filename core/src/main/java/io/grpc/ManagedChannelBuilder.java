@@ -337,6 +337,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>This method may not work as expected for the current release because retry is not fully
    * implemented yet.
    *
+   * @return this
    * @since 1.10.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3982")
@@ -353,6 +354,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>This method may not work as expected for the current release because retry is not fully
    * implemented yet.
    *
+   * @return this
    * @since 1.10.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3982")
@@ -366,7 +368,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * users have their own retry implementation and want to avoid their own retry taking place
    * simultaneously with the gRPC library layer retry.
    *
-   * @return {@code this}
+   * @return this
    * @since 1.11.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3982")
@@ -380,7 +382,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>This method may not work as expected for the current release because retry is not fully
    * implemented yet.
    *
-   * @return {@code this}
+   * @return this
    * @since 1.11.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3982")
