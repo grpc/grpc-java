@@ -37,9 +37,9 @@ public final class ForwardingTestUtil {
    * This does NOT verify that arguments or return values are forwarded properly. It only alerts
    * the developer if a forward method is missing.
    *
-   * @param delegateClass The class whose methods should be forwarded
-   * @param mockDelegate The mockito mock of the delegate class
-   * @param forwarder The forwarder class that forwards to the mockDelegate
+   * @param delegateClass The class whose methods should be forwarded.
+   * @param mockDelegate The mockito mock of the delegate class.
+   * @param forwarder The forwarder object that forwards to the mockDelegate.
    * @param skippedMethods A collection of methods that are skipped by the test.
    */
   public static <T> void testMethodsForwarded(
