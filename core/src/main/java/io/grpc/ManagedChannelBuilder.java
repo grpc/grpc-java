@@ -329,8 +329,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
 
   /**
    * Sets max number of retry attempts. The total number of retry attempts for each RPC will not
-   * exceed this number even service config may allow a higher number. Setting this number to zero
-   * is not effectively the same as {@code disableRetry()} because the former does not disable
+   * exceed this number even if service config may allow a higher number. Setting this number to
+   * zero is not effectively the same as {@code disableRetry()} because the former does not disable
    * <a
    * href="https://github.com/grpc/proposal/blob/master/A6-client-retries.md#transparent-retries">
    * transparent retry</a>.
@@ -338,6 +338,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>This method may not work as expected for the current release because retry is not fully
    * implemented yet.
    *
+   * @return this
    * @since 1.11.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3982")
@@ -347,11 +348,12 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
 
   /**
    * Sets max number of hedged attempts. The total number of hedged attempts for each RPC will not
-   * exceed this number even service config may allow a higher number.
+   * exceed this number even if service config may allow a higher number.
    *
    * <p>This method may not work as expected for the current release because retry is not fully
    * implemented yet.
    *
+   * @return this
    * @since 1.11.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3982")
