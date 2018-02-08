@@ -85,7 +85,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   private ClientStreamListener masterListener;
   private Future<?> scheduledRetry;
-  private double nextBackoffInSeconds;
+  private double nextBackoffIntervalInSeconds;
 
   RetriableStream(
       MethodDescriptor<ReqT, ?> method, Metadata headers,
@@ -100,7 +100,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     this.scheduledExecutorService = scheduledExecutorService;
     this.headers = headers;
     this.retryPolicy = checkNotNull(retryPolicy, "retryPolicy");
-    nextBackoffInSeconds = retryPolicy.initialBackoffInSeconds;
+    nextBackoffIntervalInSeconds = retryPolicy.initialBackoffInSeconds;
   }
 
   @Nullable // null if already committed
@@ -588,9 +588,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         if (pushbackStr == null) {
           if (retryPolicy.retryableStatusCodes.contains(status.getCode())) {
             shouldRetry = true;
-            backoffInMillis = (long) (nextBackoffInSeconds * 1000D * random.nextDouble());
-            nextBackoffInSeconds = Math.min(
-                nextBackoffInSeconds * retryPolicy.backoffMultiplier,
+            backoffInMillis = (long) (nextBackoffIntervalInSeconds * 1000D * random.nextDouble());
+            nextBackoffIntervalInSeconds = Math.min(
+                nextBackoffIntervalInSeconds * retryPolicy.backoffMultiplier,
                 retryPolicy.maxBackoffInSeconds);
           } // else no retry
         } else {
@@ -603,7 +603,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           if (pushback >= 0) {
             shouldRetry = true;
             backoffInMillis = pushback;
-            nextBackoffInSeconds = retryPolicy.initialBackoffInSeconds;
+            nextBackoffIntervalInSeconds = retryPolicy.initialBackoffInSeconds;
           } // else no retry
         }
       }
