@@ -27,7 +27,10 @@ import io.grpc.internal.StreamListener.MessageProducer;
 import java.lang.reflect.Method;
 import java.util.Collections;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
+@RunWith(JUnit4.class)
 public class ForwardingClientStreamListenerTest {
   private ClientStreamListener mock = mock(ClientStreamListener.class);
   private ForwardingClientStreamListener forward = new ForwardingClientStreamListener() {

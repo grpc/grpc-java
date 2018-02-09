@@ -34,8 +34,10 @@ import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.util.Collections;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
-
+@RunWith(JUnit4.class)
 public class ForwardingClientStreamTest {
   private ClientStream mock = mock(ClientStream.class);
   private ForwardingClientStream forward = new ForwardingClientStream() {
