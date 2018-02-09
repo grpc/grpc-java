@@ -108,11 +108,7 @@ public final class ManagedChannelImpl
   static final Status SUBCHANNEL_SHUTDOWN_STATUS =
       Status.UNAVAILABLE.withDescription("Subchannel shutdown invoked");
 
-  private static final Status SHUTDOWN_TRANSPORTS_STATUS =
-      Status.UNAVAILABLE.withDescription("Channel shutdownTransports invoked");
-
   private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
-
   private final String target;
   private final NameResolver.Factory nameResolverFactory;
   private final Attributes nameResolverParams;
