@@ -112,12 +112,13 @@ public abstract class ManagedChannel extends Channel {
    *
    * @since 1.8.0
    */
-  @ExperimentalApi
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4056")
   public void resetConnectBackoff() {}
 
   /**
-   * Shutdown existing transports while keeping the channel active. This allows on-going RPCs on the
-   * channel to continue while new RPCs will trigger creation of a new transport.
+   * Invoking this method moves the channel into the IDLE state and triggers tear-down of the
+   * channel's name resolver and load balancer, while still allowing on-going RPCs on the channel to
+   * continue. New RPCs on the channel will trigger creation of a new connection.
    *
    * <p>This is primarily intended for Android users when a device is transitioning from a cellular
    * to a wifi connection. Initially the device will maintain both the cellular and wifi
@@ -129,6 +130,6 @@ public abstract class ManagedChannel extends Channel {
    *
    * @since 1.11.0
    */
-  @ExperimentalApi
-  public void shutdownTransports() {}
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4056")
+  public void prepareToLoseNetwork() {}
 }

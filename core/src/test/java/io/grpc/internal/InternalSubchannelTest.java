@@ -942,34 +942,6 @@ public class InternalSubchannelTest {
     assertNoCallbackInvoke();
   }
 
-  @Test
-  public void shutdownTransports_activeTransportShutdown() throws Exception {
-    Status reason = Status.UNAVAILABLE.withDescription("shutting down");
-    SocketAddress addr = mock(SocketAddress.class);
-    createInternalSubchannel(addr);
-
-    internalSubchannel.obtainActiveTransport();
-    MockClientTransportInfo mockClientTransportInfo = transports.poll();
-    mockClientTransportInfo.listener.transportReady();
-    assertExactCallbackInvokes("onStateChange:CONNECTING", "onStateChange:READY");
-    internalSubchannel.shutdownTransports(reason);
-
-    verify(mockClientTransportInfo.transport).shutdown(reason);
-  }
-
-  @Test
-  public void shutdownTransports_pendingTransportShutdown() throws Exception {
-    Status reason = Status.UNAVAILABLE.withDescription("shutting down");
-    SocketAddress addr = mock(SocketAddress.class);
-    createInternalSubchannel(addr);
-
-    internalSubchannel.obtainActiveTransport();
-    assertExactCallbackInvokes("onStateChange:CONNECTING");
-    internalSubchannel.shutdownTransports(reason);
-
-    verify(transports.poll().transport).shutdown(reason);
-  }
-
   private void createInternalSubchannel(SocketAddress ... addrs) {
     createInternalSubChannelWithProxy(GrpcUtil.NOOP_PROXY_DETECTOR, addrs);
   }

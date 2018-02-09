@@ -292,35 +292,6 @@ final class InternalSubchannel implements InternalWithLogId {
     }
   }
 
-  void shutdownTransports(Status reason) {
-    ManagedClientTransport savedActiveTransport;
-    ConnectionClientTransport savedPendingTransport;
-    try {
-      synchronized (lock) {
-        if (state.getState() == SHUTDOWN) {
-          return;
-        }
-        savedActiveTransport = activeTransport;
-        savedPendingTransport = pendingTransport;
-        // Save a reference to the transports for the TransportListener.transportShutdown() callback
-        activeTransportToShutdown = activeTransport;
-        pendingTransportToShutdown = pendingTransport;
-        activeTransport = null;
-        pendingTransport = null;
-        addressIndex = 0;
-        cancelReconnectTask();
-      }
-    } finally {
-      channelExecutor.drain();
-    }
-    if (savedActiveTransport != null) {
-      savedActiveTransport.shutdown(reason);
-    }
-    if (savedPendingTransport != null) {
-      savedPendingTransport.shutdown(reason);
-    }
-  }
-
   @GuardedBy("lock")
   private void gotoNonErrorState(ConnectivityState newState) {
     gotoState(ConnectivityStateInfo.forNonError(newState));

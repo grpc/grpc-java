@@ -296,19 +296,7 @@ public final class ManagedChannelImpl
         // could cancel the timer.
         return;
       }
-      logger.log(Level.FINE, "[{0}] Entering idle mode", getLogId());
-      // nameResolver and loadBalancer are guaranteed to be non-null.  If any of them were null,
-      // either the idleModeTimer ran twice without exiting the idle mode, or the task in shutdown()
-      // did not cancel idleModeTimer, both of which are bugs.
-      nameResolver.shutdown();
-      nameResolverStarted = false;
-      nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
-      lbHelper.lb.shutdown();
-      lbHelper = null;
-      subchannelPicker = null;
-      if (!channelStateManager.isDisabled()) {
-        channelStateManager.gotoState(IDLE);
-      }
+      enterIdleMode();
     }
   }
 
@@ -351,6 +339,24 @@ public final class ManagedChannelImpl
       nameResolverStarted = true;
     } catch (Throwable t) {
       listener.onError(Status.fromThrowable(t));
+    }
+  }
+
+  // Must be run from channelExecutor
+  private void enterIdleMode() {
+    logger.log(Level.FINE, "[{0}] Entering idle mode", getLogId());
+    // nameResolver and loadBalancer are guaranteed to be non-null.  If any of them were null,
+    // either the idleModeTimer ran twice without exiting the idle mode, or the task in shutdown()
+    // did not cancel idleModeTimer, or prepareToLoseNetwork() ran while shutdown or in idle, all of
+    // which are bugs.
+    nameResolver.shutdown();
+    nameResolverStarted = false;
+    nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
+    lbHelper.lb.shutdown();
+    lbHelper = null;
+    subchannelPicker = null;
+    if (!channelStateManager.isDisabled()) {
+      channelStateManager.gotoState(IDLE);
     }
   }
 
@@ -726,26 +732,19 @@ public final class ManagedChannelImpl
   }
 
   @Override
-  public void shutdownTransports() {
-    class ShutdownTransportsRunnable implements Runnable {
+  public void prepareToLoseNetwork() {
+    class PrepareToLoseNetworkRunnable implements Runnable {
       @Override
       public void run() {
-        if (shutdown.get()) {
+        if (shutdown.get() || lbHelper == null) {
           return;
         }
-        if (nameResolverStarted) {
-          nameResolver.refresh();
-        }
-        for (InternalSubchannel subchannel : subchannels) {
-          subchannel.shutdownTransports(SHUTDOWN_TRANSPORTS_STATUS);
-        }
-        for (InternalSubchannel oobChannel : oobChannels) {
-          oobChannel.shutdownTransports(SHUTDOWN_TRANSPORTS_STATUS);
-        }
+        cancelIdleTimer();
+        enterIdleMode();
       }
     }
 
-    channelExecutor.executeLater(new ShutdownTransportsRunnable()).drain();
+    channelExecutor.executeLater(new PrepareToLoseNetworkRunnable()).drain();
   }
 
   /**
