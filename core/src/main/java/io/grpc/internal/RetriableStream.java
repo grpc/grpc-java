@@ -42,6 +42,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
@@ -65,7 +66,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final ScheduledExecutorService scheduledExecutorService;
   // Must not modify it.
   private final Metadata headers;
-  // TODO(zdapeng): add and use its business logic
   private final RetryPolicy retryPolicy;
 
   /** Must be held when updating state, accessing state.buffer, or certain substream attributes. */
@@ -74,6 +74,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final ChannelBufferMeter channelBufferUsed;
   private final long perRpcBufferLimit;
   private final long channelBufferLimit;
+  @Nullable
+  private final Throttle throttle;
 
   private volatile State state = new State(
       new ArrayList<BufferEntry>(), Collections.<Substream>emptySet(), null, false, false);
@@ -91,7 +93,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       MethodDescriptor<ReqT, ?> method, Metadata headers,
       ChannelBufferMeter channelBufferUsed, long perRpcBufferLimit, long channelBufferLimit,
       Executor callExecutor, ScheduledExecutorService scheduledExecutorService,
-      RetryPolicy retryPolicy) {
+      RetryPolicy retryPolicy, @Nullable Throttle throttle) {
     this.method = method;
     this.channelBufferUsed = channelBufferUsed;
     this.perRpcBufferLimit = perRpcBufferLimit;
@@ -101,6 +103,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     this.headers = headers;
     this.retryPolicy = checkNotNull(retryPolicy, "retryPolicy");
     nextBackoffIntervalInSeconds = retryPolicy.initialBackoffInSeconds;
+    this.throttle = throttle;
   }
 
   @Nullable // null if already committed
@@ -519,6 +522,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       commitAndRun(substream);
       if (state.winningSubstream == substream) {
         masterListener.headersRead(headers);
+        if (throttle != null) {
+          throttle.onSuccess();
+        }
       }
     }
 
@@ -582,35 +588,45 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     private RetryPlan makeRetryDecision(RetryPolicy retryPolicy, Status status, Metadata trailer) {
       boolean shouldRetry = false;
       long backoffInMillis = 0L;
-
-      if (retryPolicy.maxAttempts > substream.previousAttempts + 1) {
-        String pushbackStr = trailer.get(GRPC_RETRY_PUSHBACK_MS);
-        if (pushbackStr == null) {
-          if (retryPolicy.retryableStatusCodes.contains(status.getCode())) {
-            shouldRetry = true;
-            backoffInMillis = (long) (nextBackoffIntervalInSeconds * 1000D * random.nextDouble());
-            nextBackoffIntervalInSeconds = Math.min(
-                nextBackoffIntervalInSeconds * retryPolicy.backoffMultiplier,
-                retryPolicy.maxBackoffInSeconds);
-          } // else no retry
-        } else {
-          int pushback;
-          try {
-            pushback = Integer.parseInt(pushbackStr);
-          } catch (NumberFormatException e) {
-            pushback = -1;
-          }
-          if (pushback >= 0) {
-            shouldRetry = true;
-            backoffInMillis = pushback;
-            nextBackoffIntervalInSeconds = retryPolicy.initialBackoffInSeconds;
-          } // else no retry
+      String pushbackStr = trailer.get(GRPC_RETRY_PUSHBACK_MS);
+      if (pushbackStr == null) {
+        if (retryPolicy.retryableStatusCodes.contains(status.getCode())
+            && (throttle == null || throttle.onQualifiedFailureThenCheckIsAboveThreshold())
+            && retryPolicy.maxAttempts > substream.previousAttempts + 1) {
+          shouldRetry = true;
+          backoffInMillis = (long) (nextBackoffIntervalInSeconds * 1000D * random.nextDouble());
+          nextBackoffIntervalInSeconds = Math.min(
+              nextBackoffIntervalInSeconds * retryPolicy.backoffMultiplier,
+              retryPolicy.maxBackoffInSeconds);
+        } // else no retry
+      } else {
+        int pushback;
+        try {
+          pushback = Integer.parseInt(pushbackStr);
+        } catch (NumberFormatException e) {
+          pushback = -1;
         }
+        if (pushback < 0) { // no retry
+          if (throttle != null) {
+            throttle.onQualifiedFailureThenCheckIsAboveThreshold();
+          }
+        } else if (
+            (
+                retryPolicy.retryableStatusCodes.contains(status.getCode())
+                && (throttle == null || throttle.onQualifiedFailureThenCheckIsAboveThreshold())
+                && retryPolicy.maxAttempts > substream.previousAttempts + 1)
+            || (
+                !retryPolicy.retryableStatusCodes.contains(status.getCode())
+                && (throttle == null || throttle.isAboveThreshold())
+                && retryPolicy.maxAttempts > substream.previousAttempts + 1)) {
+          shouldRetry = true;
+          backoffInMillis = pushback;
+          nextBackoffIntervalInSeconds = retryPolicy.initialBackoffInSeconds;
+        } // else no retry
       }
 
       // TODO(zdapeng): transparent retry
       // TODO(zdapeng): hedging
-      // TODO(zdapeng): throttling
       return new RetryPlan(shouldRetry, backoffInMillis);
     }
 
@@ -831,8 +847,67 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   static final class ChannelBufferMeter {
     private final AtomicLong bufferUsed = new AtomicLong();
 
-    public long addAndGet(long newBytesUsed) {
+    @VisibleForTesting
+    long addAndGet(long newBytesUsed) {
       return bufferUsed.addAndGet(newBytesUsed);
+    }
+  }
+
+  /**
+   * Used for retry throttling.
+   */
+  static final class Throttle {
+    final int maxTokens;
+    final int threshold;
+    final int tokenRatio;
+    final AtomicInteger tokenCount = new AtomicInteger();
+
+    Throttle(float maxTokens, float tokenRatio) {
+      // tokenRatio is up to 3 decimal places
+      this.tokenRatio = (int) (tokenRatio * 1000f);
+      this.maxTokens = (int) (maxTokens * 1000f);
+      this.threshold = this.maxTokens / 2;
+      tokenCount.set(this.maxTokens);
+    }
+
+    @VisibleForTesting
+    boolean isAboveThreshold() {
+      return tokenCount.get() > threshold;
+    }
+
+    /**
+     * Counts down the token on qualified failure and checks if it is above the threshold
+     * atomically. Qualified failure is a failure with a retryable or non-fatal status code or with
+     * a not-to-retry pushback.
+     */
+    @VisibleForTesting
+    boolean onQualifiedFailureThenCheckIsAboveThreshold() {
+      while (true) {
+        int currentCount = tokenCount.get();
+        if (currentCount == 0) {
+          return false;
+        }
+        int decremented = currentCount - 1000;
+        boolean updated = tokenCount.compareAndSet(currentCount, Math.max(decremented, 0));
+        if (updated) {
+          return decremented > threshold;
+        }
+      }
+    }
+
+    @VisibleForTesting
+    void onSuccess() {
+      while (true) {
+        int currentCount = tokenCount.get();
+        if (currentCount == maxTokens) {
+          break;
+        }
+        int incremented = currentCount + tokenRatio;
+        boolean updated = tokenCount.compareAndSet(currentCount, Math.min(incremented, maxTokens));
+        if (updated) {
+          break;
+        }
+      }
     }
   }
 
