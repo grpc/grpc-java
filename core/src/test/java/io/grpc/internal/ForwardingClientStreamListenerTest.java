@@ -20,9 +20,12 @@ import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import io.grpc.ForwardingTestUtil;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.StreamListener.MessageProducer;
+import java.lang.reflect.Method;
+import java.util.Collections;
 import org.junit.Test;
 
 public class ForwardingClientStreamListenerTest {
@@ -33,6 +36,16 @@ public class ForwardingClientStreamListenerTest {
       return mock;
     }
   };
+
+  @Test
+  public void allMethodsForwarded() throws Exception {
+    ForwardingTestUtil.testMethodsForwarded(
+        ClientStreamListener.class,
+        mock,
+        forward,
+        Collections.<Method>emptyList());
+  }
+
 
   @Test
   public void headersReadTest() {
@@ -54,11 +67,5 @@ public class ForwardingClientStreamListenerTest {
     MessageProducer producer = mock(MessageProducer.class);
     forward.messagesAvailable(producer);
     verify(mock).messagesAvailable(same(producer));
-  }
-
-  @Test
-  public void onReadyTest() {
-    forward.onReady();
-    verify(mock).onReady();
   }
 }

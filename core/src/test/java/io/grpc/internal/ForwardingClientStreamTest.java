@@ -27,9 +27,12 @@ import io.grpc.Attributes;
 import io.grpc.Compressor;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
+import io.grpc.ForwardingTestUtil;
 import io.grpc.Status;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Method;
+import java.util.Collections;
 import org.junit.Test;
 
 
@@ -43,6 +46,15 @@ public class ForwardingClientStreamTest {
   };
 
   @Test
+  public void allMethodsForwarded() throws Exception {
+    ForwardingTestUtil.testMethodsForwarded(
+        ClientStream.class,
+        mock,
+        forward,
+        Collections.<Method>emptyList());
+  }
+
+  @Test
   public void requestTest() {
     forward.request(1234);
     verify(mock).request(1234);
@@ -53,12 +65,6 @@ public class ForwardingClientStreamTest {
     InputStream is = mock(InputStream.class); 
     forward.writeMessage(is);
     verify(mock).writeMessage(same(is));
-  }
-
-  @Test
-  public void flushTest() {
-    forward.flush();
-    verify(mock).flush();
   }
 
   @Test
@@ -85,12 +91,6 @@ public class ForwardingClientStreamTest {
     Status reason = Status.UNKNOWN;
     forward.cancel(reason);
     verify(mock).cancel(same(reason));
-  }
-
-  @Test
-  public void halfCloseTest() {
-    forward.halfClose();
-    verify(mock).halfClose();
   }
 
   @Test
