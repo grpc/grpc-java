@@ -92,6 +92,7 @@ public class BinaryLogProviderTest {
     public ClientInterceptor getClientInterceptor(String fullMethodName) {
       return new TestBinaryLogClientInterceptor();
     }
+
     @Override
     public void close() { }
 
