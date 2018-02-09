@@ -104,6 +104,9 @@ public class Context {
       new PersistentHashArrayMappedTrie<Key<?>, Object>();
 
   static final AtomicLongArray withValueCounts;
+  /**
+   * Counts how many times a value added to the context was already present.
+   */
   static final AtomicLongArray withValueDupeCounts;
   static final AtomicLongArray getCounts;
   private static final Method threadLocalRandomCurrent;

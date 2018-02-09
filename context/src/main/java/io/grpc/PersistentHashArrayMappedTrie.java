@@ -245,12 +245,7 @@ final class PersistentHashArrayMappedTrie<K,V> {
             newValues,
             compressedIndex + 1,
             values.length - compressedIndex);
-        int newSize = size();
-        newSize += 1; // The new leaf
-        for (int i = compressedIndex; i < values.length; i++) {
-          newSize -= values[i].size(); // remove all the sizes not included in the new array.
-        }
-        return new CompressedIndex<K,V>(newBitmap, newValues, newSize);
+        return new CompressedIndex<K,V>(newBitmap, newValues, size() + 1);
       } else {
         // Replace
         Node<K,V>[] newValues = Arrays.copyOf(values, values.length);
