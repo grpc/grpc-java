@@ -14,13 +14,35 @@ export CXXFLAGS=-I/tmp/protobuf/include
 export LD_LIBRARY_PATH=/tmp/protobuf/lib
 export OS_NAME=$(uname)
 
-cd ./github/grpc-java
 
 # TODO(zpencer): always make sure we are using Oracle jdk8
 
+mkdir -p /tmp/build_cache/gradle
+ln -s /tmp/build_cache/gradle ~/.gradle
+mkdir -p /tmp/build_cache/protobuf-${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)/
+ln -s /tmp/build_cache/protobuf-${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)/ /tmp/protobuf
+
+# Kokoro workers are stateless, so local caches will not persist
+# across runs.  Always bootstrap our cache using master's cache. The
+# cache should still contain cache hits for most artifacts, even if
+# this is not master branch.
+PLATFORM=$(uname)
+ARCHIVE_FILE="depdencies_master.tgz"
+CACHE_PATH="gs://grpc-temp-files/grpc-java-kokoro-build-cache/$PLATFORM/$ARCHIVE_FILE"
+set +e
+gsutil stat $CACHE_PATH
+IS_CACHED=$?
+set -e
+
+if [[ $IS_CACHED == 0 ]]; then
+  gsutil cp $CACHE_PATH .
+  tar xpzf $ARCHIVE_FILE /
+fi
+
+cd ./github/grpc-java
+
 # Proto deps
-buildscripts/make_dependencies.sh
-ln -s "/tmp/protobuf-${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)" /tmp/protobuf
+buildscripts/make_dependencies.sh # build protoc into /tmp/protobuf-${PROTOBUF_VERSION}
 
 # Gradle build config
 mkdir -p $HOME/.gradle
@@ -36,3 +58,15 @@ pushd examples
 mvn verify --batch-mode
 popd
 # TODO(zpencer): also build the GAE examples
+
+
+# For master branch only: If build was successful and the gradle dep
+# hash is not cached, then cache it. Builds on master are serialized,
+# and are in commit order for all intents and purposes.
+
+# GITBRANCH=$(git rev-parse --abbrev-ref HEAD)
+GITBRANCH='master' # TODO(zpencer): remove after testing
+if [[ $GITBRANCH == 'master' && $IS_CACHED != 0 ]]; then
+  tar czf $ARCHIVE_FILE /tmp/build_cache/
+  gsutil cp $ARCHIVE_FILE $CACHE_PATH
+fi
