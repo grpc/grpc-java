@@ -30,7 +30,7 @@ public final class InternalContext {
     return Context.withValueCounts;
   }
 
-  public static AtomicLongArray withValueDupeCounts() {
-    return Context.withValueDupeCounts;
+  public static AtomicLongArray withValueUniqueCounts() {
+    return Context.withValueUniqueCounts;
   }
 }
