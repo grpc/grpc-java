@@ -105,9 +105,9 @@ public class Context {
 
   static final AtomicLongArray withValueCounts;
   /**
-   * Counts how many times a value added to the context was already present.
+   * Counts how many times a unique value added to the context.
    */
-  static final AtomicLongArray withValueDupeCounts;
+  static final AtomicLongArray withValueUniqueCounts;
   static final AtomicLongArray getCounts;
   private static final Method threadLocalRandomCurrent;
 
@@ -124,12 +124,12 @@ public class Context {
     }
     if (localThreadLocalRandomCurrent != null) {
       withValueCounts = new AtomicLongArray(100);
-      withValueDupeCounts = new AtomicLongArray(100);
+      withValueUniqueCounts = new AtomicLongArray(100);
       getCounts = new AtomicLongArray(100);
       threadLocalRandomCurrent = localThreadLocalRandomCurrent;
     } else {
       withValueCounts = new AtomicLongArray(0);
-      withValueDupeCounts = new AtomicLongArray(0);
+      withValueUniqueCounts = new AtomicLongArray(0);
       getCounts = new AtomicLongArray(0);
       threadLocalRandomCurrent = null;
     }
@@ -370,9 +370,9 @@ public class Context {
   public <V> Context withValue(Key<V> k1, V v1) {
     PersistentHashArrayMappedTrie<Key<?>, Object> newKeyValueEntries = keyValueEntries.put(k1, v1);
     if (shouldSample()) {
-      withValueDupeCounts.addAndGet(
-          Math.min(keyValueEntries.size(), withValueDupeCounts.length() - 1),
-          1 + newKeyValueEntries.size() - keyValueEntries.size());
+      withValueUniqueCounts.addAndGet(
+          Math.min(keyValueEntries.size(), withValueUniqueCounts.length() - 1),
+          newKeyValueEntries.size() - keyValueEntries.size());
       withValueCounts.incrementAndGet(
           Math.min(keyValueEntries.size(), withValueCounts.length() - 1));
     }
@@ -387,11 +387,12 @@ public class Context {
     PersistentHashArrayMappedTrie<Key<?>, Object> newKeyValueEntries =
         keyValueEntries.put(k1, v1).put(k2, v2);
     if (shouldSample()) {
-      withValueDupeCounts.addAndGet(
-          Math.min(keyValueEntries.size(), withValueDupeCounts.length() - 1),
-          2 + newKeyValueEntries.size() - keyValueEntries.size());
-      withValueCounts.incrementAndGet(
-          Math.min(keyValueEntries.size(), withValueCounts.length() - 1));
+      withValueUniqueCounts.addAndGet(
+          Math.min(keyValueEntries.size(), withValueUniqueCounts.length() - 1),
+          newKeyValueEntries.size() - keyValueEntries.size());
+      withValueCounts.addAndGet(
+          Math.min(keyValueEntries.size(), withValueCounts.length() - 1),
+          2);
     }
     return new Context(this, newKeyValueEntries);
   }
@@ -404,11 +405,12 @@ public class Context {
     PersistentHashArrayMappedTrie<Key<?>, Object> newKeyValueEntries =
         keyValueEntries.put(k1, v1).put(k2, v2).put(k3, v3);
     if (shouldSample()) {
-      withValueDupeCounts.addAndGet(
-          Math.min(keyValueEntries.size(), withValueDupeCounts.length() - 1),
-          3 + newKeyValueEntries.size() - keyValueEntries.size());
-      withValueCounts.incrementAndGet(
-          Math.min(keyValueEntries.size(), withValueCounts.length() - 1));
+      withValueUniqueCounts.addAndGet(
+          Math.min(keyValueEntries.size(), withValueUniqueCounts.length() - 1),
+          newKeyValueEntries.size() - keyValueEntries.size());
+      withValueCounts.addAndGet(
+          Math.min(keyValueEntries.size(), withValueCounts.length() - 1),
+          3);
     }
     return new Context(this, newKeyValueEntries);
   }
@@ -422,11 +424,12 @@ public class Context {
     PersistentHashArrayMappedTrie<Key<?>, Object> newKeyValueEntries =
         keyValueEntries.put(k1, v1).put(k2, v2).put(k3, v3).put(k4, v4);
     if (shouldSample()) {
-      withValueDupeCounts.addAndGet(
-          Math.min(keyValueEntries.size(), withValueDupeCounts.length() - 1),
-          4 + newKeyValueEntries.size() - keyValueEntries.size());
-      withValueCounts.incrementAndGet(
-          Math.min(keyValueEntries.size(), withValueCounts.length() - 1));
+      withValueUniqueCounts.addAndGet(
+          Math.min(keyValueEntries.size(), withValueUniqueCounts.length() - 1),
+          newKeyValueEntries.size() - keyValueEntries.size());
+      withValueCounts.addAndGet(
+          Math.min(keyValueEntries.size(), withValueCounts.length() - 1),
+          4);
     }
     return new Context(this, newKeyValueEntries);
   }
