@@ -1,0 +1,35 @@
+description = "gRPC: ALTS"
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath libraries.protobuf_plugin
+    }
+}
+
+dependencies {
+    compile project(':grpc-core'),
+            project(':grpc-netty'),
+            project(':grpc-protobuf'),
+            project(':grpc-stub'),
+	        libraries.lang,
+	        libraries.protobuf
+    testCompile libraries.guava_testlib,
+                libraries.junit,
+                libraries.mockito,
+		        libraries.truth
+}
+
+configureProtoCompilation()
+
+idea {
+    module {
+        sourceDirs += file("${projectDir}/src/generated/main/grpc");
+        sourceDirs += file("${projectDir}/src/generated/main/java");
+    }
+}
