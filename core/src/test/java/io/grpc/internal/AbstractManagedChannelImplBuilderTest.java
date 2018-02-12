@@ -331,6 +331,24 @@ public class AbstractManagedChannelImplBuilderTest {
   }
 
   @Test
+  public void maxRetryAttempts() {
+    Builder builder = new Builder("target");
+    assertEquals(5, builder.maxRetryAttempts);
+
+    builder.maxRetryAttempts(3);
+    assertEquals(3, builder.maxRetryAttempts);
+  }
+
+  @Test
+  public void maxHedgedAttempts() {
+    Builder builder = new Builder("target");
+    assertEquals(5, builder.maxHedgedAttempts);
+
+    builder.maxHedgedAttempts(3);
+    assertEquals(3, builder.maxHedgedAttempts);
+  }
+
+  @Test
   public void retryBufferSize() {
     Builder builder = new Builder("target");
     assertEquals(1L << 24, builder.retryBufferSize);
@@ -358,6 +376,23 @@ public class AbstractManagedChannelImplBuilderTest {
   public void perRpcBufferLimitInvalidArg() {
     Builder builder = new Builder("target");
     builder.perRpcBufferLimit(0L);
+  }
+
+  @Test
+  public void disableRetry() {
+    Builder builder = new Builder("target");
+
+    builder.enableRetry();
+    assertFalse(builder.retryDisabled);
+
+    builder.disableRetry();
+    assertTrue(builder.retryDisabled);
+
+    builder.enableRetry();
+    assertFalse(builder.retryDisabled);
+
+    builder.disableRetry();
+    assertTrue(builder.retryDisabled);
   }
 
   static class Builder extends AbstractManagedChannelImplBuilder<Builder> {

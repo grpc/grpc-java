@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2018, gRPC Authors All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,18 +14,9 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
+package io.grpc;
 
-import com.google.common.util.concurrent.ListenableFuture;
-
-/**
- * An interface for types that <b>may</b> support instrumentation. If the actual type does not
- * support instrumentation, then the future will return a {@code null}.
- */
-public interface Instrumented<T> extends WithLogId {
-
-  /**
-   * Returns the stats object.
-   */
-  ListenableFuture<T> getStats();
+public final class InternalManagedChannelProvider {
+  public static final Iterable<Class<?>> HARDCODED_CLASSES =
+      ManagedChannelProvider.HARDCODED_CLASSES;
 }
