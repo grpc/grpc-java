@@ -65,6 +65,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -73,6 +74,9 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
@@ -789,19 +793,23 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
   // TODO(zdapeng): add test coverage for shutdown during retry backoff once retry backoff is
   //                implemented.
   private final class UncommittedRetriableStreamsRegistry {
-    // TODO(zdapeng): This means we would acquire a lock for each new retry-able stream,
-    // it's worthwhile to look for a lock-free approach.
-    final Object lock = new Object();
+    final ReadWriteLock lock = new ReentrantReadWriteLock();
 
-    @GuardedBy("lock")
-    Collection<ClientStream> uncommittedRetriableStreams = new HashSet<ClientStream>();
+    // GuardedBy lock
+    boolean registryIsLarge;
 
-    @GuardedBy("lock")
+    // GuardedBy lock
+    Map<ClientStream, ClientStream> uncommittedRetriableStreams =
+        new ConcurrentHashMap<ClientStream, ClientStream>();
+
+    // GuardedBy lock
     Status shutdownStatus;
 
     void onShutdown(Status reason) {
       boolean shouldShutdownDelayedTransport = false;
-      synchronized (lock) {
+      Lock writeLock = lock.writeLock();
+      writeLock.lock();
+      try {
         if (shutdownStatus != null) {
           return;
         }
@@ -812,6 +820,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
         if (uncommittedRetriableStreams.isEmpty()) {
           shouldShutdownDelayedTransport = true;
         }
+      } finally {
+        writeLock.unlock();
       }
 
       if (shouldShutdownDelayedTransport) {
@@ -823,8 +833,12 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
       onShutdown(reason);
       Collection<ClientStream> streams;
 
-      synchronized (lock) {
-        streams = new ArrayList<ClientStream>(uncommittedRetriableStreams);
+      Lock writeLock = lock.writeLock();
+      writeLock.lock();
+      try {
+        streams = new ArrayList<ClientStream>(uncommittedRetriableStreams.keySet());
+      } finally {
+        writeLock.unlock();
       }
 
       for (ClientStream stream : streams) {
@@ -839,30 +853,59 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
      */
     @Nullable
     Status add(RetriableStream<?> retriableStream) {
-      synchronized (lock) {
+      Lock readLock = lock.readLock();
+      readLock.lock();
+      try {
         if (shutdownStatus != null) {
           return shutdownStatus;
         }
-        uncommittedRetriableStreams.add(retriableStream);
+        uncommittedRetriableStreams.put(retriableStream, retriableStream);
+        if (!registryIsLarge && uncommittedRetriableStreams.size() > 1024) {
+          registryIsLarge = true;
+        }
         return null;
+      } finally {
+        readLock.unlock();
       }
     }
 
     void remove(RetriableStream<?> retriableStream) {
-      Status shutdownStatusCopy = null;
+      boolean shouldShutdownDelayedTransport = false;
+      boolean mayDownsize = false;
 
-      synchronized (lock) {
+      Lock readLock = lock.readLock();
+      readLock.lock();
+      try {
         uncommittedRetriableStreams.remove(retriableStream);
-        if (uncommittedRetriableStreams.isEmpty()) {
-          shutdownStatusCopy = shutdownStatus;
-          // Because retriable transport is long-lived, we take this opportunity to down-size the
-          // hashmap.
-          uncommittedRetriableStreams = new HashSet<ClientStream>();
+        if (shutdownStatus != null && uncommittedRetriableStreams.isEmpty()) {
+          shouldShutdownDelayedTransport = true;
+        }
+
+        // Because retriable transport is long-lived, we take this opportunity to down-size the
+        // hashmap.
+        if (registryIsLarge && uncommittedRetriableStreams.size() <= 16) {
+          mayDownsize = true;
+        }
+      } finally {
+        readLock.unlock();
+      }
+
+      if (mayDownsize) {
+        Lock writeLock = lock.writeLock();
+        writeLock.lock();
+        try {
+          if (registryIsLarge && uncommittedRetriableStreams.size() <= 16) {
+            uncommittedRetriableStreams =
+                new ConcurrentHashMap<ClientStream, ClientStream>(uncommittedRetriableStreams);
+            registryIsLarge = false;
+          }
+        } finally {
+          writeLock.unlock();
         }
       }
 
-      if (shutdownStatusCopy != null) {
-        delayedTransport.shutdown(shutdownStatusCopy);
+      if (shouldShutdownDelayedTransport) {
+        delayedTransport.shutdown(shutdownStatus);
       }
     }
   }
