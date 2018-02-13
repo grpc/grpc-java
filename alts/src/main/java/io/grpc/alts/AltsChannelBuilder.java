@@ -243,5 +243,10 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
     public void resetConnectBackoff() {
       delegate.resetConnectBackoff();
     }
+
+    @Override
+    public void prepareToLoseNetwork() {
+      delegate.prepareToLoseNetwork();
+    }
   }
 }

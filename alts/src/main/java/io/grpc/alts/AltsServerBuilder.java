@@ -137,7 +137,7 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
   /** {@inheritDoc} */
   @Override
   public AltsServerBuilder useTransportSecurity(File certChain, File privateKey) {
-    throw new UnsupportedOperationException("Can't set TLS settings for LOAS2");
+    throw new UnsupportedOperationException("Can't set TLS settings for ALTS");
   }
 
   /** {@inheritDoc} */

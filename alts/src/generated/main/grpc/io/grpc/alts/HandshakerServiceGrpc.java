@@ -30,7 +30,7 @@ public final class HandshakerServiceGrpc {
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   @java.lang.Deprecated // Use {@link #getDoHandshakeMethod()} instead. 
   public static final io.grpc.MethodDescriptor<io.grpc.alts.Handshaker.HandshakerReq,
-      io.grpc.alts.Handshaker.HandshakerResp> METHOD_DO_HANDSHAKE = getDoHandshakeMethod();
+      io.grpc.alts.Handshaker.HandshakerResp> METHOD_DO_HANDSHAKE = getDoHandshakeMethodHelper();
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.alts.Handshaker.HandshakerReq,
       io.grpc.alts.Handshaker.HandshakerResp> getDoHandshakeMethod;
@@ -38,6 +38,11 @@ public final class HandshakerServiceGrpc {
   @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
   public static io.grpc.MethodDescriptor<io.grpc.alts.Handshaker.HandshakerReq,
       io.grpc.alts.Handshaker.HandshakerResp> getDoHandshakeMethod() {
+    return getDoHandshakeMethodHelper();
+  }
+
+  private static io.grpc.MethodDescriptor<io.grpc.alts.Handshaker.HandshakerReq,
+      io.grpc.alts.Handshaker.HandshakerResp> getDoHandshakeMethodHelper() {
     io.grpc.MethodDescriptor<io.grpc.alts.Handshaker.HandshakerReq, io.grpc.alts.Handshaker.HandshakerResp> getDoHandshakeMethod;
     if ((getDoHandshakeMethod = HandshakerServiceGrpc.getDoHandshakeMethod) == null) {
       synchronized (HandshakerServiceGrpc.class) {
@@ -95,13 +100,13 @@ public final class HandshakerServiceGrpc {
      */
     public io.grpc.stub.StreamObserver<io.grpc.alts.Handshaker.HandshakerReq> doHandshake(
         io.grpc.stub.StreamObserver<io.grpc.alts.Handshaker.HandshakerResp> responseObserver) {
-      return asyncUnimplementedStreamingCall(getDoHandshakeMethod(), responseObserver);
+      return asyncUnimplementedStreamingCall(getDoHandshakeMethodHelper(), responseObserver);
     }
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
           .addMethod(
-            getDoHandshakeMethod(),
+            getDoHandshakeMethodHelper(),
             asyncBidiStreamingCall(
               new MethodHandlers<
                 io.grpc.alts.Handshaker.HandshakerReq,
@@ -138,7 +143,7 @@ public final class HandshakerServiceGrpc {
     public io.grpc.stub.StreamObserver<io.grpc.alts.Handshaker.HandshakerReq> doHandshake(
         io.grpc.stub.StreamObserver<io.grpc.alts.Handshaker.HandshakerResp> responseObserver) {
       return asyncBidiStreamingCall(
-          getChannel().newCall(getDoHandshakeMethod(), getCallOptions()), responseObserver);
+          getChannel().newCall(getDoHandshakeMethodHelper(), getCallOptions()), responseObserver);
     }
   }
 
@@ -263,7 +268,7 @@ public final class HandshakerServiceGrpc {
         if (result == null) {
           serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
               .setSchemaDescriptor(new HandshakerServiceFileDescriptorSupplier())
-              .addMethod(getDoHandshakeMethod())
+              .addMethod(getDoHandshakeMethodHelper())
               .build();
         }
       }

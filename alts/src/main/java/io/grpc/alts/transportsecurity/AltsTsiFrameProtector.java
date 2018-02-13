@@ -220,6 +220,7 @@ public final class AltsTsiFrameProtector implements TsiFrameProtector {
       decodeFrame(alloc, out);
     }
 
+    @SuppressWarnings("fallthrough")
     private void decodeFrame(ByteBufAllocator alloc, List<Object> out)
         throws GeneralSecurityException {
       switch (state) {
