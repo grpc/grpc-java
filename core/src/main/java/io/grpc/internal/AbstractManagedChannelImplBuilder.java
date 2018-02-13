@@ -133,7 +133,6 @@ public abstract class AbstractManagedChannelImplBuilder
   long perRpcBufferLimit = DEFAULT_PER_RPC_BUFFER_LIMIT_IN_BYTES;
   boolean retryDisabled = true; // TODO(zdapeng): default to false
 
-  @Nullable
   Channelz channelz = Channelz.instance();
 
   protected TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();

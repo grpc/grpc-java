@@ -204,7 +204,6 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
 
   private final CallTracer.Factory callTracerFactory;
   private final CallTracer channelCallTracer;
-  @Nullable
   private final Channelz channelz;
 
   // One instance per channel.
@@ -302,12 +301,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
         builder.setSubchannels(children);
         ret.set(builder.build());
       }
-    });
-    if (!ret.isDone()) {
-      // TODO(zpencer): have a better safe guard against thread priority inversion
-      // this method may be called from a low priority non grpc thread
-      channelExecutor.drain();
-    }
+    }).drain();
     return ret;
   }
 
@@ -558,10 +552,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
 
     this.callTracerFactory = callTracerFactory;
     channelCallTracer = callTracerFactory.create();
-    this.channelz = builder.channelz;
-    if (channelz != null) {
-      channelz.addRootChannel(this);
-    }
+    this.channelz = checkNotNull(builder.channelz);
+    channelz.addRootChannel(this);
     logger.log(Level.FINE, "[{0}] Created with target {1}", new Object[] {getLogId(), target});
   }
 
@@ -954,9 +946,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
               @Override
               void onTerminated(InternalSubchannel is) {
                 subchannels.remove(is);
-                if (channelz != null) {
-                  channelz.removeChannel(is);
-                }
+                channelz.removeChannel(is);
                 maybeTerminateChannel();
               }
 
@@ -981,9 +971,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
             },
             proxyDetector,
             callTracerFactory.create());
-      if (channelz != null) {
-        channelz.addChannel(internalSubchannel);
-      }
+      channelz.addChannel(internalSubchannel);
       subchannel.subchannel = internalSubchannel;
       logger.log(Level.FINE, "[{0}] {1} created for {2}",
           new Object[] {getLogId(), internalSubchannel.getLogId(), addressGroup});
@@ -1054,9 +1042,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
             @Override
             void onTerminated(InternalSubchannel is) {
               oobChannels.remove(oobChannel);
-              if (channelz != null) {
-                channelz.removeChannel(is);
-              }
+              channelz.removeChannel(is);
               oobChannel.handleSubchannelTerminated();
               maybeTerminateChannel();
             }
@@ -1069,10 +1055,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
           },
           proxyDetector,
           callTracerFactory.create());
-      if (channelz != null) {
-        channelz.addChannel(oobChannel);
-        channelz.addChannel(internalSubchannel);
-      }
+      channelz.addChannel(oobChannel);
+      channelz.addChannel(internalSubchannel);
       oobChannel.setSubchannel(internalSubchannel);
       runSerialized(new Runnable() {
           @Override

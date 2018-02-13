@@ -23,11 +23,11 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Logger;
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 public final class Channelz {
   private static final Logger log = Logger.getLogger(Channelz.class.getName());
+  private static final Channelz INSTANCE = new Channelz();
 
   private final ConcurrentMap<Long, Instrumented<ChannelStats>> rootChannels =
       new ConcurrentHashMap<Long, Instrumented<ChannelStats>>();
@@ -38,12 +38,9 @@ public final class Channelz {
   public Channelz() {
   }
 
-  @Nullable
   public static Channelz instance() {
-    // not enabled by default until production ready
-    return null;
+    return INSTANCE;
   }
-
 
   public void addChannel(Instrumented<ChannelStats> channel) {
     add(channels, channel);
