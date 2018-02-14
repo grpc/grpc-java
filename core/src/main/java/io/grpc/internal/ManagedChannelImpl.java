@@ -1201,8 +1201,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     }
 
     @Override
-    public ListenableFuture<ChannelStats> getStats() {
-      return subchannel.getStats();
+    Instrumented<ChannelStats> getInternalSubchannel() {
+      return subchannel;
     }
 
     @Override
@@ -1264,11 +1264,6 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     @Override
     public String toString() {
       return subchannel.getLogId().toString();
-    }
-
-    @Override
-    public LogId getLogId() {
-      return subchannel.getLogId();
     }
   }
 

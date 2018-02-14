@@ -139,8 +139,8 @@ final class OobChannel extends ManagedChannel implements Instrumented<ChannelSta
         }
 
         @Override
-        public ListenableFuture<ChannelStats> getStats() {
-          return subchannel.getStats();
+        Instrumented<ChannelStats> getInternalSubchannel() {
+          return subchannel;
         }
 
         @Override
@@ -156,11 +156,6 @@ final class OobChannel extends ManagedChannel implements Instrumented<ChannelSta
         @Override
         public Attributes getAttributes() {
           return Attributes.EMPTY;
-        }
-
-        @Override
-        public LogId getLogId() {
-          return subchannel.getLogId();
         }
     };
 

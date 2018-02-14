@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.LoadBalancer;
 import io.grpc.internal.Channelz.ChannelStats;
 import javax.annotation.Nullable;
@@ -26,8 +25,7 @@ import javax.annotation.Nullable;
  * The base interface of the Subchannels returned by {@link
  * io.grpc.LoadBalancer.Helper#createSubchannel}.
  */
-abstract class AbstractSubchannel
-    extends LoadBalancer.Subchannel implements Instrumented<ChannelStats> {
+abstract class AbstractSubchannel extends LoadBalancer.Subchannel {
 
   /**
    * Same as {@link InternalSubchannel#obtainActiveTransport}.
@@ -36,16 +34,9 @@ abstract class AbstractSubchannel
   abstract ClientTransport obtainActiveTransport();
 
   /**
-   * Same as {@link InternalSubchannel#getStats()}.
+   * Returns the InternalSubchannel as an {@code Instrumented<T>} for the sole purpose of channelz
+   * unit tests.
    */
-  @Override
   @VisibleForTesting
-  public abstract ListenableFuture<ChannelStats> getStats();
-
-  /**
-   * Same as {@link InternalSubchannel#getLogId()}.
-   */
-  @Override
-  @VisibleForTesting
-  public abstract LogId getLogId();
+  abstract Instrumented<ChannelStats> getInternalSubchannel();
 }
