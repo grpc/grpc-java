@@ -54,6 +54,7 @@ export CXXFLAGS="-I/tmp/protobuf/include"
 ./gradlew assemble generateTestProto install $GRADLE_FLAGS
 
 if [[ -z "${SKIP_CLEAN_CHECK:-}" && ! -z $(git status --porcelain) ]]; then
+  git status
   echo "Error Working directory is not clean. Forget to commit generated files?"
   exit 1
 fi
