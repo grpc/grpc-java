@@ -32,7 +32,9 @@ if [[ ! -e /tmp/protobuf ]]; then
   ln -s $PROTO_INSTALL_DIR /tmp/protobuf;
 fi
 
-if [[ "$(readlink -f /tmp/protobuf)" != "$PROTO_INSTALL_DIR" ]]; then
+# It's better to use 'readlink -f' but it's not available on macos
+if [[ "$(readlink /tmp/protobuf)" != "$PROTO_INSTALL_DIR" ]]; then
+  echo "/tmp/protobuf already exists but is not a symlink to $PROTO_INSTALL_DIR"
   exit 1;
 fi
 
@@ -58,7 +60,8 @@ popd
 # TODO(zpencer): also build the GAE examples
 
 LOCAL_MVN_TEMP=$(mktemp -d)
-./gradlew clean grpc-compiler:build grpc-compiler:uploadArchives -PtargetArch=x86_64 -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP $GRADLE_FLAGS
+./gradlew clean grpc-compiler:build grpc-compiler:uploadArchives -PtargetArch=x86_64 \
+  -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP $GRADLE_FLAGS
 
 if [[ -z "${MVN_ARTIFACTS:-}" ]]; then
   exit 0
