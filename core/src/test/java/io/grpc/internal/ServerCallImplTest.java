@@ -43,6 +43,7 @@ import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
 import io.grpc.internal.testing.SingleMessageProducer;
+import io.grpc.testing.TestMethodDescriptors;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -167,25 +168,20 @@ public class ServerCallImplTest {
   @Test
   public void sendMessage_closeMarshallerInputStream() throws Exception {
     final InputStream mockInputStream = mock(InputStream.class);
-    Marshaller<Long> marshaller = new Marshaller<Long>() {
+    Marshaller<Void> marshaller = new Marshaller<Void>() {
       @Override
-      public InputStream stream(Long value) {
+      public InputStream stream(Void value) {
         return mockInputStream;
       }
 
       @Override
-      public Long parse(InputStream stream) {
+      public Void parse(InputStream stream) {
         throw new UnsupportedOperationException();
       }
     };
-    MethodDescriptor<Long, Long> testableInputStreamMethod =
-        MethodDescriptor.<Long, Long>newBuilder()
-            .setType(MethodType.UNARY)
-            .setFullMethodName("/service/method")
-            .setRequestMarshaller(new LongMarshaller())
-            .setResponseMarshaller(marshaller)
-            .build();
-    ServerCallImpl<Long, Long> call = new ServerCallImpl<Long, Long>(
+    MethodDescriptor<Void, Void> testableInputStreamMethod =
+        TestMethodDescriptors.voidMethod().toBuilder().setResponseMarshaller(marshaller).build();
+    ServerCallImpl<Void, Void> call = new ServerCallImpl<Void, Void>(
         stream,
         testableInputStreamMethod,
         requestHeaders,
@@ -193,7 +189,7 @@ public class ServerCallImplTest {
         DecompressorRegistry.getDefaultInstance(),
         CompressorRegistry.getDefaultInstance());
     call.sendHeaders(new Metadata());
-    call.sendMessage(1L);
+    call.sendMessage(null);
     verify(mockInputStream, times(1)).close();
   }
 

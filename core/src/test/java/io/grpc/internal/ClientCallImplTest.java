@@ -942,7 +942,9 @@ public class ClientCallImplTest {
         MoreExecutors.directExecutor(),
         baseCallOptions,
         provider,
-        deadlineCancellationExecutor);
+        deadlineCancellationExecutor,
+        CallTracer.getDefaultFactory().create(),
+        false);
     call.start(callListener, new Metadata());
     call.sendMessage(null);
     verify(mockInputStream, times(1)).close();
