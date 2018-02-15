@@ -607,16 +607,16 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         }
       }
 
-      if (retryPolicy.maxAttempts > substream.previousAttempts + 1) {
+      if (retryPolicy.maxAttempts > substream.previousAttempts + 1 && !isThrottled) {
         if (pushback == null) {
-          if (isRetryableStatusCode && !isThrottled) {
+          if (isRetryableStatusCode) {
             shouldRetry = true;
             backoffInMillis = (long) (nextBackoffIntervalInSeconds * 1000D * random.nextDouble());
             nextBackoffIntervalInSeconds = Math.min(
                 nextBackoffIntervalInSeconds * retryPolicy.backoffMultiplier,
                 retryPolicy.maxBackoffInSeconds);
           } // else no retry
-        } else if (pushback >= 0 && !isThrottled) {
+        } else if (pushback >= 0) {
           shouldRetry = true;
           backoffInMillis = pushback;
           nextBackoffIntervalInSeconds = retryPolicy.initialBackoffInSeconds;
