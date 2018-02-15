@@ -45,7 +45,7 @@ _gensource = rule(
         "flavor": attr.string(
             values = [
                 "normal",
-                "lite",  # Not currently supported
+                "lite",
             ],
             default = "normal",
         ),
@@ -109,14 +109,18 @@ def java_grpc_library(name, srcs, deps, flavor=None,
   added_deps = [
       "@grpc_java//core",
       "@grpc_java//stub",
-      "@grpc_java//protobuf",
       "@com_google_guava_guava//jar",
   ]
   if flavor == "normal":
-    added_deps += ["@com_google_protobuf//:protobuf_java"]
+    added_deps += [
+        "@com_google_protobuf//:protobuf_java",
+        "@grpc_java//protobuf",
+    ]
   elif flavor == "lite":
-    # TODO: This is currently blocked on https://github.com/google/protobuf/issues/2762
-    added_deps += ["@com_google_protobuf_java_lite//:protobuf_java_lite"]
+    added_deps += [
+        "@com_google_protobuf_javalite//:protobuf_java_lite",
+        "@grpc_java//protobuf-lite:protobuf_lite",
+    ]
   else:
     fail("Unknown flavor type", "flavor")
 
