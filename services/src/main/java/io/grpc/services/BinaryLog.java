@@ -22,6 +22,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.primitives.Bytes;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.UnsafeByteOperations;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -130,7 +131,7 @@ final class BinaryLog {
    * The number of bytes logged is determined by the binary logging configuration.
    */
   public void logOutboundMessage(
-      byte[] message, boolean compressed, boolean isServer, byte[] callId) {
+      ByteBuffer message, boolean compressed, boolean isServer, byte[] callId) {
     GrpcLogEntry entry = GrpcLogEntry
         .newBuilder()
         .setType(Type.SEND_MESSAGE)
@@ -147,7 +148,7 @@ final class BinaryLog {
    * The number of bytes logged is determined by the binary logging configuration.
    */
   public void logInboundMessage(
-      byte[] message, boolean compressed, boolean isServer, byte[] callId) {
+      ByteBuffer message, boolean compressed, boolean isServer, byte[] callId) {
     GrpcLogEntry entry = GrpcLogEntry
         .newBuilder()
         .setType(Type.RECV_MESSAGE)
@@ -439,15 +440,17 @@ final class BinaryLog {
   }
 
   @VisibleForTesting
-  static Message messageToProto(byte[] message, boolean compressed, int maxMessageBytes) {
-    Preconditions.checkState(maxMessageBytes >= 0);
+  static Message messageToProto(ByteBuffer message, boolean compressed, int maxMessageBytes) {
+    int messageSize = message.remaining();
     Message.Builder builder = Message
         .newBuilder()
         .setFlags(flagsForMessage(compressed))
-        .setLength(message.length);
+        .setLength(messageSize);
     if (maxMessageBytes > 0) {
-      int limit = Math.min(maxMessageBytes, message.length);
-      builder.setData(ByteString.copyFrom(message, 0, limit));
+      int desiredRemaining = Math.min(maxMessageBytes, messageSize);
+      ByteBuffer dup = message.duplicate();
+      dup.limit(dup.position() + desiredRemaining);
+      builder.setData(UnsafeByteOperations.unsafeWrap(dup));
     }
     return builder.build();
   }

@@ -26,6 +26,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.primitives.Bytes;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.UnsafeByteOperations;
 import io.grpc.Metadata;
 import io.grpc.binarylog.GrpcLogEntry;
 import io.grpc.binarylog.Message;
@@ -98,7 +99,7 @@ public final class BinaryLogTest {
   private final Metadata metadata = new Metadata();
   private final BinaryLogSink sink = mock(BinaryLogSink.class);
   private final BinaryLog binaryLog = new BinaryLog(sink, HEADER_LIMIT, MESSAGE_LIMIT);
-  private final byte[] message = new byte[100];
+  private final ByteBuffer message = ByteBuffer.wrap(new byte[100]);
 
   @Before
   public void setUp() throws Exception {
@@ -433,38 +434,62 @@ public final class BinaryLogTest {
 
   @Test
   public void messageToProto() throws Exception {
-    byte[] bytes = "this is a long message: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-        .getBytes(US_ASCII);
+    ByteBuffer bytes = ByteBuffer.wrap(
+        "this is a long message: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes(US_ASCII));
+    int remains = bytes.remaining();
     Message message = BinaryLog.messageToProto(bytes, false, Integer.MAX_VALUE);
     assertEquals(
         Message
             .newBuilder()
-            .setData(ByteString.copyFrom(bytes))
+            .setData(ByteString.copyFrom(bytes.duplicate()))
             .setFlags(0)
-            .setLength(bytes.length)
+            .setLength(bytes.remaining())
             .build(),
         message);
+    assertEquals(remains, bytes.remaining());
+  }
+
+  @Test
+  public void messageToProto_offsetByteBuffer() throws Exception {
+    String padding = "aaaaa";
+    String body = "the actual message";
+    String truncatedRemainder = "zzzz";
+    ByteBuffer bytes = ByteBuffer.wrap(
+        (padding + body + truncatedRemainder).getBytes(US_ASCII));
+    bytes.position(padding.length());
+    int remains = bytes.remaining();
+    Message message = BinaryLog.messageToProto(bytes, false, body.length());
+    assertEquals(
+        Message
+            .newBuilder()
+            .setData(ByteString.copyFrom(body.getBytes(US_ASCII)))
+            .setFlags(0)
+            .setLength(body.length() + truncatedRemainder.length())
+            .build(),
+        message);
+    assertEquals(remains, bytes.remaining());
   }
 
   @Test
   public void messageToProto_truncated() throws Exception {
-    byte[] bytes = "this is a long message: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-        .getBytes(US_ASCII);
+    ByteBuffer bytes = ByteBuffer.wrap(
+        "this is a long message: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes(US_ASCII));
     assertEquals(
         Message
             .newBuilder()
             .setFlags(0)
-            .setLength(bytes.length)
+            .setLength(bytes.remaining())
             .build(),
         BinaryLog.messageToProto(bytes, false, 0));
 
     int limit = 10;
+    String truncatedMessage = "this is a ";
     assertEquals(
         Message
             .newBuilder()
-            .setData(ByteString.copyFrom(bytes, 0, limit))
+            .setData(UnsafeByteOperations.unsafeWrap(truncatedMessage.getBytes(US_ASCII)))
             .setFlags(0)
-            .setLength(bytes.length)
+            .setLength(bytes.remaining())
             .build(),
         BinaryLog.messageToProto(bytes, false, limit));
   }
