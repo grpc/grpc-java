@@ -1220,7 +1220,7 @@ public class RetriableStreamTest {
   }
 
   @Test
-  public void throttledStream_FailWithNonretriableStatusCode_WithoutPushback() {
+  public void throttledStream_FailWithNonRetriableStatusCode_WithoutPushback() {
     Throttle throttle = new Throttle(4f, 0.8f);
     RetriableStream<String> retriableStream = newThrottledRetriableStream(throttle);
 
@@ -1294,7 +1294,7 @@ public class RetriableStreamTest {
   }
 
   @Test
-  public void throttledStream_FailWithRetriableStatusCode_WithNonretriablePushback() {
+  public void throttledStream_FailWithRetriableStatusCode_WithNonRetriablePushback() {
     Throttle throttle = new Throttle(4f, 0.8f);
     RetriableStream<String> retriableStream = newThrottledRetriableStream(throttle);
 
@@ -1316,7 +1316,7 @@ public class RetriableStreamTest {
   }
 
   @Test
-  public void throttledStream_FailWithNonRetriableStatusCode_WithNonretriablePushback() {
+  public void throttledStream_FailWithNonRetriableStatusCode_WithNonRetriablePushback() {
     Throttle throttle = new Throttle(4f, 0.8f);
     RetriableStream<String> retriableStream = newThrottledRetriableStream(throttle);
 
