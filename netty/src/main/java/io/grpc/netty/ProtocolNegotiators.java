@@ -256,41 +256,33 @@ public final class ProtocolNegotiators {
   public static ProtocolNegotiator tls(SslContext sslContext, String authority) {
     Preconditions.checkNotNull(sslContext, "sslContext");
     URI uri = GrpcUtil.authorityToUri(Preconditions.checkNotNull(authority, "authority"));
-    String host;
-    int port;
-    if (uri.getHost() != null) {
-      host = uri.getHost();
-      port = uri.getPort();
+    int port = uri.getPort();
+    String portlessAuthority;
+    if (port == -1) {
+      log.log(Level.FINE, "Couldn't find port in " + authority);
+      // if we can't find a port, just pass it through.
+      portlessAuthority = authority;
     } else {
-      /*
-       * Implementation note: We pick -1 as the port here rather than deriving it from the original
-       * socket address.  The SSL engine doens't use this port number when contacting the remote
-       * server, but rather it is used for other things like SSL Session caching.  When an invalid
-       * authority is provided (like "bad_cert"), picking the original port and passing it in would
-       * mean that the port might used under the assumption that it was correct.   By using -1 here,
-       * it forces the SSL implementation to treat it as invalid.
-       */
-      host = authority;
-      port = -1;
+      portlessAuthority = authority.substring(0, authority.lastIndexOf(":"));
     }
 
-    return new TlsNegotiator(sslContext, host, port);
+    return new TlsNegotiator(sslContext, portlessAuthority, port);
   }
 
   static final class TlsNegotiator implements ProtocolNegotiator {
     private final SslContext sslContext;
-    private final String host;
+    private final String portlessAuthority;
     private final int port;
 
-    TlsNegotiator(SslContext sslContext, String host, int port) {
+    TlsNegotiator(SslContext sslContext, String portlessAuthority, int port) {
       this.sslContext = checkNotNull(sslContext, "sslContext");
-      this.host = checkNotNull(host, "host");
+      this.portlessAuthority = checkNotNull(portlessAuthority, "portlessAuthority");
       this.port = port;
     }
 
     @VisibleForTesting
-    String getHost() {
-      return host;
+    String getPortlessAuthority() {
+      return portlessAuthority;
     }
 
     @VisibleForTesting
@@ -303,7 +295,7 @@ public final class ProtocolNegotiators {
       ChannelHandler sslBootstrap = new ChannelHandlerAdapter() {
         @Override
         public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-          SSLEngine sslEngine = sslContext.newEngine(ctx.alloc(), host, port);
+          SSLEngine sslEngine = sslContext.newEngine(ctx.alloc(), portlessAuthority, port);
           SSLParameters sslParams = sslEngine.getSSLParameters();
           sslParams.setEndpointIdentificationAlgorithm("HTTPS");
           sslEngine.setSSLParameters(sslParams);
