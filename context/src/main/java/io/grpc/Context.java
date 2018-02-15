@@ -100,6 +100,8 @@ public class Context {
 
   private static final Logger log = Logger.getLogger(Context.class.getName());
 
+  private static final Object[] EMPTY_ARGS = new Object[0];
+
   private static final PersistentHashArrayMappedTrie<Key<?>, Object> EMPTY_ENTRIES =
       new PersistentHashArrayMappedTrie<Key<?>, Object>();
 
@@ -141,7 +143,7 @@ public class Context {
     }
     Random r;
     try {
-      r = (Random) threadLocalRandomCurrent.invoke(null);
+      r = (Random) threadLocalRandomCurrent.invoke(null, EMPTY_ARGS);
     } catch (Exception e) {
       log.log(Level.FINE, "Can't get TLR", e);
       return false;
