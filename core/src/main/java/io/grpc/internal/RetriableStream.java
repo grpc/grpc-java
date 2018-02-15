@@ -857,15 +857,32 @@ abstract class RetriableStream<ReqT> implements ClientStream {
    * Used for retry throttling.
    */
   static final class Throttle {
+
+    private static final int THREE_DECIMAL_PLACES_SCALE_UP = 1000;
+
+    /**
+     * 1000 times the maxTokens field of the retryThrottling policy in service config.
+     * The number of tokens starts at maxTokens. The token_count will always be between 0 and
+     * maxTokens.
+     */
     final int maxTokens;
+
+    /**
+     * Half of {@code maxTokens}.
+     */
     final int threshold;
+
+    /**
+     * 1000 times the tokenRatio field of the retryThrottling policy in service config.
+     */
     final int tokenRatio;
+
     final AtomicInteger tokenCount = new AtomicInteger();
 
     Throttle(float maxTokens, float tokenRatio) {
       // tokenRatio is up to 3 decimal places
-      this.tokenRatio = (int) (tokenRatio * 1000f);
-      this.maxTokens = (int) (maxTokens * 1000f);
+      this.tokenRatio = (int) (tokenRatio * THREE_DECIMAL_PLACES_SCALE_UP);
+      this.maxTokens = (int) (maxTokens * THREE_DECIMAL_PLACES_SCALE_UP);
       this.threshold = this.maxTokens / 2;
       tokenCount.set(this.maxTokens);
     }
@@ -887,7 +904,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         if (currentCount == 0) {
           return false;
         }
-        int decremented = currentCount - 1000;
+        int decremented = currentCount - (1 * THREE_DECIMAL_PLACES_SCALE_UP);
         boolean updated = tokenCount.compareAndSet(currentCount, Math.max(decremented, 0));
         if (updated) {
           return decremented > threshold;
