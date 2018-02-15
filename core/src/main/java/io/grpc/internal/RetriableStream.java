@@ -588,42 +588,40 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     private RetryPlan makeRetryDecision(RetryPolicy retryPolicy, Status status, Metadata trailer) {
       boolean shouldRetry = false;
       long backoffInMillis = 0L;
+      boolean isRetryableStatusCode = retryPolicy.retryableStatusCodes.contains(status.getCode());
+
       String pushbackStr = trailer.get(GRPC_RETRY_PUSHBACK_MS);
-      if (pushbackStr == null) {
-        if (retryPolicy.retryableStatusCodes.contains(status.getCode())
-            && (throttle == null || throttle.onQualifiedFailureThenCheckIsAboveThreshold())
-            && retryPolicy.maxAttempts > substream.previousAttempts + 1) {
-          shouldRetry = true;
-          backoffInMillis = (long) (nextBackoffIntervalInSeconds * 1000D * random.nextDouble());
-          nextBackoffIntervalInSeconds = Math.min(
-              nextBackoffIntervalInSeconds * retryPolicy.backoffMultiplier,
-              retryPolicy.maxBackoffInSeconds);
-        } // else no retry
-      } else {
-        int pushback;
+      Integer pushback = null;
+      if (pushbackStr != null) {
         try {
-          pushback = Integer.parseInt(pushbackStr);
+          pushback = Integer.valueOf(pushbackStr);
         } catch (NumberFormatException e) {
           pushback = -1;
         }
-        if (pushback < 0) { // no retry
-          if (throttle != null) {
-            throttle.onQualifiedFailureThenCheckIsAboveThreshold();
-          }
-        } else if (
-            (
-                retryPolicy.retryableStatusCodes.contains(status.getCode())
-                && (throttle == null || throttle.onQualifiedFailureThenCheckIsAboveThreshold())
-                && retryPolicy.maxAttempts > substream.previousAttempts + 1)
-            || (
-                !retryPolicy.retryableStatusCodes.contains(status.getCode())
-                && (throttle == null || throttle.isAboveThreshold())
-                && retryPolicy.maxAttempts > substream.previousAttempts + 1)) {
+      }
+
+      boolean isThrottled = false;
+      if (throttle != null) {
+        if (isRetryableStatusCode || (pushback != null && pushback < 0)) {
+          isThrottled = !throttle.onQualifiedFailureThenCheckIsAboveThreshold();
+        }
+      }
+
+      if (retryPolicy.maxAttempts > substream.previousAttempts + 1) {
+        if (pushback == null) {
+          if (isRetryableStatusCode && !isThrottled) {
+            shouldRetry = true;
+            backoffInMillis = (long) (nextBackoffIntervalInSeconds * 1000D * random.nextDouble());
+            nextBackoffIntervalInSeconds = Math.min(
+                nextBackoffIntervalInSeconds * retryPolicy.backoffMultiplier,
+                retryPolicy.maxBackoffInSeconds);
+          } // else no retry
+        } else if (pushback >= 0 && !isThrottled) {
           shouldRetry = true;
           backoffInMillis = pushback;
           nextBackoffIntervalInSeconds = retryPolicy.initialBackoffInSeconds;
         } // else no retry
-      }
+      } // else no retry
 
       // TODO(zdapeng): transparent retry
       // TODO(zdapeng): hedging
