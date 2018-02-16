@@ -78,10 +78,10 @@ import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.Channelz.ChannelStats;
-import io.grpc.internal.ManagedChannelImpl.ManagedChannelReference;
 import io.grpc.internal.NoopClientCall.NoopClientCallListener;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import io.grpc.internal.testing.SingleMessageProducer;
+import java.lang.ref.Reference;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -94,10 +94,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.logging.Filter;
-import java.util.logging.Level;
-import java.util.logging.LogRecord;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
@@ -132,7 +128,6 @@ public class ManagedChannelImplTest {
   private static final Attributes.Key<String> SUBCHANNEL_ATTR_KEY =
       Attributes.Key.of("subchannel-attr-key");
   private static final long RECONNECT_BACKOFF_INTERVAL_NANOS = 1;
-  private static int unterminatedChannels;
   private final String serviceName = "fake.example.com";
   private final String authority = serviceName;
   private final String userAgent = "userAgent";
@@ -271,16 +266,8 @@ public class ManagedChannelImplTest {
     // would ignore any time-sensitive tasks, e.g., back-off and the idle timer.
     assertTrue(timer.getDueTasks() + " should be empty", timer.getDueTasks().isEmpty());
     assertEquals(executor.getPendingTasks() + " should be empty", 0, executor.numPendingTasks());
-    helper = null; // helper retains a ref to the channel
     if (channel != null) {
       channel.shutdownNow();
-      if (!channel.isTerminated()) {
-        // Since there are no real transports in this test, if shutdownNow doesn't result in
-        // termination, then it will never happen.  It would be very cumbersome to make all the
-        // tests in this file clean up fully after themselves, so instead just keep track of how
-        // many don't.  This is used to see how many should be ignored in the phantom cleanup.
-        unterminatedChannels++;
-      }
       channel = null;
     }
   }
@@ -1624,71 +1611,14 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void orphanedChannelsAreLogged() throws Exception {
-    int remaining = unterminatedChannels;
-    for (int retry = 0; retry < 3; retry++) {
-      System.gc();
-      System.runFinalization();
-      if ((remaining -= ManagedChannelReference.cleanQueue()) <= 0) {
-        break;
-      }
-      Thread.sleep(100L * (1L << retry));
-    }
-    assertThat(remaining).isAtMost(0);
-
-    createChannel(
-        new FakeNameResolverFactory(true),
-        NO_INTERCEPTOR,
-        false, // Don't create a transport, Helper maintains a ref to the channel.
-        ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE);
-    assertNotNull(channel);
-    LogId logId = channel.getLogId();
-
-    // Try to capture the log output but without causing terminal noise.  Adding the filter must
-    // be done before clearing the ref or else it might be missed.
-    final List<LogRecord> records = new ArrayList<LogRecord>(1);
-    Logger channelLogger = Logger.getLogger(ManagedChannelImpl.class.getName());
-    Filter oldFilter = channelLogger.getFilter();
-    channelLogger.setFilter(new Filter() {
-
-      @Override
-      public boolean isLoggable(LogRecord record) {
-        synchronized (records) {
-          records.add(record);
-        }
-        return false;
-      }
-    });
-
-    // TODO(carl-mastrangelo): consider using com.google.common.testing.GcFinalization instead.
-    try {
-      channel = null;
-      // That *should* have been the last reference.  Try to reclaim it.
-      boolean success = false;
-      for (int retry = 0; retry < 3; retry++) {
-        System.gc();
-        System.runFinalization();
-        int orphans = ManagedChannelReference.cleanQueue();
-        if (orphans == 1) {
-          success = true;
-          break;
-        }
-        assertEquals("unexpected extra orphans", 0, orphans);
-        Thread.sleep(100L * (1L << retry));
-      }
-      assertTrue("Channel was not garbage collected", success);
-
-      LogRecord lr;
-      synchronized (records) {
-        assertEquals(1, records.size());
-        lr = records.get(0);
-      }
-      assertThat(lr.getMessage()).contains("shutdown");
-      assertThat(lr.getParameters()).asList().containsExactly(logId, target).inOrder();
-      assertEquals(Level.SEVERE, lr.getLevel());
-    } finally {
-      channelLogger.setFilter(oldFilter);
-    }
+  public void orphanedRefClearedOnTermination() throws Exception {
+    FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory(true);
+    createChannel(nameResolverFactory, NO_INTERCEPTOR, false /* requestConnection */,
+            ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE);
+    Reference<?> ref = mock(Reference.class);
+    channel.setPhantom(ref);
+    channel.shutdownNow().awaitTermination(1, TimeUnit.SECONDS);
+    verify(ref).clear();
   }
 
   @Test
