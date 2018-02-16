@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ConnectivityState;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -155,7 +156,7 @@ public final class Channelz {
       }
 
       public Builder setSubchannels(List<LogId> subchannels) {
-        this.subchannels = subchannels;
+        this.subchannels = Collections.unmodifiableList(subchannels);
         return this;
       }
 
