@@ -655,7 +655,8 @@ class NettyServerHandler extends AbstractNettyHandler {
     // Notify the listener if we haven't already.
     cmd.stream().transportReportStatus(cmd.reason());
     Http2Error http2Error = Http2Error.INTERNAL_ERROR;
-    if (cmd.reason() == Status.DEADLINE_EXCEEDED || cmd.reason() == Status.CANCELLED) {
+    if (Status.DEADLINE_EXCEEDED.getCode().equals(cmd.reason().getCode()) || Status.CANCELLED
+        .getCode().equals(cmd.reason().getCode())) {
       http2Error = Http2Error.CANCEL;
     }
     // Terminate the stream.
