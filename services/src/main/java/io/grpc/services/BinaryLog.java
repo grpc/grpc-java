@@ -22,7 +22,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.primitives.Bytes;
 import com.google.protobuf.ByteString;
-import com.google.protobuf.UnsafeByteOperations;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -450,7 +449,7 @@ final class BinaryLog {
       int desiredRemaining = Math.min(maxMessageBytes, messageSize);
       ByteBuffer dup = message.duplicate();
       dup.limit(dup.position() + desiredRemaining);
-      builder.setData(UnsafeByteOperations.unsafeWrap(dup));
+      builder.setData(ByteString.copyFrom(dup));
     }
     return builder.build();
   }
