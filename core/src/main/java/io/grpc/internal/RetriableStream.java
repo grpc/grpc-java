@@ -54,6 +54,11 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   @VisibleForTesting
   static final Metadata.Key<String> GRPC_PREVIOUS_RPC_ATTEMPTS =
       Metadata.Key.of("grpc-previous-rpc-attempts", Metadata.ASCII_STRING_MARSHALLER);
+
+  @VisibleForTesting
+  static final Metadata.Key<String> GRPC_TRANSPARENT_RETRY_ATTEMPTS =
+      Metadata.Key.of("grpc-transparent-retry-attempts", Metadata.ASCII_STRING_MARSHALLER);
+
   @VisibleForTesting
   static final Metadata.Key<String> GRPC_RETRY_PUSHBACK_MS =
       Metadata.Key.of("grpc-retry-pushback-ms", Metadata.ASCII_STRING_MARSHALLER);
@@ -152,13 +157,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
   }
 
-  private void retry(int previousAttempts) {
-    Substream substream = createSubstream(previousAttempts);
-    drain(substream);
-  }
 
-  private Substream createSubstream(int previousAttempts) {
-    Substream sub = new Substream(previousAttempts);
+  private Substream createSubstream(int previousAttempts, int transparentRetryAttempts) {
+    Substream sub = new Substream(previousAttempts, transparentRetryAttempts);
     // one tracer per substream
     final ClientStreamTracer bufferSizeTracer = new BufferSizeTracer(sub);
     ClientStreamTracer.Factory tracerFactory = new ClientStreamTracer.Factory() {
@@ -168,7 +169,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       }
     };
 
-    Metadata newHeaders = updateHeaders(headers, previousAttempts);
+    Metadata newHeaders = updateHeaders(headers, previousAttempts, transparentRetryAttempts);
     // NOTICE: This set _must_ be done before stream.start() and it actually is.
     sub.stream = newSubstream(tracerFactory, newHeaders);
     return sub;
@@ -183,12 +184,20 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   /** Adds grpc-previous-rpc-attempts in the headers of a retry/hedging RPC. */
   @VisibleForTesting
-  final Metadata updateHeaders(Metadata originalHeaders, int previousAttempts) {
+  final Metadata updateHeaders(
+      Metadata originalHeaders, int previousAttempts, int transparentRetryAttempts) {
     Metadata newHeaders = originalHeaders;
     if (previousAttempts > 0) {
       newHeaders = new Metadata();
       newHeaders.merge(originalHeaders);
       newHeaders.put(GRPC_PREVIOUS_RPC_ATTEMPTS, String.valueOf(previousAttempts));
+    }
+    if (transparentRetryAttempts > 0) {
+      if (newHeaders == originalHeaders) {
+        newHeaders = new Metadata();
+        newHeaders.merge(originalHeaders);
+      }
+      newHeaders.put(GRPC_TRANSPARENT_RETRY_ATTEMPTS, String.valueOf(transparentRetryAttempts));
     }
     return newHeaders;
   }
@@ -274,7 +283,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       state.buffer.add(new StartEntry());
     }
 
-    Substream substream = createSubstream(0);
+    Substream substream = createSubstream(0, 0);
     drain(substream);
 
     // TODO(zdapeng): schedule hedging if needed
@@ -282,7 +291,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   @Override
   public final void cancel(Status reason) {
-    Substream noopSubstream = new Substream(0 /* previousAttempts doesn't matter here*/);
+    Substream noopSubstream = new Substream(0 /* previousAttempts doesn't matter here*/, 0);
     noopSubstream.stream = new NoopClientStream();
     Runnable runnable = commit(noopSubstream);
 
@@ -530,6 +539,11 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     @Override
     public void closed(Status status, Metadata trailers) {
+      closed(status, RpcProgress.PROCESSED, trailers);
+    }
+
+    @Override
+    public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
       synchronized (lock) {
         state = state.substreamClosed(substream);
       }
@@ -545,6 +559,19 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       }
 
       if (state.winningSubstream == null) {
+        if (rpcProgress == RpcProgress.REFUSED) {
+          callExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+              // transparent retry
+              Substream newSubstream = createSubstream(
+                  substream.previousAttempts, substream.transparentRetryAttempts + 1);
+              drain(newSubstream);
+            }
+          });
+          return;
+        } // TODO(zdapeng): else if (rpcProgress == RpcProgress.DROPPED)
+
         RetryPlan retryPlan = makeRetryDecision(retryPolicy, status, trailers);
         if (retryPlan.shouldRetry) {
           // The check state.winningSubstream == null, checking if is not already committed, is
@@ -557,7 +584,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
                   callExecutor.execute(new Runnable() {
                     @Override
                     public void run() {
-                      retry(substream.previousAttempts + 1);
+                      // retry
+                      Substream newSubstream = createSubstream(substream.previousAttempts + 1, 0);
+                      drain(newSubstream);
                     }
                   });
                 }
@@ -768,11 +797,12 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     // setting to true must be GuardedBy RetriableStream.lock
     boolean bufferLimitExceeded;
 
-    // TODO(zdapeng): add transparent-retry-attempts
     final int previousAttempts;
+    final int transparentRetryAttempts;
 
-    Substream(int previousAttempts) {
+    Substream(int previousAttempts, int transparentRetryAttempts) {
       this.previousAttempts = previousAttempts;
+      this.transparentRetryAttempts = transparentRetryAttempts;
     }
   }
 

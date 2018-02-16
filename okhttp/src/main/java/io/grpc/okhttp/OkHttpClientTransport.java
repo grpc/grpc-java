@@ -17,6 +17,8 @@
 package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
+import static io.grpc.internal.ClientStreamListener.RpcProgress.REFUSED;
 import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -39,6 +41,8 @@ import io.grpc.Status.Code;
 import io.grpc.StatusException;
 import io.grpc.internal.Channelz.Security;
 import io.grpc.internal.Channelz.SocketStats;
+import io.grpc.internal.Channelz.TransportStats;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
@@ -733,12 +737,14 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         Map.Entry<Integer, OkHttpClientStream> entry = it.next();
         if (entry.getKey() > lastKnownStreamId) {
           it.remove();
-          entry.getValue().transportState().transportReportStatus(status, false, new Metadata());
+          entry.getValue().transportState().transportReportStatus(
+              status, REFUSED, false, new Metadata());
         }
       }
 
       for (OkHttpClientStream stream : pendingStreams) {
-        stream.transportState().transportReportStatus(status, true, new Metadata());
+        stream.transportState().transportReportStatus(
+            status, REFUSED, true, new Metadata());
       }
       pendingStreams.clear();
       maybeClearInUse();
@@ -765,6 +771,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   void finishStream(
       int streamId,
       @Nullable Status status,
+      RpcProgress rpcProgress,
       boolean stopDelivery,
       @Nullable ErrorCode errorCode,
       @Nullable Metadata trailers) {
@@ -779,6 +786,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
               .transportState()
               .transportReportStatus(
                   status,
+                  rpcProgress,
                   stopDelivery,
                   trailers != null ? trailers : new Metadata());
         }
@@ -1020,7 +1028,10 @@ class OkHttpClientTransport implements ConnectionClientTransport {
       Status status = toGrpcStatus(errorCode).augmentDescription("Rst Stream");
       boolean stopDelivery =
           (status.getCode() == Code.CANCELLED || status.getCode() == Code.DEADLINE_EXCEEDED);
-      finishStream(streamId, status, stopDelivery, null, null);
+      finishStream(
+          streamId, status,
+          errorCode == ErrorCode.REFUSED_STREAM ? REFUSED : PROCESSED,
+          stopDelivery, null, null);
     }
 
     @Override
@@ -1112,8 +1123,9 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         if (streamId == 0) {
           onError(ErrorCode.PROTOCOL_ERROR, errorMsg);
         } else {
-          finishStream(streamId,
-              Status.INTERNAL.withDescription(errorMsg), false, ErrorCode.PROTOCOL_ERROR, null);
+          finishStream(
+              streamId, Status.INTERNAL.withDescription(errorMsg), PROCESSED, false,
+              ErrorCode.PROTOCOL_ERROR, null);
         }
         return;
       }

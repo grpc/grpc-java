@@ -628,7 +628,7 @@ final class InternalSubchannel implements Instrumented<ChannelStats> {
 
     @Override
     public ClientStream newStream(
-        MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
+        MethodDescriptor<?, ?> method, Metadata headers, final CallOptions callOptions) {
       final ClientStream streamDelegate = super.newStream(method, headers, callOptions);
       return new ForwardingClientStream() {
         @Override
@@ -649,6 +649,13 @@ final class InternalSubchannel implements Instrumented<ChannelStats> {
             public void closed(Status status, Metadata trailers) {
               callTracer.reportCallEnded(status.isOk());
               super.closed(status, trailers);
+            }
+
+            @Override
+            public void closed(
+                Status status, RpcProgress rpcProgress, Metadata trailers) {
+              callTracer.reportCallEnded(status.isOk());
+              super.closed(status, rpcProgress, trailers);
             }
           });
         }

@@ -926,10 +926,10 @@ public class RetriableStreamTest {
   @Test
   public void updateHeaders() {
     Metadata originalHeaders = new Metadata();
-    Metadata headers = retriableStream.updateHeaders(originalHeaders, 0);
+    Metadata headers = retriableStream.updateHeaders(originalHeaders, 0, 0);
     assertSame(originalHeaders, headers);
 
-    headers = retriableStream.updateHeaders(originalHeaders, 345);
+    headers = retriableStream.updateHeaders(originalHeaders, 345, 0);
     assertEquals("345", headers.get(GRPC_PREVIOUS_RPC_ATTEMPTS));
     assertNull(originalHeaders.get(GRPC_PREVIOUS_RPC_ATTEMPTS));
   }

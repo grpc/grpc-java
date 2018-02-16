@@ -17,6 +17,8 @@
 package io.grpc.netty;
 
 import static com.google.common.base.Charsets.UTF_8;
+import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
+import static io.grpc.internal.ClientStreamListener.RpcProgress.REFUSED;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.netty.Utils.CONTENT_TYPE_GRPC;
 import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
@@ -35,6 +37,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.notNull;
+import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -193,7 +196,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     cancelStream(Status.CANCELLED);
 
     assertTrue(createFuture.isSuccess());
-    verify(streamListener).closed(eq(Status.CANCELLED), any(Metadata.class));
+    verify(streamListener).closed(eq(Status.CANCELLED), same(PROCESSED), any(Metadata.class));
   }
 
   @Test
@@ -338,7 +341,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     // Read a GOAWAY that indicates our stream was never processed by the server.
     channelRead(goAwayFrame(0, 8 /* Cancel */, Unpooled.copiedBuffer("this is a test", UTF_8)));
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(streamListener).closed(captor.capture(), notNull(Metadata.class));
+    verify(streamListener).closed(captor.capture(), same(REFUSED), notNull(Metadata.class));
     assertEquals(Status.CANCELLED.getCode(), captor.getValue().getCode());
     assertEquals("HTTP/2 error code: CANCEL\nReceived Goaway\nthis is a test",
         captor.getValue().getDescription());
@@ -423,7 +426,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
     assertEquals(3, streamTransportState.id());
     cancelStream(Status.CANCELLED);
-    verify(streamListener).closed(eq(Status.CANCELLED), any(Metadata.class));
+    verify(streamListener).closed(eq(Status.CANCELLED), same(PROCESSED), any(Metadata.class));
   }
 
   @Test
@@ -445,7 +448,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
     handler().channelInactive(ctx());
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(streamListener).closed(captor.capture(), notNull(Metadata.class));
+    verify(streamListener).closed(captor.capture(), same(PROCESSED), notNull(Metadata.class));
     assertEquals(Status.UNAVAILABLE.getCode(), captor.getValue().getCode());
   }
 
