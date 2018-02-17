@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.benchmarks.netty;
+package io.grpc.util;
 
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -23,7 +23,6 @@ import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.testing.TestMethodDescriptors;
-import io.grpc.util.MutableHandlerRegistry;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
