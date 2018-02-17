@@ -69,7 +69,7 @@ public class TransportBenchmark {
   private ManagedChannel channel;
   private Server server;
   private BenchmarkServiceGrpc.BenchmarkServiceBlockingStub stub;
-  private volatile EventLoopGroup groupToShutdown;
+  private EventLoopGroup groupToShutdown;
 
   @Setup
   @SuppressWarnings("LiteralClassName") // Epoll is not available on windows
