@@ -34,6 +34,7 @@ import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
+import io.grpc.stub.StreamObserver;
 import io.netty.channel.Channel;
 import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
@@ -47,12 +48,14 @@ import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Mode;
+import org.openjdk.jmh.annotations.OperationsPerInvocation;
 import org.openjdk.jmh.annotations.OutputTimeUnit;
 import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.TearDown;
+import org.openjdk.jmh.annotations.Threads;
 
 /** Some text. */
 @State(Scope.Benchmark)
@@ -69,6 +72,7 @@ public class TransportBenchmark {
   private ManagedChannel channel;
   private Server server;
   private BenchmarkServiceGrpc.BenchmarkServiceBlockingStub stub;
+  private BenchmarkServiceGrpc.BenchmarkServiceStub asyncStub;
   private EventLoopGroup groupToShutdown;
 
   @Setup
@@ -157,6 +161,7 @@ public class TransportBenchmark {
     server.start();
     channel = channelBuilder.build();
     stub = BenchmarkServiceGrpc.newBlockingStub(channel);
+    asyncStub = BenchmarkServiceGrpc.newStub(channel);
     // Wait for channel to start
     stub.unaryCall(SimpleRequest.getDefaultInstance());
   }
@@ -182,7 +187,7 @@ public class TransportBenchmark {
     }
   }
 
-  private SimpleRequest simpleRequest = SimpleRequest.newBuilder()
+  private static final SimpleRequest UNARY_CALL_1024_REQUEST = SimpleRequest.newBuilder()
       .setResponseSize(1024)
       .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[1024])))
       .build();
@@ -190,7 +195,86 @@ public class TransportBenchmark {
   @Benchmark
   @BenchmarkMode(Mode.SampleTime)
   @OutputTimeUnit(TimeUnit.NANOSECONDS)
-  public SimpleResponse unaryCall1024() {
-    return stub.unaryCall(simpleRequest);
+  public SimpleResponse unaryCall1024Latency() {
+    return stub.unaryCall(UNARY_CALL_1024_REQUEST);
+  }
+
+  private static final int BYTE_THROUGHPUT_RESPONSE_SIZE = 1048576;
+  private static final SimpleRequest BYTE_THROUGHPUT_REQUEST = SimpleRequest.newBuilder()
+      .setResponseSize(BYTE_THROUGHPUT_RESPONSE_SIZE)
+      .build();
+
+  @Benchmark
+  @BenchmarkMode(Mode.Throughput)
+  @OperationsPerInvocation(BYTE_THROUGHPUT_RESPONSE_SIZE)
+  @Threads(10)
+  public SimpleResponse unaryCallsByteThroughput() {
+    return stub.unaryCall(BYTE_THROUGHPUT_REQUEST);
+  }
+
+  private static final Throwable OK_THROWABLE = new RuntimeException("OK");
+
+  @State(Scope.Thread)
+  public static class PingPongStreamState {
+    private final ThreadlessExecutor executor = new ThreadlessExecutor();
+    private StreamObserver<SimpleRequest> requestObserver;
+    private SimpleResponse response;
+    private Throwable status;
+
+    @Setup
+    public void setUp(TransportBenchmark bench) {
+      requestObserver = bench.asyncStub
+          .withExecutor(executor)
+          .streamingCall(new StreamObserver<SimpleResponse>() {
+            @Override public void onNext(SimpleResponse next) {
+              assert response == null;
+              response = next;
+            }
+
+            @Override public void onError(Throwable t) {
+              status = t;
+            }
+
+            @Override public void onCompleted() {
+              status = OK_THROWABLE;
+            }
+          });
+    }
+
+    /** Issues request and waits for response. */
+    public SimpleResponse pingPong(SimpleRequest request) throws InterruptedException {
+      requestObserver.onNext(request);
+      while (true) {
+        executor.waitAndDrain();
+        if (response != null) {
+          SimpleResponse savedResponse = response;
+          response = null;
+          return savedResponse;
+        }
+        if (status != null) {
+          throw new RuntimeException("Unexpected stream termination", status);
+        }
+      }
+    }
+
+    @TearDown
+    public void tearDown() throws InterruptedException {
+      requestObserver.onCompleted();
+      while (status == null) {
+        executor.waitAndDrain();
+      }
+      if (status != OK_THROWABLE) {
+        throw new RuntimeException("Non-graceful stream shutdown", status);
+      }
+    }
+  }
+
+  @Benchmark
+  @BenchmarkMode(Mode.Throughput)
+  @OperationsPerInvocation(BYTE_THROUGHPUT_RESPONSE_SIZE)
+  @Threads(10)
+  public SimpleResponse streamingCallsByteThroughput(PingPongStreamState state)
+      throws InterruptedException {
+    return state.pingPong(BYTE_THROUGHPUT_REQUEST);
   }
 }
