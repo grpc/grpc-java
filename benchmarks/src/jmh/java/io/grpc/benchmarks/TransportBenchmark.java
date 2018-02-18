@@ -21,6 +21,8 @@ import static io.grpc.benchmarks.Utils.pickUnusedPort;
 import com.google.protobuf.ByteString;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.benchmarks.proto.BenchmarkServiceGrpc;
 import io.grpc.benchmarks.proto.Messages.Payload;
 import io.grpc.benchmarks.proto.Messages.SimpleRequest;
@@ -43,6 +45,7 @@ import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
 import java.net.InetSocketAddress;
+import java.util.Iterator;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -276,5 +279,45 @@ public class TransportBenchmark {
   public SimpleResponse streamingCallsByteThroughput(PingPongStreamState state)
       throws InterruptedException {
     return state.pingPong(BYTE_THROUGHPUT_REQUEST);
+  }
+
+  @State(Scope.Thread)
+  public static class InfiniteStreamState {
+    private final CancellableInterceptor cancellableInterceptor = new CancellableInterceptor();
+    private Iterator<SimpleResponse> iter;
+
+    @Setup
+    public void setUp(TransportBenchmark bench) {
+      iter = bench.stub
+          .withInterceptors(cancellableInterceptor)
+          .streamingFromServer(SimpleRequest.getDefaultInstance());
+    }
+
+    public SimpleResponse recv() throws InterruptedException {
+      return iter.next();
+    }
+
+    @TearDown
+    public void tearDown() throws InterruptedException {
+      cancellableInterceptor.cancel("Normal tear-down", null);
+      try {
+        // Need to drain the queue
+        while (iter.hasNext()) {
+          iter.next();
+        }
+      } catch (StatusRuntimeException ex) {
+        if (!Status.Code.CANCELLED.equals(ex.getStatus().getCode())) {
+          throw ex;
+        }
+      }
+    }
+  }
+
+  @Benchmark
+  @BenchmarkMode(Mode.Throughput)
+  @Threads(10)
+  public SimpleResponse streamingCallsMessageThroughput(InfiniteStreamState state)
+      throws InterruptedException {
+    return state.recv();
   }
 }
