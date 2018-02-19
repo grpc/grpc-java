@@ -24,35 +24,33 @@ import java.lang.ref.SoftReference;
 import java.lang.ref.WeakReference;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
-class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
-  private static final ReferenceQueue<ManagedChannelOrphanWrapper> REFQUEUE =
+final class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
+  private static final ReferenceQueue<ManagedChannelOrphanWrapper> refqueue =
       new ReferenceQueue<ManagedChannelOrphanWrapper>();
   // Retain the References so they don't get GC'd
-  private static final ConcurrentMap<ManagedChannelReference, ManagedChannelReference> REFS =
+  private static final ConcurrentMap<ManagedChannelReference, ManagedChannelReference> refs =
       new ConcurrentHashMap<ManagedChannelReference, ManagedChannelReference>();
-  static final Logger logger = Logger.getLogger(ManagedChannelOrphanWrapper.class.getName());
+  private static final Logger logger =
+      Logger.getLogger(ManagedChannelOrphanWrapper.class.getName());
 
   private final ManagedChannelReference phantom;
 
-  ManagedChannelOrphanWrapper(OrphanWrappableManagedChannel delegate) {
-    this(delegate, REFQUEUE, REFS);
+  ManagedChannelOrphanWrapper(ManagedChannel delegate) {
+    this(delegate, refqueue, refs);
   }
 
   @VisibleForTesting
   ManagedChannelOrphanWrapper(
-      OrphanWrappableManagedChannel delegate,
+      ManagedChannel delegate,
       ReferenceQueue<ManagedChannelOrphanWrapper> refqueue,
       ConcurrentMap<ManagedChannelReference, ManagedChannelReference> refs) {
     super(delegate);
     phantom = new ManagedChannelReference(this, delegate, refqueue, refs);
-    // zpencer: Can this be implemented with notifyWhenStateChanged and fire at SHUTDOWN instead?
-    // The reason OrphanableMC exists is because ManagedChannelImpl is both unmockable and
-    // difficult to construct.
-    delegate.setPhantom(phantom);
   }
 
   @Override
@@ -65,6 +63,15 @@ class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
   public ManagedChannel shutdownNow() {
     phantom.shutdownNow = true;
     return super.shutdownNow();
+  }
+
+  @Override
+  public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
+    try {
+      return super.awaitTermination(timeout, unit);
+    } finally {
+      phantom.clear();
+    }
   }
 
   @VisibleForTesting
@@ -144,7 +151,7 @@ class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
             String fmt = new StringBuilder()
                 .append("*~*~*~ Channel {0} was not ")
                 // Prefer to complain about shutdown if neither has been called.
-                .append(!ref.shutdownNow ? "shutdown" : "terminated")
+                .append(!ref.shutdown ? "shutdown" : "terminated")
                 .append(" properly!!! ~*~*~*")
                 .append(System.getProperty("line.separator"))
                 .append("    Make sure to call shutdown()/shutdownNow() and awaitTermination().")

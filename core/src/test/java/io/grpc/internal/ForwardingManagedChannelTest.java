@@ -39,7 +39,7 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ForwardingManagedChannelTest {
   private final ManagedChannel mock = mock(ManagedChannel.class);
-  private final ForwardingManagedChannel forward = new ForwardingManagedChannel(mock);
+  private final ForwardingManagedChannel forward = new ForwardingManagedChannel(mock) {};
 
   @Test
   public void allMethodsForwarded() throws Exception {

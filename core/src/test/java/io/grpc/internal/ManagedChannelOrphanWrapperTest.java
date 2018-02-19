@@ -18,15 +18,14 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
 
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
 import io.grpc.internal.ManagedChannelOrphanWrapper.ManagedChannelReference;
-import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
 import java.util.ArrayList;
 import java.util.List;
@@ -41,15 +40,8 @@ import org.junit.Test;
 
 public class ManagedChannelOrphanWrapperTest {
   @Test
-  public void phantomIsRegistered() throws Exception {
-    TestManagedChannel mc = new TestManagedChannel();
-    ManagedChannelOrphanWrapper orphanableChannel = new ManagedChannelOrphanWrapper(mc);
-    assertSame(orphanableChannel, mc.phantom.get());
-  }
-
-  @Test
   public void orphanedChannelsAreLogged() throws Exception {
-    OrphanWrappableManagedChannel mc = new TestManagedChannel();
+    ManagedChannel mc = mock(ManagedChannel.class);
     String channelString = mc.toString();
     ReferenceQueue<ManagedChannelOrphanWrapper> refqueue =
         new ReferenceQueue<ManagedChannelOrphanWrapper>();
@@ -107,9 +99,7 @@ public class ManagedChannelOrphanWrapperTest {
     }
   }
 
-  private static final class TestManagedChannel extends OrphanWrappableManagedChannel {
-    Reference<?> phantom;
-
+  private static final class TestManagedChannel extends ManagedChannel {
     @Override
     public ManagedChannel shutdown() {
       return null;
@@ -144,11 +134,6 @@ public class ManagedChannelOrphanWrapperTest {
     @Override
     public String authority() {
       return null;
-    }
-
-    @Override
-    public void setPhantom(Reference<?> phantom) {
-      this.phantom = phantom;
     }
   }
 }

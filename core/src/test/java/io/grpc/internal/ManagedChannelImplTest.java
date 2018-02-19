@@ -81,7 +81,6 @@ import io.grpc.internal.Channelz.ChannelStats;
 import io.grpc.internal.NoopClientCall.NoopClientCallListener;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import io.grpc.internal.testing.SingleMessageProducer;
-import java.lang.ref.Reference;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -1608,17 +1607,6 @@ public class ManagedChannelImplTest {
 
     FakeNameResolverFactory.FakeNameResolver nameResolver = nameResolverFactory.resolvers.get(0);
     assertEquals(0, nameResolver.refreshCalled);
-  }
-
-  @Test
-  public void orphanedRefClearedOnTermination() throws Exception {
-    FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory(true);
-    createChannel(nameResolverFactory, NO_INTERCEPTOR, false /* requestConnection */,
-            ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE);
-    Reference<?> ref = mock(Reference.class);
-    channel.setPhantom(ref);
-    channel.shutdownNow().awaitTermination(1, TimeUnit.SECONDS);
-    verify(ref).clear();
   }
 
   @Test

@@ -57,7 +57,6 @@ import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.RetryPolicy;
 import io.grpc.internal.RetriableStream.Throttle;
-import java.lang.ref.Reference;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -80,8 +79,7 @@ import javax.annotation.concurrent.ThreadSafe;
 
 /** A communication channel for making outgoing RPCs. */
 @ThreadSafe
-public final class ManagedChannelImpl extends OrphanWrappableManagedChannel
-    implements Instrumented<ChannelStats> {
+final class ManagedChannelImpl extends ManagedChannel implements Instrumented<ChannelStats> {
   static final Logger logger = Logger.getLogger(ManagedChannelImpl.class.getName());
 
   // Matching this pattern means the target string is a URI target or at least intended to be one.
@@ -193,9 +191,6 @@ public final class ManagedChannelImpl extends OrphanWrappableManagedChannel
   // Must be mutated from channelExecutor
   private volatile boolean terminated;
   private final CountDownLatch terminatedLatch = new CountDownLatch(1);
-
-  // If set, must be set immediately after instantiation
-  private Reference<?> phantom;
 
   private final CallTracer.Factory callTracerFactory;
   private final CallTracer channelCallTracer;
@@ -702,9 +697,6 @@ public final class ManagedChannelImpl extends OrphanWrappableManagedChannel
     if (shutdown.get() && subchannels.isEmpty() && oobChannels.isEmpty()) {
       logger.log(Level.FINE, "[{0}] Terminated", getLogId());
       terminated = true;
-      if (phantom != null) {
-        phantom.clear();
-      }
       terminatedLatch.countDown();
       executorPool.returnObject(executor);
       // Release the transport factory so that it can deallocate any resources.
@@ -1222,12 +1214,6 @@ public final class ManagedChannelImpl extends OrphanWrappableManagedChannel
   interface RetryPolicies {
     @Nonnull
     RetryPolicy get(MethodDescriptor<?, ?> method);
-  }
-
-  @Override
-  void setPhantom(Reference<?> phantom) {
-    checkState(this.phantom == null);
-    this.phantom = checkNotNull(phantom);
   }
 
   @Override
