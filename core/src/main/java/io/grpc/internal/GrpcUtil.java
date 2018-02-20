@@ -704,10 +704,7 @@ public final class GrpcUtil {
   }
 
   /** Quietly closes all messages in MessageProducer. */
-  static void closeQuietly(@Nullable MessageProducer producer) {
-    if (producer == null) {
-      return;
-    }
+  static void closeQuietly(MessageProducer producer) {
     InputStream message;
     while ((message = producer.next()) != null) {
       closeQuietly(message);
