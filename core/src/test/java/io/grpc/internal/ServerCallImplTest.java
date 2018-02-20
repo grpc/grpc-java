@@ -42,7 +42,6 @@ import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
 import io.grpc.internal.testing.SingleMessageProducer;
-import io.grpc.testing.TestMethodDescriptors;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;

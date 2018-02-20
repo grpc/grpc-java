@@ -365,8 +365,13 @@ public class AbstractClientStreamTest {
     AbstractClientStream.Sink sink = mock(AbstractClientStream.Sink.class);
     final TestClientStreamTracer tracer = new TestClientStreamTracer();
     StatsTraceContext statsTraceCtx = new StatsTraceContext(new StreamTracer[] {tracer});
-    AbstractClientStream stream = new BaseAbstractClientStream(allocator,
-        new BaseTransportState(statsTraceCtx), sink, statsTraceCtx, true);
+    AbstractClientStream stream = new BaseAbstractClientStream(
+        allocator,
+        new BaseTransportState(statsTraceCtx, transportTracer),
+        sink,
+        statsTraceCtx,
+        transportTracer,
+        true);
     stream.start(mockListener);
     InputStream input = mock(InputStream.class, delegatesTo(new ByteArrayInputStream(new byte[1])));
     stream.writeMessage(input);

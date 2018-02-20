@@ -140,9 +140,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
           Status.CANCELLED.withDescription("Server sendMessage() failed with Error"),
           new Metadata());
       throw e;
-    } catch (Throwable t) {
-      close(Status.fromThrowable(t), new Metadata());
-      throw new RuntimeException(t);
     }
   }
 
