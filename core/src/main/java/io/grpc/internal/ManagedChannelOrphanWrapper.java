@@ -67,11 +67,11 @@ final class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
 
   @Override
   public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
-    try {
-      return super.awaitTermination(timeout, unit);
-    } finally {
+    boolean ret = super.awaitTermination(timeout, unit);
+    if (ret) {
       phantom.clear();
     }
+    return ret;
   }
 
   @VisibleForTesting
@@ -154,7 +154,8 @@ final class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
                 .append(!ref.shutdown ? "shutdown" : "terminated")
                 .append(" properly!!! ~*~*~*")
                 .append(System.getProperty("line.separator"))
-                .append("    Make sure to call shutdown()/shutdownNow() and awaitTermination().")
+                .append("    Make sure to call shutdown()/shutdownNow() and wait "
+                    + "until awaitTermination() returns true.")
                 .toString();
             LogRecord lr = new LogRecord(level, fmt);
             lr.setLoggerName(logger.getName());
