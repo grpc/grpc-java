@@ -1279,7 +1279,7 @@ public class ServerImplTest {
     TracingServerInterceptor userInterceptor = new TracingServerInterceptor();
     final TracingServerInterceptor binlogInterceptor = new TracingServerInterceptor();
     builder.intercept(userInterceptor);
-    builder.binlogProvider = new BinaryLogProvider() {
+    builder.binlog = new BinaryLog() {
       @Override
       public ServerInterceptor getServerInterceptor(String fullMethodName) {
         return binlogInterceptor;
@@ -1294,6 +1294,11 @@ public class ServerImplTest {
       @Override
       protected int priority() {
         return 0;
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
       }
     };
     createAndStartServer();
@@ -1329,7 +1334,7 @@ public class ServerImplTest {
 
     TestInterceptor userInterceptor = new TestInterceptor();
     builder.intercept(userInterceptor);
-    builder.binlogProvider = new BinaryLogProvider() {
+    builder.binlog = new BinaryLog() {
       @Override
       public ServerInterceptor getServerInterceptor(String fullMethodName) {
         return new TestInterceptor();
@@ -1344,6 +1349,11 @@ public class ServerImplTest {
       @Override
       protected int priority() {
         return 0;
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
       }
     };
     createAndStartServer();

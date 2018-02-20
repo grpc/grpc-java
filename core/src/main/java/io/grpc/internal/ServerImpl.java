@@ -107,7 +107,7 @@ public final class ServerImpl extends io.grpc.Server implements Instrumented<Ser
 
   private final DecompressorRegistry decompressorRegistry;
   private final CompressorRegistry compressorRegistry;
-  private final BinaryLogProvider binlogProvider;
+  private final BinaryLog binaryLog;
 
   private final Channelz channelz;
   private final CallTracer serverCallTracer;
@@ -138,7 +138,7 @@ public final class ServerImpl extends io.grpc.Server implements Instrumented<Ser
     this.interceptors =
         builder.interceptors.toArray(new ServerInterceptor[builder.interceptors.size()]);
     this.handshakeTimeoutMillis = builder.handshakeTimeoutMillis;
-    this.binlogProvider = builder.binlogProvider;
+    this.binaryLog = builder.binaryLog;
     this.channelz = builder.channelz;
     this.serverCallTracer = builder.callTracerFactory.create();
 
@@ -532,8 +532,8 @@ public final class ServerImpl extends io.grpc.Server implements Instrumented<Ser
         handler = InternalServerInterceptors.interceptCallHandler(interceptor, handler);
       }
       ServerMethodDefinition<ReqT, RespT> interceptedDef = methodDef.withServerCallHandler(handler);
-      ServerMethodDefinition<?, ?> wMethodDef = binlogProvider == null
-          ? interceptedDef : binlogProvider.wrapMethodDefinition(interceptedDef);
+      ServerMethodDefinition<?, ?> wMethodDef = binaryLog == null
+          ? interceptedDef : binaryLog.wrapMethodDefinition(interceptedDef);
       return startWrappedCall(fullMethodName, wMethodDef, stream, headers, context);
     }
 
