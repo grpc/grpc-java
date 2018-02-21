@@ -168,8 +168,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
   private volatile SubchannelPicker subchannelPicker;
 
   // Must be accessed from the channelExecutor
-  @Nullable
-  private boolean panicMode;
+  private boolean  panicMode;
 
   // Must be mutated from channelExecutor
   // If any monitoring hook to be added later needs to get a snapshot of this Set, we could
@@ -422,12 +421,12 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
   private final ClientTransportProvider transportProvider = new ClientTransportProvider() {
     @Override
     public ClientTransport get(PickSubchannelArgs args) {
+      SubchannelPicker pickerCopy = subchannelPicker;
       if (shutdown.get()) {
         // If channel is shut down, delayedTransport is also shut down which will fail the stream
         // properly.
         return delayedTransport;
       }
-      SubchannelPicker pickerCopy = subchannelPicker;
       if (pickerCopy == null) {
         channelExecutor.executeLater(new Runnable() {
             @Override
