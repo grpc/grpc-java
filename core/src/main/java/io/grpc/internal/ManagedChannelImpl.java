@@ -162,13 +162,14 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
   @Nullable
   private LbHelperImpl lbHelper;
 
-  // Must be assigned from channelExecutor.  null if channel is in idle mode.
+  // Must ONLY be assigned from updateSubchannelPicker(), which is called from channelExecutor.
+  // null if channel is in idle mode.
   @Nullable
   private volatile SubchannelPicker subchannelPicker;
 
-  // Non-null if channel is in panic mode.
+  // Must be accessed from the channelExecutor
   @Nullable
-  private volatile PickResult panicPickResult;
+  private boolean panicMode;
 
   // Must be mutated from channelExecutor
   // If any monitoring hook to be added later needs to get a snapshot of this Set, we could
@@ -249,7 +250,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
         public void transportTerminated() {
           checkState(shutdown.get(), "Channel must have been shut down");
           terminating = true;
-          shutdownNameResolverAndLoadBalancer();
+          shutdownNameResolverAndLoadBalancer(false);
+          // No need to call channelStateManager since we are already in SHUTDOWN state.
           // Until LoadBalancer is shutdown, it may still create new subchannels.  We catch them
           // here.
           maybeShutdownNowSubchannels();
@@ -326,7 +328,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
   private IdleModeTimer idleModeTimer;
 
   // Must be called from channelExecutor
-  private void shutdownNameResolverAndLoadBalancer() {
+  private void shutdownNameResolverAndLoadBalancer(boolean verifyActive) {
+    if (verifyActive) {
+      checkState(nameResolver != null, "nameResolver is null");
+      checkState(lbHelper != null, "lbHelper is null");
+    }
     if (nameResolver != null) {
       nameResolver.shutdown();
       nameResolver = null;
@@ -346,7 +352,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
    */
   @VisibleForTesting
   void exitIdleMode() {
-    if (shutdown.get()) {
+    if (shutdown.get() || panicMode) {
       return;
     }
     if (inUseStateAggregator.isInUse()) {
@@ -381,12 +387,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
     // either the idleModeTimer ran twice without exiting the idle mode, or the task in shutdown()
     // did not cancel idleModeTimer, or prepareToLoseNetwork() ran while shutdown or in idle, all of
     // which are bugs.
-    nameResolver.shutdown();
-    nameResolverStarted = false;
+    shutdownNameResolverAndLoadBalancer(true);
     nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
-    lbHelper.lb.shutdown();
-    lbHelper = null;
-    subchannelPicker = null;
     channelStateManager.gotoState(IDLE);
   }
 
@@ -426,29 +428,26 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
         return delayedTransport;
       }
       SubchannelPicker pickerCopy = subchannelPicker;
-      PickResult pickResult = panicPickResult;
-      if (pickResult == null) {
-        if (pickerCopy == null) {
-          channelExecutor.executeLater(new Runnable() {
-              @Override
-              public void run() {
-                exitIdleMode();
-              }
-            }).drain();
-          return delayedTransport;
-        }
-        // There is no need to reschedule the idle timer here.
-        //
-        // pickerCopy != null, which means idle timer has not expired when this method starts.  Even
-        // if idle timer expires right after we grab pickerCopy, and it shuts down LoadBalancer
-        // which calls Subchannel.shutdown(), the InternalSubchannel will be actually shutdown after
-        // SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, which gives the caller time to start RPC on it.
-        //
-        // In most cases the idle timer is scheduled to fire after the transport has created the
-        // stream, which would have reported in-use state to the channel that would have cancelled
-        // the idle timer.
-        pickResult = pickerCopy.pickSubchannel(args);
+      if (pickerCopy == null) {
+        channelExecutor.executeLater(new Runnable() {
+            @Override
+            public void run() {
+              exitIdleMode();
+            }
+          }).drain();
+        return delayedTransport;
       }
+      // There is no need to reschedule the idle timer here.
+      //
+      // pickerCopy != null, which means idle timer has not expired when this method starts.
+      // Even if idle timer expires right after we grab pickerCopy, and it shuts down LoadBalancer
+      // which calls Subchannel.shutdown(), the InternalSubchannel will be actually shutdown after
+      // SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, which gives the caller time to start RPC on it.
+      //
+      // In most cases the idle timer is scheduled to fire after the transport has created the
+      // stream, which would have reported in-use state to the channel that would have cancelled
+      // the idle timer.
+      PickResult pickResult = pickerCopy.pickSubchannel(args);
       ClientTransport transport = GrpcUtil.getTransportFromPickResult(
           pickResult, args.getCallOptions().isWaitForReady());
       if (transport != null) {
@@ -656,16 +655,31 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
 
   // Called from channelExecutor
   @VisibleForTesting
-  void panic(Throwable t) {
-    if (panicPickResult != null) {
+  void panic(final Throwable t) {
+    if (panicMode) {
       // Preserve the first panic information
       return;
     }
-    panicPickResult =
-        PickResult.withDrop(Status.INTERNAL.withDescription("Panic! This is a bug!").withCause(t));
+    panicMode = true;
     cancelIdleTimer();
+    shutdownNameResolverAndLoadBalancer(false);
+    SubchannelPicker newPicker = new SubchannelPicker() {
+      final PickResult panicPickResult =
+          PickResult.withDrop(
+              Status.INTERNAL.withDescription("Panic! This is a bug!").withCause(t));
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return panicPickResult;
+      }
+    };
+    updateSubchannelPicker(newPicker);
     channelStateManager.gotoState(TRANSIENT_FAILURE);
-    shutdownNameResolverAndLoadBalancer();
+  }
+
+  // Called from channelExecutor
+  private void updateSubchannelPicker(SubchannelPicker newPicker) {
+    subchannelPicker = newPicker;
+    delayedTransport.reprocess(newPicker);
   }
 
   @Override
@@ -990,8 +1004,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
               if (LbHelperImpl.this != lbHelper) {
                 return;
               }
-              subchannelPicker = newPicker;
-              delayedTransport.reprocess(newPicker);
+              updateSubchannelPicker(newPicker);
               // It's not appropriate to report SHUTDOWN state from lb.
               // Ignore the case of newState == SHUTDOWN for now.
               if (newState != SHUTDOWN) {

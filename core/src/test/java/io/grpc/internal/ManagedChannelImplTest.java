@@ -625,8 +625,7 @@ public class ManagedChannelImplTest {
     nameResolverFactory.allResolved();
 
     // Exception thrown from balancer is caught by ChannelExecutor, making channel enter panic mode.
-    assertEquals(TRANSIENT_FAILURE, channel.getState(false));
-    checkNewCallInPanicMode(ex);
+    verifyPanicMode(ex);
   }
 
   @Test
@@ -1537,6 +1536,8 @@ public class ManagedChannelImplTest {
     // Make channel panic!
     channel.panic(panicReason);
 
+    // Calls buffered in delayedTransport will fail
+
     // Resolver and balancer are shutdown
     verify(mockLoadBalancer).shutdown();
     assertTrue(resolver.shutdown);
@@ -1544,17 +1545,71 @@ public class ManagedChannelImplTest {
     // Channel will stay in TRANSIENT_FAILURE. getState(true) will not revive it.
     assertEquals(TRANSIENT_FAILURE, channel.getState(true));
     assertEquals(TRANSIENT_FAILURE, channel.getState(true));
+    verifyPanicMode(panicReason);
 
-    // New call will fail
-    checkNewCallInPanicMode(panicReason);
-    
     // No new resolver or balancer are created
     verifyNoMoreInteractions(mockLoadBalancerFactory);
     assertEquals(0, nameResolverFactory.resolvers.size());
 
-    // A misbehaving balancer will not be able to revive it.
+    // A misbehaving balancer that calls updateBalancingState() after it's shut down will not be
+    // able to revive it.
     helper.updateBalancingState(READY, mockPicker);
-    assertEquals(TRANSIENT_FAILURE, channel.getState(true));
+    verifyPanicMode(panicReason);
+
+    // Cannot be revived by exitIdleMode()
+    channel.exitIdleMode();
+    verifyPanicMode(panicReason);
+
+    // Can still shutdown normally
+    channel.shutdown();
+    assertTrue(channel.isShutdown());
+    assertTrue(channel.isTerminated());
+    assertEquals(SHUTDOWN, channel.getState(false));
+
+    // We didn't stub mockPicker, because it should have never been called in this test.
+    verifyZeroInteractions(mockPicker);
+  }
+
+  @Test
+  public void panic_bufferedCallsWillFail() {
+    FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory(true);
+    createChannel(nameResolverFactory, NO_INTERCEPTOR);
+
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withNoResult());
+    helper.updateBalancingState(CONNECTING, mockPicker);
+
+    // Start RPCs that will be buffered in delayedTransport
+    ClientCall<String, Integer> call =
+        channel.newCall(method, CallOptions.DEFAULT.withoutWaitForReady());
+    call.start(mockCallListener, new Metadata());
+
+    ClientCall<String, Integer> call2 =
+        channel.newCall(method, CallOptions.DEFAULT.withWaitForReady());
+    call2.start(mockCallListener2, new Metadata());
+
+    executor.runDueTasks();
+    verifyZeroInteractions(mockCallListener, mockCallListener2);
+
+    // Enter panic
+    Throwable panicReason = new Exception("Simulated uncaught exception");
+    channel.panic(panicReason);
+
+    // Buffered RPCs fail immediately
+    executor.runDueTasks();
+    verifyCallListenerClosed(mockCallListener, Status.Code.INTERNAL, panicReason);
+    verifyCallListenerClosed(mockCallListener2, Status.Code.INTERNAL, panicReason);
+  }
+
+  private void verifyPanicMode(Throwable cause) {
+    @SuppressWarnings("unchecked")
+    ClientCall.Listener<Integer> mockListener =
+        (ClientCall.Listener<Integer>) mock(ClientCall.Listener.class);
+    assertEquals(TRANSIENT_FAILURE, channel.getState(false));
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockListener, new Metadata());
+    executor.runDueTasks();
+    verifyCallListenerClosed(mockListener, Status.Code.INTERNAL, cause);
 
     // Channel is dead.  No more pending task to possibly revive it.
     assertEquals(0, timer.numPendingTasks());
@@ -1562,16 +1617,14 @@ public class ManagedChannelImplTest {
     assertEquals(0, oobExecutor.numPendingTasks());
   }
 
-  private void checkNewCallInPanicMode(Throwable cause) {
-    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
-    call.start(mockCallListener, new Metadata());
-    executor.runDueTasks();
-    verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
-    Status rpcStatus = statusCaptor.getValue();
-    assertEquals(Status.Code.INTERNAL, rpcStatus.getCode());
+  private void verifyCallListenerClosed(
+      ClientCall.Listener<Integer> listener, Status.Code code, Throwable cause) {
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(null);
+    verify(listener).onClose(captor.capture(), any(Metadata.class));
+    Status rpcStatus = captor.getValue();
+    assertEquals(code, rpcStatus.getCode());
     assertSame(cause, rpcStatus.getCause());
-    verifyNoMoreInteractions(mockCallListener);
-    verifyZeroInteractions(mockPicker);
+    verifyNoMoreInteractions(listener);
   }
 
   @Test
