@@ -18,6 +18,7 @@ package io.grpc;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import java.io.InputStream;
 import java.util.concurrent.atomic.AtomicReferenceArray;
@@ -267,6 +268,7 @@ public final class MethodDescriptor<ReqT, RespT> {
 
   /**
    * Convert a request message to an {@link InputStream}.
+   * The returned InputStream should be closed by the caller.
    *
    * @param requestMessage to serialize using the request {@link Marshaller}.
    * @return serialized request message.
@@ -289,6 +291,7 @@ public final class MethodDescriptor<ReqT, RespT> {
 
   /**
    * Serialize an outgoing response message.
+   * The returned InputStream should be closed by the caller.
    *
    * @param response the response message to serialize.
    * @return the serialized message as a byte stream.
@@ -571,5 +574,20 @@ public final class MethodDescriptor<ReqT, RespT> {
           safe,
           sampledToLocalTracing);
     }
+  }
+
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(this)
+      .add("fullMethodName", fullMethodName)
+      .add("type", type)
+      .add("idempotent", idempotent)
+      .add("safe", safe)
+      .add("sampledToLocalTracing", sampledToLocalTracing)
+      .add("requestMarshaller", requestMarshaller)
+      .add("responseMarshaller", responseMarshaller)
+      .add("schemaDescriptor", schemaDescriptor)
+      .omitNullValues()
+      .toString();
   }
 }

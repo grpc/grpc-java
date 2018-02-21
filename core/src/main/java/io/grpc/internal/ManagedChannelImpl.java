@@ -55,6 +55,7 @@ import io.grpc.internal.Channelz.ChannelStats;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.RetryPolicy;
+import io.grpc.internal.RetriableStream.Throttle;
 import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.SoftReference;
@@ -215,12 +216,16 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
   // One instance per channel.
   private final ChannelBufferMeter channelBufferUsed = new ChannelBufferMeter();
 
+  private Throttle throttle;
+
+  private final int maxRetryAttempts;
+  private final int maxHedgedAttempts;
   private final long perRpcBufferLimit;
   private final long channelBufferLimit;
 
   private RetryPolicies retryPolicies;
   // Temporary false flag that can skip the retry code path.
-  private boolean retryEnabled;
+  private final boolean retryEnabled;
 
   // Called from channelExecutor
   private final ManagedClientTransport.Listener delayedTransportListener =
@@ -309,12 +314,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
         // could cancel the timer.
         return;
       }
-      logger.log(Level.FINE, "[{0}] Entering idle mode", getLogId());
-      shutdownNameResolverAndLoadBalancer();
-      nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
-      if (!channelStateManager.isDisabled()) {
-        channelStateManager.gotoState(IDLE);
-      }
+      enterIdleMode();
     }
   }
 
@@ -372,6 +372,22 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
     } catch (Throwable t) {
       listener.onError(Status.fromThrowable(t));
     }
+  }
+
+  // Must be run from channelExecutor
+  private void enterIdleMode() {
+    logger.log(Level.FINE, "[{0}] Entering idle mode", getLogId());
+    // nameResolver and loadBalancer are guaranteed to be non-null.  If any of them were null,
+    // either the idleModeTimer ran twice without exiting the idle mode, or the task in shutdown()
+    // did not cancel idleModeTimer, or prepareToLoseNetwork() ran while shutdown or in idle, all of
+    // which are bugs.
+    nameResolver.shutdown();
+    nameResolverStarted = false;
+    nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
+    lbHelper.lb.shutdown();
+    lbHelper = null;
+    subchannelPicker = null;
+    channelStateManager.gotoState(IDLE);
   }
 
   // Must be run from channelExecutor
@@ -447,11 +463,12 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
         final CallOptions callOptions,
         final Metadata headers,
         final Context context) {
+      checkState(retryEnabled, "retry should be enabled");
       RetryPolicy retryPolicy = retryPolicies == null ? DEFAULT : retryPolicies.get(method);
       return new RetriableStream<ReqT>(
           method, headers, channelBufferUsed, perRpcBufferLimit, channelBufferLimit,
           getCallExecutor(callOptions), transportFactory.getScheduledExecutorService(),
-          retryPolicy) {
+          retryPolicy, throttle) {
         @Override
         Status prestart() {
           return uncommittedRetriableStreamsRegistry.add(this);
@@ -464,7 +481,6 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
 
         @Override
         ClientStream newSubstream(ClientStreamTracer.Factory tracerFactory, Metadata newHeaders) {
-          // TODO(zdapeng): only add tracer when retry is enabled.
           CallOptions newOptions = callOptions.withStreamTracerFactory(tracerFactory);
           ClientTransport transport =
               get(new PickSubchannelArgsImpl(method, newHeaders, newOptions));
@@ -523,8 +539,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
     this.userAgent = builder.userAgent;
     this.proxyDetector = proxyDetector;
 
+    this.maxRetryAttempts = builder.maxRetryAttempts;
+    this.maxHedgedAttempts = builder.maxHedgedAttempts;
     this.channelBufferLimit = builder.retryBufferSize;
     this.perRpcBufferLimit = builder.perRpcBufferLimit;
+    this.retryEnabled = !builder.retryDisabled;
 
     phantom = new ManagedChannelReference(this);
     this.callTracerFactory = callTracerFactory;
@@ -596,9 +615,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
     channelExecutor.executeLater(new Runnable() {
       @Override
       public void run() {
-        if (!channelStateManager.isDisabled()) {
-          channelStateManager.gotoState(SHUTDOWN);
-        }
+        channelStateManager.gotoState(SHUTDOWN);
       }
     });
 
@@ -647,9 +664,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
     panicPickResult =
         PickResult.withDrop(Status.INTERNAL.withDescription("Panic! This is a bug!").withCause(t));
     cancelIdleTimer();
-    if (!channelStateManager.isDisabled()) {
-      channelStateManager.gotoState(TRANSIENT_FAILURE);
-    }
+    channelStateManager.gotoState(TRANSIENT_FAILURE);
     shutdownNameResolverAndLoadBalancer();
   }
 
@@ -700,7 +715,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
               callOptions,
               transportProvider,
               terminated ? null : transportFactory.getScheduledExecutorService(),
-          channelCallTracer)
+              channelCallTracer,
+              retryEnabled)
           .setFullStreamDecompression(fullStreamDecompression)
           .setDecompressorRegistry(decompressorRegistry)
           .setCompressorRegistry(compressorRegistry);
@@ -779,6 +795,22 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
             }
           }
         }).drain();
+  }
+
+  @Override
+  public void prepareToLoseNetwork() {
+    class PrepareToLoseNetworkRunnable implements Runnable {
+      @Override
+      public void run() {
+        if (shutdown.get() || lbHelper == null) {
+          return;
+        }
+        cancelIdleTimer();
+        enterIdleMode();
+      }
+    }
+
+    channelExecutor.executeLater(new PrepareToLoseNetworkRunnable()).drain();
   }
 
   /**
@@ -888,7 +920,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
       checkNotNull(attrs, "attrs");
       // TODO(ejona): can we be even stricter? Like loadBalancer == null?
       checkState(!terminated, "Channel is terminated");
-      final SubchannelImpl subchannel = new SubchannelImpl(attrs, callTracerFactory.create());
+      final SubchannelImpl subchannel = new SubchannelImpl(attrs);
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
             addressGroup, authority(), userAgent, backoffPolicyProvider, transportFactory,
             transportFactory.getScheduledExecutorService(), stopwatchSupplier, channelExecutor,
@@ -919,7 +951,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
                 inUseStateAggregator.updateObjectInUse(is, false);
               }
             },
-            proxyDetector);
+            proxyDetector,
+            callTracerFactory.create());
       subchannel.subchannel = internalSubchannel;
       logger.log(Level.FINE, "[{0}] {1} created for {2}",
           new Object[] {getLogId(), internalSubchannel.getLogId(), addressGroup});
@@ -982,7 +1015,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
       checkState(!terminated, "Channel is terminated");
       final OobChannel oobChannel = new OobChannel(
           authority, oobExecutorPool, transportFactory.getScheduledExecutorService(),
-          channelExecutor, callTracerFactory);
+          channelExecutor, callTracerFactory.create());
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
           addressGroup, authority, userAgent, backoffPolicyProvider, transportFactory,
           transportFactory.getScheduledExecutorService(), stopwatchSupplier, channelExecutor,
@@ -1001,7 +1034,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
               oobChannel.handleSubchannelStateChange(newState);
             }
           },
-          proxyDetector);
+          proxyDetector,
+          callTracerFactory.create());
       oobChannel.setSubchannel(internalSubchannel);
       runSerialized(new Runnable() {
           @Override
@@ -1073,6 +1107,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
           try {
             if (retryEnabled) {
               retryPolicies = getRetryPolicies(config);
+              throttle = getThrottle(config);
             }
           } catch (RuntimeException re) {
             logger.log(
@@ -1106,7 +1141,9 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
     }
   }
 
+  // TODO(zdapeng): take client provided maxAttempts into account.
   // TODO(zdapeng): implement it once the Gson dependency issue is resolved.
+  // TODO(zdapeng): test retryEnabled = true/flase really works as expected.
   private static RetryPolicies getRetryPolicies(Attributes config) {
     return new RetryPolicies() {
       @Override
@@ -1116,26 +1153,35 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
     };
   }
 
+  // TODO(zdapeng): implement it once the Gson dependency issue is resolved.
+  @Nullable
+  private static Throttle getThrottle(Attributes config) {
+    return null;
+  }
+
   private final class SubchannelImpl extends AbstractSubchannel {
     // Set right after SubchannelImpl is created.
     InternalSubchannel subchannel;
     final Object shutdownLock = new Object();
     final Attributes attrs;
-    final CallTracer subchannelCallTracer;
 
     @GuardedBy("shutdownLock")
     boolean shutdownRequested;
     @GuardedBy("shutdownLock")
     ScheduledFuture<?> delayedShutdownTask;
 
-    SubchannelImpl(Attributes attrs, CallTracer subchannelCallTracer) {
+    SubchannelImpl(Attributes attrs) {
       this.attrs = checkNotNull(attrs, "attrs");
-      this.subchannelCallTracer = subchannelCallTracer;
     }
 
     @Override
     ClientTransport obtainActiveTransport() {
       return subchannel.obtainActiveTransport();
+    }
+
+    @Override
+    ListenableFuture<ChannelStats> getStats() {
+      return subchannel.getStats();
     }
 
     @Override
@@ -1197,16 +1243,6 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
     @Override
     public String toString() {
       return subchannel.getLogId().toString();
-    }
-
-    @Override
-    public ListenableFuture<ChannelStats> getStats() {
-      SettableFuture<ChannelStats> ret = SettableFuture.create();
-      ChannelStats.Builder builder = new Channelz.ChannelStats.Builder();
-      subchannelCallTracer.updateBuilder(builder);
-      builder.setTarget(target).setState(subchannel.getState());
-      ret.set(builder.build());
-      return ret;
     }
   }
 

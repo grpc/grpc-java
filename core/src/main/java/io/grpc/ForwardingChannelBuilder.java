@@ -164,6 +164,18 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   }
 
   @Override
+  public T maxRetryAttempts(int maxRetryAttempts) {
+    delegate().maxRetryAttempts(maxRetryAttempts);
+    return thisT();
+  }
+
+  @Override
+  public T maxHedgedAttempts(int maxHedgedAttempts) {
+    delegate().maxHedgedAttempts(maxHedgedAttempts);
+    return thisT();
+  }
+
+  @Override
   public T retryBufferSize(long bytes) {
     delegate().retryBufferSize(bytes);
     return thisT();
@@ -172,6 +184,18 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   @Override
   public T perRpcBufferLimit(long bytes) {
     delegate().perRpcBufferLimit(bytes);
+    return thisT();
+  }
+
+  @Override
+  public T disableRetry() {
+    delegate().disableRetry();
+    return thisT();
+  }
+
+  @Override
+  public T enableRetry() {
+    delegate().enableRetry();
     return thisT();
   }
 

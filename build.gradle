@@ -100,7 +100,7 @@ subprojects {
         protocPluginBaseName = 'protoc-gen-grpc-java'
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
-        nettyVersion = '4.1.17.Final'
+        nettyVersion = '4.1.21.Final'
         guavaVersion = '19.0'
         protobufVersion = '3.5.1'
         protocVersion = '3.5.1-1'
@@ -208,6 +208,7 @@ subprojects {
                 protobuf_nano: "com.google.protobuf.nano:protobuf-javanano:${protobufNanoVersion}",
                 protobuf_plugin: 'com.google.protobuf:protobuf-gradle-plugin:0.8.3',
                 protobuf_util: "com.google.protobuf:protobuf-java-util:${protobufVersion}",
+                lang: "org.apache.commons:commons-lang3:3.5",
 
                 netty: "io.netty:netty-codec-http2:[${nettyVersion}]",
                 netty_epoll: "io.netty:netty-transport-native-epoll:${nettyVersion}" + epoll_suffix,
@@ -218,6 +219,7 @@ subprojects {
                 junit: 'junit:junit:4.12',
                 mockito: 'org.mockito:mockito-core:1.9.5',
                 truth: 'com.google.truth:truth:0.36',
+                guava_testlib: 'com.google.guava:guava-testlib:19.0',
 
                 // Benchmark dependencies
                 hdrhistogram: 'org.hdrhistogram:HdrHistogram:2.1.10',
@@ -311,21 +313,21 @@ subprojects {
 
     uploadArchives.repositories.mavenDeployer {
         beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
-        String stagingUrl
-        if (rootProject.hasProperty('repositoryId')) {
-          stagingUrl = 'https://oss.sonatype.org/service/local/staging/deployByRepositoryId/' +
-              rootProject.repositoryId
-        } else {
-          stagingUrl = 'https://oss.sonatype.org/service/local/staging/deploy/maven2/'
-        }
-        def configureAuth = {
-          if (rootProject.hasProperty('ossrhUsername') && rootProject.hasProperty('ossrhPassword')) {
-            authentication(userName: rootProject.ossrhUsername, password: rootProject.ossrhPassword)
-          }
-        }
         if (rootProject.hasProperty('repositoryDir')) {
           repository(url: new File(rootProject.repositoryDir).toURI())
         } else {
+          String stagingUrl
+          if (rootProject.hasProperty('repositoryId')) {
+            stagingUrl = 'https://oss.sonatype.org/service/local/staging/deployByRepositoryId/' +
+               rootProject.repositoryId
+          } else {
+            stagingUrl = 'https://oss.sonatype.org/service/local/staging/deploy/maven2/'
+          }
+          def configureAuth = {
+            if (rootProject.hasProperty('ossrhUsername') && rootProject.hasProperty('ossrhPassword')) {
+              authentication(userName: rootProject.ossrhUsername, password: rootProject.ossrhPassword)
+            }
+          }
           repository(url: stagingUrl, configureAuth)
           snapshotRepository(url: 'https://oss.sonatype.org/content/repositories/snapshots/', configureAuth)
         }
@@ -391,6 +393,8 @@ subprojects {
 // Run with: ./gradlew japicmp --continue
 def baselineGrpcVersion = '1.6.1'
 def publicApiSubprojects = [
+        // TODO: uncomment after grpc-alts artifact is published.
+        // ':grpc-alts',
         ':grpc-auth',
         ':grpc-context',
         ':grpc-core',

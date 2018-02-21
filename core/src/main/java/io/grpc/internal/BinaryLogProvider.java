@@ -23,9 +23,14 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.InternalClientInterceptors;
+import io.grpc.InternalServerInterceptors;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
+import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
+import io.grpc.ServerMethodDefinition;
+import java.io.Closeable;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -38,7 +43,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
-public abstract class BinaryLogProvider {
+public abstract class BinaryLogProvider implements Closeable {
   private static final Logger logger = Logger.getLogger(BinaryLogProvider.class.getName());
   private static final BinaryLogProvider PROVIDER = load(BinaryLogProvider.class.getClassLoader());
   @VisibleForTesting
@@ -60,6 +65,31 @@ public abstract class BinaryLogProvider {
   Channel wrapChannel(Channel channel) {
     return ClientInterceptors.intercept(channel, binaryLogShim);
   }
+
+  private static MethodDescriptor<InputStream, InputStream> toInputStreamMethod(
+      MethodDescriptor<?, ?> method) {
+    return method.toBuilder(IDENTITY_MARSHALLER, IDENTITY_MARSHALLER).build();
+  }
+
+  /**
+   * Wraps a {@link ServerMethodDefinition} such that it performs binary logging if needed.
+   */
+  final <ReqT, RespT> ServerMethodDefinition<?, ?> wrapMethodDefinition(
+      ServerMethodDefinition<ReqT, RespT> oMethodDef) {
+    ServerInterceptor binlogInterceptor =
+        getServerInterceptor(oMethodDef.getMethodDescriptor().getFullMethodName());
+    if (binlogInterceptor == null) {
+      return oMethodDef;
+    }
+    MethodDescriptor<InputStream, InputStream> binMethod =
+        BinaryLogProvider.toInputStreamMethod(oMethodDef.getMethodDescriptor());
+    ServerMethodDefinition<InputStream, InputStream> binDef = InternalServerInterceptors
+        .wrapMethod(oMethodDef, binMethod);
+    ServerCallHandler<InputStream, InputStream> binlogHandler = InternalServerInterceptors
+        .interceptCallHandler(binlogInterceptor, binDef.getServerCallHandler());
+    return ServerMethodDefinition.create(binMethod, binlogHandler);
+  }
+
 
   @VisibleForTesting
   static BinaryLogProvider load(ClassLoader classLoader) {
@@ -130,6 +160,12 @@ public abstract class BinaryLogProvider {
   @Nullable
   public abstract ClientInterceptor getClientInterceptor(String fullMethodName);
 
+  @Override
+  public void close() throws IOException {
+    // default impl: noop
+    // TODO(zpencer): make BinaryLogProvider provide a BinaryLog, and this method belongs there
+  }
+
   /**
    * A priority, from 0 to 10 that this provider should be used, taking the current environment into
    * consideration. 5 should be considered the default, and then tweaked based on environment
@@ -185,7 +221,6 @@ public abstract class BinaryLogProvider {
     @Override
     public InputStream parse(InputStream stream) {
       return stream;
-
     }
   }
 

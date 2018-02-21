@@ -127,8 +127,11 @@ public abstract class AbstractManagedChannelImplBuilder
 
   long idleTimeoutMillis = IDLE_MODE_DEFAULT_TIMEOUT_MILLIS;
 
+  int maxRetryAttempts = 5;
+  int maxHedgedAttempts = 5;
   long retryBufferSize = DEFAULT_RETRY_BUFFER_SIZE_IN_BYTES;
   long perRpcBufferLimit = DEFAULT_PER_RPC_BUFFER_LIMIT_IN_BYTES;
+  boolean retryDisabled = true; // TODO(zdapeng): default to false
 
   protected TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
 
@@ -291,6 +294,18 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   @Override
+  public final T maxRetryAttempts(int maxRetryAttempts) {
+    this.maxRetryAttempts = maxRetryAttempts;
+    return thisT();
+  }
+
+  @Override
+  public final T maxHedgedAttempts(int maxHedgedAttempts) {
+    this.maxHedgedAttempts = maxHedgedAttempts;
+    return thisT();
+  }
+
+  @Override
   public final T retryBufferSize(long bytes) {
     checkArgument(bytes > 0L, "retry buffer size must be positive");
     retryBufferSize = bytes;
@@ -301,6 +316,18 @@ public abstract class AbstractManagedChannelImplBuilder
   public final T perRpcBufferLimit(long bytes) {
     checkArgument(bytes > 0L, "per RPC buffer limit must be positive");
     perRpcBufferLimit = bytes;
+    return thisT();
+  }
+
+  @Override
+  public final T disableRetry() {
+    retryDisabled = true;
+    return thisT();
+  }
+
+  @Override
+  public final T enableRetry() {
+    retryDisabled = false;
     return thisT();
   }
 
