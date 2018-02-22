@@ -919,8 +919,8 @@ public class ServerImplTest {
     assertTrue(onHalfCloseCalled.get());
 
     streamListener.closed(Status.CANCELLED);
-    assertEquals(1, executor.runDueTasks(CONTEXT_CLOSER_TASK_FITLER));
-    assertEquals(1, executor.runDueTasks());
+    assertEquals(1, executor.numPendingTasks(CONTEXT_CLOSER_TASK_FITLER));
+    assertEquals(2, executor.runDueTasks());
     assertTrue(onCancelCalled.get());
 
     // Close should never be called if asserts in listener pass.
@@ -990,11 +990,10 @@ public class ServerImplTest {
     assertFalse(callReference.get().isCancelled());
     assertFalse(context.get().isCancelled());
     streamListener.closed(Status.CANCELLED);
-    assertEquals(1, executor.runDueTasks(CONTEXT_CLOSER_TASK_FITLER));
+    assertEquals(1, executor.numPendingTasks(CONTEXT_CLOSER_TASK_FITLER));
+    assertEquals(2, executor.runDueTasks());
     assertTrue(callReference.get().isCancelled());
     assertTrue(context.get().isCancelled());
-
-    assertEquals(1, executor.runDueTasks());
     assertTrue(contextCancelled.get());
   }
 
@@ -1108,7 +1107,7 @@ public class ServerImplTest {
       fail("Expected exception");
     } catch (TestError t) {
       assertSame(expectedT, t);
-      ensureServerStateNotLeaked();
+      ensureServerStateIsCancelled();
     }
   }
 
@@ -1133,7 +1132,7 @@ public class ServerImplTest {
       fail("Expected exception");
     } catch (RuntimeException t) {
       assertSame(expectedT, t);
-      ensureServerStateNotLeaked();
+      ensureServerStateIsCancelled();
     }
   }
 
@@ -1156,7 +1155,7 @@ public class ServerImplTest {
       fail("Expected exception");
     } catch (TestError t) {
       assertSame(expectedT, t);
-      ensureServerStateNotLeaked();
+      ensureServerStateIsCancelled();
     }
   }
 
@@ -1179,7 +1178,7 @@ public class ServerImplTest {
       fail("Expected exception");
     } catch (RuntimeException t) {
       assertSame(expectedT, t);
-      ensureServerStateNotLeaked();
+      ensureServerStateIsCancelled();
     }
   }
 
@@ -1202,7 +1201,7 @@ public class ServerImplTest {
       fail("Expected exception");
     } catch (TestError t) {
       assertSame(expectedT, t);
-      ensureServerStateNotLeaked();
+      ensureServerStateIsCancelled();
     }
   }
 
@@ -1225,7 +1224,7 @@ public class ServerImplTest {
       fail("Expected exception");
     } catch (RuntimeException t) {
       assertSame(expectedT, t);
-      ensureServerStateNotLeaked();
+      ensureServerStateIsCancelled();
     }
   }
 
@@ -1394,6 +1393,12 @@ public class ServerImplTest {
     assertEquals(Status.UNKNOWN, statusCaptor.getValue());
     assertNull(statusCaptor.getValue().getCause());
     assertTrue(metadataCaptor.getValue().keys().isEmpty());
+  }
+
+  private void ensureServerStateIsCancelled() {
+    verify(stream).cancel(statusCaptor.capture());
+    assertEquals(Status.INTERNAL, statusCaptor.getValue());
+    assertNull(statusCaptor.getValue().getCause());
   }
 
   private static class SimpleServer implements io.grpc.internal.InternalServer {
