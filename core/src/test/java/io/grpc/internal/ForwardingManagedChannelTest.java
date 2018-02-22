@@ -37,7 +37,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
-public class ForwardingManagedChannelTest {
+public final class ForwardingManagedChannelTest {
   private final ManagedChannel mock = mock(ManagedChannel.class);
   private final ForwardingManagedChannel forward = new ForwardingManagedChannel(mock) {};
 

@@ -38,7 +38,7 @@ import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 import org.junit.Test;
 
-public class ManagedChannelOrphanWrapperTest {
+public final class ManagedChannelOrphanWrapperTest {
   @Test
   public void orphanedChannelsAreLogged() throws Exception {
     ManagedChannel mc = mock(ManagedChannel.class);
