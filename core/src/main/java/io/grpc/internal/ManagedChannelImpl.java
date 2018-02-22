@@ -763,6 +763,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       executorPool.returnObject(executor);
       // Release the transport factory so that it can deallocate any resources.
       transportFactory.close();
+      channelz.removeRootChannel(this);
     }
   }
 
