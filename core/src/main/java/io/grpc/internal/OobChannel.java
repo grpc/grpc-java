@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
@@ -45,7 +46,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -63,7 +63,6 @@ final class OobChannel extends ManagedChannel implements Instrumented<ChannelSta
   private final LogId logId = LogId.allocate(getClass().getName());
   private final String authority;
   private final DelayedClientTransport delayedTransport;
-  @Nullable
   private final Channelz channelz;
   private final ObjectPool<? extends Executor> executorPool;
   private final Executor executor;
@@ -98,7 +97,7 @@ final class OobChannel extends ManagedChannel implements Instrumented<ChannelSta
     this.deadlineCancellationExecutor = checkNotNull(
         deadlineCancellationExecutor, "deadlineCancellationExecutor");
     this.delayedTransport = new DelayedClientTransport(executor, channelExecutor);
-    this.channelz = channelz;
+    this.channelz = Preconditions.checkNotNull(channelz);
     this.delayedTransport.start(new ManagedClientTransport.Listener() {
         @Override
         public void transportShutdown(Status s) {
@@ -244,9 +243,7 @@ final class OobChannel extends ManagedChannel implements Instrumented<ChannelSta
     // When delayedTransport is terminated, it shuts down subchannel.  Therefore, at this point
     // both delayedTransport and subchannel have terminated.
     executorPool.returnObject(executor);
-    if (channelz != null) {
-      channelz.removeChannel(this);
-    }
+    channelz.removeChannel(this);
     terminatedLatch.countDown();
   }
 
