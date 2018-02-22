@@ -281,6 +281,35 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
         }
       };
 
+  @Override
+  public ListenableFuture<ChannelStats> getStats() {
+    final SettableFuture<ChannelStats> ret = SettableFuture.create();
+    final ChannelStats.Builder builder = new Channelz.ChannelStats.Builder();
+    channelCallTracer.updateBuilder(builder);
+    builder.setTarget(target).setState(channelStateManager.getState());
+    // subchannels and oobchannels can only be accessed from channelExecutor
+    channelExecutor.executeLater(new Runnable() {
+      @Override
+      public void run() {
+        List<LogId> children = new ArrayList<LogId>();
+        for (InternalSubchannel internalSubchannel : subchannels) {
+          children.add(internalSubchannel.getLogId());
+        }
+        for (OobChannel oobChannel : oobChannels) {
+          children.add(oobChannel.getLogId());
+        }
+        builder.setSubchannels(children);
+        ret.set(builder.build());
+      }
+    }).drain();
+    return ret;
+  }
+
+  @Override
+  public LogId getLogId() {
+    return logId;
+  }
+
   // Run from channelExecutor
   private class IdleModeTimer implements Runnable {
     // Only mutated from channelExecutor
@@ -730,7 +759,6 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     if (shutdown.get() && subchannels.isEmpty() && oobChannels.isEmpty()) {
       logger.log(Level.FINE, "[{0}] Terminated", getLogId());
       terminated = true;
-      channelz.removeRootChannel(this);
       terminatedLatch.countDown();
       executorPool.returnObject(executor);
       // Release the transport factory so that it can deallocate any resources.
@@ -1251,33 +1279,5 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
         .add("logId", logId)
         .add("target", target)
         .toString();
-  }
-
-  public ListenableFuture<ChannelStats> getStats() {
-    final SettableFuture<ChannelStats> ret = SettableFuture.create();
-      final ChannelStats.Builder builder = new Channelz.ChannelStats.Builder();
-      channelCallTracer.updateBuilder(builder);
-      builder.setTarget(target).setState(channelStateManager.getState());
-      // subchannels and oobchannels can only be accessed from channelExecutor
-      channelExecutor.executeLater(new Runnable() {
-        @Override
-        public void run() {
-          List<LogId> children = new ArrayList<LogId>();
-          for (InternalSubchannel internalSubchannel : subchannels) {
-            children.add(internalSubchannel.getLogId());
-          }
-          for (OobChannel oobChannel : oobChannels) {
-            children.add(oobChannel.getLogId());
-          }
-          builder.setSubchannels(children);
-          ret.set(builder.build());
-        }
-      }).drain();
-      return ret;
-  }
-
-  @Override
-  public LogId getLogId() {
-    return logId;
   }
 }
