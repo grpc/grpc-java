@@ -35,7 +35,6 @@ import io.grpc.alts.internal.RpcProtocolVersionsUtil;
 import io.grpc.alts.internal.TsiHandshaker;
 import io.grpc.alts.internal.TsiHandshakerFactory;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.ProxyParameters;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.InternalNettyChannelBuilder.TransportCreationParamsFilter;
 import io.grpc.netty.InternalNettyChannelBuilder.TransportCreationParamsFilterFactory;
@@ -157,8 +156,7 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
     public TransportCreationParamsFilter create(
         final SocketAddress serverAddress,
         final String authority,
-        final String userAgent,
-        final ProxyParameters proxy) {
+        final String userAgent) {
       checkArgument(
           serverAddress instanceof InetSocketAddress,
           "%s must be a InetSocketAddress",

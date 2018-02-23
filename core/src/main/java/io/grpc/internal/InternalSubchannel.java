@@ -219,7 +219,7 @@ final class InternalSubchannel implements Instrumented<ChannelStats> {
 
     ConnectionClientTransport transport =
         new CallTracingTransport(
-            transportFactory.newClientTransport(address, authority, userAgent, proxy),
+            transportFactory.newClientTransport(address, authority, userAgent),
             callsTracer);
     channelz.addTransport(transport);
     if (log.isLoggable(Level.FINE)) {

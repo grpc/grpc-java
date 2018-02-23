@@ -156,8 +156,8 @@ public class ManagedChannelImplIdlenessTest {
     verify(mockNameResolverFactory).newNameResolver(any(URI.class), any(Attributes.class));
     // Verify the initial idleness
     verify(mockLoadBalancerFactory, never()).newLoadBalancer(any(Helper.class));
-    verify(mockTransportFactory, never()).newClientTransport(
-        any(SocketAddress.class), anyString(), anyString(), any(ProxyParameters.class));
+    verify(mockTransportFactory, never())
+        .newClientTransport(any(SocketAddress.class), anyString(), anyString());
     verify(mockNameResolver, never()).start(any(NameResolver.Listener.class));
   }
 
@@ -354,13 +354,11 @@ public class ManagedChannelImplIdlenessTest {
     // Now make an RPC on an OOB channel
     ManagedChannel oob = helper.createOobChannel(servers.get(0), "oobauthority");
     verify(mockTransportFactory, never())
-        .newClientTransport(any(SocketAddress.class), same("oobauthority"), same(USER_AGENT),
-            same(NO_PROXY));
+        .newClientTransport(any(SocketAddress.class), same("oobauthority"), same(USER_AGENT));
     ClientCall<String, Integer> oobCall = oob.newCall(method, CallOptions.DEFAULT);
     oobCall.start(mockCallListener2, new Metadata());
     verify(mockTransportFactory)
-        .newClientTransport(any(SocketAddress.class), same("oobauthority"), same(USER_AGENT),
-            same(NO_PROXY));
+        .newClientTransport(any(SocketAddress.class), same("oobauthority"), same(USER_AGENT));
     MockClientTransportInfo oobTransportInfo = newTransports.poll();
     assertEquals(0, newTransports.size());
     // The OOB transport reports in-use state
