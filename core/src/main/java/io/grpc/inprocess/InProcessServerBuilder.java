@@ -16,14 +16,20 @@
 
 package io.grpc.inprocess;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.base.Preconditions;
 import io.grpc.ExperimentalApi;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractServerImplBuilder;
+import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.ObjectPool;
+import io.grpc.internal.SharedResourcePool;
 import java.io.File;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -86,6 +92,7 @@ public final class InProcessServerBuilder
   }
 
   private final String name;
+  private ScheduledExecutorService scheduledExecutorService;
 
   private InProcessServerBuilder(String name) {
     this.name = Preconditions.checkNotNull(name, "name");
@@ -98,10 +105,31 @@ public final class InProcessServerBuilder
     handshakeTimeout(Long.MAX_VALUE, TimeUnit.SECONDS);
   }
 
+  /**
+   * Provides a custom scheduled executor service.
+   *
+   * <p>It's an optional parameter. If the user has not provided a scheduled executor service when
+   * the channel is built, the builder will use a static cached thread pool.
+   *
+   * @return this
+   *
+   * @since 1.11.0
+   */
+  public InProcessServerBuilder scheduledExecutorService(
+      ScheduledExecutorService scheduledExecutorService) {
+    this.scheduledExecutorService =
+        checkNotNull(scheduledExecutorService, "scheduledExecutorService");
+    return this;
+  }
+
   @Override
   protected InProcessServer buildTransportServer(
       List<ServerStreamTracer.Factory> streamTracerFactories) {
-    return new InProcessServer(name, GrpcUtil.TIMER_SERVICE, streamTracerFactories);
+    ObjectPool<ScheduledExecutorService> schedulerPool =
+        scheduledExecutorService == null
+            ? SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE)
+            : new FixedObjectPool<ScheduledExecutorService>(scheduledExecutorService);
+    return new InProcessServer(name, schedulerPool, streamTracerFactories);
   }
 
   @Override
