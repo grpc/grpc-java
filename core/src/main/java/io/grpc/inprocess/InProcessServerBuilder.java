@@ -79,7 +79,7 @@ public final class InProcessServerBuilder
   }
 
   /**
-   * Generates a random and unique server name.
+   * Generates a new server name that is unique each time.
    */
   public static String generateName() {
     return UUID.randomUUID().toString();
