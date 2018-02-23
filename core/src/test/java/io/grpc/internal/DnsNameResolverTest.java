@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
@@ -35,6 +36,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.internal.DnsNameResolver.DelegateResolver;
 import io.grpc.internal.DnsNameResolver.ResolutionResults;
+import io.grpc.internal.ProxyDetector.ProxiedInetSocketAddress;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -247,7 +249,7 @@ public class DnsNameResolverTest {
     final int port = 81;
     ProxyDetector alwaysDetectProxy = mock(ProxyDetector.class);
     ProxyParameters proxyParameters = new ProxyParameters(
-        InetSocketAddress.createUnresolved("proxy.example.com", 1000),
+        new InetSocketAddress(InetAddress.getByName("10.0.0.1"), 1000),
         "username",
         "password");
     when(alwaysDetectProxy.proxyFor(any(SocketAddress.class)))
@@ -263,8 +265,10 @@ public class DnsNameResolverTest {
     assertThat(result).hasSize(1);
     EquivalentAddressGroup eag = result.get(0);
     assertThat(eag.getAddresses()).hasSize(1);
-    SocketAddress socketAddress = eag.getAddresses().get(0);
-    assertTrue(((InetSocketAddress) socketAddress).isUnresolved());
+
+    ProxiedInetSocketAddress socketAddress = (ProxiedInetSocketAddress) eag.getAddresses().get(0);
+    assertSame(proxyParameters, socketAddress.getProxyParameters());
+    assertTrue(socketAddress.getDestination().isUnresolved());
   }
 
   private void testInvalidUri(URI uri) {
