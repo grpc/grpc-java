@@ -29,7 +29,10 @@ import java.lang.reflect.Proxy;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
+import java.security.AccessController;
 import java.security.NoSuchAlgorithmException;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
 import java.security.Provider;
 import java.security.Security;
 import java.util.ArrayList;
@@ -37,6 +40,7 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
 import okio.Buffer;
 
@@ -44,19 +48,25 @@ import okio.Buffer;
  * Access to platform-specific features.
  *
  * <h3>Server name indication (SNI)</h3>
+ *
  * Supported on Android 2.3+.
  *
  * <h3>Session Tickets</h3>
+ *
  * Supported on Android 2.3+.
  *
  * <h3>Android Traffic Stats (Socket Tagging)</h3>
+ *
  * Supported on Android 4.0+.
  *
  * <h3>ALPN (Application Layer Protocol Negotiation)</h3>
+ *
  * Supported on Android 5.0+. The APIs were present in Android 4.4, but that implementation was
  * unstable.
  *
- * Supported on OpenJDK 7 and 8 (via the JettyALPN-boot library).
+ * <p>Supported on OpenJDK 9+.
+ *
+ * <p>Supported on OpenJDK 7 and 8 (via the JettyALPN-boot library).
  */
 public class Platform {
   public static final Logger logger = Logger.getLogger(Platform.class.getName());
@@ -197,6 +207,23 @@ public class Platform {
       sslProvider = SSLContext.getDefault().getProvider();
     } catch (NoSuchAlgorithmException nsae) {
       throw new RuntimeException(nsae);
+    }
+
+    // Find JDK9+ ALPN support
+    try {
+      Method setApplicationProtocols =
+          SSLParameters.class.getMethod("setApplicationProtocols", String[].class);
+      Method getApplicationProtocol =
+          AccessController.doPrivileged(
+              new PrivilegedExceptionAction<Method>() {
+                @Override
+                public Method run() throws Exception {
+                  return SSLSocket.class.getMethod("getApplicationProtocol");
+                }
+              });
+      return new JdkAlpnPlatform(sslProvider, setApplicationProtocols, getApplicationProtocol);
+    } catch (NoSuchMethodException ignored) {
+    } catch (PrivilegedActionException ignored) {
     }
 
     // Find Jetty's ALPN extension for OpenJDK.
@@ -371,6 +398,56 @@ public class Platform {
         throw new RuntimeException(e);
       } catch (InvocationTargetException e) {
         throw new RuntimeException(e.getCause());
+      }
+    }
+  }
+
+  /** OpenJDK 9+. */
+  private static class JdkAlpnPlatform extends Platform {
+    private final Method setApplicationProtocols;
+    private final Method getApplicationProtocol;
+
+    private JdkAlpnPlatform(
+        Provider provider, Method setApplicationProtocols, Method getApplicationProtocol) {
+      super(provider);
+      this.setApplicationProtocols = setApplicationProtocols;
+      this.getApplicationProtocol = getApplicationProtocol;
+    }
+
+    @Override
+    public TlsExtensionType getTlsExtensionType() {
+      return TlsExtensionType.ALPN_AND_NPN;
+    }
+
+    @Override
+    public void configureTlsExtensions(
+        SSLSocket sslSocket, String hostname, List<Protocol> protocols) {
+      SSLParameters parameters = sslSocket.getSSLParameters();
+      List<String> names = new ArrayList<String>(protocols.size());
+      for (Protocol protocol : protocols) {
+        if (protocol == Protocol.HTTP_1_0) continue; // No HTTP/1.0 for ALPN.
+        names.add(protocol.toString());
+      }
+      try {
+        setApplicationProtocols.invoke(
+            parameters, new Object[] {names.toArray(new String[names.size()])});
+      } catch (IllegalAccessException e) {
+        throw new RuntimeException(e);
+      } catch (InvocationTargetException e) {
+        throw new RuntimeException(e);
+      }
+      sslSocket.setSSLParameters(parameters);
+    }
+
+    /** Returns the negotiated protocol, or null if no protocol was negotiated. */
+    @Override
+    public String getSelectedProtocol(SSLSocket socket) {
+      try {
+        return (String) getApplicationProtocol.invoke(socket);
+      } catch (IllegalAccessException e) {
+        throw new RuntimeException(e);
+      } catch (InvocationTargetException e) {
+        throw new RuntimeException(e);
       }
     }
   }
