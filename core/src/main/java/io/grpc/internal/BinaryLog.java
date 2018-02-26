@@ -35,6 +35,10 @@ import java.io.InputStream;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
+/**
+ * An abstract class representing a BinaryLog. Implementations should provide
+ * {@link ServerInterceptor} and {@link ClientInterceptor} objects for each RPC method.
+ */
 public abstract class BinaryLog implements Closeable {
   private static final Logger logger = Logger.getLogger(BinaryLog.class.getName());
   @VisibleForTesting
@@ -97,16 +101,16 @@ public abstract class BinaryLog implements Closeable {
    * Wraps a {@link ServerMethodDefinition} such that it performs binary logging if needed.
    */
   final <ReqT, RespT> ServerMethodDefinition<?, ?> wrapMethodDefinition(
-      ServerMethodDefinition<ReqT, RespT> oMethodDef) {
+      ServerMethodDefinition<ReqT, RespT> originalMethodDef) {
     ServerInterceptor binlogInterceptor =
-        getServerInterceptor(oMethodDef.getMethodDescriptor().getFullMethodName());
+        getServerInterceptor(originalMethodDef.getMethodDescriptor().getFullMethodName());
     if (binlogInterceptor == null) {
-      return oMethodDef;
+      return originalMethodDef;
     }
     MethodDescriptor<InputStream, InputStream> binMethod =
-        toInputStreamMethod(oMethodDef.getMethodDescriptor());
+        toInputStreamMethod(originalMethodDef.getMethodDescriptor());
     ServerMethodDefinition<InputStream, InputStream> binDef = InternalServerInterceptors
-        .wrapMethod(oMethodDef, binMethod);
+        .wrapMethod(originalMethodDef, binMethod);
     ServerCallHandler<InputStream, InputStream> binlogHandler = InternalServerInterceptors
         .interceptCallHandler(binlogInterceptor, binDef.getServerCallHandler());
     return ServerMethodDefinition.create(binMethod, binlogHandler);
