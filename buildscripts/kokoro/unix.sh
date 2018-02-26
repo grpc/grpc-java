@@ -50,9 +50,6 @@ export LD_LIBRARY_PATH=/tmp/protobuf/lib
 export LDFLAGS=-L/tmp/protobuf/lib
 export CXXFLAGS="-I/tmp/protobuf/include"
 
-# Warm mvn cache with retries, in case connection to maven repo is flakey
-./gradlew -m build || ./gradlew -m build || ./gradlew -m build
-
 # Ensure all *.proto changes include *.java generated code
 ./gradlew assemble generateTestProto install $GRADLE_FLAGS
 

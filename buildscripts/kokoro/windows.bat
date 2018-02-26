@@ -29,9 +29,6 @@ echo failOnWarnings=true>> gradle.properties
 echo vcProtobufLibs=%ESCWORKSPACE%\\grpc-java-helper\\protobuf-%PROTOBUF_VER%\\cmake\\build\\Release>> gradle.properties
 echo vcProtobufInclude=%ESCWORKSPACE%\\grpc-java-helper\\protobuf-%PROTOBUF_VER%\\cmake\\build\\include>> gradle.properties
 
-# Warm mvn cache with retries, in case connection to maven repo is flakey
-cmd.exe /C "%WORKSPACE%\gradlew.bat -m build" || cmd.exe /C "%WORKSPACE%\gradlew.bat -m build " || cmd.exe /C "%WORKSPACE%\gradlew.bat -m build"
-
 cmd.exe /C "%WORKSPACE%\gradlew.bat build"
 set GRADLEEXIT=%ERRORLEVEL%
 
