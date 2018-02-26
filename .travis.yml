@@ -26,7 +26,7 @@ before_install:
 
 install:
   # Warm mvn cache with retries, in case connection to maven repo is flakey
-  - ./gradlew assemble || ./gradlew assemble || ./gradlew assemble
+  - (./gradlew assemble || ./gradlew assemble || ./gradlew assemble) && ./gradlew clean
   - ./gradlew assemble generateTestProto install
   - pushd examples && ./gradlew build && popd
   - pushd examples && mvn verify && popd
