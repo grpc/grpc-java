@@ -16,10 +16,12 @@
 
 package io.grpc.alts.transportsecurity;
 
+import io.grpc.Internal;
 import io.grpc.alts.TransportSecurityCommon.RpcProtocolVersions;
 import javax.annotation.Nullable;
 
 /** Handshaker options for creating ALTS channel. */
+@Internal
 public class AltsHandshakerOptions {
   @Nullable private final RpcProtocolVersions rpcProtocolVersions;
 

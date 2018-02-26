@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Verify.verify;
 
 import com.google.common.primitives.Ints;
+import io.grpc.Internal;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import java.security.GeneralSecurityException;
@@ -28,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Frame protector that uses the ALTS framing. */
+@Internal
 public final class AltsTsiFrameProtector implements TsiFrameProtector {
   private static final int HEADER_LEN_FIELD_BYTES = 4;
   private static final int HEADER_TYPE_FIELD_BYTES = 4;
@@ -332,8 +334,9 @@ public final class AltsTsiFrameProtector implements TsiFrameProtector {
 
       // We leave space for suffixBytes to allow for in-place encryption. This allows for calling
       // doFinal in the JCE implementation which can be optimized better than update and doFinal.
-      ByteBuf unprotectedBuf = alloc.directBuffer(
-          Ints.checkedCast(requiredUnprotectedBytesCompleteFrames + suffixBytes));
+      ByteBuf unprotectedBuf =
+          alloc.directBuffer(
+              Ints.checkedCast(requiredUnprotectedBytesCompleteFrames + suffixBytes));
       try {
 
         ByteBuf out = writeSlice(unprotectedBuf, firstFrameUnprotectedLen + suffixBytes);

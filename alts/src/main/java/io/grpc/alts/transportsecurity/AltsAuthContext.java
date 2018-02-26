@@ -17,12 +17,14 @@
 package io.grpc.alts.transportsecurity;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.ExperimentalApi;
 import io.grpc.alts.Altscontext.AltsContext;
 import io.grpc.alts.Handshaker.HandshakerResult;
 import io.grpc.alts.TransportSecurityCommon.RpcProtocolVersions;
 import io.grpc.alts.TransportSecurityCommon.SecurityLevel;
 
 /** AltsAuthContext contains security-related context information about an ALTs connection. */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/4151")
 public final class AltsAuthContext {
   final AltsContext context;
 
