@@ -25,20 +25,19 @@ import io.grpc.Server;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
-import io.grpc.stub.AbstractStub;
 import io.grpc.util.MutableHandlerRegistry;
-import java.util.UUID;
+import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 import org.junit.rules.ExternalResource;
 import org.junit.rules.TestRule;
 
 /**
- * {@code GrpcServerRule} is a JUnit {@link TestRule} that starts an in-process gRPC service with
- * a {@link MutableHandlerRegistry} for adding services. It is particularly useful for mocking out
+ * {@code GrpcServerRule} is a JUnit {@link TestRule} that is particularly useful for mocking out
  * external gRPC-based services and asserting that the expected requests were made.
  *
- * <p>An {@link AbstractStub} can be created against this service by using the
- * {@link ManagedChannel} provided by {@link GrpcServerRule#getChannel()}.
+ * <p>It provides and starts a default in-process gRPC server with a {@link MutableHandlerRegistry}
+ * for adding services, and provides a default in-process client channel that is connected to the
+ * default server.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2488")
 public class GrpcServerRule extends ExternalResource {
@@ -48,43 +47,63 @@ public class GrpcServerRule extends ExternalResource {
   private String serverName;
   private MutableHandlerRegistry serviceRegistry;
   private boolean useDirectExecutor;
+  private boolean setUp;
+  private boolean tearDown;
+  /**
+   * True if the default server and channel are initiated.
+   */
+  private volatile boolean initiated;
 
   /**
-   * Returns {@code this} configured to use a direct executor for the {@link ManagedChannel} and
-   * {@link Server}. This can only be called at the rule instantiation.
+   * Configures the rule to use a direct executor for the default server and channel. This can only
+   * be called at the rule instantiation.
+   *
+   * @return this
    */
   public final GrpcServerRule directExecutor() {
-    checkState(serverName == null, "directExecutor() can only be called at the rule instantiation");
+    checkState(!setUp, "directExecutor() can only be called at the rule instantiation");
     useDirectExecutor = true;
     return this;
   }
 
   /**
-   * Returns a {@link ManagedChannel} connected to this service.
+   * Returns the default client channel.
    */
   public final ManagedChannel getChannel() {
+    if (setUp && !tearDown && !initiated) {
+      initDefaultServer();
+    }
     return channel;
   }
 
   /**
-   * Returns the underlying gRPC {@link Server} for this service.
+   * Returns the default server.
    */
   public final Server getServer() {
+    if (setUp && !tearDown && !initiated) {
+      initDefaultServer();
+    }
     return server;
   }
 
   /**
-   * Returns the randomly generated server name for this service.
+   * Returns the server name of the default server.
    */
   public final String getServerName() {
+    if (setUp && !tearDown && !initiated) {
+      initDefaultServer();
+    }
     return serverName;
   }
 
   /**
-   * Returns the service registry for this service. The registry is used to add service instances
-   * (e.g. {@link BindableService} or {@link ServerServiceDefinition} to the server.
+   * Returns the service registry for the default server. The registry is used to add service
+   * instances (e.g. {@link BindableService} or {@link ServerServiceDefinition} to the server.
    */
   public final MutableHandlerRegistry getServiceRegistry() {
+    if (setUp && !tearDown && !initiated) {
+      initDefaultServer();
+    }
     return serviceRegistry;
   }
 
@@ -93,6 +112,11 @@ public class GrpcServerRule extends ExternalResource {
    */
   @Override
   protected void after() {
+    tearDown = true;
+    if (server == null) {
+      return;
+    }
+
     serverName = null;
     serviceRegistry = null;
 
@@ -114,12 +138,20 @@ public class GrpcServerRule extends ExternalResource {
     }
   }
 
-  /**
-   * Before the test has started, create the server and channel.
-   */
   @Override
-  protected void before() throws Throwable {
-    serverName = UUID.randomUUID().toString();
+  protected void before() {
+    setUp = true;
+  }
+
+  /**
+   * Creates the default server and channel, and starts the server.
+   */
+  private synchronized void initDefaultServer() {
+    if (server != null) {
+      return;
+    }
+
+    serverName = InProcessServerBuilder.generateName();
 
     serviceRegistry = new MutableHandlerRegistry();
 
@@ -130,7 +162,13 @@ public class GrpcServerRule extends ExternalResource {
       serverBuilder.directExecutor();
     }
 
-    server = serverBuilder.build().start();
+    server = serverBuilder.build();
+
+    try {
+      server.start();
+    } catch (IOException e) {
+      throw new AssertionError(e);
+    }
 
     InProcessChannelBuilder channelBuilder = InProcessChannelBuilder.forName(serverName);
 
@@ -139,5 +177,6 @@ public class GrpcServerRule extends ExternalResource {
     }
 
     channel = channelBuilder.build();
+    initiated = true;
   }
 }
