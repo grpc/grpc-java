@@ -44,7 +44,7 @@ final class InProcessServer implements InternalServer {
   private final List<ServerStreamTracer.Factory> streamTracerFactories;
   private ServerListener listener;
   private boolean shutdown;
-  /** Expected to be a SharedResourcePool except in testing. */
+  /** Defaults to be a SharedResourcePool. */
   private final ObjectPool<ScheduledExecutorService> schedulerPool;
   /**
    * Only used to make sure the scheduler has at least one reference. Since child transports can

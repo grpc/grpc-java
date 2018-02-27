@@ -92,7 +92,8 @@ public final class InProcessServerBuilder
   }
 
   private final String name;
-  private ScheduledExecutorService scheduledExecutorService;
+  private ObjectPool<ScheduledExecutorService> schedulerPool =
+      SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
 
   private InProcessServerBuilder(String name) {
     this.name = Preconditions.checkNotNull(name, "name");
@@ -117,18 +118,14 @@ public final class InProcessServerBuilder
    */
   public InProcessServerBuilder scheduledExecutorService(
       ScheduledExecutorService scheduledExecutorService) {
-    this.scheduledExecutorService =
-        checkNotNull(scheduledExecutorService, "scheduledExecutorService");
+    schedulerPool = new FixedObjectPool<ScheduledExecutorService>(
+        checkNotNull(scheduledExecutorService, "scheduledExecutorService"));
     return this;
   }
 
   @Override
   protected InProcessServer buildTransportServer(
       List<ServerStreamTracer.Factory> streamTracerFactories) {
-    ObjectPool<ScheduledExecutorService> schedulerPool =
-        scheduledExecutorService == null
-            ? SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE)
-            : new FixedObjectPool<ScheduledExecutorService>(scheduledExecutorService);
     return new InProcessServer(name, schedulerPool, streamTracerFactories);
   }
 
