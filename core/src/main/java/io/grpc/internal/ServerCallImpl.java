@@ -170,15 +170,18 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   @Override
   public void close(Status status, Metadata trailers) {
     checkState(!closeCalled, "call already closed");
-    closeCalled = true;
+    try {
+      closeCalled = true;
 
-    if (status.isOk() && method.getType().serverSendsOneMessage() && !messageSent) {
-      internalClose(Status.INTERNAL.withDescription(MISSING_RESPONSE));
-      return;
+      if (status.isOk() && method.getType().serverSendsOneMessage() && !messageSent) {
+        internalClose(Status.INTERNAL.withDescription(MISSING_RESPONSE));
+        return;
+      }
+
+      stream.close(status, trailers);
+    } finally {
+      serverCallTracer.reportCallEnded(status.isOk());
     }
-
-    stream.close(status, trailers);
-    serverCallTracer.reportCallEnded(status.isOk());
   }
 
   @Override
