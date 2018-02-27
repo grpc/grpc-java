@@ -55,6 +55,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private final byte[] messageAcceptEncoding;
   private final DecompressorRegistry decompressorRegistry;
   private final CompressorRegistry compressorRegistry;
+  private CallTracer serverCallTracer;
 
   // state
   private volatile boolean cancelled;
@@ -65,13 +66,16 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   ServerCallImpl(ServerStream stream, MethodDescriptor<ReqT, RespT> method,
       Metadata inboundHeaders, Context.CancellableContext context,
-      DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry) {
+      DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
+      CallTracer serverCallTracer) {
     this.stream = stream;
     this.method = method;
     this.context = context;
     this.messageAcceptEncoding = inboundHeaders.get(MESSAGE_ACCEPT_ENCODING_KEY);
     this.decompressorRegistry = decompressorRegistry;
     this.compressorRegistry = compressorRegistry;
+    this.serverCallTracer = serverCallTracer;
+    this.serverCallTracer.reportCallStarted();
   }
 
   @Override
@@ -174,6 +178,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     }
 
     stream.close(status, trailers);
+    serverCallTracer.reportCallEnded(status.isOk());
   }
 
   @Override
@@ -208,6 +213,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private void internalClose(Status internalError) {
     log.log(Level.WARNING, "Cancelling the stream with status {0}", new Object[] {internalError});
     stream.cancel(internalError);
+    serverCallTracer.reportCallEnded(internalError.isOk()); // error so always false
   }
 
   /**

@@ -1361,6 +1361,22 @@ public class ServerImplTest {
         userInterceptor.interceptedMethods.get(0).getResponseMarshaller());
   }
 
+  @Test
+  public void channelz_membership() throws Exception {
+    createServer();
+    assertTrue(builder.channelz.containsServer(server.getLogId()));
+    server.shutdownNow().awaitTermination();
+    assertFalse(builder.channelz.containsServer(server.getLogId()));
+  }
+
+  @Test
+  public void channelz_serverStats() throws Exception {
+    createAndStartServer();
+    assertEquals(0, server.getStats().get().callsSucceeded);
+    basicExchangeHelper(METHOD, "Lots of pizza, please", 314, null);
+    assertEquals(1, server.getStats().get().callsSucceeded);
+  }
+
   private void createAndStartServer() throws IOException {
     createServer();
     server.start();
