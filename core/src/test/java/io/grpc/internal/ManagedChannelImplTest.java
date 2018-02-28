@@ -189,7 +189,7 @@ public class ManagedChannelImplTest {
   private ObjectPool<Executor> oobExecutorPool;
   @Mock
   private CallCredentials creds;
-  private BinaryLogProvider binlogProvider = null;
+  private BinaryLog binlog = null;
   private BlockingQueue<MockClientTransportInfo> transports;
 
   private ArgumentCaptor<ClientStreamListener> streamListenerCaptor =
@@ -229,7 +229,7 @@ public class ManagedChannelImplTest {
         .userAgent(userAgent);
     builder.executorPool = executorPool;
     builder.idleTimeoutMillis = idleTimeoutMillis;
-    builder.binlogProvider = binlogProvider;
+    builder.binarylog = binlog;
     builder.channelz = channelz;
     checkState(channel == null);
     channel = new ManagedChannelImpl(
@@ -2119,21 +2119,27 @@ public class ManagedChannelImplTest {
 
     TracingClientInterceptor userInterceptor = new TracingClientInterceptor();
     final TracingClientInterceptor binlogInterceptor = new TracingClientInterceptor();
-    binlogProvider = new BinaryLogProvider() {
+    binlog = new BinaryLog() {
       @Nullable
       @Override
-      public ServerInterceptor getServerInterceptor(String fullMethodName) {
+      public ServerInterceptor getServerInterceptor(MethodDescriptor<?, ?> method) {
         return null;
       }
 
+      @Nullable
       @Override
-      public ClientInterceptor getClientInterceptor(String fullMethodName) {
+      public ClientInterceptor getClientInterceptor(MethodDescriptor<?, ?> method) {
         return binlogInterceptor;
       }
 
       @Override
       protected int priority() {
         return 0;
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
       }
     };
 
@@ -2201,21 +2207,27 @@ public class ManagedChannelImplTest {
     }
 
     TracingClientInterceptor userInterceptor = new TracingClientInterceptor();
-    binlogProvider = new BinaryLogProvider() {
+    binlog = new BinaryLog() {
       @Nullable
       @Override
-      public ServerInterceptor getServerInterceptor(String fullMethodName) {
+      public ServerInterceptor getServerInterceptor(MethodDescriptor<?, ?> method) {
         return null;
       }
 
+      @Nullable
       @Override
-      public ClientInterceptor getClientInterceptor(String fullMethodName) {
+      public ClientInterceptor getClientInterceptor(MethodDescriptor<?, ?> method) {
         return new TracingClientInterceptor();
       }
 
       @Override
       protected int priority() {
         return 0;
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
       }
     };
     createChannel(

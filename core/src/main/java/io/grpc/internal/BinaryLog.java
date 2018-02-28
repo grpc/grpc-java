@@ -1,0 +1,160 @@
+/*
+ * Copyright 2018, gRPC Authors All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package io.grpc.internal;
+
+import com.google.common.annotations.VisibleForTesting;
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
+import io.grpc.ClientInterceptors;
+import io.grpc.InternalClientInterceptors;
+import io.grpc.InternalServerInterceptors;
+import io.grpc.MethodDescriptor;
+import io.grpc.MethodDescriptor.Marshaller;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
+import io.grpc.ServerMethodDefinition;
+import java.io.Closeable;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.logging.Logger;
+import javax.annotation.Nullable;
+
+/**
+ * An abstract class representing a BinaryLog. Implementations should provide
+ * {@link ServerInterceptor} and {@link ClientInterceptor} objects for each RPC method.
+ */
+public abstract class BinaryLog implements Closeable {
+  private static final Logger logger = Logger.getLogger(BinaryLog.class.getName());
+  @VisibleForTesting
+  static final Marshaller<InputStream> IDENTITY_MARSHALLER = new IdentityMarshaller();
+
+  private final ClientInterceptor binaryLogShim = new BinaryLogShim();
+
+  /**
+   * Returns a {@link ServerInterceptor} for binary logging. gRPC is free to cache the interceptor,
+   * so the interceptor must be reusable across calls. At runtime, the interceptor's request and
+   * response marshallers are always {@code Marshaller<InputStream>} rather than those of the
+   * {@link MethodDescriptor} parameter.
+   * Returns {@code null} if this method is not binary logged.
+   */
+  // TODO(zpencer): ensure the interceptor properly handles retries and hedging
+  @Nullable
+  public abstract ServerInterceptor getServerInterceptor(MethodDescriptor<?, ?> method);
+
+  /**
+   * Returns a {@link ClientInterceptor} for binary logging. gRPC is free to cache the interceptor,
+   * so the interceptor must be reusable across calls. At runtime, the interceptor's request and
+   * response marshallers are always {@code Marshaller<InputStream>} rather than those of the
+   * {@link MethodDescriptor} parameter.
+   * Returns {@code null} if this method is not binary logged.
+   */
+  // TODO(zpencer): ensure the interceptor properly handles retries and hedging
+  @Nullable
+  public abstract ClientInterceptor getClientInterceptor(MethodDescriptor<?, ?> method);
+
+  @Override
+  public void close() throws IOException {
+    // default impl: noop
+  }
+
+  /**
+   * A priority, from 0 to 10 that this provider should be used, taking the current environment into
+   * consideration. 5 should be considered the default, and then tweaked based on environment
+   * detection. A priority of 0 does not imply that the provider wouldn't work; just that it should
+   * be last in line.
+   */
+  protected abstract int priority();
+
+  /**
+   * Whether this provider is available for use, taking the current environment into consideration.
+   * If {@code false}, no other methods are safe to be called.
+   */
+  protected abstract boolean isAvailable();
+
+  /**
+   * Wraps a channel to provide binary logging on {@link ClientCall}s as needed.
+   */
+  Channel wrapChannel(Channel channel) {
+    return ClientInterceptors.intercept(channel, binaryLogShim);
+  }
+
+  private static MethodDescriptor<InputStream, InputStream> toInputStreamMethod(
+      MethodDescriptor<?, ?> method) {
+    return method.toBuilder(IDENTITY_MARSHALLER, IDENTITY_MARSHALLER).build();
+  }
+
+  /**
+   * Wraps a {@link ServerMethodDefinition} such that it performs binary logging if needed.
+   */
+  final <ReqT, RespT> ServerMethodDefinition<?, ?> wrapMethodDefinition(
+      ServerMethodDefinition<ReqT, RespT> originalMethodDef) {
+    ServerInterceptor binlogInterceptor =
+        getServerInterceptor(originalMethodDef.getMethodDescriptor());
+    if (binlogInterceptor == null) {
+      return originalMethodDef;
+    }
+    MethodDescriptor<InputStream, InputStream> binMethod
+        = toInputStreamMethod(originalMethodDef.getMethodDescriptor());
+    ServerMethodDefinition<InputStream, InputStream> binDef
+        = InternalServerInterceptors.wrapMethod(originalMethodDef, binMethod);
+    ServerCallHandler<InputStream, InputStream> binlogHandler
+        = InternalServerInterceptors.interceptCallHandler(
+            binlogInterceptor, binDef.getServerCallHandler());
+    return ServerMethodDefinition.create(binMethod, binlogHandler);
+  }
+
+  // Creating a named class makes debugging easier
+  private static final class IdentityMarshaller implements Marshaller<InputStream> {
+    @Override
+    public InputStream stream(InputStream value) {
+      return value;
+    }
+
+    @Override
+    public InputStream parse(InputStream stream) {
+      return stream;
+    }
+  }
+
+  /**
+   * The pipeline of interceptors is hard coded when the {@link ManagedChannelImpl} is created.
+   * This shim interceptor should always be installed as a placeholder. When a call starts,
+   * this interceptor checks with the {@link BinaryLogProvider} to see if logging should happen
+   * for this particular {@link ClientCall}'s method.
+   */
+  private final class BinaryLogShim implements ClientInterceptor {
+    @Override
+    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+        MethodDescriptor<ReqT, RespT> method,
+        CallOptions callOptions,
+        Channel next) {
+      ClientInterceptor binlogInterceptor = getClientInterceptor(method);
+      if (binlogInterceptor == null) {
+        return next.newCall(method, callOptions);
+      } else {
+        return InternalClientInterceptors
+            .wrapClientInterceptor(
+                binlogInterceptor,
+                IDENTITY_MARSHALLER,
+                IDENTITY_MARSHALLER)
+            .interceptCall(method, callOptions, next);
+      }
+    }
+  }
+}

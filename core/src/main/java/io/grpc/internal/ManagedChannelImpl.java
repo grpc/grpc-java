@@ -528,8 +528,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     this.transportFactory =
         new CallCredentialsApplyingTransportFactory(clientTransportFactory, this.executor);
     Channel channel = new RealChannel();
-    if (builder.binlogProvider != null) {
-      channel = builder.binlogProvider.wrapChannel(channel);
+    if (builder.binarylog != null) {
+      channel = builder.binarylog.wrapChannel(channel);
     }
     this.interceptorChannel = ClientInterceptors.intercept(channel, interceptors);
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
