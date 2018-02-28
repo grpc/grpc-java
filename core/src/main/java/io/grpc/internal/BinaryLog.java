@@ -48,23 +48,25 @@ public abstract class BinaryLog implements Closeable {
 
   /**
    * Returns a {@link ServerInterceptor} for binary logging. gRPC is free to cache the interceptor,
-   * so the interceptor must be reusable across calls. At runtime, the request and response
-   * marshallers are always {@code Marshaller<InputStream>}.
+   * so the interceptor must be reusable across calls. At runtime, the interceptor's request and
+   * response marshallers are always {@code Marshaller<InputStream>} rather than those of the
+   * {@link MethodDescriptor} parameter.
    * Returns {@code null} if this method is not binary logged.
    */
   // TODO(zpencer): ensure the interceptor properly handles retries and hedging
   @Nullable
-  public abstract ServerInterceptor getServerInterceptor(String fullMethodName);
+  public abstract ServerInterceptor getServerInterceptor(MethodDescriptor<?, ?> method);
 
   /**
    * Returns a {@link ClientInterceptor} for binary logging. gRPC is free to cache the interceptor,
-   * so the interceptor must be reusable across calls. At runtime, the request and response
-   * marshallers are always {@code Marshaller<InputStream>}.
+   * so the interceptor must be reusable across calls. At runtime, the interceptor's request and
+   * response marshallers are always {@code Marshaller<InputStream>} rather than those of the
+   * {@link MethodDescriptor} parameter.
    * Returns {@code null} if this method is not binary logged.
    */
   // TODO(zpencer): ensure the interceptor properly handles retries and hedging
   @Nullable
-  public abstract ClientInterceptor getClientInterceptor(String fullMethodName);
+  public abstract ClientInterceptor getClientInterceptor(MethodDescriptor<?, ?> method);
 
   @Override
   public void close() throws IOException {
@@ -103,16 +105,17 @@ public abstract class BinaryLog implements Closeable {
   final <ReqT, RespT> ServerMethodDefinition<?, ?> wrapMethodDefinition(
       ServerMethodDefinition<ReqT, RespT> originalMethodDef) {
     ServerInterceptor binlogInterceptor =
-        getServerInterceptor(originalMethodDef.getMethodDescriptor().getFullMethodName());
+        getServerInterceptor(originalMethodDef.getMethodDescriptor());
     if (binlogInterceptor == null) {
       return originalMethodDef;
     }
-    MethodDescriptor<InputStream, InputStream> binMethod =
-        toInputStreamMethod(originalMethodDef.getMethodDescriptor());
-    ServerMethodDefinition<InputStream, InputStream> binDef = InternalServerInterceptors
-        .wrapMethod(originalMethodDef, binMethod);
-    ServerCallHandler<InputStream, InputStream> binlogHandler = InternalServerInterceptors
-        .interceptCallHandler(binlogInterceptor, binDef.getServerCallHandler());
+    MethodDescriptor<InputStream, InputStream> binMethod
+        = toInputStreamMethod(originalMethodDef.getMethodDescriptor());
+    ServerMethodDefinition<InputStream, InputStream> binDef
+        = InternalServerInterceptors.wrapMethod(originalMethodDef, binMethod);
+    ServerCallHandler<InputStream, InputStream> binlogHandler
+        = InternalServerInterceptors.interceptCallHandler(
+            binlogInterceptor, binDef.getServerCallHandler());
     return ServerMethodDefinition.create(binMethod, binlogHandler);
   }
 
@@ -141,7 +144,7 @@ public abstract class BinaryLog implements Closeable {
         MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions,
         Channel next) {
-      ClientInterceptor binlogInterceptor = getClientInterceptor(method.getFullMethodName());
+      ClientInterceptor binlogInterceptor = getClientInterceptor(method);
       if (binlogInterceptor == null) {
         return next.newCall(method, callOptions);
       } else {

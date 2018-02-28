@@ -228,7 +228,7 @@ public class ManagedChannelImplTest {
         .userAgent(userAgent);
     builder.executorPool = executorPool;
     builder.idleTimeoutMillis = idleTimeoutMillis;
-    builder.binlog = binlog;
+    builder.binarylog = binlog;
     builder.channelz = channelz;
     checkState(channel == null);
     channel = new ManagedChannelImpl(
@@ -2119,12 +2119,13 @@ public class ManagedChannelImplTest {
     binlog = new BinaryLog() {
       @Nullable
       @Override
-      public ServerInterceptor getServerInterceptor(String fullMethodName) {
+      public ServerInterceptor getServerInterceptor(MethodDescriptor<?, ?> method) {
         return null;
       }
 
+      @Nullable
       @Override
-      public ClientInterceptor getClientInterceptor(String fullMethodName) {
+      public ClientInterceptor getClientInterceptor(MethodDescriptor<?, ?> method) {
         return binlogInterceptor;
       }
 
@@ -2206,12 +2207,13 @@ public class ManagedChannelImplTest {
     binlog = new BinaryLog() {
       @Nullable
       @Override
-      public ServerInterceptor getServerInterceptor(String fullMethodName) {
+      public ServerInterceptor getServerInterceptor(MethodDescriptor<?, ?> method) {
         return null;
       }
 
+      @Nullable
       @Override
-      public ClientInterceptor getClientInterceptor(String fullMethodName) {
+      public ClientInterceptor getClientInterceptor(MethodDescriptor<?, ?> method) {
         return new TracingClientInterceptor();
       }
 

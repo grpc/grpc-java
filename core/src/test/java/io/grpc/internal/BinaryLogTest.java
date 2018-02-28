@@ -45,6 +45,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.annotation.Nullable;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -79,13 +80,15 @@ public class BinaryLogTest {
   private final List<byte[]> binlogReq = new ArrayList<byte[]>();
   private final List<byte[]> binlogResp = new ArrayList<byte[]>();
   private final BinaryLog binlogProvider = new BinaryLog() {
+    @Nullable
     @Override
-    public ServerInterceptor getServerInterceptor(String fullMethodName) {
+    public ServerInterceptor getServerInterceptor(MethodDescriptor<?, ?> method) {
       return new TestBinaryLogServerInterceptor();
     }
 
+    @Nullable
     @Override
-    public ClientInterceptor getClientInterceptor(String fullMethodName) {
+    public ClientInterceptor getClientInterceptor(MethodDescriptor<?, ?> method) {
       return new TestBinaryLogClientInterceptor();
     }
 

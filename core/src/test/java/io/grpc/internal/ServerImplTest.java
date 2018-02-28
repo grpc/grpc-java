@@ -1279,15 +1279,16 @@ public class ServerImplTest {
     TracingServerInterceptor userInterceptor = new TracingServerInterceptor();
     final TracingServerInterceptor binlogInterceptor = new TracingServerInterceptor();
     builder.intercept(userInterceptor);
-    builder.binlog = new BinaryLog() {
+    builder.binaryLog = new BinaryLog() {
+      @Nullable
       @Override
-      public ServerInterceptor getServerInterceptor(String fullMethodName) {
+      public ServerInterceptor getServerInterceptor(MethodDescriptor<?, ?> method) {
         return binlogInterceptor;
       }
 
       @Nullable
       @Override
-      public ClientInterceptor getClientInterceptor(String fullMethodName) {
+      public ClientInterceptor getClientInterceptor(MethodDescriptor<?, ?> method) {
         return null;
       }
 
@@ -1334,15 +1335,16 @@ public class ServerImplTest {
 
     TestInterceptor userInterceptor = new TestInterceptor();
     builder.intercept(userInterceptor);
-    builder.binlog = new BinaryLog() {
+    builder.binaryLog = new BinaryLog() {
+      @Nullable
       @Override
-      public ServerInterceptor getServerInterceptor(String fullMethodName) {
+      public ServerInterceptor getServerInterceptor(MethodDescriptor<?, ?> method) {
         return new TestInterceptor();
       }
 
       @Nullable
       @Override
-      public ClientInterceptor getClientInterceptor(String fullMethodName) {
+      public ClientInterceptor getClientInterceptor(MethodDescriptor<?, ?> method) {
         return null;
       }
 

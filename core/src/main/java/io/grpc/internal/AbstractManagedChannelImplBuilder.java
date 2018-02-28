@@ -139,7 +139,7 @@ public abstract class AbstractManagedChannelImplBuilder
 
   private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 
-  BinaryLog binlog = BinaryLogProvider.getInstance();
+  BinaryLog binarylog = BinaryLogProvider.getInstance();
 
   /**
    * Sets the maximum message size allowed for a single gRPC frame. If an inbound messages
