@@ -98,7 +98,6 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   @Override
   @Deprecated
   public T usePlaintext(boolean skipNegotiation) {
-    @SuppressWarnings("deprecation")
     ManagedChannelBuilder<?> o = delegate().usePlaintext(skipNegotiation);
     return thisT();
   }
