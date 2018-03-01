@@ -62,7 +62,6 @@ subprojects {
             // The google mirror is less flaky than mavenCentral()
             url "https://maven-central.storage-download.googleapis.com/repos/central/data/"
         }
-        mavenCentral()
         mavenLocal()
     }
 

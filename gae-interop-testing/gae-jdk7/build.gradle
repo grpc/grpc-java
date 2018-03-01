@@ -30,13 +30,10 @@ buildscript {    // Configuration for building
 repositories {   // repositories for Jar's you access in your code
   mavenLocal()
   maven {
-    url 'https://maven-central.storage.googleapis.com'             // Google's mirror of Maven Central
-  }
-  jcenter()
-  maven {
     // The google mirror is less flaky than mavenCentral()
     url "https://maven-central.storage-download.googleapis.com/repos/central/data/"
   }
+  jcenter()
 }
 
 apply plugin: 'java'                              // standard Java tasks
