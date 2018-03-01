@@ -141,8 +141,15 @@ public final class StatusProto {
     return null;
   }
 
+  /**
+   * Extracts the google.rpc.Status from trailers, and makes sure they match the gRPC
+   * {@code status}.
+   *
+   * @return the embedded google.rpc.Status or {@code null} if it is not present.
+   * @since 1.10.0
+   */
   @Nullable
-  private static com.google.rpc.Status toStatusProto(Status status, Metadata trailers) {
+  public static com.google.rpc.Status toStatusProto(Status status, Metadata trailers) {
     if (trailers != null) {
       com.google.rpc.Status statusProto = trailers.get(STATUS_DETAILS_KEY);
       if (statusProto != null) {
