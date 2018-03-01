@@ -131,10 +131,10 @@ public final class StatusProto {
     while (cause != null) {
       if (cause instanceof StatusException) {
         StatusException e = (StatusException) cause;
-        return toStatusProto(e.getStatus(), e.getTrailers());
+        return fromStatusAndTrailers(e.getStatus(), e.getTrailers());
       } else if (cause instanceof StatusRuntimeException) {
         StatusRuntimeException e = (StatusRuntimeException) cause;
-        return toStatusProto(e.getStatus(), e.getTrailers());
+        return fromStatusAndTrailers(e.getStatus(), e.getTrailers());
       }
       cause = cause.getCause();
     }
@@ -149,7 +149,7 @@ public final class StatusProto {
    * @since 1.10.0
    */
   @Nullable
-  public static com.google.rpc.Status toStatusProto(Status status, Metadata trailers) {
+  public static com.google.rpc.Status fromStatusAndTrailers(Status status, Metadata trailers) {
     if (trailers != null) {
       com.google.rpc.Status statusProto = trailers.get(STATUS_DETAILS_KEY);
       if (statusProto != null) {
