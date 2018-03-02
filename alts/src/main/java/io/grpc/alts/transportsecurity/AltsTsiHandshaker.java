@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import io.grpc.Internal;
 import io.grpc.alts.HandshakerServiceGrpc.HandshakerServiceStub;
 import io.netty.buffer.ByteBufAllocator;
 import java.nio.ByteBuffer;
@@ -30,6 +31,7 @@ import java.util.List;
 /**
  * Negotiates a grpc channel key to be used by the TsiFrameProtector, using ALTs handshaker service.
  */
+@Internal
 public final class AltsTsiHandshaker implements TsiHandshaker {
   public static final String TSI_SERVICE_ACCOUNT_PEER_PROPERTY = "service_account";
 

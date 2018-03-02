@@ -17,11 +17,13 @@
 package io.grpc.alts.transportsecurity;
 
 import com.google.common.base.Preconditions;
+import io.grpc.Internal;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.GeneralSecurityException;
 
 /** Framing and deframing methods and classes used by handshaker. */
+@Internal
 public final class AltsFraming {
   // The size of the frame field. Must correspond to the size of int, 4 bytes.
   // Left package-private for testing.

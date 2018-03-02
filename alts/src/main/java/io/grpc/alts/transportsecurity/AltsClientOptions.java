@@ -16,6 +16,7 @@
 
 package io.grpc.alts.transportsecurity;
 
+import io.grpc.Internal;
 import io.grpc.alts.TransportSecurityCommon.RpcProtocolVersions;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -23,6 +24,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 /** Handshaker options for creating ALTS client channel. */
+@Internal
 public final class AltsClientOptions extends AltsHandshakerOptions {
   // targetName is the server service account name for secure name checking. This field is not yet
   // supported.

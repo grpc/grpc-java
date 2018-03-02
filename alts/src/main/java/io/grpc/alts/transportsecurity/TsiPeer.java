@@ -16,6 +16,7 @@
 
 package io.grpc.alts.transportsecurity;
 
+import io.grpc.ExperimentalApi;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -23,6 +24,7 @@ import java.util.List;
 import javax.annotation.Nonnull;
 
 /** A set of peer properties. */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/4151")
 public final class TsiPeer {
   private final List<Property<?>> properties;
 
