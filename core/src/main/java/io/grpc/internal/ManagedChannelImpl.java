@@ -405,7 +405,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
   }
 
   // Run from channelExecutor
-  private class NameResolverBackoff implements Runnable {
+  private class NameResolverRefresh implements Runnable {
     // Only mutated from channelExecutor
     boolean cancelled;
 
@@ -416,8 +416,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
         // cancelNameResolverBackoff() could cancel the timer.
         return;
       }
-      nameResolverBackoffFuture = null;
-      nameResolverBackoff = null;
+      nameResolverRefreshFuture = null;
+      nameResolverRefresh = null;
       if (nameResolver != null) {
         nameResolver.refresh();
       }
@@ -425,20 +425,20 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
   }
 
   // Must be used from channelExecutor
-  @Nullable private ScheduledFuture<?> nameResolverBackoffFuture;
+  @Nullable private ScheduledFuture<?> nameResolverRefreshFuture;
   // Must be used from channelExecutor
-  @Nullable private NameResolverBackoff nameResolverBackoff;
+  @Nullable private NameResolverRefresh nameResolverRefresh;
   // The policy to control backoff between name resolution attempts. Non-null when an attempt is
   // scheduled. Must be used from channelExecutor
   @Nullable private BackoffPolicy nameResolverBackoffPolicy;
 
   // Must be run from channelExecutor
   private void cancelNameResolverBackoff() {
-    if (nameResolverBackoffFuture != null) {
-      nameResolverBackoffFuture.cancel(false);
-      nameResolverBackoff.cancelled = true;
-      nameResolverBackoffFuture = null;
-      nameResolverBackoff = null;
+    if (nameResolverRefreshFuture != null) {
+      nameResolverRefreshFuture.cancel(false);
+      nameResolverRefresh.cancelled = true;
+      nameResolverRefreshFuture = null;
+      nameResolverRefresh = null;
       nameResolverBackoffPolicy = null;
     }
   }
@@ -794,7 +794,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
                 if (shutdown.get()) {
                   return;
                 }
-                if (nameResolverBackoffFuture != null) {
+                if (nameResolverRefreshFuture != null) {
+                  checkState(nameResolverStarted, "name resolver must be started");
                   cancelNameResolverBackoff();
                   nameResolver.refresh();
                 }
@@ -1161,7 +1162,7 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
                     return;
                   }
                   balancer.handleNameResolutionError(error);
-                  if (nameResolverBackoffFuture != null) {
+                  if (nameResolverRefreshFuture != null) {
                     // The name resolver may invoke onError multiple times, but we only want to
                     // schedule one backoff attempt
                     // TODO(ericgribkoff) Update contract of NameResolver.Listener or decide if we
@@ -1178,11 +1179,11 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
                         "[{0}] Scheduling DNS resolution backoff for {1} ns",
                         new Object[] {logId, delayNanos});
                   }
-                  nameResolverBackoff = new NameResolverBackoff();
-                  nameResolverBackoffFuture =
+                  nameResolverRefresh = new NameResolverRefresh();
+                  nameResolverRefreshFuture =
                       transportFactory
                           .getScheduledExecutorService()
-                          .schedule(nameResolverBackoff, delayNanos, TimeUnit.NANOSECONDS);
+                          .schedule(nameResolverRefresh, delayNanos, TimeUnit.NANOSECONDS);
                 }
               })
           .drain();
