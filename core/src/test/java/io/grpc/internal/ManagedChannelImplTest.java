@@ -247,7 +247,7 @@ public class ManagedChannelImplTest {
         numExpectedTasks += 1;
       }
 
-      if (getNameResolverBackoff() != null) {
+      if (getNameResolverRefresh() != null) {
         numExpectedTasks += 1;
       }
 
@@ -601,8 +601,10 @@ public class ManagedChannelImplTest {
     FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
     verify(mockLoadBalancer).handleNameResolutionError(same(error));
 
-    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS);
+    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS - 1);
+    assertEquals(0, resolver.refreshCalled);
 
+    timer.forwardNanos(1);
     assertEquals(1, resolver.refreshCalled);
     verify(mockLoadBalancer, times(2)).handleNameResolutionError(same(error));
 
@@ -610,15 +612,17 @@ public class ManagedChannelImplTest {
     resolver.error = null;
 
     // For the second attempt, the backoff should occur at RECONNECT_BACKOFF_INTERVAL_NANOS * 2
-    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS);
+    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS * 2 - 1);
     assertEquals(1, resolver.refreshCalled);
-    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS);
+    timer.forwardNanos(1);
     assertEquals(2, resolver.refreshCalled);
     assertEquals(0, timer.numPendingTasks());
 
     // Verify that the successful resolution reset the backoff policy
     resolver.listener.onError(error);
-    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS);
+    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS - 1);
+    assertEquals(2, resolver.refreshCalled);
+    timer.forwardNanos(1);
     assertEquals(3, resolver.refreshCalled);
     assertEquals(0, timer.numPendingTasks());
   }
@@ -632,7 +636,7 @@ public class ManagedChannelImplTest {
     createChannel(nameResolverFactory, NO_INTERCEPTOR);
     verify(mockLoadBalancer).handleNameResolutionError(same(error));
 
-    FakeClock.ScheduledTask nameResolverBackoff = getNameResolverBackoff();
+    FakeClock.ScheduledTask nameResolverBackoff = getNameResolverRefresh();
     assertNotNull(nameResolverBackoff);
     assertFalse(nameResolverBackoff.isCancelled());
 
@@ -1644,7 +1648,7 @@ public class ManagedChannelImplTest {
     FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
     verify(mockLoadBalancer).handleNameResolutionError(same(error));
 
-    FakeClock.ScheduledTask nameResolverBackoff = getNameResolverBackoff();
+    FakeClock.ScheduledTask nameResolverBackoff = getNameResolverRefresh();
     assertNotNull("There should be a name resolver backoff task", nameResolverBackoff);
     assertEquals(0, resolver.refreshCalled);
 
@@ -2287,16 +2291,16 @@ public class ManagedChannelImplTest {
     return instrumented.getStats().get();
   }
 
-  private FakeClock.ScheduledTask getNameResolverBackoff() {
-    FakeClock.ScheduledTask nameResolverBackoff = null;
+  private FakeClock.ScheduledTask getNameResolverRefresh() {
+    FakeClock.ScheduledTask nameResolverRefresh = null;
     for (FakeClock.ScheduledTask task : timer.getPendingTasks()) {
-      if (task.command.toString().contains("NameResolverBackoff")) {
+      if (task.command.toString().contains("NameResolverRefresh")) {
         assertNull(
-            "There shouldn't be more than one name resolver backoff task", nameResolverBackoff);
+            "There shouldn't be more than one name resolver refresh task", nameResolverRefresh);
         assertFalse(task.isDone());
-        nameResolverBackoff = task;
+        nameResolverRefresh = task;
       }
     }
-    return nameResolverBackoff;
+    return nameResolverRefresh;
   }
 }
