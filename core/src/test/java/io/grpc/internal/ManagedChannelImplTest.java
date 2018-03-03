@@ -144,6 +144,13 @@ public class ManagedChannelImplTest {
   private final FakeClock timer = new FakeClock();
   private final FakeClock executor = new FakeClock();
   private final FakeClock oobExecutor = new FakeClock();
+  private static final FakeClock.TaskFilter NAME_RESOLVER_REFRESH_TASK_FILTER =
+      new FakeClock.TaskFilter() {
+        @Override
+        public boolean shouldAccept(Runnable command) {
+          return command instanceof ManagedChannelImpl.NameResolverRefresh;
+        }
+      };
   private final CallTracer.Factory channelStatsFactory = new CallTracer.Factory() {
     @Override
     public CallTracer create() {
@@ -2293,13 +2300,11 @@ public class ManagedChannelImplTest {
 
   private FakeClock.ScheduledTask getNameResolverRefresh() {
     FakeClock.ScheduledTask nameResolverRefresh = null;
-    for (FakeClock.ScheduledTask task : timer.getPendingTasks()) {
-      if (task.command.toString().contains("NameResolverRefresh")) {
-        assertNull(
-            "There shouldn't be more than one name resolver refresh task", nameResolverRefresh);
-        assertFalse(task.isDone());
-        nameResolverRefresh = task;
-      }
+    for (FakeClock.ScheduledTask task : timer.getPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER)) {
+      assertNull(
+          "There shouldn't be more than one name resolver refresh task", nameResolverRefresh);
+      assertFalse(task.isDone());
+      nameResolverRefresh = task;
     }
     return nameResolverRefresh;
   }

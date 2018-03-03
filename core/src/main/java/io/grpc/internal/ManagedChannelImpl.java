@@ -405,7 +405,8 @@ public final class ManagedChannelImpl extends ManagedChannel implements Instrume
   }
 
   // Run from channelExecutor
-  private class NameResolverRefresh implements Runnable {
+  @VisibleForTesting
+  class NameResolverRefresh implements Runnable {
     // Only mutated from channelExecutor
     boolean cancelled;
 
