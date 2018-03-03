@@ -139,6 +139,8 @@ public class ServerImplTest {
 
   private final FakeClock executor = new FakeClock();
   private final FakeClock timer = new FakeClock();
+  private final Channelz channelz = new Channelz();
+
   @Mock
   private ServerStreamTracer.Factory streamTracerFactory;
   private List<ServerStreamTracer.Factory> streamTracerFactories;
@@ -188,6 +190,7 @@ public class ServerImplTest {
   @Before
   public void startUp() throws IOException {
     MockitoAnnotations.initMocks(this);
+    builder.channelz = channelz;
     streamTracerFactories = Arrays.asList(streamTracerFactory);
     when(executorPool.getObject()).thenReturn(executor.getScheduledExecutorService());
     when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
@@ -919,8 +922,8 @@ public class ServerImplTest {
     assertTrue(onHalfCloseCalled.get());
 
     streamListener.closed(Status.CANCELLED);
-    assertEquals(1, executor.runDueTasks(CONTEXT_CLOSER_TASK_FITLER));
-    assertEquals(1, executor.runDueTasks());
+    assertEquals(1, executor.numPendingTasks(CONTEXT_CLOSER_TASK_FITLER));
+    assertEquals(2, executor.runDueTasks());
     assertTrue(onCancelCalled.get());
 
     // Close should never be called if asserts in listener pass.
@@ -990,11 +993,10 @@ public class ServerImplTest {
     assertFalse(callReference.get().isCancelled());
     assertFalse(context.get().isCancelled());
     streamListener.closed(Status.CANCELLED);
-    assertEquals(1, executor.runDueTasks(CONTEXT_CLOSER_TASK_FITLER));
+    assertEquals(1, executor.numPendingTasks(CONTEXT_CLOSER_TASK_FITLER));
+    assertEquals(2, executor.runDueTasks());
     assertTrue(callReference.get().isCancelled());
     assertTrue(context.get().isCancelled());
-
-    assertEquals(1, executor.runDueTasks());
     assertTrue(contextCancelled.get());
   }
 
@@ -1293,6 +1295,11 @@ public class ServerImplTest {
       protected int priority() {
         return 0;
       }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
     };
     createAndStartServer();
 
@@ -1343,6 +1350,11 @@ public class ServerImplTest {
       protected int priority() {
         return 0;
       }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
     };
     createAndStartServer();
 
@@ -1360,6 +1372,35 @@ public class ServerImplTest {
     assertSame(
         METHOD.getResponseMarshaller(),
         userInterceptor.interceptedMethods.get(0).getResponseMarshaller());
+  }
+
+  @Test
+  public void channelz_membership() throws Exception {
+    createServer();
+    assertTrue(builder.channelz.containsServer(server.getLogId()));
+    server.shutdownNow().awaitTermination();
+    assertFalse(builder.channelz.containsServer(server.getLogId()));
+  }
+
+  @Test
+  public void channelz_serverStats() throws Exception {
+    createAndStartServer();
+    assertEquals(0, server.getStats().get().callsSucceeded);
+    basicExchangeHelper(METHOD, "Lots of pizza, please", 314, null);
+    assertEquals(1, server.getStats().get().callsSucceeded);
+  }
+
+  @Test
+  public void channelz_transport_membershp() throws Exception {
+    createAndStartServer();
+    SimpleServerTransport transport = new SimpleServerTransport();
+
+    assertFalse(builder.channelz.containsTransport(transport.getLogId()));
+    ServerTransportListener listener
+        = transportServer.registerNewServerTransport(transport);
+    assertTrue(builder.channelz.containsTransport(transport.getLogId()));
+    listener.transportTerminated();
+    assertFalse(builder.channelz.containsTransport(transport.getLogId()));
   }
 
   private void createAndStartServer() throws IOException {
@@ -1421,6 +1462,7 @@ public class ServerImplTest {
 
   private class SimpleServerTransport implements ServerTransport {
     ServerTransportListener listener;
+    LogId id = LogId.allocate(getClass().getName());
 
     @Override
     public void shutdown() {
@@ -1434,7 +1476,7 @@ public class ServerImplTest {
 
     @Override
     public LogId getLogId() {
-      throw new UnsupportedOperationException();
+      return id;
     }
 
     @Override

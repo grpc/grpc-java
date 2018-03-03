@@ -26,6 +26,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static junit.framework.TestCase.assertNotSame;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -56,6 +57,7 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
@@ -78,7 +80,6 @@ import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.Channelz.ChannelStats;
-import io.grpc.internal.ManagedChannelImpl.ManagedChannelReference;
 import io.grpc.internal.NoopClientCall.NoopClientCallListener;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import io.grpc.internal.testing.SingleMessageProducer;
@@ -94,12 +95,9 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.logging.Filter;
-import java.util.logging.Level;
-import java.util.logging.LogRecord;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -132,7 +130,6 @@ public class ManagedChannelImplTest {
   private static final Attributes.Key<String> SUBCHANNEL_ATTR_KEY =
       Attributes.Key.of("subchannel-attr-key");
   private static final long RECONNECT_BACKOFF_INTERVAL_NANOS = 10;
-  private static int unterminatedChannels;
   private final String serviceName = "fake.example.com";
   private final String authority = serviceName;
   private final String userAgent = "userAgent";
@@ -162,6 +159,7 @@ public class ManagedChannelImplTest {
       });
     }
   };
+  private final Channelz channelz = new Channelz();
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
@@ -227,7 +225,7 @@ public class ManagedChannelImplTest {
         return NAME_RESOLVER_PARAMS;
       }
 
-      @Override public Builder usePlaintext(boolean b) {
+      @Override public Builder usePlaintext() {
         throw new UnsupportedOperationException();
       }
     }
@@ -239,6 +237,7 @@ public class ManagedChannelImplTest {
     builder.executorPool = executorPool;
     builder.idleTimeoutMillis = idleTimeoutMillis;
     builder.binlogProvider = binlogProvider;
+    builder.channelz = channelz;
     checkState(channel == null);
     channel = new ManagedChannelImpl(
         builder, mockTransportFactory, new FakeBackoffPolicyProvider(),
@@ -286,16 +285,8 @@ public class ManagedChannelImplTest {
     // would ignore any time-sensitive tasks, e.g., back-off and the idle timer.
     assertTrue(timer.getDueTasks() + " should be empty", timer.getDueTasks().isEmpty());
     assertEquals(executor.getPendingTasks() + " should be empty", 0, executor.numPendingTasks());
-    helper = null; // helper retains a ref to the channel
     if (channel != null) {
       channel.shutdownNow();
-      if (!channel.isTerminated()) {
-        // Since there are no real transports in this test, if shutdownNow doesn't result in
-        // termination, then it will never happen.  It would be very cumbersome to make all the
-        // tests in this file clean up fully after themselves, so instead just keep track of how
-        // many don't.  This is used to see how many should be ignored in the phantom cleanup.
-        unterminatedChannels++;
-      }
       channel = null;
     }
   }
@@ -342,6 +333,89 @@ public class ManagedChannelImplTest {
     assertTrue(channel.isShutdown());
     assertTrue(channel.isTerminated());
     verify(executorPool).returnObject(executor.getScheduledExecutorService());
+  }
+
+  @Test
+  public void channelzMembership() throws Exception {
+    createChannel(new FakeNameResolverFactory.Builder(expectedUri).build(), NO_INTERCEPTOR);
+    assertTrue(channelz.containsRootChannel(channel.getLogId()));
+    assertTrue(channelz.containsChannel(channel.getLogId()));
+    channel.shutdownNow();
+    channel.awaitTermination(5, TimeUnit.SECONDS);
+    assertFalse(channelz.containsRootChannel(channel.getLogId()));
+    assertFalse(channelz.containsChannel(channel.getLogId()));
+  }
+
+  @Test
+  public void channelzMembership_subchannel() throws Exception {
+    createChannel(new FakeNameResolverFactory.Builder(expectedUri).build(), NO_INTERCEPTOR);
+    assertTrue(channelz.containsRootChannel(channel.getLogId()));
+    assertTrue(channelz.containsChannel(channel.getLogId()));
+
+    AbstractSubchannel subchannel =
+        (AbstractSubchannel) helper.createSubchannel(addressGroup, Attributes.EMPTY);
+    // subchannels are not root channels
+    assertFalse(channelz.containsRootChannel(subchannel.getInternalSubchannel().getLogId()));
+    assertTrue(channelz.containsChannel(subchannel.getInternalSubchannel().getLogId()));
+    assertThat(getStats(channel).subchannels)
+        .containsExactly(subchannel.getInternalSubchannel().getLogId());
+
+    subchannel.requestConnection();
+    MockClientTransportInfo transportInfo = transports.poll();
+    assertNotNull(transportInfo);
+    assertTrue(channelz.containsTransport(transportInfo.transport.getLogId()));
+
+    // terminate transport
+    transportInfo.listener.transportTerminated();
+    assertFalse(channelz.containsTransport(transportInfo.transport.getLogId()));
+
+    // terminate subchannel
+    assertTrue(channelz.containsChannel(subchannel.getInternalSubchannel().getLogId()));
+    subchannel.shutdown();
+    timer.forwardTime(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS);
+    timer.runDueTasks();
+    assertFalse(channelz.containsChannel(subchannel.getInternalSubchannel().getLogId()));
+    assertThat(getStats(channel).subchannels).isEmpty();
+
+    // channel still appears
+    assertTrue(channelz.containsRootChannel(channel.getLogId()));
+    assertTrue(channelz.containsChannel(channel.getLogId()));
+  }
+
+  @Test
+  public void channelzMembership_oob() throws Exception {
+    createChannel(new FakeNameResolverFactory.Builder(expectedUri).build(), NO_INTERCEPTOR);
+    OobChannel oob = (OobChannel) helper.createOobChannel(addressGroup, authority);
+    // oob channels are not root channels
+    assertFalse(channelz.containsRootChannel(oob.getLogId()));
+    assertTrue(channelz.containsChannel(oob.getLogId()));
+    assertThat(getStats(channel).subchannels).containsExactly(oob.getLogId());
+    assertTrue(channelz.containsChannel(oob.getLogId()));
+
+    AbstractSubchannel subchannel = (AbstractSubchannel) oob.getSubchannel();
+    assertTrue(channelz.containsChannel(subchannel.getInternalSubchannel().getLogId()));
+    assertThat(getStats(oob).subchannels)
+        .containsExactly(subchannel.getInternalSubchannel().getLogId());
+    assertTrue(channelz.containsChannel(subchannel.getInternalSubchannel().getLogId()));
+
+    oob.getSubchannel().requestConnection();
+    MockClientTransportInfo transportInfo = transports.poll();
+    assertNotNull(transportInfo);
+    assertTrue(channelz.containsTransport(transportInfo.transport.getLogId()));
+
+    // terminate transport
+    transportInfo.listener.transportTerminated();
+    assertFalse(channelz.containsTransport(transportInfo.transport.getLogId()));
+
+    // terminate oobchannel
+    oob.shutdown();
+    assertFalse(channelz.containsChannel(oob.getLogId()));
+    assertThat(getStats(channel).subchannels).isEmpty();
+    assertFalse(channelz.containsChannel(subchannel.getInternalSubchannel().getLogId()));
+
+    // channel still appears
+    assertTrue(channelz.containsRootChannel(channel.getLogId()));
+    assertTrue(channelz.containsChannel(channel.getLogId()));
   }
 
   @Test
@@ -725,11 +799,8 @@ public class ManagedChannelImplTest {
     // NameResolver returns addresses.
     nameResolverFactory.allResolved();
 
-    // The LoadBalancer will receive the error that it has thrown.
-    verify(mockLoadBalancer).handleNameResolutionError(statusCaptor.capture());
-    Status status = statusCaptor.getValue();
-    assertSame(Status.Code.INTERNAL, status.getCode());
-    assertSame(ex, status.getCause());
+    // Exception thrown from balancer is caught by ChannelExecutor, making channel enter panic mode.
+    verifyPanicMode(ex);
   }
 
   @Test
@@ -1607,6 +1678,155 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void panic_whenIdle() {
+    subtestPanic(IDLE);
+  }
+
+  @Test
+  public void panic_whenConnecting() {
+    subtestPanic(CONNECTING);
+  }
+
+  @Test
+  public void panic_whenTransientFailure() {
+    subtestPanic(TRANSIENT_FAILURE);
+  }
+
+  @Test
+  public void panic_whenReady() {
+    subtestPanic(READY);
+  }
+
+  private void subtestPanic(ConnectivityState initialState) {
+    assertNotEquals("We don't test panic mode if it's already SHUTDOWN", SHUTDOWN, initialState);
+    long idleTimeoutMillis = 2000L;
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri).build();
+    createChannel(nameResolverFactory, NO_INTERCEPTOR, true, idleTimeoutMillis);
+
+    verify(mockLoadBalancerFactory).newLoadBalancer(any(Helper.class));
+    assertEquals(1, nameResolverFactory.resolvers.size());
+    FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.remove(0);
+
+    Throwable panicReason = new Exception("Simulated uncaught exception");
+    if (initialState == IDLE) {
+      timer.forwardNanos(TimeUnit.MILLISECONDS.toNanos(idleTimeoutMillis));
+    } else {
+      helper.updateBalancingState(initialState, mockPicker);
+    }
+    assertEquals(initialState, channel.getState(false));
+
+    if (initialState == IDLE) {
+      // IDLE mode will shutdown resolver and balancer
+      verify(mockLoadBalancer).shutdown();
+      assertTrue(resolver.shutdown);
+      // A new resolver is created
+      assertEquals(1, nameResolverFactory.resolvers.size());
+      resolver = nameResolverFactory.resolvers.remove(0);
+      assertFalse(resolver.shutdown);
+    } else {
+      verify(mockLoadBalancer, never()).shutdown();
+      assertFalse(resolver.shutdown);
+    }
+
+    // Make channel panic!
+    channel.panic(panicReason);
+
+    // Calls buffered in delayedTransport will fail
+
+    // Resolver and balancer are shutdown
+    verify(mockLoadBalancer).shutdown();
+    assertTrue(resolver.shutdown);
+
+    // Channel will stay in TRANSIENT_FAILURE. getState(true) will not revive it.
+    assertEquals(TRANSIENT_FAILURE, channel.getState(true));
+    assertEquals(TRANSIENT_FAILURE, channel.getState(true));
+    verifyPanicMode(panicReason);
+
+    // No new resolver or balancer are created
+    verifyNoMoreInteractions(mockLoadBalancerFactory);
+    assertEquals(0, nameResolverFactory.resolvers.size());
+
+    // A misbehaving balancer that calls updateBalancingState() after it's shut down will not be
+    // able to revive it.
+    helper.updateBalancingState(READY, mockPicker);
+    verifyPanicMode(panicReason);
+
+    // Cannot be revived by exitIdleMode()
+    channel.exitIdleMode();
+    verifyPanicMode(panicReason);
+
+    // Can still shutdown normally
+    channel.shutdown();
+    assertTrue(channel.isShutdown());
+    assertTrue(channel.isTerminated());
+    assertEquals(SHUTDOWN, channel.getState(false));
+
+    // We didn't stub mockPicker, because it should have never been called in this test.
+    verifyZeroInteractions(mockPicker);
+  }
+
+  @Test
+  public void panic_bufferedCallsWillFail() {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri).build();
+    createChannel(nameResolverFactory, NO_INTERCEPTOR);
+
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withNoResult());
+    helper.updateBalancingState(CONNECTING, mockPicker);
+
+    // Start RPCs that will be buffered in delayedTransport
+    ClientCall<String, Integer> call =
+        channel.newCall(method, CallOptions.DEFAULT.withoutWaitForReady());
+    call.start(mockCallListener, new Metadata());
+
+    ClientCall<String, Integer> call2 =
+        channel.newCall(method, CallOptions.DEFAULT.withWaitForReady());
+    call2.start(mockCallListener2, new Metadata());
+
+    executor.runDueTasks();
+    verifyZeroInteractions(mockCallListener, mockCallListener2);
+
+    // Enter panic
+    Throwable panicReason = new Exception("Simulated uncaught exception");
+    channel.panic(panicReason);
+
+    // Buffered RPCs fail immediately
+    executor.runDueTasks();
+    verifyCallListenerClosed(mockCallListener, Status.Code.INTERNAL, panicReason);
+    verifyCallListenerClosed(mockCallListener2, Status.Code.INTERNAL, panicReason);
+  }
+
+  private void verifyPanicMode(Throwable cause) {
+    Assume.assumeTrue("Panic mode disabled to resolve issues with some tests. See #3293", false);
+
+    @SuppressWarnings("unchecked")
+    ClientCall.Listener<Integer> mockListener =
+        (ClientCall.Listener<Integer>) mock(ClientCall.Listener.class);
+    assertEquals(TRANSIENT_FAILURE, channel.getState(false));
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockListener, new Metadata());
+    executor.runDueTasks();
+    verifyCallListenerClosed(mockListener, Status.Code.INTERNAL, cause);
+
+    // Channel is dead.  No more pending task to possibly revive it.
+    assertEquals(0, timer.numPendingTasks());
+    assertEquals(0, executor.numPendingTasks());
+    assertEquals(0, oobExecutor.numPendingTasks());
+  }
+
+  private void verifyCallListenerClosed(
+      ClientCall.Listener<Integer> listener, Status.Code code, Throwable cause) {
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(null);
+    verify(listener).onClose(captor.capture(), any(Metadata.class));
+    Status rpcStatus = captor.getValue();
+    assertEquals(code, rpcStatus.getCode());
+    assertSame(cause, rpcStatus.getCause());
+    verifyNoMoreInteractions(listener);
+  }
+
+  @Test
   public void idleTimeoutAndReconnect() {
     long idleTimeoutMillis = 2000L;
     createChannel(
@@ -1784,74 +2004,6 @@ public class ManagedChannelImplTest {
 
     FakeNameResolverFactory.FakeNameResolver nameResolver = nameResolverFactory.resolvers.get(0);
     assertEquals(0, nameResolver.refreshCalled);
-  }
-
-  @Test
-  public void orphanedChannelsAreLogged() throws Exception {
-    int remaining = unterminatedChannels;
-    for (int retry = 0; retry < 3; retry++) {
-      System.gc();
-      System.runFinalization();
-      if ((remaining -= ManagedChannelReference.cleanQueue()) <= 0) {
-        break;
-      }
-      Thread.sleep(100L * (1L << retry));
-    }
-    assertThat(remaining).isAtMost(0);
-
-    createChannel(
-        new FakeNameResolverFactory.Builder(expectedUri).build(),
-        NO_INTERCEPTOR,
-        false, // Don't create a transport, Helper maintains a ref to the channel.
-        ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE);
-    assertNotNull(channel);
-    LogId logId = channel.getLogId();
-
-    // Try to capture the log output but without causing terminal noise.  Adding the filter must
-    // be done before clearing the ref or else it might be missed.
-    final List<LogRecord> records = new ArrayList<LogRecord>(1);
-    Logger channelLogger = Logger.getLogger(ManagedChannelImpl.class.getName());
-    Filter oldFilter = channelLogger.getFilter();
-    channelLogger.setFilter(new Filter() {
-
-      @Override
-      public boolean isLoggable(LogRecord record) {
-        synchronized (records) {
-          records.add(record);
-        }
-        return false;
-      }
-    });
-
-    // TODO(carl-mastrangelo): consider using com.google.common.testing.GcFinalization instead.
-    try {
-      channel = null;
-      // That *should* have been the last reference.  Try to reclaim it.
-      boolean success = false;
-      for (int retry = 0; retry < 3; retry++) {
-        System.gc();
-        System.runFinalization();
-        int orphans = ManagedChannelReference.cleanQueue();
-        if (orphans == 1) {
-          success = true;
-          break;
-        }
-        assertEquals("unexpected extra orphans", 0, orphans);
-        Thread.sleep(100L * (1L << retry));
-      }
-      assertTrue("Channel was not garbage collected", success);
-
-      LogRecord lr;
-      synchronized (records) {
-        assertEquals(1, records.size());
-        lr = records.get(0);
-      }
-      assertThat(lr.getMessage()).contains("shutdown");
-      assertThat(lr.getParameters()).asList().containsExactly(logId, target).inOrder();
-      assertEquals(Level.SEVERE, lr.getLevel());
-    } finally {
-      channelLogger.setFilter(oldFilter);
-    }
   }
 
   @Test
@@ -2148,6 +2300,11 @@ public class ManagedChannelImplTest {
       protected int priority() {
         return 0;
       }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
     };
 
     // perform an RPC
@@ -2229,6 +2386,11 @@ public class ManagedChannelImplTest {
       @Override
       protected int priority() {
         return 0;
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
       }
     };
     createChannel(
@@ -2379,7 +2541,7 @@ public class ManagedChannelImplTest {
   }
 
   private static ChannelStats getStats(AbstractSubchannel subchannel) throws Exception {
-    return subchannel.getStats().get();
+    return subchannel.getInternalSubchannel().getStats().get();
   }
 
   private static ChannelStats getStats(

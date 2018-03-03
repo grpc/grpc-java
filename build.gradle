@@ -1,6 +1,5 @@
 buildscript {
   repositories {
-    mavenCentral()
     mavenLocal()
     maven {
       url "https://plugins.gradle.org/m2/"
@@ -59,11 +58,11 @@ subprojects {
     targetCompatibility = 1.6
 
     repositories {
-        mavenCentral()
-        mavenLocal()
         maven {
-          url "https://oss.sonatype.org/content/repositories/snapshots/"
+            // The google mirror is less flaky than mavenCentral()
+            url "https://maven-central.storage-download.googleapis.com/repos/central/data/"
         }
+        mavenLocal()
     }
 
     [compileJava, compileTestJava, compileJmhJava].each() {
@@ -100,7 +99,7 @@ subprojects {
         protocPluginBaseName = 'protoc-gen-grpc-java'
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
-        nettyVersion = '4.1.21.Final'
+        nettyVersion = '4.1.22.Final'
         guavaVersion = '19.0'
         protobufVersion = '3.5.1'
         protocVersion = '3.5.1-1'
@@ -226,7 +225,7 @@ subprojects {
                 math: 'org.apache.commons:commons-math3:3.6',
 
                 // Jetty ALPN dependencies
-                jetty_alpn_agent: 'org.mortbay.jetty.alpn:jetty-alpn-agent:2.0.6'
+                jetty_alpn_agent: 'org.mortbay.jetty.alpn:jetty-alpn-agent:2.0.7'
         ]
     }
 

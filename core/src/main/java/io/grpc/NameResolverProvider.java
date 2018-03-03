@@ -30,7 +30,7 @@ import java.util.List;
  * exceptions may reasonably occur for implementation-specific reasons, implementations should
  * generally handle the exception gracefully and return {@code false} from {@link #isAvailable()}.
  */
-@ExperimentalApi
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/4159")
 public abstract class NameResolverProvider extends NameResolver.Factory {
   /**
    * The port number used in case the target or the underlying naming system doesn't provide a

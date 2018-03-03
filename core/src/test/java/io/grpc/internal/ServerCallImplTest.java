@@ -40,6 +40,8 @@ import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.ServerCall;
 import io.grpc.Status;
+import io.grpc.internal.Channelz.ServerStats;
+import io.grpc.internal.Channelz.ServerStats.Builder;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
 import io.grpc.internal.testing.SingleMessageProducer;
 import java.io.ByteArrayInputStream;
@@ -61,6 +63,7 @@ public class ServerCallImplTest {
   @Mock private ServerStream stream;
   @Mock private ServerCall.Listener<Long> callListener;
 
+  private final CallTracer serverCallTracer = CallTracer.getDefaultFactory().create();
   private ServerCallImpl<Long, Long> call;
   private Context.CancellableContext context;
 
@@ -87,7 +90,47 @@ public class ServerCallImplTest {
     MockitoAnnotations.initMocks(this);
     context = Context.ROOT.withCancellation();
     call = new ServerCallImpl<Long, Long>(stream, UNARY_METHOD, requestHeaders, context,
-        DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance());
+        DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance(),
+        serverCallTracer);
+  }
+
+  @Test
+  public void callTracer_success() {
+    callTracer0(Status.OK);
+  }
+
+  @Test
+  public void callTracer_failure() {
+    callTracer0(Status.UNKNOWN);
+  }
+
+  private void callTracer0(Status status) {
+    CallTracer tracer = CallTracer.getDefaultFactory().create();
+    Builder beforeBuilder = new Builder();
+    tracer.updateBuilder(beforeBuilder);
+    ServerStats before = beforeBuilder.build();
+    assertEquals(0, before.callsStarted);
+    assertEquals(0, before.lastCallStartedMillis);
+
+    call = new ServerCallImpl<Long, Long>(stream, UNARY_METHOD, requestHeaders, context,
+        DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance(),
+        tracer);
+
+    // required boilerplate
+    call.sendHeaders(new Metadata());
+    call.sendMessage(123L);
+    // end: required boilerplate
+
+    call.close(status, new Metadata());
+    Builder afterBuilder = new Builder();
+    tracer.updateBuilder(afterBuilder);
+    ServerStats after = afterBuilder.build();
+    assertEquals(1, after.callsStarted);
+    if (status.isOk()) {
+      assertEquals(1, after.callsSucceeded);
+    } else {
+      assertEquals(1, after.callsFailed);
+    }
   }
 
   @Test
@@ -181,7 +224,8 @@ public class ServerCallImplTest {
         requestHeaders,
         context,
         DecompressorRegistry.getDefaultInstance(),
-        CompressorRegistry.getDefaultInstance());
+        CompressorRegistry.getDefaultInstance(),
+        serverCallTracer);
     serverCall.sendHeaders(new Metadata());
     serverCall.sendMessage(1L);
     verify(stream, times(1)).writeMessage(any(InputStream.class));
@@ -191,11 +235,9 @@ public class ServerCallImplTest {
     serverCall.sendMessage(1L);
     verify(stream, times(1)).writeMessage(any(InputStream.class));
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
-    verify(stream, times(1)).close(statusCaptor.capture(), metadataCaptor.capture());
+    verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.INTERNAL, statusCaptor.getValue().getCode());
     assertEquals(ServerCallImpl.TOO_MANY_RESPONSES, statusCaptor.getValue().getDescription());
-    assertTrue(metadataCaptor.getValue().keys().isEmpty());
   }
 
   @Test
@@ -216,12 +258,13 @@ public class ServerCallImplTest {
         requestHeaders,
         context,
         DecompressorRegistry.getDefaultInstance(),
-        CompressorRegistry.getDefaultInstance());
+        CompressorRegistry.getDefaultInstance(),
+        serverCallTracer);
     serverCall.sendHeaders(new Metadata());
     serverCall.sendMessage(1L);
     serverCall.sendMessage(1L);
     verify(stream, times(1)).writeMessage(any(InputStream.class));
-    verify(stream, times(1)).close(any(Status.class), any(Metadata.class));
+    verify(stream, times(1)).cancel(any(Status.class));
 
     // App runs to completion but everything is ignored
     serverCall.sendMessage(1L);
@@ -252,14 +295,13 @@ public class ServerCallImplTest {
         requestHeaders,
         context,
         DecompressorRegistry.getDefaultInstance(),
-        CompressorRegistry.getDefaultInstance());
+        CompressorRegistry.getDefaultInstance(),
+        serverCallTracer);
     serverCall.close(Status.OK, new Metadata());
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
-    verify(stream, times(1)).close(statusCaptor.capture(), metadataCaptor.capture());
+    verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.INTERNAL, statusCaptor.getValue().getCode());
     assertEquals(ServerCallImpl.MISSING_RESPONSE, statusCaptor.getValue().getDescription());
-    assertTrue(metadataCaptor.getValue().keys().isEmpty());
   }
 
   @Test

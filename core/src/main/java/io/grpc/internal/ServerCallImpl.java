@@ -37,6 +37,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import java.io.InputStream;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
@@ -54,6 +55,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private final byte[] messageAcceptEncoding;
   private final DecompressorRegistry decompressorRegistry;
   private final CompressorRegistry compressorRegistry;
+  private CallTracer serverCallTracer;
 
   // state
   private volatile boolean cancelled;
@@ -64,13 +66,16 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   ServerCallImpl(ServerStream stream, MethodDescriptor<ReqT, RespT> method,
       Metadata inboundHeaders, Context.CancellableContext context,
-      DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry) {
+      DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
+      CallTracer serverCallTracer) {
     this.stream = stream;
     this.method = method;
     this.context = context;
     this.messageAcceptEncoding = inboundHeaders.get(MESSAGE_ACCEPT_ENCODING_KEY);
     this.decompressorRegistry = decompressorRegistry;
     this.compressorRegistry = compressorRegistry;
+    this.serverCallTracer = serverCallTracer;
+    this.serverCallTracer.reportCallStarted();
   }
 
   @Override
@@ -165,14 +170,18 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   @Override
   public void close(Status status, Metadata trailers) {
     checkState(!closeCalled, "call already closed");
-    closeCalled = true;
+    try {
+      closeCalled = true;
 
-    if (status.isOk() && method.getType().serverSendsOneMessage() && !messageSent) {
-      internalClose(Status.INTERNAL.withDescription(MISSING_RESPONSE));
-      return;
+      if (status.isOk() && method.getType().serverSendsOneMessage() && !messageSent) {
+        internalClose(Status.INTERNAL.withDescription(MISSING_RESPONSE));
+        return;
+      }
+
+      stream.close(status, trailers);
+    } finally {
+      serverCallTracer.reportCallEnded(status.isOk());
     }
-
-    stream.close(status, trailers);
   }
 
   @Override
@@ -205,7 +214,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
    * on.
    */
   private void internalClose(Status internalError) {
-    stream.close(internalError, new Metadata());
+    log.log(Level.WARNING, "Cancelling the stream with status {0}", new Object[] {internalError});
+    stream.cancel(internalError);
+    serverCallTracer.reportCallEnded(internalError.isOk()); // error so always false
   }
 
   /**

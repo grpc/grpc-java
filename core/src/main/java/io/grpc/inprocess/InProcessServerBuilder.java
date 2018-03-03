@@ -16,13 +16,20 @@
 
 package io.grpc.inprocess;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.base.Preconditions;
 import io.grpc.ExperimentalApi;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractServerImplBuilder;
+import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.ObjectPool;
+import io.grpc.internal.SharedResourcePool;
 import java.io.File;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -40,11 +47,12 @@ import java.util.concurrent.TimeUnit;
  * <h3>Usage example</h3>
  * <h4>Server and client channel setup</h4>
  * <pre>
- *   Server server = InProcessServerBuilder.forName("unique-name")
+ *   String uniqueName = InProcessServerBuilder.generateName();
+ *   Server server = InProcessServerBuilder.forName(uniqueName)
  *       .directExecutor() // directExecutor is fine for unit tests
  *       .addService(&#47;* your code here *&#47;)
  *       .build().start();
- *   ManagedChannel channel = InProcessChannelBuilder.forName("unique-name")
+ *   ManagedChannel channel = InProcessChannelBuilder.forName(uniqueName)
  *       .directExecutor()
  *       .build();
  * </pre>
@@ -76,7 +84,16 @@ public final class InProcessServerBuilder
     throw new UnsupportedOperationException("call forName() instead");
   }
 
+  /**
+   * Generates a new server name that is unique each time.
+   */
+  public static String generateName() {
+    return UUID.randomUUID().toString();
+  }
+
   private final String name;
+  private ObjectPool<ScheduledExecutorService> schedulerPool =
+      SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
 
   private InProcessServerBuilder(String name) {
     this.name = Preconditions.checkNotNull(name, "name");
@@ -89,10 +106,27 @@ public final class InProcessServerBuilder
     handshakeTimeout(Long.MAX_VALUE, TimeUnit.SECONDS);
   }
 
+  /**
+   * Provides a custom scheduled executor service.
+   *
+   * <p>It's an optional parameter. If the user has not provided a scheduled executor service when
+   * the channel is built, the builder will use a static cached thread pool.
+   *
+   * @return this
+   *
+   * @since 1.11.0
+   */
+  public InProcessServerBuilder scheduledExecutorService(
+      ScheduledExecutorService scheduledExecutorService) {
+    schedulerPool = new FixedObjectPool<ScheduledExecutorService>(
+        checkNotNull(scheduledExecutorService, "scheduledExecutorService"));
+    return this;
+  }
+
   @Override
   protected InProcessServer buildTransportServer(
       List<ServerStreamTracer.Factory> streamTracerFactories) {
-    return new InProcessServer(name, GrpcUtil.TIMER_SERVICE, streamTracerFactories);
+    return new InProcessServer(name, schedulerPool, streamTracerFactories);
   }
 
   @Override
