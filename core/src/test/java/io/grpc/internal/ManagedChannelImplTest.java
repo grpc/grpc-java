@@ -624,6 +624,7 @@ public class ManagedChannelImplTest {
     createChannel(nameResolverFactory, NO_INTERCEPTOR);
     FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
     verify(mockLoadBalancer).handleNameResolutionError(same(error));
+    assertEquals(1, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
 
     timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS - 1);
     assertEquals(0, resolver.refreshCalled);
@@ -632,22 +633,27 @@ public class ManagedChannelImplTest {
     assertEquals(1, resolver.refreshCalled);
     verify(mockLoadBalancer, times(2)).handleNameResolutionError(same(error));
 
+    // Verify an additional name resolution failure does not schedule another timer
+    resolver.refresh();
+    verify(mockLoadBalancer, times(3)).handleNameResolutionError(same(error));
+    assertEquals(1, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
+
     // Allow the next refresh attempt to succeed
     resolver.error = null;
 
     // For the second attempt, the backoff should occur at RECONNECT_BACKOFF_INTERVAL_NANOS * 2
     timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS * 2 - 1);
-    assertEquals(1, resolver.refreshCalled);
-    timer.forwardNanos(1);
     assertEquals(2, resolver.refreshCalled);
+    timer.forwardNanos(1);
+    assertEquals(3, resolver.refreshCalled);
     assertEquals(0, timer.numPendingTasks());
 
     // Verify that the successful resolution reset the backoff policy
     resolver.listener.onError(error);
     timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS - 1);
-    assertEquals(2, resolver.refreshCalled);
-    timer.forwardNanos(1);
     assertEquals(3, resolver.refreshCalled);
+    timer.forwardNanos(1);
+    assertEquals(4, resolver.refreshCalled);
     assertEquals(0, timer.numPendingTasks());
   }
 
