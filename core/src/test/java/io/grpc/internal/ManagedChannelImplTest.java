@@ -49,6 +49,7 @@ import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.CallCredentials.MetadataApplier;
@@ -2550,13 +2551,6 @@ public class ManagedChannelImplTest {
   }
 
   private FakeClock.ScheduledTask getNameResolverRefresh() {
-    FakeClock.ScheduledTask nameResolverRefresh = null;
-    for (FakeClock.ScheduledTask task : timer.getPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER)) {
-      assertNull(
-          "There shouldn't be more than one name resolver refresh task", nameResolverRefresh);
-      assertFalse(task.isDone());
-      nameResolverRefresh = task;
-    }
-    return nameResolverRefresh;
+    return Iterables.getOnlyElement(timer.getPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER), null);
   }
 }
