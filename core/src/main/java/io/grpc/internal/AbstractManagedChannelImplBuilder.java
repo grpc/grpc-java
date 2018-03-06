@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -104,6 +105,14 @@ public abstract class AbstractManagedChannelImplBuilder
   // Access via getter, which may perform authority override as needed
   private NameResolver.Factory nameResolverFactory = DEFAULT_NAME_RESOLVER_FACTORY;
 
+  private PostBuildOption postBuildOption =
+      new PostBuildOption() {
+        @Override
+        public ManagedChannel onBuilt(ManagedChannel channel) {
+          return channel;
+        }
+      };
+
   final String target;
 
   @Nullable
@@ -167,7 +176,7 @@ public abstract class AbstractManagedChannelImplBuilder
   private CensusStatsModule censusStatsOverride;
 
   protected AbstractManagedChannelImplBuilder(String target) {
-    this.target = Preconditions.checkNotNull(target, "target");
+    this.target = checkNotNull(target, "target");
     this.directServerAddress = null;
   }
 
@@ -334,6 +343,16 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   /**
+   * Sets the custom {@link PostBuildOption}.
+   *
+   * @return this
+   */
+  public final T postBuildOption(PostBuildOption postBuildOption) {
+    this.postBuildOption = checkNotNull(postBuildOption, "postBuildOption");
+    return thisT();
+  }
+
+  /**
    * Override the default stats implementation.
    */
   @VisibleForTesting
@@ -388,7 +407,7 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Override
   public ManagedChannel build() {
-    return new ManagedChannelImpl(
+    ManagedChannel channel = new ManagedChannelImpl(
         this,
         buildTransportFactory(),
         // TODO(carl-mastrangelo): Allow clients to pass this in
@@ -398,6 +417,7 @@ public abstract class AbstractManagedChannelImplBuilder
         getEffectiveInterceptors(),
         GrpcUtil.getProxyDetector(),
         CallTracer.getDefaultFactory());
+    return postBuildOption.onBuilt(channel);
   }
 
   // Temporarily disable retry when stats or tracing is enabled to avoid breakage, until we know
@@ -488,6 +508,22 @@ public abstract class AbstractManagedChannelImplBuilder
     public String getDefaultScheme() {
       return DIRECT_ADDRESS_SCHEME;
     }
+  }
+
+
+  /**
+   * Used for adding custom operations when the channel is built from the builder.
+   */
+  public interface PostBuildOption {
+
+    /**
+     * Operations to be added once the {#build()} method creates a channel.
+     *
+     * @param channel the channel that would have been returned by {#build()} without the post build
+     *               option.
+     * @return the channel that {#build()} should return
+     */
+    ManagedChannel onBuilt(ManagedChannel channel);
   }
 
   /**

@@ -102,6 +102,14 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   @Nullable
   private CensusStatsModule censusStatsOverride;
 
+  private PostBuildOption postBuildOption =
+      new PostBuildOption() {
+        @Override
+        public Server onBuilt(Server server) {
+          return server;
+        }
+      };
+
   private boolean statsEnabled = true;
   private boolean recordStartedRpcs = true;
   private boolean recordFinishedRpcs = true;
@@ -198,6 +206,16 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   }
 
   /**
+   * Sets the custom {@link PostBuildOption}.
+   *
+   * @return this
+   */
+  public final T postBuildOption(PostBuildOption postBuildOption) {
+    this.postBuildOption = checkNotNull(postBuildOption, "postBuildOption");
+    return thisT();
+  }
+
+  /**
    * Override the default stats implementation.
    */
   @VisibleForTesting
@@ -238,10 +256,11 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
 
   @Override
   public Server build() {
-    ServerImpl server = new ServerImpl(
+    Server server = new ServerImpl(
         this,
         buildTransportServer(Collections.unmodifiableList(getTracerFactories())),
         Context.ROOT);
+    server = postBuildOption.onBuilt(server);
     for (InternalNotifyOnServerBuild notifyTarget : notifyOnBuildList) {
       notifyTarget.notifyOnBuild(server);
     }
@@ -285,5 +304,20 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
     @SuppressWarnings("unchecked")
     T thisT = (T) this;
     return thisT;
+  }
+
+  /**
+   * Used for adding custom operations when the server is built from the builder.
+   */
+  public interface PostBuildOption {
+
+    /**
+     * Operations to be added once the {#build()} method creates a server.
+     *
+     * @param server the server that would have been returned by {#build()} without the post build
+     *               option.
+     * @return the server that {#build()} should return
+     */
+    Server onBuilt(Server server);
   }
 }
