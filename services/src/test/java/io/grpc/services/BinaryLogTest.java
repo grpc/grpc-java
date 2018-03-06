@@ -16,31 +16,56 @@
 
 package io.grpc.services;
 
+import static io.grpc.internal.BinaryLogProvider.IDENTITY_MARSHALLER;
+import static io.grpc.services.BinaryLog.DUMMY_CALLID;
+import static io.grpc.services.BinaryLog.DUMMY_SOCKET;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import com.google.common.primitives.Bytes;
 import com.google.protobuf.ByteString;
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
 import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
+import io.grpc.MethodDescriptor.Marshaller;
+import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.Status;
 import io.grpc.binarylog.GrpcLogEntry;
 import io.grpc.binarylog.Message;
 import io.grpc.binarylog.MetadataEntry;
 import io.grpc.binarylog.Peer;
 import io.grpc.binarylog.Peer.PeerType;
 import io.grpc.binarylog.Uint128;
+import io.grpc.internal.IoUtils;
+import io.grpc.internal.NoopClientCall;
+import io.grpc.internal.NoopServerCall;
+import io.grpc.internal.ReadableBuffers;
 import io.grpc.services.BinaryLog.FactoryImpl;
+import io.grpc.services.BinaryLog.SinkWriter;
+import io.grpc.services.BinaryLog.SinkWriterImpl;
 import io.netty.channel.unix.DomainSocketAddress;
+import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -97,7 +122,9 @@ public final class BinaryLogTest {
 
   private final Metadata nonEmptyMetadata = new Metadata();
   private final BinaryLogSink sink = mock(BinaryLogSink.class);
-  private final BinaryLog binaryLog = new BinaryLog(sink, HEADER_LIMIT, MESSAGE_LIMIT);
+  private final SinkWriter sinkWriterImpl =
+      new SinkWriterImpl(sink, HEADER_LIMIT, MESSAGE_LIMIT);
+  private final SinkWriter mockSinkWriter = mock(SinkWriter.class);
   private final ByteBuffer message = ByteBuffer.wrap(new byte[100]);
 
   @Before
@@ -511,7 +538,7 @@ public final class BinaryLogTest {
     InetAddress address = InetAddress.getByName("127.0.0.1");
     int port = 12345;
     InetSocketAddress socketAddress = new InetSocketAddress(address, port);
-    binaryLog.logSendInitialMetadata(nonEmptyMetadata, IS_SERVER, CALL_ID, socketAddress);
+    sinkWriterImpl.logSendInitialMetadata(nonEmptyMetadata, IS_SERVER, CALL_ID, socketAddress);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
@@ -528,7 +555,7 @@ public final class BinaryLogTest {
     InetAddress address = InetAddress.getByName("127.0.0.1");
     int port = 12345;
     InetSocketAddress socketAddress = new InetSocketAddress(address, port);
-    binaryLog.logSendInitialMetadata(nonEmptyMetadata, IS_CLIENT, CALL_ID, socketAddress);
+    sinkWriterImpl.logSendInitialMetadata(nonEmptyMetadata, IS_CLIENT, CALL_ID, socketAddress);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
@@ -545,7 +572,7 @@ public final class BinaryLogTest {
     InetAddress address = InetAddress.getByName("127.0.0.1");
     int port = 12345;
     InetSocketAddress socketAddress = new InetSocketAddress(address, port);
-    binaryLog.logRecvInitialMetadata(nonEmptyMetadata, IS_SERVER, CALL_ID, socketAddress);
+    sinkWriterImpl.logRecvInitialMetadata(nonEmptyMetadata, IS_SERVER, CALL_ID, socketAddress);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
@@ -562,7 +589,7 @@ public final class BinaryLogTest {
     InetAddress address = InetAddress.getByName("127.0.0.1");
     int port = 12345;
     InetSocketAddress socketAddress = new InetSocketAddress(address, port);
-    binaryLog.logRecvInitialMetadata(nonEmptyMetadata, IS_CLIENT, CALL_ID, socketAddress);
+    sinkWriterImpl.logRecvInitialMetadata(nonEmptyMetadata, IS_CLIENT, CALL_ID, socketAddress);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
@@ -576,7 +603,7 @@ public final class BinaryLogTest {
 
   @Test
   public void logTrailingMetadata_server() throws Exception {
-    binaryLog.logTrailingMetadata(nonEmptyMetadata, IS_SERVER, CALL_ID);
+    sinkWriterImpl.logTrailingMetadata(nonEmptyMetadata, IS_SERVER, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
@@ -589,7 +616,7 @@ public final class BinaryLogTest {
 
   @Test
   public void logTrailingMetadata_client() throws Exception {
-    binaryLog.logTrailingMetadata(nonEmptyMetadata, IS_CLIENT, CALL_ID);
+    sinkWriterImpl.logTrailingMetadata(nonEmptyMetadata, IS_CLIENT, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
@@ -602,7 +629,8 @@ public final class BinaryLogTest {
 
   @Test
   public void logOutboundMessage_server() throws Exception {
-    binaryLog.logOutboundMessage(message, IS_COMPRESSED, IS_SERVER, CALL_ID);
+    sinkWriterImpl.logOutboundMessage(
+        IDENTITY_MARSHALLER, toInputStream(message), IS_COMPRESSED, IS_SERVER, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
@@ -612,21 +640,24 @@ public final class BinaryLogTest {
             .setMessage(BinaryLog.messageToProto(message, IS_COMPRESSED, MESSAGE_LIMIT))
             .build());
 
-    binaryLog.logOutboundMessage(message, IS_UNCOMPRESSED, IS_SERVER, CALL_ID);
+    sinkWriterImpl.logOutboundMessage(
+        IDENTITY_MARSHALLER, toInputStream(message), IS_UNCOMPRESSED, IS_SERVER, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.SEND_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.SERVER)
             .setCallId(BinaryLog.callIdToProto(CALL_ID))
-            .setMessage(BinaryLog.messageToProto(message, IS_UNCOMPRESSED, MESSAGE_LIMIT))
+            .setMessage(
+                BinaryLog.messageToProto(message, IS_UNCOMPRESSED, MESSAGE_LIMIT))
             .build());
     verifyNoMoreInteractions(sink);
   }
 
   @Test
   public void logOutboundMessage_client() throws Exception {
-    binaryLog.logOutboundMessage(message, IS_COMPRESSED, IS_CLIENT, CALL_ID);
+    sinkWriterImpl.logOutboundMessage(
+        IDENTITY_MARSHALLER, toInputStream(message), IS_COMPRESSED, IS_CLIENT, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
@@ -636,21 +667,24 @@ public final class BinaryLogTest {
             .setMessage(BinaryLog.messageToProto(message, IS_COMPRESSED, MESSAGE_LIMIT))
             .build());
 
-    binaryLog.logOutboundMessage(message, IS_UNCOMPRESSED, IS_CLIENT, CALL_ID);
+    sinkWriterImpl.logOutboundMessage(
+        IDENTITY_MARSHALLER, toInputStream(message), IS_UNCOMPRESSED, IS_CLIENT, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.SEND_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.CLIENT)
             .setCallId(BinaryLog.callIdToProto(CALL_ID))
-            .setMessage(BinaryLog.messageToProto(message, IS_UNCOMPRESSED, MESSAGE_LIMIT))
+            .setMessage(
+                BinaryLog.messageToProto(message, IS_UNCOMPRESSED, MESSAGE_LIMIT))
             .build());
     verifyNoMoreInteractions(sink);
   }
 
   @Test
   public void logInboundMessage_server() throws Exception {
-    binaryLog.logInboundMessage(message, IS_COMPRESSED, IS_SERVER, CALL_ID);
+    sinkWriterImpl.logInboundMessage(
+        IDENTITY_MARSHALLER, toInputStream(message), IS_COMPRESSED, IS_SERVER, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
@@ -660,21 +694,24 @@ public final class BinaryLogTest {
             .setMessage(BinaryLog.messageToProto(message, IS_COMPRESSED, MESSAGE_LIMIT))
             .build());
 
-    binaryLog.logInboundMessage(message, IS_UNCOMPRESSED, IS_SERVER, CALL_ID);
+    sinkWriterImpl.logInboundMessage(
+        IDENTITY_MARSHALLER, toInputStream(message), IS_UNCOMPRESSED, IS_SERVER, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.RECV_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.SERVER)
             .setCallId(BinaryLog.callIdToProto(CALL_ID))
-            .setMessage(BinaryLog.messageToProto(message, IS_UNCOMPRESSED, MESSAGE_LIMIT))
+            .setMessage(
+                BinaryLog.messageToProto(message, IS_UNCOMPRESSED, MESSAGE_LIMIT))
             .build());
     verifyNoMoreInteractions(sink);
   }
 
   @Test
   public void logInboundMessage_client() throws Exception {
-    binaryLog.logInboundMessage(message, IS_COMPRESSED, IS_CLIENT, CALL_ID);
+    sinkWriterImpl.logInboundMessage(
+        IDENTITY_MARSHALLER, toInputStream(message), IS_COMPRESSED, IS_CLIENT, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
@@ -684,16 +721,314 @@ public final class BinaryLogTest {
             .setMessage(BinaryLog.messageToProto(message, IS_COMPRESSED, MESSAGE_LIMIT))
             .build());
 
-    binaryLog.logInboundMessage(message, IS_UNCOMPRESSED, IS_CLIENT, CALL_ID);
+    sinkWriterImpl.logInboundMessage(
+        IDENTITY_MARSHALLER, toInputStream(message), IS_UNCOMPRESSED, IS_CLIENT, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.RECV_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.CLIENT)
             .setCallId(BinaryLog.callIdToProto(CALL_ID))
-            .setMessage(BinaryLog.messageToProto(message, IS_UNCOMPRESSED, MESSAGE_LIMIT))
+            .setMessage(
+                BinaryLog.messageToProto(message, IS_UNCOMPRESSED, MESSAGE_LIMIT))
             .build());
     verifyNoMoreInteractions(sink);
+  }
+
+  @Test
+  public void logOutboundMessageReturnsDuplicate() throws Exception {
+    // only marshaller and message matter here, other params do not matter
+    InputStream dup = sinkWriterImpl.logOutboundMessage(
+        IDENTITY_MARSHALLER, toInputStream(message), IS_COMPRESSED, IS_CLIENT, CALL_ID);
+    assertEquals(message, ByteBuffer.wrap(IoUtils.toByteArray(dup)));
+  }
+
+  @Test
+  public void logInboundMessageReturnsDuplicate() throws Exception {
+    // only marshaller and message matter here, other params do not matter
+    InputStream dup = sinkWriterImpl.logInboundMessage(
+        IDENTITY_MARSHALLER, toInputStream(message), IS_COMPRESSED, IS_CLIENT, CALL_ID);
+    assertEquals(message, ByteBuffer.wrap(IoUtils.toByteArray(dup)));
+  }
+
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  public void clientInterceptor() throws Exception {
+    final AtomicReference<ClientCall.Listener> interceptedListener =
+        new AtomicReference<ClientCall.Listener>();
+    // capture these manually because ClientCall can not be mocked
+    final AtomicReference<Metadata> actualClientInitial = new AtomicReference<Metadata>();
+    final AtomicReference<Object> actualRequest = new AtomicReference<Object>();
+
+    Channel channel = new Channel() {
+      @Override
+      public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
+          MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
+        return new NoopClientCall<RequestT, ResponseT>() {
+          @Override
+          public void start(Listener<ResponseT> responseListener, Metadata headers) {
+            interceptedListener.set(responseListener);
+            actualClientInitial.set(headers);
+          }
+
+          @Override
+          public void sendMessage(RequestT message) {
+            actualRequest.set(message);
+          }
+        };
+      }
+
+      @Override
+      public String authority() {
+        throw new UnsupportedOperationException();
+      }
+    };
+
+    ClientCall.Listener<InputStream> mockListener = mock(ClientCall.Listener.class);
+
+    MethodDescriptor<InputStream, InputStream> method =
+        MethodDescriptor.<InputStream, InputStream>newBuilder()
+            .setType(MethodType.UNKNOWN)
+            .setFullMethodName("service/method")
+            .setRequestMarshaller(IDENTITY_MARSHALLER)
+            .setResponseMarshaller(IDENTITY_MARSHALLER)
+            .build();
+    ClientCall<InputStream, InputStream> interceptedCall =
+        new BinaryLog(mockSinkWriter)
+            .interceptCall(method, CallOptions.DEFAULT, channel);
+
+    // send initial metadata
+    {
+      Metadata clientInitial = new Metadata();
+      interceptedCall.start(mockListener, clientInitial);
+      verify(mockSinkWriter).logSendInitialMetadata(
+          same(clientInitial),
+          eq(IS_CLIENT),
+          same(DUMMY_CALLID),
+          same(DUMMY_SOCKET));
+      verifyNoMoreInteractions(mockSinkWriter);
+      assertSame(clientInitial, actualClientInitial.get());
+    }
+
+    // receive initial metadata
+    {
+      Metadata serverInitial = new Metadata();
+      interceptedListener.get().onHeaders(serverInitial);
+      verify(mockSinkWriter).logRecvInitialMetadata(same(serverInitial),
+          eq(IS_CLIENT),
+          same(DUMMY_CALLID),
+          same(DUMMY_SOCKET));
+      verifyNoMoreInteractions(mockSinkWriter);
+      verify(mockListener).onHeaders(same(serverInitial));
+    }
+
+    // send request
+    {
+      InputStream requestDup = mock(InputStream.class);
+      when(
+          mockSinkWriter
+              .logOutboundMessage(
+                  any(Marshaller.class),
+                  any(InputStream.class),
+                  any(Boolean.class),
+                  any(Boolean.class),
+                  any(byte[].class)))
+          .thenReturn(requestDup);
+
+      ByteBuffer request = ByteBuffer.wrap("this is a request".getBytes(US_ASCII));
+      InputStream expectedRequest = toInputStream(request);
+      interceptedCall.sendMessage(expectedRequest);
+      verify(mockSinkWriter).logOutboundMessage(
+          same(IDENTITY_MARSHALLER),
+          same(expectedRequest),
+          eq(BinaryLog.DUMMY_IS_COMPRESSED),
+          eq(IS_CLIENT),
+          same(DUMMY_CALLID));
+      verifyNoMoreInteractions(mockSinkWriter);
+      assertSame(requestDup, actualRequest.get());
+    }
+
+    // receive response
+    {
+      InputStream responseDup = mock(InputStream.class);
+      when(
+          mockSinkWriter
+              .logInboundMessage(
+                  any(Marshaller.class),
+                  any(InputStream.class),
+                  any(Boolean.class),
+                  any(Boolean.class),
+                  any(byte[].class)))
+          .thenReturn(responseDup);
+      ByteBuffer response = ByteBuffer.wrap("this is a response".getBytes(US_ASCII));
+      InputStream expectedResponse = toInputStream(response);
+      interceptedListener.get().onMessage(expectedResponse);
+      verify(mockSinkWriter).logInboundMessage(
+          same(IDENTITY_MARSHALLER),
+          same(expectedResponse),
+          eq(BinaryLog.DUMMY_IS_COMPRESSED),
+          eq(IS_CLIENT),
+          same(DUMMY_CALLID));
+      verifyNoMoreInteractions(mockSinkWriter);
+      verify(mockListener).onMessage(same(responseDup));
+    }
+
+    // receive trailers
+    {
+      Status status = Status.INTERNAL.withDescription("some description");
+      Metadata trailers = new Metadata();
+
+      interceptedListener.get().onClose(status, trailers);
+      verify(mockSinkWriter).logTrailingMetadata(
+          same(trailers),
+          eq(IS_CLIENT),
+          same(DUMMY_CALLID));
+      verifyNoMoreInteractions(mockSinkWriter);
+      verify(mockListener).onClose(same(status), same(trailers));
+    }
+  }
+
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  public void serverInterceptor() throws Exception {
+    final AtomicReference<ServerCall> interceptedCall =
+        new AtomicReference<ServerCall>();
+    ServerCall.Listener<InputStream> interceptedListener;
+    final ServerCall.Listener mockListener = mock(ServerCall.Listener.class);
+    // capture these manually because ServerCall can not be mocked
+    final AtomicReference<Metadata> actualServerInitial = new AtomicReference<Metadata>();
+    final AtomicReference<InputStream> actualResponse = new AtomicReference<InputStream>();
+    final AtomicReference<Status> actualStatus = new AtomicReference<Status>();
+    final AtomicReference<Metadata> actualTrailers = new AtomicReference<Metadata>();
+
+    // begin call and receive initial metadata
+    {
+      Metadata clientInitial = new Metadata();
+      final MethodDescriptor<InputStream, InputStream> method =
+          MethodDescriptor.<InputStream, InputStream>newBuilder()
+              .setType(MethodType.UNKNOWN)
+              .setFullMethodName("service/method")
+              .setRequestMarshaller(IDENTITY_MARSHALLER)
+              .setResponseMarshaller(IDENTITY_MARSHALLER)
+              .build();
+      interceptedListener =
+          new BinaryLog(mockSinkWriter)
+              .interceptCall(
+                  new NoopServerCall<InputStream, InputStream>() {
+                    @Override
+                    public void sendHeaders(Metadata headers) {
+                      actualServerInitial.set(headers);
+                    }
+
+                    @Override
+                    public void sendMessage(InputStream message) {
+                      actualResponse.set(message);
+                    }
+
+                    @Override
+                    public void close(Status status, Metadata trailers) {
+                      actualStatus.set(status);
+                      actualTrailers.set(trailers);
+                    }
+
+                    @Override
+                    public MethodDescriptor<InputStream, InputStream> getMethodDescriptor() {
+                      return method;
+                    }
+                  },
+                  clientInitial,
+                  new ServerCallHandler<InputStream, InputStream>() {
+                    @Override
+                    public ServerCall.Listener<InputStream> startCall(
+                        ServerCall<InputStream, InputStream> call,
+                        Metadata headers) {
+                      interceptedCall.set(call);
+                      return mockListener;
+                    }
+                  });
+      verify(mockSinkWriter).logRecvInitialMetadata(
+          same(clientInitial),
+          eq(IS_SERVER),
+          same(DUMMY_CALLID),
+          same(DUMMY_SOCKET));
+      verifyNoMoreInteractions(mockSinkWriter);
+    }
+
+    // send initial metadata
+    {
+      Metadata serverInital = new Metadata();
+      interceptedCall.get().sendHeaders(serverInital);
+      verify(mockSinkWriter).logSendInitialMetadata(
+          same(serverInital),
+          eq(IS_SERVER),
+          same(DUMMY_CALLID),
+          same(DUMMY_SOCKET));
+      verifyNoMoreInteractions(mockSinkWriter);
+      assertSame(serverInital, actualServerInitial.get());
+    }
+
+    // receive request
+    {
+      InputStream requestDup = mock(InputStream.class);
+      when(
+          mockSinkWriter.logInboundMessage(
+              any(Marshaller.class),
+              any(InputStream.class),
+              any(Boolean.class),
+              any(Boolean.class),
+              any(byte[].class)))
+          .thenReturn(requestDup);
+      ByteBuffer request = ByteBuffer.wrap("this is a request".getBytes(US_ASCII));
+      InputStream expectedRequest = toInputStream(request);
+      interceptedListener.onMessage(expectedRequest);
+      verify(mockSinkWriter).logInboundMessage(
+          same(IDENTITY_MARSHALLER),
+          same(expectedRequest),
+          eq(BinaryLog.DUMMY_IS_COMPRESSED),
+          eq(IS_SERVER),
+          same(DUMMY_CALLID));
+      verifyNoMoreInteractions(mockSinkWriter);
+      verify(mockListener).onMessage(same(requestDup));
+    }
+
+    // send response
+    {
+      InputStream responseDup = mock(InputStream.class);
+      when(
+          mockSinkWriter.logOutboundMessage(
+              any(Marshaller.class),
+              any(InputStream.class),
+              any(Boolean.class),
+              any(Boolean.class),
+              any(byte[].class)))
+          .thenReturn(responseDup);
+
+      ByteBuffer response = ByteBuffer.wrap("this is a response".getBytes(US_ASCII));
+      InputStream expectedResponse = toInputStream(response);
+      interceptedCall.get().sendMessage(expectedResponse);
+      verify(mockSinkWriter).logOutboundMessage(
+          same(IDENTITY_MARSHALLER),
+          same(expectedResponse),
+          eq(BinaryLog.DUMMY_IS_COMPRESSED),
+          eq(IS_SERVER),
+          same(DUMMY_CALLID));
+      verifyNoMoreInteractions(mockSinkWriter);
+      assertSame(responseDup, actualResponse.get());
+    }
+
+    // send trailers
+    {
+      Status status = Status.INTERNAL.withDescription("some description");
+      Metadata trailers = new Metadata();
+      interceptedCall.get().close(status, trailers);
+      verify(mockSinkWriter).logTrailingMetadata(
+          same(trailers),
+          eq(IS_SERVER),
+          same(DUMMY_CALLID));
+      verifyNoMoreInteractions(mockSinkWriter);
+      assertSame(status, actualStatus.get());
+      assertSame(trailers, actualTrailers.get());
+    }
   }
 
   /** A builder class to make unit test code more readable. */
@@ -712,13 +1047,14 @@ public final class BinaryLogTest {
     }
 
     BinaryLog build() {
-      return new BinaryLog(mock(BinaryLogSink.class), maxHeaderBytes, maxMessageBytes);
+      return new BinaryLog(
+          new SinkWriterImpl(mock(BinaryLogSink.class), maxHeaderBytes, maxMessageBytes));
     }
   }
 
   private static void assertSameLimits(BinaryLog a, BinaryLog b) {
-    assertEquals(a.maxMessageBytes, b.maxMessageBytes);
-    assertEquals(a.maxHeaderBytes, b.maxHeaderBytes);
+    assertEquals(a.writer.getMaxMessageBytes(), b.writer.getMaxMessageBytes());
+    assertEquals(a.writer.getMaxHeaderBytes(), b.writer.getMaxHeaderBytes());
   }
 
   private BinaryLog makeLog(String factoryConfigStr, String lookup) {
@@ -727,5 +1063,9 @@ public final class BinaryLogTest {
 
   private BinaryLog makeLog(String logConfigStr) {
     return FactoryImpl.createBinaryLog(sink, logConfigStr);
+  }
+
+  private static InputStream toInputStream(ByteBuffer buffer) {
+    return ReadableBuffers.openStream(ReadableBuffers.wrap(buffer.duplicate()), true);
   }
 }

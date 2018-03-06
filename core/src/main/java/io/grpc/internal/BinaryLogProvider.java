@@ -39,6 +39,9 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 public abstract class BinaryLogProvider implements Closeable {
+  @VisibleForTesting
+  public static final Marshaller<InputStream> IDENTITY_MARSHALLER = new IdentityMarshaller();
+
   private static final Logger logger = Logger.getLogger(BinaryLogProvider.class.getName());
   private static final BinaryLogProvider PROVIDER = InternalServiceProviders.load(
       BinaryLogProvider.class,
@@ -55,8 +58,6 @@ public abstract class BinaryLogProvider implements Closeable {
           return provider.priority();
         }
       });
-  @VisibleForTesting
-  static final Marshaller<InputStream> IDENTITY_MARSHALLER = new IdentityMarshaller();
 
   private final ClientInterceptor binaryLogShim = new BinaryLogShim();
 

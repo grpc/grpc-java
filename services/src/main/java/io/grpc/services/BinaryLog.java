@@ -17,14 +17,27 @@
 package io.grpc.services;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.primitives.Bytes;
 import com.google.protobuf.ByteString;
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
+import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
+import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
+import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
+import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MethodDescriptor.Marshaller;
+import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
+import io.grpc.Status;
 import io.grpc.binarylog.GrpcLogEntry;
 import io.grpc.binarylog.GrpcLogEntry.Type;
 import io.grpc.binarylog.Message;
@@ -33,6 +46,10 @@ import io.grpc.binarylog.MetadataEntry;
 import io.grpc.binarylog.Peer;
 import io.grpc.binarylog.Peer.PeerType;
 import io.grpc.binarylog.Uint128;
+import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.IoUtils;
+import io.grpc.internal.ReadableBuffers;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
@@ -54,143 +71,197 @@ import javax.annotation.concurrent.ThreadSafe;
 /**
  * A binary log class that is configured for a specific {@link MethodDescriptor}.
  */
-// TODO(zpencer): this is really a per-method logger class, make the class name more clear.
 @ThreadSafe
-final class BinaryLog {
+final class BinaryLog implements ServerInterceptor, ClientInterceptor {
   private static final Logger logger = Logger.getLogger(BinaryLog.class.getName());
   private static final int IP_PORT_BYTES = 2;
   private static final int IP_PORT_UPPER_MASK = 0xff00;
   private static final int IP_PORT_LOWER_MASK = 0xff;
+  private static final boolean SERVER = true;
+  private static final boolean CLIENT = false;
 
-  private final BinaryLogSink sink;
+  // TODO(zpencer): extract these fields from call and stop using dummy values
   @VisibleForTesting
-  final int maxHeaderBytes;
+  static final byte[] DUMMY_CALLID = new byte[16];
   @VisibleForTesting
-  final int maxMessageBytes;
+  static final SocketAddress DUMMY_SOCKET = new SocketAddress() { };
+  @VisibleForTesting
+  static final boolean DUMMY_IS_COMPRESSED = false;
 
   @VisibleForTesting
-  BinaryLog(BinaryLogSink sink, int maxHeaderBytes, int maxMessageBytes) {
-    this.sink = sink;
-    this.maxHeaderBytes = maxHeaderBytes;
-    this.maxMessageBytes = maxMessageBytes;
+  final SinkWriter writer;
+
+  @VisibleForTesting
+  BinaryLog(SinkWriter writer) {
+    this.writer = writer;
   }
 
-  /**
-   * Logs the sending of initial metadata. This method logs the appropriate number of bytes
-   * as determined by the binary logging configuration.
-   */
-  public void logSendInitialMetadata(
-      Metadata metadata, boolean isServer, byte[] callId, SocketAddress peerSocket) {
-    Preconditions.checkNotNull(metadata);
-    // TODO(zpencer): peerSocket may go away, because at this time we have not selected a peer yet
-    Preconditions.checkNotNull(peerSocket);
-    GrpcLogEntry entry = GrpcLogEntry
-        .newBuilder()
-        .setType(Type.SEND_INITIAL_METADATA)
-        .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
-        .setCallId(callIdToProto(callId))
-        .setPeer(socketToProto(peerSocket))
-        .setMetadata(metadataToProto(metadata, maxHeaderBytes))
-        .build();
-    sink.write(entry);
-  }
+  // TODO(zpencer): move proto related static helpers into this class
+  static final class SinkWriterImpl extends SinkWriter {
+    final BinaryLogSink sink;
+    private final int maxHeaderBytes;
+    private final int maxMessageBytes;
 
-  /**
-   * Logs the receiving of initial metadata. This method logs the appropriate number of bytes
-   * as determined by the binary logging configuration.
-   */
-  public void logRecvInitialMetadata(
-      Metadata metadata, boolean isServer, byte[] callId, SocketAddress peerSocket) {
-    Preconditions.checkNotNull(metadata);
-    Preconditions.checkNotNull(peerSocket);
-    GrpcLogEntry entry = GrpcLogEntry
-        .newBuilder()
-        .setType(Type.RECV_INITIAL_METADATA)
-        .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
-        .setCallId(callIdToProto(callId))
-        .setPeer(socketToProto(peerSocket))
-        .setMetadata(metadataToProto(metadata, maxHeaderBytes))
-        .build();
-    sink.write(entry);
-  }
-
-  /**
-   * Logs the trailing metadata. This method logs the appropriate number of bytes
-   * as determined by the binary logging configuration.
-   */
-  public void logTrailingMetadata(Metadata metadata, boolean isServer, byte[] callId) {
-    Preconditions.checkNotNull(metadata);
-    GrpcLogEntry entry = GrpcLogEntry
-        .newBuilder()
-        .setType(isServer ? Type.SEND_TRAILING_METADATA : Type.RECV_TRAILING_METADATA)
-        .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
-        .setCallId(callIdToProto(callId))
-        .setMetadata(metadataToProto(metadata, maxHeaderBytes))
-        .build();
-    sink.write(entry);
-  }
-
-  /**
-   * Logs the outbound message. This method logs the appropriate number of bytes from
-   * {@code message}, and returns an {@link InputStream} that contains the original message.
-   * The number of bytes logged is determined by the binary logging configuration.
-   */
-  public void logOutboundMessage(
-      ByteBuffer message, boolean compressed, boolean isServer, byte[] callId) {
-    Preconditions.checkNotNull(message);
-    Preconditions.checkNotNull(callId);
-    GrpcLogEntry entry = GrpcLogEntry
-        .newBuilder()
-        .setType(Type.SEND_MESSAGE)
-        .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
-        .setCallId(callIdToProto(callId))
-        .setMessage(messageToProto(message, compressed, maxMessageBytes))
-        .build();
-    sink.write(entry);
-  }
-
-  /**
-   * Logs the inbound message. This method logs the appropriate number of bytes from
-   * {@code message}, and returns an {@link InputStream} that contains the original message.
-   * The number of bytes logged is determined by the binary logging configuration.
-   */
-  public void logInboundMessage(
-      ByteBuffer message, boolean compressed, boolean isServer, byte[] callId) {
-    Preconditions.checkNotNull(message);
-    Preconditions.checkNotNull(callId);
-    GrpcLogEntry entry = GrpcLogEntry
-        .newBuilder()
-        .setType(Type.RECV_MESSAGE)
-        .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
-        .setCallId(callIdToProto(callId))
-        .setMessage(messageToProto(message, compressed, maxMessageBytes))
-        .build();
-    sink.write(entry);
-  }
-
-  @Override
-  public boolean equals(Object o) {
-    if (!(o instanceof BinaryLog)) {
-      return false;
+    SinkWriterImpl(BinaryLogSink sink, int maxHeaderBytes, int maxMessageBytes) {
+      this.sink = sink;
+      this.maxHeaderBytes = maxHeaderBytes;
+      this.maxMessageBytes = maxMessageBytes;
     }
-    BinaryLog that = (BinaryLog) o;
-    return this.maxHeaderBytes == that.maxHeaderBytes
-        && this.maxMessageBytes == that.maxMessageBytes
-        && this.sink.equals(that.sink);
+
+    @Override
+    void logSendInitialMetadata(
+        Metadata metadata, boolean isServer, byte[] callId, SocketAddress peerSocket) {
+      GrpcLogEntry entry = GrpcLogEntry
+          .newBuilder()
+          .setType(Type.SEND_INITIAL_METADATA)
+          .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
+          .setCallId(callIdToProto(callId))
+          .setPeer(socketToProto(peerSocket))
+          .setMetadata(metadataToProto(metadata, maxHeaderBytes))
+          .build();
+      sink.write(entry);
+    }
+
+    @Override
+    void logRecvInitialMetadata(
+        Metadata metadata, boolean isServer, byte[] callId, SocketAddress peerSocket) {
+      GrpcLogEntry entry = GrpcLogEntry
+          .newBuilder()
+          .setType(Type.RECV_INITIAL_METADATA)
+          .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
+          .setCallId(callIdToProto(callId))
+          .setPeer(socketToProto(peerSocket))
+          .setMetadata(metadataToProto(metadata, maxHeaderBytes))
+          .build();
+      sink.write(entry);
+    }
+
+    @Override
+    void logTrailingMetadata(Metadata metadata, boolean isServer, byte[] callId) {
+      GrpcLogEntry entry = GrpcLogEntry
+          .newBuilder()
+          .setType(isServer ? Type.SEND_TRAILING_METADATA : Type.RECV_TRAILING_METADATA)
+          .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
+          .setCallId(callIdToProto(callId))
+          .setMetadata(metadataToProto(metadata, maxHeaderBytes))
+          .build();
+      sink.write(entry);
+    }
+
+    @Override
+    <T> T logOutboundMessage(
+        Marshaller<T> marshaller,
+        T consumeOnce,
+        boolean compressed,
+        boolean isServer,
+        byte[] callId) {
+      ByteBuffer buf = serialize(marshaller, consumeOnce);
+      GrpcLogEntry entry = GrpcLogEntry
+          .newBuilder()
+          .setType(Type.SEND_MESSAGE)
+          .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
+          .setCallId(callIdToProto(callId))
+          .setMessage(messageToProto(buf, compressed, maxMessageBytes))
+          .build();
+      sink.write(entry);
+      return marshaller.parse(toInputStream(buf));
+    }
+
+    @Override
+    <T> T logInboundMessage(
+        Marshaller<T> marshaller,
+        T consumeOnce,
+        boolean compressed,
+        boolean isServer,
+        byte[] callId) {
+      ByteBuffer buf = serialize(marshaller, consumeOnce);
+      GrpcLogEntry entry = GrpcLogEntry
+          .newBuilder()
+          .setType(Type.RECV_MESSAGE)
+          .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
+          .setCallId(callIdToProto(callId))
+          .setMessage(messageToProto(buf, compressed, maxMessageBytes))
+          .build();
+      sink.write(entry);
+      return marshaller.parse(toInputStream(buf));
+    }
+
+    @Override
+    int getMaxHeaderBytes() {
+      return maxHeaderBytes;
+    }
+
+    @Override
+    int getMaxMessageBytes() {
+      return maxMessageBytes;
+    }
+
+    private static <T> ByteBuffer serialize(Marshaller<T> marshaller, T message) {
+      InputStream stream = null;
+      try {
+        stream = marshaller.stream(message);
+        return ByteBuffer.wrap(IoUtils.toByteArray(stream));
+      } catch (IOException e) {
+        // should never happen
+        throw new RuntimeException(e);
+      } finally {
+        GrpcUtil.closeQuietly(stream);
+      }
+    }
+
+    private static InputStream toInputStream(ByteBuffer buffer) {
+      return ReadableBuffers.openStream(ReadableBuffers.wrap(buffer.duplicate()), true);
+    }
   }
 
-  @Override
-  public int hashCode() {
-    return Objects.hashCode(maxHeaderBytes, maxMessageBytes);
-  }
+  abstract static class SinkWriter {
+    /**
+     * Logs the sending of initial metadata. This method logs the appropriate number of bytes
+     * as determined by the binary logging configuration.
+     */
+    abstract void logSendInitialMetadata(
+        Metadata metadata, boolean isServer, byte[] callId, SocketAddress peerSocket);
 
-  @Override
-  public String toString() {
-    return getClass().getSimpleName() + '['
-        + "maxHeaderBytes=" + maxHeaderBytes + ", "
-        + "maxMessageBytes=" + maxMessageBytes
-        + "sink=" + sink
-        + "]";
+    /**
+     * Logs the receiving of initial metadata. This method logs the appropriate number of bytes
+     * as determined by the binary logging configuration.
+     */
+    abstract void logRecvInitialMetadata(
+        Metadata metadata, boolean isServer, byte[] callId, SocketAddress peerSocket);
+
+    /**
+     * Logs the trailing metadata. This method logs the appropriate number of bytes
+     * as determined by the binary logging configuration.
+     */
+    abstract void logTrailingMetadata(Metadata metadata, boolean isServer, byte[] callId);
+
+    /**
+     * Logs the outbound message. This method logs the appropriate number of bytes from
+     * {@code message}, and returns a duplicate of the message.
+     * The number of bytes logged is determined by the binary logging configuration.
+     * This method takes ownership of {@code message}.
+     */
+    abstract <T> T logOutboundMessage(
+        Marshaller<T> marshaller, T message, boolean compressed, boolean isServer, byte[] callId);
+
+    /**
+     * Logs the inbound message. This method logs the appropriate number of bytes from
+     * {@code message}, and returns a duplicate of the message.
+     * The number of bytes logged is determined by the binary logging configuration.
+     * This method takes ownership of {@code message}.
+     */
+    abstract <T> T logInboundMessage(
+        Marshaller<T> marshaller, T message, boolean compressed, boolean isServer, byte[] callId);
+
+    /**
+     * Returns the number bytes of the header this writer will log, according to configuration.
+     */
+    abstract int getMaxHeaderBytes();
+
+    /**
+     * Returns the number bytes of the message this writer will log, according to configuration.
+     */
+    abstract int getMaxMessageBytes();
   }
 
   private static final Factory DEFAULT_FACTORY;
@@ -218,6 +289,96 @@ final class BinaryLog {
    */
   static BinaryLog getLog(String fullMethodName) {
     return DEFAULT_FACTORY.getLog(fullMethodName);
+  }
+
+  @Override
+  public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+      final MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+    return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+      @Override
+      public void start(Listener<RespT> responseListener, Metadata headers) {
+        writer.logSendInitialMetadata(headers, false, DUMMY_CALLID, DUMMY_SOCKET);
+        ClientCall.Listener<RespT> wListener =
+            new SimpleForwardingClientCallListener<RespT>(responseListener) {
+              @Override
+              public void onMessage(RespT message) {
+                super.onMessage(
+                    writer.logInboundMessage(
+                        method.getResponseMarshaller(),
+                        message,
+                        DUMMY_IS_COMPRESSED,
+                        CLIENT,DUMMY_CALLID));
+              }
+
+              @Override
+              public void onHeaders(Metadata headers) {
+                writer.logRecvInitialMetadata(headers, false, DUMMY_CALLID, DUMMY_SOCKET);
+                super.onHeaders(headers);
+              }
+
+              @Override
+              public void onClose(Status status, Metadata trailers) {
+                writer.logTrailingMetadata(trailers, false, DUMMY_CALLID);
+                super.onClose(status, trailers);
+              }
+            };
+        super.start(wListener, headers);
+      }
+
+      @Override
+      public void sendMessage(ReqT message) {
+        super.sendMessage(
+            writer.logOutboundMessage(
+                method.getRequestMarshaller(),
+                message,
+                DUMMY_IS_COMPRESSED,
+                CLIENT,
+                DUMMY_CALLID));
+      }
+    };
+  }
+
+  @Override
+  public <ReqT, RespT> Listener<ReqT> interceptCall(
+      final ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+    writer.logRecvInitialMetadata(headers, SERVER, DUMMY_CALLID, DUMMY_SOCKET);
+    ServerCall<ReqT, RespT> wCall = new SimpleForwardingServerCall<ReqT, RespT>(call) {
+      @Override
+      public void sendMessage(RespT message) {
+        super.sendMessage(
+            writer.logOutboundMessage(
+                call.getMethodDescriptor().getResponseMarshaller(),
+                message,
+                DUMMY_IS_COMPRESSED,
+                SERVER,
+                DUMMY_CALLID));
+      }
+
+      @Override
+      public void sendHeaders(Metadata headers) {
+        writer.logSendInitialMetadata(headers, SERVER, DUMMY_CALLID, DUMMY_SOCKET);
+        super.sendHeaders(headers);
+      }
+
+      @Override
+      public void close(Status status, Metadata trailers) {
+        writer.logTrailingMetadata(trailers, SERVER, DUMMY_CALLID);
+        super.close(status, trailers);
+      }
+    };
+
+    return new SimpleForwardingServerCallListener<ReqT>(next.startCall(wCall, headers)) {
+      @Override
+      public void onMessage(ReqT message) {
+        super.onMessage(
+            writer.logInboundMessage(
+                call.getMethodDescriptor().getRequestMarshaller(),
+                message,
+                DUMMY_IS_COMPRESSED,
+                SERVER,
+                DUMMY_CALLID));
+      }
+    };
   }
 
   interface Factory {
@@ -325,7 +486,8 @@ final class BinaryLog {
     @Nullable
     static BinaryLog createBinaryLog(BinaryLogSink sink, @Nullable String logConfig) {
       if (logConfig == null) {
-        return new BinaryLog(sink, Integer.MAX_VALUE, Integer.MAX_VALUE);
+        return new BinaryLog(
+            new SinkWriterImpl(sink, Integer.MAX_VALUE, Integer.MAX_VALUE));
       }
       try {
         Matcher headerMatcher;
@@ -352,7 +514,7 @@ final class BinaryLog {
           logger.log(Level.SEVERE, "Illegal log config pattern: " + logConfig);
           return null;
         }
-        return new BinaryLog(sink, maxHeaderBytes, maxMsgBytes);
+        return new BinaryLog(new SinkWriterImpl(sink, maxHeaderBytes, maxMsgBytes));
       } catch (NumberFormatException e) {
         logger.log(Level.SEVERE, "Illegal log config pattern: " + logConfig);
         return null;
