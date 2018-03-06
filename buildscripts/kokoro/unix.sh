@@ -70,6 +70,7 @@ popd
 # TODO(zpencer): also build the GAE examples
 
 LOCAL_MVN_TEMP=$(mktemp -d)
+# Note that this disables parallel=true from GRADLE_FLAGS
 ./gradlew clean grpc-compiler:build grpc-compiler:uploadArchives $GRADLE_FLAGS -PtargetArch=x86_64 \
   -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP
 
