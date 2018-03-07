@@ -181,6 +181,9 @@ final class DnsNameResolver extends NameResolver {
       }
     };
 
+
+
+
   @GuardedBy("this")
   private void resolve() {
     if (resolving || shutdown) {
