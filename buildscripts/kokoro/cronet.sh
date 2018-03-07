@@ -87,12 +87,10 @@ read -r ignored new_dex_count < \
 new_apk_size="$(stat --printf=%s app/build/outputs/apk/release/app-release-unsigned.apk)"
 
 
-# Get the APK size and dex count stats using the target branch
-
-base_commit="$(git rev-parse HEAD^)"
+# Get the APK size and dex count stats using the pull request base commit
 
 cd $BASE_DIR/github/grpc-java
-git checkout "$base_commit"
+git checkout HEAD^
 ./gradlew install
 cd examples/android/helloworld/
 ./gradlew build
