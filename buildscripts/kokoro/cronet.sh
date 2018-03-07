@@ -89,11 +89,10 @@ new_apk_size="$(stat --printf=%s app/build/outputs/apk/release/app-release-unsig
 
 # Get the APK size and dex count stats using the target branch
 
-sudo apt-get install -y jq
-target_branch="$(curl -s https://api.github.com/repos/grpc/grpc-java/pulls/$KOKORO_GITHUB_PULL_REQUEST_NUMBER | jq -r .base.ref)"
+base_commit="$(git rev-parse HEAD^)"
 
 cd $BASE_DIR/github/grpc-java
-git checkout "$target_branch"
+git checkout "$base_commit"
 ./gradlew install
 cd examples/android/helloworld/
 ./gradlew build
