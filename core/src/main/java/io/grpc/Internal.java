@@ -32,7 +32,8 @@ import java.lang.annotation.Target;
  * the public APIs do.
  *
  * <p>Note: This annotation is intended only for gRPC library code. Users should not attach this
- * annotation to their own code.
+ * annotation to their own code. If you want to check APIs' usage, you can use 
+ * grpc-java-api-checker.
  */
 @Retention(RetentionPolicy.CLASS)
 @Target({
