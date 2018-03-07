@@ -30,7 +30,6 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
-import com.google.gson.Gson;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -105,8 +104,6 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
   @VisibleForTesting
   static final Status SUBCHANNEL_SHUTDOWN_STATUS =
       Status.UNAVAILABLE.withDescription("Subchannel shutdown invoked");
-
-  private final Gson gson = new Gson();
 
   private final LogId logId = LogId.allocate(getClass().getName());
   private final String target;
