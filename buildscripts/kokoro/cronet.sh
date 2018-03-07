@@ -46,38 +46,11 @@ if [[ -z "$KOKORO_GITHUB_PULL_REQUEST_COMMIT" ]]; then
 fi
 
 
-# Set up APK size and dex count statuses
+# Save a copy of set_github_status.py (it may differ from the base commit)
 
 SET_GITHUB_STATUS="$TMPDIR/set_github_status.py"
 cp "$BASE_DIR/github/grpc-java/buildscripts/set_github_status.py" "$SET_GITHUB_STATUS"
 
-gsutil cp gs://grpc-testing-secrets/github_credentials/oauth_token.txt ~/
-
-function set_status_to_fail_on_error {
-  "$SET_GITHUB_STATUS" \
-    --sha1 "$KOKORO_GITHUB_PULL_REQUEST_COMMIT" \
-    --state error \
-    --description "Failed to calculate DEX count" \
-    --context android/dex_diff --oauth_file ~/oauth_token.txt
-  "$SET_GITHUB_STATUS" \
-    --sha1 "$KOKORO_GITHUB_PULL_REQUEST_COMMIT" \
-    --state error \
-    --description "Failed to calculate APK size" \
-    --context android/apk_diff --oauth_file ~/oauth_token.txt
-}
-trap set_status_to_fail_on_error ERR
-
-
-"$SET_GITHUB_STATUS" \
-  --sha1 "$KOKORO_GITHUB_PULL_REQUEST_COMMIT" \
-  --state pending \
-  --description "Waiting for DEX count to be reported" \
-  --context android/dex_diff --oauth_file ~/oauth_token.txt
-"$SET_GITHUB_STATUS" \
-  --sha1 "$KOKORO_GITHUB_PULL_REQUEST_COMMIT" \
-  --state pending \
-  --description "Waiting for APK size to be reported" \
-  --context android/apk_diff --oauth_file ~/oauth_token.txt
 
 # Collect APK size and dex count stats for the helloworld example
 
@@ -106,6 +79,8 @@ apk_size_delta="$((new_apk_size-old_apk_size))"
 
 
 # Update the statuses with the deltas
+
+gsutil cp gs://grpc-testing-secrets/github_credentials/oauth_token.txt ~/
 
 "$SET_GITHUB_STATUS" \
   --sha1 "$KOKORO_GITHUB_PULL_REQUEST_COMMIT" \
