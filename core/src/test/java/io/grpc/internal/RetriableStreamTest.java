@@ -17,6 +17,8 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
+import static io.grpc.internal.ClientStreamListener.RpcProgress.REFUSED;
 import static io.grpc.internal.RetriableStream.GRPC_PREVIOUS_RPC_ATTEMPTS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -141,6 +143,12 @@ public class RetriableStreamTest {
           tracerFactory.newClientStreamTracer(CallOptions.DEFAULT, new Metadata());
       int actualPreviousRpcAttemptsInHeader = metadata.get(GRPC_PREVIOUS_RPC_ATTEMPTS) == null
           ? 0 : Integer.valueOf(metadata.get(GRPC_PREVIOUS_RPC_ATTEMPTS));
+      int actualTransparentRetryAttempts = metadata.get(GRPC_TRANSPARENT_RETRY_ATTEMPTS) == null
+          ? 0 : Integer.valueOf(metadata.get(GRPC_TRANSPARENT_RETRY_ATTEMPTS));
+      if (actualTransparentRetryAttempts != 0) {
+        return retriableStreamRecorder
+            .newSubstream(actualPreviousRpcAttemptsInHeader, actualTransparentRetryAttempts);
+      }
       return retriableStreamRecorder.newSubstream(actualPreviousRpcAttemptsInHeader);
     }
 
@@ -1363,6 +1371,105 @@ public class RetriableStreamTest {
     assertTrue(throttle.isAboveThreshold()); // count = 2.6
   }
 
+  @Test
+  public void transparentRetry() {
+    ClientStream mockStream1 = mock(ClientStream.class);
+    ClientStream mockStream2 = mock(ClientStream.class);
+    ClientStream mockStream3 = mock(ClientStream.class);
+    ClientStream mockStream4 = mock(ClientStream.class);
+    ClientStream mockStream5 = mock(ClientStream.class);
+    ClientStream mockStream6 = mock(ClientStream.class);
+    ClientStream mockStream7 = mock(ClientStream.class);
+    InOrder inOrder = inOrder(
+        retriableStreamRecorder,
+        mockStream1, mockStream2, mockStream3, mockStream4, mockStream5, mockStream6, mockStream7);
+
+    // start
+    doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
+    retriableStream.start(masterListener);
+
+    inOrder.verify(retriableStreamRecorder).newSubstream(0);
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor1 =
+        ArgumentCaptor.forClass(ClientStreamListener.class);
+    inOrder.verify(mockStream1).start(sublistenerCaptor1.capture());
+    inOrder.verifyNoMoreInteractions();
+
+    // transparent retry
+    doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(0, 1);
+    sublistenerCaptor1.getValue()
+        .closed(Status.fromCode(NON_RETRIABLE_STATUS_CODE), REFUSED, new Metadata());
+
+    inOrder.verify(retriableStreamRecorder).newSubstream(0, 1);
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
+        ArgumentCaptor.forClass(ClientStreamListener.class);
+    inOrder.verify(mockStream2).start(sublistenerCaptor2.capture());
+    inOrder.verifyNoMoreInteractions();
+    verify(retriableStreamRecorder, never()).postCommit();
+    assertEquals(0, fakeClock.numPendingTasks());
+
+    // transparent retry
+    doReturn(mockStream3).when(retriableStreamRecorder).newSubstream(0, 2);
+    sublistenerCaptor2.getValue()
+        .closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), REFUSED, new Metadata());
+
+    inOrder.verify(retriableStreamRecorder).newSubstream(0, 2);
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor3 =
+        ArgumentCaptor.forClass(ClientStreamListener.class);
+    inOrder.verify(mockStream3).start(sublistenerCaptor3.capture());
+    inOrder.verifyNoMoreInteractions();
+    verify(retriableStreamRecorder, never()).postCommit();
+    assertEquals(0, fakeClock.numPendingTasks());
+
+    // normal retry
+    doReturn(mockStream4).when(retriableStreamRecorder).newSubstream(1);
+    sublistenerCaptor3.getValue()
+        .closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
+
+    assertEquals(1, fakeClock.numPendingTasks());
+    fakeClock.forwardTime((long) (INITIAL_BACKOFF_IN_SECONDS * FAKE_RANDOM), TimeUnit.SECONDS);
+    inOrder.verify(retriableStreamRecorder).newSubstream(1);
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor4 =
+        ArgumentCaptor.forClass(ClientStreamListener.class);
+    inOrder.verify(mockStream4).start(sublistenerCaptor4.capture());
+    inOrder.verifyNoMoreInteractions();
+    verify(retriableStreamRecorder, never()).postCommit();
+    assertEquals(0, fakeClock.numPendingTasks());
+
+    // transparent retry
+    doReturn(mockStream5).when(retriableStreamRecorder).newSubstream(1, 1);
+    sublistenerCaptor4.getValue()
+        .closed(Status.fromCode(NON_RETRIABLE_STATUS_CODE), REFUSED, new Metadata());
+
+    inOrder.verify(retriableStreamRecorder).newSubstream(1, 1);
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor5 =
+        ArgumentCaptor.forClass(ClientStreamListener.class);
+    inOrder.verify(mockStream5).start(sublistenerCaptor5.capture());
+    inOrder.verifyNoMoreInteractions();
+    verify(retriableStreamRecorder, never()).postCommit();
+    assertEquals(0, fakeClock.numPendingTasks());
+
+    // transparent retry
+    doReturn(mockStream6).when(retriableStreamRecorder).newSubstream(1, 2);
+    sublistenerCaptor5.getValue()
+        .closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), REFUSED, new Metadata());
+
+    inOrder.verify(retriableStreamRecorder).newSubstream(1, 2);
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor6 =
+        ArgumentCaptor.forClass(ClientStreamListener.class);
+    inOrder.verify(mockStream6).start(sublistenerCaptor6.capture());
+    inOrder.verifyNoMoreInteractions();
+    verify(retriableStreamRecorder, never()).postCommit();
+    assertEquals(0, fakeClock.numPendingTasks());
+
+    // commit
+    sublistenerCaptor6.getValue()
+        .closed(Status.fromCode(NON_RETRIABLE_STATUS_CODE), PROCESSED, new Metadata());
+    inOrder.verify(retriableStreamRecorder).postCommit();
+    verify(masterListener).closed(any(Status.class), any(Metadata.class));
+    inOrder.verifyNoMoreInteractions();
+    assertEquals(0, fakeClock.numPendingTasks());
+  }
+
   /**
    * Used to stub a retriable stream as well as to record methods of the retriable stream being
    * called.
@@ -1371,6 +1478,8 @@ public class RetriableStreamTest {
     void postCommit();
 
     ClientStream newSubstream(int previousAttempts);
+
+    ClientStream newSubstream(int previousAttempts, int transparentRetryAttempts);
 
     Status prestart();
   }

@@ -40,6 +40,7 @@ import static org.mockito.Matchers.notNull;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -55,6 +56,7 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.internal.ClientStreamListener;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.ClientTransport.PingCallback;
 import io.grpc.internal.GrpcUtil;
@@ -332,6 +334,44 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     Status status = Status.fromThrowable(future.cause());
     assertEquals(Status.Code.UNAVAILABLE, status.getCode());
     assertEquals("HTTP/2 error code: NO_ERROR\nReceived Goaway", status.getDescription());
+  }
+
+  @Test
+  public void receivedGoAwayShouldRefuseLaterStreamId() throws Exception {
+    // Force the stream to be buffered.
+    ChannelFuture future = enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
+    channelRead(goAwayFrame(streamId - 1));
+    verify(streamListener).closed(any(Status.class), eq(REFUSED), any(Metadata.class));
+    assertTrue(future.isDone());
+  }
+
+  @Test
+  public void receivedGoAwayShouldNotAffectEarlyStreamId() throws Exception {
+    // Force the stream to be buffered.
+    ChannelFuture future = enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
+    channelRead(goAwayFrame(streamId));
+    verify(streamListener, never())
+        .closed(any(Status.class), any(Metadata.class));
+    verify(streamListener, never())
+        .closed(any(Status.class), any(RpcProgress.class), any(Metadata.class));
+  }
+
+  @Test
+  public void receivedResetWithRefuseCode() throws Exception {
+    // Force the stream to be buffered.
+    ChannelFuture future = enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
+    channelRead(rstStreamFrame(streamId, (int) Http2Error.REFUSED_STREAM.code() ));
+    verify(streamListener).closed(any(Status.class), eq(REFUSED), any(Metadata.class));
+    assertTrue(future.isDone());
+  }
+
+  @Test
+  public void receivedResetWithCanceCode() throws Exception {
+    // Force the stream to be buffered.
+    ChannelFuture future = enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
+    channelRead(rstStreamFrame(streamId, (int) Http2Error.CANCEL.code()));
+    verify(streamListener).closed(any(Status.class), eq(PROCESSED), any(Metadata.class));
+    assertTrue(future.isDone());
   }
 
   @Test
