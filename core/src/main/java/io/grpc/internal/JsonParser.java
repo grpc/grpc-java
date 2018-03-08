@@ -55,7 +55,6 @@ final class JsonParser {
 
   private static Object parseRecursive(JsonReader jr) throws IOException {
     checkState(jr.hasNext(), "unexpected end of JSON");
-    checkState(jr.hasNext(), "unexpected end of JSON");
     switch (jr.peek()) {
       case BEGIN_ARRAY:
         return parseJsonArray(jr);
