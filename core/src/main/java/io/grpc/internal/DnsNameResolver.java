@@ -72,13 +72,15 @@ final class DnsNameResolver extends NameResolver {
   @VisibleForTesting
   static boolean enableJndi = Boolean.parseBoolean(JNDI_PROPERTY);
 
+  @VisibleForTesting
+  final ProxyDetector proxyDetector;
+
   private DelegateResolver delegateResolver = pickDelegateResolver();
 
   private final String authority;
   private final String host;
   private final int port;
   private final Resource<ExecutorService> executorResource;
-  private final ProxyDetector proxyDetector;
   @GuardedBy("this")
   private boolean shutdown;
   @GuardedBy("this")

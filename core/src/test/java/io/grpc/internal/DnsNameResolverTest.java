@@ -37,6 +37,7 @@ import io.grpc.NameResolver;
 import io.grpc.internal.DnsNameResolver.DelegateResolver;
 import io.grpc.internal.DnsNameResolver.ResolutionResults;
 import io.grpc.internal.SharedResourceHolder.Resource;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -49,6 +50,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ExecutorService;
+import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
@@ -268,6 +270,24 @@ public class DnsNameResolverTest {
     PairSocketAddress socketAddress = (PairSocketAddress) eag.getAddresses().get(0);
     assertSame(proxyParameters, socketAddress.getAttributes().get(ProxyDetector.PROXY_PARAMS_KEY));
     assertTrue(((InetSocketAddress) socketAddress.getAddress()).isUnresolved());
+  }
+
+  @Test
+  public void testProxyDetectorSpecified() throws Exception {
+    ProxyDetector proxyDetector = new ProxyDetector() {
+      @Nullable
+      @Override
+      public ProxyParameters proxyFor(SocketAddress targetServerAddress) throws IOException {
+        return null;
+      }
+    };
+    DnsNameResolver resolver = provider.newNameResolver(
+        new URI("dns", null, "/foo.googleapis.com:456", null),
+        Attributes
+            .newBuilder()
+            .set(DnsNameResolverProvider.PROXY_DETECTOR_KEY, proxyDetector)
+            .build());
+    assertSame(proxyDetector, resolver.proxyDetector);
   }
 
   private void testInvalidUri(URI uri) {
