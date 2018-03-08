@@ -242,10 +242,13 @@ showcase the usage of gRPC.
 
 Tools
 -----
-APIs that are annotated with `@ExperimentalApi` are subject to change, and APIs
-that are annotated with `@Internal` are for internal use. The APIs with these
-annotations could get modified in any way or even get removed any time.
-Therefore, you should not use `@ExperimantalApi` and `@Internal` APIs.
-We strongly recommend using the 
+
+APIs annotated with `@Internal` are for internal use by the gRPC library and
+should not be used by gRPC users. APIs annotated with `@ExperimentalApi` are
+subject to change in future releases, and library code that other projects
+may depend on should not use these APIs. We recommend using the
 [grpc-java-api-checker](https://github.com/grpc/grpc-java-api-checker)
-to ensure that you do not use any of `@ExperimentalApi` and `@Internal` APIs.
+(an [Error Prone](https://github.com/google/error-prone) plugin)
+to check for usages of `@ExperimentalApi` and `@Internal` in any library code
+that depends on gRPC. It may also be used to check for `@Internal` usage or 
+unintended `@ExperimentalApi` consumption in non-library code.
