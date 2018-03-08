@@ -54,7 +54,7 @@ public final class CronetChannelBuilderTest {
     CronetClientTransport transport =
         (CronetClientTransport)
             transportFactory.newClientTransport(
-                new InetSocketAddress("localhost", 443), "", null);
+                new InetSocketAddress("localhost", 443), "", null, null);
     CronetClientStream stream = transport.newStream(method, new Metadata(), CallOptions.DEFAULT);
 
     assertTrue(stream.idempotent);
@@ -68,7 +68,7 @@ public final class CronetChannelBuilderTest {
     CronetClientTransport transport =
         (CronetClientTransport)
             transportFactory.newClientTransport(
-                new InetSocketAddress("localhost", 443), "", null);
+                new InetSocketAddress("localhost", 443), "", null, null);
     CronetClientStream stream = transport.newStream(method, new Metadata(), CallOptions.DEFAULT);
 
     assertFalse(stream.idempotent);
