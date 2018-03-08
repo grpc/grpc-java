@@ -54,25 +54,24 @@ final class JsonParser {
   }
 
   private static Object parseRecursive(JsonReader jr) throws IOException {
-    while (jr.hasNext()) {
-      switch (jr.peek()) {
-        case BEGIN_ARRAY:
-          return parseJsonArray(jr);
-        case BEGIN_OBJECT:
-          return parseJsonObject(jr);
-        case STRING:
-          return jr.nextString();
-        case NUMBER:
-          return jr.nextDouble();
-        case BOOLEAN:
-          return jr.nextBoolean();
-        case NULL:
-          return parseJsonNull(jr);
-        default:
-          throw new IllegalStateException("Bad token: " + jr.getPath());
-      }
+    checkState(jr.hasNext(), "unexpected end of JSON");
+    checkState(jr.hasNext(), "unexpected end of JSON");
+    switch (jr.peek()) {
+      case BEGIN_ARRAY:
+        return parseJsonArray(jr);
+      case BEGIN_OBJECT:
+        return parseJsonObject(jr);
+      case STRING:
+        return jr.nextString();
+      case NUMBER:
+        return jr.nextDouble();
+      case BOOLEAN:
+        return jr.nextBoolean();
+      case NULL:
+        return parseJsonNull(jr);
+      default:
+        throw new IllegalStateException("Bad token: " + jr.getPath());
     }
-    throw new IllegalStateException("unexpected end of JSON");
   }
 
   private static Map<String, Object> parseJsonObject(JsonReader jr) throws IOException {

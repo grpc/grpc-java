@@ -26,10 +26,13 @@ import java.util.LinkedHashMap;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
 /**
  * Tests for {@link JsonParser}.
  */
+@RunWith(JUnit4.class)
 public class JsonParserTest {
 
   @Rule
@@ -47,17 +50,34 @@ public class JsonParserTest {
 
   @Test
   public void intNumber() throws IOException {
-    assertEquals(1.0, JsonParser.parse("1"));
+    assertEquals(Double.valueOf("1"), JsonParser.parse("1"));
   }
 
   @Test
   public void doubleNumber() throws IOException {
-    assertEquals(1.2, JsonParser.parse("1.2"));
+    assertEquals(Double.valueOf("1.2"), JsonParser.parse("1.2"));
   }
 
   @Test
   public void longNumber() throws IOException {
-    assertEquals(9999999999.0, JsonParser.parse("9999999999"));
+    assertEquals(Double.valueOf("9999999999"), JsonParser.parse("9999999999"));
+  }
+
+  @Test
+  public void booleanValue() throws IOException {
+    assertEquals(true, JsonParser.parse("true"));
+  }
+
+  @Test
+  public void nullValue() throws IOException {
+    assertEquals(null, JsonParser.parse("null"));
+  }
+
+  @Test
+  public void nanFails() throws IOException {
+    thrown.expect(MalformedJsonException.class);
+
+    JsonParser.parse("NaN");
   }
 
   @Test
