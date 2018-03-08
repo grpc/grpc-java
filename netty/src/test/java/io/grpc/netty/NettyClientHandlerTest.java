@@ -338,7 +338,6 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
   @Test
   public void receivedGoAwayShouldRefuseLaterStreamId() throws Exception {
-    // Force the stream to be buffered.
     ChannelFuture future = enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
     channelRead(goAwayFrame(streamId - 1));
     verify(streamListener).closed(any(Status.class), eq(REFUSED), any(Metadata.class));
@@ -347,18 +346,17 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
   @Test
   public void receivedGoAwayShouldNotAffectEarlyStreamId() throws Exception {
-    // Force the stream to be buffered.
     ChannelFuture future = enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
     channelRead(goAwayFrame(streamId));
     verify(streamListener, never())
         .closed(any(Status.class), any(Metadata.class));
     verify(streamListener, never())
         .closed(any(Status.class), any(RpcProgress.class), any(Metadata.class));
+    assertTrue(future.isDone());
   }
 
   @Test
   public void receivedResetWithRefuseCode() throws Exception {
-    // Force the stream to be buffered.
     ChannelFuture future = enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
     channelRead(rstStreamFrame(streamId, (int) Http2Error.REFUSED_STREAM.code() ));
     verify(streamListener).closed(any(Status.class), eq(REFUSED), any(Metadata.class));
@@ -367,7 +365,6 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
   @Test
   public void receivedResetWithCanceCode() throws Exception {
-    // Force the stream to be buffered.
     ChannelFuture future = enqueue(new CreateStreamCommand(grpcHeaders, streamTransportState));
     channelRead(rstStreamFrame(streamId, (int) Http2Error.CANCEL.code()));
     verify(streamListener).closed(any(Status.class), eq(PROCESSED), any(Metadata.class));
