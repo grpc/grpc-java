@@ -21,13 +21,10 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.ManagedChannel;
-import io.grpc.internal.ProxyDetector.ProxiedInetSocketAddress;
 import io.grpc.internal.ProxyParameters;
 import io.grpc.netty.InternalNettyChannelBuilder.OverrideAuthorityChecker;
-import io.grpc.netty.NettyChannelBuilder.DefaultNettyTransportCreationParamsFilterFactory;
 import io.grpc.netty.ProtocolNegotiators.TlsNegotiator;
 import io.netty.handler.ssl.SslContext;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.concurrent.TimeUnit;
@@ -219,30 +216,5 @@ public class NettyChannelBuilderTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("keepalive timeout must be positive");
     builder.keepAliveTimeout(-1L, TimeUnit.HOURS);
-  }
-
-  @Test
-  public void proxiedSocketAddress() throws Exception {
-    InetSocketAddress proxyAddress =
-        new InetSocketAddress(InetAddress.getByName("10.99.99.99"), 100);
-    String proxyUser = "username";
-    String proxyPassword = "secretpassword";
-    ProxyParameters proxy =
-        new ProxyParameters(proxyAddress, proxyUser, proxyPassword);
-    ProxiedInetSocketAddress proxyTarget =
-        new ProxiedInetSocketAddress(InetSocketAddress.createUnresolved("10.2.3.4", 1234), proxy);
-
-    SslContext nullSslContext = null;
-    DefaultNettyTransportCreationParamsFilterFactory factory =
-        new DefaultNettyTransportCreationParamsFilterFactory(
-            NegotiationType.PLAINTEXT, nullSslContext);
-
-    ProtocolNegotiators.ProxyNegotiator negotiator =
-        (ProtocolNegotiators.ProxyNegotiator) factory
-            .create(proxyTarget, "authority", "useragent")
-            .getProtocolNegotiator();
-    assertEquals(proxyAddress, negotiator.proxyAddress);
-    assertEquals(proxyUser, negotiator.proxyUsername);
-    assertEquals(proxyPassword, negotiator.proxyPassword);
   }
 }

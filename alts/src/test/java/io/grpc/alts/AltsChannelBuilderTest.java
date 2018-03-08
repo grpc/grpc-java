@@ -58,7 +58,7 @@ public final class AltsChannelBuilderTest {
     assertThat(tcpfFactory).isNotNull();
     ProtocolNegotiator protocolNegotiator =
         tcpfFactory
-            .create(new InetSocketAddress(8080), "fakeAuthority", "fakeUserAgent")
+            .create(new InetSocketAddress(8080), "fakeAuthority", "fakeUserAgent", null)
             .getProtocolNegotiator();
     assertThat(protocolNegotiator).isInstanceOf(AltsProtocolNegotiator.class);
 

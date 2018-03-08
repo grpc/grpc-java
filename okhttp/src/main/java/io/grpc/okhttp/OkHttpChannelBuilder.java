@@ -36,7 +36,6 @@ import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
-import io.grpc.internal.ProxyDetector.ProxiedInetSocketAddress;
 import io.grpc.internal.ProxyParameters;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
@@ -462,7 +461,8 @@ public class OkHttpChannelBuilder extends
 
     @Override
     public ConnectionClientTransport newClientTransport(
-        SocketAddress addr, String authority, @Nullable String userAgent) {
+        SocketAddress addr, String authority, @Nullable String userAgent,
+        @Nullable ProxyParameters proxy) {
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
       }
@@ -473,12 +473,9 @@ public class OkHttpChannelBuilder extends
           keepAliveTimeNanosState.backoff();
         }
       };
-      ProxyParameters proxy = null;
-      if (addr instanceof ProxiedInetSocketAddress) {
-        proxy = ((ProxiedInetSocketAddress) addr).getProxyParameters();
-      }
+      InetSocketAddress inetSocketAddr = (InetSocketAddress) addr;
       OkHttpClientTransport transport = new OkHttpClientTransport(
-          (InetSocketAddress) addr,
+          inetSocketAddr,
           authority,
           userAgent,
           executor,
