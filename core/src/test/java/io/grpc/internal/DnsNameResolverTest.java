@@ -36,7 +36,6 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.internal.DnsNameResolver.DelegateResolver;
 import io.grpc.internal.DnsNameResolver.ResolutionResults;
-import io.grpc.internal.ProxyDetector.ProxiedInetSocketAddress;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -266,9 +265,9 @@ public class DnsNameResolverTest {
     EquivalentAddressGroup eag = result.get(0);
     assertThat(eag.getAddresses()).hasSize(1);
 
-    ProxiedInetSocketAddress socketAddress = (ProxiedInetSocketAddress) eag.getAddresses().get(0);
-    assertSame(proxyParameters, socketAddress.getProxyParameters());
-    assertTrue(socketAddress.getDestination().isUnresolved());
+    PairSocketAddress socketAddress = (PairSocketAddress) eag.getAddresses().get(0);
+    assertSame(proxyParameters, socketAddress.getAttributes().get(ProxyDetector.PROXY_PARAMS_KEY));
+    assertTrue(((InetSocketAddress) socketAddress.getAddress()).isUnresolved());
   }
 
   private void testInvalidUri(URI uri) {

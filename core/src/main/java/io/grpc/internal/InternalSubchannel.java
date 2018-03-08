@@ -37,7 +37,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.Channelz.ChannelStats;
-import io.grpc.internal.ProxyDetector.ProxiedInetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -212,9 +211,9 @@ final class InternalSubchannel implements Instrumented<ChannelStats> {
     SocketAddress address = addrs.get(addressIndex);
 
     ProxyParameters proxy = null;
-    if (address instanceof ProxiedInetSocketAddress) {
-      proxy = ((ProxiedInetSocketAddress) address).getProxyParameters();
-      address = ((ProxiedInetSocketAddress) address).getDestination();
+    if (address instanceof PairSocketAddress) {
+      proxy = ((PairSocketAddress) address).getAttributes().get(ProxyDetector.PROXY_PARAMS_KEY);
+      address = ((PairSocketAddress) address).getAddress();
     }
 
     ConnectionClientTransport transport =

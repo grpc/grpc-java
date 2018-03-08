@@ -16,9 +16,8 @@
 
 package io.grpc.internal;
 
-import com.google.common.annotations.VisibleForTesting;
+import io.grpc.Attributes;
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import javax.annotation.Nullable;
 
@@ -29,6 +28,7 @@ import javax.annotation.Nullable;
  * {@link io.grpc.NameResolver}.
  */
 public interface ProxyDetector {
+  Attributes.Key<ProxyParameters> PROXY_PARAMS_KEY = Attributes.Key.of("proxy-params-key");
   /**
    * Given a target address, returns which proxy address should be used. If no proxy should be
    * used, then return value will be null. The address of the {@link ProxyParameters} is always
@@ -36,27 +36,4 @@ public interface ProxyDetector {
    */
   @Nullable
   ProxyParameters proxyFor(SocketAddress targetServerAddress) throws IOException;
-
-  // This class does not extend from InetSocketAddress because there is no public constructor
-  // that allows subclass instances be unresolved.
-  final class ProxiedInetSocketAddress extends SocketAddress {
-    private static final long serialVersionUID = -6854992294603212793L;
-
-    private final InetSocketAddress destination;
-    private final ProxyParameters proxyParams;
-
-    @VisibleForTesting
-    public ProxiedInetSocketAddress(InetSocketAddress destination, ProxyParameters proxyParams) {
-      this.destination = destination;
-      this.proxyParams = proxyParams;
-    }
-
-    public ProxyParameters getProxyParameters() {
-      return proxyParams;
-    }
-
-    public InetSocketAddress getDestination() {
-      return destination;
-    }
-  }
 }
