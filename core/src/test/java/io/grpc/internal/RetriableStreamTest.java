@@ -20,10 +20,11 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.REFUSED;
 import static io.grpc.internal.RetriableStream.GRPC_PREVIOUS_RPC_ATTEMPTS;
+import static io.grpc.internal.RetriableStream.GRPC_TRANSPARENT_RETRY_ATTEMPTS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Matchers.any;
@@ -935,11 +936,20 @@ public class RetriableStreamTest {
   public void updateHeaders() {
     Metadata originalHeaders = new Metadata();
     Metadata headers = retriableStream.updateHeaders(originalHeaders, 0, 0);
-    assertSame(originalHeaders, headers);
+    assertNotSame(originalHeaders, headers);
+    assertNull(headers.get(GRPC_PREVIOUS_RPC_ATTEMPTS));
+    assertNull(headers.get(GRPC_TRANSPARENT_RETRY_ATTEMPTS));
 
     headers = retriableStream.updateHeaders(originalHeaders, 345, 0);
     assertEquals("345", headers.get(GRPC_PREVIOUS_RPC_ATTEMPTS));
     assertNull(originalHeaders.get(GRPC_PREVIOUS_RPC_ATTEMPTS));
+    assertNull(headers.get(GRPC_TRANSPARENT_RETRY_ATTEMPTS));
+
+    headers = retriableStream.updateHeaders(originalHeaders, 123, 456);
+    assertEquals("123", headers.get(GRPC_PREVIOUS_RPC_ATTEMPTS));
+    assertEquals("456", headers.get(GRPC_TRANSPARENT_RETRY_ATTEMPTS));
+    assertNull(originalHeaders.get(GRPC_PREVIOUS_RPC_ATTEMPTS));
+    assertNull(originalHeaders.get(GRPC_TRANSPARENT_RETRY_ATTEMPTS));
   }
 
   @Test

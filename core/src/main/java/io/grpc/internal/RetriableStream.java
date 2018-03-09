@@ -186,17 +186,12 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   @VisibleForTesting
   final Metadata updateHeaders(
       Metadata originalHeaders, int previousAttempts, int transparentRetryAttempts) {
-    Metadata newHeaders = originalHeaders;
+    Metadata newHeaders = new Metadata();
+    newHeaders.merge(originalHeaders);
     if (previousAttempts > 0) {
-      newHeaders = new Metadata();
-      newHeaders.merge(originalHeaders);
       newHeaders.put(GRPC_PREVIOUS_RPC_ATTEMPTS, String.valueOf(previousAttempts));
     }
     if (transparentRetryAttempts > 0) {
-      if (newHeaders == originalHeaders) {
-        newHeaders = new Metadata();
-        newHeaders.merge(originalHeaders);
-      }
       newHeaders.put(GRPC_TRANSPARENT_RETRY_ATTEMPTS, String.valueOf(transparentRetryAttempts));
     }
     return newHeaders;
