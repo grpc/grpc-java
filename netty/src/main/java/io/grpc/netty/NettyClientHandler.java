@@ -16,8 +16,6 @@
 
 package io.grpc.netty;
 
-import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
-import static io.grpc.internal.ClientStreamListener.RpcProgress.REFUSED;
 import static io.netty.handler.codec.http2.DefaultHttp2LocalFlowController.DEFAULT_WINDOW_UPDATE_RATIO;
 import static io.netty.util.CharsetUtil.UTF_8;
 
@@ -29,6 +27,7 @@ import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusException;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ClientTransport.PingCallback;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
@@ -352,7 +351,8 @@ class NettyClientHandler extends AbstractNettyHandler {
           .augmentDescription("Received Rst Stream");
       stream.transportReportStatus(
           status,
-          errorCode == Http2Error.REFUSED_STREAM.code() ? REFUSED : PROCESSED,
+          errorCode == Http2Error.REFUSED_STREAM.code()
+              ? RpcProgress.REFUSED : RpcProgress.PROCESSED,
           false /*stop delivery*/,
           new Metadata());
       if (keepAliveManager != null) {
@@ -638,7 +638,7 @@ class NettyClientHandler extends AbstractNettyHandler {
             NettyClientStream.TransportState clientStream = clientStream(stream);
             if (clientStream != null) {
               clientStream.transportReportStatus(
-                  goAwayStatus, REFUSED, false, new Metadata());
+                  goAwayStatus, RpcProgress.REFUSED, false, new Metadata());
             }
             stream.close();
           }

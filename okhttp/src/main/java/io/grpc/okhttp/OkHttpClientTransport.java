@@ -17,8 +17,6 @@
 package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
-import static io.grpc.internal.ClientStreamListener.RpcProgress.REFUSED;
 import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -41,7 +39,6 @@ import io.grpc.Status.Code;
 import io.grpc.StatusException;
 import io.grpc.internal.Channelz.Security;
 import io.grpc.internal.Channelz.SocketStats;
-import io.grpc.internal.Channelz.TransportStats;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
@@ -738,13 +735,13 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         if (entry.getKey() > lastKnownStreamId) {
           it.remove();
           entry.getValue().transportState().transportReportStatus(
-              status, REFUSED, false, new Metadata());
+              status, RpcProgress.REFUSED, false, new Metadata());
         }
       }
 
       for (OkHttpClientStream stream : pendingStreams) {
         stream.transportState().transportReportStatus(
-            status, REFUSED, true, new Metadata());
+            status, RpcProgress.REFUSED, true, new Metadata());
       }
       pendingStreams.clear();
       maybeClearInUse();
@@ -1030,7 +1027,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
           (status.getCode() == Code.CANCELLED || status.getCode() == Code.DEADLINE_EXCEEDED);
       finishStream(
           streamId, status,
-          errorCode == ErrorCode.REFUSED_STREAM ? REFUSED : PROCESSED,
+          errorCode == ErrorCode.REFUSED_STREAM ? RpcProgress.REFUSED : RpcProgress.PROCESSED,
           stopDelivery, null, null);
     }
 
@@ -1124,7 +1121,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
           onError(ErrorCode.PROTOCOL_ERROR, errorMsg);
         } else {
           finishStream(
-              streamId, Status.INTERNAL.withDescription(errorMsg), PROCESSED, false,
+              streamId, Status.INTERNAL.withDescription(errorMsg), RpcProgress.PROCESSED, false,
               ErrorCode.PROTOCOL_ERROR, null);
         }
         return;
