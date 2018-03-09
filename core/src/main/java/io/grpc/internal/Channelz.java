@@ -212,24 +212,6 @@ public final class Channelz {
       this.sockets = Preconditions.checkNotNull(sockets);
     }
 
-    /** Creates a builder out of this instance. */
-    public Builder toBuilder() {
-      Builder builder = new Builder()
-          .setTarget(target)
-          .setState(state)
-          .setCallsStarted(callsStarted)
-          .setCallsSucceeded(callsSucceeded)
-          .setCallsFailed(callsFailed)
-          .setLastCallStartedMillis(lastCallStartedMillis);
-      if (!subchannels.isEmpty()) {
-        builder.setSubchannels(subchannels);
-      }
-      if (!sockets.isEmpty()) {
-        builder.setSockets(sockets);
-      }
-      return builder;
-    }
-
     public static final class Builder {
       private String target;
       private ConnectivityState state;
