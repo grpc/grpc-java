@@ -214,15 +214,20 @@ public final class Channelz {
 
     /** Creates a builder out of this instance. */
     public Builder toBuilder() {
-      return new ChannelStats.Builder()
+      Builder builder = new Builder()
           .setTarget(target)
           .setState(state)
           .setCallsStarted(callsStarted)
           .setCallsSucceeded(callsSucceeded)
           .setCallsFailed(callsFailed)
-          .setLastCallStartedMillis(lastCallStartedMillis)
-          .setSubchannels(subchannels)
-          .setSockets(sockets);
+          .setLastCallStartedMillis(lastCallStartedMillis);
+      if (!subchannels.isEmpty()) {
+        builder.setSubchannels(subchannels);
+      }
+      if (!sockets.isEmpty()) {
+        builder.setSockets(sockets);
+      }
+      return builder;
     }
 
     public static final class Builder {
