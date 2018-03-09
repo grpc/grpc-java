@@ -20,7 +20,6 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.REFUSED;
 import static io.grpc.internal.RetriableStream.GRPC_PREVIOUS_RPC_ATTEMPTS;
-import static io.grpc.internal.RetriableStream.GRPC_TRANSPARENT_RETRY_ATTEMPTS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotSame;
@@ -144,12 +143,6 @@ public class RetriableStreamTest {
           tracerFactory.newClientStreamTracer(CallOptions.DEFAULT, new Metadata());
       int actualPreviousRpcAttemptsInHeader = metadata.get(GRPC_PREVIOUS_RPC_ATTEMPTS) == null
           ? 0 : Integer.valueOf(metadata.get(GRPC_PREVIOUS_RPC_ATTEMPTS));
-      int actualTransparentRetryAttempts = metadata.get(GRPC_TRANSPARENT_RETRY_ATTEMPTS) == null
-          ? 0 : Integer.valueOf(metadata.get(GRPC_TRANSPARENT_RETRY_ATTEMPTS));
-      if (actualTransparentRetryAttempts != 0) {
-        return retriableStreamRecorder
-            .newSubstream(actualPreviousRpcAttemptsInHeader, actualTransparentRetryAttempts);
-      }
       return retriableStreamRecorder.newSubstream(actualPreviousRpcAttemptsInHeader);
     }
 
@@ -935,21 +928,13 @@ public class RetriableStreamTest {
   @Test
   public void updateHeaders() {
     Metadata originalHeaders = new Metadata();
-    Metadata headers = retriableStream.updateHeaders(originalHeaders, 0, 0);
+    Metadata headers = retriableStream.updateHeaders(originalHeaders, 0);
     assertNotSame(originalHeaders, headers);
     assertNull(headers.get(GRPC_PREVIOUS_RPC_ATTEMPTS));
-    assertNull(headers.get(GRPC_TRANSPARENT_RETRY_ATTEMPTS));
 
-    headers = retriableStream.updateHeaders(originalHeaders, 345, 0);
+    headers = retriableStream.updateHeaders(originalHeaders, 345);
     assertEquals("345", headers.get(GRPC_PREVIOUS_RPC_ATTEMPTS));
     assertNull(originalHeaders.get(GRPC_PREVIOUS_RPC_ATTEMPTS));
-    assertNull(headers.get(GRPC_TRANSPARENT_RETRY_ATTEMPTS));
-
-    headers = retriableStream.updateHeaders(originalHeaders, 123, 456);
-    assertEquals("123", headers.get(GRPC_PREVIOUS_RPC_ATTEMPTS));
-    assertEquals("456", headers.get(GRPC_TRANSPARENT_RETRY_ATTEMPTS));
-    assertNull(originalHeaders.get(GRPC_PREVIOUS_RPC_ATTEMPTS));
-    assertNull(originalHeaders.get(GRPC_TRANSPARENT_RETRY_ATTEMPTS));
   }
 
   @Test
@@ -1386,13 +1371,9 @@ public class RetriableStreamTest {
     ClientStream mockStream1 = mock(ClientStream.class);
     ClientStream mockStream2 = mock(ClientStream.class);
     ClientStream mockStream3 = mock(ClientStream.class);
-    ClientStream mockStream4 = mock(ClientStream.class);
-    ClientStream mockStream5 = mock(ClientStream.class);
-    ClientStream mockStream6 = mock(ClientStream.class);
-    ClientStream mockStream7 = mock(ClientStream.class);
     InOrder inOrder = inOrder(
         retriableStreamRecorder,
-        mockStream1, mockStream2, mockStream3, mockStream4, mockStream5, mockStream6, mockStream7);
+        mockStream1, mockStream2, mockStream3);
 
     // start
     doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
@@ -1405,11 +1386,11 @@ public class RetriableStreamTest {
     inOrder.verifyNoMoreInteractions();
 
     // transparent retry
-    doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(0, 1);
+    doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(0);
     sublistenerCaptor1.getValue()
         .closed(Status.fromCode(NON_RETRIABLE_STATUS_CODE), REFUSED, new Metadata());
 
-    inOrder.verify(retriableStreamRecorder).newSubstream(0, 1);
+    inOrder.verify(retriableStreamRecorder).newSubstream(0);
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
     inOrder.verify(mockStream2).start(sublistenerCaptor2.capture());
@@ -1417,67 +1398,112 @@ public class RetriableStreamTest {
     verify(retriableStreamRecorder, never()).postCommit();
     assertEquals(0, fakeClock.numPendingTasks());
 
-    // transparent retry
-    doReturn(mockStream3).when(retriableStreamRecorder).newSubstream(0, 2);
+    // no more transparent retry
+    doReturn(mockStream3).when(retriableStreamRecorder).newSubstream(1);
     sublistenerCaptor2.getValue()
         .closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), REFUSED, new Metadata());
 
-    inOrder.verify(retriableStreamRecorder).newSubstream(0, 2);
+    assertEquals(1, fakeClock.numPendingTasks());
+    fakeClock.forwardTime((long) (INITIAL_BACKOFF_IN_SECONDS * FAKE_RANDOM), TimeUnit.SECONDS);
+    inOrder.verify(retriableStreamRecorder).newSubstream(1);
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor3 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
     inOrder.verify(mockStream3).start(sublistenerCaptor3.capture());
     inOrder.verifyNoMoreInteractions();
     verify(retriableStreamRecorder, never()).postCommit();
     assertEquals(0, fakeClock.numPendingTasks());
+  }
+
+  @Test
+  public void normalRetry_thenNoTransparentRetry_butNormalRetry() {
+    ClientStream mockStream1 = mock(ClientStream.class);
+    ClientStream mockStream2 = mock(ClientStream.class);
+    ClientStream mockStream3 = mock(ClientStream.class);
+    InOrder inOrder = inOrder(
+        retriableStreamRecorder,
+        mockStream1, mockStream2, mockStream3);
+
+    // start
+    doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
+    retriableStream.start(masterListener);
+
+    inOrder.verify(retriableStreamRecorder).newSubstream(0);
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor1 =
+        ArgumentCaptor.forClass(ClientStreamListener.class);
+    inOrder.verify(mockStream1).start(sublistenerCaptor1.capture());
+    inOrder.verifyNoMoreInteractions();
 
     // normal retry
-    doReturn(mockStream4).when(retriableStreamRecorder).newSubstream(1);
-    sublistenerCaptor3.getValue()
+    doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
+    sublistenerCaptor1.getValue()
         .closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
 
     assertEquals(1, fakeClock.numPendingTasks());
     fakeClock.forwardTime((long) (INITIAL_BACKOFF_IN_SECONDS * FAKE_RANDOM), TimeUnit.SECONDS);
     inOrder.verify(retriableStreamRecorder).newSubstream(1);
-    ArgumentCaptor<ClientStreamListener> sublistenerCaptor4 =
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
-    inOrder.verify(mockStream4).start(sublistenerCaptor4.capture());
+    inOrder.verify(mockStream2).start(sublistenerCaptor2.capture());
     inOrder.verifyNoMoreInteractions();
     verify(retriableStreamRecorder, never()).postCommit();
     assertEquals(0, fakeClock.numPendingTasks());
 
-    // transparent retry
-    doReturn(mockStream5).when(retriableStreamRecorder).newSubstream(1, 1);
-    sublistenerCaptor4.getValue()
-        .closed(Status.fromCode(NON_RETRIABLE_STATUS_CODE), REFUSED, new Metadata());
-
-    inOrder.verify(retriableStreamRecorder).newSubstream(1, 1);
-    ArgumentCaptor<ClientStreamListener> sublistenerCaptor5 =
-        ArgumentCaptor.forClass(ClientStreamListener.class);
-    inOrder.verify(mockStream5).start(sublistenerCaptor5.capture());
-    inOrder.verifyNoMoreInteractions();
-    verify(retriableStreamRecorder, never()).postCommit();
-    assertEquals(0, fakeClock.numPendingTasks());
-
-    // transparent retry
-    doReturn(mockStream6).when(retriableStreamRecorder).newSubstream(1, 2);
-    sublistenerCaptor5.getValue()
+    // no more transparent retry
+    doReturn(mockStream3).when(retriableStreamRecorder).newSubstream(2);
+    sublistenerCaptor2.getValue()
         .closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), REFUSED, new Metadata());
 
-    inOrder.verify(retriableStreamRecorder).newSubstream(1, 2);
-    ArgumentCaptor<ClientStreamListener> sublistenerCaptor6 =
+    assertEquals(1, fakeClock.numPendingTasks());
+    fakeClock.forwardTime(
+        (long) (INITIAL_BACKOFF_IN_SECONDS * BACKOFF_MULTIPLIER * FAKE_RANDOM), TimeUnit.SECONDS);
+    inOrder.verify(retriableStreamRecorder).newSubstream(2);
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor3 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
-    inOrder.verify(mockStream6).start(sublistenerCaptor6.capture());
+    inOrder.verify(mockStream3).start(sublistenerCaptor3.capture());
+    inOrder.verifyNoMoreInteractions();
+    verify(retriableStreamRecorder, never()).postCommit();
+  }
+
+  @Test
+  public void normalRetry_thenNoTransparentRetry_andNoMoreRetry() {
+    ClientStream mockStream1 = mock(ClientStream.class);
+    ClientStream mockStream2 = mock(ClientStream.class);
+    ClientStream mockStream3 = mock(ClientStream.class);
+    InOrder inOrder = inOrder(
+        retriableStreamRecorder,
+        mockStream1, mockStream2, mockStream3);
+
+    // start
+    doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
+    retriableStream.start(masterListener);
+
+    inOrder.verify(retriableStreamRecorder).newSubstream(0);
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor1 =
+        ArgumentCaptor.forClass(ClientStreamListener.class);
+    inOrder.verify(mockStream1).start(sublistenerCaptor1.capture());
+    inOrder.verifyNoMoreInteractions();
+
+    // normal retry
+    doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
+    sublistenerCaptor1.getValue()
+        .closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
+
+    assertEquals(1, fakeClock.numPendingTasks());
+    fakeClock.forwardTime((long) (INITIAL_BACKOFF_IN_SECONDS * FAKE_RANDOM), TimeUnit.SECONDS);
+    inOrder.verify(retriableStreamRecorder).newSubstream(1);
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
+        ArgumentCaptor.forClass(ClientStreamListener.class);
+    inOrder.verify(mockStream2).start(sublistenerCaptor2.capture());
     inOrder.verifyNoMoreInteractions();
     verify(retriableStreamRecorder, never()).postCommit();
     assertEquals(0, fakeClock.numPendingTasks());
 
-    // commit
-    sublistenerCaptor6.getValue()
-        .closed(Status.fromCode(NON_RETRIABLE_STATUS_CODE), PROCESSED, new Metadata());
-    inOrder.verify(retriableStreamRecorder).postCommit();
-    verify(masterListener).closed(any(Status.class), any(Metadata.class));
-    inOrder.verifyNoMoreInteractions();
-    assertEquals(0, fakeClock.numPendingTasks());
+    // no more transparent retry
+    doReturn(mockStream3).when(retriableStreamRecorder).newSubstream(2);
+    sublistenerCaptor2.getValue()
+        .closed(Status.fromCode(NON_RETRIABLE_STATUS_CODE), REFUSED, new Metadata());
+
+    verify(retriableStreamRecorder).postCommit();
   }
 
   /**
@@ -1488,8 +1514,6 @@ public class RetriableStreamTest {
     void postCommit();
 
     ClientStream newSubstream(int previousAttempts);
-
-    ClientStream newSubstream(int previousAttempts, int transparentRetryAttempts);
 
     Status prestart();
   }
