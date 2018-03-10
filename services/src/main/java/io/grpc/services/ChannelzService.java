@@ -35,7 +35,6 @@ import io.grpc.channelz.v1.GetTopChannelsResponse;
 import io.grpc.internal.Channelz;
 import io.grpc.internal.Channelz.ChannelStats;
 import io.grpc.internal.Channelz.ServerList;
-import io.grpc.internal.Channelz.ServerStats;
 import io.grpc.internal.Channelz.SocketStats;
 import io.grpc.internal.Instrumented;
 import io.grpc.stub.StreamObserver;
@@ -64,13 +63,8 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
       GetTopChannelsRequest request, StreamObserver<GetTopChannelsResponse> responseObserver) {
     Channelz.RootChannelList rootChannels
         = channelz.getRootChannels(request.getStartChannelId(), maxPageSize);
-    GetTopChannelsResponse.Builder responseBuilder = GetTopChannelsResponse
-        .newBuilder()
-        .setEnd(rootChannels.end);
-    for (Instrumented<ChannelStats> c : rootChannels.channels) {
-      responseBuilder.addChannel(ChannelzProtoUtil.toChannel(c));
-    }
-    responseObserver.onNext(responseBuilder.build());
+
+    responseObserver.onNext(ChannelzProtoUtil.toGetTopChannelResponse(rootChannels));
     responseObserver.onCompleted();
   }
 
@@ -97,13 +91,8 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
   public void getServers(
       GetServersRequest request, StreamObserver<GetServersResponse> responseObserver) {
     ServerList servers = channelz.getServers(request.getStartServerId(), maxPageSize);
-    GetServersResponse.Builder responseBuilder = GetServersResponse
-        .newBuilder()
-        .setEnd(servers.end);
-    for (Instrumented<ServerStats> s : servers.servers) {
-      responseBuilder.addServer(ChannelzProtoUtil.toServer(s));
-    }
-    responseObserver.onNext(responseBuilder.build());
+
+    responseObserver.onNext(ChannelzProtoUtil.toGetServersResponse(servers));
     responseObserver.onCompleted();
   }
 

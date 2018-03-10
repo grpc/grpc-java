@@ -73,53 +73,6 @@ public class ChannelzServiceTest {
   }
 
   @Test
-  public void getTopChannels_paginate() throws Exception {
-    TestChannel root1 = new TestChannel();
-    TestChannel root2 = new TestChannel();
-    channelz.addRootChannel(root1);
-    channelz.addRootChannel(root2);
-
-    assertEquals(
-        GetTopChannelsResponse
-            .newBuilder()
-            .addChannel(ChannelzProtoUtil.toChannel(root1))
-            .setEnd(false)
-            .build(),
-        getTopChannelHelper(0));
-
-    assertEquals(
-        GetTopChannelsResponse
-            .newBuilder()
-            .addChannel(ChannelzProtoUtil.toChannel(root2))
-            .setEnd(true)
-            .build(),
-        getTopChannelHelper(root1.getLogId().getId() + 1));
-  }
-
-  @Test
-  public void getTopChannels_addAfterResponse() throws Exception {
-    TestChannel root1 = new TestChannel();
-    channelz.addRootChannel(root1);
-    assertEquals(
-        GetTopChannelsResponse
-            .newBuilder()
-            .addChannel(ChannelzProtoUtil.toChannel(root1))
-            .setEnd(true)
-            .build(),
-        getTopChannelHelper(0));
-
-    TestChannel root2 = new TestChannel();
-    channelz.addRootChannel(root2);
-    assertEquals(
-        GetTopChannelsResponse
-            .newBuilder()
-            .addChannel(ChannelzProtoUtil.toChannel(root2))
-            .setEnd(true)
-            .build(),
-        getTopChannelHelper(root1.getLogId().getId() + 1));
-  }
-
-  @Test
   public void getChannel() throws ExecutionException, InterruptedException {
     TestChannel root = new TestChannel();
     assertChannelNotFound(root.getLogId().getId());
@@ -172,54 +125,6 @@ public class ChannelzServiceTest {
             .setEnd(true)
             .build(),
         getServersHelper(0));
-  }
-
-  @Test
-  public void getServers_paginate() throws Exception {
-    TestServer server1 = new TestServer();
-    TestServer server2 = new TestServer();
-    channelz.addServer(server1);
-    channelz.addServer(server2);
-
-    assertEquals(
-        GetServersResponse
-            .newBuilder()
-            .addServer(ChannelzProtoUtil.toServer(server1))
-            .setEnd(false)
-            .build(),
-        getServersHelper(0));
-
-    assertEquals(
-        GetServersResponse
-            .newBuilder()
-            .addServer(ChannelzProtoUtil.toServer(server2))
-            .setEnd(true)
-            .build(),
-        getServersHelper(server1.getLogId().getId() + 1));
-  }
-
-  @Test
-  public void getServers_addAfterResponse() throws Exception {
-    TestServer server1 = new TestServer();
-    channelz.addServer(server1);
-
-    assertEquals(
-        GetServersResponse
-            .newBuilder()
-            .addServer(ChannelzProtoUtil.toServer(server1))
-            .setEnd(true)
-            .build(),
-        getServersHelper(0));
-
-    TestServer server2 = new TestServer();
-    channelz.addServer(server2);
-    assertEquals(
-        GetServersResponse
-            .newBuilder()
-            .addServer(ChannelzProtoUtil.toServer(server2))
-            .setEnd(true)
-            .build(),
-        getServersHelper(server1.getLogId().getId() + 1));
   }
 
   @Test

@@ -162,7 +162,7 @@ public final class Channelz {
 
     /** Creates an instance. */
     public RootChannelList(List<Instrumented<ChannelStats>> channels, boolean end) {
-      this.channels = channels;
+      this.channels = Preconditions.checkNotNull(channels);
       this.end = end;
     }
   }
@@ -173,7 +173,7 @@ public final class Channelz {
 
     /** Creates an instance. */
     public ServerList(List<Instrumented<ServerStats>> servers, boolean end) {
-      this.servers = servers;
+      this.servers = Preconditions.checkNotNull(servers);
       this.end = end;
     }
   }
@@ -421,5 +421,10 @@ public final class Channelz {
       this.localFlowControlWindow = localFlowControlWindow;
       this.remoteFlowControlWindow = remoteFlowControlWindow;
     }
+  }
+
+  /** Unwraps a {@link LogId} to return a {@code long}. */
+  public static long id(WithLogId withLogId) {
+    return withLogId.getLogId().getId();
   }
 }

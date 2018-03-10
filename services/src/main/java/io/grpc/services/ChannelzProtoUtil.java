@@ -31,6 +31,8 @@ import io.grpc.channelz.v1.Channel;
 import io.grpc.channelz.v1.ChannelData;
 import io.grpc.channelz.v1.ChannelData.State;
 import io.grpc.channelz.v1.ChannelRef;
+import io.grpc.channelz.v1.GetServersResponse;
+import io.grpc.channelz.v1.GetTopChannelsResponse;
 import io.grpc.channelz.v1.Server;
 import io.grpc.channelz.v1.ServerData;
 import io.grpc.channelz.v1.ServerRef;
@@ -41,6 +43,8 @@ import io.grpc.channelz.v1.Subchannel;
 import io.grpc.channelz.v1.SubchannelRef;
 import io.grpc.internal.Channelz;
 import io.grpc.internal.Channelz.ChannelStats;
+import io.grpc.internal.Channelz.RootChannelList;
+import io.grpc.internal.Channelz.ServerList;
 import io.grpc.internal.Channelz.ServerStats;
 import io.grpc.internal.Channelz.SocketStats;
 import io.grpc.internal.Channelz.TransportStats;
@@ -215,6 +219,26 @@ final class ChannelzProtoUtil {
       subchannelBuilder.addSubchannelRef(toSubchannelRef(childSubchannel));
     }
     return subchannelBuilder.build();
+  }
+
+  static GetTopChannelsResponse toGetTopChannelResponse(RootChannelList rootChannels) {
+    GetTopChannelsResponse.Builder responseBuilder = GetTopChannelsResponse
+        .newBuilder()
+        .setEnd(rootChannels.end);
+    for (Instrumented<ChannelStats> c : rootChannels.channels) {
+      responseBuilder.addChannel(ChannelzProtoUtil.toChannel(c));
+    }
+    return responseBuilder.build();
+  }
+
+  static GetServersResponse toGetServersResponse(ServerList servers) {
+    GetServersResponse.Builder responseBuilder = GetServersResponse
+        .newBuilder()
+        .setEnd(servers.end);
+    for (Instrumented<ServerStats> s : servers.servers) {
+      responseBuilder.addServer(ChannelzProtoUtil.toServer(s));
+    }
+    return responseBuilder.build();
   }
 
   private static <T> T getFuture(ListenableFuture<T> future) {

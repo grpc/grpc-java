@@ -31,6 +31,8 @@ import io.grpc.channelz.v1.Channel;
 import io.grpc.channelz.v1.ChannelData;
 import io.grpc.channelz.v1.ChannelData.State;
 import io.grpc.channelz.v1.ChannelRef;
+import io.grpc.channelz.v1.GetServersResponse;
+import io.grpc.channelz.v1.GetTopChannelsResponse;
 import io.grpc.channelz.v1.Server;
 import io.grpc.channelz.v1.ServerData;
 import io.grpc.channelz.v1.ServerRef;
@@ -40,6 +42,10 @@ import io.grpc.channelz.v1.SocketRef;
 import io.grpc.channelz.v1.Subchannel;
 import io.grpc.channelz.v1.SubchannelRef;
 import io.grpc.internal.Channelz.ChannelStats;
+import io.grpc.internal.Channelz.RootChannelList;
+import io.grpc.internal.Channelz.ServerList;
+import io.grpc.internal.Channelz.ServerStats;
+import io.grpc.internal.Instrumented;
 import io.grpc.internal.WithLogId;
 import io.grpc.services.ChannelzTestHelper.TestChannel;
 import io.grpc.services.ChannelzTestHelper.TestServer;
@@ -48,6 +54,7 @@ import io.netty.channel.unix.DomainSocketAddress;
 import java.net.Inet4Address;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.Collections;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -70,6 +77,11 @@ public final class ChannelzProtoUtilTest {
       .setCallsFailed(3)
       .setLastCallStartedTimestamp(Timestamps.fromMillis(4))
       .build();
+  private final Channel channelProto = Channel
+      .newBuilder()
+      .setRef(channelRef)
+      .setData(channelData)
+      .build();
 
   private final TestChannel subchannel = new TestChannel();
   private final SubchannelRef subchannelRef = SubchannelRef
@@ -86,6 +98,11 @@ public final class ChannelzProtoUtilTest {
       .setCallsFailed(3)
       .setLastCallStartedTimestamp(Timestamps.fromMillis(4))
       .build();
+  private final Subchannel subchannelProto = Subchannel
+        .newBuilder()
+        .setRef(subchannelRef)
+        .setData(subchannelData)
+        .build();
 
   private final TestServer server = new TestServer();
   private final ServerRef serverRef = ServerRef
@@ -99,6 +116,11 @@ public final class ChannelzProtoUtilTest {
       .setCallsSucceeded(2)
       .setCallsFailed(3)
       .setLastCallStartedTimestamp(Timestamps.fromMillis(4))
+      .build();
+  private final Server serverProto = Server
+      .newBuilder()
+      .setRef(serverRef)
+      .setData(serverData)
       .build();
 
   private final TestSocket socket = new TestSocket();
@@ -239,13 +261,7 @@ public final class ChannelzProtoUtilTest {
 
   @Test
   public void toServer() throws Exception {
-    assertEquals(
-        Server
-            .newBuilder()
-            .setRef(serverRef)
-            .setData(serverData)
-            .build(),
-        ChannelzProtoUtil.toServer(server));
+    assertEquals(serverProto, ChannelzProtoUtil.toServer(server));
   }
 
   @Test
@@ -255,19 +271,14 @@ public final class ChannelzProtoUtilTest {
 
   @Test
   public void toChannel() throws Exception {
-    Channel baseProto = Channel
-        .newBuilder()
-        .setRef(channelRef)
-        .setData(channelData)
-        .build();
-    assertEquals(baseProto, ChannelzProtoUtil.toChannel(channel));
+    assertEquals(channelProto, ChannelzProtoUtil.toChannel(channel));
 
     channel.stats = toBuilder(channel.stats)
         .setSubchannels(ImmutableList.<WithLogId>of(subchannel))
         .build();
 
     assertEquals(
-        baseProto
+        channelProto
             .toBuilder()
             .addSubchannelRef(subchannelRef)
             .build(),
@@ -278,7 +289,7 @@ public final class ChannelzProtoUtilTest {
         .setSubchannels(ImmutableList.<WithLogId>of(subchannel, otherSubchannel))
         .build();
     assertEquals(
-        baseProto
+        channelProto
             .toBuilder()
             .addSubchannelRef(subchannelRef)
             .addSubchannelRef(ChannelzProtoUtil.toSubchannelRef(otherSubchannel))
@@ -293,30 +304,19 @@ public final class ChannelzProtoUtilTest {
 
   @Test
   public void toSubchannel_noChildren() throws Exception {
-    Subchannel baseProto = Subchannel
-        .newBuilder()
-        .setRef(subchannelRef)
-        .setData(subchannelData)
-        .build();
     assertEquals(
-        baseProto,
+        subchannelProto,
         ChannelzProtoUtil.toSubchannel(subchannel));
   }
 
   @Test
   public void toSubchannel_socketChildren() throws Exception {
-    Subchannel baseProto = Subchannel
-        .newBuilder()
-        .setRef(subchannelRef)
-        .setData(subchannelData)
-        .build();
-
     subchannel.stats = toBuilder(subchannel.stats)
         .setSockets(ImmutableList.<WithLogId>of(socket))
         .build();
 
     assertEquals(
-        baseProto.toBuilder()
+        subchannelProto.toBuilder()
             .addSocketRef(socketRef)
             .build(),
         ChannelzProtoUtil.toSubchannel(subchannel));
@@ -326,7 +326,7 @@ public final class ChannelzProtoUtilTest {
         .setSockets(ImmutableList.<WithLogId>of(socket, otherSocket))
         .build();
     assertEquals(
-        baseProto
+        subchannelProto
             .toBuilder()
             .addSocketRef(socketRef)
             .addSocketRef(ChannelzProtoUtil.toSocketRef(otherSocket))
@@ -336,18 +336,12 @@ public final class ChannelzProtoUtilTest {
 
   @Test
   public void toSubchannel_subchannelChildren() throws Exception {
-    Subchannel baseProto = Subchannel
-        .newBuilder()
-        .setRef(subchannelRef)
-        .setData(subchannelData)
-        .build();
-
     TestChannel subchannel1 = new TestChannel();
     subchannel.stats = toBuilder(subchannel.stats)
         .setSubchannels(ImmutableList.<WithLogId>of(subchannel1))
         .build();
     assertEquals(
-        baseProto.toBuilder()
+        subchannelProto.toBuilder()
             .addSubchannelRef(ChannelzProtoUtil.toSubchannelRef(subchannel1))
             .build(),
         ChannelzProtoUtil.toSubchannel(subchannel));
@@ -357,12 +351,91 @@ public final class ChannelzProtoUtilTest {
         .setSubchannels(ImmutableList.<WithLogId>of(subchannel1, subchannel2))
         .build();
     assertEquals(
-        baseProto
+        subchannelProto
             .toBuilder()
             .addSubchannelRef(ChannelzProtoUtil.toSubchannelRef(subchannel1))
             .addSubchannelRef(ChannelzProtoUtil.toSubchannelRef(subchannel2))
             .build(),
         ChannelzProtoUtil.toSubchannel(subchannel));
+  }
+
+  @Test
+  public void toGetTopChannelsResponse() {
+    // empty results
+    assertEquals(
+        GetTopChannelsResponse.newBuilder().setEnd(true).build(),
+        ChannelzProtoUtil.toGetTopChannelResponse(
+            new RootChannelList(Collections.<Instrumented<ChannelStats>>emptyList(), true)));
+
+    // 1 result, paginated
+    assertEquals(
+        GetTopChannelsResponse
+            .newBuilder()
+            .addChannel(channelProto)
+            .build(),
+        ChannelzProtoUtil.toGetTopChannelResponse(
+            new RootChannelList(ImmutableList.<Instrumented<ChannelStats>>of(channel), false)));
+
+    // 1 result, end
+    assertEquals(
+        GetTopChannelsResponse
+            .newBuilder()
+            .addChannel(channelProto)
+            .setEnd(true)
+            .build(),
+        ChannelzProtoUtil.toGetTopChannelResponse(
+            new RootChannelList(ImmutableList.<Instrumented<ChannelStats>>of(channel), true)));
+
+    // 2 results, end
+    TestChannel channel2 = new TestChannel();
+    assertEquals(
+        GetTopChannelsResponse
+            .newBuilder()
+            .addChannel(channelProto)
+            .addChannel(ChannelzProtoUtil.toChannel(channel2))
+            .build(),
+        ChannelzProtoUtil.toGetTopChannelResponse(
+            new RootChannelList(
+                ImmutableList.<Instrumented<ChannelStats>>of(channel, channel2), false)));
+  }
+
+  @Test
+  public void toGetServersResponse() {
+    // empty results
+    assertEquals(
+        GetServersResponse.getDefaultInstance(),
+        ChannelzProtoUtil.toGetServersResponse(
+            new ServerList(Collections.<Instrumented<ServerStats>>emptyList(), false)));
+
+    // 1 result, paginated
+    assertEquals(
+        GetServersResponse
+            .newBuilder()
+            .addServer(serverProto)
+            .build(),
+        ChannelzProtoUtil.toGetServersResponse(
+            new ServerList(ImmutableList.<Instrumented<ServerStats>>of(server), false)));
+
+    // 1 result, end
+    assertEquals(
+        GetServersResponse
+            .newBuilder()
+            .addServer(serverProto)
+            .setEnd(true)
+            .build(),
+        ChannelzProtoUtil.toGetServersResponse(
+            new ServerList(ImmutableList.<Instrumented<ServerStats>>of(server), true)));
+
+    TestServer server2 = new TestServer();
+    // 2 results, end
+    assertEquals(
+        GetServersResponse
+            .newBuilder()
+            .addServer(serverProto)
+            .addServer(ChannelzProtoUtil.toServer(server2))
+            .build(),
+        ChannelzProtoUtil.toGetServersResponse(
+            new ServerList(ImmutableList.<Instrumented<ServerStats>>of(server, server2), false)));
   }
 
   private static ChannelStats.Builder toBuilder(ChannelStats stats) {
