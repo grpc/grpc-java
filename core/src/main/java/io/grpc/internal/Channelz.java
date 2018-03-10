@@ -43,6 +43,14 @@ public final class Channelz {
       = new ConcurrentHashMap<Long, Instrumented<ChannelStats>>();
   private final ConcurrentMap<Long, Instrumented<SocketStats>> sockets
       = new ConcurrentHashMap<Long, Instrumented<SocketStats>>();
+  private final ConcurrentMap<Long, ServerSocketMap> perServerSockets
+      = new ConcurrentHashMap<Long, ServerSocketMap>();
+
+  // A convenience class to avoid deeply nested types.
+  private static final class ServerSocketMap
+      extends ConcurrentSkipListMap<Long, Instrumented<SocketStats>> {
+    private static final long serialVersionUID = -7883772124944661414L;
+  }
 
   @VisibleForTesting
   public Channelz() {
@@ -52,24 +60,43 @@ public final class Channelz {
     return INSTANCE;
   }
 
+  /** Adds a server. */
   public void addServer(Instrumented<ServerStats> server) {
+    ServerSocketMap prev = perServerSockets.put(id(server), new ServerSocketMap());
+    assert prev == null;
     add(servers, server);
   }
 
+  /** Adds a subchannel. */
   public void addSubchannel(Instrumented<ChannelStats> subchannel) {
     add(subchannels, subchannel);
   }
 
+  /** Adds a root channel. */
   public void addRootChannel(Instrumented<ChannelStats> rootChannel) {
     add(rootChannels, rootChannel);
   }
 
+  /** Adds a socket. */
   public void addSocket(Instrumented<SocketStats> socket) {
     add(sockets, socket);
   }
 
+  /** Adds a server socket. */
+  public void addServerSocket(Instrumented<ServerStats> server, Instrumented<SocketStats> socket) {
+    add(sockets, socket);
+
+    ServerSocketMap serverSockets = perServerSockets.get(id(server));
+    assert serverSockets != null;
+    add(serverSockets, socket);
+  }
+
+  /** Removes a server. */
   public void removeServer(Instrumented<ServerStats> server) {
     remove(servers, server);
+    ServerSocketMap prev = perServerSockets.remove(id(server));
+    assert prev != null;
+    assert prev.isEmpty();
   }
 
   public void removeSubchannel(Instrumented<ChannelStats> subchannel) {
@@ -81,6 +108,16 @@ public final class Channelz {
   }
 
   public void removeSocket(Instrumented<SocketStats> socket) {
+    remove(sockets, socket);
+  }
+
+  /** Removes a server socket. */
+  public void removeServerSocket(
+      Instrumented<ServerStats> server, Instrumented<SocketStats> socket) {
+    ServerSocketMap serverSockets = perServerSockets.get(id(server));
+    assert serverSockets != null;
+    remove(serverSockets, socket);
+
     remove(sockets, socket);
   }
 
@@ -119,6 +156,22 @@ public final class Channelz {
     return new ServerList(serverList, !iterator.hasNext());
   }
 
+  /** Returns socket refs for a server. */
+  @Nullable
+  public ServerSocketsList getServerSockets(long serverId, long fromId, int maxPageSize) {
+    ServerSocketMap serverSockets = perServerSockets.get(serverId);
+    if (serverSockets == null) {
+      return null;
+    }
+    List<WithLogId> socketList = new ArrayList<WithLogId>();
+    Iterator<Instrumented<SocketStats>> iterator
+        = serverSockets.tailMap(fromId).values().iterator();
+    while (socketList.size() < maxPageSize && iterator.hasNext()) {
+      socketList.add(iterator.next());
+    }
+    return new ServerSocketsList(socketList, !iterator.hasNext());
+  }
+
   /** Returns a socket. */
   @Nullable
   public Instrumented<SocketStats> getSocket(long id) {
@@ -135,6 +188,17 @@ public final class Channelz {
     return contains(subchannels, subchannelRef);
   }
 
+  /** Gets a server socket. */
+  @VisibleForTesting
+  @Nullable
+  Instrumented<SocketStats> getServerSocketForTest(long serverId, long socketId) {
+    ServerSocketMap serverSockets = perServerSockets.get(serverId);
+    if (serverSockets == null) {
+      return null;
+    }
+    return serverSockets.get(socketId);
+  }
+
   public Instrumented<ChannelStats> getRootChannel(long id) {
     return rootChannels.get(id);
   }
@@ -145,11 +209,13 @@ public final class Channelz {
   }
 
   private static <T extends Instrumented<?>> void add(Map<Long, T> map, T object) {
-    map.put(object.getLogId().getId(), object);
+    T prev = map.put(object.getLogId().getId(), object);
+    assert prev == null;
   }
 
   private static <T extends Instrumented<?>> void remove(Map<Long, T> map, T object) {
-    map.remove(object.getLogId().getId());
+    T prev = map.remove(id(object));
+    assert prev != null;
   }
 
   private static <T extends Instrumented<?>> boolean contains(Map<Long, T> map, LogId id) {
@@ -174,6 +240,17 @@ public final class Channelz {
     /** Creates an instance. */
     public ServerList(List<Instrumented<ServerStats>> servers, boolean end) {
       this.servers = Preconditions.checkNotNull(servers);
+      this.end = end;
+    }
+  }
+
+  public static final class ServerSocketsList {
+    public final List<WithLogId> sockets;
+    public final boolean end;
+
+    /** Creates an instance. */
+    public ServerSocketsList(List<WithLogId> sockets, boolean end) {
+      this.sockets = sockets;
       this.end = end;
     }
   }
