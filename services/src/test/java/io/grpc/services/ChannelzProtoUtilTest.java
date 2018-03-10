@@ -163,12 +163,11 @@ public final class ChannelzProtoUtilTest {
 
   @Test
   public void toState() {
-    assertEquals(State.CONNECTING, ChannelzProtoUtil.toState(ConnectivityState.CONNECTING));
-    assertEquals(State.READY, ChannelzProtoUtil.toState(ConnectivityState.READY));
-    assertEquals(
-        State.TRANSIENT_FAILURE, ChannelzProtoUtil.toState(ConnectivityState.TRANSIENT_FAILURE));
-    assertEquals(State.IDLE, ChannelzProtoUtil.toState(ConnectivityState.IDLE));
-    assertEquals(State.SHUTDOWN, ChannelzProtoUtil.toState(ConnectivityState.SHUTDOWN));
+    for (ConnectivityState connectivityState : ConnectivityState.values()) {
+      assertEquals(
+          connectivityState.name(),
+          ChannelzProtoUtil.toState(connectivityState).getValueDescriptor().getName());
+    }
     assertEquals(State.UNKNOWN, ChannelzProtoUtil.toState(null));
   }
 

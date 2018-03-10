@@ -17,10 +17,12 @@
 package io.grpc.services;
 
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Int64Value;
 import com.google.protobuf.util.Timestamps;
 import io.grpc.ConnectivityState;
+import io.grpc.Status;
 import io.grpc.channelz.v1.Address;
 import io.grpc.channelz.v1.Address.OtherAddress;
 import io.grpc.channelz.v1.Address.TcpIpAddress;
@@ -88,9 +90,8 @@ final class ChannelzProtoUtil {
         .build();
   }
 
-  static Server toServer(Instrumented<ServerStats> obj)
-      throws ExecutionException, InterruptedException {
-    ServerStats stats = obj.getStats().get();
+  static Server toServer(Instrumented<ServerStats> obj) {
+    ServerStats stats = getFuture(obj.getStats());
     return Server
         .newBuilder()
         .setRef(toServerRef(obj))
@@ -108,9 +109,8 @@ final class ChannelzProtoUtil {
         .build();
   }
 
-  static Socket toSocket(Instrumented<SocketStats> obj)
-      throws ExecutionException, InterruptedException {
-    SocketStats socketStats = obj.getStats().get();
+  static Socket toSocket(Instrumented<SocketStats> obj) {
+    SocketStats socketStats = getFuture(obj.getStats());
     return Socket.newBuilder()
         .setRef(toSocketRef(obj))
         .setRemote(toAddress(socketStats.remote))
@@ -129,7 +129,7 @@ final class ChannelzProtoUtil {
               .setIpAddress(
                   ByteString.copyFrom(inetAddress.getAddress().getAddress()))
               .build());
-    } else if (address.getClass().getName().equals("io.netty.channel.unix.DomainSocketAddress")) {
+    } else if (address.getClass().getName().endsWith("io.netty.channel.unix.DomainSocketAddress")) {
       builder.setUdsAddress(
           UdsAddress
               .newBuilder()
@@ -165,9 +165,8 @@ final class ChannelzProtoUtil {
         .build();
   }
 
-  static Channel toChannel(Instrumented<ChannelStats> channel)
-      throws ExecutionException, InterruptedException {
-    ChannelStats stats = channel.getStats().get();
+  static Channel toChannel(Instrumented<ChannelStats> channel) {
+    ChannelStats stats = getFuture(channel.getStats());
     Channel.Builder channelBuilder = Channel
         .newBuilder()
         .setRef(toChannelRef(channel))
@@ -192,24 +191,18 @@ final class ChannelzProtoUtil {
   }
 
   static State toState(ConnectivityState state) {
-    if (state == ConnectivityState.CONNECTING) {
-      return State.CONNECTING;
-    } else if (state == ConnectivityState.READY) {
-      return State.READY;
-    } else if (state == ConnectivityState.TRANSIENT_FAILURE) {
-      return State.TRANSIENT_FAILURE;
-    } else if (state == ConnectivityState.IDLE) {
-      return State.IDLE;
-    } else if (state == ConnectivityState.SHUTDOWN) {
-      return State.SHUTDOWN;
-    } else {
+    if (state == null) {
+      return State.UNKNOWN;
+    }
+    try {
+      return Enum.valueOf(State.class, state.name());
+    } catch (IllegalArgumentException e) {
       return State.UNKNOWN;
     }
   }
 
-  static Subchannel toSubchannel(Instrumented<ChannelStats> subchannel)
-      throws ExecutionException, InterruptedException {
-    ChannelStats stats = subchannel.getStats().get();
+  static Subchannel toSubchannel(Instrumented<ChannelStats> subchannel) {
+    ChannelStats stats = getFuture(subchannel.getStats());
     Subchannel.Builder subchannelBuilder = Subchannel
         .newBuilder()
         .setRef(toSubchannelRef(subchannel))
@@ -222,5 +215,15 @@ final class ChannelzProtoUtil {
       subchannelBuilder.addSubchannelRef(toSubchannelRef(childSubchannel));
     }
     return subchannelBuilder.build();
+  }
+
+  private static <T> T getFuture(ListenableFuture<T> future) {
+    try {
+      return future.get();
+    } catch (InterruptedException e) {
+      throw Status.INTERNAL.withCause(e).asRuntimeException();
+    } catch (ExecutionException e) {
+      throw Status.INTERNAL.withCause(e).asRuntimeException();
+    }
   }
 }
