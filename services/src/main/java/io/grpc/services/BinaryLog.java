@@ -297,7 +297,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
     return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
       @Override
       public void start(Listener<RespT> responseListener, Metadata headers) {
-        writer.logSendInitialMetadata(headers, false, DUMMY_CALLID, DUMMY_SOCKET);
+        writer.logSendInitialMetadata(headers, CLIENT, DUMMY_CALLID, DUMMY_SOCKET);
         ClientCall.Listener<RespT> wListener =
             new SimpleForwardingClientCallListener<RespT>(responseListener) {
               @Override
@@ -312,13 +312,13 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
 
               @Override
               public void onHeaders(Metadata headers) {
-                writer.logRecvInitialMetadata(headers, false, DUMMY_CALLID, DUMMY_SOCKET);
+                writer.logRecvInitialMetadata(headers, CLIENT, DUMMY_CALLID, DUMMY_SOCKET);
                 super.onHeaders(headers);
               }
 
               @Override
               public void onClose(Status status, Metadata trailers) {
-                writer.logTrailingMetadata(trailers, false, DUMMY_CALLID);
+                writer.logTrailingMetadata(trailers, CLIENT, DUMMY_CALLID);
                 super.onClose(status, trailers);
               }
             };
