@@ -38,7 +38,7 @@ import java.lang.annotation.Target;
  * annotation to their own code.
  *
  * @see <a href="https://github.com/grpc/grpc-java-api-checker">grpc-java-api-checker</a>, an Error
- * Prone plugin to automatically check for usages of this API.
+ *     Prone plugin to automatically check for usages of this API.
  */
 @Retention(RetentionPolicy.CLASS)
 @Target({
