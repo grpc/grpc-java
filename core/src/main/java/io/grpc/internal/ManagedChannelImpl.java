@@ -822,9 +822,6 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
             public void run() {
               exitIdleMode();
               if (subchannelPicker != null) {
-                if (shutdown.get() || panicMode) {
-                  return;
-                }
                 subchannelPicker.requestConnection();
               }
             }
