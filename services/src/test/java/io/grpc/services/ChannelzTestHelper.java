@@ -73,9 +73,9 @@ final class ChannelzTestHelper {
     private final LogId id = LogId.allocate("server");
     ServerStats serverStats = new ServerStats(
       /*callsStarted=*/ 1,
-      /*callsSucceeded*/ 2,
-      /*callsFailed*/ 3,
-      /*lastCallStartedMillis*/ 4);
+      /*callsSucceeded=*/ 2,
+      /*callsFailed=*/ 3,
+      /*lastCallStartedMillis=*/ 4);
 
     @Override
     public ListenableFuture<ServerStats> getStats() {
@@ -91,7 +91,7 @@ final class ChannelzTestHelper {
   }
 
   static final class TestChannel implements Instrumented<ChannelStats> {
-    private final LogId id = LogId.allocate("subchannel");
+    private final LogId id = LogId.allocate("channel-or-subchannel");
 
     ChannelStats stats = new ChannelStats(
       /*target=*/ "sometarget",
