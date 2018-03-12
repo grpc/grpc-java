@@ -19,10 +19,15 @@ package io.grpc.okhttp;
 import com.google.common.base.Preconditions;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
+import io.grpc.internal.Channelz;
 import io.grpc.internal.TransportFrameUtil;
 import io.grpc.okhttp.internal.CipherSuite;
 import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.framed.Header;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.net.Socket;
+import java.net.SocketException;
 import java.util.List;
 
 /**
@@ -77,6 +82,76 @@ class Utils {
         .tlsVersions(tlsVersions)
         .cipherSuites(cipherSuites)
         .build();
+  }
+
+  /**
+   * Attempts to capture all known socket options and return the results as a
+   * {@link Channelz.SocketOptions}. If getting a socket option threw an exception,
+   * log the error to the output object and move on to the next option.
+   */
+  static Channelz.SocketOptions getSocketOptions(Socket socket) {
+    Channelz.SocketOptions.Builder builder = new Channelz.SocketOptions.Builder();
+    try {
+      builder.setSocketOptionLingerSeconds(socket.getSoLinger());
+    } catch (SocketException e) {
+      builder.addOption("channelzerror:SO_LINGER", exceptionToString(e));
+    }
+
+    try {
+      builder.setSocketOptionTimeoutMillis(socket.getSoTimeout());
+    } catch (Exception e) {
+      builder.addOption("channelzerror:SO_TIMEOUT", exceptionToString(e));
+    }
+
+    try {
+      builder.addOption("TCP_NODELAY", socket.getTcpNoDelay());
+    } catch (SocketException e) {
+      builder.addOption("channelzerror:TCP_NODELAY", exceptionToString(e));
+    }
+
+    try {
+      builder.addOption("SO_REUSEADDR", socket.getReuseAddress());
+    } catch (SocketException e) {
+      builder.addOption("channelzerror:SO_REUSEADDR", exceptionToString(e));
+    }
+
+    try {
+      builder.addOption("SO_SNDBUF", socket.getSendBufferSize());
+    } catch (SocketException e) {
+      builder.addOption("channelzerror:SO_SNDBUF", exceptionToString(e));
+    }
+
+    try {
+      builder.addOption("SO_RECVBUF", socket.getReceiveBufferSize());
+    } catch (SocketException e) {
+      builder.addOption("channelzerror:SO_RECVBUF", exceptionToString(e));
+    }
+
+    try {
+      builder.addOption("SO_KEEPALIVE", socket.getKeepAlive());
+    } catch (SocketException e) {
+      builder.addOption("channelzerror:SO_KEEPALIVE", exceptionToString(e));
+    }
+
+    try {
+      builder.addOption("SO_OOBINLINE", socket.getOOBInline());
+    } catch (SocketException e) {
+      builder.addOption("channelzerror:SO_OOBINLINE", exceptionToString(e));
+    }
+
+    try {
+      builder.addOption("IP_TOS", socket.getTrafficClass());
+    } catch (SocketException e) {
+      builder.addOption("channelzerror:IP_TOS", exceptionToString(e));
+    }
+    return builder.build();
+  }
+
+  private static String exceptionToString(Exception e) {
+    StringWriter sw = new StringWriter();
+    PrintWriter pw = new PrintWriter(sw);
+    e.printStackTrace(pw);
+    return sw.toString();
   }
 
   private Utils() {
