@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import java.net.SocketAddress;
 
@@ -31,8 +32,8 @@ final class PairSocketAddress extends SocketAddress {
 
   @VisibleForTesting
   PairSocketAddress(SocketAddress address, Attributes attributes) {
-    this.address = address;
-    this.attributes = attributes;
+    this.address = Preconditions.checkNotNull(address);
+    this.attributes = Preconditions.checkNotNull(attributes);
   }
 
   public Attributes getAttributes() {

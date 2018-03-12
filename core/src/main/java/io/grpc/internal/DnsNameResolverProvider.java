@@ -37,8 +37,6 @@ import java.net.URI;
  * </ul>
  */
 public final class DnsNameResolverProvider extends NameResolverProvider {
-  public static final Attributes.Key<ProxyDetector> PROXY_DETECTOR_KEY
-      = Attributes.Key.of("proxy-detector-key");
 
   private static final String SCHEME = "dns";
 
@@ -49,17 +47,12 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
       Preconditions.checkArgument(targetPath.startsWith("/"),
           "the path component (%s) of the target (%s) must start with '/'", targetPath, targetUri);
       String name = targetPath.substring(1);
-      // We want to eventually let the ProxyDetector be passed in from ManagedChannel
-      ProxyDetector proxyDetector = params.get(PROXY_DETECTOR_KEY);
-      if (proxyDetector == null) {
-        proxyDetector = GrpcUtil.getDefaultProxyDetector();
-      }
       return new DnsNameResolver(
           targetUri.getAuthority(),
           name,
           params,
           GrpcUtil.SHARED_CHANNEL_EXECUTOR,
-          proxyDetector);
+          GrpcUtil.getDefaultProxyDetector());
     } else {
       return null;
     }
