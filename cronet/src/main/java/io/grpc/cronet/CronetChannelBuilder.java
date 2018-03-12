@@ -160,7 +160,7 @@ public final class CronetChannelBuilder extends
     trafficStatsUid = uid;
     return this;
   }
-  
+
   @Override
   protected final ClientTransportFactory buildTransportFactory() {
     return new CronetTransportFactory(
