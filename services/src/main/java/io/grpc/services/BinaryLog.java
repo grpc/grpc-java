@@ -416,10 +416,10 @@ final class BinaryLog {
   static io.grpc.binarylog.Metadata metadataToProto(Metadata metadata, int maxHeaderBytes) {
     Preconditions.checkState(maxHeaderBytes >= 0);
     Builder builder = io.grpc.binarylog.Metadata.newBuilder();
-    if (maxHeaderBytes > 0) {
-      byte[][] serialized = InternalMetadata.serialize(metadata);
+    // This code is tightly coupled with Metadata's implementation
+    byte[][] serialized;
+    if (maxHeaderBytes > 0 && (serialized = InternalMetadata.serialize(metadata)) != null) {
       int written = 0;
-      // This code is tightly coupled with Metadata's implementation
       for (int i = 0; i < serialized.length && written < maxHeaderBytes; i += 2) {
         byte[] key = serialized[i];
         byte[] value = serialized[i + 1];
