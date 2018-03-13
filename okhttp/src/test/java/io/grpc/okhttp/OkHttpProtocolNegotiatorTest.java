@@ -112,7 +112,7 @@ public class OkHttpProtocolNegotiatorTest {
 
   @Test
   public void negotiate_handshakeFails() throws IOException {
-    SSLParameters parameters = mock(SSLParameters.class);
+    SSLParameters parameters = new SSLParameters();
     OkHttpProtocolNegotiator negotiator = OkHttpProtocolNegotiator.get();
     doReturn(parameters).when(sock).getSSLParameters();
     doThrow(new IOException()).when(sock).startHandshake();

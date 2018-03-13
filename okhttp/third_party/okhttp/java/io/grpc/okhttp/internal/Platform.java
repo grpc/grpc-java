@@ -30,6 +30,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
 import java.security.AccessController;
+import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
@@ -40,6 +41,7 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
 import okio.Buffer;
@@ -211,8 +213,29 @@ public class Platform {
 
     // Find JDK9+ ALPN support
     try {
+      // getApplicationProtocol() may throw UnsupportedOperationException, so first construct a
+      // dummy SSLEngine and verify the method does not throw.
+      SSLContext context = SSLContext.getInstance("TLS", sslProvider);
+      context.init(null, null, null);
+      SSLEngine engine = context.createSSLEngine();
+      Method getEngineApplicationProtocol =
+          AccessController.doPrivileged(
+              new PrivilegedExceptionAction<Method>() {
+                @Override
+                public Method run() throws Exception {
+                  return SSLEngine.class.getMethod("getApplicationProtocol");
+                }
+              });
+      getEngineApplicationProtocol.invoke(engine);
+
       Method setApplicationProtocols =
-          SSLParameters.class.getMethod("setApplicationProtocols", String[].class);
+          AccessController.doPrivileged(
+              new PrivilegedExceptionAction<Method>() {
+                @Override
+                public Method run() throws Exception {
+                  return SSLParameters.class.getMethod("setApplicationProtocols", String[].class);
+                }
+              });
       Method getApplicationProtocol =
           AccessController.doPrivileged(
               new PrivilegedExceptionAction<Method>() {
@@ -222,8 +245,11 @@ public class Platform {
                 }
               });
       return new JdkAlpnPlatform(sslProvider, setApplicationProtocols, getApplicationProtocol);
-    } catch (NoSuchMethodException ignored) {
+    } catch (NoSuchAlgorithmException ignored) {
+    } catch (KeyManagementException ignored) {
     } catch (PrivilegedActionException ignored) {
+    } catch (IllegalAccessException ignored) {
+    } catch (InvocationTargetException ignored) {
     }
 
     // Find Jetty's ALPN extension for OpenJDK.
