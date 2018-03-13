@@ -18,9 +18,14 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
+import static org.mockito.Mockito.mock;
 
 import io.grpc.Metadata;
+import io.grpc.Server;
 import io.grpc.ServerStreamTracer;
+import io.grpc.internal.AbstractServerImplBuilder.PostBuildOption;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
 import io.grpc.internal.testing.StatsTestUtils.FakeTagContextBinarySerializer;
 import io.grpc.internal.testing.StatsTestUtils.FakeTagger;
@@ -83,6 +88,28 @@ public class AbstractServerImplBuilderTest {
     assertThat(factories).containsExactly(DUMMY_USER_TRACER);
   }
 
+  @Test
+  public void postBuildOption_default() {
+    assertNotNull(builder.build());
+  }
+
+  @Test
+  public void postBuildOption_custom() {
+    final Server expected = mock(Server.class);
+    PostBuildOption postBuildOption =
+        new PostBuildOption() {
+          @Override
+          public Server onBuilt(Server server) {
+            return expected;
+          }
+        };
+
+    builder.postBuildOption(postBuildOption);
+    Server actual = builder.build();
+
+    assertSame(expected, actual);
+  }
+
   static class Builder extends AbstractServerImplBuilder<Builder> {
     Builder() {
       overrideCensusStatsModule(
@@ -95,9 +122,9 @@ public class AbstractServerImplBuilderTest {
     }
 
     @Override
-    protected io.grpc.internal.InternalServer buildTransportServer(
+    protected InternalServer buildTransportServer(
         List<ServerStreamTracer.Factory> streamTracerFactories) {
-      throw new UnsupportedOperationException();
+      return mock(InternalServer.class);
     }
 
     @Override
@@ -105,5 +132,4 @@ public class AbstractServerImplBuilderTest {
       throw new UnsupportedOperationException();
     }
   }
-
 }

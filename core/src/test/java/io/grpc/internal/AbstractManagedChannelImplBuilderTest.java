@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
@@ -34,8 +35,10 @@ import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.LoadBalancer;
+import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
+import io.grpc.internal.AbstractManagedChannelImplBuilder.PostBuildOption;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
 import io.grpc.internal.testing.StatsTestUtils.FakeTagContextBinarySerializer;
 import io.grpc.internal.testing.StatsTestUtils.FakeTagger;
@@ -61,7 +64,7 @@ public class AbstractManagedChannelImplBuilderTest {
         }
       };
 
-  private Builder builder = new Builder("fake");
+  private Builder builder = new Builder("fake:123");
   private Builder directAddressBuilder = new Builder(new SocketAddress(){}, "fake");
 
   @Test
@@ -395,6 +398,29 @@ public class AbstractManagedChannelImplBuilderTest {
     assertTrue(builder.retryDisabled);
   }
 
+
+  @Test
+  public void postBuildOption_default() {
+    assertNotNull(builder.build());
+  }
+
+  @Test
+  public void postBuildOption_custom() {
+    final ManagedChannel expected = mock(ManagedChannel.class);
+    PostBuildOption postBuildOption =
+        new PostBuildOption() {
+          @Override
+          public ManagedChannel onBuilt(ManagedChannel server) {
+            return expected;
+          }
+        };
+
+    builder.postBuildOption(postBuildOption);
+    ManagedChannel actual = builder.build();
+
+    assertSame(expected, actual);
+  }
+
   static class Builder extends AbstractManagedChannelImplBuilder<Builder> {
     Builder(String target) {
       super(target);
@@ -420,7 +446,7 @@ public class AbstractManagedChannelImplBuilderTest {
 
     @Override
     protected ClientTransportFactory buildTransportFactory() {
-      throw new UnsupportedOperationException();
+      return mock(ClientTransportFactory.class);
     }
   }
 }
