@@ -281,6 +281,11 @@ class NettyClientStream extends AbstractClientStream {
     }
 
     @Override
+    public void deframerClosed(boolean hasPartialMessageIgnored) {
+      super.deframerClosed(hasPartialMessageIgnored);
+    }
+
+    @Override
     public void bytesRead(int processedBytes) {
       handler.returnProcessedBytes(http2Stream, processedBytes);
       handler.getWriteQueue().scheduleFlush();
@@ -293,6 +298,9 @@ class NettyClientStream extends AbstractClientStream {
 
     void transportHeadersReceived(Http2Headers headers, boolean endOfStream) {
       if (endOfStream) {
+        if (!isOutboundClosed()) {
+          handler.getWriteQueue().enqueue(new CancelClientStreamCommand(this, null), true);
+        }
         transportTrailersReceived(Utils.convertTrailers(headers));
       } else {
         transportHeadersReceived(Utils.convertHeaders(headers));
