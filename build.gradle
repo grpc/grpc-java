@@ -1,6 +1,5 @@
 buildscript {
   repositories {
-    mavenCentral()
     mavenLocal()
     maven {
       url "https://plugins.gradle.org/m2/"
@@ -53,17 +52,17 @@ subprojects {
     idea.module.inheritOutputDirs = true
 
     group = "io.grpc"
-    version = "1.11.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.12.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     sourceCompatibility = 1.6
     targetCompatibility = 1.6
 
     repositories {
-        mavenCentral()
-        mavenLocal()
         maven {
-          url "https://oss.sonatype.org/content/repositories/snapshots/"
+            // The google mirror is less flaky than mavenCentral()
+            url "https://maven-central.storage-download.googleapis.com/repos/central/data/"
         }
+        mavenLocal()
     }
 
     [compileJava, compileTestJava, compileJmhJava].each() {
@@ -176,8 +175,10 @@ subprojects {
           [compileJava, compileTestJava, compileJmhJava].each() {
             // Protobuf-generated code produces some warnings.
             // https://github.com/google/protobuf/issues/2718
-            it.options.compilerArgs += ["-Xlint:-cast", "-Xep:MissingOverride:OFF",
-                "-Xep:ReferenceEquality:OFF", "-Xep:FunctionalInterfaceClash:OFF"]
+            it.options.compilerArgs += [
+                "-Xlint:-cast",
+                "-XepExcludedPaths:.*/src/generated/[^/]+/java/.*",
+            ]
           }
         }
 

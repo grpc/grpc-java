@@ -1,6 +1,9 @@
 buildscript {
     repositories {
-        mavenCentral()
+        maven {
+            // The google mirror is less flaky than mavenCentral()
+            url "https://maven-central.storage-download.googleapis.com/repos/central/data/"
+        }
         mavenLocal()
     }
     dependencies {
@@ -25,8 +28,7 @@ dependencies {
 compileTestJava {
   // Protobuf-generated Lite produces quite a few warnings.
   options.compilerArgs += ["-Xlint:-rawtypes", "-Xlint:-unchecked", "-Xlint:-fallthrough",
-        "-Xep:MissingOverride:OFF", "-Xep:ReferenceEquality:OFF", "-Xep:FallThrough:OFF",
-        "-Xep:JavaLangClash:OFF" /* The Enum protobuf clashes */]
+        "-XepExcludedPaths:.*/build/generated/source/proto/.*"]
 }
 
 protobuf {

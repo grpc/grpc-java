@@ -37,13 +37,16 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusException;
-import io.grpc.internal.Channelz.TransportStats;
+import io.grpc.internal.Channelz.Security;
+import io.grpc.internal.Channelz.SocketStats;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
 import io.grpc.internal.LogId;
+import io.grpc.internal.ProxyParameters;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.StatsTraceContext;
@@ -176,25 +179,23 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   private long keepAliveTimeNanos;
   private long keepAliveTimeoutNanos;
   private boolean keepAliveWithoutCalls;
-  @Nullable
-  private final InetSocketAddress proxyAddress;
-  @Nullable
-  private final String proxyUsername;
-  @Nullable
-  private final String proxyPassword;
   private final Runnable tooManyPingsRunnable;
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
+
+  @VisibleForTesting
+  @Nullable
+  final ProxyParameters proxy;
 
   // The following fields should only be used for test.
   Runnable connectingCallback;
   SettableFuture<Void> connectedFuture;
 
+
   OkHttpClientTransport(InetSocketAddress address, String authority, @Nullable String userAgent,
       Executor executor, @Nullable SSLSocketFactory sslSocketFactory,
       @Nullable HostnameVerifier hostnameVerifier, ConnectionSpec connectionSpec,
-      int maxMessageSize, @Nullable InetSocketAddress proxyAddress, @Nullable String proxyUsername,
-      @Nullable String proxyPassword, Runnable tooManyPingsRunnable,
+      int maxMessageSize, @Nullable ProxyParameters proxy, Runnable tooManyPingsRunnable,
       TransportTracer transportTracer) {
     this.address = Preconditions.checkNotNull(address, "address");
     this.defaultAuthority = authority;
@@ -209,9 +210,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     this.connectionSpec = Preconditions.checkNotNull(connectionSpec, "connectionSpec");
     this.stopwatchFactory = GrpcUtil.STOPWATCH_SUPPLIER;
     this.userAgent = GrpcUtil.getGrpcUserAgent("okhttp", userAgent);
-    this.proxyAddress = proxyAddress;
-    this.proxyUsername = proxyUsername;
-    this.proxyPassword = proxyPassword;
+    this.proxy = proxy;
     this.tooManyPingsRunnable =
         Preconditions.checkNotNull(tooManyPingsRunnable, "tooManyPingsRunnable");
     this.transportTracer = Preconditions.checkNotNull(transportTracer);
@@ -249,9 +248,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     this.connectionSpec = null;
     this.connectingCallback = connectingCallback;
     this.connectedFuture = Preconditions.checkNotNull(connectedFuture, "connectedFuture");
-    this.proxyAddress = null;
-    this.proxyUsername = null;
-    this.proxyPassword = null;
+    this.proxy = null;
     this.tooManyPingsRunnable =
         Preconditions.checkNotNull(tooManyPingsRunnable, "tooManyPingsRunnable");
     this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
@@ -455,10 +452,11 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         BufferedSink sink;
         Socket sock;
         try {
-          if (proxyAddress == null) {
+          if (proxy == null) {
             sock = new Socket(address.getAddress(), address.getPort());
           } else {
-            sock = createHttpProxySocket(address, proxyAddress, proxyUsername, proxyPassword);
+            sock = createHttpProxySocket(
+                address, proxy.proxyAddress, proxy.username, proxy.password);
           }
 
           if (sslSocketFactory != null) {
@@ -736,12 +734,14 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         Map.Entry<Integer, OkHttpClientStream> entry = it.next();
         if (entry.getKey() > lastKnownStreamId) {
           it.remove();
-          entry.getValue().transportState().transportReportStatus(status, false, new Metadata());
+          entry.getValue().transportState().transportReportStatus(
+              status, RpcProgress.REFUSED, false, new Metadata());
         }
       }
 
       for (OkHttpClientStream stream : pendingStreams) {
-        stream.transportState().transportReportStatus(status, true, new Metadata());
+        stream.transportState().transportReportStatus(
+            status, RpcProgress.REFUSED, true, new Metadata());
       }
       pendingStreams.clear();
       maybeClearInUse();
@@ -768,6 +768,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   void finishStream(
       int streamId,
       @Nullable Status status,
+      RpcProgress rpcProgress,
       boolean stopDelivery,
       @Nullable ErrorCode errorCode,
       @Nullable Metadata trailers) {
@@ -782,6 +783,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
               .transportState()
               .transportReportStatus(
                   status,
+                  rpcProgress,
                   stopDelivery,
                   trailers != null ? trailers : new Metadata());
         }
@@ -893,10 +895,14 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public ListenableFuture<TransportStats> getStats() {
+  public ListenableFuture<SocketStats> getStats() {
     synchronized (lock) {
-      SettableFuture<TransportStats> ret = SettableFuture.create();
-      ret.set(transportTracer.getStats());
+      SettableFuture<SocketStats> ret = SettableFuture.create();
+      ret.set(new SocketStats(
+          transportTracer.getStats(),
+          socket.getLocalSocketAddress(),
+          socket.getRemoteSocketAddress(),
+          new Security()));
       return ret;
     }
   }
@@ -1019,7 +1025,10 @@ class OkHttpClientTransport implements ConnectionClientTransport {
       Status status = toGrpcStatus(errorCode).augmentDescription("Rst Stream");
       boolean stopDelivery =
           (status.getCode() == Code.CANCELLED || status.getCode() == Code.DEADLINE_EXCEEDED);
-      finishStream(streamId, status, stopDelivery, null, null);
+      finishStream(
+          streamId, status,
+          errorCode == ErrorCode.REFUSED_STREAM ? RpcProgress.REFUSED : RpcProgress.PROCESSED,
+          stopDelivery, null, null);
     }
 
     @Override
@@ -1111,8 +1120,9 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         if (streamId == 0) {
           onError(ErrorCode.PROTOCOL_ERROR, errorMsg);
         } else {
-          finishStream(streamId,
-              Status.INTERNAL.withDescription(errorMsg), false, ErrorCode.PROTOCOL_ERROR, null);
+          finishStream(
+              streamId, Status.INTERNAL.withDescription(errorMsg), RpcProgress.PROCESSED, false,
+              ErrorCode.PROTOCOL_ERROR, null);
         }
         return;
       }

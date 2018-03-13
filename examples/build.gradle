@@ -3,7 +3,10 @@ apply plugin: 'com.google.protobuf'
 
 buildscript {
   repositories {
-    mavenCentral()
+    maven {
+      // The google mirror is less flaky than mavenCentral()
+      url "https://maven-central.storage-download.googleapis.com/repos/central/data/"
+    }
   }
   dependencies {
     // ASSUMES GRADLE 2.12 OR HIGHER. Use plugin version 0.7.5 with earlier
@@ -13,7 +16,10 @@ buildscript {
 }
 
 repositories {
-  mavenCentral()
+  maven {
+      // The google mirror is less flaky than mavenCentral()
+    url "https://maven-central.storage-download.googleapis.com/repos/central/data/"
+  }
   mavenLocal()
 }
 
@@ -22,7 +28,7 @@ repositories {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.11.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.12.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def nettyTcNativeVersion = '2.0.7.Final'
 
 dependencies {

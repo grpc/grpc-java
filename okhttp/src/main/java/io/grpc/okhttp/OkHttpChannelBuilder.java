@@ -16,6 +16,7 @@
 
 package io.grpc.okhttp;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
@@ -105,6 +106,7 @@ public class OkHttpChannelBuilder extends
   }
 
   private Executor transportExecutor;
+  private ScheduledExecutorService scheduledExecutorService;
 
   private SSLSocketFactory sslSocketFactory;
   private HostnameVerifier hostnameVerifier;
@@ -273,7 +275,7 @@ public class OkHttpChannelBuilder extends
    * <p>By default {@link #DEFAULT_CONNECTION_SPEC} will be used.
    *
    * <p>This method is only used when building a secure connection. For plaintext
-   * connection, use {@link #usePlaintext} instead.
+   * connection, use {@link #usePlaintext()} instead.
    *
    * @throws IllegalArgumentException
    *         If {@code connectionSpec} is not with TLS
@@ -286,14 +288,26 @@ public class OkHttpChannelBuilder extends
 
   /**
    * Equivalent to using {@link #negotiationType(NegotiationType)} with {@code PLAINTEXT}.
+   *
+   * @deprecated use {@link #usePlaintext()} instead.
    */
   @Override
+  @Deprecated
   public final OkHttpChannelBuilder usePlaintext(boolean skipNegotiation) {
     if (skipNegotiation) {
       negotiationType(NegotiationType.PLAINTEXT);
     } else {
       throw new IllegalArgumentException("Plaintext negotiation not currently supported");
     }
+    return this;
+  }
+
+  /**
+   * Equivalent to using {@link #negotiationType(NegotiationType)} with {@code PLAINTEXT}.
+   */
+  @Override
+  public final OkHttpChannelBuilder usePlaintext() {
+    negotiationType(NegotiationType.PLAINTEXT);
     return this;
   }
 
@@ -306,11 +320,28 @@ public class OkHttpChannelBuilder extends
     return this;
   }
 
+  /**
+   * Provides a custom scheduled executor service.
+   *
+   * <p>It's an optional parameter. If the user has not provided a scheduled executor service when
+   * the channel is built, the builder will use a static cached thread pool.
+   *
+   * @return this
+   *
+   * @since 1.11.0
+   */
+  public final OkHttpChannelBuilder scheduledExecutorService(
+      ScheduledExecutorService scheduledExecutorService) {
+    this.scheduledExecutorService =
+        checkNotNull(scheduledExecutorService, "scheduledExecutorService");
+    return this;
+  }
+
   @Override
   @Internal
   protected final ClientTransportFactory buildTransportFactory() {
     boolean enableKeepAlive = keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED;
-    return new OkHttpTransportFactory(transportExecutor,
+    return new OkHttpTransportFactory(transportExecutor, scheduledExecutorService,
         createSocketFactory(), hostnameVerifier, connectionSpec, maxInboundMessageSize(),
         enableKeepAlive, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
         transportTracerFactory);
@@ -379,6 +410,7 @@ public class OkHttpChannelBuilder extends
   static final class OkHttpTransportFactory implements ClientTransportFactory {
     private final Executor executor;
     private final boolean usingSharedExecutor;
+    private final boolean usingSharedScheduler;
     private final TransportTracer.Factory transportTracerFactory;
     @Nullable
     private final SSLSocketFactory socketFactory;
@@ -390,11 +422,11 @@ public class OkHttpChannelBuilder extends
     private final AtomicBackoff keepAliveTimeNanos;
     private final long keepAliveTimeoutNanos;
     private final boolean keepAliveWithoutCalls;
-    private final ScheduledExecutorService timeoutService =
-        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
+    private final ScheduledExecutorService timeoutService;
     private boolean closed;
 
     private OkHttpTransportFactory(Executor executor,
+        @Nullable ScheduledExecutorService timeoutService,
         @Nullable SSLSocketFactory socketFactory,
         @Nullable HostnameVerifier hostnameVerifier,
         ConnectionSpec connectionSpec,
@@ -404,6 +436,9 @@ public class OkHttpChannelBuilder extends
         long keepAliveTimeoutNanos,
         boolean keepAliveWithoutCalls,
         TransportTracer.Factory transportTracerFactory) {
+      usingSharedScheduler = timeoutService == null;
+      this.timeoutService = usingSharedScheduler
+          ? SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE) : timeoutService;
       this.socketFactory = socketFactory;
       this.hostnameVerifier = hostnameVerifier;
       this.connectionSpec = connectionSpec;
@@ -448,9 +483,7 @@ public class OkHttpChannelBuilder extends
           hostnameVerifier,
           Utils.convertSpec(connectionSpec),
           maxMessageSize,
-          proxy == null ? null : proxy.proxyAddress,
-          proxy == null ? null : proxy.username,
-          proxy == null ? null : proxy.password,
+          proxy,
           tooManyPingsRunnable,
           transportTracerFactory.create());
       if (enableKeepAlive) {
@@ -471,7 +504,10 @@ public class OkHttpChannelBuilder extends
         return;
       }
       closed = true;
-      SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timeoutService);
+
+      if (usingSharedScheduler) {
+        SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timeoutService);
+      }
 
       if (usingSharedExecutor) {
         SharedResourceHolder.release(SHARED_EXECUTOR, (ExecutorService) executor);

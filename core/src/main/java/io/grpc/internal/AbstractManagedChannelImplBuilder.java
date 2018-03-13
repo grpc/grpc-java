@@ -133,6 +133,8 @@ public abstract class AbstractManagedChannelImplBuilder
   long perRpcBufferLimit = DEFAULT_PER_RPC_BUFFER_LIMIT_IN_BYTES;
   boolean retryDisabled = true; // TODO(zdapeng): default to false
 
+  Channelz channelz = Channelz.instance();
+
   protected TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
 
   private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
@@ -386,7 +388,7 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Override
   public ManagedChannel build() {
-    return new ManagedChannelOrphanWrapper(new ManagedChannelImpl(
+    return new ManagedChannelImpl(
         this,
         buildTransportFactory(),
         // TODO(carl-mastrangelo): Allow clients to pass this in
@@ -394,8 +396,7 @@ public abstract class AbstractManagedChannelImplBuilder
         SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
         GrpcUtil.STOPWATCH_SUPPLIER,
         getEffectiveInterceptors(),
-        GrpcUtil.getProxyDetector(),
-        CallTracer.getDefaultFactory()));
+        CallTracer.getDefaultFactory());
   }
 
   // Temporarily disable retry when stats or tracing is enabled to avoid breakage, until we know

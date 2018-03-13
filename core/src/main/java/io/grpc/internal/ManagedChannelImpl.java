@@ -119,7 +119,11 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       @Override
       void handleUncaughtThrowable(Throwable t) {
         super.handleUncaughtThrowable(t);
-        panic(t);
+        // Disabled because it breaks some tests, as it detects pre-existing issues.
+        // See #3293
+        if (false) {
+          panic(t);
+        }
       }
     };
 
@@ -147,8 +151,6 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
   // Only null after channel is terminated. Must be assigned from the channelExecutor.
   private NameResolver nameResolver;
 
-  private final ProxyDetector proxyDetector;
-
   // Must be accessed from the channelExecutor.
   private boolean nameResolverStarted;
 
@@ -170,7 +172,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
   private final Set<InternalSubchannel> subchannels = new HashSet<InternalSubchannel>(16, .75f);
 
   // Must be mutated from channelExecutor
-  private final Set<InternalSubchannel> oobChannels = new HashSet<InternalSubchannel>(1, .75f);
+  private final Set<OobChannel> oobChannels = new HashSet<OobChannel>(1, .75f);
 
   // reprocess() must be run from channelExecutor
   private final DelayedClientTransport delayedTransport;
@@ -204,6 +206,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
 
   private final CallTracer.Factory callTracerFactory;
   private final CallTracer channelCallTracer;
+  private final Channelz channelz;
 
   // One instance per channel.
   private final ChannelBufferMeter channelBufferUsed = new ChannelBufferMeter();
@@ -256,8 +259,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       for (InternalSubchannel subchannel : subchannels) {
         subchannel.shutdownNow(SHUTDOWN_NOW_STATUS);
       }
-      for (InternalSubchannel oobChannel : oobChannels) {
-        oobChannel.shutdownNow(SHUTDOWN_NOW_STATUS);
+      for (OobChannel oobChannel : oobChannels) {
+        oobChannel.getInternalSubchannel().shutdownNow(SHUTDOWN_NOW_STATUS);
       }
     }
   }
@@ -282,11 +285,21 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
 
   @Override
   public ListenableFuture<ChannelStats> getStats() {
-    SettableFuture<ChannelStats> ret = SettableFuture.create();
-    ChannelStats.Builder builder = new Channelz.ChannelStats.Builder();
+    final SettableFuture<ChannelStats> ret = SettableFuture.create();
+    final ChannelStats.Builder builder = new Channelz.ChannelStats.Builder();
     channelCallTracer.updateBuilder(builder);
     builder.setTarget(target).setState(channelStateManager.getState());
-    ret.set(builder.build());
+    // subchannels and oobchannels can only be accessed from channelExecutor
+    channelExecutor.executeLater(new Runnable() {
+      @Override
+      public void run() {
+        List<WithLogId> children = new ArrayList<WithLogId>();
+        children.addAll(subchannels);
+        children.addAll(oobChannels);
+        builder.setSubchannels(children);
+        ret.set(builder.build());
+      }
+    }).drain();
     return ret;
   }
 
@@ -325,6 +338,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       checkState(lbHelper != null, "lbHelper is null");
     }
     if (nameResolver != null) {
+      cancelNameResolverBackoff();
       nameResolver.shutdown();
       nameResolver = null;
       nameResolverStarted = false;
@@ -376,9 +390,10 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     logger.log(Level.FINE, "[{0}] Entering idle mode", getLogId());
     // nameResolver and loadBalancer are guaranteed to be non-null.  If any of them were null,
     // either the idleModeTimer ran twice without exiting the idle mode, or the task in shutdown()
-    // did not cancel idleModeTimer, or prepareToLoseNetwork() ran while shutdown or in idle, all of
+    // did not cancel idleModeTimer, or enterIdle() ran while shutdown or in idle, all of
     // which are bugs.
     shutdownNameResolverAndLoadBalancer(true);
+    delayedTransport.reprocess(null);
     nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
     channelStateManager.gotoState(IDLE);
   }
@@ -408,6 +423,46 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
             }
           }),
         idleTimeoutMillis, TimeUnit.MILLISECONDS);
+  }
+
+  // Run from channelExecutor
+  @VisibleForTesting
+  class NameResolverRefresh implements Runnable {
+    // Only mutated from channelExecutor
+    boolean cancelled;
+
+    @Override
+    public void run() {
+      if (cancelled) {
+        // Race detected: this task was scheduled on channelExecutor before
+        // cancelNameResolverBackoff() could cancel the timer.
+        return;
+      }
+      nameResolverRefreshFuture = null;
+      nameResolverRefresh = null;
+      if (nameResolver != null) {
+        nameResolver.refresh();
+      }
+    }
+  }
+
+  // Must be used from channelExecutor
+  @Nullable private ScheduledFuture<?> nameResolverRefreshFuture;
+  // Must be used from channelExecutor
+  @Nullable private NameResolverRefresh nameResolverRefresh;
+  // The policy to control backoff between name resolution attempts. Non-null when an attempt is
+  // scheduled. Must be used from channelExecutor
+  @Nullable private BackoffPolicy nameResolverBackoffPolicy;
+
+  // Must be run from channelExecutor
+  private void cancelNameResolverBackoff() {
+    if (nameResolverRefreshFuture != null) {
+      nameResolverRefreshFuture.cancel(false);
+      nameResolverRefresh.cancelled = true;
+      nameResolverRefreshFuture = null;
+      nameResolverRefresh = null;
+      nameResolverBackoffPolicy = null;
+    }
   }
 
   private final ClientTransportProvider transportProvider = new ClientTransportProvider() {
@@ -492,7 +547,6 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       ObjectPool<? extends Executor> oobExecutorPool,
       Supplier<Stopwatch> stopwatchSupplier,
       List<ClientInterceptor> interceptors,
-      ProxyDetector proxyDetector,
       CallTracer.Factory callTracerFactory) {
     this.target = checkNotNull(builder.target, "target");
     this.nameResolverFactory = builder.getNameResolverFactory();
@@ -527,7 +581,6 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     this.decompressorRegistry = checkNotNull(builder.decompressorRegistry, "decompressorRegistry");
     this.compressorRegistry = checkNotNull(builder.compressorRegistry, "compressorRegistry");
     this.userAgent = builder.userAgent;
-    this.proxyDetector = proxyDetector;
 
     this.maxRetryAttempts = builder.maxRetryAttempts;
     this.maxHedgedAttempts = builder.maxHedgedAttempts;
@@ -537,6 +590,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
 
     this.callTracerFactory = callTracerFactory;
     channelCallTracer = callTracerFactory.create();
+    this.channelz = checkNotNull(builder.channelz);
+    channelz.addRootChannel(this);
     logger.log(Level.FINE, "[{0}] Created with target {1}", new Object[] {getLogId(), target});
   }
 
@@ -746,6 +801,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       executorPool.returnObject(executor);
       // Release the transport factory so that it can deallocate any resources.
       transportFactory.close();
+      channelz.removeRootChannel(this);
     }
   }
 
@@ -758,6 +814,9 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
             @Override
             public void run() {
               exitIdleMode();
+              if (subchannelPicker != null) {
+                subchannelPicker.requestConnection();
+              }
             }
           }).drain();
     }
@@ -777,28 +836,32 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
 
   @Override
   public void resetConnectBackoff() {
-    channelExecutor.executeLater(
-        new Runnable() {
-          @Override
-          public void run() {
-            if (shutdown.get()) {
-              return;
-            }
-            if (nameResolverStarted) {
-              nameResolver.refresh();
-            }
-            for (InternalSubchannel subchannel : subchannels) {
-              subchannel.resetConnectBackoff();
-            }
-            for (InternalSubchannel oobChannel : oobChannels) {
-              oobChannel.resetConnectBackoff();
-            }
-          }
-        }).drain();
+    channelExecutor
+        .executeLater(
+            new Runnable() {
+              @Override
+              public void run() {
+                if (shutdown.get()) {
+                  return;
+                }
+                if (nameResolverRefreshFuture != null) {
+                  checkState(nameResolverStarted, "name resolver must be started");
+                  cancelNameResolverBackoff();
+                  nameResolver.refresh();
+                }
+                for (InternalSubchannel subchannel : subchannels) {
+                  subchannel.resetConnectBackoff();
+                }
+                for (OobChannel oobChannel : oobChannels) {
+                  oobChannel.resetConnectBackoff();
+                }
+              }
+            })
+        .drain();
   }
 
   @Override
-  public void prepareToLoseNetwork() {
+  public void enterIdle() {
     class PrepareToLoseNetworkRunnable implements Runnable {
       @Override
       public void run() {
@@ -929,6 +992,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
               @Override
               void onTerminated(InternalSubchannel is) {
                 subchannels.remove(is);
+                channelz.removeSubchannel(is);
                 maybeTerminateChannel();
               }
 
@@ -951,8 +1015,9 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
                 inUseStateAggregator.updateObjectInUse(is, false);
               }
             },
-            proxyDetector,
+            channelz,
             callTracerFactory.create());
+      channelz.addSubchannel(internalSubchannel);
       subchannel.subchannel = internalSubchannel;
       logger.log(Level.FINE, "[{0}] {1} created for {2}",
           new Object[] {getLogId(), internalSubchannel.getLogId(), addressGroup});
@@ -1014,7 +1079,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       checkState(!terminated, "Channel is terminated");
       final OobChannel oobChannel = new OobChannel(
           authority, oobExecutorPool, transportFactory.getScheduledExecutorService(),
-          channelExecutor, callTracerFactory.create());
+          channelExecutor, callTracerFactory.create(), channelz);
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
           addressGroup, authority, userAgent, backoffPolicyProvider, transportFactory,
           transportFactory.getScheduledExecutorService(), stopwatchSupplier, channelExecutor,
@@ -1022,7 +1087,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
           new InternalSubchannel.Callback() {
             @Override
             void onTerminated(InternalSubchannel is) {
-              oobChannels.remove(is);
+              oobChannels.remove(oobChannel);
+              channelz.removeSubchannel(is);
               oobChannel.handleSubchannelTerminated();
               maybeTerminateChannel();
             }
@@ -1033,8 +1099,10 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
               oobChannel.handleSubchannelStateChange(newState);
             }
           },
-          proxyDetector,
+          channelz,
           callTracerFactory.create());
+      channelz.addSubchannel(oobChannel);
+      channelz.addSubchannel(internalSubchannel);
       oobChannel.setSubchannel(internalSubchannel);
       runSerialized(new Runnable() {
           @Override
@@ -1045,7 +1113,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
             if (!terminated) {
               // If channel has not terminated, it will track the subchannel and block termination
               // for it.
-              oobChannels.add(internalSubchannel);
+              oobChannels.add(oobChannel);
             }
           }
         });
@@ -1103,6 +1171,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
             return;
           }
 
+          nameResolverBackoffPolicy = null;
+
           try {
             if (retryEnabled) {
               retryPolicies = getRetryPolicies(config);
@@ -1127,16 +1197,41 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       checkArgument(!error.isOk(), "the error status must not be OK");
       logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
           new Object[] {getLogId(), error});
-      channelExecutor.executeLater(new Runnable() {
-          @Override
-          public void run() {
-            // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
-            if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
-              return;
-            }
-            balancer.handleNameResolutionError(error);
-          }
-        }).drain();
+      channelExecutor
+          .executeLater(
+              new Runnable() {
+                @Override
+                public void run() {
+                  // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
+                  if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
+                    return;
+                  }
+                  balancer.handleNameResolutionError(error);
+                  if (nameResolverRefreshFuture != null) {
+                    // The name resolver may invoke onError multiple times, but we only want to
+                    // schedule one backoff attempt
+                    // TODO(ericgribkoff) Update contract of NameResolver.Listener or decide if we
+                    // want to reset the backoff interval upon repeated onError() calls
+                    return;
+                  }
+                  if (nameResolverBackoffPolicy == null) {
+                    nameResolverBackoffPolicy = backoffPolicyProvider.get();
+                  }
+                  long delayNanos = nameResolverBackoffPolicy.nextBackoffNanos();
+                  if (logger.isLoggable(Level.FINE)) {
+                    logger.log(
+                        Level.FINE,
+                        "[{0}] Scheduling DNS resolution backoff for {1} ns",
+                        new Object[] {logId, delayNanos});
+                  }
+                  nameResolverRefresh = new NameResolverRefresh();
+                  nameResolverRefreshFuture =
+                      transportFactory
+                          .getScheduledExecutorService()
+                          .schedule(nameResolverRefresh, delayNanos, TimeUnit.NANOSECONDS);
+                }
+              })
+          .drain();
     }
   }
 
@@ -1179,8 +1274,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     }
 
     @Override
-    ListenableFuture<ChannelStats> getStats() {
-      return subchannel.getStats();
+    Instrumented<ChannelStats> getInternalSubchannel() {
+      return subchannel;
     }
 
     @Override
