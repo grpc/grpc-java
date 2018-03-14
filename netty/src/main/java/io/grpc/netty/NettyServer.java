@@ -21,7 +21,10 @@ import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED
 import static io.netty.channel.ChannelOption.SO_BACKLOG;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
+=======
+>>>>>>> core,netty,services: expose server listen sockets in channelz
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
@@ -130,7 +133,11 @@ class NettyServer implements InternalServer, WithLogId {
     this.maxConnectionAgeGraceInNanos = maxConnectionAgeGraceInNanos;
     this.permitKeepAliveWithoutCalls = permitKeepAliveWithoutCalls;
     this.permitKeepAliveTimeInNanos = permitKeepAliveTimeInNanos;
+<<<<<<< HEAD
     this.channelz = Preconditions.checkNotNull(channelz);
+=======
+    this.channelz = channelz;
+>>>>>>> core,netty,services: expose server listen sockets in channelz
   }
 
   @Override
@@ -245,7 +252,11 @@ class NettyServer implements InternalServer, WithLogId {
       public void operationComplete(ChannelFuture f) throws Exception {
         Instrumented<SocketStats> listenSocket = new ListenSocket(f.channel());
         listenSockets = ImmutableList.of(listenSocket);
+<<<<<<< HEAD
         channelz.addListenSocket(listenSocket);
+=======
+        channelz.addSocket(listenSocket);
+>>>>>>> core,netty,services: expose server listen sockets in channelz
       }
     });
     try {
@@ -273,9 +284,14 @@ class NettyServer implements InternalServer, WithLogId {
           log.log(Level.WARNING, "Error shutting down server", future.cause());
         }
         for (Instrumented<SocketStats> listenSocket : listenSockets) {
+<<<<<<< HEAD
           channelz.removeListenSocket(listenSocket);
         }
         listenSockets = null;
+=======
+          channelz.removeSocket(listenSocket);
+        }
+>>>>>>> core,netty,services: expose server listen sockets in channelz
         synchronized (NettyServer.this) {
           listener.serverShutdown();
         }
@@ -344,6 +360,7 @@ class NettyServer implements InternalServer, WithLogId {
             /*data=*/ null,
             ch.localAddress(),
             /*remoteAddress=*/ null,
+<<<<<<< HEAD
             Utils.getSocketOptions(ch),
             /*security=*/ null));
         return ret;
@@ -371,6 +388,22 @@ class NettyServer implements InternalServer, WithLogId {
                 }
               });
 
+=======
+            /*security=*/ null));
+        return ret;
+      }
+      ch.eventLoop().submit(
+          new Runnable() {
+            @Override
+            public void run() {
+              ret.set(new SocketStats(
+                  /*data=*/ null,
+                  ch.localAddress(),
+                  /*remoteAddress=*/ null,
+                  /*security=*/ null));
+            }
+          });
+>>>>>>> core,netty,services: expose server listen sockets in channelz
       return ret;
     }
 
