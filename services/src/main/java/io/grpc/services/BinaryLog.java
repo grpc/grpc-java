@@ -81,6 +81,9 @@ final class BinaryLog {
    */
   public void logSendInitialMetadata(
       Metadata metadata, boolean isServer, byte[] callId, SocketAddress peerSocket) {
+    Preconditions.checkNotNull(metadata);
+    // TODO(zpencer): peerSocket may go away, because at this time we have not selected a peer yet
+    Preconditions.checkNotNull(peerSocket);
     GrpcLogEntry entry = GrpcLogEntry
         .newBuilder()
         .setType(Type.SEND_INITIAL_METADATA)
@@ -98,6 +101,8 @@ final class BinaryLog {
    */
   public void logRecvInitialMetadata(
       Metadata metadata, boolean isServer, byte[] callId, SocketAddress peerSocket) {
+    Preconditions.checkNotNull(metadata);
+    Preconditions.checkNotNull(peerSocket);
     GrpcLogEntry entry = GrpcLogEntry
         .newBuilder()
         .setType(Type.RECV_INITIAL_METADATA)
@@ -114,6 +119,7 @@ final class BinaryLog {
    * as determined by the binary logging configuration.
    */
   public void logTrailingMetadata(Metadata metadata, boolean isServer, byte[] callId) {
+    Preconditions.checkNotNull(metadata);
     GrpcLogEntry entry = GrpcLogEntry
         .newBuilder()
         .setType(isServer ? Type.SEND_TRAILING_METADATA : Type.RECV_TRAILING_METADATA)
@@ -131,6 +137,8 @@ final class BinaryLog {
    */
   public void logOutboundMessage(
       ByteBuffer message, boolean compressed, boolean isServer, byte[] callId) {
+    Preconditions.checkNotNull(message);
+    Preconditions.checkNotNull(callId);
     GrpcLogEntry entry = GrpcLogEntry
         .newBuilder()
         .setType(Type.SEND_MESSAGE)
@@ -148,6 +156,8 @@ final class BinaryLog {
    */
   public void logInboundMessage(
       ByteBuffer message, boolean compressed, boolean isServer, byte[] callId) {
+    Preconditions.checkNotNull(message);
+    Preconditions.checkNotNull(callId);
     GrpcLogEntry entry = GrpcLogEntry
         .newBuilder()
         .setType(Type.RECV_MESSAGE)
@@ -414,6 +424,7 @@ final class BinaryLog {
 
   @VisibleForTesting
   static io.grpc.binarylog.Metadata metadataToProto(Metadata metadata, int maxHeaderBytes) {
+    Preconditions.checkNotNull(metadata);
     Preconditions.checkState(maxHeaderBytes >= 0);
     Builder builder = io.grpc.binarylog.Metadata.newBuilder();
     // This code is tightly coupled with Metadata's implementation

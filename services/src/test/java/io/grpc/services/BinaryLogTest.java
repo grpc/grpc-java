@@ -374,9 +374,7 @@ public final class BinaryLogTest {
   @Test
   public void metadataToProto_empty() throws Exception {
     assertEquals(
-        io.grpc.binarylog.Metadata
-            .newBuilder()
-            .build(),
+        io.grpc.binarylog.Metadata.getDefaultInstance(),
         BinaryLog.metadataToProto(new Metadata(), Integer.MAX_VALUE));
   }
 
