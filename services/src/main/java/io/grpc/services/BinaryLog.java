@@ -380,6 +380,7 @@ final class BinaryLog {
    */
   // TODO(zpencer): verify int64 representation with other gRPC languages
   static Uint128 callIdToProto(byte[] bytes) {
+    Preconditions.checkNotNull(bytes);
     Preconditions.checkArgument(
         bytes.length == 16,
         String.format("can only convert from 16 byte input, actual length = %d", bytes.length));
@@ -392,6 +393,7 @@ final class BinaryLog {
   @VisibleForTesting
   // TODO(zpencer): the binlog design does not specify how to actually express the peer bytes
   static Peer socketToProto(SocketAddress address) {
+    Preconditions.checkNotNull(address);
     PeerType peerType = PeerType.UNKNOWN_PEERTYPE;
     byte[] peerAddress = null;
 
@@ -451,6 +453,7 @@ final class BinaryLog {
 
   @VisibleForTesting
   static Message messageToProto(ByteBuffer message, boolean compressed, int maxMessageBytes) {
+    Preconditions.checkNotNull(message);
     int messageSize = message.remaining();
     Message.Builder builder = Message
         .newBuilder()
