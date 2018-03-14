@@ -62,6 +62,7 @@ public class ChannelzBenchmark {
 
     serverSocketToRemove = create();
     channelz.addSocket(serverSocketToRemove);
+    channelz.addServerSocket(serverForServerSocket, serverSocketToRemove);
 
     populate(preexisting);
 
