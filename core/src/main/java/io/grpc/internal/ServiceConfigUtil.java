@@ -180,7 +180,7 @@ final class ServiceConfigUtil {
   }
 
   /**
-   * Gets a string from an object for the given key.
+   * Gets a string from an object for the given index.
    */
   @SuppressWarnings("unchecked")
   private static String getString(List<Object> list, int i) {
