@@ -532,8 +532,11 @@ public class ProtoReflectionServiceTest {
         (ClientCallStreamObserver<ServerReflectionRequest>)
             stub.serverReflectionInfo(clientResponseObserver);
 
-    // ClientCalls.startCall() calls request(1) initially, so we should get an immediate response.
+    // We should not get an initial response until we request it.
     requestObserver.onNext(flowControlRequest);
+    assertEquals(0, clientResponseObserver.getResponses().size());
+
+    requestObserver.request(1);
     assertEquals(1, clientResponseObserver.getResponses().size());
     assertEquals(flowControlGoldenResponse, clientResponseObserver.getResponses().get(0));
 
@@ -557,17 +560,16 @@ public class ProtoReflectionServiceTest {
         (ClientCallStreamObserver<ServerReflectionRequest>)
             stub.serverReflectionInfo(clientResponseObserver);
 
-    // ClientCalls.startCall() calls request(1) initially, so make additional request.
-    requestObserver.onNext(flowControlRequest);
+    // ClientCalls.startCall() does not request initially, so we make one request.
     requestObserver.onNext(flowControlRequest);
     requestObserver.onCompleted();
-    assertEquals(1, clientResponseObserver.getResponses().size());
+    assertEquals(0, clientResponseObserver.getResponses().size());
     assertFalse(clientResponseObserver.onCompleteCalled());
 
     requestObserver.request(1);
     assertTrue(clientResponseObserver.onCompleteCalled());
-    assertEquals(2, clientResponseObserver.getResponses().size());
-    assertEquals(flowControlGoldenResponse, clientResponseObserver.getResponses().get(1));
+    assertEquals(1, clientResponseObserver.getResponses().size());
+    assertEquals(flowControlGoldenResponse, clientResponseObserver.getResponses().get(0));
   }
 
   private final ServerReflectionRequest flowControlRequest =

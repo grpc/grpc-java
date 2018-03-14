@@ -145,7 +145,7 @@ public final class ClientCalls {
   public static <ReqT, RespT> Iterator<RespT> blockingServerStreamingCall(
       ClientCall<ReqT, RespT> call, ReqT param) {
     BlockingResponseStream<RespT> result = new BlockingResponseStream<RespT>(call);
-    asyncUnaryRequestCall(call, param, result.listener(), true);
+    asyncUnaryRequestCall(call, param, result.listener(), true, true);
     return result;
   }
 
@@ -161,7 +161,7 @@ public final class ClientCalls {
     ThreadlessExecutor executor = new ThreadlessExecutor();
     ClientCall<ReqT, RespT> call = channel.newCall(method, callOptions.withExecutor(executor));
     BlockingResponseStream<RespT> result = new BlockingResponseStream<RespT>(call, executor);
-    asyncUnaryRequestCall(call, param, result.listener(), true);
+    asyncUnaryRequestCall(call, param, result.listener(), true, true);
     return result;
   }
 
@@ -174,7 +174,7 @@ public final class ClientCalls {
       ClientCall<ReqT, RespT> call,
       ReqT param) {
     GrpcFuture<RespT> responseFuture = new GrpcFuture<RespT>(call);
-    asyncUnaryRequestCall(call, param, new UnaryStreamToFuture<RespT>(responseFuture), false);
+    asyncUnaryRequestCall(call, param, new UnaryStreamToFuture<RespT>(responseFuture), false, true);
     return responseFuture;
   }
 
@@ -250,22 +250,25 @@ public final class ClientCalls {
   private static <ReqT, RespT> void asyncUnaryRequestCall(
       ClientCall<ReqT, RespT> call, ReqT param, StreamObserver<RespT> responseObserver,
       boolean streamingResponse) {
+    CallToStreamObserverAdapter<ReqT> adapter = new CallToStreamObserverAdapter<ReqT>(call);
     asyncUnaryRequestCall(
         call,
         param,
         new StreamObserverToCallListenerAdapter<ReqT, RespT>(
             responseObserver,
-            new CallToStreamObserverAdapter<ReqT>(call),
+            adapter,
             streamingResponse),
-        streamingResponse);
+        streamingResponse,
+        adapter.autoFlowControlEnabled);
   }
 
   private static <ReqT, RespT> void asyncUnaryRequestCall(
       ClientCall<ReqT, RespT> call,
       ReqT param,
       ClientCall.Listener<RespT> responseListener,
-      boolean streamingResponse) {
-    startCall(call, responseListener, streamingResponse);
+      boolean streamingResponse,
+      boolean autoFlowControlEnabled) {
+    startCall(call, responseListener, streamingResponse, autoFlowControlEnabled);
     try {
       call.sendMessage(param);
       call.halfClose();
@@ -284,19 +287,23 @@ public final class ClientCalls {
         call,
         new StreamObserverToCallListenerAdapter<ReqT, RespT>(
             responseObserver, adapter, streamingResponse),
-        streamingResponse);
+        streamingResponse,
+        adapter.autoFlowControlEnabled);
     return adapter;
   }
 
   private static <ReqT, RespT> void startCall(ClientCall<ReqT, RespT> call,
-      ClientCall.Listener<RespT> responseListener, boolean streamingResponse) {
+      ClientCall.Listener<RespT> responseListener, boolean streamingResponse,
+      boolean autoFlowControlEnabled) {
     call.start(responseListener, new Metadata());
-    if (streamingResponse) {
-      call.request(1);
-    } else {
-      // Initially ask for two responses from flow-control so that if a misbehaving server sends
-      // more than one responses, we can catch it and fail it in the listener.
-      call.request(2);
+    if (autoFlowControlEnabled) {
+      if (streamingResponse) {
+        call.request(1);
+      } else {
+        // Initially ask for two responses from flow-control so that if a misbehaving server sends
+        // more than one responses, we can catch it and fail it in the listener.
+        call.request(2);
+      }
     }
   }
 

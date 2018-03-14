@@ -278,7 +278,7 @@ public class ClientCallsTest {
       }
     });
     listener.get().onMessage("message");
-    assertThat(requests).containsExactly(1);
+    assertThat(requests).isEmpty();
   }
 
   @Test
@@ -365,7 +365,7 @@ public class ClientCallsTest {
     };
     ClientCalls.asyncServerStreamingCall(call, 1, responseObserver);
     listener.get().onMessage("message");
-    assertThat(requests).containsExactly(5, 1).inOrder();
+    assertThat(requests).containsExactly(5);
   }
 
   @Test
@@ -435,6 +435,7 @@ public class ClientCallsTest {
 
     CallStreamObserver<Integer> integerStreamObserver = (CallStreamObserver<Integer>)
         ClientCalls.asyncBidiStreamingCall(clientCall, responseObserver);
+    integerStreamObserver.request(1);
     semaphore.acquire();
     integerStreamObserver.request(2);
     semaphore.acquire();
@@ -442,7 +443,7 @@ public class ClientCallsTest {
     integerStreamObserver.onCompleted();
     assertTrue(latch.await(5, TimeUnit.SECONDS));
     // Verify that number of messages produced in each onReady handler call matches the number
-    // requested by the client. Note that ClientCalls.asyncBidiStreamingCall will request(1)
+    // requested by the client.
     assertEquals(Arrays.asList(0, 1, 1, 2, 2, 2), receivedMessages);
   }
 
