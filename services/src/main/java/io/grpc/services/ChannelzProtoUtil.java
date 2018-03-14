@@ -152,6 +152,7 @@ final class ChannelzProtoUtil {
               .newBuilder()
               .setIpAddress(
                   ByteString.copyFrom(inetAddress.getAddress().getAddress()))
+              .setPort(inetAddress.getPort())
               .build());
     } else if (address.getClass().getName().endsWith("io.netty.channel.unix.DomainSocketAddress")) {
       builder.setUdsAddress(
