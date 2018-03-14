@@ -16,7 +16,10 @@
 
 package io.grpc.internal;
 
+import com.sun.istack.internal.NotNull;
+import io.grpc.internal.Channelz.SocketStats;
 import java.io.IOException;
+import java.util.List;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -47,4 +50,10 @@ public interface InternalServer {
    * available or does not make sense.
    */
   int getPort();
+
+  /**
+   * Returns the listen sockets of this server.
+   */
+  @NotNull
+  List<Instrumented<SocketStats>> getListenSockets();
 }

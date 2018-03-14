@@ -21,7 +21,13 @@ import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED
 import static io.netty.channel.ChannelOption.SO_BACKLOG;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.ServerStreamTracer;
+import io.grpc.internal.Channelz;
+import io.grpc.internal.Channelz.SocketStats;
+import io.grpc.internal.Instrumented;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.LogId;
 import io.grpc.internal.ServerListener;
@@ -82,6 +88,10 @@ class NettyServer implements InternalServer, WithLogId {
   private final ReferenceCounted eventLoopReferenceCounter = new EventLoopReferenceCounter();
   private final List<ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer.Factory transportTracerFactory;
+  private final Channelz channelz;
+  // Only set once during start(). This code assumes all listen sockets are created at startup
+  // and never changed. In the future we may have >1 listen socket.
+  private ImmutableList<Instrumented<SocketStats>> listenSockets;
 
   NettyServer(
       SocketAddress address, Class<? extends ServerChannel> channelType,
@@ -93,7 +103,8 @@ class NettyServer implements InternalServer, WithLogId {
       long keepAliveTimeInNanos, long keepAliveTimeoutInNanos,
       long maxConnectionIdleInNanos,
       long maxConnectionAgeInNanos, long maxConnectionAgeGraceInNanos,
-      boolean permitKeepAliveWithoutCalls, long permitKeepAliveTimeInNanos) {
+      boolean permitKeepAliveWithoutCalls, long permitKeepAliveTimeInNanos,
+      Channelz channelz) {
     this.address = address;
     this.channelType = checkNotNull(channelType, "channelType");
     checkNotNull(channelOptions, "channelOptions");
@@ -116,6 +127,7 @@ class NettyServer implements InternalServer, WithLogId {
     this.maxConnectionAgeGraceInNanos = maxConnectionAgeGraceInNanos;
     this.permitKeepAliveWithoutCalls = permitKeepAliveWithoutCalls;
     this.permitKeepAliveTimeInNanos = permitKeepAliveTimeInNanos;
+    this.channelz = channelz;
   }
 
   @Override
@@ -128,6 +140,11 @@ class NettyServer implements InternalServer, WithLogId {
       return -1;
     }
     return ((InetSocketAddress) localAddr).getPort();
+  }
+
+  @Override
+  public List<Instrumented<SocketStats>> getListenSockets() {
+    return listenSockets;
   }
 
   @Override
@@ -220,7 +237,14 @@ class NettyServer implements InternalServer, WithLogId {
       }
     });
     // Bind and start to accept incoming connections.
-    ChannelFuture future = b.bind(address);
+    ChannelFuture future = b.bind(address).addListener(new ChannelFutureListener() {
+      @Override
+      public void operationComplete(ChannelFuture f) throws Exception {
+        Instrumented<SocketStats> listenSocket = new ListenSocket(f.channel());
+        listenSockets = ImmutableList.of(listenSocket);
+        channelz.addSocket(listenSocket);
+      }
+    });
     try {
       future.await();
     } catch (InterruptedException ex) {
@@ -244,6 +268,9 @@ class NettyServer implements InternalServer, WithLogId {
       public void operationComplete(ChannelFuture future) throws Exception {
         if (!future.isSuccess()) {
           log.log(Level.WARNING, "Error shutting down server", future.cause());
+        }
+        for (Instrumented<SocketStats> listenSocket : listenSockets) {
+          channelz.removeSocket(listenSocket);
         }
         synchronized (NettyServer.this) {
           listener.serverShutdown();
@@ -289,6 +316,50 @@ class NettyServer implements InternalServer, WithLogId {
     @Override
     public ReferenceCounted touch(Object hint) {
       return this;
+    }
+  }
+
+  /**
+   * A class that can answer channelz queries about the server listen sockets.
+   */
+  private static final class ListenSocket implements Instrumented<SocketStats> {
+    private final LogId id = LogId.allocate(getClass().getName());
+    private final Channel ch;
+
+    ListenSocket(Channel ch) {
+      this.ch = ch;
+    }
+
+    @Override
+    public ListenableFuture<SocketStats> getStats() {
+      final SettableFuture<SocketStats> ret = SettableFuture.create();
+      if (ch.eventLoop().inEventLoop()) {
+        // This is necessary, otherwise we will block forever if we get the future from inside
+        // the event loop.
+        ret.set(new SocketStats(
+            /*data=*/ null,
+            ch.localAddress(),
+            /*remoteAddress=*/ null,
+            /*security=*/ null));
+        return ret;
+      }
+      ch.eventLoop().submit(
+          new Runnable() {
+            @Override
+            public void run() {
+              ret.set(new SocketStats(
+                  /*data=*/ null,
+                  ch.localAddress(),
+                  /*remoteAddress=*/ null,
+                  /*security=*/ null));
+            }
+          });
+      return ret;
+    }
+
+    @Override
+    public LogId getLogId() {
+      return id;
     }
   }
 }

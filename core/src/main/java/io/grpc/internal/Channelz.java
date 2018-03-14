@@ -263,7 +263,7 @@ public final class Channelz {
     public final long callsSucceeded;
     public final long callsFailed;
     public final long lastCallStartedMillis;
-    // TODO(zpencer): add listen sockets
+    public final List<Instrumented<SocketStats>> listenSockets;
 
     /**
      * Creates an instance.
@@ -272,11 +272,13 @@ public final class Channelz {
         long callsStarted,
         long callsSucceeded,
         long callsFailed,
-        long lastCallStartedMillis) {
+        long lastCallStartedMillis,
+        List<Instrumented<SocketStats>> listenSockets) {
       this.callsStarted = callsStarted;
       this.callsSucceeded = callsSucceeded;
       this.callsFailed = callsFailed;
       this.lastCallStartedMillis = lastCallStartedMillis;
+      this.listenSockets = Preconditions.checkNotNull(listenSockets);
     }
 
     public static final class Builder {
@@ -284,6 +286,7 @@ public final class Channelz {
       private long callsSucceeded;
       private long callsFailed;
       private long lastCallStartedMillis;
+      public List<Instrumented<SocketStats>> listenSockets = Collections.emptyList();
 
       public Builder setCallsStarted(long callsStarted) {
         this.callsStarted = callsStarted;
@@ -305,6 +308,13 @@ public final class Channelz {
         return this;
       }
 
+      /** Sets the listen sockets. */
+      public Builder setListenSockets(List<Instrumented<SocketStats>> listenSockets) {
+        Preconditions.checkNotNull(listenSockets);
+        this.listenSockets = Collections.unmodifiableList(listenSockets);
+        return this;
+      }
+
       /**
        * Builds an instance.
        */
@@ -313,7 +323,8 @@ public final class Channelz {
             callsStarted,
             callsSucceeded,
             callsFailed,
-            lastCallStartedMillis);
+            lastCallStartedMillis,
+            listenSockets);
       }
     }
   }
@@ -434,11 +445,11 @@ public final class Channelz {
   }
 
   public static final class SocketStats {
-    public final TransportStats data;
+    @Nullable public final TransportStats data;
     public final SocketAddress local;
-    public final SocketAddress remote;
-    public final Security security;
+    @Nullable public final SocketAddress remote;
     public final SocketOptions socketOptions;
+    @Nullable public final Security security;
 
     /** Creates an instance. */
     public SocketStats(
