@@ -31,6 +31,7 @@ import com.squareup.okhttp.Request;
 import com.squareup.okhttp.internal.http.StatusLine;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -149,6 +150,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   private final int maxMessageSize;
   private int connectionUnacknowledgedBytesRead;
   private ClientFrameHandler clientFrameHandler;
+  private Attributes attributes;
   /**
    * Indicates the transport is in go-away state: no new streams will be processed, but existing
    * streams may continue.
@@ -485,6 +487,13 @@ class OkHttpClientTransport implements ConnectionClientTransport {
           startPendingStreams();
         }
 
+        // TODO(zhangkun83): fill channel security attributes
+        // The return value of OkHttpTlsUpgrader.upgrade is an SSLSocket that has this info
+        attributes = Attributes
+            .newBuilder()
+            .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, socket.getRemoteSocketAddress())
+            .build();
+
         rawFrameWriter = variant.newWriter(sink, true);
         frameWriter.becomeConnected(rawFrameWriter, socket);
 
@@ -675,8 +684,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
 
   @Override
   public Attributes getAttributes() {
-    // TODO(zhangkun83): fill channel security attributes
-    return Attributes.EMPTY;
+    return attributes;
   }
 
   /**

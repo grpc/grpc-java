@@ -199,7 +199,7 @@ public final class ProtocolNegotiators {
           proxyHandler = new HttpProxyHandler(proxyAddress, proxyUsername, proxyPassword);
         }
         return new BufferUntilProxyTunnelledHandler(
-            proxyHandler, negotiator.newHandler(http2Handler));
+            proxyHandler, negotiator.newHandler(http2Handler), http2Handler);
       }
     }
 
@@ -212,11 +212,15 @@ public final class ProtocolNegotiators {
   static final class BufferUntilProxyTunnelledHandler extends AbstractBufferingHandler
       implements ProtocolNegotiator.Handler {
     private final ProtocolNegotiator.Handler originalHandler;
+    private final GrpcHttp2ConnectionHandler grpcHandler;
 
     public BufferUntilProxyTunnelledHandler(
-        ProxyHandler proxyHandler, ProtocolNegotiator.Handler handler) {
+        ProxyHandler proxyHandler,
+        ProtocolNegotiator.Handler handler,
+        GrpcHttp2ConnectionHandler grpcHandler) {
       super(proxyHandler, handler);
       this.originalHandler = handler;
+      this.grpcHandler = grpcHandler;
     }
 
 
@@ -229,6 +233,11 @@ public final class ProtocolNegotiators {
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
       if (evt instanceof ProxyConnectionEvent) {
         writeBufferedAndRemove(ctx);
+        grpcHandler.handleProtocolNegotiationCompleted(
+            Attributes.newBuilder()
+                .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
+                .build()
+        );
       }
       super.userEventTriggered(ctx, evt);
     }
@@ -329,7 +338,7 @@ public final class ProtocolNegotiators {
       HttpClientCodec httpClientCodec = new HttpClientCodec();
       final HttpClientUpgradeHandler upgrader =
           new HttpClientUpgradeHandler(httpClientCodec, upgradeCodec, 1000);
-      return new BufferingHttp2UpgradeHandler(upgrader);
+      return new BufferingHttp2UpgradeHandler(upgrader, handler);
     }
   }
 
@@ -662,8 +671,11 @@ public final class ProtocolNegotiators {
   private static class BufferUntilChannelActiveHandler extends AbstractBufferingHandler
       implements ProtocolNegotiator.Handler {
 
-    BufferUntilChannelActiveHandler(ChannelHandler... handlers) {
-      super(handlers);
+    private final GrpcHttp2ConnectionHandler handler;
+
+    BufferUntilChannelActiveHandler(GrpcHttp2ConnectionHandler handler) {
+      super(handler);
+      this.handler = handler;
     }
 
     @Override
@@ -679,6 +691,11 @@ public final class ProtocolNegotiators {
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
       writeBufferedAndRemove(ctx);
+      handler.handleProtocolNegotiationCompleted(
+          Attributes
+              .newBuilder()
+              .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
+              .build());
       super.channelActive(ctx);
     }
   }
@@ -689,8 +706,11 @@ public final class ProtocolNegotiators {
   private static class BufferingHttp2UpgradeHandler extends AbstractBufferingHandler
       implements ProtocolNegotiator.Handler {
 
-    BufferingHttp2UpgradeHandler(ChannelHandler... handlers) {
-      super(handlers);
+    private final GrpcHttp2ConnectionHandler grpcHandler;
+
+    BufferingHttp2UpgradeHandler(ChannelHandler handler, GrpcHttp2ConnectionHandler grpcHandler) {
+      super(handler);
+      this.grpcHandler = grpcHandler;
     }
 
     @Override
@@ -712,6 +732,11 @@ public final class ProtocolNegotiators {
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
       if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_SUCCESSFUL) {
         writeBufferedAndRemove(ctx);
+        grpcHandler.handleProtocolNegotiationCompleted(
+            Attributes
+                .newBuilder()
+                .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
+                .build());
       } else if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_REJECTED) {
         fail(ctx, unavailableException("HTTP/2 upgrade rejected"));
       }

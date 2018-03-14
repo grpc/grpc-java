@@ -123,7 +123,7 @@ class OkHttpClientStream extends AbstractClientStream {
 
   @Override
   public Attributes getAttributes() {
-    return Attributes.EMPTY;
+    return transportState().getAttributes();
   }
 
   class Sink implements AbstractClientStream.Sink {
@@ -316,6 +316,12 @@ class OkHttpClientStream extends AbstractClientStream {
         return;
       }
       super.transportDataReceived(new OkHttpReadableBuffer(frame), endOfStream);
+    }
+
+    public Attributes getAttributes() {
+      synchronized (lock) {
+        return transport.getAttributes();
+      }
     }
 
     @GuardedBy("lock")
