@@ -150,7 +150,8 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   private final int maxMessageSize;
   private int connectionUnacknowledgedBytesRead;
   private ClientFrameHandler clientFrameHandler;
-  private Attributes attributes;
+  // Can be read any time but only set by start()
+  private volatile Attributes attributes = Attributes.EMPTY;
   /**
    * Indicates the transport is in go-away state: no new streams will be processed, but existing
    * streams may continue.
@@ -453,6 +454,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         Variant variant = new Http2();
         BufferedSink sink;
         Socket sock;
+        Attributes attrs;
         try {
           if (proxy == null) {
             sock = new Socket(address.getAddress(), address.getPort());
@@ -469,6 +471,10 @@ class OkHttpClientTransport implements ConnectionClientTransport {
           sock.setTcpNoDelay(true);
           source = Okio.buffer(Okio.source(sock));
           sink = Okio.buffer(Okio.sink(sock));
+          attrs = Attributes
+              .newBuilder()
+              .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, sock.getRemoteSocketAddress())
+              .build();
         } catch (StatusException e) {
           startGoAway(0, ErrorCode.INTERNAL_ERROR, e.getStatus());
           return;
@@ -485,14 +491,11 @@ class OkHttpClientTransport implements ConnectionClientTransport {
           socket = sock;
           maxConcurrentStreams = Integer.MAX_VALUE;
           startPendingStreams();
-        }
 
-        // TODO(zhangkun83): fill channel security attributes
-        // The return value of OkHttpTlsUpgrader.upgrade is an SSLSocket that has this info
-        attributes = Attributes
-            .newBuilder()
-            .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, socket.getRemoteSocketAddress())
-            .build();
+          // TODO(zhangkun83): fill channel security attributes
+          // The return value of OkHttpTlsUpgrader.upgrade is an SSLSocket that has this info
+          attributes = attrs;
+        }
 
         rawFrameWriter = variant.newWriter(sink, true);
         frameWriter.becomeConnected(rawFrameWriter, socket);
