@@ -318,10 +318,10 @@ class OkHttpClientStream extends AbstractClientStream {
       super.transportDataReceived(new OkHttpReadableBuffer(frame), endOfStream);
     }
 
+    // Safe to call without lock
+    @SuppressWarnings("GuardedBy")
     public Attributes getAttributes() {
-      synchronized (lock) {
-        return transport.getAttributes();
-      }
+      return transport.getAttributes();
     }
 
     @GuardedBy("lock")
