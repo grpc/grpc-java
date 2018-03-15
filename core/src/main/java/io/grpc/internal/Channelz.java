@@ -210,12 +210,14 @@ public final class Channelz {
 
   private static <T extends Instrumented<?>> void add(Map<Long, T> map, T object) {
     T prev = map.put(object.getLogId().getId(), object);
-    assert prev == null;
+    // TODO(zpencer): turn this on
+    // assert prev == null;
   }
 
   private static <T extends Instrumented<?>> void remove(Map<Long, T> map, T object) {
     T prev = map.remove(id(object));
-    assert prev != null;
+    // TODO(zpencer): turn this on
+    // assert prev != null;
   }
 
   private static <T extends Instrumented<?>> boolean contains(Map<Long, T> map, LogId id) {
