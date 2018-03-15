@@ -199,7 +199,7 @@ public final class ProtocolNegotiators {
           proxyHandler = new HttpProxyHandler(proxyAddress, proxyUsername, proxyPassword);
         }
         return new BufferUntilProxyTunnelledHandler(
-            proxyHandler, negotiator.newHandler(http2Handler), http2Handler);
+            proxyHandler, negotiator.newHandler(http2Handler));
       }
     }
 
@@ -212,15 +212,12 @@ public final class ProtocolNegotiators {
   static final class BufferUntilProxyTunnelledHandler extends AbstractBufferingHandler
       implements ProtocolNegotiator.Handler {
     private final ProtocolNegotiator.Handler originalHandler;
-    private final GrpcHttp2ConnectionHandler grpcHandler;
 
     public BufferUntilProxyTunnelledHandler(
         ProxyHandler proxyHandler,
-        ProtocolNegotiator.Handler handler,
-        GrpcHttp2ConnectionHandler grpcHandler) {
+        ProtocolNegotiator.Handler handler) {
       super(proxyHandler, handler);
       this.originalHandler = handler;
-      this.grpcHandler = grpcHandler;
     }
 
 
@@ -233,11 +230,6 @@ public final class ProtocolNegotiators {
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
       if (evt instanceof ProxyConnectionEvent) {
         writeBufferedAndRemove(ctx);
-        grpcHandler.handleProtocolNegotiationCompleted(
-            Attributes.newBuilder()
-                .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
-                .build()
-        );
       }
       super.userEventTriggered(ctx, evt);
     }

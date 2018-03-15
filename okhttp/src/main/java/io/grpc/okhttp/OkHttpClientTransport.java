@@ -150,8 +150,8 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   private final int maxMessageSize;
   private int connectionUnacknowledgedBytesRead;
   private ClientFrameHandler clientFrameHandler;
-  // Can be read any time but only set by start()
-  private volatile Attributes attributes = Attributes.EMPTY;
+  // Caution: Not synchronized, new value can only be safely read after the connection is complete.
+  private Attributes attributes = Attributes.EMPTY;
   /**
    * Indicates the transport is in go-away state: no new streams will be processed, but existing
    * streams may continue.
@@ -490,11 +490,12 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         synchronized (lock) {
           socket = sock;
           maxConcurrentStreams = Integer.MAX_VALUE;
-          startPendingStreams();
 
           // TODO(zhangkun83): fill channel security attributes
           // The return value of OkHttpTlsUpgrader.upgrade is an SSLSocket that has this info
           attributes = attrs;
+
+          startPendingStreams();
         }
 
         rawFrameWriter = variant.newWriter(sink, true);
