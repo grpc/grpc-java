@@ -82,6 +82,7 @@ import io.netty.handler.logging.LogLevel;
 import io.netty.util.AsciiString;
 import io.netty.util.ReferenceCountUtil;
 import java.util.List;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -96,6 +97,10 @@ import javax.annotation.Nullable;
 class NettyServerHandler extends AbstractNettyHandler {
   private static final Logger logger = Logger.getLogger(NettyServerHandler.class.getName());
   private static final long KEEPALIVE_PING = 0xDEADL;
+  private static final long MAX_CONNECTION_AGE_PING = 0xA9EL;
+  private static final long MAX_CONNECTION_IDLE_PING = 0x1D1EL;
+  private static final long GRACEFUL_SHUTDOWN_PING_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(10);
+  private static final SystemTicker SYSTEM_TICKER = new SystemTicker();
 
   private final Http2Connection.PropertyKey streamKey;
   private final ServerTransportListener transportListener;
@@ -121,6 +126,12 @@ class NettyServerHandler extends AbstractNettyHandler {
   private MaxConnectionIdleManager maxConnectionIdleManager;
   @CheckForNull
   private ScheduledFuture<?> maxConnectionAgeMonitor;
+  @CheckForNull
+  private GracefulShutdownRunner maxAgeShutdownRunner;
+  @CheckForNull
+  private GracefulShutdownRunner maxIdleShutdownRunner;
+
+  private Ticker ticker = SYSTEM_TICKER;
 
   static NettyServerHandler newHandler(
       ServerTransportListener transportListener,
@@ -250,18 +261,9 @@ class NettyServerHandler extends AbstractNettyHandler {
       maxConnectionIdleManager = new MaxConnectionIdleManager(maxConnectionIdleInNanos) {
         @Override
         void close(ChannelHandlerContext ctx) {
-          goAway(
-              ctx,
-              Integer.MAX_VALUE,
-              Http2Error.NO_ERROR.code(),
-              ByteBufUtil.writeAscii(ctx.alloc(), "max_idle"),
-              ctx.newPromise());
-          ctx.flush();
-          try {
-            NettyServerHandler.this.close(ctx, ctx.newPromise());
-          } catch (Exception e) {
-            onError(ctx, /* outbound= */ true, e);
-          }
+          maxIdleShutdownRunner = new GracefulShutdownRunner(
+              ctx, MAX_CONNECTION_IDLE_PING, "max_idle", null);
+          maxIdleShutdownRunner.run();
         }
       };
     }
@@ -321,26 +323,9 @@ class NettyServerHandler extends AbstractNettyHandler {
           new LogExceptionRunnable(new Runnable() {
             @Override
             public void run() {
-              // send GO_AWAY
-              ByteBuf debugData = ByteBufUtil.writeAscii(ctx.alloc(), "max_age");
-              goAway(
-                  ctx,
-                  Integer.MAX_VALUE,
-                  Http2Error.NO_ERROR.code(),
-                  debugData,
-                  ctx.newPromise());
-
-              // gracefully shutdown with specified grace time
-              long savedGracefulShutdownTime = gracefulShutdownTimeoutMillis();
-              try {
-                gracefulShutdownTimeoutMillis(
-                    TimeUnit.NANOSECONDS.toMillis(maxConnectionAgeGraceInNanos));
-                close(ctx, ctx.newPromise());
-              } catch (Exception e) {
-                onError(ctx, /* outbound= */ true, e);
-              } finally {
-                gracefulShutdownTimeoutMillis(savedGracefulShutdownTime);
-              }
+              maxAgeShutdownRunner = new GracefulShutdownRunner(
+                  ctx, MAX_CONNECTION_AGE_PING, "max_age", maxConnectionAgeGraceInNanos);
+              maxAgeShutdownRunner.run();
             }
           }),
           maxConnectionAgeInNanos,
@@ -787,6 +772,12 @@ class NettyServerHandler extends AbstractNettyHandler {
           logger.log(Level.FINE, String.format("Window: %d",
               decoder().flowController().initialWindowSize(connection().connectionStream())));
         }
+      } else if (data == MAX_CONNECTION_AGE_PING) {
+        checkNotNull(maxAgeShutdownRunner, "maxAgeShutdownRunner");
+        maxAgeShutdownRunner.secondGoAwayAndClose();
+      } else if (data == MAX_CONNECTION_IDLE_PING) {
+        checkNotNull(maxIdleShutdownRunner, "maxIdleShutdownRunner");
+        maxIdleShutdownRunner.secondGoAwayAndClose();
       } else if (data != KEEPALIVE_PING) {
         logger.warning("Received unexpected ping ack. No ping outstanding");
       }
@@ -803,7 +794,6 @@ class NettyServerHandler extends AbstractNettyHandler {
     @Override
     public void ping() {
       ChannelFuture pingFuture = encoder().writePing(
-          // slice KEEPALIVE_PING because tls handler may modify the reader index
           ctx, false /* isAck */, KEEPALIVE_PING, ctx.newPromise());
       ctx.flush();
       if (transportTracer != null) {
@@ -833,6 +823,105 @@ class NettyServerHandler extends AbstractNettyHandler {
           logger.log(Level.WARNING, "Exception while propagating exception", ex2);
           logger.log(Level.WARNING, "Original failure", ex);
         }
+      }
+    }
+  }
+
+  private final class GracefulShutdownRunner {
+
+    ChannelHandlerContext ctx;
+    long payload;
+    String goAwayMessage;
+
+    /**
+     * The grace time between starting graceful shutdown and closing the netty channel,
+     * {@code null} is unspecified.
+     */
+    @CheckForNull
+    Long graceTimeInNanos;
+
+    /**
+     * True if ping is Acked or ping is timeout.
+     */
+    boolean pingAckedOrTimeout;
+
+    /**
+     * Deadline of the shutdown.
+     */
+    long deadline;
+    Future<?> pingFuture;
+
+    GracefulShutdownRunner(
+        ChannelHandlerContext ctx, long payload, String goAwayMessage,
+        @Nullable Long graceTimeInNanos) {
+      this.ctx = ctx;
+      this.payload = payload;
+      this.goAwayMessage = goAwayMessage;
+      this.graceTimeInNanos = graceTimeInNanos;
+    }
+
+    /**
+     * Sends out first GOAWAY and ping, and schedules second GOAWAY and close.
+     */
+    void run() {
+      goAway(
+          ctx,
+          Integer.MAX_VALUE,
+          Http2Error.NO_ERROR.code(),
+          ByteBufUtil.writeAscii(ctx.alloc(), goAwayMessage),
+          ctx.newPromise());
+      ctx.flush();
+
+      long gracefulShutdownPingTimeout = GRACEFUL_SHUTDOWN_PING_TIMEOUT_NANOS;
+      if (graceTimeInNanos != null) {
+        deadline = ticker.read() + graceTimeInNanos;
+        gracefulShutdownPingTimeout = Math.min(gracefulShutdownPingTimeout, graceTimeInNanos);
+      }
+      pingFuture = ctx.executor().schedule(
+          new Runnable() {
+            @Override
+            public void run() {
+              secondGoAwayAndClose();
+            }
+          },
+          gracefulShutdownPingTimeout,
+          TimeUnit.NANOSECONDS);
+
+      encoder().writePing(ctx, false /* isAck */, payload, ctx.newPromise());
+      ctx.flush();
+    }
+
+    void secondGoAwayAndClose() {
+      if (pingAckedOrTimeout) {
+        return;
+      }
+      pingAckedOrTimeout = true;
+
+      checkNotNull(pingFuture, "pingFuture");
+      pingFuture.cancel(false);
+
+      // send the second GOAWAY with last stream id
+      goAway(
+          ctx,
+          connection().remote().lastStreamCreated(),
+          Http2Error.NO_ERROR.code(),
+          ByteBufUtil.writeAscii(ctx.alloc(), goAwayMessage),
+          ctx.newPromise());
+      ctx.flush();
+
+      // gracefully shutdown with specified grace time
+      long savedGracefulShutdownTimeMillis = gracefulShutdownTimeoutMillis();
+      long gracefulShutdownTimeoutMillis = savedGracefulShutdownTimeMillis;
+      if (graceTimeInNanos != null) {
+        gracefulShutdownTimeoutMillis = TimeUnit.NANOSECONDS.toMillis(deadline - ticker.read());
+      }
+      try {
+        gracefulShutdownTimeoutMillis(gracefulShutdownTimeoutMillis);
+        close(ctx, ctx.newPromise());
+      } catch (Exception e) {
+        onError(ctx, /* outbound= */ true, e);
+      } finally {
+        gracefulShutdownTimeoutMillis(savedGracefulShutdownTimeMillis);
       }
     }
   }
@@ -869,6 +958,27 @@ class NettyServerHandler extends AbstractNettyHandler {
       keepAliveEnforcer.resetCounters();
       return super.writeHeaders(ctx, streamId, headers, streamDependency, weight, exclusive,
           padding, endStream, promise);
+    }
+  }
+
+  @VisibleForTesting
+  void setTickerForTest(Ticker ticker) {
+    this.ticker = ticker;
+  }
+
+  // TODO(zsurocking): Classes below are copied from Deadline.java. We should consider share the
+  // code.
+
+  /** Time source representing nanoseconds since fixed but arbitrary point in time. */
+  abstract static class Ticker {
+    /** Returns the number of nanoseconds since this source's epoch. */
+    public abstract long read();
+  }
+
+  private static class SystemTicker extends Ticker {
+    @Override
+    public long read() {
+      return System.nanoTime();
     }
   }
 }
