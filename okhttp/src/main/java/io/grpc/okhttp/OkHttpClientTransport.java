@@ -454,7 +454,6 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         Variant variant = new Http2();
         BufferedSink sink;
         Socket sock;
-        Attributes attrs;
         try {
           if (proxy == null) {
             sock = new Socket(address.getAddress(), address.getPort());
@@ -471,7 +470,9 @@ class OkHttpClientTransport implements ConnectionClientTransport {
           sock.setTcpNoDelay(true);
           source = Okio.buffer(Okio.source(sock));
           sink = Okio.buffer(Okio.sink(sock));
-          attrs = Attributes
+          // TODO(zhangkun83): fill channel security attributes
+          // The return value of OkHttpTlsUpgrader.upgrade is an SSLSocket that has this info
+          attributes = Attributes
               .newBuilder()
               .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, sock.getRemoteSocketAddress())
               .build();
@@ -490,10 +491,6 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         synchronized (lock) {
           socket = sock;
           maxConcurrentStreams = Integer.MAX_VALUE;
-
-          // TODO(zhangkun83): fill channel security attributes
-          // The return value of OkHttpTlsUpgrader.upgrade is an SSLSocket that has this info
-          attributes = attrs;
 
           startPendingStreams();
         }
