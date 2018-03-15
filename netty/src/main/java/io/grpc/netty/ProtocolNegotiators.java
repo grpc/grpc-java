@@ -214,8 +214,7 @@ public final class ProtocolNegotiators {
     private final ProtocolNegotiator.Handler originalHandler;
 
     public BufferUntilProxyTunnelledHandler(
-        ProxyHandler proxyHandler,
-        ProtocolNegotiator.Handler handler) {
+        ProxyHandler proxyHandler, ProtocolNegotiator.Handler handler) {
       super(proxyHandler, handler);
       this.originalHandler = handler;
     }
