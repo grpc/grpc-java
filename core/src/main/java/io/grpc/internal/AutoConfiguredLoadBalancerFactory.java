@@ -145,7 +145,6 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
     static LoadBalancer.Factory decideLoadBalancerFactory(
         List<EquivalentAddressGroup> servers, Map<String, Object> config) {
 
-
       // Check for balancer addresses
       boolean haveBalancerAddress = false;
       for (EquivalentAddressGroup s : servers) {
@@ -157,8 +156,7 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
 
       if (haveBalancerAddress) {
         try {
-          Class<?> lbFactoryClass;
-          lbFactoryClass = Class.forName(GRPCLB_LOAD_BALANCER_FACTORY_NAME);
+          Class<?> lbFactoryClass = Class.forName(GRPCLB_LOAD_BALANCER_FACTORY_NAME);
           Method getInstance = lbFactoryClass.getMethod("getInstance");
           return (LoadBalancer.Factory) getInstance.invoke(null);
         } catch (RuntimeException e) {
@@ -174,10 +172,8 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
       // Check for an explicitly present lb choice
       if (serviceConfigChoiceBalancingPolicy != null) {
         if (serviceConfigChoiceBalancingPolicy.toUpperCase(Locale.ROOT).equals("ROUND_ROBIN")) {
-          ClassNotFoundException caught = null;
           try {
-            Class<?> lbFactoryClass;
-            lbFactoryClass = Class.forName(ROUND_ROUND_LOAD_BALANCER_FACTORY_NAME);
+            Class<?> lbFactoryClass = Class.forName(ROUND_ROUND_LOAD_BALANCER_FACTORY_NAME);
             Method getInstance = lbFactoryClass.getMethod("getInstance");
             return (LoadBalancer.Factory) getInstance.invoke(null);
           } catch (RuntimeException e) {
