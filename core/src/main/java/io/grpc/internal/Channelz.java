@@ -144,7 +144,8 @@ public final class Channelz {
 
   /** Returns a server list. */
   public ServerList getServers(long fromId, int maxPageSize) {
-    List<Instrumented<ServerStats>> serverList = new ArrayList<Instrumented<ServerStats>>();
+    List<Instrumented<ServerStats>> serverList
+        = new ArrayList<Instrumented<ServerStats>>(maxPageSize);
     Iterator<Instrumented<ServerStats>> iterator = servers.tailMap(fromId).values().iterator();
 
     while (iterator.hasNext() && serverList.size() < maxPageSize) {
@@ -160,7 +161,7 @@ public final class Channelz {
     if (serverSockets == null) {
       return null;
     }
-    List<WithLogId> socketList = new ArrayList<WithLogId>();
+    List<WithLogId> socketList = new ArrayList<WithLogId>(maxPageSize);
     Iterator<Instrumented<SocketStats>> iterator
         = serverSockets.tailMap(fromId).values().iterator();
     while (socketList.size() < maxPageSize && iterator.hasNext()) {
