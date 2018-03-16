@@ -1395,12 +1395,12 @@ public class ServerImplTest {
     createAndStartServer();
     SimpleServerTransport transport = new SimpleServerTransport();
 
-    assertFalse(builder.channelz.containsSocket(transport.getLogId()));
+    assertFalse(builder.channelz.containsServerSocket(transport.getLogId()));
     ServerTransportListener listener
         = transportServer.registerNewServerTransport(transport);
-    assertTrue(builder.channelz.containsSocket(transport.getLogId()));
+    assertTrue(builder.channelz.containsServerSocket(transport.getLogId()));
     listener.transportTerminated();
-    assertFalse(builder.channelz.containsSocket(transport.getLogId()));
+    assertFalse(builder.channelz.containsServerSocket(transport.getLogId()));
   }
 
   private void createAndStartServer() throws IOException {

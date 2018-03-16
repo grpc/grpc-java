@@ -41,7 +41,8 @@ public final class Channelz {
       = new ConcurrentSkipListMap<Long, Instrumented<ChannelStats>>();
   private final ConcurrentMap<Long, Instrumented<ChannelStats>> subchannels
       = new ConcurrentHashMap<Long, Instrumented<ChannelStats>>();
-  private final ConcurrentMap<Long, Instrumented<SocketStats>> sockets
+  // An InProcessTransport can appear in both clientSockets and perServerSockets simultaneously
+  private final ConcurrentMap<Long, Instrumented<SocketStats>> clientSockets
       = new ConcurrentHashMap<Long, Instrumented<SocketStats>>();
   private final ConcurrentMap<Long, ServerSocketMap> perServerSockets
       = new ConcurrentHashMap<Long, ServerSocketMap>();
@@ -78,14 +79,12 @@ public final class Channelz {
   }
 
   /** Adds a socket. */
-  public void addSocket(Instrumented<SocketStats> socket) {
-    add(sockets, socket);
+  public void addClientSocket(Instrumented<SocketStats> socket) {
+    add(clientSockets, socket);
   }
 
   /** Adds a server socket. */
   public void addServerSocket(Instrumented<ServerStats> server, Instrumented<SocketStats> socket) {
-    add(sockets, socket);
-
     ServerSocketMap serverSockets = perServerSockets.get(id(server));
     assert serverSockets != null;
     add(serverSockets, socket);
@@ -107,18 +106,16 @@ public final class Channelz {
     remove(rootChannels, channel);
   }
 
-  public void removeSocket(Instrumented<SocketStats> socket) {
-    remove(sockets, socket);
+  public void removeClientSocket(Instrumented<SocketStats> socket) {
+    remove(clientSockets, socket);
   }
 
   /** Removes a server socket. */
   public void removeServerSocket(
       Instrumented<ServerStats> server, Instrumented<SocketStats> socket) {
-    ServerSocketMap serverSockets = perServerSockets.get(id(server));
-    assert serverSockets != null;
-    remove(serverSockets, socket);
-
-    remove(sockets, socket);
+    ServerSocketMap socketsOfServer = perServerSockets.get(id(server));
+    assert socketsOfServer != null;
+    remove(socketsOfServer, socket);
   }
 
   /** Returns a {@link RootChannelList}. */
@@ -175,7 +172,21 @@ public final class Channelz {
   /** Returns a socket. */
   @Nullable
   public Instrumented<SocketStats> getSocket(long id) {
-    return sockets.get(id);
+    Instrumented<SocketStats> clientSocket = clientSockets.get(id);
+    if (clientSocket != null) {
+      return clientSocket;
+    }
+    return getServerSocket(id);
+  }
+
+  private Instrumented<SocketStats> getServerSocket(long id) {
+    for (ServerSocketMap perServerSockets : perServerSockets.values()) {
+      Instrumented<SocketStats> serverSocket = perServerSockets.get(id);
+      if (serverSocket != null) {
+        return serverSocket;
+      }
+    }
+    return null;
   }
 
   @VisibleForTesting
@@ -188,36 +199,28 @@ public final class Channelz {
     return contains(subchannels, subchannelRef);
   }
 
-  /** Gets a server socket. */
-  @VisibleForTesting
-  @Nullable
-  Instrumented<SocketStats> getServerSocketForTest(long serverId, long socketId) {
-    ServerSocketMap serverSockets = perServerSockets.get(serverId);
-    if (serverSockets == null) {
-      return null;
-    }
-    return serverSockets.get(socketId);
-  }
-
   public Instrumented<ChannelStats> getRootChannel(long id) {
     return rootChannels.get(id);
   }
 
   @VisibleForTesting
-  public boolean containsSocket(LogId transportRef) {
-    return contains(sockets, transportRef);
+  public boolean containsClientSocket(LogId transportRef) {
+    return contains(clientSockets, transportRef);
+  }
+
+  @VisibleForTesting
+  public boolean containsServerSocket(LogId transportRef) {
+    return getServerSocket(transportRef.getId()) != null;
   }
 
   private static <T extends Instrumented<?>> void add(Map<Long, T> map, T object) {
     T prev = map.put(object.getLogId().getId(), object);
-    // TODO(zpencer): turn this on
-    // assert prev == null;
+    assert prev == null;
   }
 
   private static <T extends Instrumented<?>> void remove(Map<Long, T> map, T object) {
     T prev = map.remove(id(object));
-    // TODO(zpencer): turn this on
-    // assert prev != null;
+    assert prev != null;
   }
 
   private static <T extends Instrumented<?>> boolean contains(Map<Long, T> map, LogId id) {

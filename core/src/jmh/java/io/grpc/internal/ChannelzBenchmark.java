@@ -61,7 +61,7 @@ public class ChannelzBenchmark {
     channelz.addServer(serverForServerSocket);
 
     serverSocketToRemove = create();
-    channelz.addSocket(serverSocketToRemove);
+    channelz.addClientSocket(serverSocketToRemove);
     channelz.addServerSocket(serverForServerSocket, serverSocketToRemove);
 
     populate(preexisting);
@@ -78,7 +78,7 @@ public class ChannelzBenchmark {
 
       // for add / remove
       Instrumented<SocketStats> sock = create();
-      channelz.addSocket(sock);
+      channelz.addClientSocket(sock);
 
       // for addServerSocket / removeServerSocket
       channelz.addServerSocket(serverForServerSocket, sock);
@@ -96,7 +96,7 @@ public class ChannelzBenchmark {
   @BenchmarkMode(Mode.SampleTime)
   @OutputTimeUnit(TimeUnit.NANOSECONDS)
   public void add() {
-    channelz.addSocket(serverSocketToAdd);
+    channelz.addClientSocket(serverSocketToAdd);
   }
 
   @Benchmark
@@ -117,7 +117,7 @@ public class ChannelzBenchmark {
   @BenchmarkMode(Mode.SampleTime)
   @OutputTimeUnit(TimeUnit.NANOSECONDS)
   public void remove() {
-    channelz.removeSocket(serverSocketToRemove);
+    channelz.removeClientSocket(serverSocketToRemove);
   }
 
   @Benchmark

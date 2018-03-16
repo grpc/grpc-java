@@ -215,10 +215,10 @@ public final class ChannelzTest {
     Instrumented<SocketStats> socket = create();
     assertNull(channelz.getSocket(id(socket)));
 
-    channelz.addSocket(socket);
+    channelz.addClientSocket(socket);
     assertSame(socket, channelz.getSocket(id(socket)));
 
-    channelz.removeSocket(socket);
+    channelz.removeClientSocket(socket);
     assertNull(channelz.getSocket(id(socket)));
   }
 
@@ -260,18 +260,16 @@ public final class ChannelzTest {
     channelz.addServerSocket(server2, socket2);
 
     ServerSocketsList list1
-        = channelz.getServerSockets(id(server1), /*fromId=*/ 0, /*maxPageSize=*/ 1);
+        = channelz.getServerSockets(id(server1), /*fromId=*/ 0, /*maxPageSize=*/ 2);
     assertNotNull(list1);
     assertTrue(list1.end);
     assertThat(list1.sockets).containsExactly(socket1);
-    assertNull(channelz.getServerSocketForTest(id(server1), id(socket2)));
 
     ServerSocketsList list2
-        = channelz.getServerSockets(id(server2), /*fromId=*/ 0, /*maxPageSize=*/1);
+        = channelz.getServerSockets(id(server2), /*fromId=*/ 0, /*maxPageSize=*/2);
     assertNotNull(list2);
     assertTrue(list2.end);
     assertThat(list2.sockets).containsExactly(socket2);
-    assertNull(channelz.getServerSocketForTest(id(server2), id(socket1)));
   }
 
   private void assertEmptyServerSocketsPage(long serverId, long socketId) {
