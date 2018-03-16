@@ -5,10 +5,16 @@ cat /VERSION
 
 BASE_DIR="$(pwd)"
 
-# Build Cronet
+# Build grpc-cronet
 
 cd "$BASE_DIR/github/grpc-java/cronet"
 ./cronet_deps.sh
+../gradlew --include-build .. build
+
+
+# Build grpc-android
+
+cd "$BASE_DIR/github/grpc-java/android"
 ../gradlew --include-build .. build
 
 
