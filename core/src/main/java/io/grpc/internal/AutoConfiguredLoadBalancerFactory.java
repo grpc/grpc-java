@@ -16,8 +16,6 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
