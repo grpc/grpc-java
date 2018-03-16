@@ -208,11 +208,6 @@ public final class Channelz {
     return contains(clientSockets, transportRef);
   }
 
-  @VisibleForTesting
-  public boolean containsServerSocket(LogId transportRef) {
-    return getServerSocket(transportRef.getId()) != null;
-  }
-
   private static <T extends Instrumented<?>> void add(Map<Long, T> map, T object) {
     T prev = map.put(object.getLogId().getId(), object);
     assert prev == null;
