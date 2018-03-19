@@ -58,7 +58,6 @@ import java.util.Map.Entry;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -103,9 +102,6 @@ final class GrpclbState {
   private static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.of("io.grpc.grpclb.GrpclbLoadBalancer.stateInfo");
 
-  private static final Attributes.Key<AtomicLong> USAGE =
-      Attributes.Key.of("io.grpc.grpclb.GrpclbLoadBalancer.usage");
-
   // Scheduled only once.  Never reset.
   @Nullable
   private FallbackModeTask fallbackTimer;
@@ -121,8 +117,6 @@ final class GrpclbState {
   @Nullable
   private LbStream lbStream;
   private Map<EquivalentAddressGroup, Subchannel> subchannels = Collections.emptyMap();
-
-  private boolean isShutdown;
 
   // Has the same size as the round-robin list from the balancer.
   // A drop entry from the round-robin list becomes a DropEntry here.
@@ -286,7 +280,6 @@ final class GrpclbState {
   }
 
   void shutdown() {
-    isShutdown = true;
     shutdownLbComm();
     // We close the subchannels through subchannelPool instead of helper just for convenience of
     // testing.
@@ -336,7 +329,6 @@ final class GrpclbState {
               .set(STATE_INFO,
                   new AtomicReference<ConnectivityStateInfo>(
                       ConnectivityStateInfo.forNonError(IDLE)))
-              .set(USAGE, new AtomicLong())
               .build();
           subchannel = subchannelPool.takeOrCreateSubchannel(eag, subchannelAttrs);
           subchannel.requestConnection();
@@ -647,11 +639,6 @@ final class GrpclbState {
     if (picker.dropList.equals(currentPicker.dropList)
         && picker.pickList.equals(currentPicker.pickList)) {
       return;
-    }
-    StringBuilder buffer = new StringBuilder();
-    for (DropEntry drop : picker.dropList) {
-      buffer.append(" ");
-      buffer.append(drop != null);
     }
     // No need to skip ErrorPicker. If the current picker is ErrorPicker, there won't be any pending
     // stream thus no time is wasted in re-process.
