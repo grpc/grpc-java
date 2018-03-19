@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.internal.Channelz.id;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -67,7 +68,8 @@ import io.grpc.ServerTransportFilter;
 import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
-import io.grpc.internal.Channelz.TransportStats;
+import io.grpc.internal.Channelz.ServerSocketsList;
+import io.grpc.internal.Channelz.SocketStats;
 import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
 import io.grpc.internal.testing.SingleMessageProducer;
 import io.grpc.internal.testing.TestServerStreamTracer;
@@ -139,6 +141,8 @@ public class ServerImplTest {
 
   private final FakeClock executor = new FakeClock();
   private final FakeClock timer = new FakeClock();
+  private final Channelz channelz = new Channelz();
+
   @Mock
   private ServerStreamTracer.Factory streamTracerFactory;
   private List<ServerStreamTracer.Factory> streamTracerFactories;
@@ -188,6 +192,7 @@ public class ServerImplTest {
   @Before
   public void startUp() throws IOException {
     MockitoAnnotations.initMocks(this);
+    builder.channelz = channelz;
     streamTracerFactories = Arrays.asList(streamTracerFactory);
     when(executorPool.getObject()).thenReturn(executor.getScheduledExecutorService());
     when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
@@ -1107,7 +1112,7 @@ public class ServerImplTest {
       fail("Expected exception");
     } catch (TestError t) {
       assertSame(expectedT, t);
-      ensureServerStateIsCancelled();
+      ensureServerStateNotLeaked();
     }
   }
 
@@ -1132,7 +1137,7 @@ public class ServerImplTest {
       fail("Expected exception");
     } catch (RuntimeException t) {
       assertSame(expectedT, t);
-      ensureServerStateIsCancelled();
+      ensureServerStateNotLeaked();
     }
   }
 
@@ -1155,7 +1160,7 @@ public class ServerImplTest {
       fail("Expected exception");
     } catch (TestError t) {
       assertSame(expectedT, t);
-      ensureServerStateIsCancelled();
+      ensureServerStateNotLeaked();
     }
   }
 
@@ -1178,7 +1183,7 @@ public class ServerImplTest {
       fail("Expected exception");
     } catch (RuntimeException t) {
       assertSame(expectedT, t);
-      ensureServerStateIsCancelled();
+      ensureServerStateNotLeaked();
     }
   }
 
@@ -1201,7 +1206,7 @@ public class ServerImplTest {
       fail("Expected exception");
     } catch (TestError t) {
       assertSame(expectedT, t);
-      ensureServerStateIsCancelled();
+      ensureServerStateNotLeaked();
     }
   }
 
@@ -1224,7 +1229,7 @@ public class ServerImplTest {
       fail("Expected exception");
     } catch (RuntimeException t) {
       assertSame(expectedT, t);
-      ensureServerStateIsCancelled();
+      ensureServerStateNotLeaked();
     }
   }
 
@@ -1292,6 +1297,11 @@ public class ServerImplTest {
       protected int priority() {
         return 0;
       }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
     };
     createAndStartServer();
 
@@ -1342,6 +1352,11 @@ public class ServerImplTest {
       protected int priority() {
         return 0;
       }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
     };
     createAndStartServer();
 
@@ -1359,6 +1374,46 @@ public class ServerImplTest {
     assertSame(
         METHOD.getResponseMarshaller(),
         userInterceptor.interceptedMethods.get(0).getResponseMarshaller());
+  }
+
+  @Test
+  public void channelz_membership() throws Exception {
+    createServer();
+    assertTrue(builder.channelz.containsServer(server.getLogId()));
+    server.shutdownNow().awaitTermination();
+    assertFalse(builder.channelz.containsServer(server.getLogId()));
+  }
+
+  @Test
+  public void channelz_serverStats() throws Exception {
+    createAndStartServer();
+    assertEquals(0, server.getStats().get().callsSucceeded);
+    basicExchangeHelper(METHOD, "Lots of pizza, please", 314, null);
+    assertEquals(1, server.getStats().get().callsSucceeded);
+  }
+
+  @Test
+  public void channelz_transport_membershp() throws Exception {
+    createAndStartServer();
+    SimpleServerTransport transport = new SimpleServerTransport();
+
+    ServerSocketsList before = builder.channelz
+        .getServerSockets(id(server), id(transport), /*maxPageSize=*/ 1);
+    assertThat(before.sockets).isEmpty();
+    assertTrue(before.end);
+
+    ServerTransportListener listener
+        = transportServer.registerNewServerTransport(transport);
+    ServerSocketsList added = builder.channelz
+        .getServerSockets(id(server), id(transport), /*maxPageSize=*/ 1);
+    assertThat(added.sockets).containsExactly(transport);
+    assertTrue(before.end);
+
+    listener.transportTerminated();
+    ServerSocketsList after = builder.channelz
+        .getServerSockets(id(server), id(transport), /*maxPageSize=*/ 1);
+    assertThat(after.sockets).isEmpty();
+    assertTrue(after.end);
   }
 
   private void createAndStartServer() throws IOException {
@@ -1395,12 +1450,6 @@ public class ServerImplTest {
     assertTrue(metadataCaptor.getValue().keys().isEmpty());
   }
 
-  private void ensureServerStateIsCancelled() {
-    verify(stream).cancel(statusCaptor.capture());
-    assertEquals(Status.INTERNAL, statusCaptor.getValue());
-    assertNull(statusCaptor.getValue().getCause());
-  }
-
   private static class SimpleServer implements io.grpc.internal.InternalServer {
     ServerListener listener;
 
@@ -1426,6 +1475,7 @@ public class ServerImplTest {
 
   private class SimpleServerTransport implements ServerTransport {
     ServerTransportListener listener;
+    LogId id = LogId.allocate(getClass().getName());
 
     @Override
     public void shutdown() {
@@ -1439,7 +1489,7 @@ public class ServerImplTest {
 
     @Override
     public LogId getLogId() {
-      throw new UnsupportedOperationException();
+      return id;
     }
 
     @Override
@@ -1448,8 +1498,8 @@ public class ServerImplTest {
     }
 
     @Override
-    public ListenableFuture<TransportStats> getStats() {
-      SettableFuture<TransportStats> ret = SettableFuture.create();
+    public ListenableFuture<SocketStats> getStats() {
+      SettableFuture<SocketStats> ret = SettableFuture.create();
       ret.set(null);
       return ret;
     }

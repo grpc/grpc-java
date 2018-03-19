@@ -117,7 +117,7 @@ public class AbstractManagedChannelImplBuilderTest {
 
   @Test
   public void loadBalancerFactory_default() {
-    assertNotNull(builder.loadBalancerFactory);
+    assertNull(builder.loadBalancerFactory);
   }
 
   @Test
@@ -420,11 +420,6 @@ public class AbstractManagedChannelImplBuilderTest {
 
     @Override
     protected ClientTransportFactory buildTransportFactory() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public Builder usePlaintext(boolean value) {
       throw new UnsupportedOperationException();
     }
   }

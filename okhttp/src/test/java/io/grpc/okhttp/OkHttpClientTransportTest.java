@@ -18,6 +18,8 @@ package io.grpc.okhttp;
 
 import static com.google.common.base.Charsets.UTF_8;
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
+import static io.grpc.internal.ClientStreamListener.RpcProgress.REFUSED;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.okhttp.Headers.CONTENT_TYPE_HEADER;
 import static io.grpc.okhttp.Headers.METHOD_HEADER;
@@ -61,11 +63,14 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusException;
 import io.grpc.internal.AbstractStream;
+import io.grpc.internal.Channelz.SocketStats;
 import io.grpc.internal.Channelz.TransportStats;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.Instrumented;
 import io.grpc.internal.ManagedClientTransport;
+import io.grpc.internal.ProxyParameters;
 import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.OkHttpClientTransport.ClientFrameHandler;
 import io.grpc.okhttp.internal.ConnectionSpec;
@@ -88,6 +93,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -121,6 +127,10 @@ public class OkHttpClientTransportTest {
   // The gRPC header length, which includes 1 byte compression flag and 4 bytes message length.
   private static final int HEADER_LENGTH = 5;
   private static final Status SHUTDOWN_REASON = Status.UNAVAILABLE.withDescription("for test");
+  private static final ProxyParameters NO_PROXY = null;
+  private static final String NO_USER = null;
+  private static final String NO_PW = null;
+  private static final int DEFAULT_START_STREAM_ID = 3;
 
   @Rule public final Timeout globalTimeout = Timeout.seconds(10);
 
@@ -134,9 +144,6 @@ public class OkHttpClientTransportTest {
 
   private final SSLSocketFactory sslSocketFactory = null;
   private final HostnameVerifier hostnameVerifier = null;
-  private final InetSocketAddress proxyAddr = null;
-  private final String proxyUser = null;
-  private final String proxyPassword = null;
   private final TransportTracer transportTracer = new TransportTracer();
   private OkHttpClientTransport clientTransport;
   private MockFrameReader frameReader;
@@ -164,7 +171,7 @@ public class OkHttpClientTransportTest {
   }
 
   private void initTransport() throws Exception {
-    startTransport(3, null, true, DEFAULT_MAX_MESSAGE_SIZE, null);
+    startTransport(DEFAULT_START_STREAM_ID, null, true, DEFAULT_MAX_MESSAGE_SIZE, null);
   }
 
   private void initTransport(int startId) throws Exception {
@@ -173,7 +180,8 @@ public class OkHttpClientTransportTest {
 
   private void initTransportAndDelayConnected() throws Exception {
     delayConnectedCallback = new DelayConnectedCallback();
-    startTransport(3, delayConnectedCallback, false, DEFAULT_MAX_MESSAGE_SIZE, null);
+    startTransport(
+        DEFAULT_START_STREAM_ID, delayConnectedCallback, false, DEFAULT_MAX_MESSAGE_SIZE, null);
   }
 
   private void startTransport(int startId, @Nullable Runnable connectingCallback,
@@ -222,9 +230,7 @@ public class OkHttpClientTransportTest {
         hostnameVerifier,
         Utils.convertSpec(OkHttpChannelBuilder.DEFAULT_CONNECTION_SPEC),
         DEFAULT_MAX_MESSAGE_SIZE,
-        proxyAddr,
-        proxyUser,
-        proxyPassword,
+        NO_PROXY,
         tooManyPingsRunnable,
         transportTracer);
     String s = clientTransport.toString();
@@ -547,7 +553,7 @@ public class OkHttpClientTransportTest {
   @Test
   public void transportTracer_windowSizeDefault() throws Exception {
     initTransport();
-    TransportStats stats = clientTransport.getStats().get();
+    TransportStats stats = getTransportStats(clientTransport);
     assertEquals(Utils.DEFAULT_WINDOW_SIZE, stats.remoteFlowControlWindow);
     // okhttp does not track local window sizes
     assertEquals(-1, stats.localFlowControlWindow);
@@ -556,13 +562,13 @@ public class OkHttpClientTransportTest {
   @Test
   public void transportTracer_windowSize_remote() throws Exception {
     initTransport();
-    TransportStats before = clientTransport.getStats().get();
+    TransportStats before = getTransportStats(clientTransport);
     assertEquals(Utils.DEFAULT_WINDOW_SIZE, before.remoteFlowControlWindow);
     // okhttp does not track local window sizes
     assertEquals(-1, before.localFlowControlWindow);
 
     frameHandler().windowUpdate(0, 1000);
-    TransportStats after = clientTransport.getStats().get();
+    TransportStats after = getTransportStats(clientTransport);
     assertEquals(Utils.DEFAULT_WINDOW_SIZE + 1000, after.remoteFlowControlWindow);
     // okhttp does not track local window sizes
     assertEquals(-1, after.localFlowControlWindow);
@@ -1278,11 +1284,11 @@ public class OkHttpClientTransportTest {
     initTransport();
     PingCallbackImpl callback1 = new PingCallbackImpl();
     clientTransport.ping(callback1, MoreExecutors.directExecutor());
-    assertEquals(1, clientTransport.getStats().get().keepAlivesSent);
+    assertEquals(1, getTransportStats(clientTransport).keepAlivesSent);
     // add'l ping will be added as listener to outstanding operation
     PingCallbackImpl callback2 = new PingCallbackImpl();
     clientTransport.ping(callback2, MoreExecutors.directExecutor());
-    assertEquals(1, clientTransport.getStats().get().keepAlivesSent);
+    assertEquals(1, getTransportStats(clientTransport).keepAlivesSent);
 
     ArgumentCaptor<Integer> captor1 = ArgumentCaptor.forClass(int.class);
     ArgumentCaptor<Integer> captor2 = ArgumentCaptor.forClass(int.class);
@@ -1315,7 +1321,7 @@ public class OkHttpClientTransportTest {
     // now that previous ping is done, next request returns a different future
     callback1 = new PingCallbackImpl();
     clientTransport.ping(callback1, MoreExecutors.directExecutor());
-    assertEquals(2, clientTransport.getStats().get().keepAlivesSent);
+    assertEquals(2, getTransportStats(clientTransport).keepAlivesSent);
     assertEquals(0, callback1.invocationCount);
     shutdownAndVerify();
   }
@@ -1325,7 +1331,7 @@ public class OkHttpClientTransportTest {
     initTransport();
     PingCallbackImpl callback = new PingCallbackImpl();
     clientTransport.ping(callback, MoreExecutors.directExecutor());
-    assertEquals(1, clientTransport.getStats().get().keepAlivesSent);
+    assertEquals(1, getTransportStats(clientTransport).keepAlivesSent);
     assertEquals(0, callback.invocationCount);
 
     clientTransport.shutdown(SHUTDOWN_REASON);
@@ -1337,7 +1343,7 @@ public class OkHttpClientTransportTest {
     // now that handler is in terminal state, all future pings fail immediately
     callback = new PingCallbackImpl();
     clientTransport.ping(callback, MoreExecutors.directExecutor());
-    assertEquals(1, clientTransport.getStats().get().keepAlivesSent);
+    assertEquals(1, getTransportStats(clientTransport).keepAlivesSent);
     assertEquals(1, callback.invocationCount);
     assertTrue(callback.failureCause instanceof StatusException);
     assertSame(SHUTDOWN_REASON, ((StatusException) callback.failureCause).getStatus());
@@ -1349,7 +1355,7 @@ public class OkHttpClientTransportTest {
     initTransport();
     PingCallbackImpl callback = new PingCallbackImpl();
     clientTransport.ping(callback, MoreExecutors.directExecutor());
-    assertEquals(1, clientTransport.getStats().get().keepAlivesSent);
+    assertEquals(1, getTransportStats(clientTransport).keepAlivesSent);
     assertEquals(0, callback.invocationCount);
 
     clientTransport.onException(new IOException());
@@ -1362,7 +1368,7 @@ public class OkHttpClientTransportTest {
     // now that handler is in terminal state, all future pings fail immediately
     callback = new PingCallbackImpl();
     clientTransport.ping(callback, MoreExecutors.directExecutor());
-    assertEquals(1, clientTransport.getStats().get().keepAlivesSent);
+    assertEquals(1, getTransportStats(clientTransport).keepAlivesSent);
     assertEquals(1, callback.invocationCount);
     assertTrue(callback.failureCause instanceof StatusException);
     assertEquals(Status.Code.UNAVAILABLE,
@@ -1447,9 +1453,7 @@ public class OkHttpClientTransportTest {
         hostnameVerifier,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
-        proxyAddr,
-        proxyUser,
-        proxyPassword,
+        NO_PROXY,
         tooManyPingsRunnable,
         transportTracer);
 
@@ -1471,9 +1475,7 @@ public class OkHttpClientTransportTest {
         hostnameVerifier,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
-        proxyAddr,
-        proxyUser,
-        proxyPassword,
+        NO_PROXY,
         tooManyPingsRunnable,
         new TransportTracer());
 
@@ -1503,9 +1505,8 @@ public class OkHttpClientTransportTest {
         hostnameVerifier,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
-        (InetSocketAddress) serverSocket.getLocalSocketAddress(),
-        proxyUser,
-        proxyPassword,
+        new ProxyParameters(
+            (InetSocketAddress) serverSocket.getLocalSocketAddress(), NO_USER, NO_PW),
         tooManyPingsRunnable,
         transportTracer);
     clientTransport.start(transportListener);
@@ -1554,9 +1555,8 @@ public class OkHttpClientTransportTest {
         hostnameVerifier,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
-        (InetSocketAddress) serverSocket.getLocalSocketAddress(),
-        proxyUser,
-        proxyPassword,
+        new ProxyParameters(
+            (InetSocketAddress) serverSocket.getLocalSocketAddress(), NO_USER, NO_PW),
         tooManyPingsRunnable,
         transportTracer);
     clientTransport.start(transportListener);
@@ -1604,9 +1604,8 @@ public class OkHttpClientTransportTest {
         hostnameVerifier,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
-        (InetSocketAddress) serverSocket.getLocalSocketAddress(),
-        proxyUser,
-        proxyPassword,
+        new ProxyParameters(
+            (InetSocketAddress) serverSocket.getLocalSocketAddress(), NO_USER, NO_PW),
         tooManyPingsRunnable,
         transportTracer);
     clientTransport.start(transportListener);
@@ -1614,34 +1613,6 @@ public class OkHttpClientTransportTest {
     Socket sock = serverSocket.accept();
     serverSocket.close();
     sock.close();
-
-    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(captor.capture());
-    Status error = captor.getValue();
-    assertTrue("Status didn't contain proxy: " + captor.getValue(),
-        error.getDescription().contains("proxy"));
-    assertEquals("Not UNAVAILABLE: " + captor.getValue(),
-        Status.UNAVAILABLE.getCode(), error.getCode());
-    verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
-  }
-
-  @Test
-  public void proxy_unresolvedProxyAddress() throws Exception {
-    clientTransport = new OkHttpClientTransport(
-        InetSocketAddress.createUnresolved("theservice", 80),
-        "authority",
-        "userAgent",
-        executor,
-        sslSocketFactory,
-        hostnameVerifier,
-        ConnectionSpec.CLEARTEXT,
-        DEFAULT_MAX_MESSAGE_SIZE,
-        InetSocketAddress.createUnresolved("unresolvedproxy", 80),
-        proxyUser,
-        proxyPassword,
-        tooManyPingsRunnable,
-        transportTracer);
-    clientTransport.start(transportListener);
 
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(captor.capture());
@@ -1692,6 +1663,88 @@ public class OkHttpClientTransportTest {
     initTransport();
     frameHandler().goAway(0, ErrorCode.ENHANCE_YOUR_CALM, ByteString.encodeUtf8("too_many_pings"));
     assertTrue(run.get());
+
+    shutdownAndVerify();
+  }
+
+  @Test
+  public void goAway_streamListenerRpcProgress() throws Exception {
+    initTransport();
+    setMaxConcurrentStreams(2);
+    MockStreamListener listener1 = new MockStreamListener();
+    MockStreamListener listener2 = new MockStreamListener();
+    MockStreamListener listener3 = new MockStreamListener();
+    OkHttpClientStream stream1 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
+    stream1.start(listener1);
+    OkHttpClientStream stream2 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
+    stream2.start(listener2);
+    OkHttpClientStream stream3 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
+    stream3.start(listener3);
+    waitForStreamPending(1);
+
+    assertEquals(2, activeStreamCount());
+    assertContainStream(DEFAULT_START_STREAM_ID);
+    assertContainStream(DEFAULT_START_STREAM_ID + 2);
+
+    frameHandler()
+        .goAway(DEFAULT_START_STREAM_ID, ErrorCode.CANCEL, ByteString.encodeUtf8("blablabla"));
+
+    listener2.waitUntilStreamClosed();
+    listener3.waitUntilStreamClosed();
+    assertNull(listener1.rpcProgress);
+    assertEquals(REFUSED, listener2.rpcProgress);
+    assertEquals(REFUSED, listener3.rpcProgress);
+    assertEquals(1, activeStreamCount());
+    assertContainStream(DEFAULT_START_STREAM_ID);
+
+    getStream(DEFAULT_START_STREAM_ID).cancel(Status.CANCELLED);
+
+    listener1.waitUntilStreamClosed();
+    assertEquals(PROCESSED, listener1.rpcProgress);
+
+    shutdownAndVerify();
+  }
+
+  @Test
+  public void reset_streamListenerRpcProgress() throws Exception {
+    initTransport();
+    MockStreamListener listener1 = new MockStreamListener();
+    MockStreamListener listener2 = new MockStreamListener();
+    MockStreamListener listener3 = new MockStreamListener();
+    OkHttpClientStream stream1 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
+    stream1.start(listener1);
+    OkHttpClientStream stream2 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
+    stream2.start(listener2);
+    OkHttpClientStream stream3 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
+    stream3.start(listener3);
+
+    assertEquals(3, activeStreamCount());
+    assertContainStream(DEFAULT_START_STREAM_ID);
+    assertContainStream(DEFAULT_START_STREAM_ID + 2);
+    assertContainStream(DEFAULT_START_STREAM_ID + 4);
+
+    frameHandler().rstStream(DEFAULT_START_STREAM_ID + 2, ErrorCode.REFUSED_STREAM);
+
+    listener2.waitUntilStreamClosed();
+    assertNull(listener1.rpcProgress);
+    assertEquals(REFUSED, listener2.rpcProgress);
+    assertNull(listener3.rpcProgress);
+
+    frameHandler().rstStream(DEFAULT_START_STREAM_ID, ErrorCode.CANCEL);
+    listener1.waitUntilStreamClosed();
+    assertEquals(PROCESSED, listener1.rpcProgress);
+    assertNull(listener3.rpcProgress);
+
+    getStream(DEFAULT_START_STREAM_ID + 4).cancel(Status.CANCELLED);
+
+    listener3.waitUntilStreamClosed();
+    assertEquals(PROCESSED, listener3.rpcProgress);
 
     shutdownAndVerify();
   }
@@ -1846,6 +1899,7 @@ public class OkHttpClientTransportTest {
     Status status;
     Metadata headers;
     Metadata trailers;
+    RpcProgress rpcProgress;
     CountDownLatch closed = new CountDownLatch(1);
     ArrayList<String> messages = new ArrayList<String>();
     boolean onReadyCalled;
@@ -1871,8 +1925,14 @@ public class OkHttpClientTransportTest {
 
     @Override
     public void closed(Status status, Metadata trailers) {
+      closed(status, PROCESSED, trailers);
+    }
+
+    @Override
+    public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
       this.status = status;
       this.trailers = trailers;
+      this.rpcProgress = rpcProgress;
       closed.countDown();
     }
 
@@ -1969,5 +2029,10 @@ public class OkHttpClientTransportTest {
     void allowConnected() {
       delayed.set(null);
     }
+  }
+
+  private static TransportStats getTransportStats(Instrumented<SocketStats> obj)
+      throws ExecutionException, InterruptedException {
+    return obj.getStats().get().data;
   }
 }

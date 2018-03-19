@@ -26,6 +26,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.SharedResourceHolder.Resource;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -35,10 +36,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
@@ -69,39 +69,40 @@ final class DnsNameResolver extends NameResolver {
   private static final String GRPCLB_NAME_PREFIX = "_grpclb._tcp.";
 
   private static final String JNDI_PROPERTY =
-      System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi", "false");
+      System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi", "true");
 
   @VisibleForTesting
   static boolean enableJndi = Boolean.parseBoolean(JNDI_PROPERTY);
+
+
+  @VisibleForTesting
+  final ProxyDetector proxyDetector;
+
+  /** Access through {@link #getLocalHostname}. */
+  private static String localHostname;
+
+  private final Random random = new Random();
 
   private DelegateResolver delegateResolver = pickDelegateResolver();
 
   private final String authority;
   private final String host;
   private final int port;
-  private final Resource<ScheduledExecutorService> timerServiceResource;
   private final Resource<ExecutorService> executorResource;
-  private final ProxyDetector proxyDetector;
   @GuardedBy("this")
   private boolean shutdown;
   @GuardedBy("this")
-  private ScheduledExecutorService timerService;
-  @GuardedBy("this")
   private ExecutorService executor;
-  @GuardedBy("this")
-  private ScheduledFuture<?> resolutionTask;
   @GuardedBy("this")
   private boolean resolving;
   @GuardedBy("this")
   private Listener listener;
 
   DnsNameResolver(@Nullable String nsAuthority, String name, Attributes params,
-      Resource<ScheduledExecutorService> timerServiceResource,
       Resource<ExecutorService> executorResource,
       ProxyDetector proxyDetector) {
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
-    this.timerServiceResource = timerServiceResource;
     this.executorResource = executorResource;
     // Must prepend a "//" to the name when constructing a URI, otherwise it will be treated as an
     // opaque URI, thus the authority and host of the resulted URI would be null.
@@ -131,7 +132,6 @@ final class DnsNameResolver extends NameResolver {
   @Override
   public final synchronized void start(Listener listener) {
     Preconditions.checkState(this.listener == null, "already started");
-    timerService = SharedResourceHolder.get(timerServiceResource);
     executor = SharedResourceHolder.get(executorResource);
     this.listener = Preconditions.checkNotNull(listener, "listener");
     resolve();
@@ -148,11 +148,6 @@ final class DnsNameResolver extends NameResolver {
       public void run() {
         Listener savedListener;
         synchronized (DnsNameResolver.this) {
-          // If this task is started by refresh(), there might already be a scheduled task.
-          if (resolutionTask != null) {
-            resolutionTask.cancel(false);
-            resolutionTask = null;
-          }
           if (shutdown) {
             return;
           }
@@ -161,9 +156,23 @@ final class DnsNameResolver extends NameResolver {
         }
         try {
           InetSocketAddress destination = InetSocketAddress.createUnresolved(host, port);
-          ProxyParameters proxy = proxyDetector.proxyFor(destination);
+          ProxyParameters proxy;
+          try {
+            proxy = proxyDetector.proxyFor(destination);
+          } catch (IOException e) {
+            savedListener.onError(
+                Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
+            return;
+          }
           if (proxy != null) {
-            EquivalentAddressGroup server = new EquivalentAddressGroup(destination);
+            EquivalentAddressGroup server =
+                new EquivalentAddressGroup(
+                    new PairSocketAddress(
+                        destination,
+                        Attributes
+                            .newBuilder()
+                            .set(ProxyDetector.PROXY_PARAMS_KEY, proxy)
+                            .build()));
             savedListener.onAddresses(Collections.singletonList(server), Attributes.EMPTY);
             return;
           }
@@ -171,16 +180,6 @@ final class DnsNameResolver extends NameResolver {
           try {
             resolvedInetAddrs = delegateResolver.resolve(host);
           } catch (Exception e) {
-            synchronized (DnsNameResolver.this) {
-              if (shutdown) {
-                return;
-              }
-              // Because timerService is the single-threaded GrpcUtil.TIMER_SERVICE in production,
-              // we need to delegate the blocking work to the executor
-              resolutionTask =
-                  timerService.schedule(new LogExceptionRunnable(resolutionRunnableOnExecutor),
-                      1, TimeUnit.MINUTES);
-            }
             savedListener.onError(
                 Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
             return;
@@ -194,25 +193,34 @@ final class DnsNameResolver extends NameResolver {
 
           Attributes.Builder attrs = Attributes.newBuilder();
           if (!resolvedInetAddrs.txtRecords.isEmpty()) {
-            attrs.set(
-                GrpcAttributes.NAME_RESOLVER_ATTR_DNS_TXT,
-                Collections.unmodifiableList(new ArrayList<String>(resolvedInetAddrs.txtRecords)));
+            Map<String, Object> serviceConfig = null;
+            try {
+              for (Map<String, Object> possibleConfig :
+                  ServiceConfigUtil.parseTxtResults(resolvedInetAddrs.txtRecords)) {
+                try {
+                  serviceConfig =
+                      ServiceConfigUtil.maybeChooseServiceConfig(
+                          possibleConfig, random, getLocalHostname());
+                } catch (RuntimeException e) {
+                  logger.log(Level.WARNING, "Bad service config choice " + possibleConfig, e);
+                }
+                if (serviceConfig != null) {
+                  break;
+                }
+              }
+            } catch (RuntimeException e) {
+              logger.log(Level.WARNING, "Can't parse service Configs", e);
+            }
+            if (serviceConfig != null) {
+              attrs.set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig);
+            }
+          } else {
+            logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});
           }
           savedListener.onAddresses(servers, attrs.build());
         } finally {
           synchronized (DnsNameResolver.this) {
             resolving = false;
-          }
-        }
-      }
-    };
-
-  private final Runnable resolutionRunnableOnExecutor = new Runnable() {
-      @Override
-      public void run() {
-        synchronized (DnsNameResolver.this) {
-          if (!shutdown) {
-            executor.execute(resolutionRunnable);
           }
         }
       }
@@ -232,12 +240,6 @@ final class DnsNameResolver extends NameResolver {
       return;
     }
     shutdown = true;
-    if (resolutionTask != null) {
-      resolutionTask.cancel(false);
-    }
-    if (timerService != null) {
-      timerService = SharedResourceHolder.release(timerServiceResource, timerService);
-    }
     if (executor != null) {
       executor = SharedResourceHolder.release(executorResource, executor);
     }
@@ -450,7 +452,7 @@ final class DnsNameResolver extends NameResolver {
           NamingEnumeration<?> rrValues = rrEntry.getAll();
           try {
             while (rrValues.hasMore()) {
-              records.add(String.valueOf(rrValues.next()));
+              records.add(unquote(String.valueOf(rrValues.next())));
             }
           } finally {
             rrValues.close();
@@ -461,5 +463,46 @@ final class DnsNameResolver extends NameResolver {
       }
       return records;
     }
+  }
+
+  /**
+   * Undo the quoting done in {@link com.sun.jndi.dns.ResourceRecord#decodeTxt}.
+   */
+  @VisibleForTesting
+  static String unquote(String txtRecord) {
+    StringBuilder sb = new StringBuilder(txtRecord.length());
+    boolean inquote = false;
+    for (int i = 0; i < txtRecord.length(); i++) {
+      char c = txtRecord.charAt(i);
+      if (!inquote) {
+        if (c == ' ') {
+          continue;
+        } else if (c == '"') {
+          inquote = true;
+          continue;
+        }
+      } else {
+        if (c == '"') {
+          inquote = false;
+          continue;
+        } else if (c == '\\') {
+          c = txtRecord.charAt(++i);
+          assert c == '"' || c == '\\';
+        }
+      }
+      sb.append(c);
+    }
+    return sb.toString();
+  }
+
+  private static String getLocalHostname() {
+    if (localHostname == null) {
+      try {
+        localHostname = InetAddress.getLocalHost().getHostName();
+      } catch (UnknownHostException e) {
+        throw new RuntimeException(e);
+      }
+    }
+    return localHostname;
   }
 }

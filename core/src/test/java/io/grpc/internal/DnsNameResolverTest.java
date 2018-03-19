@@ -27,7 +27,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.base.MoreObjects;
@@ -35,7 +34,6 @@ import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
-import io.grpc.Status;
 import io.grpc.internal.DnsNameResolver.DelegateResolver;
 import io.grpc.internal.DnsNameResolver.ResolutionResults;
 import io.grpc.internal.SharedResourceHolder.Resource;
@@ -51,8 +49,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
@@ -80,17 +76,6 @@ public class DnsNameResolverTest {
   private final FakeClock fakeClock = new FakeClock();
   private final FakeClock fakeExecutor = new FakeClock();
   private MockResolver mockResolver = new MockResolver();
-  private final Resource<ScheduledExecutorService> fakeTimerServiceResource =
-      new Resource<ScheduledExecutorService>() {
-        @Override
-        public ScheduledExecutorService create() {
-          return fakeClock.getScheduledExecutorService();
-        }
-
-        @Override
-        public void close(ScheduledExecutorService instance) {
-        }
-      };
 
   private final Resource<ExecutorService> fakeExecutorResource =
       new Resource<ExecutorService>() {
@@ -108,8 +93,6 @@ public class DnsNameResolverTest {
   private NameResolver.Listener mockListener;
   @Captor
   private ArgumentCaptor<List<EquivalentAddressGroup>> resultCaptor;
-  @Captor
-  private ArgumentCaptor<Status> statusCaptor;
 
   private DnsNameResolver newResolver(String name, int port) {
     return newResolver(name, port, mockResolver, GrpcUtil.NOOP_PROXY_DETECTOR);
@@ -124,7 +107,6 @@ public class DnsNameResolverTest {
         null,
         name,
         Attributes.newBuilder().set(NameResolver.Factory.PARAMS_DEFAULT_PORT, port).build(),
-        fakeTimerServiceResource,
         fakeExecutorResource,
         proxyDetector);
     dnsResolver.setDelegateResolver(delegateResolver);
@@ -188,105 +170,6 @@ public class DnsNameResolverTest {
     assertEquals(0, fakeClock.numPendingTasks());
 
     resolver.shutdown();
-  }
-
-  @Test
-  public void retry() throws Exception {
-    String name = "foo.googleapis.com";
-    UnknownHostException error = new UnknownHostException(name);
-    List<InetAddress> answer = createAddressList(2);
-    DnsNameResolver resolver = newResolver(name, 81);
-    mockResolver.addAnswer(error).addAnswer(error).addAnswer(answer);
-    resolver.start(mockListener);
-    assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockListener).onError(statusCaptor.capture());
-    assertEquals(name, mockResolver.invocations.poll());
-    Status status = statusCaptor.getValue();
-    assertEquals(Status.Code.UNAVAILABLE, status.getCode());
-    assertSame(error, status.getCause());
-
-    // First retry scheduled
-    assertEquals(1, fakeClock.numPendingTasks());
-    fakeClock.forwardNanos(TimeUnit.MINUTES.toNanos(1) - 1);
-    assertEquals(1, fakeClock.numPendingTasks());
-
-    // First retry
-    fakeClock.forwardNanos(1);
-    assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockListener, times(2)).onError(statusCaptor.capture());
-    assertEquals(name, mockResolver.invocations.poll());
-    status = statusCaptor.getValue();
-    assertEquals(Status.Code.UNAVAILABLE, status.getCode());
-    assertSame(error, status.getCause());
-
-    // Second retry scheduled
-    assertEquals(1, fakeClock.numPendingTasks());
-    fakeClock.forwardNanos(TimeUnit.MINUTES.toNanos(1) - 1);
-    assertEquals(1, fakeClock.numPendingTasks());
-
-    // Second retry
-    fakeClock.forwardNanos(1);
-    assertEquals(0, fakeClock.numPendingTasks());
-    assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockListener).onAddresses(resultCaptor.capture(), any(Attributes.class));
-    assertEquals(name, mockResolver.invocations.poll());
-    assertAnswerMatches(answer, 81, resultCaptor.getValue());
-
-    verifyNoMoreInteractions(mockListener);
-  }
-
-  @Test
-  public void refreshCancelsScheduledRetry() throws Exception {
-    String name = "foo.googleapis.com";
-    UnknownHostException error = new UnknownHostException(name);
-    List<InetAddress> answer = createAddressList(2);
-    DnsNameResolver resolver = newResolver(name,  81);
-    mockResolver.addAnswer(error).addAnswer(answer);
-    resolver.start(mockListener);
-    assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockListener).onError(statusCaptor.capture());
-    assertEquals(name, mockResolver.invocations.poll());
-    Status status = statusCaptor.getValue();
-    assertEquals(Status.Code.UNAVAILABLE, status.getCode());
-    assertSame(error, status.getCause());
-
-    // First retry scheduled
-    assertEquals(1, fakeClock.numPendingTasks());
-
-    resolver.refresh();
-    assertEquals(1, fakeExecutor.runDueTasks());
-    // Refresh cancelled the retry
-    assertEquals(0, fakeClock.numPendingTasks());
-    verify(mockListener).onAddresses(resultCaptor.capture(), any(Attributes.class));
-    assertEquals(name, mockResolver.invocations.poll());
-    assertAnswerMatches(answer, 81, resultCaptor.getValue());
-
-    verifyNoMoreInteractions(mockListener);
-  }
-
-  @Test
-  public void shutdownCancelsScheduledRetry() throws Exception {
-    String name = "foo.googleapis.com";
-    UnknownHostException error = new UnknownHostException(name);
-    DnsNameResolver resolver = newResolver(name, 81);
-    mockResolver.addAnswer(error);
-    resolver.start(mockListener);
-    assertEquals(1, fakeExecutor.runDueTasks());
-
-    verify(mockListener).onError(statusCaptor.capture());
-    assertEquals(name, mockResolver.invocations.poll());
-    Status status = statusCaptor.getValue();
-    assertEquals(Status.Code.UNAVAILABLE, status.getCode());
-    assertSame(error, status.getCause());
-
-    // Retry scheduled
-    assertEquals(1, fakeClock.numPendingTasks());
-
-    // Shutdown cancelled the retry
-    resolver.shutdown();
-    assertEquals(0, fakeClock.numPendingTasks());
-
-    verifyNoMoreInteractions(mockListener);
   }
 
   @Test
@@ -365,7 +248,7 @@ public class DnsNameResolverTest {
     final int port = 81;
     ProxyDetector alwaysDetectProxy = mock(ProxyDetector.class);
     ProxyParameters proxyParameters = new ProxyParameters(
-        InetSocketAddress.createUnresolved("proxy.example.com", 1000),
+        new InetSocketAddress(InetAddress.getByName("10.0.0.1"), 1000),
         "username",
         "password");
     when(alwaysDetectProxy.proxyFor(any(SocketAddress.class)))
@@ -381,8 +264,21 @@ public class DnsNameResolverTest {
     assertThat(result).hasSize(1);
     EquivalentAddressGroup eag = result.get(0);
     assertThat(eag.getAddresses()).hasSize(1);
-    SocketAddress socketAddress = eag.getAddresses().get(0);
-    assertTrue(((InetSocketAddress) socketAddress).isUnresolved());
+
+    PairSocketAddress socketAddress = (PairSocketAddress) eag.getAddresses().get(0);
+    assertSame(proxyParameters, socketAddress.getAttributes().get(ProxyDetector.PROXY_PARAMS_KEY));
+    assertTrue(((InetSocketAddress) socketAddress.getAddress()).isUnresolved());
+  }
+
+  @Test
+  public void unquoteRemovesJndiFormatting() {
+    assertEquals("blah", DnsNameResolver.unquote("blah"));
+    assertEquals("", DnsNameResolver.unquote("\"\""));
+    assertEquals("blahblah", DnsNameResolver.unquote("blah blah"));
+    assertEquals("blahfoo blah", DnsNameResolver.unquote("blah \"foo blah\""));
+    assertEquals("blah blah", DnsNameResolver.unquote("\"blah blah\""));
+    assertEquals("blah\"blah", DnsNameResolver.unquote("\"blah\\\"blah\""));
+    assertEquals("blah\\blah", DnsNameResolver.unquote("\"blah\\\\blah\""));
   }
 
   private void testInvalidUri(URI uri) {

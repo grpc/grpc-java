@@ -1,35 +1,14 @@
 load("//:java_grpc_library.bzl", "java_grpc_library")
 
 java_library(
-    name = "alts_tsi",
+    name = "alts_internal",
     srcs = glob([
-        "src/main/java/io/grpc/alts/transportsecurity/*.java",
+        "src/main/java/io/grpc/alts/internal/*.java",
     ]),
-    visibility = ["//visibility:public"],
     deps = [
-        "//core",
-        "//core:internal",
-        "//stub",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
-        "@com_google_protobuf//:protobuf_java",
-        "@com_google_protobuf//:protobuf_java_util",
-        "@io_netty_netty_buffer//jar",
-        "@io_netty_netty_common//jar",
-        ":handshaker_java_proto",
         ":handshaker_java_grpc",
-    ],
-)
-
-java_library(
-    name = "alts",
-    srcs = glob([
-        "src/main/java/io/grpc/alts/*.java",
-    ]),
-    visibility = ["//visibility:public"],
-    deps = [
+        ":handshaker_java_proto",
         "//core",
-        "//core:internal",
         "//netty",
         "//stub",
         "@com_google_code_findbugs_jsr305//jar",
@@ -40,10 +19,26 @@ java_library(
         "@io_netty_netty_codec//jar",
         "@io_netty_netty_common//jar",
         "@io_netty_netty_transport//jar",
-        "@org_apache_commons_commons_lang3//jar",
-        ":alts_tsi",
-        ":handshaker_java_proto",
+    ],
+)
+
+java_library(
+    name = "alts",
+    srcs = glob([
+        "src/main/java/io/grpc/alts/*.java",
+    ]),
+    visibility = ["//visibility:public"],
+    deps = [
+        ":alts_internal",
         ":handshaker_java_grpc",
+        "//core",
+        "//core:internal",
+        "//netty",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava_guava//jar",
+        "@io_netty_netty_common//jar",
+        "@io_netty_netty_transport//jar",
+        "@org_apache_commons_commons_lang3//jar",
     ],
 )
 

@@ -46,6 +46,7 @@ public final class StatusProto {
    *
    * @throws IllegalArgumentException if the value of {@code statusProto.getCode()} is not a valid
    *     gRPC status code.
+   * @since 1.3.0
    */
   public static StatusRuntimeException toStatusRuntimeException(com.google.rpc.Status statusProto) {
     return toStatus(statusProto).asRuntimeException(toMetadata(statusProto));
@@ -62,6 +63,7 @@ public final class StatusProto {
    *
    * @throws IllegalArgumentException if the value of {@code statusProto.getCode()} is not a valid
    *     gRPC status code.
+   * @since 1.3.0
    */
   public static StatusRuntimeException toStatusRuntimeException(
       com.google.rpc.Status statusProto, Metadata metadata) {
@@ -77,6 +79,7 @@ public final class StatusProto {
    *
    * @throws IllegalArgumentException if the value of {@code statusProto.getCode()} is not a valid
    *     gRPC status code.
+   * @since 1.3.0
    */
   public static StatusException toStatusException(com.google.rpc.Status statusProto) {
     return toStatus(statusProto).asException(toMetadata(statusProto));
@@ -93,6 +96,7 @@ public final class StatusProto {
    *
    * @throws IllegalArgumentException if the value of {@code statusProto.getCode()} is not a valid
    *     gRPC status code.
+   * @since 1.3.0
    */
   public static StatusException toStatusException(
       com.google.rpc.Status statusProto, Metadata metadata) {
@@ -124,6 +128,7 @@ public final class StatusProto {
    * @return the extracted {@link com.google.rpc.Status} instance, or {@code null} if none exists.
    * @throws IllegalArgumentException if an embedded {@link com.google.rpc.Status} is found and its
    *     code does not match the gRPC {@link Status} code.
+   * @since 1.3.0
    */
   @Nullable
   public static com.google.rpc.Status fromThrowable(Throwable t) {
@@ -131,18 +136,25 @@ public final class StatusProto {
     while (cause != null) {
       if (cause instanceof StatusException) {
         StatusException e = (StatusException) cause;
-        return toStatusProto(e.getStatus(), e.getTrailers());
+        return fromStatusAndTrailers(e.getStatus(), e.getTrailers());
       } else if (cause instanceof StatusRuntimeException) {
         StatusRuntimeException e = (StatusRuntimeException) cause;
-        return toStatusProto(e.getStatus(), e.getTrailers());
+        return fromStatusAndTrailers(e.getStatus(), e.getTrailers());
       }
       cause = cause.getCause();
     }
     return null;
   }
 
+  /**
+   * Extracts the google.rpc.Status from trailers, and makes sure they match the gRPC
+   * {@code status}.
+   *
+   * @return the embedded google.rpc.Status or {@code null} if it is not present.
+   * @since 1.10.0
+   */
   @Nullable
-  private static com.google.rpc.Status toStatusProto(Status status, Metadata trailers) {
+  public static com.google.rpc.Status fromStatusAndTrailers(Status status, Metadata trailers) {
     if (trailers != null) {
       com.google.rpc.Status statusProto = trailers.get(STATUS_DETAILS_KEY);
       if (statusProto != null) {
