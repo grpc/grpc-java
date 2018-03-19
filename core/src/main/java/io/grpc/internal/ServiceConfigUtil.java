@@ -66,8 +66,13 @@ final class ServiceConfigUtil {
     return null;
   }
 
+  /**
+   * Gets retry policies from the service config.
+   *
+   * @throw ClassCastException if the service config doesn't parse properly
+   */
   static RetryPolicies getRetryPolicies(
-      @Nullable Map<String, Object> serviceConfig, int customMaxAttempts) {
+      @Nullable Map<String, Object> serviceConfig, int maxAttemptsLimit) {
     final Map<String, RetryPolicy> fullMethodNameMap = new HashMap<String, RetryPolicy>();
     final Map<String, RetryPolicy> serviceNameMap = new HashMap<String, RetryPolicy>();
 
@@ -99,12 +104,11 @@ final class ServiceConfigUtil {
         List<Object> methodConfigs = getList(serviceConfig, "methodConfig");
         for (int i = 0; i < methodConfigs.size(); i++) {
           Map<String, Object> methodConfig = getObject(methodConfigs, i);
-          List<Object> names = getList(methodConfig, "name");
           if (methodConfig.containsKey("retryPolicy")) {
             Map<String, Object> retryPolicy = getObject(methodConfig, "retryPolicy");
 
             int maxAttempts = getDouble(retryPolicy, "maxAttempts").intValue();
-            maxAttempts = Math.min(maxAttempts, customMaxAttempts);
+            maxAttempts = Math.min(maxAttempts, maxAttemptsLimit);
 
             String initialBackoffStr = getString(retryPolicy, "initialBackoff");
             checkState(
@@ -132,6 +136,7 @@ final class ServiceConfigUtil {
             RetryPolicy pojoPolicy = new RetryPolicy(
                 maxAttempts, initialBackoff, maxBackoff, backoffMultiplier, codeSet);
 
+            List<Object> names = getList(methodConfig, "name");
             for (int j = 0; j < names.size(); j++) {
               Map<String, Object> name = getObject(names, j);
               String service = getString(name, "service");
