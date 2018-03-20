@@ -28,11 +28,15 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder.Resource;
+import io.grpc.internal.TransportTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2InboundHeaders;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2Exception;
+import io.netty.handler.codec.http2.Http2FlowController;
 import io.netty.handler.codec.http2.Http2Headers;
+import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import java.io.IOException;
@@ -198,6 +202,25 @@ class Utils {
     @Override
     public String toString() {
       return name;
+    }
+  }
+
+  static final class FlowControlReader implements TransportTracer.FlowControlReader {
+    private final Http2Stream connectionStream;
+    private final Http2FlowController local;
+    private final Http2FlowController remote;
+
+    FlowControlReader(Http2Connection connection) {
+      local = connection.local().flowController();
+      remote = connection.remote().flowController();
+      connectionStream = connection.connectionStream();
+    }
+
+    @Override
+    public TransportTracer.FlowControlWindows read() {
+      return new TransportTracer.FlowControlWindows(
+          local.windowSize(connectionStream),
+          remote.windowSize(connectionStream));
     }
   }
 
