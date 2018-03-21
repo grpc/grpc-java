@@ -319,14 +319,14 @@ If you received an error message "ALPN is not configured properly" or "Jetty ALP
  - ALPN related dependencies are either not present in the classpath
  - or that there is a classpath conflict
  - or that a wrong version is used due to dependency management
- - or you are on an unsupported platform (e.g., 32-bit OS, Alpine with `muslc`). See [Transport Security](#transport-security-tls) for supported platforms.
+ - or you are on an unsupported platform (e.g., 32-bit OS, Alpine with `musl` libc). See [Transport Security](#transport-security-tls) for supported platforms.
 
 ### Netty
 If you aren't using gRPC on Android devices, you are most likely using `grpc-netty` transport.
 
 If you are developing for Android and have a dependency on `grpc-netty`, you should remove it as `grpc-netty` is unsupported on Android. Use `grpc-okhttp` instead.
 
-If you are on a 32-bit operating system, or not on an [Transport Security supported platform](#transport-security-tls), you should use Jetty ALPN (and beware of potential issues), or you'll need to build your own 32-bit version of `netty-tcnative`.
+If you are on a 32-bit operating system, or not on a [Transport Security supported platform](#transport-security-tls), you should use Jetty ALPN (and beware of potential issues), or you'll need to build your own 32-bit version of `netty-tcnative`.
 
 Find the dependency tree (e.g., `mvn dependency:tree`), and look for versions of:
  - `io.grpc:grpc-netty`
