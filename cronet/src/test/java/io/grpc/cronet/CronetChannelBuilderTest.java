@@ -27,7 +27,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.cronet.CronetChannelBuilder.CronetTransportFactory;
 import io.grpc.internal.ClientTransportFactory;
-import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.testing.TestMethodDescriptors;
 import java.net.InetSocketAddress;
@@ -103,7 +102,6 @@ public final class CronetChannelBuilderTest {
     assertSame(builder, builder1);
 
     ClientTransportFactory clientTransportFactory = builder1.buildTransportFactory();
-
     assertSame(scheduledExecutorService, clientTransportFactory.getScheduledExecutorService());
 
     clientTransportFactory.close();

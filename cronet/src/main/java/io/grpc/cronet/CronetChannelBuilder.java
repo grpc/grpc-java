@@ -187,7 +187,8 @@ public final class CronetChannelBuilder extends
     return new CronetTransportFactory(
         new TaggingStreamFactory(
             cronetEngine, trafficStatsTagSet, trafficStatsTag, trafficStatsUidSet, trafficStatsUid),
-        MoreExecutors.directExecutor(), scheduledExecutorService,
+        MoreExecutors.directExecutor(),
+        scheduledExecutorService,
         maxMessageSize,
         alwaysUsePut,
         transportTracerFactory.create());
