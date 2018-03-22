@@ -266,7 +266,12 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     stream().transportState().setId(STREAM_ID);
     stream().transportState().transportHeadersReceived(grpcResponseHeaders(), false);
     stream().transportState().transportHeadersReceived(grpcResponseTrailers(Status.OK), true);
-    verify(writeQueue).enqueue(isA(CancelClientStreamCommand.class), eq(true));
+
+    // Verify a cancel stream with reason=null is sent to the handler.
+    ArgumentCaptor<CancelClientStreamCommand> captor = ArgumentCaptor
+        .forClass(CancelClientStreamCommand.class);
+    verify(writeQueue).enqueue(captor.capture(), eq(true));
+    assertNull(captor.getValue().reason());
   }
 
   @Test

@@ -293,18 +293,10 @@ class NettyClientStream extends AbstractClientStream {
 
     void transportHeadersReceived(Http2Headers headers, boolean endOfStream) {
       if (endOfStream) {
-        transportTrailersReceived(Utils.convertTrailers(headers));
         if (!isOutboundClosed()) {
-          handler
-              .getWriteQueue()
-              .enqueue(
-                  new CancelClientStreamCommand(
-                      this,
-                      Status.INTERNAL.withDescription(
-                          "Cancelled stream after server closed. "
-                              + "The server's status should be reported instead of this one")),
-                  true);
+          handler.getWriteQueue().enqueue(new CancelClientStreamCommand(this, null), true);
         }
+        transportTrailersReceived(Utils.convertTrailers(headers));
       } else {
         transportHeadersReceived(Utils.convertHeaders(headers));
       }
