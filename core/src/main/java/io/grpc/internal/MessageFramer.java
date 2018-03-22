@@ -78,6 +78,7 @@ public class MessageFramer implements Framer {
   private final byte[] headerScratch = new byte[HEADER_LENGTH];
   private final WritableBufferAllocator bufferAllocator;
   private final StatsTraceContext statsTraceCtx;
+  // transportTracer is nullable until it is integrated with client transports
   private boolean closed;
 
   // Tracing and stats-related states
