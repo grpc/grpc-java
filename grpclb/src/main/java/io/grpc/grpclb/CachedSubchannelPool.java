@@ -66,19 +66,19 @@ final class CachedSubchannelPool implements SubchannelPool {
   @Override
   public void returnSubchannel(Subchannel subchannel) {
     CacheEntry prev = cache.get(subchannel.getAddresses());
-    if (prev != null && prev.subchannel != subchannel) {
-      subchannel.shutdown();
+    if (prev != null) {
+      // Returning the same Subchannel twice has no effect.
+      // Returning a different Subchannel for an already cached EAG will cause the
+      // latter Subchannel to be shutdown immediately.
+      if (prev.subchannel != subchannel) {
+        subchannel.shutdown();
+      }
       return;
     }
     final ShutdownSubchannelTask shutdownTask = new ShutdownSubchannelTask(subchannel);
     ScheduledFuture<?> shutdownTimer =
         timerService.schedule(
-            new Runnable() {
-              @Override
-              public void run() {
-                helper.runSerialized(shutdownTask);
-              }
-            },
+            new ShutdownSubchannelScheduledTask(shutdownTask),
             SHUTDOWN_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     shutdownTask.timer = shutdownTimer;
     CacheEntry entry = new CacheEntry(subchannel, shutdownTimer);
@@ -95,7 +95,21 @@ final class CachedSubchannelPool implements SubchannelPool {
   }
 
   @VisibleForTesting
-  class ShutdownSubchannelTask implements Runnable {
+  final class ShutdownSubchannelScheduledTask implements Runnable {
+    private final ShutdownSubchannelTask task;
+
+    ShutdownSubchannelScheduledTask(ShutdownSubchannelTask task) {
+      this.task = checkNotNull(task, "task");
+    }
+
+    @Override
+    public void run() {
+      helper.runSerialized(task);
+    }
+  }
+
+  @VisibleForTesting
+  final class ShutdownSubchannelTask implements Runnable {
     private final Subchannel subchannel;
     private ScheduledFuture<?> timer;
 

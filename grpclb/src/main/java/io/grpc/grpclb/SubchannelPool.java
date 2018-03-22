@@ -43,7 +43,8 @@ interface SubchannelPool {
   Subchannel takeOrCreateSubchannel(EquivalentAddressGroup eag, Attributes defaultAttributes);
 
   /**
-   * Returns a {@link Subchannel} to the pool.
+   * Puts a {@link Subchannel} back to the pool.  From this point the Subchannel is owned by the
+   * pool.
    */
   void returnSubchannel(Subchannel subchannel);
 
