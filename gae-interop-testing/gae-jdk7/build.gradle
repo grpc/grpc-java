@@ -11,6 +11,13 @@
 //  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
+
+import com.squareup.okhttp.OkHttpClient
+import com.squareup.okhttp.Request
+import com.squareup.okhttp.Response
+
+import java.util.concurrent.TimeUnit
+
 description = 'gRPC: gae interop testing (jdk7)'
 
 buildscript {    // Configuration for building
@@ -106,6 +113,24 @@ String getAppUrl(String project, String service, String version) {
   }
 }
 
+Response callWithRetries(OkHttpClient client, Request request, int maxRetries) {
+  String result = null
+  Throwable caught = null
+  for (int attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      def response = client.newCall(request).execute()
+      result = response.body().string()
+      if (response.code() == 200) {
+        return response
+      }
+    } catch (Throwable t) {
+      caught = t
+      logger.log(LogLevel.ERROR, "caught exception. will retry if possible", t)
+    }
+  }
+  throw new GradleException("Interop test failed:\nresponse: ${result}\nthrowable:${caught}")
+}
+
 task runInteropTestRemote(dependsOn: 'appengineDeploy') {
   doLast {
     // give remote app some time to settle down
@@ -116,29 +141,14 @@ task runInteropTestRemote(dependsOn: 'appengineDeploy') {
             getService(project.getProjectDir().toPath()),
             System.getProperty('gaeDeployVersion'))
     logger.log(LogLevel.INFO, "the appURL=" + appUrl)
-    def client = new com.squareup.okhttp.OkHttpClient()
+    def client = new OkHttpClient()
     // The test suite can take a while to run
-    client.setReadTimeout(3, java.util.concurrent.TimeUnit.MINUTES)
-    // The '?jdk8' argument is ignored by the server, it exists only to tag the request log entry
-    def interopRequest = new com.squareup.okhttp.Request.Builder()
+    client.setReadTimeout(3, TimeUnit.MINUTES)
+    // The '?jdk7' argument is ignored by the server, it exists only to tag the request log entry
+    def interopRequest = new Request.Builder()
             .url("${appUrl}/?jdk7").build()
 
     // Retry in case GAE is slow and times out
-    int maxRetries = 5
-    String result = null
-    Throwable caught = null
-    for (int attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        def response = client.newCall(interopRequest).execute()
-        result = response.body().string()
-        if (response.code() == 200) {
-          return
-        }
-      } catch (Throwable t) {
-        caught = t
-        logger.log(LogLevel.ERROR, "caught exception. will retry if possible", t)
-      }
-    }
-    throw new GradleException("Interop test failed:\nresponse: ${result}\nthrowable:${caught}")
+    callWithRetries(client, interopRequest, 5)
   }
 }
