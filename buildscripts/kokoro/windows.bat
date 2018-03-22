@@ -12,24 +12,25 @@ cd /d %~dp0\..\..
 set WORKSPACE=T:\src\github\grpc-java
 set ESCWORKSPACE=%WORKSPACE:\=\\%
 
-mkdir grpc-java-helper
-
-cd grpc-java-helper
 
 @rem Clear JAVA_HOME to prevent a different Java version from being used
 set JAVA_HOME=
 set PATH=C:\Program Files\java\jdk1.8.0_152\bin;%PATH%
+
+mkdir grpc-java-helper32
+cd grpc-java-helper32
 call "%VS120COMNTOOLS%\vsvars32.bat" || exit /b 1
 call "%WORKSPACE%\buildscripts\make_dependencies.bat" || exit /b 1
 
 cd "%WORKSPACE%"
 
-echo targetArch=x86_32> gradle.properties
-echo failOnWarnings=true>> gradle.properties
-echo vcProtobufLibs=%ESCWORKSPACE%\\grpc-java-helper\\protobuf-%PROTOBUF_VER%\\cmake\\build\\Release>> gradle.properties
-echo vcProtobufInclude=%ESCWORKSPACE%\\grpc-java-helper\\protobuf-%PROTOBUF_VER%\\cmake\\build\\include>> gradle.properties
+SET TARGET_ARCH=x86_32
+SET FAIL_ON_WARNINGS=true
+SET VC_PROTOBUF_LIBS=%ESCWORKSPACE%\\grpc-java-helper32\\protobuf-%PROTOBUF_VER%\\cmake\\build\\Release
+SET VC_PROTOBUF_INCLUDE=%ESCWORKSPACE%\\grpc-java-helper32\\protobuf-%PROTOBUF_VER%\\cmake\\build\\include
+SET GRADLE_FLAGS=-PtargetArch=%TARGET_ARCH% -PfailOnWarnings=%FAIL_ON_WARNINGS% -PvcProtobufLibs=%VC_PROTOBUF_LIBS% -PvcProtobufInclude=%VC_PROTOBUF_INCLUDE%
 
-cmd.exe /C "%WORKSPACE%\gradlew.bat build"
+cmd.exe /C "%WORKSPACE%\gradlew.bat %GRADLE_FLAGS% build"
 set GRADLEEXIT=%ERRORLEVEL%
 
 @rem Rename test results .xml files to format parsable by Kokoro
@@ -40,4 +41,32 @@ for /r %%F in (TEST-*.xml) do (
 )
 @echo on
 
-exit /b %GRADLEEXIT%
+IF NOT %GRADLEEXIT% == 0 (
+  exit /b %GRADLEEXIT%
+)
+
+@rem make sure no daemons have any files open
+cmd.exe /C "%WORKSPACE%\gradlew.bat --stop"
+
+cmd.exe /C "%WORKSPACE%\gradlew.bat  %GRADLE_FLAGS% -Dorg.gradle.parallel=false -PrepositoryDir=%WORKSPACE%\artifacts\x86_32\ clean grpc-compiler:build grpc-compiler:uploadArchives" || exit /b 1
+
+mkdir grpc-java-helper64
+cd grpc-java-helper64
+call "%VS120COMNTOOLS%\..\..\VC\bin\amd64\vcvars64.bat" || exit /b 1
+call "%WORKSPACE%\buildscripts\make_dependencies.bat" || exit /b 1
+
+cd "%WORKSPACE%"
+
+SET TARGET_ARCH=x86_64
+SET FAIL_ON_WARNINGS=true
+SET VC_PROTOBUF_LIBS=%ESCWORKSPACE%\\grpc-java-helper64\\protobuf-%PROTOBUF_VER%\\cmake\\build\\Release
+SET VC_PROTOBUF_INCLUDE=%ESCWORKSPACE%\\grpc-java-helper64\\protobuf-%PROTOBUF_VER%\\cmake\\build\\include
+SET GRADLE_FLAGS=-PtargetArch=%TARGET_ARCH% -PfailOnWarnings=%FAIL_ON_WARNINGS% -PvcProtobufLibs=%VC_PROTOBUF_LIBS% -PvcProtobufInclude=%VC_PROTOBUF_INCLUDE%
+
+cmd.exe /C "%WORKSPACE%\gradlew.bat  %GRADLE_FLAGS% -Dorg.gradle.parallel=false -PrepositoryDir=%WORKSPACE%\artifacts\x86_64\ clean grpc-compiler:build grpc-compiler:uploadArchives" || exit /b 1
+
+IF DEFINED MVN_ARTIFACTS (
+  mkdir mvn-artifacts
+  move artifacts\x86_64 mvn-artifacts\x86_64
+  move artifacts\x86_32 mvn-artifacts\x86_32
+)
