@@ -46,10 +46,7 @@ import io.grpc.binarylog.MetadataEntry;
 import io.grpc.binarylog.Peer;
 import io.grpc.binarylog.Peer.PeerType;
 import io.grpc.binarylog.Uint128;
-import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.IoUtils;
-import io.grpc.internal.ReadableBuffers;
-import java.io.IOException;
+import io.grpc.internal.BinaryLogProvider.ByteArrayRetainedInputStream;
 import java.io.InputStream;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
@@ -82,7 +79,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
 
   // TODO(zpencer): extract these fields from call and stop using dummy values
   @VisibleForTesting
-  static final byte[] DUMMY_CALLID = new byte[16];
+  static final byte[] dumyCallId = new byte[16];
   @VisibleForTesting
   static final SocketAddress DUMMY_SOCKET = new SocketAddress() { };
   @VisibleForTesting
@@ -98,7 +95,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
 
   // TODO(zpencer): move proto related static helpers into this class
   static final class SinkWriterImpl extends SinkWriter {
-    final BinaryLogSink sink;
+    private final BinaryLogSink sink;
     private final int maxHeaderBytes;
     private final int maxMessageBytes;
 
@@ -155,16 +152,21 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
         boolean compressed,
         boolean isServer,
         byte[] callId) {
-      ByteBuffer buf = serialize(marshaller, consumeOnce);
+      InputStream stream = marshaller.stream(consumeOnce);
+      if (!(stream instanceof ByteArrayRetainedInputStream)) {
+        throw new IllegalStateException(
+            "Expected the output of the BinaryLog's special ByteArrayMarshaller");
+      }
+      byte[] bytes = ((ByteArrayRetainedInputStream) stream).getBytes();
       GrpcLogEntry entry = GrpcLogEntry
           .newBuilder()
           .setType(Type.SEND_MESSAGE)
           .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
           .setCallId(callIdToProto(callId))
-          .setMessage(messageToProto(buf, compressed, maxMessageBytes))
+          .setMessage(messageToProto(bytes, compressed, maxMessageBytes))
           .build();
       sink.write(entry);
-      return marshaller.parse(toInputStream(buf));
+      return marshaller.parse(stream);
     }
 
     @Override
@@ -174,16 +176,21 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
         boolean compressed,
         boolean isServer,
         byte[] callId) {
-      ByteBuffer buf = serialize(marshaller, consumeOnce);
+      InputStream stream = marshaller.stream(consumeOnce);
+      if (!(stream instanceof ByteArrayRetainedInputStream)) {
+        throw new IllegalStateException(
+            "Expected the output of the BinaryLog's special ByteArrayMarshaller");
+      }
+      byte[] bytes = ((ByteArrayRetainedInputStream) stream).getBytes();
       GrpcLogEntry entry = GrpcLogEntry
           .newBuilder()
           .setType(Type.RECV_MESSAGE)
           .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
           .setCallId(callIdToProto(callId))
-          .setMessage(messageToProto(buf, compressed, maxMessageBytes))
+          .setMessage(messageToProto(bytes, compressed, maxMessageBytes))
           .build();
       sink.write(entry);
-      return marshaller.parse(toInputStream(buf));
+      return marshaller.parse(stream);
     }
 
     @Override
@@ -194,23 +201,6 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
     @Override
     int getMaxMessageBytes() {
       return maxMessageBytes;
-    }
-
-    private static <T> ByteBuffer serialize(Marshaller<T> marshaller, T message) {
-      InputStream stream = null;
-      try {
-        stream = marshaller.stream(message);
-        return ByteBuffer.wrap(IoUtils.toByteArray(stream));
-      } catch (IOException e) {
-        // should never happen
-        throw new RuntimeException(e);
-      } finally {
-        GrpcUtil.closeQuietly(stream);
-      }
-    }
-
-    private static InputStream toInputStream(ByteBuffer buffer) {
-      return ReadableBuffers.openStream(ReadableBuffers.wrap(buffer.duplicate()), true);
     }
   }
 
@@ -297,7 +287,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
     return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
       @Override
       public void start(Listener<RespT> responseListener, Metadata headers) {
-        writer.logSendInitialMetadata(headers, CLIENT, DUMMY_CALLID, DUMMY_SOCKET);
+        writer.logSendInitialMetadata(headers, CLIENT, dumyCallId, DUMMY_SOCKET);
         ClientCall.Listener<RespT> wListener =
             new SimpleForwardingClientCallListener<RespT>(responseListener) {
               @Override
@@ -307,18 +297,19 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
                         method.getResponseMarshaller(),
                         message,
                         DUMMY_IS_COMPRESSED,
-                        CLIENT,DUMMY_CALLID));
+                        CLIENT,
+                        dumyCallId));
               }
 
               @Override
               public void onHeaders(Metadata headers) {
-                writer.logRecvInitialMetadata(headers, CLIENT, DUMMY_CALLID, DUMMY_SOCKET);
+                writer.logRecvInitialMetadata(headers, CLIENT, dumyCallId, DUMMY_SOCKET);
                 super.onHeaders(headers);
               }
 
               @Override
               public void onClose(Status status, Metadata trailers) {
-                writer.logTrailingMetadata(trailers, CLIENT, DUMMY_CALLID);
+                writer.logTrailingMetadata(trailers, CLIENT, dumyCallId);
                 super.onClose(status, trailers);
               }
             };
@@ -333,7 +324,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
                 message,
                 DUMMY_IS_COMPRESSED,
                 CLIENT,
-                DUMMY_CALLID));
+                dumyCallId));
       }
     };
   }
@@ -341,7 +332,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
   @Override
   public <ReqT, RespT> Listener<ReqT> interceptCall(
       final ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-    writer.logRecvInitialMetadata(headers, SERVER, DUMMY_CALLID, DUMMY_SOCKET);
+    writer.logRecvInitialMetadata(headers, SERVER, dumyCallId, DUMMY_SOCKET);
     ServerCall<ReqT, RespT> wCall = new SimpleForwardingServerCall<ReqT, RespT>(call) {
       @Override
       public void sendMessage(RespT message) {
@@ -351,18 +342,18 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
                 message,
                 DUMMY_IS_COMPRESSED,
                 SERVER,
-                DUMMY_CALLID));
+                dumyCallId));
       }
 
       @Override
       public void sendHeaders(Metadata headers) {
-        writer.logSendInitialMetadata(headers, SERVER, DUMMY_CALLID, DUMMY_SOCKET);
+        writer.logSendInitialMetadata(headers, SERVER, dumyCallId, DUMMY_SOCKET);
         super.sendHeaders(headers);
       }
 
       @Override
       public void close(Status status, Metadata trailers) {
-        writer.logTrailingMetadata(trailers, SERVER, DUMMY_CALLID);
+        writer.logTrailingMetadata(trailers, SERVER, dumyCallId);
         super.close(status, trailers);
       }
     };
@@ -376,7 +367,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
                 message,
                 DUMMY_IS_COMPRESSED,
                 SERVER,
-                DUMMY_CALLID));
+                dumyCallId));
       }
     };
   }
@@ -614,18 +605,15 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
   }
 
   @VisibleForTesting
-  static Message messageToProto(ByteBuffer message, boolean compressed, int maxMessageBytes) {
+  static Message messageToProto(byte[] message, boolean compressed, int maxMessageBytes) {
     Preconditions.checkNotNull(message);
-    int messageSize = message.remaining();
     Message.Builder builder = Message
         .newBuilder()
         .setFlags(flagsForMessage(compressed))
-        .setLength(messageSize);
+        .setLength(message.length);
     if (maxMessageBytes > 0) {
-      int desiredRemaining = Math.min(maxMessageBytes, messageSize);
-      ByteBuffer dup = message.duplicate();
-      dup.limit(dup.position() + desiredRemaining);
-      builder.setData(ByteString.copyFrom(dup));
+      int desiredBytes = Math.min(maxMessageBytes, message.length);
+      builder.setData(ByteString.copyFrom(message, 0, desiredBytes));
     }
     return builder.build();
   }

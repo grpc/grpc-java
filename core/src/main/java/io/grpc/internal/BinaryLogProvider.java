@@ -31,16 +31,18 @@ import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerMethodDefinition;
+import java.io.ByteArrayInputStream;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Collections;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.NotThreadSafe;
 
 public abstract class BinaryLogProvider implements Closeable {
   @VisibleForTesting
-  public static final Marshaller<InputStream> IDENTITY_MARSHALLER = new IdentityMarshaller();
+  public static final Marshaller<byte[]> BYTEARRAY_MARSHALLER = new ByteArrayMarshaller();
 
   private static final Logger logger = Logger.getLogger(BinaryLogProvider.class.getName());
   private static final BinaryLogProvider PROVIDER = InternalServiceProviders.load(
@@ -76,9 +78,9 @@ public abstract class BinaryLogProvider implements Closeable {
     return ClientInterceptors.intercept(channel, binaryLogShim);
   }
 
-  private static MethodDescriptor<InputStream, InputStream> toInputStreamMethod(
+  private static MethodDescriptor<byte[], byte[]> toByteBufferMethod(
       MethodDescriptor<?, ?> method) {
-    return method.toBuilder(IDENTITY_MARSHALLER, IDENTITY_MARSHALLER).build();
+    return method.toBuilder(BYTEARRAY_MARSHALLER, BYTEARRAY_MARSHALLER).build();
   }
 
   /**
@@ -91,11 +93,11 @@ public abstract class BinaryLogProvider implements Closeable {
     if (binlogInterceptor == null) {
       return oMethodDef;
     }
-    MethodDescriptor<InputStream, InputStream> binMethod =
-        BinaryLogProvider.toInputStreamMethod(oMethodDef.getMethodDescriptor());
-    ServerMethodDefinition<InputStream, InputStream> binDef = InternalServerInterceptors
+    MethodDescriptor<byte[], byte[]> binMethod =
+        BinaryLogProvider.toByteBufferMethod(oMethodDef.getMethodDescriptor());
+    ServerMethodDefinition<byte[], byte[]> binDef = InternalServerInterceptors
         .wrapMethod(oMethodDef, binMethod);
-    ServerCallHandler<InputStream, InputStream> binlogHandler = InternalServerInterceptors
+    ServerCallHandler<byte[], byte[]> binlogHandler = InternalServerInterceptors
         .interceptCallHandler(binlogInterceptor, binDef.getServerCallHandler());
     return ServerMethodDefinition.create(binMethod, binlogHandler);
   }
@@ -142,15 +144,72 @@ public abstract class BinaryLogProvider implements Closeable {
   protected abstract boolean isAvailable();
 
   // Creating a named class makes debugging easier
-  private static final class IdentityMarshaller implements Marshaller<InputStream> {
+  private static final class ByteArrayMarshaller implements Marshaller<byte[]> {
     @Override
-    public InputStream stream(InputStream value) {
-      return value;
+    public InputStream stream(byte[] value) {
+      return new ByteArrayRetainedInputStream(value);
     }
 
     @Override
-    public InputStream parse(InputStream stream) {
-      return stream;
+    public byte[] parse(InputStream stream) {
+      if (stream instanceof ByteArrayRetainedInputStream) {
+        ByteArrayRetainedInputStream retainedStream = (ByteArrayRetainedInputStream) stream;
+        if (!retainedStream.wasRead) {
+          return retainedStream.bytes;
+        }
+      }
+      try {
+        return parseHelper(stream);
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    private byte[] parseHelper(InputStream stream) throws IOException {
+      try {
+        return IoUtils.toByteArray(stream);
+      } finally {
+        stream.close();
+      }
+    }
+  }
+
+  // TODO(zpencer): Move to same package as BinaryLog, and lock down. Should not be public.
+  @NotThreadSafe
+  public static final class ByteArrayRetainedInputStream extends ByteArrayInputStream {
+    private final byte[] bytes;
+    private boolean wasRead;
+
+    ByteArrayRetainedInputStream(byte[] bytes) {
+      super(bytes);
+      this.bytes = bytes;
+    }
+
+    @Override
+    @SuppressWarnings("UnsynchronizedOverridesSynchronized")
+    public int read() {
+      wasRead = true;
+      return super.read();
+    }
+
+    @Override
+    @SuppressWarnings("UnsynchronizedOverridesSynchronized")
+    public int read(byte[] b, int off, int len) {
+      wasRead = true;
+      return super.read(b, off, len);
+    }
+
+    /**
+     * Returns the original {@code byte[]} if this stream was never read. If this stream was
+     * read, then an {@link IllegalStateException} will be thrown.
+     */
+    public byte[] getBytes() {
+      if (wasRead) {
+        throw new IllegalStateException(
+            "The stream was read. The data remaining on the stream is not equal "
+                + "to the original byte[] input.");
+      }
+      return bytes;
     }
   }
 
@@ -173,8 +232,8 @@ public abstract class BinaryLogProvider implements Closeable {
         return InternalClientInterceptors
             .wrapClientInterceptor(
                 binlogInterceptor,
-                IDENTITY_MARSHALLER,
-                IDENTITY_MARSHALLER)
+                BYTEARRAY_MARSHALLER,
+                BYTEARRAY_MARSHALLER)
             .interceptCall(method, callOptions, next);
       }
     }
