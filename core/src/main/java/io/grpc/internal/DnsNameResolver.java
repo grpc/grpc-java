@@ -69,7 +69,7 @@ final class DnsNameResolver extends NameResolver {
   private static final String GRPCLB_NAME_PREFIX = "_grpclb._tcp.";
 
   private static final String JNDI_PROPERTY =
-      System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi", "true");
+      System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi", "false");
 
   @VisibleForTesting
   static boolean enableJndi = Boolean.parseBoolean(JNDI_PROPERTY);
@@ -341,7 +341,9 @@ final class DnsNameResolver extends NameResolver {
         ResolutionResults jdniResults = jndiResovler.resolve(host);
         txtRecords = jdniResults.txtRecords;
         balancerAddresses = jdniResults.balancerAddresses;
-      } catch (Exception e) {
+      } catch (Throwable e) {
+        // JndiResolver.resolve may throw Error that could cause rpc to hang.
+        // Catch and log Throwable and keep using jdkResolver's result to prevent it.
         logger.log(Level.SEVERE, "Failed to resolve TXT results", e);
       }
 
