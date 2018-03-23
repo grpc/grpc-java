@@ -17,8 +17,8 @@ set ESCWORKSPACE=%WORKSPACE:\=\\%
 set JAVA_HOME=
 set PATH=C:\Program Files\java\jdk1.8.0_152\bin;%PATH%
 
-cmd.exe /C "%WORKSPACE%\buildscripts\kokoro\win32.bat" || exit /b 1
-cmd.exe /C "%WORKSPACE%\buildscripts\kokoro\win64.bat" || exit /b 1
+cmd.exe /C "%WORKSPACE%\buildscripts\kokoro\windows32.bat" || exit /b 1
+cmd.exe /C "%WORKSPACE%\buildscripts\kokoro\windows64.bat" || exit /b 1
 
 IF DEFINED MVN_ARTIFACTS (
   mkdir mvn-artifacts
