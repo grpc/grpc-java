@@ -21,6 +21,7 @@ import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED
 import static io.netty.channel.ChannelOption.SO_BACKLOG;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
@@ -47,6 +48,8 @@ import io.netty.channel.ServerChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.AbstractReferenceCounted;
 import io.netty.util.ReferenceCounted;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GenericFutureListener;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -127,7 +130,7 @@ class NettyServer implements InternalServer, WithLogId {
     this.maxConnectionAgeGraceInNanos = maxConnectionAgeGraceInNanos;
     this.permitKeepAliveWithoutCalls = permitKeepAliveWithoutCalls;
     this.permitKeepAliveTimeInNanos = permitKeepAliveTimeInNanos;
-    this.channelz = channelz;
+    this.channelz = Preconditions.checkNotNull(channelz);
   }
 
   @Override
@@ -272,6 +275,7 @@ class NettyServer implements InternalServer, WithLogId {
         for (Instrumented<SocketStats> listenSocket : listenSockets) {
           channelz.removeSocket(listenSocket);
         }
+        listenSockets = null;
         synchronized (NettyServer.this) {
           listener.serverShutdown();
         }
@@ -343,17 +347,28 @@ class NettyServer implements InternalServer, WithLogId {
             /*security=*/ null));
         return ret;
       }
-      ch.eventLoop().submit(
-          new Runnable() {
-            @Override
-            public void run() {
-              ret.set(new SocketStats(
-                  /*data=*/ null,
-                  ch.localAddress(),
-                  /*remoteAddress=*/ null,
-                  /*security=*/ null));
-            }
-          });
+      ch.eventLoop()
+          .submit(
+              new Runnable() {
+                @Override
+                public void run() {
+                  ret.set(new SocketStats(
+                      /*data=*/ null,
+                      ch.localAddress(),
+                      /*remoteAddress=*/ null,
+                      /*security=*/ null));
+                }
+              })
+          .addListener(
+              new GenericFutureListener<Future<Object>>() {
+                @Override
+                public void operationComplete(Future<Object> future) throws Exception {
+                  if (!future.isSuccess()) {
+                    ret.setException(future.cause());
+                  }
+                }
+              });
+
       return ret;
     }
 

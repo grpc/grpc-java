@@ -311,7 +311,8 @@ public final class Channelz {
       /** Sets the listen sockets. */
       public Builder setListenSockets(List<Instrumented<SocketStats>> listenSockets) {
         Preconditions.checkNotNull(listenSockets);
-        this.listenSockets = Collections.unmodifiableList(listenSockets);
+        this.listenSockets = Collections.unmodifiableList(
+            new ArrayList<Instrumented<SocketStats>>(listenSockets));
         return this;
       }
 
