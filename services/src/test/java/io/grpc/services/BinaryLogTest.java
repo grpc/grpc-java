@@ -24,13 +24,11 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
 
 import com.google.common.primitives.Bytes;
 import com.google.protobuf.ByteString;
@@ -39,7 +37,6 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
@@ -710,22 +707,6 @@ public final class BinaryLogTest {
   }
 
   @Test
-  public void logOutboundMessageReturnsDuplicate() throws Exception {
-    // only marshaller and message matter here, other params do not matter
-    byte[] dup = sinkWriterImpl.logOutboundMessage(
-        BYTEARRAY_MARSHALLER, message, IS_COMPRESSED, IS_CLIENT, CALL_ID);
-    assertEquals(message, dup);
-  }
-
-  @Test
-  public void logInboundMessageReturnsDuplicate() throws Exception {
-    // only marshaller and message matter here, other params do not matter
-    byte[] dup = sinkWriterImpl.logInboundMessage(
-        BYTEARRAY_MARSHALLER, message, IS_COMPRESSED, IS_CLIENT, CALL_ID);
-    assertEquals(message, dup);
-  }
-
-  @Test
   @SuppressWarnings({"rawtypes", "unchecked"})
   public void clientInterceptor() throws Exception {
     final AtomicReference<ClientCall.Listener> interceptedListener =
@@ -798,17 +779,6 @@ public final class BinaryLogTest {
 
     // send request
     {
-      byte[] requestDup = new byte[0];
-      when(
-          mockSinkWriter
-              .logOutboundMessage(
-                  any(Marshaller.class),
-                  any(byte[].class),
-                  any(Boolean.class),
-                  any(Boolean.class),
-                  any(byte[].class)))
-          .thenReturn(requestDup);
-
       byte[] request = "this is a request".getBytes(US_ASCII);
       interceptedCall.sendMessage(request);
       verify(mockSinkWriter).logOutboundMessage(
@@ -818,21 +788,11 @@ public final class BinaryLogTest {
           eq(IS_CLIENT),
           same(dumyCallId));
       verifyNoMoreInteractions(mockSinkWriter);
-      assertSame(requestDup, actualRequest.get());
+      assertSame(request, actualRequest.get());
     }
 
     // receive response
     {
-      byte[] responseDup = new byte[0];
-      when(
-          mockSinkWriter
-              .logInboundMessage(
-                  any(Marshaller.class),
-                  any(byte[].class),
-                  any(Boolean.class),
-                  any(Boolean.class),
-                  any(byte[].class)))
-          .thenReturn(responseDup);
       byte[] response = "this is a response".getBytes(US_ASCII);
       interceptedListener.get().onMessage(response);
       verify(mockSinkWriter).logInboundMessage(
@@ -842,7 +802,7 @@ public final class BinaryLogTest {
           eq(IS_CLIENT),
           same(dumyCallId));
       verifyNoMoreInteractions(mockSinkWriter);
-      verify(mockListener).onMessage(same(responseDup));
+      verify(mockListener).onMessage(same(response));
     }
 
     // receive trailers
@@ -941,15 +901,6 @@ public final class BinaryLogTest {
 
     // receive request
     {
-      byte[] requestDup = new byte[0];
-      when(
-          mockSinkWriter.logInboundMessage(
-              any(Marshaller.class),
-              any(byte[].class),
-              any(Boolean.class),
-              any(Boolean.class),
-              any(byte[].class)))
-          .thenReturn(requestDup);
       byte[] request = "this is a request".getBytes(US_ASCII);
       capturedListener.onMessage(request);
       verify(mockSinkWriter).logInboundMessage(
@@ -959,21 +910,11 @@ public final class BinaryLogTest {
           eq(IS_SERVER),
           same(dumyCallId));
       verifyNoMoreInteractions(mockSinkWriter);
-      verify(mockListener).onMessage(same(requestDup));
+      verify(mockListener).onMessage(same(request));
     }
 
     // send response
     {
-      byte[] responseDup = new byte[0];
-      when(
-          mockSinkWriter.logOutboundMessage(
-              any(Marshaller.class),
-              any(byte[].class),
-              any(Boolean.class),
-              any(Boolean.class),
-              any(byte[].class)))
-          .thenReturn(responseDup);
-
       byte[] response = "this is a response".getBytes(US_ASCII);
       interceptedCall.get().sendMessage(response);
       verify(mockSinkWriter).logOutboundMessage(
@@ -983,7 +924,7 @@ public final class BinaryLogTest {
           eq(IS_SERVER),
           same(dumyCallId));
       verifyNoMoreInteractions(mockSinkWriter);
-      assertSame(responseDup, actualResponse.get());
+      assertSame(response, actualResponse.get());
     }
 
     // send trailers

@@ -38,7 +38,6 @@ import java.io.InputStream;
 import java.util.Collections;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.NotThreadSafe;
 
 public abstract class BinaryLogProvider implements Closeable {
   @VisibleForTesting
@@ -147,17 +146,11 @@ public abstract class BinaryLogProvider implements Closeable {
   private static final class ByteArrayMarshaller implements Marshaller<byte[]> {
     @Override
     public InputStream stream(byte[] value) {
-      return new ByteArrayRetainedInputStream(value);
+      return new ByteArrayInputStream(value);
     }
 
     @Override
     public byte[] parse(InputStream stream) {
-      if (stream instanceof ByteArrayRetainedInputStream) {
-        ByteArrayRetainedInputStream retainedStream = (ByteArrayRetainedInputStream) stream;
-        if (!retainedStream.wasRead) {
-          return retainedStream.bytes;
-        }
-      }
       try {
         return parseHelper(stream);
       } catch (IOException e) {
@@ -171,45 +164,6 @@ public abstract class BinaryLogProvider implements Closeable {
       } finally {
         stream.close();
       }
-    }
-  }
-
-  // TODO(zpencer): Move to same package as BinaryLog, and lock down. Should not be public.
-  @NotThreadSafe
-  public static final class ByteArrayRetainedInputStream extends ByteArrayInputStream {
-    private final byte[] bytes;
-    private boolean wasRead;
-
-    ByteArrayRetainedInputStream(byte[] bytes) {
-      super(bytes);
-      this.bytes = bytes;
-    }
-
-    @Override
-    @SuppressWarnings("UnsynchronizedOverridesSynchronized")
-    public int read() {
-      wasRead = true;
-      return super.read();
-    }
-
-    @Override
-    @SuppressWarnings("UnsynchronizedOverridesSynchronized")
-    public int read(byte[] b, int off, int len) {
-      wasRead = true;
-      return super.read(b, off, len);
-    }
-
-    /**
-     * Returns the original {@code byte[]} if this stream was never read. If this stream was
-     * read, then an {@link IllegalStateException} will be thrown.
-     */
-    public byte[] getBytes() {
-      if (wasRead) {
-        throw new IllegalStateException(
-            "The stream was read. The data remaining on the stream is not equal "
-                + "to the original byte[] input.");
-      }
-      return bytes;
     }
   }
 

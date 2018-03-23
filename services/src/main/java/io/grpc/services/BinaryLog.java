@@ -16,6 +16,8 @@
 
 package io.grpc.services;
 
+import static io.grpc.internal.BinaryLogProvider.BYTEARRAY_MARSHALLER;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
@@ -46,8 +48,6 @@ import io.grpc.binarylog.MetadataEntry;
 import io.grpc.binarylog.Peer;
 import io.grpc.binarylog.Peer.PeerType;
 import io.grpc.binarylog.Uint128;
-import io.grpc.internal.BinaryLogProvider.ByteArrayRetainedInputStream;
-import java.io.InputStream;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -146,18 +146,16 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
     }
 
     @Override
-    <T> T logOutboundMessage(
+    <T> void logOutboundMessage(
         Marshaller<T> marshaller,
-        T consumeOnce,
+        T message,
         boolean compressed,
         boolean isServer,
         byte[] callId) {
-      InputStream stream = marshaller.stream(consumeOnce);
-      if (!(stream instanceof ByteArrayRetainedInputStream)) {
-        throw new IllegalStateException(
-            "Expected the output of the BinaryLog's special ByteArrayMarshaller");
+      if (marshaller != BYTEARRAY_MARSHALLER) {
+        throw new IllegalStateException("Expected the BinaryLog's ByteArrayMarshaller");
       }
-      byte[] bytes = ((ByteArrayRetainedInputStream) stream).getBytes();
+      byte[] bytes = (byte[]) message;
       GrpcLogEntry entry = GrpcLogEntry
           .newBuilder()
           .setType(Type.SEND_MESSAGE)
@@ -166,22 +164,19 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
           .setMessage(messageToProto(bytes, compressed, maxMessageBytes))
           .build();
       sink.write(entry);
-      return marshaller.parse(stream);
     }
 
     @Override
-    <T> T logInboundMessage(
+    <T> void logInboundMessage(
         Marshaller<T> marshaller,
-        T consumeOnce,
+        T message,
         boolean compressed,
         boolean isServer,
         byte[] callId) {
-      InputStream stream = marshaller.stream(consumeOnce);
-      if (!(stream instanceof ByteArrayRetainedInputStream)) {
-        throw new IllegalStateException(
-            "Expected the output of the BinaryLog's special ByteArrayMarshaller");
+      if (marshaller != BYTEARRAY_MARSHALLER) {
+        throw new IllegalStateException("Expected the BinaryLog's ByteArrayMarshaller");
       }
-      byte[] bytes = ((ByteArrayRetainedInputStream) stream).getBytes();
+      byte[] bytes = (byte[]) message;
       GrpcLogEntry entry = GrpcLogEntry
           .newBuilder()
           .setType(Type.RECV_MESSAGE)
@@ -190,7 +185,6 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
           .setMessage(messageToProto(bytes, compressed, maxMessageBytes))
           .build();
       sink.write(entry);
-      return marshaller.parse(stream);
     }
 
     @Override
@@ -231,7 +225,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
      * The number of bytes logged is determined by the binary logging configuration.
      * This method takes ownership of {@code message}.
      */
-    abstract <T> T logOutboundMessage(
+    abstract <T> void logOutboundMessage(
         Marshaller<T> marshaller, T message, boolean compressed, boolean isServer, byte[] callId);
 
     /**
@@ -240,7 +234,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
      * The number of bytes logged is determined by the binary logging configuration.
      * This method takes ownership of {@code message}.
      */
-    abstract <T> T logInboundMessage(
+    abstract <T> void logInboundMessage(
         Marshaller<T> marshaller, T message, boolean compressed, boolean isServer, byte[] callId);
 
     /**
@@ -292,13 +286,13 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
             new SimpleForwardingClientCallListener<RespT>(responseListener) {
               @Override
               public void onMessage(RespT message) {
-                super.onMessage(
-                    writer.logInboundMessage(
-                        method.getResponseMarshaller(),
-                        message,
-                        DUMMY_IS_COMPRESSED,
-                        CLIENT,
-                        dumyCallId));
+                writer.logInboundMessage(
+                    method.getResponseMarshaller(),
+                    message,
+                    DUMMY_IS_COMPRESSED,
+                    CLIENT,
+                    dumyCallId);
+                super.onMessage(message);
               }
 
               @Override
@@ -318,13 +312,13 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
 
       @Override
       public void sendMessage(ReqT message) {
-        super.sendMessage(
-            writer.logOutboundMessage(
-                method.getRequestMarshaller(),
-                message,
-                DUMMY_IS_COMPRESSED,
-                CLIENT,
-                dumyCallId));
+        writer.logOutboundMessage(
+            method.getRequestMarshaller(),
+            message,
+            DUMMY_IS_COMPRESSED,
+            CLIENT,
+            dumyCallId);
+        super.sendMessage(message);
       }
     };
   }
@@ -336,13 +330,13 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
     ServerCall<ReqT, RespT> wCall = new SimpleForwardingServerCall<ReqT, RespT>(call) {
       @Override
       public void sendMessage(RespT message) {
-        super.sendMessage(
-            writer.logOutboundMessage(
-                call.getMethodDescriptor().getResponseMarshaller(),
-                message,
-                DUMMY_IS_COMPRESSED,
-                SERVER,
-                dumyCallId));
+        writer.logOutboundMessage(
+            call.getMethodDescriptor().getResponseMarshaller(),
+            message,
+            DUMMY_IS_COMPRESSED,
+            SERVER,
+            dumyCallId);
+        super.sendMessage(message);
       }
 
       @Override
@@ -361,13 +355,13 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
     return new SimpleForwardingServerCallListener<ReqT>(next.startCall(wCall, headers)) {
       @Override
       public void onMessage(ReqT message) {
-        super.onMessage(
-            writer.logInboundMessage(
-                call.getMethodDescriptor().getRequestMarshaller(),
-                message,
-                DUMMY_IS_COMPRESSED,
-                SERVER,
-                dumyCallId));
+        writer.logInboundMessage(
+            call.getMethodDescriptor().getRequestMarshaller(),
+            message,
+            DUMMY_IS_COMPRESSED,
+            SERVER,
+            dumyCallId);
+        super.onMessage(message);
       }
     };
   }
