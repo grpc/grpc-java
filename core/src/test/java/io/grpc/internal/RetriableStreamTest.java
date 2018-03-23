@@ -1009,7 +1009,7 @@ public class RetriableStreamTest {
     // retry4
     sublistenerCaptor4.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_2), new Metadata());
     assertEquals(1, fakeClock.numPendingTasks());
-    fakeClock.forwardTime((long) (INITIAL_BACKOFF_NANOS * BACKOFF_MULTIPLIER * BACKOFF_MULTIPLIER * FAKE_RANDOM) - 100, TimeUnit.NANOSECONDS);
+    fakeClock.forwardTime((long) (MAX_BACKOFF_NANOS * FAKE_RANDOM) - 100, TimeUnit.NANOSECONDS);
     assertEquals(1, fakeClock.numPendingTasks());
     fakeClock.forwardTime(100L, TimeUnit.NANOSECONDS);
     assertEquals(0, fakeClock.numPendingTasks());
@@ -1022,9 +1022,9 @@ public class RetriableStreamTest {
     // retry5
     sublistenerCaptor5.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_2), new Metadata());
     assertEquals(1, fakeClock.numPendingTasks());
-    fakeClock.forwardTime((long) (INITIAL_BACKOFF_NANOS * FAKE_RANDOM) - 1L, TimeUnit.NANOSECONDS);
+    fakeClock.forwardTime((long) (MAX_BACKOFF_NANOS * FAKE_RANDOM) - 1L, TimeUnit.NANOSECONDS);
     assertEquals(1, fakeClock.numPendingTasks());
-    fakeClock.forwardTime(1L, TimeUnit.SECONDS);
+    fakeClock.forwardTime(100L, TimeUnit.NANOSECONDS);
     assertEquals(0, fakeClock.numPendingTasks());
     verify(retriableStreamRecorder).newSubstream(5);
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor6 =
