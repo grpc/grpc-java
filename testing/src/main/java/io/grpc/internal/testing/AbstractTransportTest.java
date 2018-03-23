@@ -1800,7 +1800,6 @@ public abstract class AbstractTransportTest {
     verify(listener, timeout(100)).transportReady();
   }
 
-
   private static class MockServerListener implements ServerListener {
     public final BlockingQueue<MockServerTransportListener> listeners
         = new LinkedBlockingQueue<MockServerTransportListener>();
