@@ -20,18 +20,10 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.math.LongMath.checkedAdd;
 
-
-import io.grpc.MethodDescriptor;
-import io.grpc.Status.Code;
-import io.grpc.internal.RetriableStream.RetryPolicies;
-import io.grpc.internal.RetriableStream.RetryPolicy;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.text.ParseException;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -52,116 +44,19 @@ final class ServiceConfigUtil {
       "maxRequestMessageBytes";
   private static final String METHOD_CONFIG_MAX_RESPONSE_MESSAGE_BYTES_KEY =
       "maxResponseMessageBytes";
+  private static final String METHOD_CONFIG_RETRY_POLICY_KEY = "retryPolicy";
   private static final String NAME_SERVICE_KEY = "service";
   private static final String NAME_METHOD_KEY = "method";
+  private static final String RETRY_POLICY_MAX_ATTEMPTS_KEY = "maxAttempts";
+  private static final String RETRY_POLICY_INITIAL_BACKOFF_KEY = "initialBackoff";
+  private static final String RETRY_POLICY_MAX_BACKOFF_KEY = "maxBackoff";
+  private static final String RETRY_POLICY_BACKOFF_MULTIPLIER_KEY = "backoffMultiplier";
+  private static final String RETRY_POLICY_RETRYABLE_STATUS_CODES_KEY = "retryableStatusCodes";
 
   private static final long DURATION_SECONDS_MIN = -315576000000L;
   private static final long DURATION_SECONDS_MAX = 315576000000L;
 
   private ServiceConfigUtil() {}
-
-
-  /**
-   * Gets retry policies from the service config.
-   *
-   * @throw ClassCastException if the service config doesn't parse properly
-   */
-  static RetryPolicies getRetryPolicies(
-      @Nullable Map<String, Object> serviceConfig, int maxAttemptsLimit) {
-    final Map<String, RetryPolicy> fullMethodNameMap = new HashMap<String, RetryPolicy>();
-    final Map<String, RetryPolicy> serviceNameMap = new HashMap<String, RetryPolicy>();
-
-    if (serviceConfig != null) {
-
-      /* schema as follows
-      {
-        "methodConfig": [
-          {
-            "name": [
-              {
-                "service": string,
-                "method": string,         // Optional
-              }
-            ],
-            "retryPolicy": {
-              "maxAttempts": number,
-              "initialBackoff": string,   // Long decimal with "s" appended
-              "maxBackoff": string,       // Long decimal with "s" appended
-              "backoffMultiplier": number
-              "retryableStatusCodes": []
-            }
-          }
-        ]
-      }
-      */
-      if (serviceConfig.containsKey("methodConfig")) {
-        List<Object> methodConfigs = getList(serviceConfig, "methodConfig");
-        for (int i = 0; i < methodConfigs.size(); i++) {
-          Map<String, Object> methodConfig = getObject(methodConfigs, i);
-          if (methodConfig.containsKey("retryPolicy")) {
-            Map<String, Object> retryPolicy = getObject(methodConfig, "retryPolicy");
-
-            int maxAttempts = getDouble(retryPolicy, "maxAttempts").intValue();
-            maxAttempts = Math.min(maxAttempts, maxAttemptsLimit);
-
-            String initialBackoffStr = getString(retryPolicy, "initialBackoff");
-            checkState(
-                initialBackoffStr.charAt(initialBackoffStr.length() - 1) == 's',
-                "invalid value of initialBackoff");
-            double initialBackoff =
-                Double.parseDouble(initialBackoffStr.substring(0, initialBackoffStr.length() - 1));
-
-            String maxBackoffStr = getString(retryPolicy, "maxBackoff");
-            checkState(
-                maxBackoffStr.charAt(maxBackoffStr.length() - 1) == 's',
-                "invalid value of maxBackoff");
-            double maxBackoff =
-                Double.parseDouble(maxBackoffStr.substring(0, maxBackoffStr.length() - 1));
-
-            double backoffMultiplier = getDouble(retryPolicy, "backoffMultiplier");
-
-            List<Object> retryableStatusCodes = getList(retryPolicy, "retryableStatusCodes");
-            Set<Code> codeSet = new HashSet<Code>(retryableStatusCodes.size());
-            for (int j = 0; j < retryableStatusCodes.size(); j++) {
-              String code = getString(retryableStatusCodes, j);
-              codeSet.add(Code.valueOf(code));
-            }
-
-            RetryPolicy pojoPolicy = new RetryPolicy(
-                maxAttempts, initialBackoff, maxBackoff, backoffMultiplier, codeSet);
-
-            List<Object> names = getList(methodConfig, "name");
-            for (int j = 0; j < names.size(); j++) {
-              Map<String, Object> name = getObject(names, j);
-              String service = getString(name, "service");
-              if (name.containsKey("method")) {
-                String method = getString(name, "method");
-                fullMethodNameMap.put(
-                    MethodDescriptor.generateFullMethodName(service, method), pojoPolicy);
-              } else {
-                serviceNameMap.put(service, pojoPolicy);
-              }
-            }
-          }
-        }
-      }
-    }
-
-    return new RetryPolicies() {
-      @Override
-      public RetryPolicy get(MethodDescriptor<?, ?> method) {
-        RetryPolicy retryPolicy = fullMethodNameMap.get(method.getFullMethodName());
-        if (retryPolicy == null) {
-          retryPolicy = serviceNameMap
-              .get(MethodDescriptor.extractFullServiceName(method.getFullMethodName()));
-        }
-        if (retryPolicy == null) {
-          retryPolicy = RetryPolicy.DEFAULT;
-        }
-        return retryPolicy;
-      }
-    };
-  }
 
   @Nullable
   static Throttle getThrottlePolicy(@Nullable Map<String, Object> serviceConfig) {
@@ -198,7 +93,55 @@ final class ServiceConfigUtil {
     return new Throttle(maxTokens, tokenRatio);
   }
 
+  @Nullable
+  static Integer getMaxAttemptsFromRetryPolicy(Map<String, Object> retryPolicy) {
+    if (!retryPolicy.containsKey(RETRY_POLICY_MAX_ATTEMPTS_KEY)) {
+      return null;
+    }
+    return getDouble(retryPolicy, RETRY_POLICY_MAX_ATTEMPTS_KEY).intValue();
+  }
 
+  @Nullable
+  static Long getInitialBackoffNanosFromRetryPolicy(Map<String, Object> retryPolicy) {
+    if (!retryPolicy.containsKey(RETRY_POLICY_INITIAL_BACKOFF_KEY)) {
+      return null;
+    }
+    String rawInitialBackoff = getString(retryPolicy, RETRY_POLICY_INITIAL_BACKOFF_KEY);
+    try {
+      return parseDuration(rawInitialBackoff);
+    } catch (ParseException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Nullable
+  static Long getMaxBackoffNanosFromRetryPolicy(Map<String, Object> retryPolicy) {
+    if (!retryPolicy.containsKey(RETRY_POLICY_MAX_BACKOFF_KEY)) {
+      return null;
+    }
+    String rawMaxBackoff = getString(retryPolicy, RETRY_POLICY_MAX_BACKOFF_KEY);
+    try {
+      return parseDuration(rawMaxBackoff);
+    } catch (ParseException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Nullable
+  static Double getBackoffMultiplierFromRetryPolicy(Map<String, Object> retryPolicy) {
+    if (!retryPolicy.containsKey(RETRY_POLICY_BACKOFF_MULTIPLIER_KEY)) {
+      return null;
+    }
+    return getDouble(retryPolicy, RETRY_POLICY_BACKOFF_MULTIPLIER_KEY);
+  }
+
+  @Nullable
+  static List<String> getRetryableStatusCodesFromRetryPolicy(Map<String, Object> retryPolicy) {
+    if (!retryPolicy.containsKey(RETRY_POLICY_RETRYABLE_STATUS_CODES_KEY)) {
+      return null;
+    }
+    return checkStringList(getList(retryPolicy, RETRY_POLICY_RETRYABLE_STATUS_CODES_KEY));
+  }
 
   @Nullable
   static String getServiceFromName(Map<String, Object> name) {
@@ -214,6 +157,14 @@ final class ServiceConfigUtil {
       return null;
     }
     return getString(name, NAME_METHOD_KEY);
+  }
+
+  @Nullable
+  static Map<String, Object> getRetryPolicyFromMethodConfig(Map<String, Object> methodConfig) {
+    if (!methodConfig.containsKey(METHOD_CONFIG_RETRY_POLICY_KEY)) {
+      return null;
+    }
+    return getObject(methodConfig, METHOD_CONFIG_RETRY_POLICY_KEY);
   }
 
   @Nullable
@@ -296,7 +247,7 @@ final class ServiceConfigUtil {
     throw new ClassCastException(
         String.format("value %s for key %s in %s is not List", value, key, obj));
   }
-
+  
   /**
    * Gets an object from an object for the given key.
    */
@@ -389,6 +340,17 @@ final class ServiceConfigUtil {
       }
     }
     return (List<Map<String, Object>>) (List) rawList;
+  }
+
+  @SuppressWarnings("unchecked")
+  static List<String> checkStringList(List<Object> rawList) {
+    for (int i = 0; i < rawList.size(); i++) {
+      if (!(rawList.get(i) instanceof String)) {
+        throw new ClassCastException(
+            String.format("value %s for idx %d in %s is not string", rawList.get(i), i, rawList));
+      }
+    }
+    return (List<String>) (List) rawList;
   }
 
   /**

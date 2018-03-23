@@ -22,7 +22,6 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.internal.RetriableStream.RetryPolicy.DEFAULT;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -55,15 +54,15 @@ import io.grpc.Status;
 import io.grpc.internal.Channelz.ChannelStats;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
-import io.grpc.internal.RetriableStream.RetryPolicies;
-import io.grpc.internal.RetriableStream.RetryPolicy;
 import io.grpc.internal.RetriableStream.Throttle;
+import io.grpc.internal.ServiceConfigInterceptor.MethodInfo.RetryPolicy;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
@@ -217,7 +216,6 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
   private final long perRpcBufferLimit;
   private final long channelBufferLimit;
 
-  private RetryPolicies retryPolicies;
   // Temporary false flag that can skip the retry code path.
   private final boolean retryEnabled;
 
@@ -508,7 +506,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
         final Metadata headers,
         final Context context) {
       checkState(retryEnabled, "retry should be enabled");
-      RetryPolicy retryPolicy = retryPolicies == null ? DEFAULT : retryPolicies.get(method);
+      RetryPolicy retryPolicy = callOptions.getOption(ServiceConfigInterceptor.RETRY_POLICY_KEY);
       return new RetriableStream<ReqT>(
           method, headers, channelBufferUsed, perRpcBufferLimit, channelBufferLimit,
           getCallExecutor(callOptions), transportFactory.getScheduledExecutorService(),
@@ -1174,9 +1172,12 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
 
           nameResolverBackoffPolicy = null;
 
+          Map<String, Object> serviceConfig =
+              config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+
           try {
+            serviceConfigInterceptor.handleUpdate(serviceConfig);
             if (retryEnabled) {
-              retryPolicies = getRetryPolicies(config);
               throttle = getThrottle(config);
             }
           } catch (RuntimeException re) {
@@ -1236,12 +1237,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     }
   }
 
-  // TODO(zdapeng): test retryEnabled = true/flase really works as expected.
-  private RetryPolicies getRetryPolicies(Attributes config) {
-    return ServiceConfigUtil.getRetryPolicies(
-        config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG), maxRetryAttempts);
-  }
-
+  // TODO(zdapeng): test retryEnabled = true/flase really works as expected
   @Nullable
   private static Throttle getThrottle(Attributes config) {
     return ServiceConfigUtil.getThrottlePolicy(

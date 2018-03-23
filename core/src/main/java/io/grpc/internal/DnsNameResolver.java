@@ -330,7 +330,7 @@ final class DnsNameResolver extends NameResolver {
     if (!serviceConfigChoice.containsKey(SERVICE_CONFIG_CHOICE_CLIENT_LANGUAGE_KEY)) {
       return null;
     }
-    return checkStringList(
+    return ServiceConfigUtil.checkStringList(
         ServiceConfigUtil.getList(serviceConfigChoice, SERVICE_CONFIG_CHOICE_CLIENT_LANGUAGE_KEY));
   }
 
@@ -340,20 +340,11 @@ final class DnsNameResolver extends NameResolver {
     if (!serviceConfigChoice.containsKey(SERVICE_CONFIG_CHOICE_CLIENT_HOSTNAME_KEY)) {
       return null;
     }
-    return checkStringList(
+    return ServiceConfigUtil.checkStringList(
         ServiceConfigUtil.getList(serviceConfigChoice, SERVICE_CONFIG_CHOICE_CLIENT_HOSTNAME_KEY));
   }
 
-  @SuppressWarnings("unchecked")
-  private static List<String> checkStringList(List<Object> rawList) {
-    for (int i = 0; i < rawList.size(); i++) {
-      if (!(rawList.get(i) instanceof String)) {
-        throw new ClassCastException(
-            String.format("value %s for idx %d in %s is not string", rawList.get(i), i, rawList));
-      }
-    }
-    return (List<String>) (List) rawList;
-  }
+
 
   /**
    * Determines if a given Service Config choice applies, and if so, returns it.

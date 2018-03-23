@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -28,10 +29,13 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.Deadline;
 import io.grpc.MethodDescriptor;
+import io.grpc.Status.Code;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
@@ -105,12 +109,12 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
   /**
    * Equivalent of MethodConfig from a ServiceConfig.
    */
-  @VisibleForTesting
   static final class MethodInfo {
     final Long timeoutNanos;
     final Boolean waitForReady;
     final Integer maxInboundMessageSize;
     final Integer maxOutboundMessageSize;
+    final RetryPolicy retryPolicy;
 
     MethodInfo(Map<String, Object> methodConfig) {
       timeoutNanos = ServiceConfigUtil.getTimeoutFromMethodConfig(methodConfig);
@@ -125,6 +129,9 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
       if (maxOutboundMessageSize != null) {
         checkArgument(maxOutboundMessageSize >= 0, "%s exceeds bounds", maxOutboundMessageSize);
       }
+
+      Map<String, Object> policy = ServiceConfigUtil.getRetryPolicyFromMethodConfig(methodConfig);
+      retryPolicy = policy == null ? null : new RetryPolicy(policy);
     }
 
     @Override
@@ -154,7 +161,107 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
           .add("maxOutboundMessageSize", maxOutboundMessageSize)
           .toString();
     }
+
+    static final class RetryPolicy {
+      final int maxAttempts;
+      final long initialBackoffNanos;
+      final long maxBackoffNanos;
+      final double backoffMultiplier;
+      final Set<Code> retryableStatusCodes;
+
+      RetryPolicy(Map<String, Object> retryPolicy) {
+        maxAttempts = checkNotNull(
+            ServiceConfigUtil.getMaxAttemptsFromRetryPolicy(retryPolicy),
+            "maxAttempts cannot be empty");
+        checkArgument(maxAttempts >= 2, "maxAttempts must be greater than 1: %s", maxAttempts);
+
+        initialBackoffNanos = checkNotNull(
+            ServiceConfigUtil.getInitialBackoffNanosFromRetryPolicy(retryPolicy),
+            "initialBackoff cannot be empty");
+        checkArgument(
+            initialBackoffNanos > 0,
+            "initialBackoffNanos must be greater than 0: %s",
+            initialBackoffNanos);
+
+        maxBackoffNanos = checkNotNull(
+            ServiceConfigUtil.getMaxBackoffNanosFromRetryPolicy(retryPolicy),
+            "maxBackoff cannot be empty");
+        checkArgument(
+            maxBackoffNanos > 0, "maxBackoff must be greater than 0: %s", maxBackoffNanos);
+
+        backoffMultiplier = checkNotNull(
+            ServiceConfigUtil.getBackoffMultiplierFromRetryPolicy(retryPolicy),
+            "backoffMultiplier cannot be empty");
+        checkArgument(
+            backoffMultiplier > 0,
+            "backoffMultiplier must be greater than 0: %s",
+            backoffMultiplier);
+
+        List<String> rawCodes =
+            ServiceConfigUtil.getRetryableStatusCodesFromRetryPolicy(retryPolicy);
+        checkNotNull(rawCodes, "rawCodes must be present");
+        checkArgument(!rawCodes.isEmpty(), "rawCodes can't be empty");
+        EnumSet<Code> codes = EnumSet.noneOf(Code.class);
+        // service config doesn't say if duplicates are allowed, so just accept them.
+        for (String rawCode : rawCodes) {
+          codes.add(Code.valueOf(rawCode));
+        }
+        retryableStatusCodes = Collections.unmodifiableSet(codes);
+      }
+
+      @VisibleForTesting
+      RetryPolicy(
+          int maxAttempts,
+          long initialBackoffNanos,
+          long maxBackoffNanos,
+          double backoffMultiplier,
+          Set<Code> retryableStatusCodes) {
+        this.maxAttempts = maxAttempts;
+        this.initialBackoffNanos = initialBackoffNanos;
+        this.maxBackoffNanos = maxBackoffNanos;
+        this.backoffMultiplier = backoffMultiplier;
+        this.retryableStatusCodes = retryableStatusCodes;
+      }
+
+      @Override
+      public int hashCode() {
+        return Objects.hashCode(
+            maxAttempts,
+            initialBackoffNanos,
+            maxBackoffNanos,
+            backoffMultiplier,
+            retryableStatusCodes);
+      }
+
+      @Override
+      public boolean equals(Object other) {
+        if (!(other instanceof RetryPolicy)) {
+          return false;
+        }
+        RetryPolicy that = (RetryPolicy) other;
+        return Objects.equal(this.maxAttempts, that.maxAttempts)
+            && Objects.equal(this.initialBackoffNanos, that.initialBackoffNanos)
+            && Objects.equal(this.maxBackoffNanos, that.maxBackoffNanos)
+            && Objects.equal(this.backoffMultiplier, that.backoffMultiplier)
+            && Objects.equal(this.retryableStatusCodes, that.retryableStatusCodes);
+      }
+
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper(this)
+            .add("maxAttempts", maxAttempts)
+            .add("initialBackoffNanos", initialBackoffNanos)
+            .add("maxBackoffNanos", maxBackoffNanos)
+            .add("backoffMultiplier", backoffMultiplier)
+            .add("retryableStatusCodes", retryableStatusCodes)
+            .toString();
+      }
+
+    }
   }
+
+  static final CallOptions.Key<MethodInfo.RetryPolicy> RETRY_POLICY_KEY =
+      CallOptions.Key.of("internal-retry-policy", null);
 
   @Override
   public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
@@ -192,6 +299,9 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
     }
     if (info.maxOutboundMessageSize != null) {
       callOptions = callOptions.withMaxOutboundMessageSize(info.maxOutboundMessageSize);
+    }
+    if (info.retryPolicy != null) {
+      callOptions = callOptions.withOption(RETRY_POLICY_KEY, info.retryPolicy);
     }
 
     return next.newCall(method, callOptions);
