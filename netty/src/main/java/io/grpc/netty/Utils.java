@@ -232,8 +232,8 @@ class Utils {
         continue;
       }
       Object value = opt.getValue();
-      String valueStr = value != null ? value.toString() : "null";
-      b.addOption(key.name(), valueStr);
+      // zpencer: Can a netty option be null?
+      b.addOption(key.name(), String.valueOf(value));
     }
     return b.build();
   }

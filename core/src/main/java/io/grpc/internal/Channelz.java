@@ -466,9 +466,10 @@ public final class Channelz {
         Integer timeoutMillis,
         Integer lingerSeconds,
         Map<String, String> others) {
+      Preconditions.checkNotNull(others);
       this.soTimeoutMillis = timeoutMillis;
       this.lingerSeconds = lingerSeconds;
-      this.others = Collections.unmodifiableMap(Preconditions.checkNotNull(others));
+      this.others = Collections.unmodifiableMap(new HashMap<String, String>(others));
     }
 
     public static final class Builder {
@@ -491,7 +492,7 @@ public final class Channelz {
       }
 
       public Builder addOption(String name, String value) {
-        others.put(name, value);
+        others.put(name, Preconditions.checkNotNull(value));
         return this;
       }
 
