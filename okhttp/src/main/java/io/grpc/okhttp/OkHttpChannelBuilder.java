@@ -23,9 +23,6 @@ import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.squareup.okhttp.CipherSuite;
-import com.squareup.okhttp.ConnectionSpec;
-import com.squareup.okhttp.TlsVersion;
 import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
@@ -40,7 +37,10 @@ import io.grpc.internal.ProxyParameters;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.TransportTracer;
+import io.grpc.okhttp.internal.CipherSuite;
+import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.Platform;
+import io.grpc.okhttp.internal.TlsVersion;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.GeneralSecurityException;
@@ -280,9 +280,10 @@ public class OkHttpChannelBuilder extends
    * @throws IllegalArgumentException
    *         If {@code connectionSpec} is not with TLS
    */
-  public final OkHttpChannelBuilder connectionSpec(ConnectionSpec connectionSpec) {
+  public final OkHttpChannelBuilder connectionSpec(
+      com.squareup.okhttp.ConnectionSpec connectionSpec) {
     Preconditions.checkArgument(connectionSpec.isTls(), "plaintext ConnectionSpec is not accepted");
-    this.connectionSpec = connectionSpec;
+    this.connectionSpec = Utils.convertSpec(connectionSpec);
     return this;
   }
 
@@ -481,7 +482,7 @@ public class OkHttpChannelBuilder extends
           executor,
           socketFactory,
           hostnameVerifier,
-          Utils.convertSpec(connectionSpec),
+          connectionSpec,
           maxMessageSize,
           proxy,
           tooManyPingsRunnable,
