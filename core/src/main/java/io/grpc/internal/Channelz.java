@@ -42,8 +42,8 @@ public final class Channelz {
       = new ConcurrentSkipListMap<Long, Instrumented<ChannelStats>>();
   private final ConcurrentMap<Long, Instrumented<ChannelStats>> subchannels
       = new ConcurrentHashMap<Long, Instrumented<ChannelStats>>();
-  // An InProcessTransport can appear in both clientSockets and perServerSockets simultaneously
-  private final ConcurrentMap<Long, Instrumented<SocketStats>> clientSockets
+  // An InProcessTransport can appear in both otherSockets and perServerSockets simultaneously
+  private final ConcurrentMap<Long, Instrumented<SocketStats>> otherSockets
       = new ConcurrentHashMap<Long, Instrumented<SocketStats>>();
   private final ConcurrentMap<Long, ServerSocketMap> perServerSockets
       = new ConcurrentHashMap<Long, ServerSocketMap>();
@@ -81,7 +81,11 @@ public final class Channelz {
 
   /** Adds a socket. */
   public void addClientSocket(Instrumented<SocketStats> socket) {
-    add(clientSockets, socket);
+    add(otherSockets, socket);
+  }
+
+  public void addListenSocket(Instrumented<SocketStats> socket) {
+    add(otherSockets, socket);
   }
 
   /** Adds a server socket. */
@@ -108,7 +112,11 @@ public final class Channelz {
   }
 
   public void removeClientSocket(Instrumented<SocketStats> socket) {
-    remove(clientSockets, socket);
+    remove(otherSockets, socket);
+  }
+
+  public void removeListenSocket(Instrumented<SocketStats> socket) {
+    remove(otherSockets, socket);
   }
 
   /** Removes a server socket. */
@@ -174,7 +182,7 @@ public final class Channelz {
   /** Returns a socket. */
   @Nullable
   public Instrumented<SocketStats> getSocket(long id) {
-    Instrumented<SocketStats> clientSocket = clientSockets.get(id);
+    Instrumented<SocketStats> clientSocket = otherSockets.get(id);
     if (clientSocket != null) {
       return clientSocket;
     }
@@ -207,7 +215,7 @@ public final class Channelz {
 
   @VisibleForTesting
   public boolean containsClientSocket(LogId transportRef) {
-    return contains(clientSockets, transportRef);
+    return contains(otherSockets, transportRef);
   }
 
   private static <T extends Instrumented<?>> void add(Map<Long, T> map, T object) {

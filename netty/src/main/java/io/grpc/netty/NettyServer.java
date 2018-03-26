@@ -245,7 +245,7 @@ class NettyServer implements InternalServer, WithLogId {
       public void operationComplete(ChannelFuture f) throws Exception {
         Instrumented<SocketStats> listenSocket = new ListenSocket(f.channel());
         listenSockets = ImmutableList.of(listenSocket);
-        channelz.addSocket(listenSocket);
+        channelz.addListenSocket(listenSocket);
       }
     });
     try {
@@ -273,7 +273,7 @@ class NettyServer implements InternalServer, WithLogId {
           log.log(Level.WARNING, "Error shutting down server", future.cause());
         }
         for (Instrumented<SocketStats> listenSocket : listenSockets) {
-          channelz.removeSocket(listenSocket);
+          channelz.removeListenSocket(listenSocket);
         }
         listenSockets = null;
         synchronized (NettyServer.this) {
