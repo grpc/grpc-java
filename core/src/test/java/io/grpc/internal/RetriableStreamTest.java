@@ -1512,9 +1512,10 @@ public class RetriableStreamTest {
   public void droppedShouldNeverRetry() {
     ClientStream mockStream1 = mock(ClientStream.class);
     ClientStream mockStream2 = mock(ClientStream.class);
+    doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
+    doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
 
     // start
-    doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
     retriableStream.start(masterListener);
 
     verify(retriableStreamRecorder).newSubstream(0);
@@ -1522,8 +1523,7 @@ public class RetriableStreamTest {
         ArgumentCaptor.forClass(ClientStreamListener.class);
     verify(mockStream1).start(sublistenerCaptor1.capture());
 
-    // normal retry
-    doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
+    // drop and verify no retry
     Status status = Status.fromCode(RETRIABLE_STATUS_CODE_1);
     sublistenerCaptor1.getValue().closed(status, DROPPED, new Metadata());
 

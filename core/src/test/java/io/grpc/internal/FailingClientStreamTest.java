@@ -35,15 +35,21 @@ import org.junit.runners.JUnit4;
 public class FailingClientStreamTest {
 
   @Test
-  public void rpcProgressPopulatedToListener() {
+  public void processedRpcProgressPopulatedToListener() {
     ClientStreamListener listener = mock(ClientStreamListener.class);
     Status status = Status.UNAVAILABLE;
 
     ClientStream stream = new FailingClientStream(status);
     stream.start(listener);
     verify(listener).closed(eq(status), eq(RpcProgress.PROCESSED), any(Metadata.class));
+  }
 
-    stream = new FailingClientStream(status, RpcProgress.DROPPED);
+  @Test
+  public void droppedRpcProgressPopulatedToListener() {
+    ClientStreamListener listener = mock(ClientStreamListener.class);
+    Status status = Status.UNAVAILABLE;
+
+    ClientStream stream = new FailingClientStream(status, RpcProgress.DROPPED);
     stream.start(listener);
     verify(listener).closed(eq(status), eq(RpcProgress.DROPPED), any(Metadata.class));
   }
