@@ -97,8 +97,7 @@ import javax.annotation.Nullable;
 class NettyServerHandler extends AbstractNettyHandler {
   private static final Logger logger = Logger.getLogger(NettyServerHandler.class.getName());
   private static final long KEEPALIVE_PING = 0xDEADL;
-  private static final long MAX_CONNECTION_AGE_PING = 0xA9EL;
-  private static final long MAX_CONNECTION_IDLE_PING = 0x1D1EL;
+  private static final long GRACEFUL_SHUTDOWN_PING = 0x97ACEF001L;
   private static final long GRACEFUL_SHUTDOWN_PING_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(10);
   private static final SystemTicker SYSTEM_TICKER = new SystemTicker();
 
@@ -127,9 +126,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   @CheckForNull
   private ScheduledFuture<?> maxConnectionAgeMonitor;
   @CheckForNull
-  private GracefulShutdownRunner maxAgeShutdownRunner;
-  @CheckForNull
-  private GracefulShutdownRunner maxIdleShutdownRunner;
+  private GracefulShutdown gracefulShutdown;
 
   private Ticker ticker = SYSTEM_TICKER;
 
@@ -261,9 +258,11 @@ class NettyServerHandler extends AbstractNettyHandler {
       maxConnectionIdleManager = new MaxConnectionIdleManager(maxConnectionIdleInNanos) {
         @Override
         void close(ChannelHandlerContext ctx) {
-          maxIdleShutdownRunner = new GracefulShutdownRunner(
-              ctx, MAX_CONNECTION_IDLE_PING, "max_idle", null);
-          maxIdleShutdownRunner.run();
+          if (gracefulShutdown == null) {
+            gracefulShutdown = new GracefulShutdown("max_idle", null);
+            gracefulShutdown.start(ctx);
+            ctx.flush();
+          }
         }
       };
     }
@@ -323,9 +322,11 @@ class NettyServerHandler extends AbstractNettyHandler {
           new LogExceptionRunnable(new Runnable() {
             @Override
             public void run() {
-              maxAgeShutdownRunner = new GracefulShutdownRunner(
-                  ctx, MAX_CONNECTION_AGE_PING, "max_age", maxConnectionAgeGraceInNanos);
-              maxAgeShutdownRunner.run();
+              if (gracefulShutdown != null) {
+                gracefulShutdown = new GracefulShutdown("max_age", maxConnectionAgeGraceInNanos);
+                gracefulShutdown.start(ctx);
+                ctx.flush();
+              }
             }
           }),
           maxConnectionAgeInNanos,
@@ -772,12 +773,9 @@ class NettyServerHandler extends AbstractNettyHandler {
           logger.log(Level.FINE, String.format("Window: %d",
               decoder().flowController().initialWindowSize(connection().connectionStream())));
         }
-      } else if (data == MAX_CONNECTION_AGE_PING) {
-        checkNotNull(maxAgeShutdownRunner, "maxAgeShutdownRunner");
-        maxAgeShutdownRunner.secondGoAwayAndClose();
-      } else if (data == MAX_CONNECTION_IDLE_PING) {
-        checkNotNull(maxIdleShutdownRunner, "maxIdleShutdownRunner");
-        maxIdleShutdownRunner.secondGoAwayAndClose();
+      } else if (data == GRACEFUL_SHUTDOWN_PING) {
+        checkNotNull(gracefulShutdown, "gracefulShutdownRunner");
+        gracefulShutdown.secondGoAwayAndClose(ctx);
       } else if (data != KEEPALIVE_PING) {
         logger.warning("Received unexpected ping ack. No ping outstanding");
       }
@@ -827,10 +825,7 @@ class NettyServerHandler extends AbstractNettyHandler {
     }
   }
 
-  private final class GracefulShutdownRunner {
-
-    ChannelHandlerContext ctx;
-    long payload;
+  private final class GracefulShutdown {
     String goAwayMessage;
 
     /**
@@ -851,11 +846,8 @@ class NettyServerHandler extends AbstractNettyHandler {
     long deadline;
     Future<?> pingFuture;
 
-    GracefulShutdownRunner(
-        ChannelHandlerContext ctx, long payload, String goAwayMessage,
+    GracefulShutdown(String goAwayMessage,
         @Nullable Long graceTimeInNanos) {
-      this.ctx = ctx;
-      this.payload = payload;
       this.goAwayMessage = goAwayMessage;
       this.graceTimeInNanos = graceTimeInNanos;
     }
@@ -863,14 +855,13 @@ class NettyServerHandler extends AbstractNettyHandler {
     /**
      * Sends out first GOAWAY and ping, and schedules second GOAWAY and close.
      */
-    void run() {
+    void start(final ChannelHandlerContext ctx) {
       goAway(
           ctx,
           Integer.MAX_VALUE,
           Http2Error.NO_ERROR.code(),
           ByteBufUtil.writeAscii(ctx.alloc(), goAwayMessage),
           ctx.newPromise());
-      ctx.flush();
 
       long gracefulShutdownPingTimeout = GRACEFUL_SHUTDOWN_PING_TIMEOUT_NANOS;
       if (graceTimeInNanos != null) {
@@ -881,17 +872,16 @@ class NettyServerHandler extends AbstractNettyHandler {
           new Runnable() {
             @Override
             public void run() {
-              secondGoAwayAndClose();
+              secondGoAwayAndClose(ctx);
             }
           },
           gracefulShutdownPingTimeout,
           TimeUnit.NANOSECONDS);
 
-      encoder().writePing(ctx, false /* isAck */, payload, ctx.newPromise());
-      ctx.flush();
+      encoder().writePing(ctx, false /* isAck */, GRACEFUL_SHUTDOWN_PING, ctx.newPromise());
     }
 
-    void secondGoAwayAndClose() {
+    void secondGoAwayAndClose(ChannelHandlerContext ctx) {
       if (pingAckedOrTimeout) {
         return;
       }
@@ -907,7 +897,6 @@ class NettyServerHandler extends AbstractNettyHandler {
           Http2Error.NO_ERROR.code(),
           ByteBufUtil.writeAscii(ctx.alloc(), goAwayMessage),
           ctx.newPromise());
-      ctx.flush();
 
       // gracefully shutdown with specified grace time
       long savedGracefulShutdownTimeMillis = gracefulShutdownTimeoutMillis();
