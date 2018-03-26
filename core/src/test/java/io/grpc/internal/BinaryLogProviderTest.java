@@ -46,6 +46,7 @@ import io.grpc.StringMarshaller;
 import io.grpc.internal.BinaryLogProvider.CallId;
 import io.grpc.internal.testing.StatsTestUtils.MockableSpan;
 import io.grpc.testing.TestMethodDescriptors;
+import io.opencensus.trace.Tracing;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -335,36 +336,36 @@ public class BinaryLogProviderTest {
   @Test
   public void clientCallIdSetter() throws Exception {
     final MockableSpan mockableSpan = MockableSpan.generateRandomSpan(new Random(0));
-    Context.current().withValue(CONTEXT_SPAN_KEY, mockableSpan).call(
-        new Callable<Void>() {
+    Tracing.getTracer().withSpan(mockableSpan, new Callable<Void>() {
+      @Override
+      public Void call() throws Exception {
+        final SettableFuture<CallOptions> future = SettableFuture.create();
+        Channel channel = new Channel() {
           @Override
-          public Void call() throws Exception {
-            final SettableFuture<CallOptions> future = SettableFuture.create();
-            Channel channel = new Channel() {
-              @Override
-              public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
-                  MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
-                future.set(callOptions);
-                return null;
-              }
-
-              @Override
-              public String authority() {
-                return null;
-              }
-            };
-            BinaryLogProvider.CLIENT_CALLID_SETTER.interceptCall(
-                TestMethodDescriptors.voidMethod(),
-                CallOptions.DEFAULT,
-                channel);
-            CallOptions callOptions = future.get();
-            CallId callId = callOptions.getOption(BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY);
-            assertTrue(
-                Arrays.equals(mockableSpan.getContext().getTraceId().getBytes(), callId.id));
+          public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
+              MethodDescriptor<RequestT, ResponseT> methodDescriptor,
+              CallOptions callOptions) {
+            future.set(callOptions);
             return null;
           }
-        }
-    );
+
+          @Override
+          public String authority() {
+            return null;
+          }
+        };
+        BinaryLogProvider.CLIENT_CALLID_SETTER.interceptCall(
+            TestMethodDescriptors.voidMethod(),
+            CallOptions.DEFAULT,
+            channel);
+        CallOptions callOptions = future.get();
+        CallId callId = callOptions
+            .getOption(BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY);
+        assertTrue(
+            Arrays.equals(mockableSpan.getContext().getTraceId().getBytes(), callId.id));
+        return null;
+      }
+    }).call();
   }
 
   private final class TestBinaryLogClientInterceptor implements ClientInterceptor {

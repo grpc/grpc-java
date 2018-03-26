@@ -16,8 +16,6 @@
 
 package io.grpc.internal;
 
-import static io.opencensus.trace.unsafe.ContextUtils.CONTEXT_SPAN_KEY;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.CallOptions;
@@ -39,6 +37,7 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerStreamTracer;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.TraceId;
+import io.opencensus.trace.Tracing;
 import java.io.ByteArrayInputStream;
 import java.io.Closeable;
 import java.io.IOException;
@@ -143,13 +142,17 @@ public abstract class BinaryLogProvider implements Closeable {
   private static final ServerStreamTracer SERVER_CALLID_SETTER = new ServerStreamTracer() {
     @Override
     public Context filterContext(Context context) {
-      Span span = CONTEXT_SPAN_KEY.get(context);
-      if (span == null) {
-        return context;
+      Context toRestore = context.attach();
+      try {
+        Span span = Tracing.getTracer().getCurrentSpan();
+        if (span == null) {
+          return context;
+        }
+        TraceId traceId = span.getContext().getTraceId();
+        return context.withValue(SERVER_CALL_ID_CONTEXT_KEY, new CallId(traceId.getBytes()));
+      } finally {
+        context.detach(toRestore);
       }
-
-      TraceId traceId = span.getContext().getTraceId();
-      return context.withValue(SERVER_CALL_ID_CONTEXT_KEY, new CallId(traceId.getBytes()));
     }
   };
 
@@ -173,7 +176,7 @@ public abstract class BinaryLogProvider implements Closeable {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-      Span span = CONTEXT_SPAN_KEY.get();
+      Span span = Tracing.getTracer().getCurrentSpan();
       if (span == null) {
         return next.newCall(method, callOptions);
       }
