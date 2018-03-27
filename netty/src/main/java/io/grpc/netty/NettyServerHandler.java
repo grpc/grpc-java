@@ -99,7 +99,6 @@ class NettyServerHandler extends AbstractNettyHandler {
   private static final long KEEPALIVE_PING = 0xDEADL;
   private static final long GRACEFUL_SHUTDOWN_PING = 0x97ACEF001L;
   private static final long GRACEFUL_SHUTDOWN_PING_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(10);
-  private static final SystemTicker SYSTEM_TICKER = new SystemTicker();
 
   private final Http2Connection.PropertyKey streamKey;
   private final ServerTransportListener transportListener;
@@ -127,8 +126,6 @@ class NettyServerHandler extends AbstractNettyHandler {
   private ScheduledFuture<?> maxConnectionAgeMonitor;
   @CheckForNull
   private GracefulShutdown gracefulShutdown;
-
-  private Ticker ticker = SYSTEM_TICKER;
 
   static NettyServerHandler newHandler(
       ServerTransportListener transportListener,
@@ -322,7 +319,7 @@ class NettyServerHandler extends AbstractNettyHandler {
           new LogExceptionRunnable(new Runnable() {
             @Override
             public void run() {
-              if (gracefulShutdown != null) {
+              if (gracefulShutdown == null) {
                 gracefulShutdown = new GracefulShutdown("max_age", maxConnectionAgeGraceInNanos);
                 gracefulShutdown.start(ctx);
                 ctx.flush();
@@ -840,10 +837,6 @@ class NettyServerHandler extends AbstractNettyHandler {
      */
     boolean pingAckedOrTimeout;
 
-    /**
-     * Deadline of the shutdown.
-     */
-    long deadline;
     Future<?> pingFuture;
 
     GracefulShutdown(String goAwayMessage,
@@ -864,10 +857,6 @@ class NettyServerHandler extends AbstractNettyHandler {
           ctx.newPromise());
 
       long gracefulShutdownPingTimeout = GRACEFUL_SHUTDOWN_PING_TIMEOUT_NANOS;
-      if (graceTimeInNanos != null) {
-        deadline = ticker.read() + graceTimeInNanos;
-        gracefulShutdownPingTimeout = Math.min(gracefulShutdownPingTimeout, graceTimeInNanos);
-      }
       pingFuture = ctx.executor().schedule(
           new Runnable() {
             @Override
@@ -875,7 +864,7 @@ class NettyServerHandler extends AbstractNettyHandler {
               secondGoAwayAndClose(ctx);
             }
           },
-          gracefulShutdownPingTimeout,
+          GRACEFUL_SHUTDOWN_PING_TIMEOUT_NANOS,
           TimeUnit.NANOSECONDS);
 
       encoder().writePing(ctx, false /* isAck */, GRACEFUL_SHUTDOWN_PING, ctx.newPromise());
@@ -902,7 +891,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       long savedGracefulShutdownTimeMillis = gracefulShutdownTimeoutMillis();
       long gracefulShutdownTimeoutMillis = savedGracefulShutdownTimeMillis;
       if (graceTimeInNanos != null) {
-        gracefulShutdownTimeoutMillis = TimeUnit.NANOSECONDS.toMillis(deadline - ticker.read());
+        gracefulShutdownTimeoutMillis = TimeUnit.NANOSECONDS.toMillis(graceTimeInNanos);
       }
       try {
         gracefulShutdownTimeoutMillis(gracefulShutdownTimeoutMillis);
@@ -947,27 +936,6 @@ class NettyServerHandler extends AbstractNettyHandler {
       keepAliveEnforcer.resetCounters();
       return super.writeHeaders(ctx, streamId, headers, streamDependency, weight, exclusive,
           padding, endStream, promise);
-    }
-  }
-
-  @VisibleForTesting
-  void setTickerForTest(Ticker ticker) {
-    this.ticker = ticker;
-  }
-
-  // TODO(zsurocking): Classes below are copied from Deadline.java. We should consider share the
-  // code.
-
-  /** Time source representing nanoseconds since fixed but arbitrary point in time. */
-  abstract static class Ticker {
-    /** Returns the number of nanoseconds since this source's epoch. */
-    public abstract long read();
-  }
-
-  private static class SystemTicker extends Ticker {
-    @Override
-    public long read() {
-      return System.nanoTime();
     }
   }
 }
