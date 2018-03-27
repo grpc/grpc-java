@@ -771,7 +771,9 @@ class NettyServerHandler extends AbstractNettyHandler {
               decoder().flowController().initialWindowSize(connection().connectionStream())));
         }
       } else if (data == GRACEFUL_SHUTDOWN_PING) {
-        checkNotNull(gracefulShutdown, "gracefulShutdownRunner");
+        if (gracefulShutdown == null) {
+          throw new AssertionError("gracefulShutdown is null");
+        }
         gracefulShutdown.secondGoAwayAndClose(ctx);
       } else if (data != KEEPALIVE_PING) {
         logger.warning("Received unexpected ping ack. No ping outstanding");
