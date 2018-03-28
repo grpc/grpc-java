@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
@@ -29,7 +30,6 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
-import io.grpc.internal.ServiceConfigInterceptor.MethodInfo;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -45,8 +45,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.CheckReturnValue;
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
+import javax.annotation.concurrent.Immutable;
 
 /** A logical {@link ClientStream} that is retriable. */
 abstract class RetriableStream<ReqT> implements ClientStream {
@@ -66,7 +68,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final ScheduledExecutorService scheduledExecutorService;
   // Must not modify it.
   private final Metadata headers;
-  private final MethodInfo.RetryPolicy retryPolicy;
+  private final RetryPolicy retryPolicy;
 
   /** Must be held when updating state, accessing state.buffer, or certain substream attributes. */
   private final Object lock = new Object();
@@ -92,13 +94,13 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   private ClientStreamListener masterListener;
   private Future<?> scheduledRetry;
-  private long nextBackoffIntervalNanos;
+  private double nextBackoffIntervalInSeconds;
 
   RetriableStream(
       MethodDescriptor<ReqT, ?> method, Metadata headers,
       ChannelBufferMeter channelBufferUsed, long perRpcBufferLimit, long channelBufferLimit,
       Executor callExecutor, ScheduledExecutorService scheduledExecutorService,
-      MethodInfo.RetryPolicy retryPolicy, @Nullable Throttle throttle) {
+      RetryPolicy retryPolicy, @Nullable Throttle throttle) {
     this.method = method;
     this.channelBufferUsed = channelBufferUsed;
     this.perRpcBufferLimit = perRpcBufferLimit;
@@ -107,7 +109,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     this.scheduledExecutorService = scheduledExecutorService;
     this.headers = headers;
     this.retryPolicy = checkNotNull(retryPolicy, "retryPolicy");
-    nextBackoffIntervalNanos = retryPolicy.initialBackoffNanos;
+    nextBackoffIntervalInSeconds = retryPolicy.initialBackoffInSeconds;
     this.throttle = throttle;
   }
 
@@ -586,8 +588,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
                   });
                 }
               },
-              retryPlan.backoffNanos,
-              TimeUnit.NANOSECONDS);
+              retryPlan.backoffInMillis,
+              TimeUnit.MILLISECONDS);
           return;
         }
       }
@@ -609,48 +611,47 @@ abstract class RetriableStream<ReqT> implements ClientStream {
      * caller should check it separately.
      */
     // TODO(zdapeng): add HedgingPolicy as param
-    private RetryPlan makeRetryDecision(
-        MethodInfo.RetryPolicy retryPolicy, Status status, Metadata trailer) {
+    private RetryPlan makeRetryDecision(RetryPolicy retryPolicy, Status status, Metadata trailer) {
       boolean shouldRetry = false;
-      long backoffNanos = 0L;
+      long backoffInMillis = 0L;
       boolean isRetryableStatusCode = retryPolicy.retryableStatusCodes.contains(status.getCode());
 
       String pushbackStr = trailer.get(GRPC_RETRY_PUSHBACK_MS);
-      Long pushbackNanos = null;
+      Integer pushback = null;
       if (pushbackStr != null) {
         try {
-          pushbackNanos = TimeUnit.MILLISECONDS.toNanos(Long.parseLong(pushbackStr));
+          pushback = Integer.valueOf(pushbackStr);
         } catch (NumberFormatException e) {
-          pushbackNanos = -1L;
+          pushback = -1;
         }
       }
 
       boolean isThrottled = false;
       if (throttle != null) {
-        if (isRetryableStatusCode || (pushbackNanos != null && pushbackNanos < 0)) {
+        if (isRetryableStatusCode || (pushback != null && pushback < 0)) {
           isThrottled = !throttle.onQualifiedFailureThenCheckIsAboveThreshold();
         }
       }
 
       if (retryPolicy.maxAttempts > substream.previousAttempts + 1 && !isThrottled) {
-        if (pushbackNanos == null) {
+        if (pushback == null) {
           if (isRetryableStatusCode) {
             shouldRetry = true;
-            backoffNanos = (long) (nextBackoffIntervalNanos * random.nextDouble());
-            nextBackoffIntervalNanos = (long) Math.min(
-                nextBackoffIntervalNanos * retryPolicy.backoffMultiplier,
-                retryPolicy.maxBackoffNanos);
+            backoffInMillis = (long) (nextBackoffIntervalInSeconds * 1000D * random.nextDouble());
+            nextBackoffIntervalInSeconds = Math.min(
+                nextBackoffIntervalInSeconds * retryPolicy.backoffMultiplier,
+                retryPolicy.maxBackoffInSeconds);
           } // else no retry
-        } else if (pushbackNanos >= 0) {
+        } else if (pushback >= 0) {
           shouldRetry = true;
-          backoffNanos = pushbackNanos;
-          nextBackoffIntervalNanos = retryPolicy.initialBackoffNanos;
+          backoffInMillis = pushback;
+          nextBackoffIntervalInSeconds = retryPolicy.initialBackoffInSeconds;
         } // else no retry
       } // else no retry
 
       // TODO(zdapeng): transparent retry
       // TODO(zdapeng): hedging
-      return new RetryPlan(shouldRetry, backoffNanos);
+      return new RetryPlan(shouldRetry, backoffInMillis);
     }
 
     @Override
@@ -967,14 +968,72 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
   }
 
+  interface RetryPolicies {
+    @Nonnull
+    RetryPolicy get(MethodDescriptor<?, ?> method);
+  }
+
+  @Immutable
+  static final class RetryPolicy {
+    private final int maxAttempts;
+    private final double initialBackoffInSeconds;
+    private final double maxBackoffInSeconds;
+    private final double backoffMultiplier;
+    private final Collection<Status.Code> retryableStatusCodes;
+
+    RetryPolicy(
+        int maxAttempts, double initialBackoffInSeconds, double maxBackoffInSeconds,
+        double backoffMultiplier, Collection<Status.Code> retryableStatusCodes) {
+      checkArgument(maxAttempts >= 1, "maxAttempts");
+      this.maxAttempts = maxAttempts;
+      checkArgument(initialBackoffInSeconds >= 0D, "initialBackoffInSeconds");
+      this.initialBackoffInSeconds = initialBackoffInSeconds;
+      checkArgument(
+          maxBackoffInSeconds >= initialBackoffInSeconds,
+          "maxBackoffInSeconds should be at least initialBackoffInSeconds");
+      this.maxBackoffInSeconds = maxBackoffInSeconds;
+      checkArgument(backoffMultiplier > 0D, "backoffMultiplier");
+      this.backoffMultiplier = backoffMultiplier;
+      this.retryableStatusCodes = Collections.unmodifiableSet(
+          new HashSet<Status.Code>(checkNotNull(retryableStatusCodes, "retryableStatusCodes")));
+    }
+
+    /** No retry. */
+    static final RetryPolicy DEFAULT =
+        new RetryPolicy(1, 0, 0, 1, Collections.<Status.Code>emptyList());
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (!(o instanceof RetryPolicy)) {
+        return false;
+      }
+      RetryPolicy that = (RetryPolicy) o;
+      return maxAttempts == that.maxAttempts
+          && Double.compare(backoffMultiplier, that.backoffMultiplier) == 0
+          && Double.compare(initialBackoffInSeconds, that.initialBackoffInSeconds) == 0
+          && Double.compare(maxBackoffInSeconds, that.maxBackoffInSeconds) == 0
+          && Objects.equal(retryableStatusCodes, that.retryableStatusCodes);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(
+          maxAttempts, initialBackoffInSeconds, maxBackoffInSeconds, backoffMultiplier,
+          retryableStatusCodes);
+    }
+  }
+
   private static final class RetryPlan {
     final boolean shouldRetry;
     // TODO(zdapeng) boolean hasHedging
-    final long backoffNanos;
+    final long backoffInMillis;
 
-    RetryPlan(boolean shouldRetry, long backoffNanos) {
+    RetryPlan(boolean shouldRetry, long backoffInMillis) {
       this.shouldRetry = shouldRetry;
-      this.backoffNanos = backoffNanos;
+      this.backoffInMillis = backoffInMillis;
     }
   }
 }
