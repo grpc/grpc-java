@@ -294,7 +294,7 @@ public abstract class AbstractInteropTest {
   @After
   public void tearDown() throws Exception {
     if (channel != null) {
-      channel.shutdownNow().awaitTermination(2, TimeUnit.SECONDS);
+      channel.shutdownNow().awaitTermination(1, TimeUnit.SECONDS);
     }
     stopServer();
   }
