@@ -36,7 +36,6 @@ import io.grpc.ServerInterceptor;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerStreamTracer;
 import io.opencensus.trace.Span;
-import io.opencensus.trace.TraceId;
 import io.opencensus.trace.Tracing;
 import java.io.ByteArrayInputStream;
 import java.io.Closeable;
@@ -148,15 +147,15 @@ public abstract class BinaryLogProvider implements Closeable {
         if (span == null) {
           return context;
         }
-        TraceId traceId = span.getContext().getTraceId();
-        return context.withValue(SERVER_CALL_ID_CONTEXT_KEY, new CallId(traceId.getBytes()));
+
+        return context.withValue(SERVER_CALL_ID_CONTEXT_KEY, CallId.fromCensusSpan(span));
       } finally {
         context.detach(toRestore);
       }
     }
   };
 
-  static final ServerStreamTracer.Factory SERVER_CALLID_SETTER_FACTORY
+  private static final ServerStreamTracer.Factory SERVER_CALLID_SETTER_FACTORY
       = new ServerStreamTracer.Factory() {
           @Override
           public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
@@ -172,7 +171,7 @@ public abstract class BinaryLogProvider implements Closeable {
     return SERVER_CALLID_SETTER_FACTORY;
   }
 
-  static final ClientInterceptor CLIENT_CALLID_SETTER = new ClientInterceptor() {
+  private static final ClientInterceptor CLIENT_CALLID_SETTER = new ClientInterceptor() {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
@@ -181,10 +180,9 @@ public abstract class BinaryLogProvider implements Closeable {
         return next.newCall(method, callOptions);
       }
 
-      TraceId traceId = span.getContext().getTraceId();
       return next.newCall(
           method,
-          callOptions.withOption(CLIENT_CALL_ID_CALLOPTION_KEY, new CallId(traceId.getBytes())));
+          callOptions.withOption(CLIENT_CALL_ID_CALLOPTION_KEY, CallId.fromCensusSpan(span)));
     }
   };
 
@@ -262,14 +260,27 @@ public abstract class BinaryLogProvider implements Closeable {
   }
 
   /**
-   * A CallId is a byte[] of size 16 that uniquely identifies the RPC.
+   * A CallId is two byte[] arrays both of size 8 that uniquely identifies the RPC. Users are
+   * free to use the byte arrays however they see fit.
    */
   public static final class CallId {
-    public final byte[] id;
+    private static final byte[] emptyHi = new byte[8];
+    public final byte[] hi;
+    public final byte[] lo;
 
-    public CallId(byte[] id) {
-      Preconditions.checkState(id.length == 16);
-      this.id = id;
+
+    /**
+     * Creates an instance.
+     */
+    public CallId(byte[] hi, byte[] lo) {
+      Preconditions.checkState(hi.length == 8);
+      Preconditions.checkState(lo.length == 8);
+      this.hi = hi;
+      this.lo = lo;
+    }
+
+    static CallId fromCensusSpan(Span span) {
+      return new CallId(emptyHi, span.getContext().getSpanId().getBytes());
     }
   }
 }

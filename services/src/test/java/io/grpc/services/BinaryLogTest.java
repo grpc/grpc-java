@@ -17,16 +17,14 @@
 package io.grpc.services;
 
 import static io.grpc.internal.BinaryLogProvider.BYTEARRAY_MARSHALLER;
+import static io.grpc.services.BinaryLog.EMPTY_CALL_ID;
 import static io.grpc.services.BinaryLog.UNKNOWN_SOCKET;
-import static io.grpc.services.BinaryLog.emptyCallId;
 import static io.grpc.services.BinaryLog.getCallIdForClient;
 import static io.grpc.services.BinaryLog.getCallIdForServer;
 import static io.grpc.services.BinaryLog.getPeerSocket;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.mock;
@@ -118,9 +116,9 @@ public final class BinaryLogTest {
   private static final boolean IS_COMPRESSED = true;
   private static final boolean IS_UNCOMPRESSED = false;
   // TODO(zpencer): rename this to callId, since byte[] is mutable
-  private static final byte[] CALL_ID = new byte[] {
-      0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-      0x19, 0x10, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f };
+  private static final CallId CALL_ID = new CallId(
+      new byte[] {0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18},
+      new byte[] {0x19, 0x10, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f});
   private static final int HEADER_LIMIT = 10;
   private static final int MESSAGE_LIMIT = Integer.MAX_VALUE;
 
@@ -309,9 +307,9 @@ public final class BinaryLogTest {
 
   @Test
   public void callIdToProto() {
-    byte[] callId = new byte[] {
-      0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-      0x19, 0x10, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f };
+    CallId callId = new CallId(
+        new byte[] {0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18},
+        new byte[] {0x19, 0x10, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f});
     assertEquals(
         Uint128
             .newBuilder()
@@ -319,29 +317,6 @@ public final class BinaryLogTest {
             .setLow(0x19101a1b1c1d1e1fL)
             .build(),
         BinaryLog.callIdToProto(callId));
-
-  }
-
-  @Test
-  public void callIdToProto_invalid_shorter_len() {
-    try {
-      BinaryLog.callIdToProto(new byte[14]);
-      fail();
-    } catch (IllegalArgumentException expected) {
-      assertTrue(
-          expected.getMessage().startsWith("can only convert from 16 byte input, actual length"));
-    }
-  }
-
-  @Test
-  public void callIdToProto_invalid_longer_len() {
-    try {
-      BinaryLog.callIdToProto(new byte[18]);
-      fail();
-    } catch (IllegalArgumentException expected) {
-      assertTrue(
-          expected.getMessage().startsWith("can only convert from 16 byte input, actual length"));
-    }
   }
 
   @Test
@@ -712,24 +687,24 @@ public final class BinaryLogTest {
 
   @Test
   public void getCallIdServer() {
-    assertSame(emptyCallId, getCallIdForServer(Context.ROOT));
+    assertSame(EMPTY_CALL_ID, getCallIdForServer(Context.ROOT));
     assertSame(
         CALL_ID,
         getCallIdForServer(
             Context.ROOT.withValue(
                 BinaryLogProvider.SERVER_CALL_ID_CONTEXT_KEY,
-                new CallId(CALL_ID))));
+                CALL_ID)));
   }
 
   @Test
   public void getCallIdClient() {
-    assertSame(emptyCallId, getCallIdForClient(CallOptions.DEFAULT));
+    assertSame(EMPTY_CALL_ID, getCallIdForClient(CallOptions.DEFAULT));
     assertSame(
         CALL_ID,
         getCallIdForClient(
             CallOptions.DEFAULT.withOption(
                 BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY,
-                new CallId(CALL_ID))));
+                CALL_ID)));
   }
 
   @Test
@@ -792,7 +767,7 @@ public final class BinaryLogTest {
             .interceptCall(
                 method,
                 CallOptions.DEFAULT.withOption(
-                    BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY, new CallId(CALL_ID)),
+                    BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY, CALL_ID),
                 channel);
 
     // send initial metadata
@@ -865,7 +840,7 @@ public final class BinaryLogTest {
   @Test
   public void serverInterceptor() throws Exception {
     Context.current()
-        .withValue(BinaryLogProvider.SERVER_CALL_ID_CONTEXT_KEY, new CallId(CALL_ID))
+        .withValue(BinaryLogProvider.SERVER_CALL_ID_CONTEXT_KEY, CALL_ID)
         .call(new Callable<Void>() {
           @Override
           public Void call() throws Exception {

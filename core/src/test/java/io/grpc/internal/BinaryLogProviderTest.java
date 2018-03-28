@@ -51,7 +51,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.Callable;
@@ -299,6 +298,14 @@ public class BinaryLogProviderTest {
         (int) method.parseResponse(new ByteArrayInputStream((byte[]) serializedResp.get(0))));
   }
 
+  @Test
+  public void callIdFromSpan() {
+    MockableSpan mockableSpan = MockableSpan.generateRandomSpan(new Random(0));
+    CallId callId = CallId.fromCensusSpan(mockableSpan);
+    assertThat(callId.hi).isEqualTo(new byte[8]);
+    assertThat(callId.lo).isEqualTo(mockableSpan.getContext().getSpanId().getBytes());
+  }
+
   @SuppressWarnings({"rawtypes", "unchecked"})
   private static void onServerMessageHelper(ServerCall.Listener listener, Object request) {
     listener.onMessage(request);
@@ -323,14 +330,15 @@ public class BinaryLogProviderTest {
 
   @Test
   public void serverCallIdSetter() {
-    ServerStreamTracer tracer = BinaryLogProvider.SERVER_CALLID_SETTER_FACTORY
-        .newServerStreamTracer(
-            "service/method", new Metadata());
+    ServerStreamTracer tracer = binlogProvider
+        .getServerCallIdSetter()
+        .newServerStreamTracer("service/method", new Metadata());
     MockableSpan mockableSpan = MockableSpan.generateRandomSpan(new Random(0));
     Context context = Context.current().withValue(CONTEXT_SPAN_KEY, mockableSpan);
     Context filtered = tracer.filterContext(context);
     CallId callId = BinaryLogProvider.SERVER_CALL_ID_CONTEXT_KEY.get(filtered);
-    assertTrue(Arrays.equals(mockableSpan.getContext().getTraceId().getBytes(), callId.id));
+    assertThat(callId.hi).isEqualTo(new byte[8]);
+    assertThat(mockableSpan.getContext().getSpanId().getBytes()).isEqualTo(callId.lo);
   }
 
   @Test
@@ -354,15 +362,15 @@ public class BinaryLogProviderTest {
             return null;
           }
         };
-        BinaryLogProvider.CLIENT_CALLID_SETTER.interceptCall(
+        binlogProvider.getClientCallIdSetter().interceptCall(
             TestMethodDescriptors.voidMethod(),
             CallOptions.DEFAULT,
             channel);
         CallOptions callOptions = future.get();
         CallId callId = callOptions
             .getOption(BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY);
-        assertTrue(
-            Arrays.equals(mockableSpan.getContext().getTraceId().getBytes(), callId.id));
+        assertThat(callId.hi).isEqualTo(new byte[8]);
+        assertThat(mockableSpan.getContext().getSpanId().getBytes()).isEqualTo(callId.lo);
         return null;
       }
     }).call();

@@ -83,7 +83,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
   private static final boolean CLIENT = false;
 
   @VisibleForTesting
-  static final byte[] emptyCallId = new byte[16];
+  static final CallId EMPTY_CALL_ID = new CallId(new byte[8], new byte[8]);
   @VisibleForTesting
   static final SocketAddress DUMMY_SOCKET = new DummySocketAddress();
   @VisibleForTesting
@@ -110,7 +110,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
     }
 
     @Override
-    void logSendInitialMetadata(Metadata metadata, boolean isServer, byte[] callId) {
+    void logSendInitialMetadata(Metadata metadata, boolean isServer, CallId callId) {
       GrpcLogEntry entry = GrpcLogEntry
           .newBuilder()
           .setType(Type.SEND_INITIAL_METADATA)
@@ -123,7 +123,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
 
     @Override
     void logRecvInitialMetadata(
-        Metadata metadata, boolean isServer, byte[] callId, SocketAddress peerSocket) {
+        Metadata metadata, boolean isServer, CallId callId, SocketAddress peerSocket) {
       GrpcLogEntry entry = GrpcLogEntry
           .newBuilder()
           .setType(Type.RECV_INITIAL_METADATA)
@@ -136,7 +136,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
     }
 
     @Override
-    void logTrailingMetadata(Metadata metadata, boolean isServer, byte[] callId) {
+    void logTrailingMetadata(Metadata metadata, boolean isServer, CallId callId) {
       GrpcLogEntry entry = GrpcLogEntry
           .newBuilder()
           .setType(isServer ? Type.SEND_TRAILING_METADATA : Type.RECV_TRAILING_METADATA)
@@ -153,7 +153,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
         T message,
         boolean compressed,
         boolean isServer,
-        byte[] callId) {
+        CallId callId) {
       if (marshaller != BYTEARRAY_MARSHALLER) {
         throw new IllegalStateException("Expected the BinaryLog's ByteArrayMarshaller");
       }
@@ -174,7 +174,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
         T message,
         boolean compressed,
         boolean isServer,
-        byte[] callId) {
+        CallId callId) {
       if (marshaller != BYTEARRAY_MARSHALLER) {
         throw new IllegalStateException("Expected the BinaryLog's ByteArrayMarshaller");
       }
@@ -205,20 +205,20 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
      * Logs the sending of initial metadata. This method logs the appropriate number of bytes
      * as determined by the binary logging configuration.
      */
-    abstract void logSendInitialMetadata(Metadata metadata, boolean isServer, byte[] callId);
+    abstract void logSendInitialMetadata(Metadata metadata, boolean isServer, CallId callId);
 
     /**
      * Logs the receiving of initial metadata. This method logs the appropriate number of bytes
      * as determined by the binary logging configuration.
      */
     abstract void logRecvInitialMetadata(
-        Metadata metadata, boolean isServer, byte[] callId, SocketAddress peerSocket);
+        Metadata metadata, boolean isServer, CallId callId, SocketAddress peerSocket);
 
     /**
      * Logs the trailing metadata. This method logs the appropriate number of bytes
      * as determined by the binary logging configuration.
      */
-    abstract void logTrailingMetadata(Metadata metadata, boolean isServer, byte[] callId);
+    abstract void logTrailingMetadata(Metadata metadata, boolean isServer, CallId callId);
 
     /**
      * Logs the outbound message. This method logs the appropriate number of bytes from
@@ -227,7 +227,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
      * This method takes ownership of {@code message}.
      */
     abstract <T> void logOutboundMessage(
-        Marshaller<T> marshaller, T message, boolean compressed, boolean isServer, byte[] callId);
+        Marshaller<T> marshaller, T message, boolean compressed, boolean isServer, CallId callId);
 
     /**
      * Logs the inbound message. This method logs the appropriate number of bytes from
@@ -236,7 +236,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
      * This method takes ownership of {@code message}.
      */
     abstract <T> void logInboundMessage(
-        Marshaller<T> marshaller, T message, boolean compressed, boolean isServer, byte[] callId);
+        Marshaller<T> marshaller, T message, boolean compressed, boolean isServer, CallId callId);
 
     /**
      * Returns the number bytes of the header this writer will log, according to configuration.
@@ -276,20 +276,20 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
     return DEFAULT_FACTORY.getLog(fullMethodName);
   }
 
-  static byte[] getCallIdForServer(Context context) {
+  static CallId getCallIdForServer(Context context) {
     CallId callId = BinaryLogProvider.SERVER_CALL_ID_CONTEXT_KEY.get(context);
     if (callId == null) {
-      return emptyCallId;
+      return EMPTY_CALL_ID;
     }
-    return callId.id;
+    return callId;
   }
 
-  static byte[] getCallIdForClient(CallOptions callOptions) {
+  static CallId getCallIdForClient(CallOptions callOptions) {
     CallId callId = callOptions.getOption(BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY);
     if (callId == null) {
-      return emptyCallId;
+      return EMPTY_CALL_ID;
     }
-    return callId.id;
+    return callId;
   }
 
   static SocketAddress getPeerSocket(Attributes streamAttributes) {
@@ -303,7 +303,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
   @Override
   public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
       final MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-    final byte[] callId = getCallIdForClient(callOptions);
+    final CallId callId = getCallIdForClient(callOptions);
     return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
       @Override
       public void start(Listener<RespT> responseListener, Metadata headers) {
@@ -353,7 +353,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
   @Override
   public <ReqT, RespT> Listener<ReqT> interceptCall(
       final ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-    final byte[] callId = getCallIdForServer(Context.current());
+    final CallId callId = getCallIdForServer(Context.current());
     SocketAddress peer = getPeerSocket(call.getAttributes());
     writer.logRecvInitialMetadata(headers, SERVER, callId, peer);
     ServerCall<ReqT, RespT> wCall = new SimpleForwardingServerCall<ReqT, RespT>(call) {
@@ -551,19 +551,15 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
   }
 
   /**
-   * Returns a {@link Uint128} by interpreting the first 8 bytes as the high int64 and the second
-   * 8 bytes as the low int64.
+   * Returns a {@link Uint128} from a CallId.
    */
-  // TODO(zpencer): verify int64 representation with other gRPC languages
-  static Uint128 callIdToProto(byte[] bytes) {
-    Preconditions.checkNotNull(bytes);
-    Preconditions.checkArgument(
-        bytes.length == 16,
-        String.format("can only convert from 16 byte input, actual length = %d", bytes.length));
-    ByteBuffer bb = ByteBuffer.wrap(bytes);
-    long high = bb.getLong();
-    long low = bb.getLong();
-    return Uint128.newBuilder().setHigh(high).setLow(low).build();
+  static Uint128 callIdToProto(CallId callId) {
+    Preconditions.checkNotNull(callId);
+    return Uint128
+        .newBuilder()
+        .setHigh(ByteBuffer.wrap(callId.hi).getLong())
+        .setLow(ByteBuffer.wrap(callId.lo).getLong())
+        .build();
   }
 
   @VisibleForTesting
