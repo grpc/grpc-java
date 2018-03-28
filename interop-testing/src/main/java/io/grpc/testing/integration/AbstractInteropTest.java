@@ -390,19 +390,7 @@ public abstract class AbstractInteropTest {
    * Tests client per-message compression for unary calls. The Java API does not support inspecting
    * a message's compression level, so this is primarily intended to run against a gRPC C++ server.
    */
-  public void clientCompressedUnary() throws Exception {
-    clientCompressedUnary(true);
-  }
-
-  /**
-   * Tests client per-message compression for unary calls. The Java API does not support inspecting
-   * a message's compression level, so this is primarily intended to run against a gRPC C++ server.
-   */
-  public void clientCompressedUnaryNoProbe() throws Exception {
-    clientCompressedUnary(false);
-  }
-
-  private void clientCompressedUnary(boolean probe) throws Exception {
+  public void clientCompressedUnary(boolean probe) throws Exception {
     assumeEnoughMemory();
     final SimpleRequest expectCompressedRequest =
         SimpleRequest.newBuilder()
@@ -571,20 +559,7 @@ public abstract class AbstractInteropTest {
    * inspecting a message's compression level, so this is primarily intended to run against a gRPC
    * C++ server.
    */
-  public void clientCompressedStreaming() throws Exception {
-    clientCompressedStreaming(true);
-  }
-
-  /**
-   * Tests client per-message compression for streaming calls. The Java API does not support
-   * inspecting a message's compression level, so this is primarily intended to run against a gRPC
-   * C++ server.
-   */
-  public void clientCompressedStreamingNoProbe() throws Exception {
-    clientCompressedStreaming(false);
-  }
-
-  private void clientCompressedStreaming(boolean probe) throws Exception {
+  public void clientCompressedStreaming(boolean probe) throws Exception {
     final StreamingInputCallRequest expectCompressedRequest =
         StreamingInputCallRequest.newBuilder()
             .setExpectCompressed(BoolValue.newBuilder().setValue(true))

@@ -221,11 +221,11 @@ public class TestServiceClient {
         break;
 
       case CLIENT_COMPRESSED_UNARY:
-        tester.clientCompressedUnary();
+        tester.clientCompressedUnary(true);
         break;
 
       case CLIENT_COMPRESSED_UNARY_NOPROBE:
-        tester.clientCompressedUnaryNoProbe();
+        tester.clientCompressedUnary(false);
         break;
 
       case SERVER_COMPRESSED_UNARY:
@@ -237,11 +237,11 @@ public class TestServiceClient {
         break;
 
       case CLIENT_COMPRESSED_STREAMING:
-        tester.clientCompressedStreaming();
+        tester.clientCompressedStreaming(true);
         break;
 
       case CLIENT_COMPRESSED_STREAMING_NOPROBE:
-        tester.clientCompressedStreamingNoProbe();
+        tester.clientCompressedStreaming(false);
         break;
 
       case SERVER_STREAMING:
