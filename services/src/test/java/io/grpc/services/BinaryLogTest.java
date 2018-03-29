@@ -17,8 +17,8 @@
 package io.grpc.services;
 
 import static io.grpc.internal.BinaryLogProvider.BYTEARRAY_MARSHALLER;
+import static io.grpc.services.BinaryLog.DUMMY_SOCKET;
 import static io.grpc.services.BinaryLog.EMPTY_CALL_ID;
-import static io.grpc.services.BinaryLog.UNKNOWN_SOCKET;
 import static io.grpc.services.BinaryLog.getCallIdForClient;
 import static io.grpc.services.BinaryLog.getCallIdForServer;
 import static io.grpc.services.BinaryLog.getPeerSocket;
@@ -709,7 +709,7 @@ public final class BinaryLogTest {
 
   @Test
   public void getPeerSocketTest() {
-    assertSame(UNKNOWN_SOCKET, getPeerSocket(Attributes.EMPTY));
+    assertSame(DUMMY_SOCKET, getPeerSocket(Attributes.EMPTY));
     assertSame(
         peer,
         getPeerSocket(Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, peer).build()));
