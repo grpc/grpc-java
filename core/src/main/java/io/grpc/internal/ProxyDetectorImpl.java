@@ -49,7 +49,6 @@ class ProxyDetectorImpl implements ProxyDetector {
   // AbstractInteropTest for an example how to run a
   // TestService.EmptyCall RPC.
   //
-  //
   // The instructions below assume Squid 3.5.23 and a recent
   // version of Debian.
   //
