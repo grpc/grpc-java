@@ -105,6 +105,9 @@ class ProxyDetectorImpl implements ProxyDetector {
   //
   // In both cases, start the JVM with -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=3128 to
   // configure the proxy. For passwords, use java.net.Authenticator.setDefault().
+  //
+  // It may be helpful to monitor the squid access logs:
+  // $ sudo tail -f /var/log/squid/access.log
 
   private static final Logger log = Logger.getLogger(ProxyDetectorImpl.class.getName());
   private static final AuthenticationProvider DEFAULT_AUTHENTICATOR = new AuthenticationProvider() {
