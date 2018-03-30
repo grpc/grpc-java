@@ -49,13 +49,14 @@ class ProxyDetectorImpl implements ProxyDetector {
   // AbstractInteropTest for an example how to run a
   // TestService.EmptyCall RPC.
   //
-  // WARNING: THESE CONFIGS HAVE NOT BEEN REVIEWED FOR SECURITY, DO
-  // NOT USE OUTSIDE OF TESTING.
   //
   // The instructions below assume Squid 3.5.23 and a recent
   // version of Debian.
   //
   // Set the contents of /etc/squid/squid.conf to be:
+  // WARNING: THESE CONFIGS HAVE NOT BEEN REVIEWED FOR SECURITY, DO
+  // NOT USE OUTSIDE OF TESTING. COMMENT OUT THIS WARNING TO
+  // UNBREAK THE CONFIG FILE.
   // acl SSL_ports port 443
   // acl Safe_ports port 80
   // acl Safe_ports port 21
