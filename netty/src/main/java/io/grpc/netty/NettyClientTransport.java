@@ -350,7 +350,7 @@ class NettyClientTransport implements ConnectionClientTransport {
                   result.setException(future.cause());
                 }
               }
-            });;
+            });
     return result;
   }
 
