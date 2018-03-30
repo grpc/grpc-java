@@ -90,9 +90,13 @@ class ProxyDetectorImpl implements ProxyDetector {
   // $ sudo htpasswd -c /etc/squid/passwd myuser1
   //
   // Make the file readable to squid:
-  // $ sudo chmod 644 /etc/squid/password
+  // $ sudo chmod 644 /etc/squid/passwd
   //
-  // Add these additional lines to squid.conf:
+  // Validate the username and password, you should see OK printed:
+  // $ /usr/lib/squid3/basic_ncsa_auth /etc/squid/passwd
+  // myuser1 <your password here>
+  //
+  // Add these additional lines to the beginning of squid.conf (the ordering matters):
   // auth_param basic program /usr/lib/squid3/basic_ncsa_auth /etc/squid/passwd
   // auth_param basic children 5
   // auth_param basic realm Squid proxy-caching web server
@@ -105,6 +109,11 @@ class ProxyDetectorImpl implements ProxyDetector {
   //
   // In both cases, start the JVM with -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=3128 to
   // configure the proxy. For passwords, use java.net.Authenticator.setDefault().
+  //
+  // Testing with curl, no password:
+  // $ curl -U myuser1:pass1 -x http://localhost:3128 -L grpc.io
+  // Testing with curl, with password:
+  // $ curl -U myuser1:pass1 -x http://localhost:3128 -L grpc.io
   //
   // It may be helpful to monitor the squid access logs:
   // $ sudo tail -f /var/log/squid/access.log
