@@ -23,6 +23,7 @@ import io.grpc.internal.Channelz;
 import io.grpc.internal.Channelz.ChannelStats;
 import io.grpc.internal.Channelz.Security;
 import io.grpc.internal.Channelz.ServerStats;
+import io.grpc.internal.Channelz.SocketOptions;
 import io.grpc.internal.Channelz.SocketStats;
 import io.grpc.internal.Channelz.TransportStats;
 import io.grpc.internal.Instrumented;
@@ -88,6 +89,7 @@ final class ChannelzTestHelper {
               /*data=*/ null,
               listenAddress,
               /*remoteAddress=*/ null,
+              new SocketOptions.Builder().build(),
               /*security=*/ null));
       return ret;
     }

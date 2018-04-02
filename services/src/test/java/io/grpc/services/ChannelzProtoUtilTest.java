@@ -284,6 +284,12 @@ public final class ChannelzProtoUtilTest {
     socket.socketOptions = toBuilder(socket.socketOptions)
         .setSocketOptionLingerSeconds(10)
         .build();
+    assertEquals(
+        socketDataNoSockOpts
+            .toBuilder()
+            .addOption(sockOptlinger10s)
+            .build(),
+        ChannelzProtoUtil.extractSocketData(socket.getStats().get()));
   }
 
   @Test
@@ -302,7 +308,6 @@ public final class ChannelzProtoUtilTest {
     assertEquals(
         socketDataNoSockOpts
             .toBuilder()
-            .addOption(sockOptlinger10s)
             .build(),
         ChannelzProtoUtil.extractSocketData(socket.getStats().get()));
   }

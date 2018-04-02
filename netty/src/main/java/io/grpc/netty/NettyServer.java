@@ -344,6 +344,7 @@ class NettyServer implements InternalServer, WithLogId {
             /*data=*/ null,
             ch.localAddress(),
             /*remoteAddress=*/ null,
+            Utils.getSocketOptions(ch),
             /*security=*/ null));
         return ret;
       }
@@ -356,6 +357,7 @@ class NettyServer implements InternalServer, WithLogId {
                       /*data=*/ null,
                       ch.localAddress(),
                       /*remoteAddress=*/ null,
+                      Utils.getSocketOptions(ch),
                       /*security=*/ null));
                 }
               })
