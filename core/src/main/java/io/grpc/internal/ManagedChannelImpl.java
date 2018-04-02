@@ -28,7 +28,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
@@ -1247,7 +1246,6 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     return ServiceConfigUtil.getRetryPolicies(
         config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG), maxRetryAttempts);
   }
-
 
   @Nullable
   private static Throttle getThrottle(Attributes config) {

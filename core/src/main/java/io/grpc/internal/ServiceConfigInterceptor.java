@@ -122,12 +122,16 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
       maxInboundMessageSize =
           ServiceConfigUtil.getMaxResponseMessageBytesFromMethodConfig(methodConfig);
       if (maxInboundMessageSize != null) {
-        checkArgument(maxInboundMessageSize >= 0, "%s exceeds bounds", maxInboundMessageSize);
+        checkArgument(
+            maxInboundMessageSize >= 0,
+            "maxInboundMessageSize %s exceeds bounds", maxInboundMessageSize);
       }
       maxOutboundMessageSize =
           ServiceConfigUtil.getMaxRequestMessageBytesFromMethodConfig(methodConfig);
       if (maxOutboundMessageSize != null) {
-        checkArgument(maxOutboundMessageSize >= 0, "%s exceeds bounds", maxOutboundMessageSize);
+        checkArgument(
+            maxOutboundMessageSize >= 0,
+            "maxOutboundMessageSize %s exceeds bounds", maxOutboundMessageSize);
       }
 
       Map<String, Object> policy = ServiceConfigUtil.getRetryPolicyFromMethodConfig(methodConfig);

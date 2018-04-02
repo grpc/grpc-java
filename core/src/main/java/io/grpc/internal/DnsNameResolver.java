@@ -37,7 +37,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Random;
@@ -294,15 +293,15 @@ final class DnsNameResolver extends NameResolver {
         try {
           Object rawChoices = JsonParser.parse(txtRecord.substring(SERVICE_CONFIG_PREFIX.length()));
           if (!(rawChoices instanceof List)) {
-            throw new IOException("wrong type" + rawChoices);
+            throw new IOException("wrong type " + rawChoices);
           }
           List<Object> listChoices = (List<Object>) rawChoices;
           for (Object obj : listChoices) {
             if (!(obj instanceof Map)) {
-              throw new IOException("wrong element type" + rawChoices);
+              throw new IOException("wrong element type " + rawChoices);
             }
           }
-          choices = (List<Map<String, Object>>) (List) listChoices;
+          choices = (List<Map<String, Object>>) (List<?>) listChoices;
         } catch (IOException e) {
           logger.log(Level.WARNING, "Bad service config: " + txtRecord, e);
           continue;
@@ -344,8 +343,6 @@ final class DnsNameResolver extends NameResolver {
         ServiceConfigUtil.getList(serviceConfigChoice, SERVICE_CONFIG_CHOICE_CLIENT_HOSTNAME_KEY));
   }
 
-
-
   /**
    * Determines if a given Service Config choice applies, and if so, returns it.
    *
@@ -364,18 +361,16 @@ final class DnsNameResolver extends NameResolver {
     }
 
     List<String> clientLanguages = getClientLanguagesFromChoice(choice);
-    if (clientLanguages != null) {
-      if (clientLanguages.size() != 0) {
-        boolean javaPresent = false;
-        for (String lang : clientLanguages) {
-          if ("java".equals(lang.toLowerCase(Locale.ROOT))) {
-            javaPresent = true;
-            break;
-          }
+    if (clientLanguages != null && clientLanguages.size() != 0) {
+      boolean javaPresent = false;
+      for (String lang : clientLanguages) {
+        if ("java".equalsIgnoreCase(lang)) {
+          javaPresent = true;
+          break;
         }
-        if (!javaPresent) {
-          return null;
-        }
+      }
+      if (!javaPresent) {
+        return null;
       }
     }
     Double percentage = getPercentageFromChoice(choice);
@@ -387,18 +382,16 @@ final class DnsNameResolver extends NameResolver {
       }
     }
     List<String> clientHostnames = getHostnamesFromChoice(choice);
-    if (clientHostnames != null) {
-      if (clientHostnames.size() != 0) {
-        boolean hostnamePresent = false;
-        for (String clientHostname : clientHostnames) {
-          if (clientHostname.equals(hostname)) {
-            hostnamePresent = true;
-            break;
-          }
+    if (clientHostnames != null && clientHostnames.size() != 0) {
+      boolean hostnamePresent = false;
+      for (String clientHostname : clientHostnames) {
+        if (clientHostname.equals(hostname)) {
+          hostnamePresent = true;
+          break;
         }
-        if (!hostnamePresent) {
-          return null;
-        }
+      }
+      if (!hostnamePresent) {
+        return null;
       }
     }
     return ServiceConfigUtil.getObject(choice, SERVICE_CONFIG_CHOICE_SERVICE_CONFIG_KEY);
