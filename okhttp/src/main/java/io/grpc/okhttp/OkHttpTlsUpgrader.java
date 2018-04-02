@@ -70,9 +70,24 @@ final class OkHttpTlsUpgrader {
     if (hostnameVerifier == null) {
       hostnameVerifier = OkHostnameVerifier.INSTANCE;
     }
-    if (!hostnameVerifier.verify(host, sslSocket.getSession())) {
+    if (!hostnameVerifier.verify(canonicalizeHost(host), sslSocket.getSession())) {
       throw new SSLPeerUnverifiedException("Cannot verify hostname: " + host);
     }
     return sslSocket;
+  }
+
+  /**
+   * Converts a host from URI to X509 format.
+   *
+   * <p>IPv6 host addresses derived from URIs are enclosed in square brackets per RFC2732, but
+   * omit these brackets in X509 certificate subjectAltName extensions per RFC5280.
+   *
+   * @see <a href="https://www.ietf.org/rfc/rfc2732.txt">RFC2732</a>
+   * @see <a href="https://tools.ietf.org/html/rfc5280#section-4.2.1.6">RFC5280</a>
+   *
+   * @return {@param host} in a form consistent with X509 certificates
+   */
+  static String canonicalizeHost(String host) {
+    return host.replaceAll("[\\[\\]]", "");
   }
 }
