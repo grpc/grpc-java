@@ -87,6 +87,7 @@ final class OkHttpTlsUpgrader {
    *
    * @return {@param host} in a form consistent with X509 certificates
    */
+  @VisibleForTesting
   static String canonicalizeHost(String host) {
     if (host.startsWith("[") && host.endsWith("]")) {
       return host.substring(1, host.length()-1);
