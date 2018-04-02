@@ -90,7 +90,7 @@ final class OkHttpTlsUpgrader {
   @VisibleForTesting
   static String canonicalizeHost(String host) {
     if (host.startsWith("[") && host.endsWith("]")) {
-      return host.substring(1, host.length()-1);
+      return host.substring(1, host.length() - 1);
     }
     return host;
   }
