@@ -46,7 +46,6 @@ public class ReadableBuffersTest {
   @Test(expected = NullPointerException.class)
   public void readArray_checksNotNull() {
     ReadableBuffers.readArray(null);
-    fail("Exception expected");
   }
 
   @Test
@@ -64,7 +63,6 @@ public class ReadableBuffersTest {
   @Test(expected = NullPointerException.class)
   public void readAsString_checksNotNull() {
     ReadableBuffers.readAsString(null, UTF_8);
-    fail("Exception expected");
   }
 
   @Test
@@ -76,7 +74,6 @@ public class ReadableBuffersTest {
   @Test(expected = NullPointerException.class)
   public void readAsStringUtf8_checksNotNull() {
     ReadableBuffers.readAsStringUtf8(null);
-    fail("Exception expected");
   }
 
   @Test
