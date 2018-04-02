@@ -46,8 +46,8 @@ public final class LongLivedChannel extends HttpServlet {
   public void destroy() {
     try {
       channel.shutdownNow().awaitTermination(1, TimeUnit.SECONDS);
-    } catch (Throwable t) {
-      throw new RuntimeException(t);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
   }
 
