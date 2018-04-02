@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Charsets.UTF_8;
-import static junit.framework.TestCase.fail;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
