@@ -1,0 +1,15 @@
+package io.grpc.grpcbenchmarks;
+
+/**
+ * Created by davidcao on 7/28/16.
+ */
+public enum MethodEnum {
+    SERIAL_BYTE_ARRAY,
+    SERIAL_CODED_OUTPUT,
+    SERIAL_BYTE_ARRAY_OUTPUT_STREAM,
+    DESERIAL_BYTE_ARRAY,
+    DESERIAL_CODED_INPUT,
+    DESERIAL_BYTE_ARRAY_INPUT,
+    SERIAL_JSON_BYTE_ARRAY,
+    DESERIAL_JSON_BYTE_ARRAY
+}

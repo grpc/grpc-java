@@ -1,0 +1,43 @@
+syntax = "proto3";
+package benchmarks;
+
+option java_multiple_files = true;
+option java_package = "io.grpc.benchmarks";
+option java_outer_classname = "NewsfeedProtos";
+
+message Post {
+    int32 owner_id = 1;
+    string content = 2;
+    repeated Reaction reactions = 3;
+    repeated Comment comments = 4;
+
+    message Reaction {
+        int32 owner_id = 1;
+        ReactionType type = 2;
+
+        enum ReactionType {
+            LIKE = 0;
+            LOVE = 1;
+            HAHA = 2;
+            SAD = 3;
+            ANGRY = 4;
+        }
+    }
+
+    message Comment {
+        int32 owner_id = 1;
+        string text = 2;
+    }
+}
+
+message Profile {
+    int32 id = 1;
+    string name = 2;
+    string about = 3;
+    bool gender = 4; // <- Not the best idea to use a boolean in practice, but this is an example!
+    repeated Post posts = 5;
+}
+
+message FriendsList {
+    repeated Profile profiles = 1;
+}

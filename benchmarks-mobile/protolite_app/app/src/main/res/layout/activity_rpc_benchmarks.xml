@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              xmlns:tools="http://schemas.android.com/tools"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:paddingBottom="@dimen/activity_vertical_margin"
+              android:paddingLeft="@dimen/activity_horizontal_margin"
+              android:paddingRight="@dimen/activity_horizontal_margin"
+              android:paddingTop="@dimen/activity_vertical_margin"
+              android:keepScreenOn="true"
+              android:orientation="vertical"
+              tools:context="io.grpc.grpcbenchmarks.RpcBenchmarksActivity">
+
+    <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="8dp"
+            android:layout_weight="1">
+        <LinearLayout
+                android:id="@+id/rpc_benchmark_cardlayoutlinear"
+                android:orientation="vertical"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+            <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:baselineAligned="false">
+                    <EditText
+                            android:id="@+id/host_edit_text"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="Enter Host Name/IP" />
+            </LinearLayout>
+
+            <EditText android:id="@+id/payload_edit_text"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:hint="Payload Size (default 100)"
+                      android:inputType="number" />
+
+            <LinearLayout android:layout_width="match_parent"
+                          android:layout_height="wrap_content"
+                          android:orientation="horizontal">
+                <CheckBox android:id="@+id/gzip_json_checkbox"
+                          android:layout_width="0dp"
+                          android:layout_weight="1"
+                          android:layout_height="wrap_content"
+                          android:text="@string/gzipLabel"/>
+                <CheckBox android:id="@+id/okhttp_json_checkbox"
+                          android:layout_width="0dp"
+                          android:layout_weight="1"
+                          android:layout_height="wrap_content"
+                          android:text="Use OkHttp"/>
+            </LinearLayout>
+
+            <LinearLayout android:layout_width="match_parent"
+                          android:layout_height="wrap_content"
+                          android:orientation="horizontal" >
+                <Button android:id="@+id/ping_button"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:onClick="pingAddress"
+                        android:text="Ping address" />
+
+                <TextView android:id="@+id/ping_text_view"
+                          android:layout_width="wrap_content"
+                          android:layout_height="match_parent"
+                          android:text="Ping results"
+                          android:layout_marginLeft="16dp"
+                          android:layout_marginStart="16dp"
+                          android:gravity="center"/>
+            </LinearLayout>
+
+
+        </LinearLayout>
+    </ScrollView>
+
+    <Button
+            android:id="@+id/rpc_benchmarks_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:onClick="beginAllBenchmarks"
+            android:text="@string/allBenchmarksButtonEnabled" />
+</LinearLayout>
