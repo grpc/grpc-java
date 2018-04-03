@@ -98,7 +98,6 @@ public class ReadableBuffersTest {
   public void bufferInputStream_read_returnsUnsignedByte() throws Exception {
     ReadableBuffer buffer = ReadableBuffers.wrap(MSG_BYTES);
     InputStream inputStream = ReadableBuffers.openStream(buffer, true);
-    // 104 represents 'h' in decimal ascii
     assertEquals((int) 'h', inputStream.read());
   }
 
