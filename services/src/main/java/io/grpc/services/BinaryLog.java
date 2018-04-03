@@ -58,7 +58,6 @@ import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.Collections;
 import java.util.HashMap;
@@ -83,7 +82,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
   private static final boolean CLIENT = false;
 
   @VisibleForTesting
-  static final CallId emptyCallId = new CallId(new byte[8], new byte[8]);
+  static final CallId emptyCallId = new CallId(0, 0);
   @VisibleForTesting
   static final SocketAddress DUMMY_SOCKET = new DummySocketAddress();
   @VisibleForTesting
@@ -557,8 +556,8 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
     Preconditions.checkNotNull(callId);
     return Uint128
         .newBuilder()
-        .setHigh(ByteBuffer.wrap(callId.hi).getLong())
-        .setLow(ByteBuffer.wrap(callId.lo).getLong())
+        .setHigh(callId.hi)
+        .setLow(callId.lo)
         .build();
   }
 

@@ -116,9 +116,8 @@ public final class BinaryLogTest {
   private static final boolean IS_COMPRESSED = true;
   private static final boolean IS_UNCOMPRESSED = false;
   // TODO(zpencer): rename this to callId, since byte[] is mutable
-  private static final CallId CALL_ID = new CallId(
-      new byte[] {0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18},
-      new byte[] {0x19, 0x10, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f});
+  private static final CallId CALL_ID =
+      new CallId(0x1112131415161718L, 0x19101a1b1c1d1e1fL);
   private static final int HEADER_LIMIT = 10;
   private static final int MESSAGE_LIMIT = Integer.MAX_VALUE;
 
@@ -307,9 +306,7 @@ public final class BinaryLogTest {
 
   @Test
   public void callIdToProto() {
-    CallId callId = new CallId(
-        new byte[] {0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18},
-        new byte[] {0x19, 0x10, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f});
+    CallId callId = new CallId(0x1112131415161718L, 0x19101a1b1c1d1e1fL);
     assertEquals(
         Uint128
             .newBuilder()

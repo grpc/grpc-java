@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -42,6 +41,7 @@ import java.io.ByteArrayInputStream;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -269,22 +269,19 @@ public abstract class BinaryLogProvider implements Closeable {
    * free to use the byte arrays however they see fit.
    */
   public static final class CallId {
-    private static final byte[] emptyHi = new byte[8];
-    public final byte[] hi;
-    public final byte[] lo;
+    public final long hi;
+    public final long lo;
 
     /**
      * Creates an instance.
      */
-    public CallId(byte[] hi, byte[] lo) {
-      Preconditions.checkState(hi.length == 8);
-      Preconditions.checkState(lo.length == 8);
+    public CallId(long hi, long lo) {
       this.hi = hi;
       this.lo = lo;
     }
 
     static CallId fromCensusSpan(Span span) {
-      return new CallId(emptyHi, span.getContext().getSpanId().getBytes());
+      return new CallId(0, ByteBuffer.wrap(span.getContext().getSpanId().getBytes()).getLong());
     }
   }
 }

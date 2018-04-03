@@ -50,6 +50,7 @@ import io.opencensus.trace.Tracing;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -302,8 +303,9 @@ public class BinaryLogProviderTest {
   public void callIdFromSpan() {
     MockableSpan mockableSpan = MockableSpan.generateRandomSpan(new Random(0));
     CallId callId = CallId.fromCensusSpan(mockableSpan);
-    assertThat(callId.hi).isEqualTo(new byte[8]);
-    assertThat(callId.lo).isEqualTo(mockableSpan.getContext().getSpanId().getBytes());
+    assertThat(callId.hi).isEqualTo(0);
+    assertThat(callId.lo)
+        .isEqualTo(ByteBuffer.wrap(mockableSpan.getContext().getSpanId().getBytes()).getLong());
   }
 
   @SuppressWarnings({"rawtypes", "unchecked"})
@@ -337,8 +339,9 @@ public class BinaryLogProviderTest {
     Context context = Context.current().withValue(CONTEXT_SPAN_KEY, mockableSpan);
     Context filtered = tracer.filterContext(context);
     CallId callId = BinaryLogProvider.SERVER_CALL_ID_CONTEXT_KEY.get(filtered);
-    assertThat(callId.hi).isEqualTo(new byte[8]);
-    assertThat(mockableSpan.getContext().getSpanId().getBytes()).isEqualTo(callId.lo);
+    assertThat(callId.hi).isEqualTo(0);
+    assertThat(ByteBuffer.wrap(mockableSpan.getContext().getSpanId().getBytes()).getLong())
+        .isEqualTo(callId.lo);
   }
 
   @Test
@@ -369,8 +372,9 @@ public class BinaryLogProviderTest {
         CallOptions callOptions = future.get();
         CallId callId = callOptions
             .getOption(BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY);
-        assertThat(callId.hi).isEqualTo(new byte[8]);
-        assertThat(mockableSpan.getContext().getSpanId().getBytes()).isEqualTo(callId.lo);
+        assertThat(callId.hi).isEqualTo(0);
+        assertThat(ByteBuffer.wrap(mockableSpan.getContext().getSpanId().getBytes()).getLong())
+            .isEqualTo(callId.lo);
         return null;
       }
     }).call();
