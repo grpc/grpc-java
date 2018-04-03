@@ -27,7 +27,6 @@ import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
 import io.grpc.Internal;
-import io.grpc.InternalNotifyOnServerBuild;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerInterceptor;
@@ -83,9 +82,6 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
 
   final List<ServerInterceptor> interceptors = new ArrayList<ServerInterceptor>();
 
-  private final List<InternalNotifyOnServerBuild> notifyOnBuildList =
-      new ArrayList<InternalNotifyOnServerBuild>();
-
   private final List<ServerStreamTracer.Factory> streamTracerFactories =
       new ArrayList<ServerStreamTracer.Factory>();
 
@@ -136,9 +132,6 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
 
   @Override
   public final T addService(BindableService bindableService) {
-    if (bindableService instanceof InternalNotifyOnServerBuild) {
-      notifyOnBuildList.add((InternalNotifyOnServerBuild) bindableService);
-    }
     return addService(bindableService.bindService());
   }
 
@@ -238,14 +231,10 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
 
   @Override
   public Server build() {
-    ServerImpl server = new ServerImpl(
+    return new ServerImpl(
         this,
         buildTransportServer(Collections.unmodifiableList(getTracerFactories())),
         Context.ROOT);
-    for (InternalNotifyOnServerBuild notifyTarget : notifyOnBuildList) {
-      notifyTarget.notifyOnBuild(server);
-    }
-    return server;
   }
 
   @VisibleForTesting

@@ -22,9 +22,14 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import com.google.protobuf.ByteString;
-import io.grpc.BindableService;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
 import io.grpc.Server;
+import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
+import io.grpc.ServerInterceptors;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
@@ -64,7 +69,6 @@ import org.junit.runners.JUnit4;
 public class ProtoReflectionServiceTest {
   private static final String TEST_HOST = "localhost";
   private MutableHandlerRegistry handlerRegistry = new MutableHandlerRegistry();
-  private BindableService reflectionService;
   private ServerServiceDefinition dynamicService =
       (new DynamicServiceGrpc.DynamicServiceImplBase() {}).bindService();
   private ServerServiceDefinition anotherDynamicService =
@@ -75,11 +79,22 @@ public class ProtoReflectionServiceTest {
 
   @Before
   public void setUp() throws Exception {
-    reflectionService = ProtoReflectionService.newInstance();
+    ServerServiceDefinition interceptedReflectionService =
+        ServerInterceptors.interceptForward(
+            ProtoReflectionService.newInstance(),
+            new ServerInterceptor() {
+              @Override
+              public <ReqT, RespT> Listener<ReqT> interceptCall(
+                  ServerCall<ReqT, RespT> call,
+                  Metadata headers,
+                  ServerCallHandler<ReqT, RespT> next) {
+                return next.startCall(call, headers);
+              }
+            });
     server =
         InProcessServerBuilder.forName("proto-reflection-test")
             .directExecutor()
-            .addService(reflectionService)
+            .addService(interceptedReflectionService)
             .addService(new ReflectableServiceGrpc.ReflectableServiceImplBase() {})
             .fallbackHandlerRegistry(handlerRegistry)
             .build()
