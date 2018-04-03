@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">gRPC Benchmarks Lite</string>
+    <string name="protobufBenchmarksName">Protobuf Benchmarks</string>
+    <string name="rpcBenchmarksName">RPC Benchmarks</string>
+    <string name="grpcBenchmarksName">gRPC Benchmarks</string>
+    <string name="jsonBenchmarksName">JSON Benchmarks</string>
+    <string name="gzipLabel">gzip JSON</string>
+    <string name="protobuf_spinner_prompt">Pick a proto to benchmark</string>
+    <string name="allBenchmarksButtonEnabled">Run All Benchmarks</string>
+    <string name="allBenchmarksButtonDisabled">Benchmarks are running...</string>
+    <string name="pingRunning">Pinging host...</string>
+    <string name="benchmarkError">Failed to benchmark. Is server running?</string>
+</resources>
