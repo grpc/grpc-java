@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">(Nano) gRPC Benchmarks</string>
+    <string name="protobuf_spinner_prompt">Pick a proto to benchmark</string>
+    <string name="allBenchmarksButtonEnabled">Run All Benchmarks</string>
+    <string name="allBenchmarksButtonDisabled">Benchmarks are running...</string>
+
+    <color name="clear">#00000000</color>
+    <color name="black">#000000</color>
+</resources>
