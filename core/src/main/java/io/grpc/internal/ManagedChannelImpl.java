@@ -403,7 +403,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     void reschedule(long delay, TimeUnit timeUnit) {
       long delayNanos = timeUnit.toNanos(delay);
       long newRunAt = ticker.read() + delayNanos;
-      if (newRunAt - runAt < 0 || !enabled) {
+      if (newRunAt - runAt < 0 || wakeUp == null) {
         enabled = true;
         if (wakeUp != null) {
           wakeUp.cancel(false);
