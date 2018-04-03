@@ -94,7 +94,7 @@ class NettyServer implements InternalServer, WithLogId {
   private final Channelz channelz;
   // Only set once during start(). This code assumes all listen sockets are created at startup
   // and never changed. In the future we may have >1 listen socket.
-  private ImmutableList<Instrumented<SocketStats>> listenSockets;
+  private ImmutableList<Instrumented<SocketStats>> listenSockets = ImmutableList.of();
 
   NettyServer(
       SocketAddress address, Class<? extends ServerChannel> channelType,
@@ -240,16 +240,12 @@ class NettyServer implements InternalServer, WithLogId {
       }
     });
     // Bind and start to accept incoming connections.
-    ChannelFuture future = b.bind(address).addListener(new ChannelFutureListener() {
-      @Override
-      public void operationComplete(ChannelFuture f) throws Exception {
-        Instrumented<SocketStats> listenSocket = new ListenSocket(f.channel());
-        listenSockets = ImmutableList.of(listenSocket);
-        channelz.addListenSocket(listenSocket);
-      }
-    });
+    ChannelFuture future = b.bind(address);
     try {
       future.await();
+      Instrumented<SocketStats> listenSocket = new ListenSocket(future.channel());
+      listenSockets = ImmutableList.of(listenSocket);
+      channelz.addListenSocket(listenSocket);
     } catch (InterruptedException ex) {
       Thread.currentThread().interrupt();
       throw new RuntimeException("Interrupted waiting for bind");
