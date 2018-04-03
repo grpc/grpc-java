@@ -113,7 +113,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   /** Incomplete attributes produced by negotiator. */
   private Attributes negotiationAttributes;
   /** Completed attributes produced by transportReady. */
-  private Attributes attributes;
+  private Attributes attributes = Attributes.EMPTY;
   private Throwable connectionError;
   private boolean teWarningLogged;
   private WriteQueue serverWriteQueue;
@@ -554,6 +554,15 @@ class NettyServerHandler extends AbstractNettyHandler {
   WriteQueue getWriteQueue() {
     return serverWriteQueue;
   }
+
+  /**
+   * The protocol negotiation attributes, available once the protocol negotiation completes;
+   * otherwise returns {@code Attributes.EMPTY}.
+   */
+  Attributes getAttributes() {
+    return attributes;
+  }
+
 
   /**
    * Handler for commands sent from the stream.

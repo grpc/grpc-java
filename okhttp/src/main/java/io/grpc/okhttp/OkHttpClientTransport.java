@@ -40,6 +40,8 @@ import io.grpc.Status.Code;
 import io.grpc.StatusException;
 import io.grpc.internal.Channelz.Security;
 import io.grpc.internal.Channelz.SocketStats;
+import io.grpc.internal.Channelz.Tls;
+import io.grpc.internal.Channelz.TransportStats;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
@@ -65,6 +67,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketAddress;
 import java.net.URI;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -81,6 +84,8 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import okio.Buffer;
 import okio.BufferedSink;
@@ -185,6 +190,11 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   private final Runnable tooManyPingsRunnable;
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
+  // Avoid reading from attributes because it can only be safely read after the connection
+  // is established. Channelz may want to read this info before that point.
+  @GuardedBy("lock")
+  @Nullable
+  private SSLSession sslSession;
 
   @VisibleForTesting
   @Nullable
@@ -454,6 +464,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         Variant variant = new Http2();
         BufferedSink sink;
         Socket sock;
+        SSLSession sslSession = null;
         try {
           if (proxy == null) {
             sock = new Socket(address.getAddress(), address.getPort());
@@ -463,9 +474,11 @@ class OkHttpClientTransport implements ConnectionClientTransport {
           }
 
           if (sslSocketFactory != null) {
-            sock = OkHttpTlsUpgrader.upgrade(
+            SSLSocket sslSocket = OkHttpTlsUpgrader.upgrade(
                 sslSocketFactory, hostnameVerifier, sock, getOverridenHost(), getOverridenPort(),
                 connectionSpec);
+            sslSession = sslSocket.getSession();
+            sock = sslSocket;
           }
           sock.setTcpNoDelay(true);
           source = Okio.buffer(Okio.source(sock));
@@ -489,9 +502,9 @@ class OkHttpClientTransport implements ConnectionClientTransport {
 
         FrameWriter rawFrameWriter;
         synchronized (lock) {
-          socket = sock;
+          socket = Preconditions.checkNotNull(sock);
           maxConcurrentStreams = Integer.MAX_VALUE;
-
+          OkHttpClientTransport.this.sslSession = sslSession;
           startPendingStreams();
         }
 
@@ -905,14 +918,23 @@ class OkHttpClientTransport implements ConnectionClientTransport {
 
   @Override
   public ListenableFuture<SocketStats> getStats() {
+    SettableFuture<SocketStats> ret = SettableFuture.create();
     synchronized (lock) {
-      SettableFuture<SocketStats> ret = SettableFuture.create();
+      SocketAddress local = socket == null ? null : socket.getLocalSocketAddress();
+      SocketAddress remote = socket == null ? null :  socket.getRemoteSocketAddress();
+      final Security security;
+      if (sslSession != null) {
+        security = Security.withTls(Tls.fromSslSession(sslSession));
+      } else {
+        security = null;
+      }
+      TransportStats stats = transportTracer.getStats();
       ret.set(new SocketStats(
-          transportTracer.getStats(),
-          socket.getLocalSocketAddress(),
-          socket.getRemoteSocketAddress(),
+          stats,
+          local,
+          remote,
           Utils.getSocketOptions(socket),
-          new Security()));
+          security));
       return ret;
     }
   }

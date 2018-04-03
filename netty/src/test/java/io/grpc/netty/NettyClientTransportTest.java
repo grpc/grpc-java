@@ -34,6 +34,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
@@ -49,6 +51,8 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusException;
 import io.grpc.internal.Channelz;
+import io.grpc.internal.Channelz.SocketStats;
+import io.grpc.internal.Channelz.Tls;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
@@ -78,6 +82,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
+import java.security.cert.Certificate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -87,6 +92,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import javax.net.ssl.SSLHandshakeException;
+import javax.net.ssl.SSLSession;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -552,6 +558,42 @@ public class NettyClientTransportTest {
     rpc.waitForResponse();
 
     assertNull(transport.keepAliveManager());
+  }
+
+  @Test
+  public void tlsReportedInStatus() throws Exception {
+    startServer();
+
+    Certificate local = mock(Certificate.class);
+    Certificate remote = mock(Certificate.class);
+    when(local.toString()).thenReturn("local-cert");
+    when(remote.toString()).thenReturn("remote-cert");
+    final SSLSession session = mock(SSLSession.class);
+    when(session.getCipherSuite()).thenReturn("TLS_NULL_WITH_NULL_NULL");
+    when(session.getLocalCertificates()).thenReturn(new Certificate[]{local});
+    when(session.getPeerCertificates()).thenReturn(new Certificate[]{remote});
+
+    final ProtocolNegotiator negotiator = new NoopProtocolNegotiator() {
+      @Override
+      public Handler newHandler(final GrpcHttp2ConnectionHandler grpcHandler) {
+        grpcHandler.handleProtocolNegotiationCompleted(
+            Attributes
+                .newBuilder()
+                .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, session)
+                .build());
+        return super.newHandler(grpcHandler);
+      }
+    };
+    final NettyClientTransport transport = newTransport(negotiator);
+    callMeMaybe(transport.start(clientTransportListener));
+
+    SocketStats socketStats = transport.getStats().get();
+    assertNull(socketStats.security.other);
+    Tls tls = socketStats.security.tls;
+    assertNotNull(tls);
+    assertEquals("local-cert", tls.localCert);
+    assertEquals("remote-cert", tls.remoteCert);
+    assertEquals("TLS_NULL_WITH_NULL_NULL", tls.cipherSuiteStandardName);
   }
 
   private Throwable getRootCause(Throwable t) {

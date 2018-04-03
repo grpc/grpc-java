@@ -21,7 +21,6 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.ConnectivityState;
 import io.grpc.internal.Channelz;
 import io.grpc.internal.Channelz.ChannelStats;
-import io.grpc.internal.Channelz.Security;
 import io.grpc.internal.Channelz.ServerStats;
 import io.grpc.internal.Channelz.SocketOptions;
 import io.grpc.internal.Channelz.SocketStats;
@@ -67,7 +66,7 @@ final class ChannelzTestHelper {
               local,
               remote,
               socketOptions,
-              new Security()));
+              /*seucrity=*/ null));
       return ret;
     }
 

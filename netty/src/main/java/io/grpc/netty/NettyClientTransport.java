@@ -25,11 +25,13 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.Channelz.Security;
 import io.grpc.internal.Channelz.SocketStats;
+import io.grpc.internal.Channelz.Tls;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.FailingClientStream;
@@ -58,6 +60,7 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
+import javax.net.ssl.SSLSession;
 
 /**
  * A Netty-based {@link ConnectionClientTransport} implementation.
@@ -310,8 +313,7 @@ class NettyClientTransport implements ConnectionClientTransport {
 
   @Override
   public Attributes getAttributes() {
-    // TODO(zhangkun83): fill channel security attributes
-    return Attributes.EMPTY;
+    return handler == null ? Attributes.EMPTY : handler.getAttributes();
   }
 
   @Override
@@ -320,26 +322,14 @@ class NettyClientTransport implements ConnectionClientTransport {
     if (channel.eventLoop().inEventLoop()) {
       // This is necessary, otherwise we will block forever if we get the future from inside
       // the event loop.
-      result.set(
-          new SocketStats(
-              transportTracer.getStats(),
-              channel.localAddress(),
-              channel.remoteAddress(),
-              Utils.getSocketOptions(channel),
-              new Security()));
+      result.set(getStatsHelper(channel));
       return result;
     }
     channel.eventLoop().submit(
         new Runnable() {
           @Override
           public void run() {
-            result.set(
-                new SocketStats(
-                    transportTracer.getStats(),
-                    channel.localAddress(),
-                    channel.remoteAddress(),
-                    Utils.getSocketOptions(channel),
-                    new Security()));
+            result.set(getStatsHelper(channel));
           }
         })
         .addListener(
@@ -352,6 +342,25 @@ class NettyClientTransport implements ConnectionClientTransport {
               }
             });
     return result;
+  }
+
+  private SocketStats getStatsHelper(Channel ch) {
+    Preconditions.checkState(ch.eventLoop().inEventLoop());
+    // If protocol negotiation is not yet complete, then the attributes will be empty,
+    // and we will have no security to report yet.
+    SSLSession sslSession = getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
+    final Security security;
+    if (sslSession != null) {
+      security = Security.withTls(Tls.fromSslSession(sslSession));
+    } else {
+      security = null;
+    }
+    return new SocketStats(
+        transportTracer.getStats(),
+        channel.localAddress(),
+        channel.remoteAddress(),
+        Utils.getSocketOptions(ch),
+        security);
   }
 
   @VisibleForTesting

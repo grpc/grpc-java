@@ -8,6 +8,8 @@ dependencies {
     testCompile project(':grpc-core').sourceSets.test.output,
                 project(':grpc-testing'),
                 project(':grpc-netty')
+    // OkHttpTlsTransportTest requires a TLS enabled netty server
+    testRuntime libraries.netty_tcnative
     signature "org.codehaus.mojo.signature:java16:1.1@signature"
 }
 
@@ -28,3 +30,8 @@ checkstyleMain.exclude '**/io/grpc/okhttp/internal/**'
 
 javadoc.exclude 'io/grpc/okhttp/internal/**'
 javadoc.options.links 'http://square.github.io/okhttp/2.x/okhttp/'
+
+test {
+    // Needed for OkHttpTlsTransportTest
+    jvmArgs += ("-javaagent:" + configurations.alpnagent.asPath)
+}

@@ -17,9 +17,11 @@
 package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import io.grpc.ConnectivityState;
 import java.net.SocketAddress;
+import java.security.cert.Certificate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -32,6 +34,8 @@ import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
+import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.net.ssl.SSLSession;
 
 public final class Channelz {
   private static final Channelz INSTANCE = new Channelz();
@@ -450,21 +454,124 @@ public final class Channelz {
   }
 
   public static final class Security {
-    // TODO(zpencer): fill this in
+    @Nullable
+    public final Tls tls;
+    @Nullable
+    public final OtherSecurity other;
+
+    private Security(Tls tls, OtherSecurity other) {
+      Preconditions.checkState(
+          tls != null ^ other != null,
+          "one of tls or other should be set");
+      this.tls = tls;
+      this.other = other;
+    }
+
+    public static Security withTls(Tls tls) {
+      return new Security(tls, /*other=*/ null);
+    }
+
+    public static Security withOtherSecurity(OtherSecurity other) {
+      return new Security(/*tls=*/ null, other);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof Security)) {
+        return false;
+      }
+      Security that = (Security) o;
+      return Objects.equal(tls, that.tls) && Objects.equal(other, that.other);
+    }
+
+    @Override
+    public int hashCode() {
+      // only tls field is immutable
+      return Objects.hashCode(tls);
+    }
+  }
+
+  public static final class OtherSecurity {
+    public final String name;
+    @Nullable
+    public final Object security;
+
+    public OtherSecurity(String name, @Nullable Object security) {
+      this.name = Preconditions.checkNotNull(name);
+      this.security = security;
+    }
+  }
+
+  @Immutable
+  public static final class Tls {
+    public final String cipherSuiteStandardName;
+    @Nullable public final String localCert;
+    @Nullable public final String remoteCert;
+
+    /**
+     * Creates an instance.
+     */
+    public Tls(
+        String cipherSuiteStandardName,
+        @Nullable String localCert,
+        @Nullable String remoteCert) {
+      this.cipherSuiteStandardName = cipherSuiteStandardName;
+      this.localCert = localCert;
+      this.remoteCert = remoteCert;
+    }
+
+    /**
+     * Creates an instance.
+     */
+    public static Tls fromSslSession(SSLSession session) {
+      String cipherSuiteStandardName = session.getCipherSuite();
+      String localCert = null;
+      String remoteCert = null;
+      Certificate[] localCerts = session.getLocalCertificates();
+      if (localCerts != null) {
+        localCert = localCerts[0].toString();
+      }
+      try {
+        Certificate[] peerCerts = session.getPeerCertificates();
+        if (peerCerts != null) {
+          remoteCert = peerCerts[0].toString();
+        }
+      } catch (SSLPeerUnverifiedException e) {
+        // peer cert is not available
+      }
+      return new Tls(cipherSuiteStandardName, localCert, remoteCert);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof Tls)) {
+        return false;
+      }
+      Tls that = (Tls) o;
+      return Objects.equal(cipherSuiteStandardName, that.cipherSuiteStandardName)
+          && Objects.equal(localCert, that.localCert)
+          && Objects.equal(remoteCert, that.remoteCert);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(cipherSuiteStandardName, localCert, remoteCert);
+    }
   }
 
   public static final class SocketStats {
     @Nullable public final TransportStats data;
-    public final SocketAddress local;
+    @Nullable public final SocketAddress local;
     @Nullable public final SocketAddress remote;
     public final SocketOptions socketOptions;
+    // Can be null if plaintext
     @Nullable public final Security security;
 
     /** Creates an instance. */
     public SocketStats(
         TransportStats data,
-        SocketAddress local,
-        SocketAddress remote,
+        @Nullable SocketAddress local,
+        @Nullable SocketAddress remote,
         SocketOptions socketOptions,
         Security security) {
       this.data = data;
