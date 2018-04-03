@@ -53,12 +53,14 @@ public final class FakeClock {
   private final PriorityBlockingQueue<ScheduledTask> tasks =
       new PriorityBlockingQueue<ScheduledTask>();
 
-  private final Ticker ticker =
-      new Ticker() {
-        @Override public long read() {
-          return currentTimeNanos;
-        }
-      };
+  private final class FakeTicker extends Ticker implements ManagedChannelImpl.Rescheduler.Ticker {
+    @Override
+    public long read() {
+      return currentTimeNanos;
+    }
+  }
+
+  private final FakeTicker ticker = new FakeTicker();
 
   private final Supplier<Stopwatch> stopwatchSupplier =
       new Supplier<Stopwatch>() {
@@ -66,6 +68,10 @@ public final class FakeClock {
           return Stopwatch.createUnstarted(ticker);
         }
       };
+
+  public ManagedChannelImpl.Rescheduler.Ticker ticker() {
+    return ticker;
+  }
 
   private long currentTimeNanos;
 

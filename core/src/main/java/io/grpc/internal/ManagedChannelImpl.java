@@ -67,6 +67,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -307,26 +308,12 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
 
   // Run from channelExecutor
   private class IdleModeTimer implements Runnable {
-    // Only mutated from channelExecutor
-    boolean cancelled;
 
     @Override
     public void run() {
-      if (cancelled) {
-        // Race detected: this task was scheduled on channelExecutor before cancelIdleTimer()
-        // could cancel the timer.
-        return;
-      }
       enterIdleMode();
     }
   }
-
-  // Must be used from channelExecutor
-  @Nullable
-  private ScheduledFuture<?> idleModeTimerFuture;
-  // Must be used from channelExecutor
-  @Nullable
-  private IdleModeTimer idleModeTimer;
 
   // Must be called from channelExecutor
   private void shutdownNameResolverAndLoadBalancer(boolean verifyActive) {
@@ -360,7 +347,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     if (inUseStateAggregator.isInUse()) {
       // Cancel the timer now, so that a racing due timer will not put Channel on idleness
       // when the caller of exitIdleMode() is about to use the returned loadBalancer.
-      cancelIdleTimer();
+      cancelIdleTimer(false);
     } else {
       // exitIdleMode() may be called outside of inUseStateAggregator.handleNotInUse() while
       // isInUse() == false, in which case we still need to schedule the timer.
@@ -395,14 +382,92 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     channelStateManager.gotoState(IDLE);
   }
 
-  // Must be run from channelExecutor
-  private void cancelIdleTimer() {
-    if (idleModeTimerFuture != null) {
-      idleModeTimerFuture.cancel(false);
-      idleModeTimer.cancelled = true;
-      idleModeTimerFuture = null;
-      idleModeTimer = null;
+  static final class Rescheduler {
+    private final Runnable runnable;
+    private final ChannelExecutor exec;
+    private final ScheduledExecutorService scheduler;
+
+    private ScheduledFuture<?> wakeUp;
+
+    // state
+    private long runAt;
+    private boolean enabled;
+
+    Rescheduler(Runnable r, ChannelExecutor exec, ScheduledExecutorService scheduler) {
+      this.runnable = r;
+      this.exec = exec;
+      this.scheduler = scheduler;
     }
+
+    // must be called from channel executor
+    void reschedule(long delay, TimeUnit timeUnit) {
+      long delayNanos = timeUnit.toNanos(delay);
+      long newRunAt = ticker.read() + delayNanos;
+      if (newRunAt - runAt < 0 || !enabled) {
+        enabled = true;
+        if (wakeUp != null) {
+          wakeUp.cancel(false);
+        }
+        wakeUp = scheduler.schedule(new FutureRunnable(), delayNanos, TimeUnit.NANOSECONDS);
+      }
+      runAt = newRunAt;
+    }
+
+    // must be called from channel executor
+    void cancel(boolean permanent) {
+      enabled = false;
+      if (permanent && wakeUp != null) {
+        wakeUp.cancel(false);
+        wakeUp = null;
+      }
+    }
+
+    private final class FutureRunnable implements Runnable {
+
+      @Override
+      public void run() {
+        exec.executeLater(new ChannelFutureRunnable());
+        exec.drain();
+      }
+    }
+
+    private final class ChannelFutureRunnable implements Runnable {
+
+      @Override
+      public void run() {
+        if (!enabled) {
+          return;
+        }
+        long now = ticker.read();
+        if (runAt - now > 0) {
+          wakeUp = scheduler.schedule(new FutureRunnable(), runAt - now,  TimeUnit.NANOSECONDS);
+        } else {
+          enabled = false;
+          wakeUp = null;
+          runnable.run();
+        }
+      }
+    }
+
+    /** Time source representing nanoseconds since fixed but arbitrary point in time. */
+    interface Ticker {
+      /** Returns the number of nanoseconds since this source's epoch. */
+      long read();
+    }
+
+    @VisibleForTesting
+    static Ticker ticker = new Ticker() {
+
+      @Override
+      public long read() {
+        return System.nanoTime();
+      }
+    };
+  }
+
+  // Must be run from channelExecutor
+  private void cancelIdleTimer(boolean permanent) {
+    idleTimer.cancel(permanent);
   }
 
   // Always run from channelExecutor
@@ -410,16 +475,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     if (idleTimeoutMillis == IDLE_TIMEOUT_MILLIS_DISABLE) {
       return;
     }
-    cancelIdleTimer();
-    idleModeTimer = new IdleModeTimer();
-    idleModeTimerFuture = transportFactory.getScheduledExecutorService().schedule(
-        new LogExceptionRunnable(new Runnable() {
-            @Override
-            public void run() {
-              channelExecutor.executeLater(idleModeTimer).drain();
-            }
-          }),
-        idleTimeoutMillis, TimeUnit.MILLISECONDS);
+    idleTimer.reschedule(idleTimeoutMillis, TimeUnit.MILLISECONDS);
   }
 
   // Run from channelExecutor
@@ -537,6 +593,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     }
   };
 
+  private final Rescheduler idleTimer;
+
   ManagedChannelImpl(
       AbstractManagedChannelImplBuilder<?> builder,
       ClientTransportFactory clientTransportFactory,
@@ -570,6 +628,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     if (builder.idleTimeoutMillis == IDLE_TIMEOUT_MILLIS_DISABLE) {
       this.idleTimeoutMillis = builder.idleTimeoutMillis;
+
     } else {
       checkArgument(
           builder.idleTimeoutMillis
@@ -577,6 +636,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
           "invalid idleTimeoutMillis %s", builder.idleTimeoutMillis);
       this.idleTimeoutMillis = builder.idleTimeoutMillis;
     }
+    idleTimer = new Rescheduler(
+        new IdleModeTimer(), channelExecutor, transportFactory.getScheduledExecutorService());
     this.fullStreamDecompression = builder.fullStreamDecompression;
     this.decompressorRegistry = checkNotNull(builder.decompressorRegistry, "decompressorRegistry");
     this.compressorRegistry = checkNotNull(builder.compressorRegistry, "compressorRegistry");
@@ -666,7 +727,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     channelExecutor.executeLater(new Runnable() {
         @Override
         public void run() {
-          cancelIdleTimer();
+          cancelIdleTimer(/* permanent= */ true);
         }
       }).drain();
     logger.log(Level.FINE, "[{0}] Shutting down", getLogId());
@@ -704,7 +765,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       return;
     }
     panicMode = true;
-    cancelIdleTimer();
+    cancelIdleTimer(/* permanent= */ true);
     shutdownNameResolverAndLoadBalancer(false);
     SubchannelPicker newPicker = new SubchannelPicker() {
       final PickResult panicPickResult =
@@ -868,7 +929,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
         if (shutdown.get() || lbHelper == null) {
           return;
         }
-        cancelIdleTimer();
+        cancelIdleTimer(/* permanent= */ false);
         enterIdleMode();
       }
     }

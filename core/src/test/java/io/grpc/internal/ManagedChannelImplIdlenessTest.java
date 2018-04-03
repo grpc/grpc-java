@@ -51,6 +51,7 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
+import io.grpc.internal.ManagedChannelImpl.Rescheduler;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -111,6 +112,7 @@ public class ManagedChannelImplIdlenessTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
+    Rescheduler.ticker = timer.ticker();
     when(mockLoadBalancerFactory.newLoadBalancer(any(Helper.class))).thenReturn(mockLoadBalancer);
     when(mockNameResolver.getServiceAuthority()).thenReturn(AUTHORITY);
     when(mockNameResolverFactory

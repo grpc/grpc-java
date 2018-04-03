@@ -269,6 +269,7 @@ public class ManagedChannelImplTest {
   @Before
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
+    ManagedChannelImpl.Rescheduler.ticker = executor.ticker();
     expectedUri = new URI(target);
     when(mockLoadBalancerFactory.newLoadBalancer(any(Helper.class))).thenReturn(mockLoadBalancer);
     transports = TestUtils.captureTransports(mockTransportFactory);
