@@ -1067,6 +1067,7 @@ public class ServerImplTest {
             .addMethod(METHOD, callHandler).build());
     transportServer = new SimpleServer();
     createAndStartServer();
+    verify(fallbackRegistry).getServices();
 
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());

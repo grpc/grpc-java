@@ -161,6 +161,12 @@ public final class ServerImpl extends io.grpc.Server implements Instrumented<Ser
       transportServer.start(new ServerListenerImpl());
       executor = Preconditions.checkNotNull(executorPool.getObject(), "executor");
       started = true;
+      for (ServerServiceDefinition service : fallbackRegistry.getServices()) {
+        service.onStart(this);
+      }
+      for (ServerServiceDefinition service : registry.getServices()) {
+        service.onStart(this);
+      }
       return this;
     }
   }

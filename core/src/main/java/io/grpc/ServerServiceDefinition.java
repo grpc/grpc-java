@@ -26,9 +26,10 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import javax.annotation.Nullable;
 
 /** Definition of a service to be exposed via a Server. */
-public final class ServerServiceDefinition {
+public final class ServerServiceDefinition implements Server.LifecycleListener {
   /** Convenience that constructs a {@link ServiceDescriptor} simultaneously. */
   public static Builder builder(String serviceName) {
     return new Builder(serviceName);
@@ -40,12 +41,40 @@ public final class ServerServiceDefinition {
 
   private final ServiceDescriptor serviceDescriptor;
   private final Map<String, ServerMethodDefinition<?, ?>> methods;
+  private final Server.LifecycleListener serverLifecycleListener;
 
   private ServerServiceDefinition(
-      ServiceDescriptor serviceDescriptor, Map<String, ServerMethodDefinition<?, ?>> methods) {
+      ServiceDescriptor serviceDescriptor,
+      Map<String, ServerMethodDefinition<?, ?>> methods,
+      Server.LifecycleListener serverLifecycleListener) {
     this.serviceDescriptor = checkNotNull(serviceDescriptor, "serviceDescriptor");
     this.methods =
         Collections.unmodifiableMap(new HashMap<String, ServerMethodDefinition<?, ?>>(methods));
+    this.serverLifecycleListener = serverLifecycleListener;
+  }
+
+  /**
+   * Turns this definition into a builder.
+   *
+   * @since 1.12.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
+  public Builder toBuilder() {
+    return new Builder(this);
+  }
+
+  @Override
+  @Internal
+  public void onStart(Server server) {
+    if (serverLifecycleListener != null) {
+      serverLifecycleListener.onStart(server);
+    }
+  }
+
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
+  @Nullable
+  public Server.LifecycleListener getServerLifecycleListener() {
+    return serverLifecycleListener;
   }
 
   /**
@@ -78,17 +107,38 @@ public final class ServerServiceDefinition {
   public static final class Builder {
     private final String serviceName;
     private final ServiceDescriptor serviceDescriptor;
-    private final Map<String, ServerMethodDefinition<?, ?>> methods =
-        new HashMap<String, ServerMethodDefinition<?, ?>>();
+    private final Map<String, ServerMethodDefinition<?, ?>> methods;
+    private Server.LifecycleListener serverLifecycleListener;
 
     private Builder(String serviceName) {
       this.serviceName = checkNotNull(serviceName, "serviceName");
       this.serviceDescriptor = null;
+      this.methods = new HashMap<String, ServerMethodDefinition<?, ?>>();
     }
 
     private Builder(ServiceDescriptor serviceDescriptor) {
       this.serviceDescriptor = checkNotNull(serviceDescriptor, "serviceDescriptor");
       this.serviceName = serviceDescriptor.getName();
+      this.methods = new HashMap<String, ServerMethodDefinition<?, ?>>();
+    }
+
+    private Builder(ServerServiceDefinition serviceDefinition) {
+      checkNotNull(serviceDefinition, "serviceDefinition");
+      this.serviceDescriptor = serviceDefinition.getServiceDescriptor();
+      this.serviceName = this.serviceDescriptor.getName();
+      this.serverLifecycleListener = serviceDefinition.serverLifecycleListener;
+      this.methods = serviceDefinition.methods;
+    }
+
+    /**
+     * Set the Server.LifecycleListener for this service.
+     *
+     * @since 1.12.0
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
+    public Builder setServerLifecycleListener(Server.LifecycleListener serverLifecycleListener) {
+      this.serverLifecycleListener = serverLifecycleListener;
+      return this;
     }
 
     /**
@@ -151,7 +201,7 @@ public final class ServerServiceDefinition {
             "No entry in descriptor matching bound method "
                 + tmpMethods.values().iterator().next().getMethodDescriptor().getFullMethodName());
       }
-      return new ServerServiceDefinition(serviceDescriptor, methods);
+      return new ServerServiceDefinition(serviceDescriptor, methods, serverLifecycleListener);
     }
   }
 }

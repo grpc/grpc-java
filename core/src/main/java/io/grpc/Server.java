@@ -29,6 +29,20 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 public abstract class Server {
   /**
+   * A listener for server lifecycle events.
+   *
+   * @since 1.12.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
+  public interface LifecycleListener {
+    /**
+     * This is invoked on registered {@link ServerServiceDefinition} instances when the server is
+     * started via {@link Server#start}.
+     */
+    void onStart(Server server);
+  }
+
+  /**
    * Bind and start the server.
    *
    * @return {@code this} object

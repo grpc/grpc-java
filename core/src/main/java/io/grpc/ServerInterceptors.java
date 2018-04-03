@@ -110,6 +110,7 @@ public final class ServerInterceptors {
     }
     ServerServiceDefinition.Builder serviceDefBuilder
         = ServerServiceDefinition.builder(serviceDef.getServiceDescriptor());
+    serviceDefBuilder.setServerLifecycleListener(serviceDef.getServerLifecycleListener());
     for (ServerMethodDefinition<?, ?> method : serviceDef.getMethods()) {
       wrapAndAddMethod(serviceDefBuilder, method, interceptors);
     }
@@ -190,6 +191,7 @@ public final class ServerInterceptors {
     final ServerServiceDefinition.Builder serviceBuilder = ServerServiceDefinition
         .builder(new ServiceDescriptor(serviceDef.getServiceDescriptor().getName(),
             wrappedDescriptors));
+    serviceBuilder.setServerLifecycleListener(serviceDef.getServerLifecycleListener());
     // Create the new service definiton.
     for (ServerMethodDefinition<?, ?> definition : wrappedMethods) {
       serviceBuilder.addMethod(definition);
