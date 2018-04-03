@@ -83,7 +83,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
   private static final boolean CLIENT = false;
 
   @VisibleForTesting
-  static final CallId EMPTY_CALL_ID = new CallId(new byte[8], new byte[8]);
+  static final CallId emptyCallId = new CallId(new byte[8], new byte[8]);
   @VisibleForTesting
   static final SocketAddress DUMMY_SOCKET = new DummySocketAddress();
   @VisibleForTesting
@@ -279,7 +279,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
   static CallId getCallIdForServer(Context context) {
     CallId callId = BinaryLogProvider.SERVER_CALL_ID_CONTEXT_KEY.get(context);
     if (callId == null) {
-      return EMPTY_CALL_ID;
+      return emptyCallId;
     }
     return callId;
   }
@@ -287,7 +287,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
   static CallId getCallIdForClient(CallOptions callOptions) {
     CallId callId = callOptions.getOption(BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY);
     if (callId == null) {
-      return EMPTY_CALL_ID;
+      return emptyCallId;
     }
     return callId;
   }

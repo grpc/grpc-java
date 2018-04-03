@@ -24,6 +24,7 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.Context;
+import io.grpc.Internal;
 import io.grpc.InternalClientInterceptors;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.InternalServiceProviders;
@@ -46,8 +47,12 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 public abstract class BinaryLogProvider implements Closeable {
+  // TODO(zpencer): move to services and make package private
+  @Internal
   public static final Context.Key<CallId> SERVER_CALL_ID_CONTEXT_KEY
       = Context.key("binarylog-context-key");
+  // TODO(zpencer): move to services and make package private when this class is moved
+  @Internal
   public static final CallOptions.Key<CallId> CLIENT_CALL_ID_CALLOPTION_KEY
       = CallOptions.Key.of("binarylog-calloptions-key", null);
   @VisibleForTesting
@@ -267,7 +272,6 @@ public abstract class BinaryLogProvider implements Closeable {
     private static final byte[] emptyHi = new byte[8];
     public final byte[] hi;
     public final byte[] lo;
-
 
     /**
      * Creates an instance.

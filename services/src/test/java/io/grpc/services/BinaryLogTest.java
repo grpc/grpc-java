@@ -18,7 +18,7 @@ package io.grpc.services;
 
 import static io.grpc.internal.BinaryLogProvider.BYTEARRAY_MARSHALLER;
 import static io.grpc.services.BinaryLog.DUMMY_SOCKET;
-import static io.grpc.services.BinaryLog.EMPTY_CALL_ID;
+import static io.grpc.services.BinaryLog.emptyCallId;
 import static io.grpc.services.BinaryLog.getCallIdForClient;
 import static io.grpc.services.BinaryLog.getCallIdForServer;
 import static io.grpc.services.BinaryLog.getPeerSocket;
@@ -687,7 +687,7 @@ public final class BinaryLogTest {
 
   @Test
   public void getCallIdServer() {
-    assertSame(EMPTY_CALL_ID, getCallIdForServer(Context.ROOT));
+    assertSame(emptyCallId, getCallIdForServer(Context.ROOT));
     assertSame(
         CALL_ID,
         getCallIdForServer(
@@ -698,7 +698,7 @@ public final class BinaryLogTest {
 
   @Test
   public void getCallIdClient() {
-    assertSame(EMPTY_CALL_ID, getCallIdForClient(CallOptions.DEFAULT));
+    assertSame(emptyCallId, getCallIdForClient(CallOptions.DEFAULT));
     assertSame(
         CALL_ID,
         getCallIdForClient(
