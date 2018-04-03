@@ -16,7 +16,7 @@ java_library(
 
 # This config is not fully-reliable. If it breaks, it is probably because you
 # are changing --android_crosstool_top. Instead of doing that, you can bind
-# your own toolchain on top of the default android/closstool, as mentioned at
+# your own toolchain on top of the default android/crosstool, as mentioned at
 # https://github.com/bazelbuild/bazel/issues/3924#issuecomment-338704582
 config_setting(
     name = "android",
