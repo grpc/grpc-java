@@ -42,25 +42,23 @@ import java.util.concurrent.TimeUnit;
 public final class FakeClock {
 
   private static final TaskFilter ACCEPT_ALL_FILTER = new TaskFilter() {
-      @Override
-      public boolean shouldAccept(Runnable command) {
-        return true;
-      }
-    };
+    @Override
+    public boolean shouldAccept(Runnable command) {
+      return true;
+    }
+  };
 
   private final ScheduledExecutorService scheduledExecutorService = new ScheduledExecutorImpl();
 
   private final PriorityBlockingQueue<ScheduledTask> tasks =
       new PriorityBlockingQueue<ScheduledTask>();
 
-  private final class FakeTicker extends Ticker implements ManagedChannelImpl.Rescheduler.Ticker {
-    @Override
-    public long read() {
-      return currentTimeNanos;
-    }
-  }
-
-  private final FakeTicker ticker = new FakeTicker();
+  private final Ticker ticker =
+      new Ticker() {
+        @Override public long read() {
+          return currentTimeNanos;
+        }
+      };
 
   private final Supplier<Stopwatch> stopwatchSupplier =
       new Supplier<Stopwatch>() {
@@ -68,10 +66,6 @@ public final class FakeClock {
           return Stopwatch.createUnstarted(ticker);
         }
       };
-
-  public ManagedChannelImpl.Rescheduler.Ticker ticker() {
-    return ticker;
-  }
 
   private long currentTimeNanos;
 

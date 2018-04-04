@@ -269,7 +269,6 @@ public class ManagedChannelImplTest {
   @Before
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
-    ManagedChannelImpl.Rescheduler.ticker = executor.ticker();
     expectedUri = new URI(target);
     when(mockLoadBalancerFactory.newLoadBalancer(any(Helper.class))).thenReturn(mockLoadBalancer);
     transports = TestUtils.captureTransports(mockTransportFactory);
@@ -330,6 +329,7 @@ public class ManagedChannelImplTest {
         NO_INTERCEPTOR);
     verify(executorPool).getObject();
     verify(executorPool, never()).returnObject(anyObject());
+    verify(mockTransportFactory).getScheduledExecutorService();
     verifyNoMoreInteractions(mockTransportFactory);
     channel.shutdown();
     assertTrue(channel.isShutdown());
