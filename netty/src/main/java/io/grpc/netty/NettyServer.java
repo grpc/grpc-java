@@ -262,7 +262,7 @@ class NettyServer implements InternalServer, WithLogId {
     try {
       channelzFuture.await();
     } catch (InterruptedException ex) {
-      throw new RuntimeException("Interrupted while registering listen socket to channelz");
+      throw new RuntimeException("Interrupted while registering listen socket to channelz", ex);
     }
   }
 
