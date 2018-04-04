@@ -243,9 +243,6 @@ class NettyServer implements InternalServer, WithLogId {
     ChannelFuture future = b.bind(address);
     try {
       future.await();
-      Instrumented<SocketStats> listenSocket = new ListenSocket(future.channel());
-      listenSockets = ImmutableList.of(listenSocket);
-      channelz.addListenSocket(listenSocket);
     } catch (InterruptedException ex) {
       Thread.currentThread().interrupt();
       throw new RuntimeException("Interrupted waiting for bind");
@@ -254,6 +251,9 @@ class NettyServer implements InternalServer, WithLogId {
       throw new IOException("Failed to bind", future.cause());
     }
     channel = future.channel();
+    Instrumented<SocketStats> listenSocket = new ListenSocket(channel);
+    listenSockets = ImmutableList.of(listenSocket);
+    channelz.addListenSocket(listenSocket);
   }
 
   @Override
