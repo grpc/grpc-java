@@ -92,8 +92,8 @@ class NettyServer implements InternalServer, WithLogId {
   private final List<ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer.Factory transportTracerFactory;
   private final Channelz channelz;
-  // Only set once during start(). This code assumes all listen sockets are created at startup
-  // and never changed. In the future we may have >1 listen socket. Unset at shutdown.
+  // Only modified in event loop but safe to read any time. Set at startup and unset at shutdown.
+  // In the future we may have >1 listen socket.
   private volatile ImmutableList<Instrumented<SocketStats>> listenSockets = ImmutableList.of();
 
   NettyServer(
@@ -251,9 +251,19 @@ class NettyServer implements InternalServer, WithLogId {
       throw new IOException("Failed to bind", future.cause());
     }
     channel = future.channel();
-    Instrumented<SocketStats> listenSocket = new ListenSocket(channel);
-    listenSockets = ImmutableList.of(listenSocket);
-    channelz.addListenSocket(listenSocket);
+    Future<?> channelzFuture = channel.eventLoop().submit(new Runnable() {
+      @Override
+      public void run() {
+        Instrumented<SocketStats> listenSocket = new ListenSocket(channel);
+        listenSockets = ImmutableList.of(listenSocket);
+        channelz.addListenSocket(listenSocket);
+      }
+    });
+    try {
+      channelzFuture.await();
+    } catch (InterruptedException ex) {
+      throw new RuntimeException("Interrupted while registering listen socket to channelz");
+    }
   }
 
   @Override
