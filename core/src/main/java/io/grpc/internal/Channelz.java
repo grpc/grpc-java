@@ -32,12 +32,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
 
 public final class Channelz {
+  private static final Logger log = Logger.getLogger(Channelz.class.getName());
   private static final Channelz INSTANCE = new Channelz();
 
   private final ConcurrentNavigableMap<Long, Instrumented<ServerStats>> servers
@@ -538,6 +541,7 @@ public final class Channelz {
         }
       } catch (SSLPeerUnverifiedException e) {
         // peer cert is not available
+        log.log(Level.FINE, "Peer cert not available for peerHost={}", session.getPeerHost());
       }
       return new Tls(cipherSuiteStandardName, localCert, remoteCert);
     }

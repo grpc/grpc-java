@@ -562,6 +562,7 @@ public class NettyClientTransportTest {
 
   @Test
   public void tlsReportedInStatus() throws Exception {
+    negotiator = ProtocolNegotiators.serverPlaintext();
     startServer();
 
     Certificate local = mock(Certificate.class);
@@ -573,19 +574,24 @@ public class NettyClientTransportTest {
     when(session.getLocalCertificates()).thenReturn(new Certificate[]{local});
     when(session.getPeerCertificates()).thenReturn(new Certificate[]{remote});
 
+    final SettableFuture<GrpcHttp2ConnectionHandler> handlerFuture = SettableFuture.create();
     final ProtocolNegotiator negotiator = new NoopProtocolNegotiator() {
       @Override
       public Handler newHandler(final GrpcHttp2ConnectionHandler grpcHandler) {
-        grpcHandler.handleProtocolNegotiationCompleted(
-            Attributes
-                .newBuilder()
-                .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, session)
-                .build());
+        handlerFuture.set(grpcHandler);
         return super.newHandler(grpcHandler);
       }
     };
     final NettyClientTransport transport = newTransport(negotiator);
     callMeMaybe(transport.start(clientTransportListener));
+    // A hack: The NoopProtocolNegotiator does not notify the handler
+    // via handleProtocolNegotiationCompleted, so now that the negotiation is complete,
+    // we invoke it manually.
+    handlerFuture.get().handleProtocolNegotiationCompleted(
+        Attributes
+            .newBuilder()
+            .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, session)
+            .build());
 
     SocketStats socketStats = transport.getStats().get();
     assertNull(socketStats.security.other);
