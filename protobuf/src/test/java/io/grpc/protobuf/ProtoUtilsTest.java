@@ -66,9 +66,14 @@ public class ProtoUtilsTest {
   public void testJsonMarshallerFailToPrint() {
     Marshaller<Any> marshaller = ProtoUtils.jsonMarshaller(Any.getDefaultInstance());
     try {
-      marshaller.stream(Any.newBuilder().setValue(ByteString.copyFromUtf8("invalid")).build());
+      // Set the invalid bytes to `value`.
+      marshaller.stream(
+          Any.newBuilder().setValue(
+              ByteString.copyFromUtf8("invalid serialized protocol buffer")).build());
       fail("Expected exception");
     } catch (StatusRuntimeException e) {
+      assertNotNull(e.getCause());
+      assertNotNull(e.getMessage());
       assertEquals(Status.Code.INTERNAL, e.getStatus().getCode());
     }
   }
