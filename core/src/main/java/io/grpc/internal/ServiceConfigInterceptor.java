@@ -299,10 +299,22 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
           info.waitForReady ? callOptions.withWaitForReady() : callOptions.withoutWaitForReady();
     }
     if (info.maxInboundMessageSize != null) {
-      callOptions = callOptions.withMaxInboundMessageSize(info.maxInboundMessageSize);
+      Integer existingLimit = callOptions.getMaxInboundMessageSize();
+      if (existingLimit != null) {
+        callOptions = callOptions.withMaxInboundMessageSize(
+            Math.min(existingLimit, info.maxInboundMessageSize));
+      } else {
+        callOptions = callOptions.withMaxInboundMessageSize(info.maxInboundMessageSize);
+      }
     }
     if (info.maxOutboundMessageSize != null) {
-      callOptions = callOptions.withMaxOutboundMessageSize(info.maxOutboundMessageSize);
+      Integer existingLimit = callOptions.getMaxOutboundMessageSize();
+      if (existingLimit != null) {
+        callOptions = callOptions.withMaxOutboundMessageSize(
+            Math.min(existingLimit, info.maxOutboundMessageSize));
+      } else {
+        callOptions = callOptions.withMaxOutboundMessageSize(info.maxOutboundMessageSize);
+      }
     }
     if (info.retryPolicy != null) {
       callOptions = callOptions.withOption(RETRY_POLICY_KEY, info.retryPolicy);

@@ -106,10 +106,40 @@ public class ServiceConfigInterceptorTest {
 
     interceptor.handleUpdate(serviceConfig);
 
-    interceptor.interceptCall(methodDescriptor, CallOptions.DEFAULT.withoutWaitForReady(), channel);
+    interceptor.interceptCall(methodDescriptor, CallOptions.DEFAULT, channel);
 
     verify(channel).newCall(eq(methodDescriptor), callOptionsCap.capture());
     assertThat(callOptionsCap.getValue().getMaxOutboundMessageSize()).isEqualTo(1);
+  }
+
+  @Test
+  public void withMaxRequestSize_pickSmallerExisting() {
+    JsonObj name = new JsonObj("service", "service");
+    JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxRequestMessageBytes", 10d);
+    JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+
+    interceptor.handleUpdate(serviceConfig);
+
+    interceptor.interceptCall(
+        methodDescriptor, CallOptions.DEFAULT.withMaxOutboundMessageSize(5), channel);
+
+    verify(channel).newCall(eq(methodDescriptor), callOptionsCap.capture());
+    assertThat(callOptionsCap.getValue().getMaxOutboundMessageSize()).isEqualTo(5);
+  }
+
+  @Test
+  public void withMaxRequestSize_pickSmallerNew() {
+    JsonObj name = new JsonObj("service", "service");
+    JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxRequestMessageBytes", 5d);
+    JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+
+    interceptor.handleUpdate(serviceConfig);
+
+    interceptor.interceptCall(
+        methodDescriptor, CallOptions.DEFAULT.withMaxOutboundMessageSize(10), channel);
+
+    verify(channel).newCall(eq(methodDescriptor), callOptionsCap.capture());
+    assertThat(callOptionsCap.getValue().getMaxOutboundMessageSize()).isEqualTo(5);
   }
 
   @Test
@@ -120,10 +150,40 @@ public class ServiceConfigInterceptorTest {
 
     interceptor.handleUpdate(serviceConfig);
 
-    interceptor.interceptCall(methodDescriptor, CallOptions.DEFAULT.withoutWaitForReady(), channel);
+    interceptor.interceptCall(methodDescriptor, CallOptions.DEFAULT, channel);
 
     verify(channel).newCall(eq(methodDescriptor), callOptionsCap.capture());
     assertThat(callOptionsCap.getValue().getMaxInboundMessageSize()).isEqualTo(1);
+  }
+
+  @Test
+  public void withMaxResponseSize_pickSmallerExisting() {
+    JsonObj name = new JsonObj("service", "service");
+    JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxResponseMessageBytes", 5d);
+    JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+
+    interceptor.handleUpdate(serviceConfig);
+
+    interceptor.interceptCall(
+        methodDescriptor, CallOptions.DEFAULT.withMaxInboundMessageSize(10), channel);
+
+    verify(channel).newCall(eq(methodDescriptor), callOptionsCap.capture());
+    assertThat(callOptionsCap.getValue().getMaxInboundMessageSize()).isEqualTo(5);
+  }
+
+  @Test
+  public void withMaxResponseSize_pickSmallerNew() {
+    JsonObj name = new JsonObj("service", "service");
+    JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxResponseMessageBytes", 10d);
+    JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+
+    interceptor.handleUpdate(serviceConfig);
+
+    interceptor.interceptCall(
+        methodDescriptor, CallOptions.DEFAULT.withMaxInboundMessageSize(5), channel);
+
+    verify(channel).newCall(eq(methodDescriptor), callOptionsCap.capture());
+    assertThat(callOptionsCap.getValue().getMaxInboundMessageSize()).isEqualTo(5);
   }
 
   @Test

@@ -78,7 +78,6 @@ public class DnsNameResolverTest {
 
   private final Map<String, Object> serviceConfig = new LinkedHashMap<String, Object>();
 
-
   private static final int DEFAULT_PORT = 887;
   private static final Attributes NAME_RESOLVER_PARAMS =
       Attributes.newBuilder().set(NameResolver.Factory.PARAMS_DEFAULT_PORT, DEFAULT_PORT).build();
