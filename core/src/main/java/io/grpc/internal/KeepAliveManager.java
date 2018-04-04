@@ -293,7 +293,7 @@ public class KeepAliveManager {
     public abstract long read();
   }
 
-  static class SystemTicker extends Ticker {
+  private static class SystemTicker extends Ticker {
     @Override
     public long read() {
       return System.nanoTime();
