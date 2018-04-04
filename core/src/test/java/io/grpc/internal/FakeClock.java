@@ -42,11 +42,11 @@ import java.util.concurrent.TimeUnit;
 public final class FakeClock {
 
   private static final TaskFilter ACCEPT_ALL_FILTER = new TaskFilter() {
-    @Override
-    public boolean shouldAccept(Runnable command) {
-      return true;
-    }
-  };
+      @Override
+      public boolean shouldAccept(Runnable command) {
+        return true;
+      }
+    };
 
   private final ScheduledExecutorService scheduledExecutorService = new ScheduledExecutorImpl();
 
