@@ -93,8 +93,8 @@ class NettyServer implements InternalServer, WithLogId {
   private final TransportTracer.Factory transportTracerFactory;
   private final Channelz channelz;
   // Only set once during start(). This code assumes all listen sockets are created at startup
-  // and never changed. In the future we may have >1 listen socket.
-  private ImmutableList<Instrumented<SocketStats>> listenSockets = ImmutableList.of();
+  // and never changed. In the future we may have >1 listen socket. Unset at shutdown.
+  private volatile ImmutableList<Instrumented<SocketStats>> listenSockets = ImmutableList.of();
 
   NettyServer(
       SocketAddress address, Class<? extends ServerChannel> channelType,
