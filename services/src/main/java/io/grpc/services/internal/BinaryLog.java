@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
-package io.grpc.services;
+package io.grpc.services.internal;
 
-import static io.grpc.internal.BinaryLogProvider.BYTEARRAY_MARSHALLER;
+import static io.grpc.services.internal.BinaryLogProviderImpl.BYTEARRAY_MARSHALLER;
+import static io.grpc.services.internal.BinaryLogProviderImpl.CLIENT_CALL_ID_CALLOPTION_KEY;
+import static io.grpc.services.internal.BinaryLogProviderImpl.SERVER_CALL_ID_CONTEXT_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -51,8 +53,7 @@ import io.grpc.binarylog.MetadataEntry;
 import io.grpc.binarylog.Peer;
 import io.grpc.binarylog.Peer.PeerType;
 import io.grpc.binarylog.Uint128;
-import io.grpc.internal.BinaryLogProvider;
-import io.grpc.internal.BinaryLogProvider.CallId;
+import io.grpc.services.internal.BinaryLogProviderImpl.CallId;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -248,35 +249,8 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
     abstract int getMaxMessageBytes();
   }
 
-  private static final Factory DEFAULT_FACTORY;
-  private static final Factory NULL_FACTORY = new NullFactory();
-
-  static {
-    Factory defaultFactory = NULL_FACTORY;
-    try {
-      String configStr = System.getenv("GRPC_BINARY_LOG_CONFIG");
-      // TODO(zpencer): make BinaryLog.java implement isAvailable, and put this check there
-      BinaryLogSink sink = BinaryLogSinkProvider.provider();
-      if (sink != null && configStr != null && configStr.length() > 0) {
-        defaultFactory = new FactoryImpl(sink, configStr);
-      }
-    } catch (Throwable t) {
-      logger.log(Level.SEVERE, "Failed to initialize binary log. Disabling binary log.", t);
-      defaultFactory = NULL_FACTORY;
-    }
-    DEFAULT_FACTORY = defaultFactory;
-  }
-
-  /**
-   * Accepts the fullMethodName and returns the binary log that should be used. The log may be
-   * a log that does nothing.
-   */
-  static BinaryLog getLog(String fullMethodName) {
-    return DEFAULT_FACTORY.getLog(fullMethodName);
-  }
-
   static CallId getCallIdForServer(Context context) {
-    CallId callId = BinaryLogProvider.SERVER_CALL_ID_CONTEXT_KEY.get(context);
+    CallId callId = SERVER_CALL_ID_CONTEXT_KEY.get(context);
     if (callId == null) {
       return emptyCallId;
     }
@@ -284,7 +258,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
   }
 
   static CallId getCallIdForClient(CallOptions callOptions) {
-    CallId callId = callOptions.getOption(BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY);
+    CallId callId = callOptions.getOption(CLIENT_CALL_ID_CALLOPTION_KEY);
     if (callId == null) {
       return emptyCallId;
     }
@@ -396,7 +370,10 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
 
   interface Factory {
     @Nullable
-    BinaryLog getLog(String fullMethodName);
+    ServerInterceptor getServerInterceptor(String fullMethodName);
+
+    @Nullable
+    ClientInterceptor getClientInterceptor(String fullMethodName);
   }
 
   static final class FactoryImpl implements Factory {
@@ -472,8 +449,7 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
     /**
      * Accepts a full method name and returns the log that should be used.
      */
-    @Override
-    public BinaryLog getLog(String fullMethodName) {
+    BinaryLog getLog(String fullMethodName) {
       BinaryLog methodLog = perMethodLogs.get(fullMethodName);
       if (methodLog != null) {
         return methodLog;
@@ -540,12 +516,17 @@ final class BinaryLog implements ServerInterceptor, ClientInterceptor {
     static boolean isServiceGlob(String input) {
       return input.endsWith("/*");
     }
-  }
 
-  private static final class NullFactory implements Factory {
+    @Nullable
     @Override
-    public BinaryLog getLog(String fullMethodName) {
-      return null;
+    public ServerInterceptor getServerInterceptor(String fullMethodName) {
+      return getLog(fullMethodName);
+    }
+
+    @Nullable
+    @Override
+    public ClientInterceptor getClientInterceptor(String fullMethodName) {
+      return getLog(fullMethodName);
     }
   }
 

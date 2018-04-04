@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2018, gRPC Authors All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,17 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
+package io.grpc.services.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.services.internal.BinaryLogProviderImpl.BYTEARRAY_MARSHALLER;
+import static io.grpc.services.internal.BinaryLogProviderImpl.CLIENT_CALL_ID_CALLOPTION_KEY;
+import static io.grpc.services.internal.BinaryLogProviderImpl.SERVER_CALL_ID_CONTEXT_KEY;
 import static io.opencensus.trace.unsafe.ContextUtils.CONTEXT_SPAN_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
 
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallOptions;
@@ -43,8 +47,12 @@ import io.grpc.ServerInterceptor;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.StringMarshaller;
-import io.grpc.internal.BinaryLogProvider.CallId;
+import io.grpc.internal.BinaryLogProvider;
+import io.grpc.internal.IoUtils;
+import io.grpc.internal.NoopClientCall;
+import io.grpc.internal.NoopServerCall;
 import io.grpc.internal.testing.StatsTestUtils.MockableSpan;
+import io.grpc.services.internal.BinaryLogProviderImpl.CallId;
 import io.grpc.testing.TestMethodDescriptors;
 import io.opencensus.trace.Tracing;
 import java.io.ByteArrayInputStream;
@@ -60,9 +68,12 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link BinaryLogProvider}. */
+/**
+ * Tests for BinaryLogImpl.
+ */
 @RunWith(JUnit4.class)
-public class BinaryLogProviderTest {
+public class BinaryLogProviderImplTest {
+
   private final InvocationCountMarshaller<String> reqMarshaller =
       new InvocationCountMarshaller<String>() {
         @Override
@@ -89,31 +100,19 @@ public class BinaryLogProviderTest {
           .build();
   private final List<byte[]> binlogReq = new ArrayList<byte[]>();
   private final List<byte[]> binlogResp = new ArrayList<byte[]>();
-  private final BinaryLogProvider binlogProvider = new BinaryLogProvider() {
-    @Override
-    public ServerInterceptor getServerInterceptor(String fullMethodName) {
-      return new TestBinaryLogServerInterceptor();
-    }
+  private final BinaryLogProvider binlogProvider = new BinaryLogProviderImpl(
+      mock(BinaryLogSink.class),
+      new BinaryLog.Factory() {
+        @Override
+        public ServerInterceptor getServerInterceptor(String fullMethodName) {
+          return new TestBinaryLogServerInterceptor();
+        }
 
-    @Override
-    public ClientInterceptor getClientInterceptor(String fullMethodName) {
-      return new TestBinaryLogClientInterceptor();
-    }
-
-    @Override
-    public void close() { }
-
-
-    @Override
-    protected int priority() {
-      return 0;
-    }
-
-    @Override
-    protected boolean isAvailable() {
-      return true;
-    }
-  };
+        @Override
+        public ClientInterceptor getClientInterceptor(String fullMethodName) {
+          return new TestBinaryLogClientInterceptor();
+        }
+      });
 
   @Test
   public void wrapChannel_methodDescriptor() throws Exception {
@@ -215,8 +214,8 @@ public class BinaryLogProviderTest {
   }
 
   private void validateWrappedMethod(MethodDescriptor<?, ?> wMethod) {
-    assertSame(BinaryLogProvider.BYTEARRAY_MARSHALLER, wMethod.getRequestMarshaller());
-    assertSame(BinaryLogProvider.BYTEARRAY_MARSHALLER, wMethod.getResponseMarshaller());
+    assertSame(BYTEARRAY_MARSHALLER, wMethod.getRequestMarshaller());
+    assertSame(BYTEARRAY_MARSHALLER, wMethod.getResponseMarshaller());
     assertEquals(method.getType(), wMethod.getType());
     assertEquals(method.getFullMethodName(), wMethod.getFullMethodName());
     assertEquals(method.getSchemaDescriptor(), wMethod.getSchemaDescriptor());
@@ -338,7 +337,7 @@ public class BinaryLogProviderTest {
     MockableSpan mockableSpan = MockableSpan.generateRandomSpan(new Random(0));
     Context context = Context.current().withValue(CONTEXT_SPAN_KEY, mockableSpan);
     Context filtered = tracer.filterContext(context);
-    CallId callId = BinaryLogProvider.SERVER_CALL_ID_CONTEXT_KEY.get(filtered);
+    CallId callId = SERVER_CALL_ID_CONTEXT_KEY.get(filtered);
     assertThat(callId.hi).isEqualTo(0);
     assertThat(ByteBuffer.wrap(mockableSpan.getContext().getSpanId().getBytes()).getLong())
         .isEqualTo(callId.lo);
@@ -371,7 +370,7 @@ public class BinaryLogProviderTest {
             channel);
         CallOptions callOptions = future.get();
         CallId callId = callOptions
-            .getOption(BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY);
+            .getOption(CLIENT_CALL_ID_CALLOPTION_KEY);
         assertThat(callId.hi).isEqualTo(0);
         assertThat(ByteBuffer.wrap(mockableSpan.getContext().getSpanId().getBytes()).getLong())
             .isEqualTo(callId.lo);
@@ -386,8 +385,8 @@ public class BinaryLogProviderTest {
         final MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions,
         Channel next) {
-      assertSame(BinaryLogProvider.BYTEARRAY_MARSHALLER, method.getRequestMarshaller());
-      assertSame(BinaryLogProvider.BYTEARRAY_MARSHALLER, method.getResponseMarshaller());
+      assertSame(BYTEARRAY_MARSHALLER, method.getRequestMarshaller());
+      assertSame(BYTEARRAY_MARSHALLER, method.getResponseMarshaller());
       return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
         @Override
         public void start(Listener<RespT> responseListener, Metadata headers) {
@@ -412,11 +411,11 @@ public class BinaryLogProviderTest {
 
         @Override
         public void sendMessage(ReqT message) {
-            byte[] bytes = (byte[]) message;
-            binlogReq.add(bytes);
-            ByteArrayInputStream input = new ByteArrayInputStream(bytes);
-            ReqT dup = method.parseRequest(input);
-            super.sendMessage(dup);
+          byte[] bytes = (byte[]) message;
+          binlogReq.add(bytes);
+          ByteArrayInputStream input = new ByteArrayInputStream(bytes);
+          ReqT dup = method.parseRequest(input);
+          super.sendMessage(dup);
         }
       };
     }
@@ -429,19 +428,19 @@ public class BinaryLogProviderTest {
         Metadata headers,
         ServerCallHandler<ReqT, RespT> next) {
       assertSame(
-          BinaryLogProvider.BYTEARRAY_MARSHALLER,
+          BYTEARRAY_MARSHALLER,
           call.getMethodDescriptor().getRequestMarshaller());
       assertSame(
-          BinaryLogProvider.BYTEARRAY_MARSHALLER,
+          BYTEARRAY_MARSHALLER,
           call.getMethodDescriptor().getResponseMarshaller());
       ServerCall<ReqT, RespT> wCall = new SimpleForwardingServerCall<ReqT, RespT>(call) {
         @Override
         public void sendMessage(RespT message) {
-            byte[] bytes = (byte[]) message;
-            binlogResp.add(bytes);
-            ByteArrayInputStream input = new ByteArrayInputStream(bytes);
-            RespT dup = call.getMethodDescriptor().parseResponse(input);
-            super.sendMessage(dup);
+          byte[] bytes = (byte[]) message;
+          binlogResp.add(bytes);
+          ByteArrayInputStream input = new ByteArrayInputStream(bytes);
+          RespT dup = call.getMethodDescriptor().parseResponse(input);
+          super.sendMessage(dup);
         }
       };
       final ServerCall.Listener<ReqT> oListener = next.startCall(wCall, headers);

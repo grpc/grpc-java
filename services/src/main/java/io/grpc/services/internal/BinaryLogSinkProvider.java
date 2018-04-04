@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.services;
+package io.grpc.services.internal;
 
 import io.grpc.InternalServiceProviders;
 import java.util.Collections;
