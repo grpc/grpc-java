@@ -34,7 +34,7 @@ using google::protobuf::io::Printer;
 using google::protobuf::SourceLocation;
 using std::to_string;
 
-// java keywords from: https://docs.oracle.com/javase/tutorial/java/nutsandbolts/_keywords.html
+// java keywords from: https://docs.oracle.com/javase/specs/jls/se8/html/jls-3.html#jls-3.9
 static std::set<string> java_keywords = {
   "abstract",
   "assert",
