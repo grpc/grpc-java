@@ -107,10 +107,10 @@ static string MixedLower(const string& word) {
       after_underscore = false;
     }
   }
-  if (java_keywords.find(w) == java_keywords.end()) {
-    return w;
+  if (java_keywords.find(w) != java_keywords.end()) {
+    return w + "_";
   }
-  return w + "_";
+  return w;
 }
 
 // Converts to the identifier to the ALL_UPPER_CASE format.
