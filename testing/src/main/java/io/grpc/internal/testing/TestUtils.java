@@ -154,32 +154,32 @@ public class TestUtils {
    * previously.
    */
   public static void installConscryptIfAvailable() {
-    // if (conscryptInstallAttempted) {
-    //   return;
-    // }
-    // Class<?> conscrypt;
-    // try {
-    //   conscrypt = Class.forName("org.conscrypt.Conscrypt");
-    // } catch (ClassNotFoundException ex) {
-    //   conscryptInstallAttempted = true;
-    //   return;
-    // }
-    // Method newProvider;
-    // try {
-    //   newProvider = conscrypt.getMethod("newProvider");
-    // } catch (NoSuchMethodException ex) {
-    //   throw new RuntimeException("Could not find newProvider method on Conscrypt", ex);
-    // }
-    // Provider provider;
-    // try {
-    //   provider = (Provider) newProvider.invoke(null);
-    // } catch (IllegalAccessException ex) {
-    //   throw new RuntimeException("Could not invoke Conscrypt.newProvider", ex);
-    // } catch (InvocationTargetException ex) {
-    //   throw new RuntimeException("Could not invoke Conscrypt.newProvider", ex);
-    // }
-    // Security.addProvider(provider);
-    // conscryptInstallAttempted = true;
+    if (conscryptInstallAttempted) {
+      return;
+    }
+    Class<?> conscrypt;
+    try {
+      conscrypt = Class.forName("org.conscrypt.Conscrypt");
+    } catch (ClassNotFoundException ex) {
+      conscryptInstallAttempted = true;
+      return;
+    }
+    Method newProvider;
+    try {
+      newProvider = conscrypt.getMethod("newProvider");
+    } catch (NoSuchMethodException ex) {
+      throw new RuntimeException("Could not find newProvider method on Conscrypt", ex);
+    }
+    Provider provider;
+    try {
+      provider = (Provider) newProvider.invoke(null);
+    } catch (IllegalAccessException ex) {
+      throw new RuntimeException("Could not invoke Conscrypt.newProvider", ex);
+    } catch (InvocationTargetException ex) {
+      throw new RuntimeException("Could not invoke Conscrypt.newProvider", ex);
+    }
+    Security.addProvider(provider);
+    conscryptInstallAttempted = true;
   }
 
   /**
