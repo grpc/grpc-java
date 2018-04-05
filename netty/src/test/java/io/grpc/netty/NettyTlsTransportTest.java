@@ -46,7 +46,7 @@ import org.junit.runners.JUnit4;
 /** Unit tests for Netty transport with TLS enabled. */
 @RunWith(JUnit4.class)
 public class NettyTlsTransportTest extends AbstractTransportTest {
-  // Choose an arbitrary cipher for unit test reproducibility
+  // Choose a hardcoded cipher for unit test reproducibility
   private static final String CIPHER = "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384";
   private final FakeClock fakeClock = new FakeClock();
   private final TransportTracer.Factory fakeClockTransportTracer = new TransportTracer.Factory(

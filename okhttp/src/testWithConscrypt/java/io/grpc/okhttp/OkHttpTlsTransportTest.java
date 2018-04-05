@@ -38,9 +38,11 @@ import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.security.Security;
 import java.security.cert.CertificateException;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import org.conscrypt.Conscrypt;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -49,7 +51,7 @@ import org.junit.runners.JUnit4;
 /** Unit tests for OkHttp transport. */
 @RunWith(JUnit4.class)
 public class OkHttpTlsTransportTest extends AbstractTransportTest {
-  // Choose an arbitrary cipher for unit test reproducibility
+  // Choose an hardcoded cipher for unit test reproducibility
   private static final String CIPHER = "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384";
   private final FakeClock fakeClock = new FakeClock();
   private final TransportTracer.Factory fakeClockTransportTracer = new TransportTracer.Factory(
@@ -60,6 +62,10 @@ public class OkHttpTlsTransportTest extends AbstractTransportTest {
         }
       });
   private ClientTransportFactory clientFactory;
+
+  public OkHttpTlsTransportTest() {
+    Security.insertProviderAt(Conscrypt.newProvider(), 1);
+  }
 
   @Override
   protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {

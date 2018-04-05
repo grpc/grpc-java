@@ -1,4 +1,9 @@
 description = "gRPC: OkHttp"
+
+configurations {
+    tls
+}
+
 dependencies {
     compile project(':grpc-core'),
             libraries.okhttp,
@@ -8,8 +13,7 @@ dependencies {
     testCompile project(':grpc-core').sourceSets.test.output,
                 project(':grpc-testing'),
                 project(':grpc-netty')
-    // OkHttpTlsTransportTest requires a TLS enabled netty server
-    testRuntime libraries.netty_tcnative
+    tls libraries.conscrypt, libraries.netty_tcnative
     signature "org.codehaus.mojo.signature:java16:1.1@signature"
 }
 
@@ -24,14 +28,26 @@ project.sourceSets {
             srcDir "${projectDir}/third_party/okhttp/test/java"
         }
     }
+
+    // Conscrypt must be installed before io.grpc.okhttp.internal.Platform is initialized.
+    // Otherwise Platform will return stale results and think that conscrypt is not available.
+    // All tests in this source set must install conscrypt at the start of the file to ensure
+    // Platform does not get polluted.
+    testWithConscrypt {
+        compileClasspath = sourceSets.test.runtimeClasspath + configurations.tls
+        runtimeClasspath = compileClasspath + sourceSets.testWithConscrypt.output
+    }
 }
+
+task testWithConscrypt(
+        type: Test, description: 'Runs the integration tests.', group: 'Verification') {
+    testClassesDirs = sourceSets.testWithConscrypt.output
+    classpath = sourceSets.testWithConscrypt.runtimeClasspath
+}
+
+test.dependsOn testWithConscrypt
 
 checkstyleMain.exclude '**/io/grpc/okhttp/internal/**'
 
 javadoc.exclude 'io/grpc/okhttp/internal/**'
 javadoc.options.links 'http://square.github.io/okhttp/2.x/okhttp/'
-
-test {
-    // Needed for OkHttpTlsTransportTest
-    jvmArgs += ("-javaagent:" + configurations.alpnagent.asPath)
-}
