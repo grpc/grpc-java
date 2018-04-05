@@ -43,8 +43,8 @@ final class ServiceConfigUtil {
   private static final Logger logger = Logger.getLogger(ServiceConfigUtil.class.getName());
 
   private static final String SERVICE_CONFIG_METHOD_CONFIG_KEY = "methodConfig";
-  private static final String SERVICE_CONFIG_LOAD_BALANCING_POLICY = "loadBalancingPolicy";
-  private static final String METHOD_CONFIG_NAME = "name";
+  private static final String SERVICE_CONFIG_LOAD_BALANCING_POLICY_key = "loadBalancingPolicy";
+  private static final String METHOD_CONFIG_NAME_KEY = "name";
   private static final String METHOD_CONFIG_TIMEOUT_KEY = "timeout";
   private static final String METHOD_CONFIG_WAIT_FOR_READY_KEY = "waitForReady";
   private static final String METHOD_CONFIG_MAX_REQUEST_MESSAGE_BYTES_KEY =
@@ -81,23 +81,23 @@ final class ServiceConfigUtil {
       {
         "methodConfig": [
           {
-           "name": [
-             {
-               "service": string,
-               "method": string,         // Optional
-             }
-           ],
-           "retryPolicy": {
-             "maxAttempts": number,
-             "initialBackoff": string,   // Long decimal with "s" appended
-             "maxBackoff": string,       // Long decimal with "s" appended
-             "backoffMultiplier": number
-             "retryableStatusCodes": []
+            "name": [
+              {
+                "service": string,
+                "method": string,         // Optional
+              }
+            ],
+            "retryPolicy": {
+              "maxAttempts": number,
+              "initialBackoff": string,   // Long decimal with "s" appended
+              "maxBackoff": string,       // Long decimal with "s" appended
+              "backoffMultiplier": number
+              "retryableStatusCodes": []
              }
            }
          ]
        }
-       */
+      */
 
       if (serviceConfig.containsKey("methodConfig")) {
         List<Object> methodConfigs = getList(serviceConfig, "methodConfig");
@@ -279,10 +279,10 @@ final class ServiceConfigUtil {
 
   @Nullable
   static List<Map<String, Object>> getNameListFromMethodConfig(Map<String, Object> methodConfig) {
-    if (!methodConfig.containsKey(METHOD_CONFIG_NAME)) {
+    if (!methodConfig.containsKey(METHOD_CONFIG_NAME_KEY)) {
       return null;
     }
-    return checkObjectList(getList(methodConfig, METHOD_CONFIG_NAME));
+    return checkObjectList(getList(methodConfig, METHOD_CONFIG_NAME_KEY));
   }
 
   /**
@@ -338,10 +338,10 @@ final class ServiceConfigUtil {
 
   @Nullable
   static String getLoadBalancingPolicyFromServiceConfig(Map<String, Object> serviceConfig) {
-    if (!serviceConfig.containsKey(SERVICE_CONFIG_LOAD_BALANCING_POLICY)) {
+    if (!serviceConfig.containsKey(SERVICE_CONFIG_LOAD_BALANCING_POLICY_key)) {
       return null;
     }
-    return getString(serviceConfig, SERVICE_CONFIG_LOAD_BALANCING_POLICY);
+    return getString(serviceConfig, SERVICE_CONFIG_LOAD_BALANCING_POLICY_key);
   }
 
   /**
@@ -357,7 +357,7 @@ final class ServiceConfigUtil {
     throw new ClassCastException(
         String.format("value %s for key %s in %s is not List", value, key, obj));
   }
-  
+
   /**
    * Gets an object from an object for the given key.
    */
@@ -449,7 +449,7 @@ final class ServiceConfigUtil {
             String.format("value %s for idx %d in %s is not object", rawList.get(i), i, rawList));
       }
     }
-    return (List<Map<String, Object>>) (List) rawList;
+    return (List<Map<String, Object>>) (List<?>) rawList;
   }
 
   @SuppressWarnings("unchecked")
@@ -460,7 +460,7 @@ final class ServiceConfigUtil {
             String.format("value %s for idx %d in %s is not string", rawList.get(i), i, rawList));
       }
     }
-    return (List<String>) (List) rawList;
+    return (List<String>) (List<?>) rawList;
   }
 
   /**
