@@ -23,6 +23,11 @@ message StreamingOutputCallRequest {
 message StreamingOutputCallResponse {
 }
 
+// Because these are capitalized, they do not collide with Java keywords.
+// Had they been 'native' or 'volatile' then protoc would generate invalid Java code.
+message Native {}
+message Volatile {}
+
 // Test service that supports all call types.
 service TestService {
   // One request followed by one response.
@@ -51,4 +56,8 @@ service TestService {
   // first request.
   rpc HalfBidiCall(stream StreamingOutputCallRequest)
       returns (stream StreamingOutputCallResponse);
+
+  // An RPC method whose Java name collides with a keyword, and whose generated
+  // method should have a '_' appended.
+  rpc Import(stream StreamingInputCallRequest) returns (stream StreamingInputCallResponse);
 }
