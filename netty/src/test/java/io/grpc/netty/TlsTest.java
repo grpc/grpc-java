@@ -37,7 +37,9 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.security.NoSuchAlgorithmException;
 import java.security.Provider;
 import java.security.Security;
@@ -176,6 +178,70 @@ public class TlsTest {
     client.unaryRpc(SimpleRequest.getDefaultInstance());
   }
 
+  /**
+   * Same as basicClientServerIntegrationTest except we test the InputStream based certs API.
+   */
+  @Test
+  public void basicClientServerIntegrationTestInputStreamCerts() throws Exception {
+    InputStream serverCertChain = null;
+    InputStream serverPrivateKey = null;
+    InputStream clientCertChain = null;
+    InputStream clientPrivateKey = null;
+
+    try {
+      // Create & start a server.
+      File serverCertChainFile = TestUtils.loadCert("server1.pem");
+      File serverPrivateKeyFile = TestUtils.loadCert("server1.key");
+      X509Certificate[] serverTrustedCaCerts = {
+          TestUtils.loadX509Cert("ca.pem")
+      };
+      serverCertChain = new FileInputStream(serverCertChainFile);
+      serverPrivateKey = new FileInputStream(serverPrivateKeyFile);
+      SslContextBuilder sslContextBuilder
+          = SslContextBuilder.forServer(serverCertChain, serverPrivateKey);
+      GrpcSslContexts.configure(sslContextBuilder, sslProvider);
+      sslContextBuilder.trustManager(serverTrustedCaCerts)
+          .clientAuth(ClientAuth.REQUIRE);
+      server = NettyServerBuilder.forPort(0)
+          .sslContext(sslContextBuilder.build())
+          .addService(new SimpleServiceImpl())
+          .build()
+          .start();
+
+      // Create a client.
+      File clientCertChainFile = TestUtils.loadCert("client.pem");
+      File clientPrivateKeyFile = TestUtils.loadCert("client.key");
+      X509Certificate[] clientTrustedCaCerts = {
+          TestUtils.loadX509Cert("ca.pem")
+      };
+
+      clientCertChain = new FileInputStream(clientCertChainFile);
+      clientPrivateKey = new FileInputStream(clientPrivateKeyFile);
+      channel = clientChannel(server.getPort(), clientContextBuilder
+          .keyManager(clientCertChain, clientPrivateKey)
+          .trustManager(clientTrustedCaCerts)
+          .build());
+    } finally {
+      if (serverCertChain != null) {
+        serverCertChain.close();
+      }
+      if (serverPrivateKey != null) {
+        serverPrivateKey.close();
+      }
+      if (clientCertChain != null) {
+        clientCertChain.close();
+      }
+      if (clientPrivateKey != null) {
+        clientPrivateKey.close();
+      }
+    }
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub client = SimpleServiceGrpc.newBlockingStub(channel);
+
+    // Send an actual request, via the full GRPC & network stack, and check that a proper
+    // response comes back.
+    client.unaryRpc(SimpleRequest.getDefaultInstance());
+  }
 
   /**
    * Tests that a server configured to require client authentication refuses to accept connections
