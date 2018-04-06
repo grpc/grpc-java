@@ -537,6 +537,8 @@ public final class Channelz {
       try {
         Certificate[] peerCerts = session.getPeerCertificates();
         if (peerCerts != null) {
+          // The javadoc of getPeerCertificate states that the peer's own certificate is the first
+          // element of the list.
           remoteCert = peerCerts[0].toString();
         }
       } catch (SSLPeerUnverifiedException e) {
