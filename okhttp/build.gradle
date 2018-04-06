@@ -40,7 +40,7 @@ project.sourceSets {
 }
 
 task testWithConscrypt(
-        type: Test, description: 'Runs the integration tests.', group: 'Verification') {
+        type: Test, description: 'Runs the tests with conscrypt.', group: 'Verification') {
     testClassesDirs = sourceSets.testWithConscrypt.output
     classpath = sourceSets.testWithConscrypt.runtimeClasspath
 }
