@@ -28,8 +28,7 @@ import javax.annotation.Nullable;
  * An class for getting low level socket info.
  */
 final class NettySocketSupport {
-  private static final Logger log =
-      Logger.getAnonymousLogger(NettySocketSupport.class.getName());
+  private static final Logger log = Logger.getLogger(NettySocketSupport.class.getName());
 
   /**
    * Returns the info on the socket if possible. Returns null if the info can not be discovered.
