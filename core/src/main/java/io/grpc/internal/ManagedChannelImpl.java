@@ -533,7 +533,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     this.backoffPolicyProvider = backoffPolicyProvider;
     this.transportFactory =
         new CallCredentialsApplyingTransportFactory(clientTransportFactory, this.executor);
-    this.retryEnabled = !builder.retryDisabled;
+    this.retryEnabled = builder.retryEnabled;
     serviceConfigInterceptor = new ServiceConfigInterceptor(retryEnabled, builder.maxRetryAttempts);
     Channel channel = new RealChannel();
     channel = ClientInterceptors.intercept(channel, serviceConfigInterceptor);

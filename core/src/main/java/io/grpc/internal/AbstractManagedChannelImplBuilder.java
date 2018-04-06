@@ -127,7 +127,7 @@ public abstract class AbstractManagedChannelImplBuilder
   int maxHedgedAttempts = 5;
   long retryBufferSize = DEFAULT_RETRY_BUFFER_SIZE_IN_BYTES;
   long perRpcBufferLimit = DEFAULT_PER_RPC_BUFFER_LIMIT_IN_BYTES;
-  boolean retryDisabled = true; // TODO(zdapeng): default to false
+  boolean retryEnabled = false; // TODO(zdapeng): default to true
 
   Channelz channelz = Channelz.instance();
 
@@ -315,13 +315,13 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Override
   public final T disableRetry() {
-    retryDisabled = true;
+    retryEnabled = false;
     return thisT();
   }
 
   @Override
   public final T enableRetry() {
-    retryDisabled = false;
+    retryEnabled = true;
     return thisT();
   }
 
@@ -399,7 +399,7 @@ public abstract class AbstractManagedChannelImplBuilder
     List<ClientInterceptor> effectiveInterceptors =
         new ArrayList<ClientInterceptor>(this.interceptors);
     if (statsEnabled) {
-      retryDisabled = true;
+      retryEnabled = false;
       CensusStatsModule censusStats = this.censusStatsOverride;
       if (censusStats == null) {
         censusStats = new CensusStatsModule(GrpcUtil.STOPWATCH_SUPPLIER, true);
@@ -410,7 +410,7 @@ public abstract class AbstractManagedChannelImplBuilder
           0, censusStats.getClientInterceptor(recordStartedRpcs, recordFinishedRpcs));
     }
     if (tracingEnabled) {
-      retryDisabled = true;
+      retryEnabled = false;
       CensusTracingModule censusTracing =
           new CensusTracingModule(Tracing.getTracer(),
               Tracing.getPropagationComponent().getBinaryFormat());
