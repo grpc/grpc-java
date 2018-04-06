@@ -20,14 +20,16 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.internal.Channelz.TcpInfo;
 import io.netty.channel.Channel;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
  * An class for getting low level socket info.
  */
 final class NettySocketSupport {
+  private static final Logger log =
+      Logger.getAnonymousLogger(NettySocketSupport.class.getName());
 
   /**
    * Returns the info on the socket if possible. Returns null if the info can not be discovered.
@@ -52,7 +54,7 @@ final class NettySocketSupport {
         Map<String, String> otherInfo) {
       Preconditions.checkNotNull(otherInfo);
       this.tcpInfo = tcpInfo;
-      this.otherInfo = ImmutableMap.copyOf(new HashMap<String, String>(otherInfo));
+      this.otherInfo = ImmutableMap.copyOf(otherInfo);
     }
   }
 
