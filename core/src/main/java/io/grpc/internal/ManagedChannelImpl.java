@@ -362,12 +362,13 @@ public final class ManagedChannelImpl
       return;
     }
     cancelIdleTimer();
-    idleModeTimer = new IdleModeTimer();
+    final IdleModeTimer nextIdleModeTimer = new IdleModeTimer();
+    idleModeTimer = nextIdleModeTimer;
     idleModeTimerFuture = transportFactory.getScheduledExecutorService().schedule(
         new LogExceptionRunnable(new Runnable() {
             @Override
             public void run() {
-              channelExecutor.executeLater(idleModeTimer).drain();
+              channelExecutor.executeLater(nextIdleModeTimer).drain();
             }
           }),
         idleTimeoutMillis, TimeUnit.MILLISECONDS);
