@@ -20,29 +20,35 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.internal.Channelz.TcpInfo;
 import io.netty.channel.Channel;
+import java.lang.reflect.Constructor;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
  * An class for getting low level socket info.
  */
-final class NettySocketSupport {
+abstract class NettySocketSupport {
+  private static final Logger log = Logger.getLogger(NettySocketSupport.class.getName());
+  private static final NettySocketSupport INSTANCE;
+
+  static {
+    INSTANCE = create();
+  }
 
   /**
    * Returns the info on the socket if possible. Returns null if the info can not be discovered.
    */
   @Nullable
-  public static NativeSocketOptions getNativeSocketOptions(Channel ch) {
-    // TODO(zpencer): if netty-epoll, use reflection to call EpollSocketChannel.tcpInfo()
-    // And/or if some other low level socket support library is available, call it now.
-    return null;
-  }
+  public abstract NativeSocketOptions getNativeSocketOptions(Channel ch);
 
   /**
    * A TcpInfo and additional other info that will be turned into channelz socket options.
    */
   public static final class NativeSocketOptions {
-    @Nullable public final TcpInfo tcpInfo;
+    @Nullable
+    public final TcpInfo tcpInfo;
     public final ImmutableMap<String, String> otherInfo;
 
     /** Creates an instance. */
@@ -55,5 +61,23 @@ final class NettySocketSupport {
     }
   }
 
-  private NettySocketSupport() {}
+  public static NettySocketSupport instance() {
+    return INSTANCE;
+  }
+
+  private static NettySocketSupport create() {
+    try {
+      Class<?> klass = Class.forName("io.grpc.netty.NettySocketSupportOverride");
+      Constructor<?>[] constructors = klass.getConstructors();
+      for (Constructor<?> ctor : constructors) {
+        if (ctor.getParameterTypes().length == 0) {
+          return (NettySocketSupport) ctor.newInstance();
+        }
+      }
+    } catch (Exception e) {
+      log.log(Level.FINE, "Exception caught", e);
+    }
+    log.log(Level.FINE, "io.grpc.netty.NettySocketSupportOverride not available");
+    return new NettySocketSupportImpl();
+  }
 }
