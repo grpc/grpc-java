@@ -60,7 +60,8 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
   private final boolean retryEnabled;
   private final int maxRetryAttemptsLimit;
 
-  private boolean nameResolveComplete;
+  // Setting this to true and observing this equal to true are run in different threads.
+  private volatile boolean nameResolveComplete;
 
   ServiceConfigInterceptor(
       boolean retryEnabled, int maxRetryAttemptsLimit) {
