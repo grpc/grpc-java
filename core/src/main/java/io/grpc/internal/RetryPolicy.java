@@ -94,7 +94,8 @@ final class RetryPolicy {
   }
 
   /**
-   * Providers the most suitable retry policy for a call in the current situation.
+   * Providers the most suitable retry policy for a call when this will have to provide a retry
+   * policy.
    */
   interface Provider {
 
