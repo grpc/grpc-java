@@ -266,7 +266,7 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
       }
     }
 
-    MethodInfo info = methodInfoOf(method);
+    MethodInfo info = getMethodInfo(method);
     if (info == null) {
       return next.newCall(method, callOptions);
     }
@@ -306,7 +306,7 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
   }
 
   @CheckForNull
-  private MethodInfo methodInfoOf(MethodDescriptor<?, ?> method) {
+  private MethodInfo getMethodInfo(MethodDescriptor<?, ?> method) {
     Map<String, MethodInfo> localServiceMethodMap = serviceMethodMap.get();
     MethodInfo info = null;
     if (localServiceMethodMap != null) {
@@ -324,7 +324,7 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
 
   @VisibleForTesting
   RetryPolicy getRetryPolicyFromConfig(MethodDescriptor<?, ?> method) {
-    MethodInfo info = methodInfoOf(method);
+    MethodInfo info = getMethodInfo(method);
     if (info == null || info.retryPolicy == null) {
       return RetryPolicy.DEFAULT;
     }
