@@ -238,7 +238,7 @@ class Utils {
     }
 
     NativeSocketOptions nativeOptions
-        = NettySocketSupport.instance().getNativeSocketOptions(channel);
+        = NettySocketSupport.getNativeSocketOptions(channel);
     if (nativeOptions != null) {
       b.setTcpInfo(nativeOptions.tcpInfo); // may be null
       for (Entry<String, String> entry : nativeOptions.otherInfo.entrySet()) {

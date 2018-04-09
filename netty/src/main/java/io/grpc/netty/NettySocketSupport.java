@@ -29,19 +29,17 @@ import javax.annotation.Nullable;
 /**
  * An class for getting low level socket info.
  */
-abstract class NettySocketSupport {
+final class NettySocketSupport {
   private static final Logger log = Logger.getLogger(NettySocketSupport.class.getName());
-  private static final NettySocketSupport INSTANCE;
+  private static final Helper INSTANCE = create();
 
-  static {
-    INSTANCE = create();
+  interface Helper {
+    /**
+     * Returns the info on the socket if possible. Returns null if the info can not be discovered.
+     */
+    @Nullable
+    NativeSocketOptions getNativeSocketOptions(Channel ch);
   }
-
-  /**
-   * Returns the info on the socket if possible. Returns null if the info can not be discovered.
-   */
-  @Nullable
-  public abstract NativeSocketOptions getNativeSocketOptions(Channel ch);
 
   /**
    * A TcpInfo and additional other info that will be turned into channelz socket options.
@@ -61,23 +59,32 @@ abstract class NettySocketSupport {
     }
   }
 
-  public static NettySocketSupport instance() {
-    return INSTANCE;
+  public static NativeSocketOptions getNativeSocketOptions(Channel ch) {
+    return INSTANCE.getNativeSocketOptions(ch);
   }
 
-  private static NettySocketSupport create() {
+  private static Helper create() {
     try {
-      Class<?> klass = Class.forName("io.grpc.netty.NettySocketSupportOverride");
+      Class<?> klass = Class.forName("io.grpc.netty.NettySocketSupportHelperOverride");
       Constructor<?>[] constructors = klass.getConstructors();
       for (Constructor<?> ctor : constructors) {
         if (ctor.getParameterTypes().length == 0) {
-          return (NettySocketSupport) ctor.newInstance();
+          return (Helper) ctor.newInstance();
         }
       }
     } catch (Exception e) {
       log.log(Level.FINE, "Exception caught", e);
     }
     log.log(Level.FINE, "io.grpc.netty.NettySocketSupportOverride not available");
-    return new NettySocketSupportImpl();
+    return new NettySocketHelperImpl();
+  }
+
+  private static final class NettySocketHelperImpl implements Helper {
+    @Override
+    public NativeSocketOptions getNativeSocketOptions(Channel ch) {
+      // TODO(zpencer): if netty-epoll, use reflection to call EpollSocketChannel.tcpInfo()
+      // And/or if some other low level socket support library is available, call it now.
+      return null;
+    }
   }
 }
