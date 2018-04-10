@@ -101,7 +101,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void notYetHandleUpdate() {
+  public void handleUpdateNotCalledBeforeInterceptCall() {
     interceptor.interceptCall(methodDescriptor, CallOptions.DEFAULT.withoutWaitForReady(), channel);
 
     verify(channel).newCall(eq(methodDescriptor), callOptionsCap.capture());
