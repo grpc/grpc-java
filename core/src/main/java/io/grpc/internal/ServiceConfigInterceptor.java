@@ -120,7 +120,7 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
   }
 
   /**
-   * Equivalent of MethodConfig from a ServiceConfig.
+   * Equivalent of MethodConfig from a ServiceConfig with restrictions from Channel setting.
    */
   static final class MethodInfo {
     final Long timeoutNanos;
@@ -129,6 +129,11 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
     final Integer maxOutboundMessageSize;
     final RetryPolicy retryPolicy;
 
+    /**
+     * Constructor.
+     *
+     * @param retryEnabled when false, the argument maxRetryAttemptsLimit will have no effect.
+     */
     MethodInfo(
         Map<String, Object> methodConfig, boolean retryEnabled, int maxRetryAttemptsLimit) {
       timeoutNanos = ServiceConfigUtil.getTimeoutFromMethodConfig(methodConfig);
@@ -157,7 +162,7 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
     @Override
     public int hashCode() {
       return Objects.hashCode(
-          timeoutNanos, waitForReady, maxInboundMessageSize, maxOutboundMessageSize);
+          timeoutNanos, waitForReady, maxInboundMessageSize, maxOutboundMessageSize, retryPolicy);
     }
 
     @Override
@@ -169,7 +174,8 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
       return Objects.equal(this.timeoutNanos, that.timeoutNanos)
           && Objects.equal(this.waitForReady, that.waitForReady)
           && Objects.equal(this.maxInboundMessageSize, that.maxInboundMessageSize)
-          && Objects.equal(this.maxOutboundMessageSize, that.maxOutboundMessageSize);
+          && Objects.equal(this.maxOutboundMessageSize, that.maxOutboundMessageSize)
+          && Objects.equal(this.retryPolicy, that.retryPolicy);
     }
 
     @Override
@@ -179,6 +185,7 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
           .add("waitForReady", waitForReady)
           .add("maxInboundMessageSize", maxInboundMessageSize)
           .add("maxOutboundMessageSize", maxOutboundMessageSize)
+          .add("retryPolicy", retryPolicy)
           .toString();
     }
 
