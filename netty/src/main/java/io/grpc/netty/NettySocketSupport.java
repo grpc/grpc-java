@@ -20,18 +20,14 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.internal.Channelz.TcpInfo;
 import io.netty.channel.Channel;
-import java.lang.reflect.Constructor;
 import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
  * An class for getting low level socket info.
  */
 final class NettySocketSupport {
-  private static final Logger log = Logger.getLogger(NettySocketSupport.class.getName());
-  private static final Helper INSTANCE = create();
+  private static volatile Helper INSTANCE = new NettySocketHelperImpl();
 
   interface Helper {
     /**
@@ -63,20 +59,8 @@ final class NettySocketSupport {
     return INSTANCE.getNativeSocketOptions(ch);
   }
 
-  private static Helper create() {
-    try {
-      Class<?> klass = Class.forName("io.grpc.netty.NettySocketSupportHelperOverride");
-      Constructor<?>[] constructors = klass.getConstructors();
-      for (Constructor<?> ctor : constructors) {
-        if (ctor.getParameterTypes().length == 0) {
-          return (Helper) ctor.newInstance();
-        }
-      }
-    } catch (Exception e) {
-      log.log(Level.FINE, "Exception caught", e);
-    }
-    log.log(Level.FINE, "io.grpc.netty.NettySocketSupportOverride not available");
-    return new NettySocketHelperImpl();
+  static void setHelper(Helper helper) {
+    INSTANCE = Preconditions.checkNotNull(helper);
   }
 
   private static final class NettySocketHelperImpl implements Helper {
