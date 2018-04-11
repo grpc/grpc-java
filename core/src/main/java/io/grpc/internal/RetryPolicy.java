@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
+import com.google.common.collect.ImmutableSet;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import java.util.Collections;
@@ -43,8 +44,6 @@ final class RetryPolicy {
   /**
    * The caller is supposed to have validated the arguments and handled throwing exception or
    * logging warnings already, so we avoid repeating args check here.
-   *
-   * @param retryableStatusCodes an immutable set.
    */
   RetryPolicy(
       int maxAttempts,
@@ -56,7 +55,7 @@ final class RetryPolicy {
     this.initialBackoffNanos = initialBackoffNanos;
     this.maxBackoffNanos = maxBackoffNanos;
     this.backoffMultiplier = backoffMultiplier;
-    this.retryableStatusCodes = retryableStatusCodes;
+    this.retryableStatusCodes = ImmutableSet.copyOf(retryableStatusCodes);
   }
 
   @Override
