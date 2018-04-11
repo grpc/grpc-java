@@ -624,24 +624,24 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       boolean isRetryableStatusCode = retryPolicy.retryableStatusCodes.contains(status.getCode());
 
       String pushbackStr = trailer.get(GRPC_RETRY_PUSHBACK_MS);
-      Integer pushback = null;
+      Integer pushbackMillis = null;
       if (pushbackStr != null) {
         try {
-          pushback = Integer.valueOf(pushbackStr);
+          pushbackMillis = Integer.valueOf(pushbackStr);
         } catch (NumberFormatException e) {
-          pushback = -1;
+          pushbackMillis = -1;
         }
       }
 
       boolean isThrottled = false;
       if (throttle != null) {
-        if (isRetryableStatusCode || (pushback != null && pushback < 0)) {
+        if (isRetryableStatusCode || (pushbackMillis != null && pushbackMillis < 0)) {
           isThrottled = !throttle.onQualifiedFailureThenCheckIsAboveThreshold();
         }
       }
 
       if (retryPolicy.maxAttempts > substream.previousAttempts + 1 && !isThrottled) {
-        if (pushback == null) {
+        if (pushbackMillis == null) {
           if (isRetryableStatusCode) {
             shouldRetry = true;
             backoffNanos = (long) (nextBackoffIntervalNanos * random.nextDouble());
@@ -650,9 +650,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
                 retryPolicy.maxBackoffNanos);
 
           } // else no retry
-        } else if (pushback >= 0) {
+        } else if (pushbackMillis >= 0) {
           shouldRetry = true;
-          backoffNanos = TimeUnit.MILLISECONDS.toNanos(pushback);
+          backoffNanos = TimeUnit.MILLISECONDS.toNanos(pushbackMillis);
           nextBackoffIntervalNanos = retryPolicy.initialBackoffNanos;
         } // else no retry
       } // else no retry
