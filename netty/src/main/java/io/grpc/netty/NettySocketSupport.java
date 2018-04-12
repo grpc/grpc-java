@@ -40,7 +40,7 @@ final class NettySocketSupport {
   /**
    * A TcpInfo and additional other info that will be turned into channelz socket options.
    */
-  public static final class NativeSocketOptions {
+  public static class NativeSocketOptions {
     @Nullable
     public final TcpInfo tcpInfo;
     public final ImmutableMap<String, String> otherInfo;
