@@ -83,6 +83,8 @@ import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
+import io.grpc.stub.SyncCall;
+import io.grpc.stub.SyncCall.SyncClientCall;
 import io.grpc.testing.TestUtils;
 import io.grpc.testing.integration.EmptyProtos.Empty;
 import io.grpc.testing.integration.Messages.EchoStatus;
@@ -324,7 +326,14 @@ public abstract class AbstractInteropTest {
 
   @Test
   public void emptyUnary() throws Exception {
-    assertEquals(EMPTY, blockingStub.emptyCall(EMPTY));
+    SyncClientCall<Empty, Empty> call =
+        SyncCall.call(
+            blockingStub.getChannel(),
+            TestServiceGrpc.getEmptyCallMethod(),
+            blockingStub.getCallOptions());
+    call.put(EMPTY);
+    call.halfClose();
+    assertEquals(EMPTY, call.take());
   }
 
   /** Sends a cacheable unary rpc using GET. Requires that the server is behind a caching proxy. */
