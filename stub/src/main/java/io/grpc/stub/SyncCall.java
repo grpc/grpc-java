@@ -1,3 +1,19 @@
+/*
+ * Copyright 201, gRPC Authors All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package io.grpc.stub;
 
 import com.google.errorprone.annotations.DoNotMock;
@@ -6,6 +22,7 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import java.util.ArrayDeque;
@@ -17,8 +34,10 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
+/**
+ * A Non-blocking, synchronous RPC.
+ */
 @CheckReturnValue
 @DoNotMock("or else!")
 public abstract class SyncCall<ReqT, RespT> {
@@ -148,8 +167,8 @@ public abstract class SyncCall<ReqT, RespT> {
 
   /**
    * Attempts to send a request message if it would not result in excessive buffering.  Waits up
-   * to the given timeout.  Unlike {@link #offerInterruptibly(Object, long, TimeUnit)}, if the calling thread
-   * is interrupted, it will be ignored.
+   * to the given timeout.  Unlike {@link #offerInterruptibly(Object, long, TimeUnit)}, if the
+   * calling thread is interrupted, it will be ignored.
    *
    * @param req the message to send
    * @param timeout how long to wait before returning, in units of {@code unit}
@@ -218,8 +237,8 @@ public abstract class SyncCall<ReqT, RespT> {
    * Attempts to send a request message, blocking until there would not be excessive buffering.
    * Waits up to the given timeout or if the stub becomes readable.   If the message can be sent
    * and the stub is readable, the message will always be sent.  Unlike
-   * {@link #offerInterruptiblyUntilReadable(Object, long, TimeUnit)}, if the calling thread is interrupted,
-   * it will be ignored.
+   * {@link #offerInterruptiblyUntilReadable(Object, long, TimeUnit)}, if the calling thread is
+   * interrupted, it will be ignored.
    *
    * @param req the message to send
    * @param timeout how long to wait before returning, in units of {@code unit}
@@ -250,8 +269,6 @@ public abstract class SyncCall<ReqT, RespT> {
    * the message will always be sent.
    *
    * @param req the message to send
-   * @param timeout how long to wait before returning, in units of {@code unit}
-   * @param unit a {@link TimeUnit} determining how to interpret {@code timeout}.
    * @return {@code true} if the message was enqueued.
    * @throws InterruptedException if interrupted while waiting.
    * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
@@ -263,6 +280,10 @@ public abstract class SyncCall<ReqT, RespT> {
 
   public static <ReqT, RespT> SyncClientCall<ReqT, RespT> call(
       Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions opts) {
+    if (method.getType().clientSendsOneMessage()) {
+      // Alternatively, we could call half close for the user, but that would involve state.
+      method = method.toBuilder().setType(MethodType.UNKNOWN).build();
+    }
     ClientCall<ReqT, RespT> c = channel.newCall(method, opts);
     return SyncClientCall.createAndStart(c, new Metadata());
   }
@@ -271,11 +292,11 @@ public abstract class SyncCall<ReqT, RespT> {
   public static final class SyncClientCall<ReqT, RespT> extends SyncCall<ReqT, RespT> {
 
     private final ClientCall<ReqT, RespT> call;
-    @GuardedBy("lock")
+    // @javax.annotation.concurrent.GuardedBy("lock")
     private final Queue<RespT> responses = new ArrayDeque<RespT>();
-    @GuardedBy("lock")
+    // @javax.annotation.concurrent.GuardedBy("lock")
     private Status status;
-    @GuardedBy("lock")
+    // @javax.annotation.concurrent.GuardedBy("lock")
     private Metadata trailers;
 
     private final Lock lock = new ReentrantLock();
@@ -299,7 +320,7 @@ public abstract class SyncCall<ReqT, RespT> {
       public void onReady() {
         lock.lock();
         try {
-          cond.notifyAll();
+          cond.signalAll();
         } finally {
           lock.unlock();
         }
@@ -310,7 +331,7 @@ public abstract class SyncCall<ReqT, RespT> {
         lock.lock();
         try {
           responses.add(message);
-          cond.notifyAll();
+          cond.signalAll();
         } finally {
           lock.unlock();
         }
@@ -322,7 +343,7 @@ public abstract class SyncCall<ReqT, RespT> {
         try {
           SyncClientCall.this.status = status;
           SyncClientCall.this.trailers = trailers;
-          cond.notifyAll();
+          cond.signalAll();
         } finally {
           lock.unlock();
         }
@@ -336,16 +357,264 @@ public abstract class SyncCall<ReqT, RespT> {
       boolean checkRead = false;
       boolean checkWrite = false;
       try {
-        return poll(interruptible, checkRead, checkWrite);
+        return pollInternal(interruptible, checkRead, checkWrite);
       } catch (InterruptedException e) {
         throw new AssertionError(e);
       }
     }
 
+    @Nullable
+    @Override
+    public RespT poll(long timeout, TimeUnit unit) {
+      boolean interruptible = false;
+      boolean checkRead = true;
+      boolean checkWrite = false;
+      try {
+        return pollInternal(timeout, unit, interruptible, checkRead, checkWrite);
+      } catch (InterruptedException e) {
+        throw new AssertionError(e);
+      }
+    }
 
-    private void checkStatus() {
-      if (status != null && !status.isOk()) {
-        throw status.asRuntimeException(trailers);
+    @Override
+    public RespT takeInterruptibly() throws InterruptedException {
+      boolean interruptible = true;
+      boolean checkRead = true;
+      boolean checkWrite = false;
+      RespT response = pollInternal(interruptible, checkRead, checkWrite);
+      if (response == null) {
+        // Because poll checks that the call is readable and cannot timeout, the only way to reach
+        // this is by the status having been set.  This means if there is no response, the only way
+        // is if the call is over.  The status must be OK, or else an exception would have been
+        // thrown.
+        assert status != null && status.isOk();
+        throw new NoSuchElementException("call half closed");
+      }
+      return response;
+    }
+
+    @Override
+    public RespT take() {
+      boolean interruptible = false;
+      boolean checkRead = true;
+      boolean checkWrite = false;
+      RespT response;
+      try {
+        response = pollInternal(interruptible, checkRead, checkWrite);
+      } catch (InterruptedException e) {
+        throw new AssertionError(e);
+      }
+
+      if (response == null) {
+        // Because poll checks that the call is readable and cannot timeout, the only way to reach
+        // this is by the status having been set.  This means if there is no response, the only way
+        // is if the call is over.  The status must be OK, or else an exception would have been
+        // thrown.
+        assert status != null && status.isOk();
+        throw new NoSuchElementException("call half closed");
+      }
+      return response;
+    }
+
+    @Override
+    @Nullable
+    public RespT pollUntilWritable() {
+      boolean interruptible = false;
+      boolean checkRead = true;
+      boolean checkWrite = true;
+      try {
+        return pollInternal(interruptible, checkRead, checkWrite);
+      } catch (InterruptedException e) {
+        throw new AssertionError(e);
+      }
+    }
+
+    @Nullable
+    @Override
+    public RespT pollUntilWritable(long timeout, TimeUnit unit) {
+      boolean interruptible = false;
+      boolean checkRead = true;
+      boolean checkWrite = true;
+      try {
+        return pollInternal(timeout, unit, interruptible, checkRead, checkWrite);
+      } catch (InterruptedException e) {
+        throw new AssertionError(e);
+      }
+    }
+
+    @Override
+    public RespT pollInterruptiblyUntilWritable() throws InterruptedException {
+      boolean interruptible = true;
+      boolean checkRead = true;
+      boolean checkWrite = true;
+      return pollInternal(interruptible, checkRead, checkWrite);
+    }
+
+    @Nullable
+    @Override
+    public RespT pollInterruptiblyUntilWritable(long timeout, TimeUnit unit)
+        throws InterruptedException {
+      boolean interruptible = true;
+      boolean checkRead = true;
+      boolean checkWrite = true;
+      return pollInternal(timeout, unit, interruptible, checkRead, checkWrite);
+    }
+
+    @Override
+    public boolean offer(ReqT req) {
+      boolean interruptible = false;
+      boolean checkRead = false;
+      boolean checkWrite = false;
+      try {
+        return offerInternal(req, interruptible, checkRead, checkWrite);
+      } catch (InterruptedException e) {
+        throw new AssertionError(e);
+      }
+    }
+
+    @Override
+    public boolean offer(ReqT req, long timeout, TimeUnit unit) {
+      boolean interruptible = false;
+      boolean checkRead = false;
+      boolean checkWrite = true;
+      try {
+        return offerInternal(req, timeout, unit, interruptible, checkRead, checkWrite);
+      } catch (InterruptedException e) {
+        throw new AssertionError(e);
+      }
+    }
+
+    @Override
+    public boolean offerInterruptibly(ReqT req, long timeout, TimeUnit unit)
+        throws InterruptedException {
+      boolean interruptible = true;
+      boolean checkRead = false;
+      boolean checkWrite = true;
+      return offerInternal(req, timeout, unit, interruptible, checkRead, checkWrite);
+    }
+
+    @Override
+    public void put(ReqT req) {
+      boolean interruptible = false;
+      boolean checkRead = false;
+      boolean checkWrite = true;
+      try {
+        if (!offerInternal(req, interruptible, checkRead, checkWrite)) {
+          // Because offer checks that the call is writable and cannot timeout, the only way to
+          // reach this is by the status having been set.  This means if it could not write, the
+          // only way is if the call is over.  The status must be OK, or else an exception would
+          // have been thrown.
+          assert status != null && status.isOk();
+          throw new NoSuchElementException("call half closed");
+        }
+      } catch (InterruptedException e) {
+        throw new AssertionError(e);
+      }
+    }
+
+    @Override
+    public void putInterruptibly(ReqT req) throws InterruptedException {
+      boolean interruptible = false;
+      boolean checkRead = false;
+      boolean checkWrite = true;
+      if (!offerInternal(req, interruptible, checkRead, checkWrite)) {
+        // Because offer checks that the call is writable and cannot timeout, the only way to
+        // reach this is by the status having been set.  This means if it could not write, the
+        // only way is if the call is over.  The status must be OK, or else an exception would
+        // have been thrown.
+        assert status != null && status.isOk();
+        throw new NoSuchElementException("call half closed");
+      }
+    }
+
+    @Override
+    public void putQueued(ReqT req) {
+      lock.lock();
+      try {
+        checkStatus();
+        call.sendMessage(req);
+      } finally {
+        lock.unlock();
+      }
+    }
+
+    @Override
+    public boolean offerUntilReadable(ReqT req) {
+      boolean interruptible = false;
+      boolean checkRead = true;
+      boolean checkWrite = true;
+      try {
+        return offerInternal(req, interruptible, checkRead, checkWrite);
+      } catch (InterruptedException e) {
+        throw new AssertionError(e);
+      }
+    }
+
+    @Override
+    public boolean offerUntilReadable(ReqT req, long timeout, TimeUnit unit) {
+      boolean interruptible = false;
+      boolean checkRead = true;
+      boolean checkWrite = true;
+      try {
+        return offerInternal(req, timeout, unit, interruptible, checkRead, checkWrite);
+      } catch (InterruptedException e) {
+        throw new AssertionError(e);
+      }
+    }
+
+    @Override
+    public boolean offerInterruptiblyUntilReadable(ReqT req) throws InterruptedException {
+      boolean interruptible = true;
+      boolean checkRead = true;
+      boolean checkWrite = true;
+      return offerInternal(req, interruptible, checkRead, checkWrite);
+    }
+
+    @Override
+    public boolean offerInterruptiblyUntilReadable(ReqT req, long timeout, TimeUnit unit)
+        throws InterruptedException {
+      boolean interruptible = true;
+      boolean checkRead = true;
+      boolean checkWrite = true;
+      return offerInternal(req, timeout, unit, interruptible, checkRead, checkWrite);
+    }
+
+    /**
+     * Indicates the RPC is done sending.
+     */
+    public void halfClose() {
+      call.halfClose();
+    }
+
+    /**
+     * Cancels the RPC.
+     */
+    public void cancel(@Nullable String message, @Nullable Throwable t) {
+      call.cancel(message, t);
+    }
+
+    @Override
+    public boolean isComplete() {
+      lock.lock();
+      try {
+        return status != null;
+      } finally {
+        lock.unlock();
+      }
+    }
+
+    /**
+     * Get's the status of the RPC.
+     *
+     * @return {@code null} if incomplete, else the status.
+     */
+    @Nullable
+    public Status getStatus() {
+      lock.lock();
+      try {
+        return status;
+      } finally {
+        lock.unlock();
       }
     }
 
@@ -355,10 +624,10 @@ public abstract class SyncCall<ReqT, RespT> {
       boolean interruptible = true;
       boolean checkRead = true;
       boolean checkWrite = false;
-      return poll(timeout, unit, interruptible, checkRead, checkWrite);
+      return pollInternal(timeout, unit, interruptible, checkRead, checkWrite);
     }
 
-    private final RespT poll(
+    private final RespT pollInternal(
         long timeout,
         TimeUnit unit,
         boolean interruptible,
@@ -404,7 +673,7 @@ public abstract class SyncCall<ReqT, RespT> {
       }
     }
 
-    private RespT poll(
+    private RespT pollInternal(
         boolean interruptible, boolean checkRead, boolean checkWrite) throws InterruptedException {
       RespT response;
       lock.lock();
@@ -434,225 +703,9 @@ public abstract class SyncCall<ReqT, RespT> {
       }
     }
 
-    @Nullable
-    @Override
-    public RespT poll(long timeout, TimeUnit unit) {
-      boolean interruptible = false;
-      boolean checkRead = true;
-      boolean checkWrite = false;
-      try {
-        return poll(timeout, unit, interruptible, checkRead, checkWrite);
-      } catch (InterruptedException e) {
-        throw new AssertionError(e);
-      }
-    }
-
-    @Override
-    public RespT takeInterruptibly() throws InterruptedException {
-      boolean interruptible = true;
-      boolean checkRead = true;
-      boolean checkWrite = false;
-      RespT response = poll(interruptible, checkRead, checkWrite);
-      if (response == null) {
-        // Because poll checks that the call is readable and cannot timeout, the only way to reach
-        // this is by the status having been set.  This means if there is no response, the only way
-        // is if the call is over.  The status must be OK, or else an exception would have been
-        // thrown.
-        assert status != null && status.isOk();
-        throw new NoSuchElementException("call half closed");
-      }
-      return response;
-    }
-
-    @Override
-    public RespT take() {
-      boolean interruptible = false;
-      boolean checkRead = true;
-      boolean checkWrite = false;
-      RespT response;
-      try {
-        response = poll(interruptible, checkRead, checkWrite);
-      } catch (InterruptedException e) {
-        throw new AssertionError(e);
-      }
-
-      if (response == null) {
-        // Because poll checks that the call is readable and cannot timeout, the only way to reach
-        // this is by the status having been set.  This means if there is no response, the only way
-        // is if the call is over.  The status must be OK, or else an exception would have been
-        // thrown.
-        assert status != null && status.isOk();
-        throw new NoSuchElementException("call half closed");
-      }
-      return response;
-    }
-
-    @Override
-    @Nullable
-    public RespT pollUntilWritable() {
-      boolean interruptible = false;
-      boolean checkRead = true;
-      boolean checkWrite = true;
-      try {
-        return poll(interruptible, checkRead, checkWrite);
-      } catch (InterruptedException e) {
-        throw new AssertionError(e);
-      }
-    }
-
-    @Nullable
-    @Override
-    public RespT pollUntilWritable(long timeout, TimeUnit unit) {
-      boolean interruptible = false;
-      boolean checkRead = true;
-      boolean checkWrite = true;
-      try {
-        return poll(timeout, unit, interruptible, checkRead, checkWrite);
-      } catch (InterruptedException e) {
-        throw new AssertionError(e);
-      }
-    }
-
-    @Override
-    public RespT pollInterruptiblyUntilWritable() throws InterruptedException {
-      boolean interruptible = true;
-      boolean checkRead = true;
-      boolean checkWrite = true;
-      return poll(interruptible, checkRead, checkWrite);
-    }
-
-    @Nullable
-    @Override
-    public RespT pollInterruptiblyUntilWritable(long timeout, TimeUnit unit)
-        throws InterruptedException {
-      boolean interruptible = true;
-      boolean checkRead = true;
-      boolean checkWrite = true;
-      return poll(timeout, unit, interruptible, checkRead, checkWrite);
-    }
-
-    @Override
-    public boolean offer(ReqT req) {
-      boolean interruptible = false;
-      boolean checkRead = false;
-      boolean checkWrite = false;
-      try {
-        return offer(req, interruptible, checkRead, checkWrite);
-      } catch (InterruptedException e) {
-        throw new AssertionError(e);
-      }
-    }
-
-    @Override
-    public boolean offer(ReqT req, long timeout, TimeUnit unit) {
-      boolean interruptible = false;
-      boolean checkRead = false;
-      boolean checkWrite = true;
-      try {
-        return offer(req, timeout, unit, interruptible, checkRead, checkWrite);
-      } catch (InterruptedException e) {
-        throw new AssertionError(e);
-      }
-    }
-
-    @Override
-    public boolean offerInterruptibly(ReqT req, long timeout, TimeUnit unit)
-        throws InterruptedException {
-      boolean interruptible = true;
-      boolean checkRead = false;
-      boolean checkWrite = true;
-      return offer(req, timeout, unit, interruptible, checkRead, checkWrite);
-    }
-
-    @Override
-    public void put(ReqT req) {
-      boolean interruptible = false;
-      boolean checkRead = false;
-      boolean checkWrite = true;
-      try {
-        if (!offer(req, interruptible, checkRead, checkWrite)) {
-          // Because offer checks that the call is writable and cannot timeout, the only way to
-          // reach this is by the status having been set.  This means if it could not write, the
-          // only way is if the call is over.  The status must be OK, or else an exception would
-          // have been thrown.
-          assert status != null && status.isOk();
-          throw new NoSuchElementException("call half closed");
-        }
-      } catch (InterruptedException e) {
-        throw new AssertionError(e);
-      }
-    }
-
-    @Override
-    public void putInterruptibly(ReqT req) throws InterruptedException {
-      boolean interruptible = false;
-      boolean checkRead = false;
-      boolean checkWrite = true;
-      if (!offer(req, interruptible, checkRead, checkWrite)) {
-        // Because offer checks that the call is writable and cannot timeout, the only way to
-        // reach this is by the status having been set.  This means if it could not write, the
-        // only way is if the call is over.  The status must be OK, or else an exception would
-        // have been thrown.
-        assert status != null && status.isOk();
-        throw new NoSuchElementException("call half closed");
-      }
-    }
-
-    @Override
-    public void putQueued(ReqT req) {
-      lock.lock();
-      try {
-        checkStatus();
-        call.sendMessage(req);
-      } finally {
-        lock.unlock();
-      }
-    }
-
-    @Override
-    public boolean offerUntilReadable(ReqT req) {
-      boolean interruptible = false;
-      boolean checkRead = true;
-      boolean checkWrite = true;
-      try {
-        return offer(req, interruptible, checkRead, checkWrite);
-      } catch (InterruptedException e) {
-        throw new AssertionError(e);
-      }
-    }
-
-    @Override
-    public boolean offerUntilReadable(ReqT req, long timeout, TimeUnit unit) {
-      boolean interruptible = false;
-      boolean checkRead = true;
-      boolean checkWrite = true;
-      try {
-        return offer(req, timeout, unit, interruptible, checkRead, checkWrite);
-      } catch (InterruptedException e) {
-        throw new AssertionError(e);
-      }
-    }
-
-    @Override
-    public boolean offerInterruptiblyUntilReadable(ReqT req) throws InterruptedException {
-      boolean interruptible = true;
-      boolean checkRead = true;
-      boolean checkWrite = true;
-      return offer(req, interruptible, checkRead, checkWrite);
-    }
-
-    @Override
-    public boolean offerInterruptiblyUntilReadable(ReqT req, long timeout, TimeUnit unit)
-        throws InterruptedException {
-      boolean interruptible = true;
-      boolean checkRead = true;
-      boolean checkWrite = true;
-      return offer(req, timeout, unit, interruptible, checkRead, checkWrite);
-    }
-
-    private boolean offer(
+    private boolean offerInternal(
         ReqT req, boolean interruptible, boolean checkRead, boolean checkWrite)
-            throws InterruptedException {
+        throws InterruptedException {
       boolean isReady;
       lock.lock();
       try {
@@ -683,7 +736,7 @@ public abstract class SyncCall<ReqT, RespT> {
       }
     }
 
-    private boolean offer(
+    private boolean offerInternal(
         ReqT req,
         long timeout,
         TimeUnit unit,
@@ -732,31 +785,9 @@ public abstract class SyncCall<ReqT, RespT> {
       }
     }
 
-    public void halfClose() {
-      call.halfClose();
-    }
-
-    public void cancel(@Nullable String message, @Nullable Throwable t) {
-      call.cancel(message, t);
-    }
-
-    @Override
-    public boolean isComplete() {
-      lock.lock();
-      try {
-        return status != null;
-      } finally {
-        lock.unlock();
-      }
-    }
-
-    @Nullable
-    public Status getStatus() {
-      lock.lock();
-      try {
-        return status;
-      } finally {
-        lock.unlock();
+    private void checkStatus() {
+      if (status != null && !status.isOk()) {
+        throw status.asRuntimeException(trailers);
       }
     }
   }
