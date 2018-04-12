@@ -21,6 +21,7 @@ import static io.grpc.internal.Channelz.id;
 import static org.junit.Assert.assertEquals;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Int64Value;
@@ -266,7 +267,7 @@ public final class ChannelzProtoUtilTest {
       .setName(socket.toString())
       .setSocketId(socket.getLogId().getId())
       .build();
-  private final SocketData socketDataNoSockOpts = SocketData
+  private final SocketData socketDataWithDataNoSockOpts = SocketData
       .newBuilder()
       .setStreamsStarted(1)
       .setLastLocalStreamCreatedTimestamp(Timestamps.fromNanos(2))
@@ -333,14 +334,55 @@ public final class ChannelzProtoUtilTest {
   }
 
   @Test
-  public void toSocket() throws Exception {
+  public void toSocket_withDataNoOptions() throws Exception {
     assertEquals(
         Socket
             .newBuilder()
             .setRef(socketRef)
             .setLocal(localAddress)
             .setRemote(remoteAddress)
-            .setData(socketDataNoSockOpts)
+            .setData(socketDataWithDataNoSockOpts)
+            .build(),
+        ChannelzProtoUtil.toSocket(socket));
+  }
+
+  @Test
+  public void toSocket_noDataWithOptions() throws Exception {
+    assertEquals(
+        Socket
+            .newBuilder()
+            .setRef(listenSocketRef)
+            .setLocal(listenAddress)
+            .setData(
+                SocketData
+                    .newBuilder()
+                    .addOption(
+                        SocketOption
+                            .newBuilder()
+                            .setName("listen_option")
+                            .setValue("listen_option_value").build())
+                    .build())
+            .build(),
+        ChannelzProtoUtil.toSocket(listenSocket));
+  }
+
+  @Test
+  public void toSocket_withDataWithOptions() throws Exception {
+    socket.socketOptions
+        = new SocketOptions(null, null, null, ImmutableMap.of("test_name", "test_value"));
+    assertEquals(
+        Socket
+            .newBuilder()
+            .setRef(socketRef)
+            .setLocal(localAddress)
+            .setRemote(remoteAddress)
+            .setData(
+                SocketData
+                    .newBuilder(socketDataWithDataNoSockOpts)
+                    .addOption(
+                        SocketOption.newBuilder()
+                            .setName("test_name").setValue("test_value").build())
+                    .build())
             .build(),
         ChannelzProtoUtil.toSocket(socket));
   }
@@ -349,7 +391,7 @@ public final class ChannelzProtoUtilTest {
   public void extractSocketData() throws Exception {
     // no options
     assertEquals(
-        socketDataNoSockOpts,
+        socketDataWithDataNoSockOpts,
         ChannelzProtoUtil.extractSocketData(socket.getStats().get()));
 
     // with options
@@ -358,7 +400,7 @@ public final class ChannelzProtoUtilTest {
         .setTcpInfo(channelzTcpInfo)
         .build();
     assertEquals(
-        socketDataNoSockOpts
+        socketDataWithDataNoSockOpts
             .toBuilder()
             .addOption(sockOptlinger10s)
             .addOption(socketOptionTcpInfo)
@@ -367,20 +409,9 @@ public final class ChannelzProtoUtilTest {
   }
 
   @Test
-  public void toSocket_listenSocket() {
-    assertEquals(
-        Socket
-            .newBuilder()
-            .setRef(listenSocketRef)
-            .setLocal(listenAddress)
-            .build(),
-        ChannelzProtoUtil.toSocket(listenSocket));
-  }
-
-  @Test
   public void toSocketData() throws Exception {
     assertEquals(
-        socketDataNoSockOpts
+        socketDataWithDataNoSockOpts
             .toBuilder()
             .build(),
         ChannelzProtoUtil.extractSocketData(socket.getStats().get()));
