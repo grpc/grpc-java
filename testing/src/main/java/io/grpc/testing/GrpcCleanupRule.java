@@ -16,6 +16,8 @@
 
 package io.grpc.testing;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
@@ -24,29 +26,49 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.NotThreadSafe;
-import org.junit.rules.ExternalResource;
 import org.junit.rules.TestRule;
+import org.junit.runner.Description;
+import org.junit.runners.model.Statement;
 
 /**
  * A JUnit {@link TestRule} that can register gRPC resources and manages its automatic release at
- * the end of the test.
+ * the end of the test. If any of the resources registered to the rule can not be successfully
+ * released, the test will fail.
  *
  * @since 1.12.0
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2488")
 @NotThreadSafe
-public final class GrpcCleanupRule extends ExternalResource {
+public final class GrpcCleanupRule implements TestRule {
 
   private final List<Resource> resources = new ArrayList<Resource>();
+  private long timeoutNanos = TimeUnit.SECONDS.toNanos(10L);
+  private long deadline;
 
-  private RuntimeException exception;
+  private Throwable firstException;
+
+  /**
+   * Sets a positive total time limit for the automatic resource cleanup. If any of the resources
+   * registered to the rule fails to be released in time, the test will fail.
+   *
+   * <p>Note that the resource cleanup duration may or may not be counted as part of the JUnit
+   * {@link org.junit.rules.Timeout Timeout} rule's test duration, depending on which rule is
+   * applied first.
+   *
+   * @return this
+   */
+  public GrpcCleanupRule withTimeout(long timeout, TimeUnit timeUnit) {
+    checkArgument(timeout > 0, "timeout should be positive");
+    timeoutNanos = timeUnit.toNanos(timeout);
+    return this;
+  }
 
   /**
    * Registers the given channel to the rule. Once registered, the channel will be automatically
    * shutdown at the end of the test.
    *
    * <p>This method need be properly synchronized when used in multiple threads. This method must
-   * not be used during test tear down.
+   * not be used during the test teardown.
    *
    * @return the input channel
    */
@@ -60,7 +82,7 @@ public final class GrpcCleanupRule extends ExternalResource {
    * shutdown at the end of the test.
    *
    * <p>This method need be properly synchronized when used in multiple threads. This method must
-   * not be used during test tear down.
+   * not be used during the test teardown.
    *
    * @return the input server
    */
@@ -69,33 +91,78 @@ public final class GrpcCleanupRule extends ExternalResource {
     return server;
   }
 
+  @Override
+  public Statement apply(final Statement base, Description description) {
+    return new Statement() {
+      @Override
+      public void evaluate() throws Throwable {
+        try {
+          base.evaluate();
+        } catch (Throwable t) {
+          firstException = t;
+        } finally {
+          teardown();
+        }
+
+        if (firstException != null) {
+          throw firstException;
+        }
+      }
+    };
+  }
+
   /**
    * Releases all the registered resources.
    */
-  @Override
-  protected void after() {
+  private void teardown() {
+    deadline = System.nanoTime() + timeoutNanos;
+
     for (int i = resources.size() - 1; i >= 0; i--) {
-      resources.get(i).cleanUp();
+      try {
+        resources.get(i).cleanUp();
+      } catch (Throwable t) {
+        if (firstException == null) {
+          firstException = t;
+        }
+      }
     }
 
     for (int i = resources.size() - 1; i >= 0; i--) {
-      resources.get(i).awaitCleanupDone();
+      try {
+        boolean released =
+            resources.get(i).awaitReleased(deadline - System.nanoTime(), TimeUnit.NANOSECONDS);
+        if (!released && firstException == null) {
+          firstException =
+              new AssertionError("Resource " + resources.get(i) + " can not be released in time");
+        }
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        if (firstException == null) {
+          firstException = e;
+        }
+      } catch (Throwable t) {
+        if (firstException == null) {
+          firstException = t;
+        }
+      }
     }
 
     resources.clear();
-
-    if (exception != null) {
-      throw exception;
-    }
   }
 
   private interface Resource {
     void cleanUp();
 
-    void awaitCleanupDone();
+    /**
+     * Returns true if the resource is released.
+     */
+    boolean awaitReleased(long duration, TimeUnit timeUnit) throws InterruptedException;
+
+    @Override
+    String toString();
   }
 
-  private final class ManagedChannelResource implements Resource {
+  private static final class ManagedChannelResource implements Resource {
     final ManagedChannel channel;
 
     ManagedChannelResource(ManagedChannel channel) {
@@ -104,28 +171,21 @@ public final class GrpcCleanupRule extends ExternalResource {
 
     @Override
     public void cleanUp() {
-      channel.shutdown();
+      channel.shutdownNow();
     }
 
     @Override
-    public void awaitCleanupDone() {
-      if (exception != null) {
-        channel.shutdownNow();
-        return;
-      }
+    public boolean awaitReleased(long duration, TimeUnit timeUnit) throws InterruptedException {
+      return channel.awaitTermination(duration, timeUnit);
+    }
 
-      try {
-        channel.awaitTermination(1, TimeUnit.MINUTES);
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        exception = new RuntimeException("Channel " + channel + " shutdown was interrupted", e);
-      } finally {
-        channel.shutdownNow();
-      }
+    @Override
+    public String toString() {
+      return channel.toString();
     }
   }
 
-  private final class ServerResource implements Resource {
+  private static final class ServerResource implements Resource {
     final Server server;
 
     ServerResource(Server server) {
@@ -134,24 +194,17 @@ public final class GrpcCleanupRule extends ExternalResource {
 
     @Override
     public void cleanUp() {
-      server.shutdown();
+      server.shutdownNow();
     }
 
     @Override
-    public void awaitCleanupDone() {
-      if (exception != null) {
-        server.shutdownNow();
-        return;
-      }
+    public boolean awaitReleased(long duration, TimeUnit timeUnit) throws InterruptedException {
+      return server.awaitTermination(duration, timeUnit);
+    }
 
-      try {
-        server.awaitTermination(1, TimeUnit.MINUTES);
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        exception = new RuntimeException("Server " + server + " shutdown was interrupted", e);
-      } finally {
-        server.shutdownNow();
-      }
+    @Override
+    public String toString() {
+      return server.toString();
     }
   }
 }
