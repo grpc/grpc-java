@@ -16,6 +16,7 @@
 
 package io.grpc.testing;
 
+import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import java.util.ArrayList;
@@ -29,9 +30,12 @@ import org.junit.rules.TestRule;
 /**
  * A JUnit {@link TestRule} that can register gRPC resources and manages its automatic release at
  * the end of the test.
+ *
+ * @since 1.12.0
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/2488")
 @NotThreadSafe
-public final class GrpcResourceCleanupRule extends ExternalResource {
+public final class GrpcCleanupRule extends ExternalResource {
 
   private final List<Resource> resources = new ArrayList<Resource>();
 
