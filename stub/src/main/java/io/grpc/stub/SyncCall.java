@@ -35,6 +35,20 @@ public abstract class SyncCall<ReqT, RespT> {
 
   /**
    * Tries to get a response from the remote endpoint, waiting up until the given timeout.
+   * Unlike {@link #pollInterruptibly(long, TimeUnit)}, if the calling thread is interrupted, it
+   * will be ignored.
+   *
+   * @param timeout how long to wait before returning, in units of {@code unit}
+   * @param unit a {@link TimeUnit} determining how to interpret {@code timeout}.
+   * @return A response or {@code null} if not available.  Always returns {@code null} after the
+   *         remote endpoint has half-closed.
+   * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
+   */
+  @Nullable
+  public abstract RespT poll(long timeout, TimeUnit unit);
+
+  /**
+   * Tries to get a response from the remote endpoint, waiting up until the given timeout.
    *
    * @param timeout how long to wait before returning, in units of {@code unit}
    * @param unit a {@link TimeUnit} determining how to interpret {@code timeout}.
@@ -44,21 +58,7 @@ public abstract class SyncCall<ReqT, RespT> {
    * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
    */
   @Nullable
-  public abstract RespT poll(long timeout, TimeUnit unit) throws InterruptedException;
-
-  /**
-   * Tries to get a response from the remote endpoint, waiting up until the given timeout.
-   * Unlike {@link #poll(long, TimeUnit)}, if the calling thread is interrupted, it will be
-   * ignored.
-   *
-   * @param timeout how long to wait before returning, in units of {@code unit}
-   * @param unit a {@link TimeUnit} determining how to interpret {@code timeout}.
-   * @return A response or {@code null} if not available.  Always returns {@code null} after the
-   *         remote endpoint has half-closed.
-   * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
-   */
-  @Nullable
-  public abstract RespT pollUninterruptibly(long timeout, TimeUnit unit);
+  public abstract RespT pollInterruptibly(long timeout, TimeUnit unit) throws InterruptedException;
 
   /**
    * Returns a response from the remote endpoint, waiting until one is available.
@@ -67,16 +67,46 @@ public abstract class SyncCall<ReqT, RespT> {
    * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
    * @throws InterruptedException if interrupted while waiting
    */
-  public abstract RespT take() throws InterruptedException;
+  public abstract RespT takeInterruptibly() throws InterruptedException;
 
   /**
    * Returns a response from the remote endpoint, waiting until one is available.  Unlike
-   * {@link #take()}, if the calling thread is interrupted, it will be ignored.
+   * {@link #takeInterruptibly()}, if the calling thread is interrupted, it will be ignored.
    *
    * @throws NoSuchElementException if the remote endpoint has half-closed.
    * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
    */
-  public abstract RespT takeUninterruptibly();
+  public abstract RespT take();
+
+  /**
+   * Tries to get a response from the remote endpoint, until the stub is writable.  If there are
+   * messages available, this method will return a message even if the stub is writable.  Unlike
+   * {@link #pollInterruptiblyUntilWritable()}, if the calling thread is interrupted, it will be
+   * ignored.
+   *
+   * @return A response or {@code null} if not available.  Always returns {@code null} after the
+   *         remote endpoint has half-closed.
+   * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
+   */
+  @Nullable
+  public abstract RespT pollUntilWritable();
+
+  /**
+   * Tries to get a response from the remote endpoint, waiting up until the given timeout, or
+   * until the stub is writable.  If there are messages available, this method will return a
+   * message even if the stub is writable.  Unlike
+   * {@link #pollInterruptiblyUntilWritable(long, TimeUnit)}, if the calling thread is interrupted,
+   * it will be ignored.
+   *
+   * @param timeout how long to wait before returning, in units of {@code unit}
+   * @param unit a {@link TimeUnit} determining how to interpret {@code timeout}.
+   * @return A response or {@code null} if not available.  Always returns {@code null} after the
+   *         remote endpoint has half-closed.
+   * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
+   */
+  @Nullable
+  public abstract RespT pollUntilWritable(long timeout, TimeUnit unit);
+
 
   /**
    * Tries to get a response from the remote endpoint, until the stub is writable.  If there are
@@ -88,7 +118,7 @@ public abstract class SyncCall<ReqT, RespT> {
    * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
    */
   @Nullable
-  public abstract RespT pollUntilWritable() throws InterruptedException;
+  public abstract RespT pollInterruptiblyUntilWritable() throws InterruptedException;
 
   /**
    * Tries to get a response from the remote endpoint, waiting up until the given timeout, or
@@ -103,34 +133,8 @@ public abstract class SyncCall<ReqT, RespT> {
    * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
    */
   @Nullable
-  public abstract RespT pollUntilWritable(long timeout, TimeUnit unit) throws InterruptedException;
-
-  /**
-   * Tries to get a response from the remote endpoint, until the stub is writable.  If there are
-   * messages available, this method will return a message even if the stub is writable.  Unlike
-   * {@link #pollUntilWritable()}, if the calling thread is interrupted, it will be ignored.
-   *
-   * @return A response or {@code null} if not available.  Always returns {@code null} after the
-   *         remote endpoint has half-closed.
-   * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
-   */
-  @Nullable
-  public abstract RespT pollUninterruptiblyUntilWritable();
-
-  /**
-   * Tries to get a response from the remote endpoint, waiting up until the given timeout, or
-   * until the stub is writable.  If there are messages available, this method will return a
-   * message even if the stub is writable.  Unlike {@link #pollUntilWritable(long, TimeUnit)}, if
-   * the calling thread is interrupted, it will be ignored.
-   *
-   * @param timeout how long to wait before returning, in units of {@code unit}
-   * @param unit a {@link TimeUnit} determining how to interpret {@code timeout}.
-   * @return A response or {@code null} if not available.  Always returns {@code null} after the
-   *         remote endpoint has half-closed.
-   * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
-   */
-  @Nullable
-  public abstract RespT pollUninterruptiblyUntilWritable(long timeout, TimeUnit unit);
+  public abstract RespT pollInterruptiblyUntilWritable(long timeout, TimeUnit unit)
+      throws InterruptedException;
 
   /**
    * Attempts to send a request message if it would not result in excessive buffering.
@@ -143,6 +147,19 @@ public abstract class SyncCall<ReqT, RespT> {
 
   /**
    * Attempts to send a request message if it would not result in excessive buffering.  Waits up
+   * to the given timeout.  Unlike {@link #offerInterruptibly(Object, long, TimeUnit)}, if the calling thread
+   * is interrupted, it will be ignored.
+   *
+   * @param req the message to send
+   * @param timeout how long to wait before returning, in units of {@code unit}
+   * @param unit a {@link TimeUnit} determining how to interpret {@code timeout}.
+   * @return {@code true} if the message was enqueued.
+   * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
+   */
+  public abstract boolean offer(ReqT req, long timeout, TimeUnit unit);
+
+  /**
+   * Attempts to send a request message if it would not result in excessive buffering.  Waits up
    * to the given timeout.
    *
    * @param req the message to send
@@ -152,20 +169,18 @@ public abstract class SyncCall<ReqT, RespT> {
    * @throws InterruptedException if interrupted while waiting.
    * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
    */
-  public abstract boolean offer(ReqT req, long timeout, TimeUnit unit) throws InterruptedException;
+  public abstract boolean offerInterruptibly(ReqT req, long timeout, TimeUnit unit)
+      throws InterruptedException;
 
   /**
-   * Attempts to send a request message if it would not result in excessive buffering.  Waits up
-   * to the given timeout.  Unlike {@link #offer(Object, long, TimeUnit)}, if the calling thread
-   * is interrupted, it will be ignored.
+   * Attempts to send a request message, blocking until there would not be excessive buffering.
+   * Unlike {@link #putInterruptibly(Object)} if the calling thread is interrupted, it will be
+   * ignored.
    *
    * @param req the message to send
-   * @param timeout how long to wait before returning, in units of {@code unit}
-   * @param unit a {@link TimeUnit} determining how to interpret {@code timeout}.
-   * @return {@code true} if the message was enqueued.
    * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
    */
-  public abstract boolean offerUninterruptibly(ReqT req, long timeout, TimeUnit unit);
+  public abstract void put(ReqT req);
 
   /**
    * Attempts to send a request message, blocking until there would not be excessive buffering.
@@ -174,16 +189,7 @@ public abstract class SyncCall<ReqT, RespT> {
    * @throws InterruptedException if interrupted while waiting.
    * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
    */
-  public abstract void put(ReqT req) throws InterruptedException;
-
-  /**
-   * Attempts to send a request message, blocking until there would not be excessive buffering.
-   * Unlike {@link #put(Object)} if the calling thread is interrupted, it will be ignored.
-   *
-   * @param req the message to send
-   * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
-   */
-  public abstract void putUninterruptibly(ReqT req);
+  public abstract void putInterruptibly(ReqT req) throws InterruptedException;
 
   /**
    * Attempts to send a request message, buffering the message if it cannot be sent immediately.
@@ -193,6 +199,34 @@ public abstract class SyncCall<ReqT, RespT> {
    * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
    */
   public abstract void putQueued(ReqT req);
+
+  /**
+   * Attempts to send a request message, blocking until there would not be excessive buffering,
+   * or until the stub becomes readable.   If the message can be sent and the stub is readable,
+   * the message will always be sent.  Unlike
+   * {@link #offerInterruptiblyUntilReadable(Object, long, TimeUnit)}, if the calling thread is
+   * interrupted, it will be ignored.
+   *
+   * @param req the message to send
+   * @return {@code true} if the message was enqueued.
+   * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
+   */
+  public abstract boolean offerUntilReadable(ReqT req);
+
+  /**
+   * Attempts to send a request message, blocking until there would not be excessive buffering.
+   * Waits up to the given timeout or if the stub becomes readable.   If the message can be sent
+   * and the stub is readable, the message will always be sent.  Unlike
+   * {@link #offerInterruptiblyUntilReadable(Object, long, TimeUnit)}, if the calling thread is interrupted,
+   * it will be ignored.
+   *
+   * @param req the message to send
+   * @param timeout how long to wait before returning, in units of {@code unit}
+   * @param unit a {@link TimeUnit} determining how to interpret {@code timeout}.
+   * @return {@code true} if the message was enqueued.
+   * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
+   */
+  public abstract boolean offerUntilReadable(ReqT req, long timeout, TimeUnit unit);
 
   /**
    * Attempts to send a request message, blocking until there would not be excessive buffering.
@@ -206,7 +240,7 @@ public abstract class SyncCall<ReqT, RespT> {
    * @throws InterruptedException if interrupted while waiting.
    * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
    */
-  public abstract boolean offerUntilReadable(ReqT req, long timeout, TimeUnit unit)
+  public abstract boolean offerInterruptiblyUntilReadable(ReqT req, long timeout, TimeUnit unit)
       throws InterruptedException;
 
   /**
@@ -221,36 +255,7 @@ public abstract class SyncCall<ReqT, RespT> {
    * @throws InterruptedException if interrupted while waiting.
    * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
    */
-  public abstract boolean offerUntilReadable(ReqT req) throws InterruptedException;
-
-  /**
-   * Attempts to send a request message, blocking until there would not be excessive buffering,
-   * or until the stub becomes readable.   If the message can be sent and the stub is readable,
-   * the message will always be sent.  Unlike {@link #offerUntilReadable(Object, long, TimeUnit)},
-   * if the calling thread is interrupted, it will be ignored.
-   *
-   * @param req the message to send
-   * @return {@code true} if the message was enqueued.
-   * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
-   */
-  public abstract boolean offerUninterruptiblyUntilReadable(ReqT req);
-
-  /**
-   * Attempts to send a request message, blocking until there would not be excessive buffering.
-   * Waits up to the given timeout or if the stub becomes readable.   If the message can be sent
-   * and the stub is readable, the message will always be sent.  Unlike
-   * {@link #offerUntilReadable(Object, long, TimeUnit)}, if the calling thread is interrupted,
-   * it will be ignored.
-   *
-   * @param req the message to send
-   * @param timeout how long to wait before returning, in units of {@code unit}
-   * @param unit a {@link TimeUnit} determining how to interpret {@code timeout}.
-   * @return {@code true} if the message was enqueued.
-   * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
-   */
-  public abstract boolean offerUninterruptiblyUntilReadable(ReqT req, long timeout, TimeUnit unit);
-
-
+  public abstract boolean offerInterruptiblyUntilReadable(ReqT req) throws InterruptedException;
 
   public abstract boolean isComplete();
 
@@ -341,7 +346,7 @@ public abstract class SyncCall<ReqT, RespT> {
 
     @Nullable
     @Override
-    public RespT poll(long timeout, TimeUnit unit) throws InterruptedException {
+    public RespT pollInterruptibly(long timeout, TimeUnit unit) throws InterruptedException {
       boolean interruptible = true;
       boolean checkRead = true;
       boolean checkWrite = false;
@@ -426,7 +431,7 @@ public abstract class SyncCall<ReqT, RespT> {
 
     @Nullable
     @Override
-    public RespT pollUninterruptibly(long timeout, TimeUnit unit) {
+    public RespT poll(long timeout, TimeUnit unit) {
       boolean interruptible = false;
       boolean checkRead = true;
       boolean checkWrite = false;
@@ -438,7 +443,7 @@ public abstract class SyncCall<ReqT, RespT> {
     }
 
     @Override
-    public RespT take() throws InterruptedException {
+    public RespT takeInterruptibly() throws InterruptedException {
       boolean interruptible = true;
       boolean checkRead = true;
       boolean checkWrite = false;
@@ -451,7 +456,7 @@ public abstract class SyncCall<ReqT, RespT> {
     }
 
     @Override
-    public RespT takeUninterruptibly() {
+    public RespT take() {
       boolean interruptible = false;
       boolean checkRead = true;
       boolean checkWrite = false;
@@ -469,25 +474,8 @@ public abstract class SyncCall<ReqT, RespT> {
     }
 
     @Override
-    public RespT pollUntilWritable() throws InterruptedException {
-      boolean interruptible = true;
-      boolean checkRead = true;
-      boolean checkWrite = true;
-      return poll(interruptible, checkRead, checkWrite);
-    }
-
     @Nullable
-    @Override
-    public RespT pollUntilWritable(long timeout, TimeUnit unit) throws InterruptedException {
-      boolean interruptible = true;
-      boolean checkRead = true;
-      boolean checkWrite = true;
-      return poll(timeout, unit, interruptible, checkRead, checkWrite);
-    }
-
-    @Override
-    @Nullable
-    public RespT pollUninterruptiblyUntilWritable() {
+    public RespT pollUntilWritable() {
       boolean interruptible = false;
       boolean checkRead = true;
       boolean checkWrite = true;
@@ -500,7 +488,7 @@ public abstract class SyncCall<ReqT, RespT> {
 
     @Nullable
     @Override
-    public RespT pollUninterruptiblyUntilWritable(long timeout, TimeUnit unit) {
+    public RespT pollUntilWritable(long timeout, TimeUnit unit) {
       boolean interruptible = false;
       boolean checkRead = true;
       boolean checkWrite = true;
@@ -510,6 +498,25 @@ public abstract class SyncCall<ReqT, RespT> {
         throw new AssertionError(e);
       }
     }
+
+    @Override
+    public RespT pollInterruptiblyUntilWritable() throws InterruptedException {
+      boolean interruptible = true;
+      boolean checkRead = true;
+      boolean checkWrite = true;
+      return poll(interruptible, checkRead, checkWrite);
+    }
+
+    @Nullable
+    @Override
+    public RespT pollInterruptiblyUntilWritable(long timeout, TimeUnit unit) throws InterruptedException {
+      boolean interruptible = true;
+      boolean checkRead = true;
+      boolean checkWrite = true;
+      return poll(timeout, unit, interruptible, checkRead, checkWrite);
+    }
+
+
 
     @Override
     public boolean offer(ReqT req) {
@@ -527,7 +534,14 @@ public abstract class SyncCall<ReqT, RespT> {
     }
 
     @Override
-    public boolean offer(ReqT req, long timeout, TimeUnit unit) throws InterruptedException {
+    public boolean offer(ReqT req, long timeout, TimeUnit unit) {
+      return false;
+    }
+
+
+    @Override
+    public boolean offerInterruptibly(ReqT req, long timeout, TimeUnit unit)
+        throws InterruptedException {
       long remainingNanos = unit.toNanos(timeout);
       long end = System.nanoTime() + remainingNanos;
       boolean isReady;
@@ -555,43 +569,36 @@ public abstract class SyncCall<ReqT, RespT> {
     }
 
     @Override
-    public boolean offerUninterruptibly(ReqT req, long timeout, TimeUnit unit) {
+    public void put(ReqT req) {
+    }
+
+    @Override
+    public void putInterruptibly(ReqT req) throws InterruptedException {
+    }
+
+
+    @Override
+    public void putQueued(ReqT req) {
+    }
+
+    @Override
+    public boolean offerUntilReadable(ReqT req) {
       return false;
     }
 
     @Override
-    public void put(ReqT req) throws InterruptedException {
-
+    public boolean offerUntilReadable(ReqT req, long timeout, TimeUnit unit) {
+      return false;
     }
 
     @Override
-    public void putUninterruptibly(ReqT req) {
-
-    }
-
-    @Override
-    public void putQueued(ReqT req) {
-
-    }
-
-    @Override
-    public boolean offerUntilReadable(ReqT req, long timeout, TimeUnit unit)
+    public boolean offerInterruptiblyUntilReadable(ReqT req, long timeout, TimeUnit unit)
         throws InterruptedException {
       return false;
     }
 
     @Override
-    public boolean offerUntilReadable(ReqT req) throws InterruptedException {
-      return false;
-    }
-
-    @Override
-    public boolean offerUninterruptiblyUntilReadable(ReqT req) {
-      return false;
-    }
-
-    @Override
-    public boolean offerUninterruptiblyUntilReadable(ReqT req, long timeout, TimeUnit unit) {
+    public boolean offerInterruptiblyUntilReadable(ReqT req) throws InterruptedException {
       return false;
     }
 
