@@ -17,6 +17,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.GuardedBy;
 
 @CheckReturnValue
 @DoNotMock("or else!")
@@ -270,8 +271,11 @@ public abstract class SyncCall<ReqT, RespT> {
   public static final class SyncClientCall<ReqT, RespT> extends SyncCall<ReqT, RespT> {
 
     private final ClientCall<ReqT, RespT> call;
+    @GuardedBy("lock")
     private final Queue<RespT> responses = new ArrayDeque<RespT>();
+    @GuardedBy("lock")
     private Status status;
+    @GuardedBy("lock")
     private Metadata trailers;
 
     private final Lock lock = new ReentrantLock();
@@ -337,6 +341,7 @@ public abstract class SyncCall<ReqT, RespT> {
         throw new AssertionError(e);
       }
     }
+
 
     private void checkStatus() {
       if (status != null && !status.isOk()) {
@@ -449,6 +454,10 @@ public abstract class SyncCall<ReqT, RespT> {
       boolean checkWrite = false;
       RespT response = poll(interruptible, checkRead, checkWrite);
       if (response == null) {
+        // Because poll checks that the call is readable and cannot timeout, the only way to reach
+        // this is by the status having been set.  This means if there is no response, the only way
+        // is if the call is over.  The status must be OK, or else an exception would have been
+        // thrown.
         assert status != null && status.isOk();
         throw new NoSuchElementException("call half closed");
       }
@@ -466,7 +475,12 @@ public abstract class SyncCall<ReqT, RespT> {
       } catch (InterruptedException e) {
         throw new AssertionError(e);
       }
+
       if (response == null) {
+        // Because poll checks that the call is readable and cannot timeout, the only way to reach
+        // this is by the status having been set.  This means if there is no response, the only way
+        // is if the call is over.  The status must be OK, or else an exception would have been
+        // thrown.
         assert status != null && status.isOk();
         throw new NoSuchElementException("call half closed");
       }
@@ -509,120 +523,147 @@ public abstract class SyncCall<ReqT, RespT> {
 
     @Nullable
     @Override
-    public RespT pollInterruptiblyUntilWritable(long timeout, TimeUnit unit) throws InterruptedException {
+    public RespT pollInterruptiblyUntilWritable(long timeout, TimeUnit unit)
+        throws InterruptedException {
       boolean interruptible = true;
       boolean checkRead = true;
       boolean checkWrite = true;
       return poll(timeout, unit, interruptible, checkRead, checkWrite);
     }
 
-
-
     @Override
     public boolean offer(ReqT req) {
-      lock.lock();
+      boolean interruptible = false;
+      boolean checkRead = false;
+      boolean checkWrite = false;
       try {
-        checkStatus();
-        if (call.isReady() && status == null) {
-          call.sendMessage(req);
-          return true;
-        }
-        return false;
-      } finally {
-        lock.unlock();
+        return offer(req, interruptible, checkRead, checkWrite);
+      } catch (InterruptedException e) {
+        throw new AssertionError(e);
       }
     }
 
     @Override
     public boolean offer(ReqT req, long timeout, TimeUnit unit) {
-      return false;
+      boolean interruptible = false;
+      boolean checkRead = false;
+      boolean checkWrite = true;
+      try {
+        return offer(req, timeout, unit, interruptible, checkRead, checkWrite);
+      } catch (InterruptedException e) {
+        throw new AssertionError(e);
+      }
     }
-
 
     @Override
     public boolean offerInterruptibly(ReqT req, long timeout, TimeUnit unit)
         throws InterruptedException {
-      long remainingNanos = unit.toNanos(timeout);
-      long end = System.nanoTime() + remainingNanos;
-      boolean isReady;
+      boolean interruptible = true;
+      boolean checkRead = false;
+      boolean checkWrite = true;
+      return offer(req, timeout, unit, interruptible, checkRead, checkWrite);
+    }
+
+    @Override
+    public void put(ReqT req) {
+      boolean interruptible = false;
+      boolean checkRead = false;
+      boolean checkWrite = true;
+      try {
+        if (!offer(req, interruptible, checkRead, checkWrite)) {
+          // Because offer checks that the call is writable and cannot timeout, the only way to
+          // reach this is by the status having been set.  This means if it could not write, the
+          // only way is if the call is over.  The status must be OK, or else an exception would
+          // have been thrown.
+          assert status != null && status.isOk();
+          throw new NoSuchElementException("call half closed");
+        }
+      } catch (InterruptedException e) {
+        throw new AssertionError(e);
+      }
+    }
+
+    @Override
+    public void putInterruptibly(ReqT req) throws InterruptedException {
+      boolean interruptible = false;
+      boolean checkRead = false;
+      boolean checkWrite = true;
+      if (!offer(req, interruptible, checkRead, checkWrite)) {
+        // Because offer checks that the call is writable and cannot timeout, the only way to
+        // reach this is by the status having been set.  This means if it could not write, the
+        // only way is if the call is over.  The status must be OK, or else an exception would
+        // have been thrown.
+        assert status != null && status.isOk();
+        throw new NoSuchElementException("call half closed");
+      }
+    }
+
+    @Override
+    public void putQueued(ReqT req) {
       lock.lock();
       try {
         checkStatus();
-        while (true) {
-          if ((isReady = call.isReady()) || status != null) {
-            break;
-          }
-          if (!cond.await(remainingNanos, TimeUnit.NANOSECONDS)) {
-            return false;
-          }
-          remainingNanos = end - System.nanoTime();
-        }
-        checkStatus();
-        if (isReady) {
-          call.sendMessage(req);
-          return true;
-        }
-        return false;
+        call.sendMessage(req);
       } finally {
         lock.unlock();
       }
     }
 
     @Override
-    public void put(ReqT req) {
-    }
-
-    @Override
-    public void putInterruptibly(ReqT req) throws InterruptedException {
-    }
-
-
-    @Override
-    public void putQueued(ReqT req) {
-    }
-
-    @Override
     public boolean offerUntilReadable(ReqT req) {
-      return false;
+      boolean interruptible = false;
+      boolean checkRead = true;
+      boolean checkWrite = true;
+      try {
+        return offer(req, interruptible, checkRead, checkWrite);
+      } catch (InterruptedException e) {
+        throw new AssertionError(e);
+      }
     }
 
     @Override
     public boolean offerUntilReadable(ReqT req, long timeout, TimeUnit unit) {
-      return false;
+      boolean interruptible = false;
+      boolean checkRead = true;
+      boolean checkWrite = true;
+      try {
+        return offer(req, timeout, unit, interruptible, checkRead, checkWrite);
+      } catch (InterruptedException e) {
+        throw new AssertionError(e);
+      }
+    }
+
+    @Override
+    public boolean offerInterruptiblyUntilReadable(ReqT req) throws InterruptedException {
+      boolean interruptible = true;
+      boolean checkRead = true;
+      boolean checkWrite = true;
+      return offer(req, interruptible, checkRead, checkWrite);
     }
 
     @Override
     public boolean offerInterruptiblyUntilReadable(ReqT req, long timeout, TimeUnit unit)
         throws InterruptedException {
-      return false;
+      boolean interruptible = true;
+      boolean checkRead = true;
+      boolean checkWrite = true;
+      return offer(req, timeout, unit, interruptible, checkRead, checkWrite);
     }
 
-    @Override
-    public boolean offerInterruptiblyUntilReadable(ReqT req) throws InterruptedException {
-      return false;
-    }
-
-    private final boolean offer(
+    private boolean offer(
         ReqT req, boolean interruptible, boolean checkRead, boolean checkWrite)
             throws InterruptedException {
+      boolean isReady;
       lock.lock();
       try {
         while (true) {
-          if (status != null) {
-            if (status.isOk()) {
-              return false;
-            } else {
-              throw status.asRuntimeException(trailers);
-            }
-          }
+          isReady = call.isReady();
           if (!checkRead && !checkWrite) {
-            call.sendMessage(req);
-            return true;
-          } else if (checkWrite && call.isReady()) {
-            call.sendMessage(req);
-            return true;
-          } else if (checkRead && !responses.isEmpty()) {
-            return false;
+            break;
+          } else if (checkWrite && (isReady || status != null)) {
+            break;
+          } else if (checkRead && (!responses.isEmpty() || status != null)) {
+            break;
           }
           if (interruptible) {
             cond.await();
@@ -630,8 +671,64 @@ public abstract class SyncCall<ReqT, RespT> {
             cond.awaitUninterruptibly();
           }
         }
+        checkStatus();
+        if (isReady) {
+          assert status == null;
+          call.sendMessage(req);
+          return true;
+        }
+        return false;
       } finally {
         lock.unlock();
+      }
+    }
+
+    private boolean offer(
+        ReqT req,
+        long timeout,
+        TimeUnit unit,
+        boolean interruptible,
+        boolean checkRead,
+        boolean checkWrite) throws InterruptedException {
+      long remainingNanos = unit.toNanos(timeout);
+      long end = System.nanoTime() + remainingNanos;
+      boolean interrupted = true;
+      boolean isReady;
+      lock.lock();
+      try {
+        while (true) {
+          isReady = call.isReady();
+          if (!checkRead && !checkWrite) {
+            break;
+          } else if (checkWrite && (isReady || status != null)) {
+            break;
+          } else if (checkRead && (!responses.isEmpty() || status != null)) {
+            break;
+          }
+          try {
+            if (!cond.await(remainingNanos, TimeUnit.NANOSECONDS)) {
+              return false;
+            }
+          } catch (InterruptedException e) {
+            if (interruptible) {
+              throw e;
+            }
+            interrupted = true;
+          }
+          remainingNanos = end - System.nanoTime();
+        }
+        checkStatus();
+        if (isReady) {
+          assert status == null;
+          call.sendMessage(req);
+          return true;
+        }
+        return false;
+      } finally {
+        lock.unlock();
+        if (interrupted) {
+          Thread.currentThread().interrupt();
+        }
       }
     }
 
