@@ -229,8 +229,8 @@ public abstract class ClientCall<ReqT, RespT> {
    * override the method.
    *
    * <p>If the type of the call is either {@link MethodDescriptor.MethodType#UNARY} or
-   * {@link MethodDescriptor.MethodType#SERVER_STREAMING}, this method may return false. Calls that
-   * send exactly one message should not check this method.
+   * {@link MethodDescriptor.MethodType#SERVER_STREAMING}, this method may persistently return
+   * false. Calls that send exactly one message should not check this method.
    */
   public boolean isReady() {
     return true;
