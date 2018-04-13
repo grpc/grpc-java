@@ -31,7 +31,8 @@ public final class InternalNettySocketSupport {
     InternalNativeSocketOptions getNativeSocketOptions(io.netty.channel.Channel ch);
   }
 
-  public static class InternalNativeSocketOptions extends NettySocketSupport.NativeSocketOptions {
+  public static final class InternalNativeSocketOptions
+      extends NettySocketSupport.NativeSocketOptions {
     public InternalNativeSocketOptions(TcpInfo tcpInfo, Map<String, String> otherInfo) {
       super(tcpInfo, otherInfo);
     }
