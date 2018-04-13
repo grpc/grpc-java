@@ -45,7 +45,9 @@ public abstract class SyncCall<ReqT, RespT> {
   SyncCall() {}
 
   /**
-   * Tries to get a response from the remote endpoint.
+   * Tries to get a response from the remote endpoint, waiting until a message is available.  If
+   * the call is completed, or the remote endpoint half-closes, this may return null.  Unlike
+   * {@link #pollInterruptibly()}, if the calling thread is interrupted, it will be ignored.
    *
    * @return A response or {@code null} if not available.
    * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
@@ -68,6 +70,18 @@ public abstract class SyncCall<ReqT, RespT> {
   public abstract RespT poll(long timeout, TimeUnit unit);
 
   /**
+   * Tries to get a response from the remote endpoint, waiting until a message is available.  If
+   * the call is completed, or the remote endpoint half-closes, this may return null.
+   *
+   * @return A response or {@code null} if not available.  Always returns {@code null} after the
+   *         remote endpoint has half-closed.
+   * @throws InterruptedException if interrupted while waiting.
+   * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
+   */
+  @Nullable
+  public abstract RespT pollInterruptibly() throws InterruptedException;
+
+  /**
    * Tries to get a response from the remote endpoint, waiting up until the given timeout.
    *
    * @param timeout how long to wait before returning, in units of {@code unit}
@@ -79,6 +93,17 @@ public abstract class SyncCall<ReqT, RespT> {
    */
   @Nullable
   public abstract RespT pollInterruptibly(long timeout, TimeUnit unit) throws InterruptedException;
+
+  /**
+   * Tries to get a response from the remote endpoint, waiting until a message is available.  If
+   * the call is completed, or the remote endpoint half-closes, this may return null.  Unlike
+   * {@link #pollInterruptibly()}, if the calling thread is interrupted, it will be ignored.
+   *
+   * @return A response or {@code null} if not available.
+   * @throws StatusRuntimeException if the RPC has completed with a non-OK {@link Status}.
+   */
+  @Nullable
+  public abstract RespT pollNow();
 
   /**
    * Returns a response from the remote endpoint, waiting until one is available.

@@ -20,11 +20,14 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Message;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.examples.routeguide.RouteGuideGrpc.RouteGuideBlockingStub;
 import io.grpc.examples.routeguide.RouteGuideGrpc.RouteGuideStub;
 import io.grpc.stub.StreamObserver;
+import io.grpc.stub.SyncCall;
+import io.grpc.stub.SyncCall.SyncClientCall;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
@@ -108,6 +111,50 @@ public class RouteGuideClient {
         Rectangle.newBuilder()
             .setLo(Point.newBuilder().setLatitude(lowLat).setLongitude(lowLon).build())
             .setHi(Point.newBuilder().setLatitude(hiLat).setLongitude(hiLon).build()).build();
+    Iterator<Feature> features;
+    try {
+      features = blockingStub.listFeatures(request);
+      for (int i = 1; features.hasNext(); i++) {
+        Feature feature = features.next();
+        info("Result #" + i + ": {0}", feature);
+        if (testHelper != null) {
+          testHelper.onMessage(feature);
+        }
+      }
+    } catch (StatusRuntimeException e) {
+      warning("RPC failed: {0}", e.getStatus());
+      if (testHelper != null) {
+        testHelper.onRpcError(e);
+      }
+    }
+  }
+
+  /**
+   * Blocking server-streaming example. Calls listFeatures with a rectangle of interest. Prints each
+   * response feature as it arrives.
+   */
+  public void listFeaturesSync(int lowLat, int lowLon, int hiLat, int hiLon) {
+    info("*** ListFeatures: lowLat={0} lowLon={1} hiLat={2} hiLon={3}", lowLat, lowLon, hiLat,
+        hiLon);
+
+    Rectangle request =
+        Rectangle.newBuilder()
+            .setLo(Point.newBuilder().setLatitude(lowLat).setLongitude(lowLon).build())
+            .setHi(Point.newBuilder().setLatitude(hiLat).setLongitude(hiLon).build()).build();
+
+    SyncClientCall<Rectangle, Feature> call =
+        SyncCall.call(
+            blockingStub.getChannel(),
+            RouteGuideGrpc.getListFeaturesMethod(),
+            blockingStub.getCallOptions());
+
+    call.put(request);
+    while (!call.isComplete()) {
+      call.off
+    }
+
+    
+    
     Iterator<Feature> features;
     try {
       features = blockingStub.listFeatures(request);
