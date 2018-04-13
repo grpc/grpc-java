@@ -1986,7 +1986,7 @@ public class OkHttpClientTransportTest {
 
     @Override
     public SocketAddress getLocalSocketAddress() {
-      return InetSocketAddress.createUnresolved("127.0.0.1", 4000);
+      return InetSocketAddress.createUnresolved("localhost", 4000);
     }
   }
 

@@ -185,9 +185,9 @@ final class ChannelzProtoUtil {
           .setLastMessageReceivedTimestamp(
               Timestamps.fromNanos(s.lastMessageReceivedTimeNanos))
           .setLocalFlowControlWindow(
-              Int64Value.newBuilder().setValue(s.localFlowControlWindow).build())
+              Int64Value.of(s.localFlowControlWindow))
           .setRemoteFlowControlWindow(
-              Int64Value.newBuilder().setValue(s.remoteFlowControlWindow).build());
+              Int64Value.of(s.remoteFlowControlWindow));
     }
     builder.addAllOption(toSocketOptionsList(socketStats.socketOptions));
     return builder.build();
