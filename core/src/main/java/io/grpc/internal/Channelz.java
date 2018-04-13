@@ -543,7 +543,10 @@ public final class Channelz {
         }
       } catch (SSLPeerUnverifiedException e) {
         // peer cert is not available
-        log.log(Level.FINE, "Peer cert not available for peerHost={}", session.getPeerHost());
+        log.log(
+            Level.FINE,
+            String.format("Peer cert not available for peerHost=%s", session.getPeerHost()),
+            e);
       }
       return new Tls(cipherSuiteStandardName, localCert, remoteCert);
     }

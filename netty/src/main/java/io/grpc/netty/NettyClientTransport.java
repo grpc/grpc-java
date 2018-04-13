@@ -345,7 +345,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   }
 
   private SocketStats getStatsHelper(Channel ch) {
-    Preconditions.checkState(ch.eventLoop().inEventLoop());
+    assert ch.eventLoop().inEventLoop();
     // If protocol negotiation is not yet complete, then the attributes will be empty,
     // and we will have no security to report yet.
     SSLSession sslSession = getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);

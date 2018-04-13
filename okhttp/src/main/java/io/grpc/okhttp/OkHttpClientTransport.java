@@ -502,7 +502,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
 
         FrameWriter rawFrameWriter;
         synchronized (lock) {
-          socket = Preconditions.checkNotNull(sock);
+          socket = Preconditions.checkNotNull(sock, "socket");
           maxConcurrentStreams = Integer.MAX_VALUE;
           OkHttpClientTransport.this.sslSession = sslSession;
           startPendingStreams();
