@@ -257,8 +257,7 @@ public final class ChannelzProtoUtilTest {
               .newBuilder()
               .setIpAddress(ByteString.copyFrom(
                   ((InetSocketAddress) listenSocket.listenAddress).getAddress().getAddress()))
-              .setPort(1234)
-              .build())
+              .setPort(1234))
       .build();
 
   private final TestSocket socket = new TestSocket();
@@ -279,8 +278,8 @@ public final class ChannelzProtoUtilTest {
       .setKeepAlivesSent(8)
       .setLastMessageSentTimestamp(Timestamps.fromNanos(9))
       .setLastMessageReceivedTimestamp(Timestamps.fromNanos(10))
-      .setLocalFlowControlWindow(Int64Value.newBuilder().setValue(11).build())
-      .setRemoteFlowControlWindow(Int64Value.newBuilder().setValue(12).build())
+      .setLocalFlowControlWindow(Int64Value.newBuilder().setValue(11))
+      .setRemoteFlowControlWindow(Int64Value.newBuilder().setValue(12))
       .build();
   private final Address localAddress = Address
       .newBuilder()
@@ -289,8 +288,7 @@ public final class ChannelzProtoUtilTest {
               .newBuilder()
               .setIpAddress(ByteString.copyFrom(
                   ((InetSocketAddress) socket.local).getAddress().getAddress()))
-              .setPort(1000)
-              .build())
+              .setPort(1000))
       .build();
   private final Address remoteAddress = Address
       .newBuilder()
@@ -299,8 +297,7 @@ public final class ChannelzProtoUtilTest {
               .newBuilder()
               .setIpAddress(ByteString.copyFrom(
                   ((InetSocketAddress) socket.remote).getAddress().getAddress()))
-              .setPort(1000)
-              .build())
+              .setPort(1000))
       .build();
 
   @Test
@@ -360,8 +357,7 @@ public final class ChannelzProtoUtilTest {
                         SocketOption
                             .newBuilder()
                             .setName("listen_option")
-                            .setValue("listen_option_value").build())
-                    .build())
+                            .setValue("listen_option_value")))
             .build(),
         ChannelzProtoUtil.toSocket(listenSocket));
   }
@@ -381,8 +377,7 @@ public final class ChannelzProtoUtilTest {
                     .newBuilder(socketDataWithDataNoSockOpts)
                     .addOption(
                         SocketOption.newBuilder()
-                            .setName("test_name").setValue("test_value").build())
-                    .build())
+                            .setName("test_name").setValue("test_value")))
             .build(),
         ChannelzProtoUtil.toSocket(socket));
   }
@@ -425,8 +420,7 @@ public final class ChannelzProtoUtilTest {
             TcpIpAddress
                 .newBuilder()
                 .setIpAddress(ByteString.copyFrom(inet4.getAddress().getAddress()))
-                .setPort(1000)
-                .build())
+                .setPort(1000))
             .build(),
         ChannelzProtoUtil.toAddress(inet4));
   }
@@ -439,8 +433,7 @@ public final class ChannelzProtoUtilTest {
         Address.newBuilder().setUdsAddress(
             UdsAddress
                 .newBuilder()
-                .setFilename(path)
-                .build())
+                .setFilename(path))
             .build(),
         ChannelzProtoUtil.toAddress(uds));
   }
@@ -458,8 +451,7 @@ public final class ChannelzProtoUtilTest {
         Address.newBuilder().setOtherAddress(
             OtherAddress
                 .newBuilder()
-                .setName(name)
-                .build())
+                .setName(name))
             .build(),
         ChannelzProtoUtil.toAddress(other));
   }
