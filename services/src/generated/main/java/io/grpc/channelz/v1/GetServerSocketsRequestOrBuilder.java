@@ -14,11 +14,11 @@ public interface GetServerSocketsRequestOrBuilder extends
 
   /**
    * <pre>
-   * start_socket_id indicates that only sockets at or above this id should be
-   * included in the results.
+   * A pagination token for a page of results. Set this to 0 for the first page.
+   * For subsequent pages, the token is copied from the previous page of results.
    * </pre>
    *
-   * <code>int64 start_socket_id = 2;</code>
+   * <code>int64 pagination_token = 2;</code>
    */
-  long getStartSocketId();
+  long getPaginationToken();
 }

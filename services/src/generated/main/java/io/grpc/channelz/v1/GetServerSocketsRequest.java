@@ -17,7 +17,7 @@ private static final long serialVersionUID = 0L;
   }
   private GetServerSocketsRequest() {
     serverId_ = 0L;
-    startSocketId_ = 0L;
+    paginationToken_ = 0L;
   }
 
   @java.lang.Override
@@ -58,7 +58,7 @@ private static final long serialVersionUID = 0L;
           }
           case 16: {
 
-            startSocketId_ = input.readInt64();
+            paginationToken_ = input.readInt64();
             break;
           }
         }
@@ -94,18 +94,18 @@ private static final long serialVersionUID = 0L;
     return serverId_;
   }
 
-  public static final int START_SOCKET_ID_FIELD_NUMBER = 2;
-  private long startSocketId_;
+  public static final int PAGINATION_TOKEN_FIELD_NUMBER = 2;
+  private long paginationToken_;
   /**
    * <pre>
-   * start_socket_id indicates that only sockets at or above this id should be
-   * included in the results.
+   * A pagination token for a page of results. Set this to 0 for the first page.
+   * For subsequent pages, the token is copied from the previous page of results.
    * </pre>
    *
-   * <code>int64 start_socket_id = 2;</code>
+   * <code>int64 pagination_token = 2;</code>
    */
-  public long getStartSocketId() {
-    return startSocketId_;
+  public long getPaginationToken() {
+    return paginationToken_;
   }
 
   private byte memoizedIsInitialized = -1;
@@ -123,8 +123,8 @@ private static final long serialVersionUID = 0L;
     if (serverId_ != 0L) {
       output.writeInt64(1, serverId_);
     }
-    if (startSocketId_ != 0L) {
-      output.writeInt64(2, startSocketId_);
+    if (paginationToken_ != 0L) {
+      output.writeInt64(2, paginationToken_);
     }
     unknownFields.writeTo(output);
   }
@@ -138,9 +138,9 @@ private static final long serialVersionUID = 0L;
       size += com.google.protobuf.CodedOutputStream
         .computeInt64Size(1, serverId_);
     }
-    if (startSocketId_ != 0L) {
+    if (paginationToken_ != 0L) {
       size += com.google.protobuf.CodedOutputStream
-        .computeInt64Size(2, startSocketId_);
+        .computeInt64Size(2, paginationToken_);
     }
     size += unknownFields.getSerializedSize();
     memoizedSize = size;
@@ -160,8 +160,8 @@ private static final long serialVersionUID = 0L;
     boolean result = true;
     result = result && (getServerId()
         == other.getServerId());
-    result = result && (getStartSocketId()
-        == other.getStartSocketId());
+    result = result && (getPaginationToken()
+        == other.getPaginationToken());
     result = result && unknownFields.equals(other.unknownFields);
     return result;
   }
@@ -176,9 +176,9 @@ private static final long serialVersionUID = 0L;
     hash = (37 * hash) + SERVER_ID_FIELD_NUMBER;
     hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
         getServerId());
-    hash = (37 * hash) + START_SOCKET_ID_FIELD_NUMBER;
+    hash = (37 * hash) + PAGINATION_TOKEN_FIELD_NUMBER;
     hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
-        getStartSocketId());
+        getPaginationToken());
     hash = (29 * hash) + unknownFields.hashCode();
     memoizedHashCode = hash;
     return hash;
@@ -310,7 +310,7 @@ private static final long serialVersionUID = 0L;
       super.clear();
       serverId_ = 0L;
 
-      startSocketId_ = 0L;
+      paginationToken_ = 0L;
 
       return this;
     }
@@ -335,7 +335,7 @@ private static final long serialVersionUID = 0L;
     public io.grpc.channelz.v1.GetServerSocketsRequest buildPartial() {
       io.grpc.channelz.v1.GetServerSocketsRequest result = new io.grpc.channelz.v1.GetServerSocketsRequest(this);
       result.serverId_ = serverId_;
-      result.startSocketId_ = startSocketId_;
+      result.paginationToken_ = paginationToken_;
       onBuilt();
       return result;
     }
@@ -380,8 +380,8 @@ private static final long serialVersionUID = 0L;
       if (other.getServerId() != 0L) {
         setServerId(other.getServerId());
       }
-      if (other.getStartSocketId() != 0L) {
-        setStartSocketId(other.getStartSocketId());
+      if (other.getPaginationToken() != 0L) {
+        setPaginationToken(other.getPaginationToken());
       }
       this.mergeUnknownFields(other.unknownFields);
       onChanged();
@@ -436,43 +436,43 @@ private static final long serialVersionUID = 0L;
       return this;
     }
 
-    private long startSocketId_ ;
+    private long paginationToken_ ;
     /**
      * <pre>
-     * start_socket_id indicates that only sockets at or above this id should be
-     * included in the results.
+     * A pagination token for a page of results. Set this to 0 for the first page.
+     * For subsequent pages, the token is copied from the previous page of results.
      * </pre>
      *
-     * <code>int64 start_socket_id = 2;</code>
+     * <code>int64 pagination_token = 2;</code>
      */
-    public long getStartSocketId() {
-      return startSocketId_;
+    public long getPaginationToken() {
+      return paginationToken_;
     }
     /**
      * <pre>
-     * start_socket_id indicates that only sockets at or above this id should be
-     * included in the results.
+     * A pagination token for a page of results. Set this to 0 for the first page.
+     * For subsequent pages, the token is copied from the previous page of results.
      * </pre>
      *
-     * <code>int64 start_socket_id = 2;</code>
+     * <code>int64 pagination_token = 2;</code>
      */
-    public Builder setStartSocketId(long value) {
+    public Builder setPaginationToken(long value) {
       
-      startSocketId_ = value;
+      paginationToken_ = value;
       onChanged();
       return this;
     }
     /**
      * <pre>
-     * start_socket_id indicates that only sockets at or above this id should be
-     * included in the results.
+     * A pagination token for a page of results. Set this to 0 for the first page.
+     * For subsequent pages, the token is copied from the previous page of results.
      * </pre>
      *
-     * <code>int64 start_socket_id = 2;</code>
+     * <code>int64 pagination_token = 2;</code>
      */
-    public Builder clearStartSocketId() {
+    public Builder clearPaginationToken() {
       
-      startSocketId_ = 0L;
+      paginationToken_ = 0L;
       onChanged();
       return this;
     }

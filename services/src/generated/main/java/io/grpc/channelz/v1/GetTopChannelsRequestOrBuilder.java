@@ -9,11 +9,11 @@ public interface GetTopChannelsRequestOrBuilder extends
 
   /**
    * <pre>
-   * start_channel_id indicates that only channels at or above this id should be
-   * included in the results.
+   * A pagination token for a page of results. Set this to 0 for the first page.
+   * For subsequent pages, the token is copied from the previous page of results.
    * </pre>
    *
-   * <code>int64 start_channel_id = 1;</code>
+   * <code>int64 pagination_token = 1;</code>
    */
-  long getStartChannelId();
+  long getPaginationToken();
 }

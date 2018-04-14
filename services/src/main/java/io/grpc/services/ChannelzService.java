@@ -17,6 +17,7 @@
 package io.grpc.services;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
 import io.grpc.channelz.v1.ChannelzGrpc;
@@ -54,6 +55,7 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
 
   @VisibleForTesting
   ChannelzService(Channelz channelz, int maxPageSize) {
+    Preconditions.checkState(maxPageSize > 0, "maxPageSize must be > 0");
     this.channelz = channelz;
     this.maxPageSize = maxPageSize;
   }
@@ -63,8 +65,7 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
   public void getTopChannels(
       GetTopChannelsRequest request, StreamObserver<GetTopChannelsResponse> responseObserver) {
     Channelz.RootChannelList rootChannels
-        = channelz.getRootChannels(request.getStartChannelId(), maxPageSize);
-
+        = channelz.getRootChannels(request.getPaginationToken(), maxPageSize);
     responseObserver.onNext(ChannelzProtoUtil.toGetTopChannelResponse(rootChannels));
     responseObserver.onCompleted();
   }
@@ -91,7 +92,7 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
   @Override
   public void getServers(
       GetServersRequest request, StreamObserver<GetServersResponse> responseObserver) {
-    ServerList servers = channelz.getServers(request.getStartServerId(), maxPageSize);
+    ServerList servers = channelz.getServers(request.getPaginationToken(), maxPageSize);
 
     responseObserver.onNext(ChannelzProtoUtil.toGetServersResponse(servers));
     responseObserver.onCompleted();
@@ -137,7 +138,8 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
   public void getServerSockets(
       GetServerSocketsRequest request, StreamObserver<GetServerSocketsResponse> responseObserver) {
     ServerSocketsList serverSockets
-        = channelz.getServerSockets(request.getServerId(), request.getStartSocketId(), maxPageSize);
+        = channelz.getServerSockets(
+            request.getServerId(), request.getPaginationToken(), maxPageSize);
     if (serverSockets == null) {
       responseObserver.onError(Status.NOT_FOUND.asRuntimeException());
       return;

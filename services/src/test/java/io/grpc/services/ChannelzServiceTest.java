@@ -67,6 +67,7 @@ public class ChannelzServiceTest {
         GetTopChannelsResponse
             .newBuilder()
             .addChannel(ChannelzProtoUtil.toChannel(root))
+            .setPaginationToken(root.getLogId().getId() + 1)
             .setEnd(true)
             .build(),
         getTopChannelHelper(0));
@@ -122,6 +123,7 @@ public class ChannelzServiceTest {
         GetServersResponse
             .newBuilder()
             .addServer(ChannelzProtoUtil.toServer(server))
+            .setPaginationToken(server.getLogId().getId() + 1)
             .setEnd(true)
             .build(),
         getServersHelper(0));
@@ -144,13 +146,13 @@ public class ChannelzServiceTest {
     assertSocketNotFound(socket.getLogId().getId());
   }
 
-  private GetTopChannelsResponse getTopChannelHelper(long startId) {
+  private GetTopChannelsResponse getTopChannelHelper(long token) {
     @SuppressWarnings("unchecked")
     StreamObserver<GetTopChannelsResponse> observer = mock(StreamObserver.class);
     ArgumentCaptor<GetTopChannelsResponse> responseCaptor
         = ArgumentCaptor.forClass(GetTopChannelsResponse.class);
     service.getTopChannels(
-        GetTopChannelsRequest.newBuilder().setStartChannelId(startId).build(),
+        GetTopChannelsRequest.newBuilder().setPaginationToken(token).build(),
         observer);
     verify(observer).onNext(responseCaptor.capture());
     verify(observer).onCompleted();
@@ -199,13 +201,13 @@ public class ChannelzServiceTest {
     assertEquals(Status.NOT_FOUND, ((StatusRuntimeException) exception).getStatus());
   }
 
-  private GetServersResponse getServersHelper(long startId) {
+  private GetServersResponse getServersHelper(long token) {
     @SuppressWarnings("unchecked")
     StreamObserver<GetServersResponse> observer = mock(StreamObserver.class);
     ArgumentCaptor<GetServersResponse> responseCaptor
         = ArgumentCaptor.forClass(GetServersResponse.class);
     service.getServers(
-        GetServersRequest.newBuilder().setStartServerId(startId).build(),
+        GetServersRequest.newBuilder().setPaginationToken(token).build(),
         observer);
     verify(observer).onNext(responseCaptor.capture());
     verify(observer).onCompleted();

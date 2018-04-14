@@ -339,9 +339,9 @@ service Channelz {
 }
 
 message GetServersRequest {
-  // start_server_id indicates that only servers at or above this id should be
-  // included in the results.
-  int64 start_server_id = 1;
+  // A pagination token for a page of results. Set this to 0 for the first page.
+  // For subsequent pages, the token is copied from the previous page of results.
+  int64 pagination_token = 1;
 }
 
 message GetServersResponse {
@@ -352,13 +352,16 @@ message GetServersResponse {
   // more servers will only return more if they are created after this RPC
   // completes.
   bool end = 2;
+  // A pagination token for the next page of results.
+  // Clients must pass this into the next request as is.
+  int64 pagination_token = 3;
 }
 
 message GetServerSocketsRequest {
   int64 server_id = 1;
-  // start_socket_id indicates that only sockets at or above this id should be
-  // included in the results.
-  int64 start_socket_id = 2;
+  // A pagination token for a page of results. Set this to 0 for the first page.
+  // For subsequent pages, the token is copied from the previous page of results.
+  int64 pagination_token = 2;
 }
 
 message GetServerSocketsResponse {
@@ -369,12 +372,15 @@ message GetServerSocketsResponse {
   // more sockets will only return more if they are created after this RPC
   // completes.
   bool end = 2;
+  // A pagination token for the next page of results.
+  // Clients must pass this into the next request as is.
+  int64 pagination_token = 3;
 }
 
 message GetTopChannelsRequest {
-  // start_channel_id indicates that only channels at or above this id should be
-  // included in the results.
-  int64 start_channel_id = 1;
+  // A pagination token for a page of results. Set this to 0 for the first page.
+  // For subsequent pages, the token is copied from the previous page of results.
+  int64 pagination_token = 1;
 }
 
 message GetTopChannelsResponse {
@@ -385,6 +391,9 @@ message GetTopChannelsResponse {
   // more channels can only return more if they are created after this RPC
   // completes.
   bool end = 2;
+  // A pagination token for the next page of results.
+  // Clients must pass this into the next request as is.
+  int64 pagination_token = 3;
 }
 
 message GetChannelRequest {

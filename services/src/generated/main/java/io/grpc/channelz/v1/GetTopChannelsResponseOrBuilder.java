@@ -66,4 +66,14 @@ public interface GetTopChannelsResponseOrBuilder extends
    * <code>bool end = 2;</code>
    */
   boolean getEnd();
+
+  /**
+   * <pre>
+   * A pagination token for the next page of results.
+   * Clients must pass this into the next request as is.
+   * </pre>
+   *
+   * <code>int64 pagination_token = 3;</code>
+   */
+  long getPaginationToken();
 }
