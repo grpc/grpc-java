@@ -68,7 +68,7 @@ mvn verify --batch-mode
 popd
 
 pushd examples/example-kotlin/
-./gradlew build
+./gradlew build $GRADLE_FLAGS
 popd
 
 # TODO(zpencer): also build the GAE examples
