@@ -216,6 +216,8 @@ message Address {
     bytes ip_address = 1;
     // 0-64k, or -1 if not appropriate.
     int32 port = 2;
+    // An optional human friendly version of the ip_address.
+    string ip_address_str = 3;
   }
   // A Unix Domain Socket address.
   message UdsAddress {

@@ -137,6 +137,24 @@ private static final long serialVersionUID = 0L;
      * <code>int32 port = 2;</code>
      */
     int getPort();
+
+    /**
+     * <pre>
+     * An optional human friendly version of the ip_address.
+     * </pre>
+     *
+     * <code>string ip_address_str = 3;</code>
+     */
+    java.lang.String getIpAddressStr();
+    /**
+     * <pre>
+     * An optional human friendly version of the ip_address.
+     * </pre>
+     *
+     * <code>string ip_address_str = 3;</code>
+     */
+    com.google.protobuf.ByteString
+        getIpAddressStrBytes();
   }
   /**
    * Protobuf type {@code grpc.channelz.Address.TcpIpAddress}
@@ -153,6 +171,7 @@ private static final long serialVersionUID = 0L;
     private TcpIpAddress() {
       ipAddress_ = com.google.protobuf.ByteString.EMPTY;
       port_ = 0;
+      ipAddressStr_ = "";
     }
 
     @java.lang.Override
@@ -194,6 +213,12 @@ private static final long serialVersionUID = 0L;
             case 16: {
 
               port_ = input.readInt32();
+              break;
+            }
+            case 26: {
+              java.lang.String s = input.readStringRequireUtf8();
+
+              ipAddressStr_ = s;
               break;
             }
           }
@@ -247,6 +272,48 @@ private static final long serialVersionUID = 0L;
       return port_;
     }
 
+    public static final int IP_ADDRESS_STR_FIELD_NUMBER = 3;
+    private volatile java.lang.Object ipAddressStr_;
+    /**
+     * <pre>
+     * An optional human friendly version of the ip_address.
+     * </pre>
+     *
+     * <code>string ip_address_str = 3;</code>
+     */
+    public java.lang.String getIpAddressStr() {
+      java.lang.Object ref = ipAddressStr_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        ipAddressStr_ = s;
+        return s;
+      }
+    }
+    /**
+     * <pre>
+     * An optional human friendly version of the ip_address.
+     * </pre>
+     *
+     * <code>string ip_address_str = 3;</code>
+     */
+    public com.google.protobuf.ByteString
+        getIpAddressStrBytes() {
+      java.lang.Object ref = ipAddressStr_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        ipAddressStr_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
       byte isInitialized = memoizedIsInitialized;
@@ -265,6 +332,9 @@ private static final long serialVersionUID = 0L;
       if (port_ != 0) {
         output.writeInt32(2, port_);
       }
+      if (!getIpAddressStrBytes().isEmpty()) {
+        com.google.protobuf.GeneratedMessageV3.writeString(output, 3, ipAddressStr_);
+      }
       unknownFields.writeTo(output);
     }
 
@@ -280,6 +350,9 @@ private static final long serialVersionUID = 0L;
       if (port_ != 0) {
         size += com.google.protobuf.CodedOutputStream
           .computeInt32Size(2, port_);
+      }
+      if (!getIpAddressStrBytes().isEmpty()) {
+        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(3, ipAddressStr_);
       }
       size += unknownFields.getSerializedSize();
       memoizedSize = size;
@@ -301,6 +374,8 @@ private static final long serialVersionUID = 0L;
           .equals(other.getIpAddress());
       result = result && (getPort()
           == other.getPort());
+      result = result && getIpAddressStr()
+          .equals(other.getIpAddressStr());
       result = result && unknownFields.equals(other.unknownFields);
       return result;
     }
@@ -316,6 +391,8 @@ private static final long serialVersionUID = 0L;
       hash = (53 * hash) + getIpAddress().hashCode();
       hash = (37 * hash) + PORT_FIELD_NUMBER;
       hash = (53 * hash) + getPort();
+      hash = (37 * hash) + IP_ADDRESS_STR_FIELD_NUMBER;
+      hash = (53 * hash) + getIpAddressStr().hashCode();
       hash = (29 * hash) + unknownFields.hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -449,6 +526,8 @@ private static final long serialVersionUID = 0L;
 
         port_ = 0;
 
+        ipAddressStr_ = "";
+
         return this;
       }
 
@@ -473,6 +552,7 @@ private static final long serialVersionUID = 0L;
         io.grpc.channelz.v1.Address.TcpIpAddress result = new io.grpc.channelz.v1.Address.TcpIpAddress(this);
         result.ipAddress_ = ipAddress_;
         result.port_ = port_;
+        result.ipAddressStr_ = ipAddressStr_;
         onBuilt();
         return result;
       }
@@ -519,6 +599,10 @@ private static final long serialVersionUID = 0L;
         }
         if (other.getPort() != 0) {
           setPort(other.getPort());
+        }
+        if (!other.getIpAddressStr().isEmpty()) {
+          ipAddressStr_ = other.ipAddressStr_;
+          onChanged();
         }
         this.mergeUnknownFields(other.unknownFields);
         onChanged();
@@ -625,6 +709,95 @@ private static final long serialVersionUID = 0L;
       public Builder clearPort() {
         
         port_ = 0;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object ipAddressStr_ = "";
+      /**
+       * <pre>
+       * An optional human friendly version of the ip_address.
+       * </pre>
+       *
+       * <code>string ip_address_str = 3;</code>
+       */
+      public java.lang.String getIpAddressStr() {
+        java.lang.Object ref = ipAddressStr_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          ipAddressStr_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <pre>
+       * An optional human friendly version of the ip_address.
+       * </pre>
+       *
+       * <code>string ip_address_str = 3;</code>
+       */
+      public com.google.protobuf.ByteString
+          getIpAddressStrBytes() {
+        java.lang.Object ref = ipAddressStr_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          ipAddressStr_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <pre>
+       * An optional human friendly version of the ip_address.
+       * </pre>
+       *
+       * <code>string ip_address_str = 3;</code>
+       */
+      public Builder setIpAddressStr(
+          java.lang.String value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  
+        ipAddressStr_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * An optional human friendly version of the ip_address.
+       * </pre>
+       *
+       * <code>string ip_address_str = 3;</code>
+       */
+      public Builder clearIpAddressStr() {
+        
+        ipAddressStr_ = getDefaultInstance().getIpAddressStr();
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * An optional human friendly version of the ip_address.
+       * </pre>
+       *
+       * <code>string ip_address_str = 3;</code>
+       */
+      public Builder setIpAddressStrBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  checkByteStringIsUtf8(value);
+        
+        ipAddressStr_ = value;
         onChanged();
         return this;
       }

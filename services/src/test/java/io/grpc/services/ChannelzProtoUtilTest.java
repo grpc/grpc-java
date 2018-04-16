@@ -257,6 +257,7 @@ public final class ChannelzProtoUtilTest {
               .newBuilder()
               .setIpAddress(ByteString.copyFrom(
                   ((InetSocketAddress) listenSocket.listenAddress).getAddress().getAddress()))
+              .setIpAddressStr("/10.0.0.1")
               .setPort(1234))
       .build();
 
@@ -288,6 +289,7 @@ public final class ChannelzProtoUtilTest {
               .newBuilder()
               .setIpAddress(ByteString.copyFrom(
                   ((InetSocketAddress) socket.local).getAddress().getAddress()))
+              .setIpAddressStr("/10.0.0.1")
               .setPort(1000))
       .build();
   private final Address remoteAddress = Address
@@ -297,6 +299,7 @@ public final class ChannelzProtoUtilTest {
               .newBuilder()
               .setIpAddress(ByteString.copyFrom(
                   ((InetSocketAddress) socket.remote).getAddress().getAddress()))
+              .setIpAddressStr("/10.0.0.2")
               .setPort(1000))
       .build();
 
@@ -420,6 +423,7 @@ public final class ChannelzProtoUtilTest {
             TcpIpAddress
                 .newBuilder()
                 .setIpAddress(ByteString.copyFrom(inet4.getAddress().getAddress()))
+                .setIpAddressStr("/10.0.0.1")
                 .setPort(1000))
             .build(),
         ChannelzProtoUtil.toAddress(inet4));
