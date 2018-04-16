@@ -935,7 +935,7 @@ public class InternalSubchannelTest {
 
   @Test
   public void channelzStatContainsTransport() throws Exception {
-    SocketAddress addr = mock(SocketAddress.class);
+    SocketAddress addr = new SocketAddress() {};
     assertThat(transports).isEmpty();
     createInternalSubchannel(addr);
     internalSubchannel.obtainActiveTransport();
