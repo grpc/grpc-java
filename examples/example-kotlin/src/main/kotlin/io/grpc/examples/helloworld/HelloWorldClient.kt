@@ -30,6 +30,7 @@ class HelloWorldClient
 /** Construct client for accessing RouteGuide server using the existing channel.  */
 internal constructor(private val channel: ManagedChannel) {
     private val blockingStub: GreeterGrpc.GreeterBlockingStub
+            = GreeterGrpc.newBlockingStub(channel);
 
     /** Construct client connecting to HelloWorld server at `host:port`.  */
     constructor(host: String, port: Int) : this(ManagedChannelBuilder.forAddress(host, port)
@@ -39,9 +40,6 @@ internal constructor(private val channel: ManagedChannel) {
             .build()) {
     }
 
-    init {
-        blockingStub = GreeterGrpc.newBlockingStub(channel)
-    }
 
     @Throws(InterruptedException::class)
     fun shutdown() {
@@ -52,15 +50,14 @@ internal constructor(private val channel: ManagedChannel) {
     fun greet(name: String) {
         logger.info("Will try to greet $name ...")
         val request = HelloRequest.newBuilder().setName(name).build()
-        val response: HelloReply
-        try {
-            response = blockingStub.sayHello(request)
+        val response: HelloReply =  try {
+            blockingStub.sayHello(request)
         } catch (e: StatusRuntimeException) {
-            logger.log(Level.WARNING, "RPC failed: {0}", e.status)
-            return
+            logger.log(Level.WARNING, "RPC failed: ${e.status}")
+            return;
         }
 
-        logger.info("Greeting: " + response.message)
+        logger.info("Greeting: ${response?.message}")
     }
 
     companion object {
@@ -76,10 +73,7 @@ internal constructor(private val channel: ManagedChannel) {
             val client = HelloWorldClient("localhost", 50051)
             try {
                 /* Access a service running on the local machine on port 50051 */
-                var user = "world"
-                if (args.size > 0) {
-                    user = args[0] /* Use the arg as the name to greet if provided */
-                }
+                val user = if (args.size > 0) "world" else "world";
                 client.greet(user)
             } finally {
                 client.shutdown()

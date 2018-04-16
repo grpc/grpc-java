@@ -39,7 +39,7 @@ class HelloWorldServer {
                 .addService(GreeterImpl())
                 .build()
                 .start()
-        logger.info("Server started, listening on " + port)
+        logger.info("Server started, listening on $port")
         Runtime.getRuntime().addShutdownHook(object : Thread() {
             override fun run() {
                 // Use stderr here since the logger may have been reset by its JVM shutdown hook.
@@ -51,9 +51,7 @@ class HelloWorldServer {
     }
 
     private fun stop() {
-        if (server != null) {
-            server!!.shutdown()
-        }
+        server?.shutdown()
     }
 
     /**
@@ -61,15 +59,13 @@ class HelloWorldServer {
      */
     @Throws(InterruptedException::class)
     private fun blockUntilShutdown() {
-        if (server != null) {
-            server!!.awaitTermination()
-        }
+        server?.awaitTermination()
     }
 
     internal class GreeterImpl : GreeterGrpc.GreeterImplBase() {
 
         override fun sayHello(req: HelloRequest, responseObserver: StreamObserver<HelloReply>) {
-            val reply = HelloReply.newBuilder().setMessage("Hello " + req.name).build()
+            val reply = HelloReply.newBuilder().setMessage("Hello ${req.name}").build()
             responseObserver.onNext(reply)
             responseObserver.onCompleted()
         }
