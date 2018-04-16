@@ -42,7 +42,7 @@ class HelloworldActivity : AppCompatActivity(), View.OnClickListener {
     super.onCreate(savedInstanceState)
     setContentView(R.layout.activity_helloworld)
     grpc_response_text!!.movementMethod = ScrollingMovementMethod()
-    send_button.setOnClickListener(this)
+    send_button!!.setOnClickListener(this)
   }
 
   override fun onClick(view: View) {
@@ -84,7 +84,7 @@ class HelloworldActivity : AppCompatActivity(), View.OnClickListener {
 
     override fun onPostExecute(result: String) {
       try {
-        channel!!.shutdown().awaitTermination(1, TimeUnit.SECONDS)
+        channel?.shutdown().awaitTermination(1, TimeUnit.SECONDS)
       } catch (e: InterruptedException) {
         Thread.currentThread().interrupt()
       }
