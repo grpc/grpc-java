@@ -18,6 +18,7 @@ private static final long serialVersionUID = 0L;
   private GetServersResponse() {
     server_ = java.util.Collections.emptyList();
     end_ = false;
+    paginationToken_ = 0L;
   }
 
   @java.lang.Override
@@ -63,6 +64,11 @@ private static final long serialVersionUID = 0L;
           case 16: {
 
             end_ = input.readBool();
+            break;
+          }
+          case 24: {
+
+            paginationToken_ = input.readInt64();
             break;
           }
         }
@@ -168,6 +174,20 @@ private static final long serialVersionUID = 0L;
     return end_;
   }
 
+  public static final int PAGINATION_TOKEN_FIELD_NUMBER = 3;
+  private long paginationToken_;
+  /**
+   * <pre>
+   * A pagination token for the next page of results.
+   * Clients must pass this into the next request as is.
+   * </pre>
+   *
+   * <code>int64 pagination_token = 3;</code>
+   */
+  public long getPaginationToken() {
+    return paginationToken_;
+  }
+
   private byte memoizedIsInitialized = -1;
   public final boolean isInitialized() {
     byte isInitialized = memoizedIsInitialized;
@@ -186,6 +206,9 @@ private static final long serialVersionUID = 0L;
     if (end_ != false) {
       output.writeBool(2, end_);
     }
+    if (paginationToken_ != 0L) {
+      output.writeInt64(3, paginationToken_);
+    }
     unknownFields.writeTo(output);
   }
 
@@ -201,6 +224,10 @@ private static final long serialVersionUID = 0L;
     if (end_ != false) {
       size += com.google.protobuf.CodedOutputStream
         .computeBoolSize(2, end_);
+    }
+    if (paginationToken_ != 0L) {
+      size += com.google.protobuf.CodedOutputStream
+        .computeInt64Size(3, paginationToken_);
     }
     size += unknownFields.getSerializedSize();
     memoizedSize = size;
@@ -222,6 +249,8 @@ private static final long serialVersionUID = 0L;
         .equals(other.getServerList());
     result = result && (getEnd()
         == other.getEnd());
+    result = result && (getPaginationToken()
+        == other.getPaginationToken());
     result = result && unknownFields.equals(other.unknownFields);
     return result;
   }
@@ -240,6 +269,9 @@ private static final long serialVersionUID = 0L;
     hash = (37 * hash) + END_FIELD_NUMBER;
     hash = (53 * hash) + com.google.protobuf.Internal.hashBoolean(
         getEnd());
+    hash = (37 * hash) + PAGINATION_TOKEN_FIELD_NUMBER;
+    hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
+        getPaginationToken());
     hash = (29 * hash) + unknownFields.hashCode();
     memoizedHashCode = hash;
     return hash;
@@ -378,6 +410,8 @@ private static final long serialVersionUID = 0L;
       }
       end_ = false;
 
+      paginationToken_ = 0L;
+
       return this;
     }
 
@@ -412,6 +446,7 @@ private static final long serialVersionUID = 0L;
         result.server_ = serverBuilder_.build();
       }
       result.end_ = end_;
+      result.paginationToken_ = paginationToken_;
       result.bitField0_ = to_bitField0_;
       onBuilt();
       return result;
@@ -482,6 +517,9 @@ private static final long serialVersionUID = 0L;
       }
       if (other.getEnd() != false) {
         setEnd(other.getEnd());
+      }
+      if (other.getPaginationToken() != 0L) {
+        setPaginationToken(other.getPaginationToken());
       }
       this.mergeUnknownFields(other.unknownFields);
       onChanged();
@@ -881,6 +919,47 @@ private static final long serialVersionUID = 0L;
     public Builder clearEnd() {
       
       end_ = false;
+      onChanged();
+      return this;
+    }
+
+    private long paginationToken_ ;
+    /**
+     * <pre>
+     * A pagination token for the next page of results.
+     * Clients must pass this into the next request as is.
+     * </pre>
+     *
+     * <code>int64 pagination_token = 3;</code>
+     */
+    public long getPaginationToken() {
+      return paginationToken_;
+    }
+    /**
+     * <pre>
+     * A pagination token for the next page of results.
+     * Clients must pass this into the next request as is.
+     * </pre>
+     *
+     * <code>int64 pagination_token = 3;</code>
+     */
+    public Builder setPaginationToken(long value) {
+      
+      paginationToken_ = value;
+      onChanged();
+      return this;
+    }
+    /**
+     * <pre>
+     * A pagination token for the next page of results.
+     * Clients must pass this into the next request as is.
+     * </pre>
+     *
+     * <code>int64 pagination_token = 3;</code>
+     */
+    public Builder clearPaginationToken() {
+      
+      paginationToken_ = 0L;
       onChanged();
       return this;
     }

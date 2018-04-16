@@ -307,17 +307,19 @@ public final class ChannelzProto {
       "tt\030\030 \001(\r\022\023\n\013tcpi_rttvar\030\031 \001(\r\022\031\n\021tcpi_sn" +
       "d_ssthresh\030\032 \001(\r\022\025\n\rtcpi_snd_cwnd\030\033 \001(\r\022" +
       "\023\n\013tcpi_advmss\030\034 \001(\r\022\027\n\017tcpi_reordering\030" +
-      "\035 \001(\r\",\n\021GetServersRequest\022\027\n\017start_serv" +
-      "er_id\030\001 \001(\003\"H\n\022GetServersResponse\022%\n\006ser" +
-      "ver\030\001 \003(\0132\025.grpc.channelz.Server\022\013\n\003end\030" +
-      "\002 \001(\010\"E\n\027GetServerSocketsRequest\022\021\n\tserv" +
-      "er_id\030\001 \001(\003\022\027\n\017start_socket_id\030\002 \001(\003\"U\n\030" +
-      "GetServerSocketsResponse\022,\n\nsocket_ref\030\001" +
-      " \003(\0132\030.grpc.channelz.SocketRef\022\013\n\003end\030\002 " +
-      "\001(\010\"1\n\025GetTopChannelsRequest\022\030\n\020start_ch" +
-      "annel_id\030\001 \001(\003\"N\n\026GetTopChannelsResponse" +
-      "\022\'\n\007channel\030\001 \003(\0132\026.grpc.channelz.Channe" +
-      "l\022\013\n\003end\030\002 \001(\010\"\'\n\021GetChannelRequest\022\022\n\nc" +
+      "\035 \001(\r\"-\n\021GetServersRequest\022\030\n\020pagination" +
+      "_token\030\001 \001(\003\"b\n\022GetServersResponse\022%\n\006se" +
+      "rver\030\001 \003(\0132\025.grpc.channelz.Server\022\013\n\003end" +
+      "\030\002 \001(\010\022\030\n\020pagination_token\030\003 \001(\003\"F\n\027GetS" +
+      "erverSocketsRequest\022\021\n\tserver_id\030\001 \001(\003\022\030" +
+      "\n\020pagination_token\030\002 \001(\003\"o\n\030GetServerSoc" +
+      "ketsResponse\022,\n\nsocket_ref\030\001 \003(\0132\030.grpc." +
+      "channelz.SocketRef\022\013\n\003end\030\002 \001(\010\022\030\n\020pagin" +
+      "ation_token\030\003 \001(\003\"1\n\025GetTopChannelsReque" +
+      "st\022\030\n\020pagination_token\030\001 \001(\003\"h\n\026GetTopCh" +
+      "annelsResponse\022\'\n\007channel\030\001 \003(\0132\026.grpc.c" +
+      "hannelz.Channel\022\013\n\003end\030\002 \001(\010\022\030\n\020paginati" +
+      "on_token\030\003 \001(\003\"\'\n\021GetChannelRequest\022\022\n\nc" +
       "hannel_id\030\001 \001(\003\"=\n\022GetChannelResponse\022\'\n" +
       "\007channel\030\001 \001(\0132\026.grpc.channelz.Channel\"-" +
       "\n\024GetSubchannelRequest\022\025\n\rsubchannel_id\030" +
@@ -507,37 +509,37 @@ public final class ChannelzProto {
     internal_static_grpc_channelz_GetServersRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_grpc_channelz_GetServersRequest_descriptor,
-        new java.lang.String[] { "StartServerId", });
+        new java.lang.String[] { "PaginationToken", });
     internal_static_grpc_channelz_GetServersResponse_descriptor =
       getDescriptor().getMessageTypes().get(20);
     internal_static_grpc_channelz_GetServersResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_grpc_channelz_GetServersResponse_descriptor,
-        new java.lang.String[] { "Server", "End", });
+        new java.lang.String[] { "Server", "End", "PaginationToken", });
     internal_static_grpc_channelz_GetServerSocketsRequest_descriptor =
       getDescriptor().getMessageTypes().get(21);
     internal_static_grpc_channelz_GetServerSocketsRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_grpc_channelz_GetServerSocketsRequest_descriptor,
-        new java.lang.String[] { "ServerId", "StartSocketId", });
+        new java.lang.String[] { "ServerId", "PaginationToken", });
     internal_static_grpc_channelz_GetServerSocketsResponse_descriptor =
       getDescriptor().getMessageTypes().get(22);
     internal_static_grpc_channelz_GetServerSocketsResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_grpc_channelz_GetServerSocketsResponse_descriptor,
-        new java.lang.String[] { "SocketRef", "End", });
+        new java.lang.String[] { "SocketRef", "End", "PaginationToken", });
     internal_static_grpc_channelz_GetTopChannelsRequest_descriptor =
       getDescriptor().getMessageTypes().get(23);
     internal_static_grpc_channelz_GetTopChannelsRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_grpc_channelz_GetTopChannelsRequest_descriptor,
-        new java.lang.String[] { "StartChannelId", });
+        new java.lang.String[] { "PaginationToken", });
     internal_static_grpc_channelz_GetTopChannelsResponse_descriptor =
       getDescriptor().getMessageTypes().get(24);
     internal_static_grpc_channelz_GetTopChannelsResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_grpc_channelz_GetTopChannelsResponse_descriptor,
-        new java.lang.String[] { "Channel", "End", });
+        new java.lang.String[] { "Channel", "End", "PaginationToken", });
     internal_static_grpc_channelz_GetChannelRequest_descriptor =
       getDescriptor().getMessageTypes().get(25);
     internal_static_grpc_channelz_GetChannelRequest_fieldAccessorTable = new

@@ -16,7 +16,7 @@ private static final long serialVersionUID = 0L;
     super(builder);
   }
   private GetTopChannelsRequest() {
-    startChannelId_ = 0L;
+    paginationToken_ = 0L;
   }
 
   @java.lang.Override
@@ -52,7 +52,7 @@ private static final long serialVersionUID = 0L;
           }
           case 8: {
 
-            startChannelId_ = input.readInt64();
+            paginationToken_ = input.readInt64();
             break;
           }
         }
@@ -79,18 +79,18 @@ private static final long serialVersionUID = 0L;
             io.grpc.channelz.v1.GetTopChannelsRequest.class, io.grpc.channelz.v1.GetTopChannelsRequest.Builder.class);
   }
 
-  public static final int START_CHANNEL_ID_FIELD_NUMBER = 1;
-  private long startChannelId_;
+  public static final int PAGINATION_TOKEN_FIELD_NUMBER = 1;
+  private long paginationToken_;
   /**
    * <pre>
-   * start_channel_id indicates that only channels at or above this id should be
-   * included in the results.
+   * A pagination token for a page of results. Set this to 0 for the first page.
+   * For subsequent pages, the token is copied from the previous page of results.
    * </pre>
    *
-   * <code>int64 start_channel_id = 1;</code>
+   * <code>int64 pagination_token = 1;</code>
    */
-  public long getStartChannelId() {
-    return startChannelId_;
+  public long getPaginationToken() {
+    return paginationToken_;
   }
 
   private byte memoizedIsInitialized = -1;
@@ -105,8 +105,8 @@ private static final long serialVersionUID = 0L;
 
   public void writeTo(com.google.protobuf.CodedOutputStream output)
                       throws java.io.IOException {
-    if (startChannelId_ != 0L) {
-      output.writeInt64(1, startChannelId_);
+    if (paginationToken_ != 0L) {
+      output.writeInt64(1, paginationToken_);
     }
     unknownFields.writeTo(output);
   }
@@ -116,9 +116,9 @@ private static final long serialVersionUID = 0L;
     if (size != -1) return size;
 
     size = 0;
-    if (startChannelId_ != 0L) {
+    if (paginationToken_ != 0L) {
       size += com.google.protobuf.CodedOutputStream
-        .computeInt64Size(1, startChannelId_);
+        .computeInt64Size(1, paginationToken_);
     }
     size += unknownFields.getSerializedSize();
     memoizedSize = size;
@@ -136,8 +136,8 @@ private static final long serialVersionUID = 0L;
     io.grpc.channelz.v1.GetTopChannelsRequest other = (io.grpc.channelz.v1.GetTopChannelsRequest) obj;
 
     boolean result = true;
-    result = result && (getStartChannelId()
-        == other.getStartChannelId());
+    result = result && (getPaginationToken()
+        == other.getPaginationToken());
     result = result && unknownFields.equals(other.unknownFields);
     return result;
   }
@@ -149,9 +149,9 @@ private static final long serialVersionUID = 0L;
     }
     int hash = 41;
     hash = (19 * hash) + getDescriptor().hashCode();
-    hash = (37 * hash) + START_CHANNEL_ID_FIELD_NUMBER;
+    hash = (37 * hash) + PAGINATION_TOKEN_FIELD_NUMBER;
     hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
-        getStartChannelId());
+        getPaginationToken());
     hash = (29 * hash) + unknownFields.hashCode();
     memoizedHashCode = hash;
     return hash;
@@ -281,7 +281,7 @@ private static final long serialVersionUID = 0L;
     }
     public Builder clear() {
       super.clear();
-      startChannelId_ = 0L;
+      paginationToken_ = 0L;
 
       return this;
     }
@@ -305,7 +305,7 @@ private static final long serialVersionUID = 0L;
 
     public io.grpc.channelz.v1.GetTopChannelsRequest buildPartial() {
       io.grpc.channelz.v1.GetTopChannelsRequest result = new io.grpc.channelz.v1.GetTopChannelsRequest(this);
-      result.startChannelId_ = startChannelId_;
+      result.paginationToken_ = paginationToken_;
       onBuilt();
       return result;
     }
@@ -347,8 +347,8 @@ private static final long serialVersionUID = 0L;
 
     public Builder mergeFrom(io.grpc.channelz.v1.GetTopChannelsRequest other) {
       if (other == io.grpc.channelz.v1.GetTopChannelsRequest.getDefaultInstance()) return this;
-      if (other.getStartChannelId() != 0L) {
-        setStartChannelId(other.getStartChannelId());
+      if (other.getPaginationToken() != 0L) {
+        setPaginationToken(other.getPaginationToken());
       }
       this.mergeUnknownFields(other.unknownFields);
       onChanged();
@@ -377,43 +377,43 @@ private static final long serialVersionUID = 0L;
       return this;
     }
 
-    private long startChannelId_ ;
+    private long paginationToken_ ;
     /**
      * <pre>
-     * start_channel_id indicates that only channels at or above this id should be
-     * included in the results.
+     * A pagination token for a page of results. Set this to 0 for the first page.
+     * For subsequent pages, the token is copied from the previous page of results.
      * </pre>
      *
-     * <code>int64 start_channel_id = 1;</code>
+     * <code>int64 pagination_token = 1;</code>
      */
-    public long getStartChannelId() {
-      return startChannelId_;
+    public long getPaginationToken() {
+      return paginationToken_;
     }
     /**
      * <pre>
-     * start_channel_id indicates that only channels at or above this id should be
-     * included in the results.
+     * A pagination token for a page of results. Set this to 0 for the first page.
+     * For subsequent pages, the token is copied from the previous page of results.
      * </pre>
      *
-     * <code>int64 start_channel_id = 1;</code>
+     * <code>int64 pagination_token = 1;</code>
      */
-    public Builder setStartChannelId(long value) {
+    public Builder setPaginationToken(long value) {
       
-      startChannelId_ = value;
+      paginationToken_ = value;
       onChanged();
       return this;
     }
     /**
      * <pre>
-     * start_channel_id indicates that only channels at or above this id should be
-     * included in the results.
+     * A pagination token for a page of results. Set this to 0 for the first page.
+     * For subsequent pages, the token is copied from the previous page of results.
      * </pre>
      *
-     * <code>int64 start_channel_id = 1;</code>
+     * <code>int64 pagination_token = 1;</code>
      */
-    public Builder clearStartChannelId() {
+    public Builder clearPaginationToken() {
       
-      startChannelId_ = 0L;
+      paginationToken_ = 0L;
       onChanged();
       return this;
     }

@@ -350,6 +350,7 @@ final class ChannelzProtoUtil {
         .setEnd(rootChannels.end);
     for (Instrumented<ChannelStats> c : rootChannels.channels) {
       responseBuilder.addChannel(ChannelzProtoUtil.toChannel(c));
+      responseBuilder.setPaginationToken(c.getLogId().getId() + 1);
     }
     return responseBuilder.build();
   }
@@ -360,6 +361,7 @@ final class ChannelzProtoUtil {
         .setEnd(servers.end);
     for (Instrumented<ServerStats> s : servers.servers) {
       responseBuilder.addServer(ChannelzProtoUtil.toServer(s));
+      responseBuilder.setPaginationToken(s.getLogId().getId() + 1);
     }
     return responseBuilder.build();
   }
@@ -370,6 +372,7 @@ final class ChannelzProtoUtil {
         .setEnd(serverSockets.end);
     for (WithLogId s : serverSockets.sockets) {
       responseBuilder.addSocketRef(ChannelzProtoUtil.toSocketRef(s));
+      responseBuilder.setPaginationToken(s.getLogId().getId() + 1);
     }
     return responseBuilder.build();
   }

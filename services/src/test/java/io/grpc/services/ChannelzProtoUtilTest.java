@@ -19,6 +19,7 @@ package io.grpc.services;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.Channelz.id;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -596,6 +597,7 @@ public final class ChannelzProtoUtilTest {
         GetTopChannelsResponse
             .newBuilder()
             .addChannel(channelProto)
+            .setPaginationToken(channelProto.getRef().getChannelId() + 1)
             .build(),
         ChannelzProtoUtil.toGetTopChannelResponse(
             new RootChannelList(ImmutableList.<Instrumented<ChannelStats>>of(channel), false)));
@@ -605,6 +607,7 @@ public final class ChannelzProtoUtilTest {
         GetTopChannelsResponse
             .newBuilder()
             .addChannel(channelProto)
+            .setPaginationToken(channelProto.getRef().getChannelId() + 1)
             .setEnd(true)
             .build(),
         ChannelzProtoUtil.toGetTopChannelResponse(
@@ -612,11 +615,13 @@ public final class ChannelzProtoUtilTest {
 
     // 2 results, end
     TestChannel channel2 = new TestChannel();
+    assertTrue(channel2.getLogId().getId() > channelProto.getRef().getChannelId());
     assertEquals(
         GetTopChannelsResponse
             .newBuilder()
             .addChannel(channelProto)
             .addChannel(ChannelzProtoUtil.toChannel(channel2))
+            .setPaginationToken(channel2.getLogId().getId() + 1)
             .setEnd(true)
             .build(),
         ChannelzProtoUtil.toGetTopChannelResponse(
@@ -628,15 +633,16 @@ public final class ChannelzProtoUtilTest {
   public void toGetServersResponse() {
     // empty results
     assertEquals(
-        GetServersResponse.getDefaultInstance(),
+        GetServersResponse.newBuilder().setEnd(true).build(),
         ChannelzProtoUtil.toGetServersResponse(
-            new ServerList(Collections.<Instrumented<ServerStats>>emptyList(), false)));
+            new ServerList(Collections.<Instrumented<ServerStats>>emptyList(), true)));
 
     // 1 result, paginated
     assertEquals(
         GetServersResponse
             .newBuilder()
             .addServer(serverProto)
+            .setPaginationToken(serverProto.getRef().getServerId() + 1)
             .build(),
         ChannelzProtoUtil.toGetServersResponse(
             new ServerList(ImmutableList.<Instrumented<ServerStats>>of(server), false)));
@@ -646,18 +652,21 @@ public final class ChannelzProtoUtilTest {
         GetServersResponse
             .newBuilder()
             .addServer(serverProto)
+            .setPaginationToken(serverProto.getRef().getServerId() + 1)
             .setEnd(true)
             .build(),
         ChannelzProtoUtil.toGetServersResponse(
             new ServerList(ImmutableList.<Instrumented<ServerStats>>of(server), true)));
 
     TestServer server2 = new TestServer();
+    assertTrue(server2.getLogId().getId() > serverProto.getRef().getServerId());
     // 2 results, end
     assertEquals(
         GetServersResponse
             .newBuilder()
             .addServer(serverProto)
             .addServer(ChannelzProtoUtil.toServer(server2))
+            .setPaginationToken(server2.getLogId().getId() + 1)
             .setEnd(true)
             .build(),
         ChannelzProtoUtil.toGetServersResponse(
@@ -668,15 +677,16 @@ public final class ChannelzProtoUtilTest {
   public void toGetServerSocketsResponse() {
     // empty results
     assertEquals(
-        GetServerSocketsResponse.getDefaultInstance(),
+        GetServerSocketsResponse.newBuilder().setEnd(true).build(),
         ChannelzProtoUtil.toGetServerSocketsResponse(
-            new ServerSocketsList(Collections.<WithLogId>emptyList(), false)));
+            new ServerSocketsList(Collections.<WithLogId>emptyList(), true)));
 
     // 1 result, paginated
     assertEquals(
         GetServerSocketsResponse
             .newBuilder()
             .addSocketRef(socketRef)
+            .setPaginationToken(socketRef.getSocketId() + 1)
             .build(),
         ChannelzProtoUtil.toGetServerSocketsResponse(
             new ServerSocketsList(ImmutableList.<WithLogId>of(socket), false)));
@@ -686,18 +696,21 @@ public final class ChannelzProtoUtilTest {
         GetServerSocketsResponse
             .newBuilder()
             .addSocketRef(socketRef)
+            .setPaginationToken(socketRef.getSocketId() + 1)
             .setEnd(true)
             .build(),
         ChannelzProtoUtil.toGetServerSocketsResponse(
             new ServerSocketsList(ImmutableList.<WithLogId>of(socket), true)));
 
     TestSocket socket2 = new TestSocket();
+    assertTrue(socket2.getLogId().getId() > socketRef.getSocketId());
     // 2 results, end
     assertEquals(
         GetServerSocketsResponse
             .newBuilder()
             .addSocketRef(socketRef)
             .addSocketRef(ChannelzProtoUtil.toSocketRef(socket2))
+            .setPaginationToken(socket2.getLogId().getId() + 1)
             .setEnd(true)
             .build(),
         ChannelzProtoUtil.toGetServerSocketsResponse(
