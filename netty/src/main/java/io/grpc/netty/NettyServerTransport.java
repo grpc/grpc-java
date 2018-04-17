@@ -64,7 +64,8 @@ class NettyServerTransport implements ServerTransport {
   private final ProtocolNegotiator protocolNegotiator;
   private final int maxStreams;
   // Only set once during start()
-  private volatile NettyServerHandler grpcHandler;
+  @VisibleForTesting
+  volatile NettyServerHandler grpcHandler;
   private ServerTransportListener listener;
   private boolean terminated;
   private final int flowControlWindow;
@@ -232,23 +233,22 @@ class NettyServerTransport implements ServerTransport {
 
   private SocketStats getStatsHelper(Channel ch) {
     Preconditions.checkState(ch.eventLoop().inEventLoop());
-
-    SSLSession sslSession
-        = grpcHandler == null
-        ? null
-        : grpcHandler.getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
-    final Security security;
-    if (sslSession != null) {
-      security = Security.withTls(Tls.fromSslSession(sslSession));
-    } else {
-      security = null;
-    }
     return new SocketStats(
         transportTracer.getStats(),
         channel.localAddress(),
         channel.remoteAddress(),
         Utils.getSocketOptions(ch),
-        security);
+        getSecurity());
+  }
+
+  Security getSecurity() {
+    SSLSession sslSession = grpcHandler == null
+        ? null
+        : grpcHandler.getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
+    if (sslSession == null) {
+      return null;
+    }
+    return new Security(Tls.fromSslSession(sslSession));
   }
 
   /**

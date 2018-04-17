@@ -51,8 +51,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
-import io.grpc.internal.Channelz;
-import io.grpc.internal.Channelz.Security;
 import io.grpc.internal.Channelz.SocketStats;
 import io.grpc.internal.Channelz.TransportStats;
 import io.grpc.internal.ClientStream;
@@ -121,22 +119,6 @@ public abstract class AbstractTransportTest {
    * Returns the authority string used by a client to connect to {@code server}.
    */
   protected abstract String testAuthority(InternalServer server);
-
-  /**
-   * Returns the value of the {@link Channelz.Security} on client side.
-   */
-  protected Channelz.Security getExpectedClientSecurity() {
-    // Default implementation: no security
-    return null;
-  }
-
-  /**
-   * Returns the value of the {@link Channelz.Security} on server side.
-   */
-  protected Channelz.Security getExpectedServerSecurity() {
-    // Default implementation: no security
-    return null;
-  }
 
   /**
    * Returns true (which is default) if the transport reports message sizes to StreamTracers.
@@ -1741,29 +1723,6 @@ public abstract class AbstractTransportTest {
     // very basic sanity check that socket options are populated
     assertNotNull(serverSocketStats.socketOptions.lingerSeconds);
     assertTrue(serverSocketStats.socketOptions.others.containsKey("SO_SNDBUF"));
-  }
-
-  @Test
-  public void socketStats_security() throws Exception {
-    server.start(serverListener);
-    ManagedClientTransport client = newClientTransport(server);
-    startTransport(client, mockClientTransportListener);
-    ClientStream clientStream = client.newStream(methodDescriptor, new Metadata(), callOptions);
-    ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
-    clientStream.start(clientStreamListener);
-
-    MockServerTransportListener serverTransportListener
-        = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
-    StreamCreation serverStreamCreation
-        = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
-
-    Security expectedClientSecurity = getExpectedClientSecurity();
-    SocketStats clientSocketStats = client.getStats().get();
-    assertEquals(expectedClientSecurity, clientSocketStats.security);
-
-    Security expectedServerSecurity = getExpectedServerSecurity();
-    SocketStats serverSocketStats = serverTransportListener.transport.getStats().get();
-    assertEquals(expectedServerSecurity, serverSocketStats.security);
   }
 
   /**

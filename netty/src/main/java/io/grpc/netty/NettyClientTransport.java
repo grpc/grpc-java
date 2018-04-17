@@ -85,7 +85,10 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final Runnable tooManyPingsRunnable;
 
   private ProtocolNegotiator.Handler negotiationHandler;
-  private NettyClientHandler handler;
+
+  @VisibleForTesting
+  NettyClientHandler handler;
+
   // We should not send on the channel until negotiation completes. This is a hard requirement
   // by SslHandler but is appropriate for HTTP/1.1 Upgrade as well.
   private Channel channel;
@@ -346,21 +349,22 @@ class NettyClientTransport implements ConnectionClientTransport {
 
   private SocketStats getStatsHelper(Channel ch) {
     assert ch.eventLoop().inEventLoop();
-    // If protocol negotiation is not yet complete, then the attributes will be empty,
-    // and we will have no security to report yet.
-    SSLSession sslSession = getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
-    final Security security;
-    if (sslSession != null) {
-      security = Security.withTls(Tls.fromSslSession(sslSession));
-    } else {
-      security = null;
-    }
     return new SocketStats(
         transportTracer.getStats(),
         channel.localAddress(),
         channel.remoteAddress(),
         Utils.getSocketOptions(ch),
-        security);
+        getSecurity());
+  }
+
+  Security getSecurity() {
+    // If protocol negotiation is not yet complete, then the attributes will be empty,
+    // and we will have no security to report yet.
+    SSLSession sslSession = getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
+    if (sslSession == null) {
+      return null;
+    }
+    return new Security(Tls.fromSslSession(sslSession));
   }
 
   @VisibleForTesting

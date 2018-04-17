@@ -51,7 +51,7 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusException;
 import io.grpc.internal.Channelz;
-import io.grpc.internal.Channelz.SocketStats;
+import io.grpc.internal.Channelz.Security;
 import io.grpc.internal.Channelz.Tls;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
@@ -561,44 +561,33 @@ public class NettyClientTransportTest {
   }
 
   @Test
-  public void tlsReportedInStatus() throws Exception {
+  public void tlsReportedForChannelz() throws Exception {
     negotiator = ProtocolNegotiators.serverPlaintext();
     startServer();
 
-    Certificate local = mock(Certificate.class);
-    Certificate remote = mock(Certificate.class);
-    when(local.toString()).thenReturn("local-cert");
-    when(remote.toString()).thenReturn("remote-cert");
+    Certificate local = TestUtils.loadX509Cert("client.pem");
+    Certificate remote = TestUtils.loadX509Cert("server0.pem");
     final SSLSession session = mock(SSLSession.class);
     when(session.getCipherSuite()).thenReturn("TLS_NULL_WITH_NULL_NULL");
     when(session.getLocalCertificates()).thenReturn(new Certificate[]{local});
     when(session.getPeerCertificates()).thenReturn(new Certificate[]{remote});
 
-    final SettableFuture<GrpcHttp2ConnectionHandler> handlerFuture = SettableFuture.create();
-    final ProtocolNegotiator negotiator = new NoopProtocolNegotiator() {
-      @Override
-      public Handler newHandler(final GrpcHttp2ConnectionHandler grpcHandler) {
-        handlerFuture.set(grpcHandler);
-        return super.newHandler(grpcHandler);
-      }
-    };
+    final ProtocolNegotiator negotiator = new NoopProtocolNegotiator();
     final NettyClientTransport transport = newTransport(negotiator);
     callMeMaybe(transport.start(clientTransportListener));
-    // A hack: The NoopProtocolNegotiator does not notify the handler
-    // via handleProtocolNegotiationCompleted, so now that the negotiation is complete,
-    // we invoke it manually.
-    handlerFuture.get().handleProtocolNegotiationCompleted(
+    assertNull(transport.getSecurity());
+
+    transport.handler.handleProtocolNegotiationCompleted(
         Attributes
             .newBuilder()
             .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, session)
             .build());
 
-    SocketStats socketStats = transport.getStats().get();
-    assertNull(socketStats.security.other);
-    Tls tls = socketStats.security.tls;
+    Security security = transport.getSecurity();
+    Tls tls = security.tls;
     assertNotNull(tls);
-    assertEquals("local-cert", tls.localCert);
-    assertEquals("remote-cert", tls.remoteCert);
+    assertEquals(local.toString(), tls.localCert);
+    assertEquals(remote.toString(), tls.remoteCert);
     assertEquals("TLS_NULL_WITH_NULL_NULL", tls.cipherSuiteStandardName);
   }
 

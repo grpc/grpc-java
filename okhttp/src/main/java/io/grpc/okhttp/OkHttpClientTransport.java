@@ -190,11 +190,6 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   private final Runnable tooManyPingsRunnable;
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
-  // Avoid reading from attributes because it can only be safely read after the connection
-  // is established. Channelz may want to read this info before that point.
-  @GuardedBy("lock")
-  @Nullable
-  private SSLSession sslSession;
 
   @VisibleForTesting
   @Nullable
@@ -488,6 +483,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
           attributes = Attributes
               .newBuilder()
               .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, sock.getRemoteSocketAddress())
+              .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession)
               .build();
         } catch (StatusException e) {
           startGoAway(0, ErrorCode.INTERNAL_ERROR, e.getStatus());
@@ -504,7 +500,6 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         synchronized (lock) {
           socket = Preconditions.checkNotNull(sock, "socket");
           maxConcurrentStreams = Integer.MAX_VALUE;
-          OkHttpClientTransport.this.sslSession = sslSession;
           startPendingStreams();
         }
 
@@ -923,8 +918,9 @@ class OkHttpClientTransport implements ConnectionClientTransport {
       SocketAddress local = socket == null ? null : socket.getLocalSocketAddress();
       SocketAddress remote = socket == null ? null :  socket.getRemoteSocketAddress();
       final Security security;
+      final SSLSession sslSession = attributes.get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
       if (sslSession != null) {
-        security = Security.withTls(Tls.fromSslSession(sslSession));
+        security = new Security(Tls.fromSslSession(sslSession));
       } else {
         security = null;
       }

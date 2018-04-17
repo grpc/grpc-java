@@ -462,20 +462,14 @@ public final class Channelz {
     @Nullable
     public final OtherSecurity other;
 
-    private Security(Tls tls, OtherSecurity other) {
-      Preconditions.checkState(
-          tls != null ^ other != null,
-          "one of tls or other should be set");
+    public Security(Tls tls) {
       this.tls = tls;
+      this.other = null;
+    }
+
+    public Security(OtherSecurity other) {
+      this.tls = null;
       this.other = other;
-    }
-
-    public static Security withTls(Tls tls) {
-      return new Security(tls, /*other=*/ null);
-    }
-
-    public static Security withOtherSecurity(OtherSecurity other) {
-      return new Security(/*tls=*/ null, other);
     }
 
     @Override
