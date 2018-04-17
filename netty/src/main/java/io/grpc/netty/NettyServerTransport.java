@@ -59,9 +59,8 @@ class NettyServerTransport implements ServerTransport {
   private final ChannelPromise channelUnused;
   private final ProtocolNegotiator protocolNegotiator;
   private final int maxStreams;
-  // Only set once during start()
-  @VisibleForTesting
-  volatile NettyServerHandler grpcHandler;
+  // only accessed from channel event loop
+  private NettyServerHandler grpcHandler;
   private ServerTransportListener listener;
   private boolean terminated;
   private final int flowControlWindow;

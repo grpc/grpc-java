@@ -79,7 +79,6 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final long keepAliveTimeoutNanos;
   private final boolean keepAliveWithoutCalls;
   private final Runnable tooManyPingsRunnable;
-
   private ProtocolNegotiator.Handler negotiationHandler;
   private NettyClientHandler handler;
 
@@ -310,7 +309,8 @@ class NettyClientTransport implements ConnectionClientTransport {
 
   @Override
   public Attributes getAttributes() {
-    return handler == null ? Attributes.EMPTY : handler.getAttributes();
+    // TODO(zhangkun83): fill channel security attributes
+    return Attributes.EMPTY;
   }
 
   @Override
