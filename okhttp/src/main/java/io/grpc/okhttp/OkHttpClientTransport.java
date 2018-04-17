@@ -38,9 +38,8 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusException;
-import io.grpc.internal.Channelz.Security;
+import io.grpc.internal.Channelz;
 import io.grpc.internal.Channelz.SocketStats;
-import io.grpc.internal.Channelz.Tls;
 import io.grpc.internal.Channelz.TransportStats;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ConnectionClientTransport;
@@ -190,6 +189,8 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   private final Runnable tooManyPingsRunnable;
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
+  @GuardedBy("lock")
+  private Channelz.SecurityInfoProvider securityInfoProvider = Channelz.NO_SECURITY_INFO;
 
   @VisibleForTesting
   @Nullable
@@ -501,6 +502,9 @@ class OkHttpClientTransport implements ConnectionClientTransport {
           socket = Preconditions.checkNotNull(sock, "socket");
           maxConcurrentStreams = Integer.MAX_VALUE;
           startPendingStreams();
+          if (sslSession != null) {
+            securityInfoProvider = new Channelz.TlsSecurityInfoProvider(sslSession);
+          }
         }
 
         rawFrameWriter = variant.newWriter(sink, true);
@@ -917,20 +921,13 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     synchronized (lock) {
       SocketAddress local = socket == null ? null : socket.getLocalSocketAddress();
       SocketAddress remote = socket == null ? null :  socket.getRemoteSocketAddress();
-      final Security security;
-      final SSLSession sslSession = attributes.get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
-      if (sslSession != null) {
-        security = new Security(Tls.fromSslSession(sslSession));
-      } else {
-        security = null;
-      }
       TransportStats stats = transportTracer.getStats();
       ret.set(new SocketStats(
           stats,
           local,
           remote,
           Utils.getSocketOptions(socket),
-          security));
+          securityInfoProvider.get()));
       return ret;
     }
   }

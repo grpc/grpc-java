@@ -16,6 +16,7 @@
 
 package io.grpc.services;
 
+import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.Any;
@@ -36,6 +37,9 @@ import io.grpc.channelz.v1.ChannelRef;
 import io.grpc.channelz.v1.GetServerSocketsResponse;
 import io.grpc.channelz.v1.GetServersResponse;
 import io.grpc.channelz.v1.GetTopChannelsResponse;
+import io.grpc.channelz.v1.Security;
+import io.grpc.channelz.v1.Security.OtherSecurity;
+import io.grpc.channelz.v1.Security.Tls;
 import io.grpc.channelz.v1.Server;
 import io.grpc.channelz.v1.ServerData;
 import io.grpc.channelz.v1.ServerRef;
@@ -127,11 +131,42 @@ final class ChannelzProtoUtil {
         .build();
   }
 
+  static Security toSecurity(Channelz.Security security) {
+    Preconditions.checkNotNull(security);
+    Preconditions.checkState(
+        security.tls != null ^ security.other != null,
+        "one of tls or othersecurity must be non null");
+    if (security.tls != null) {
+      Tls.Builder tlsBuilder
+          = Tls.newBuilder().setStandardName(security.tls.cipherSuiteStandardName);
+      if (security.tls.localCert != null) {
+        tlsBuilder.setLocalCertificate(ByteString.copyFrom(
+            security.tls.localCert,
+            Charsets.UTF_8));
+      }
+      if (security.tls.remoteCert != null) {
+        tlsBuilder.setRemoteCertificate(ByteString.copyFrom(
+            security.tls.remoteCert,
+            Charsets.UTF_8));
+      }
+      return Security.newBuilder().setTls(tlsBuilder).build();
+    } else {
+      OtherSecurity.Builder builder = OtherSecurity.newBuilder().setName(security.other.name);
+      if (security.other.any != null) {
+        builder.setValue((Any) security.other.any);
+      }
+      return Security.newBuilder().setOther(builder).build();
+    }
+  }
+
   static Socket toSocket(Instrumented<SocketStats> obj) {
     SocketStats socketStats = getFuture(obj.getStats());
     Builder builder = Socket.newBuilder()
         .setRef(toSocketRef(obj))
         .setLocal(toAddress(socketStats.local));
+    if (socketStats.security != null) {
+      builder.setSecurity(toSecurity(socketStats.security));
+    }
     // listen sockets do not have remote nor data
     if (socketStats.remote != null) {
       builder.setRemote(toAddress(socketStats.remote));

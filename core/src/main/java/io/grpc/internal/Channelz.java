@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import io.grpc.ConnectivityState;
 import java.net.SocketAddress;
@@ -456,6 +455,30 @@ public final class Channelz {
     }
   }
 
+  public interface SecurityInfoProvider {
+    Security get();
+  }
+
+  public static final SecurityInfoProvider NO_SECURITY_INFO = new SecurityInfoProvider() {
+    @Override
+    public Security get() {
+      return null;
+    }
+  };
+
+  public static final class TlsSecurityInfoProvider implements SecurityInfoProvider {
+    private final SSLSession session;
+
+    public TlsSecurityInfoProvider(SSLSession session) {
+      this.session = Preconditions.checkNotNull(session, "session");
+    }
+
+    @Override
+    public Security get() {
+      return new Security(new Tls(session));
+    }
+  }
+
   public static final class Security {
     @Nullable
     public final Tls tls;
@@ -471,31 +494,24 @@ public final class Channelz {
       this.tls = null;
       this.other = other;
     }
-
-    @Override
-    public boolean equals(Object o) {
-      if (!(o instanceof Security)) {
-        return false;
-      }
-      Security that = (Security) o;
-      return Objects.equal(tls, that.tls) && Objects.equal(other, that.other);
-    }
-
-    @Override
-    public int hashCode() {
-      // only tls field is immutable
-      return Objects.hashCode(tls);
-    }
   }
 
   public static final class OtherSecurity {
     public final String name;
     @Nullable
-    public final Object security;
+    public final Object any;
 
-    public OtherSecurity(String name, @Nullable Object security) {
+    /**
+     * Creates an instance.
+     * @param name the name.
+     * @param any a com.google.protobuf.Any object
+     */
+    public OtherSecurity(String name, @Nullable Object any) {
       this.name = Preconditions.checkNotNull(name);
-      this.security = security;
+      Preconditions.checkState(
+          any == null || any.getClass().getName().endsWith("com.google.protobuf.Any"),
+          "the 'any' object must be of type com.google.protobuf.Any");
+      this.any = any;
     }
   }
 
@@ -506,13 +522,10 @@ public final class Channelz {
     @Nullable public final String remoteCert;
 
     /**
-     * Creates an instance.
+     * A constructor only for testing.
      */
-    public Tls(
-        String cipherSuiteStandardName,
-        @Nullable String localCert,
-        @Nullable String remoteCert) {
-      this.cipherSuiteStandardName = cipherSuiteStandardName;
+    public Tls(String cipherSuiteName, String localCert, String remoteCert) {
+      this.cipherSuiteStandardName = cipherSuiteName;
       this.localCert = localCert;
       this.remoteCert = remoteCert;
     }
@@ -520,7 +533,7 @@ public final class Channelz {
     /**
      * Creates an instance.
      */
-    public static Tls fromSslSession(SSLSession session) {
+    public Tls(SSLSession session) {
       String cipherSuiteStandardName = session.getCipherSuite();
       String localCert = null;
       String remoteCert = null;
@@ -542,23 +555,9 @@ public final class Channelz {
             String.format("Peer cert not available for peerHost=%s", session.getPeerHost()),
             e);
       }
-      return new Tls(cipherSuiteStandardName, localCert, remoteCert);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (!(o instanceof Tls)) {
-        return false;
-      }
-      Tls that = (Tls) o;
-      return Objects.equal(cipherSuiteStandardName, that.cipherSuiteStandardName)
-          && Objects.equal(localCert, that.localCert)
-          && Objects.equal(remoteCert, that.remoteCert);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(cipherSuiteStandardName, localCert, remoteCert);
+      this.cipherSuiteStandardName = cipherSuiteStandardName;
+      this.localCert = localCert;
+      this.remoteCert = remoteCert;
     }
   }
 

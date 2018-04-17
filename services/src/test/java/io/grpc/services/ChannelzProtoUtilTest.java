@@ -20,10 +20,12 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.Channelz.id;
 import static org.junit.Assert.assertEquals;
 
+import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Int64Value;
+import com.google.protobuf.Message;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
 import io.grpc.ConnectivityState;
@@ -35,9 +37,13 @@ import io.grpc.channelz.v1.Channel;
 import io.grpc.channelz.v1.ChannelData;
 import io.grpc.channelz.v1.ChannelData.State;
 import io.grpc.channelz.v1.ChannelRef;
+import io.grpc.channelz.v1.GetChannelRequest;
 import io.grpc.channelz.v1.GetServerSocketsResponse;
 import io.grpc.channelz.v1.GetServersResponse;
 import io.grpc.channelz.v1.GetTopChannelsResponse;
+import io.grpc.channelz.v1.Security;
+import io.grpc.channelz.v1.Security.OtherSecurity;
+import io.grpc.channelz.v1.Security.Tls;
 import io.grpc.channelz.v1.Server;
 import io.grpc.channelz.v1.ServerData;
 import io.grpc.channelz.v1.ServerRef;
@@ -310,6 +316,54 @@ public final class ChannelzProtoUtilTest {
             .toBuilder()
             .build(),
         ChannelzProtoUtil.extractSocketData(socket.getStats().get()));
+  }
+
+  @Test
+  public void socketSecurityTls() throws Exception {
+    socket.security = new Channelz.Security(
+        new Channelz.Tls("TLS_NULL_WITH_NULL_NULL", "localcert", "remotecert"));
+    assertEquals(
+        Security.newBuilder().setTls(
+            Tls.newBuilder()
+            .setStandardName("TLS_NULL_WITH_NULL_NULL")
+            .setLocalCertificate(ByteString.copyFrom("localcert", Charsets.UTF_8))
+            .setRemoteCertificate(ByteString.copyFrom("remotecert", Charsets.UTF_8)))
+        .build(),
+        ChannelzProtoUtil.toSocket(socket).getSecurity());
+
+    socket.security = new Channelz.Security(
+        new Channelz.Tls("TLS_NULL_WITH_NULL_NULL", /*localcert=*/ null, "remotecert"));
+    assertEquals(
+        Security.newBuilder().setTls(
+            Tls.newBuilder()
+            .setStandardName("TLS_NULL_WITH_NULL_NULL")
+            .setRemoteCertificate(ByteString.copyFrom("remotecert", Charsets.UTF_8)))
+        .build(),
+        ChannelzProtoUtil.toSocket(socket).getSecurity());
+
+    socket.security = new Channelz.Security(
+        new Channelz.Tls("TLS_NULL_WITH_NULL_NULL", "localcert", /*remotecert=*/ null));
+    assertEquals(
+        Security.newBuilder().setTls(
+            Tls.newBuilder()
+                .setStandardName("TLS_NULL_WITH_NULL_NULL")
+                .setLocalCertificate(ByteString.copyFrom("localcert", Charsets.UTF_8)))
+            .build(),
+            ChannelzProtoUtil.toSocket(socket).getSecurity());
+  }
+
+  @Test
+  public void socketSecurityOther() throws Exception {
+    // what is packed here is not important, just pick some proto message
+    Message contents = GetChannelRequest.newBuilder().setChannelId(1).build();
+    Any packed = Any.pack(contents);
+    socket.security
+        = new Channelz.Security(new Channelz.OtherSecurity("other_security", packed));
+    assertEquals(
+        Security.newBuilder().setOther(
+            OtherSecurity.newBuilder().setName("other_security").setValue(packed))
+        .build(),
+        ChannelzProtoUtil.toSocket(socket).getSecurity());
   }
 
   @Test

@@ -21,6 +21,7 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.ConnectivityState;
 import io.grpc.internal.Channelz;
 import io.grpc.internal.Channelz.ChannelStats;
+import io.grpc.internal.Channelz.Security;
 import io.grpc.internal.Channelz.ServerStats;
 import io.grpc.internal.Channelz.SocketOptions;
 import io.grpc.internal.Channelz.SocketStats;
@@ -56,6 +57,7 @@ final class ChannelzTestHelper {
     SocketAddress local = new InetSocketAddress("10.0.0.1", 1000);
     SocketAddress remote = new InetSocketAddress("10.0.0.2", 1000);
     Channelz.SocketOptions socketOptions = new Channelz.SocketOptions.Builder().build();
+    Security security = null;
 
     @Override
     public ListenableFuture<SocketStats> getStats() {
@@ -66,7 +68,7 @@ final class ChannelzTestHelper {
               local,
               remote,
               socketOptions,
-              /*seucrity=*/ null));
+              security));
       return ret;
     }
 

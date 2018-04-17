@@ -25,13 +25,10 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
-import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
-import io.grpc.internal.Channelz.Security;
 import io.grpc.internal.Channelz.SocketStats;
-import io.grpc.internal.Channelz.Tls;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.FailingClientStream;
@@ -60,7 +57,6 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.net.ssl.SSLSession;
 
 /**
  * A Netty-based {@link ConnectionClientTransport} implementation.
@@ -85,9 +81,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final Runnable tooManyPingsRunnable;
 
   private ProtocolNegotiator.Handler negotiationHandler;
-
-  @VisibleForTesting
-  NettyClientHandler handler;
+  private NettyClientHandler handler;
 
   // We should not send on the channel until negotiation completes. This is a hard requirement
   // by SslHandler but is appropriate for HTTP/1.1 Upgrade as well.
@@ -354,17 +348,7 @@ class NettyClientTransport implements ConnectionClientTransport {
         channel.localAddress(),
         channel.remoteAddress(),
         Utils.getSocketOptions(ch),
-        getSecurity());
-  }
-
-  Security getSecurity() {
-    // If protocol negotiation is not yet complete, then the attributes will be empty,
-    // and we will have no security to report yet.
-    SSLSession sslSession = getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
-    if (sslSession == null) {
-      return null;
-    }
-    return new Security(Tls.fromSslSession(sslSession));
+        handler == null ? null : handler.getSecurityInfoProvider().get());
   }
 
   @VisibleForTesting
