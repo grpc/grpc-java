@@ -279,20 +279,47 @@ public class RouteGuideClient {
     };
 
     RouteSummary summary = null;
+    Point point = null;
+    int pointsSent = 0;
+    while (true) {
+      if (call.isComplete()) {
+        break;
+      }
+      if (pointsSent == numPoints) {
+        break;
+      }
+      if (point == null) {
+        int index = random.nextInt(features.size());
+        point = features.get(index).getLocation();
+      }
+      if (call.offerUninterruptiblyUntilReadable(point)) {
+        info("Visited point {0}, {1}", RouteGuideUtil.getLatitude(point),
+            RouteGuideUtil.getLongitude(point));
+        point = null;
+        pointsSent++;
+        continue;
+      }
+      if ((summary = call.pollNow()) != null) {
+        break;
+      }
+    }
+
+
+
+
+
+
     try {
       // Send numPoints points randomly selected from the features list.
       for (int i = 0; i < numPoints && !call.isComplete(); ++i) {
-        int index = random.nextInt(features.size());
+
         Point point = features.get(index).getLocation();
-        info("Visiting point {0}, {1}", RouteGuideUtil.getLatitude(point),
-            RouteGuideUtil.getLongitude(point));
+
         if (!call.offerUninterruptiblyUntilReadable(point)) {
           if (call.isComplete()) {
             break;
           }
-          if ((summary = call.pollNow()) != null) {
-            break;
-          }
+
         }
         // Sleep for a bit before sending the next one.
         Thread.sleep(random.nextInt(1000) + 500);
