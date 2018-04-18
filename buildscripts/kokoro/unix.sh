@@ -67,6 +67,7 @@ pushd examples
 mvn verify --batch-mode
 popd
 
+./gradlew install
 pushd examples/example-kotlin/
 ./gradlew build $GRADLE_FLAGS
 popd
