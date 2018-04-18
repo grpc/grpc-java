@@ -73,6 +73,15 @@ LOCAL_MVN_TEMP=$(mktemp -d)
 # Note that this disables parallel=true from GRADLE_FLAGS
 ./gradlew clean grpc-compiler:build grpc-compiler:uploadArchives $GRADLE_FLAGS -PtargetArch=x86_64 \
   -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP
+  
+LOCAL_CHANNELZ_PROTO="services/src/main/proto/io/grpc/channelz.proto"
+REMOTE_CHANNELZ_PROTO="https://raw.githubusercontent.com/grpc/grpc-proto/master/grpc/channelz/channelz.proto"
+CHANNELZ_PROTO_DIFF=`curl "$REMOTE_CHANNELZ_PROTO" | diff -u "$LOCAL_CHANNELZ_PROTO" -`
+if [[ -n "$CHANNELZ_PROTO_DIFF" ]]; then
+  echo "Error Channelz defs don't match"
+  echo "$CHANNELZ_PROTO_DIFF"
+  exit 1
+fi
 
 if [[ -z "${MVN_ARTIFACTS:-}" ]]; then
   exit 0
