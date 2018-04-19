@@ -41,7 +41,7 @@ information.
 Unit test examples
 ==============================================
 
-Examples for unit testing gRPC clients and servers are located in [examples/src/test](src/test).
+Examples for unit testing gRPC clients and servers are located in [./src/test](./src/test).
 
 In general, we DO NOT allow overriding the client stub.
 We encourage users to leverage `InProcessTransport` as demonstrated in the examples to
