@@ -20,6 +20,7 @@ import io.grpc.Server
 import io.grpc.ServerBuilder
 import io.grpc.stub.StreamObserver
 import java.io.IOException
+import java.util.logging.Level
 import java.util.logging.Logger
 
 /**
@@ -39,7 +40,7 @@ class HelloWorldServer {
                 .addService(GreeterImpl())
                 .build()
                 .start()
-        logger.info("Server started, listening on $port")
+        logger.log(Level.INFO, "Server started, listening on {0}", port)
         Runtime.getRuntime().addShutdownHook(object : Thread() {
             override fun run() {
                 // Use stderr here since the logger may have been reset by its JVM shutdown hook.

@@ -48,16 +48,16 @@ internal constructor(private val channel: ManagedChannel) {
 
     /** Say hello to server.  */
     fun greet(name: String) {
-        logger.info("Will try to greet $name ...")
+        logger.log(Level.INFO, "Will try to greet {0}...", name)
         val request = HelloRequest.newBuilder().setName(name).build()
         val response: HelloReply =  try {
             blockingStub.sayHello(request)
         } catch (e: StatusRuntimeException) {
-            logger.log(Level.WARNING, "RPC failed: ${e.status}")
+            logger.log(Level.WARNING, "RPC failed: {0}", e.status)
             return;
         }
 
-        logger.info("Greeting: ${response?.message}")
+        logger.info("Greeting: ${response.message}")
     }
 
     companion object {
