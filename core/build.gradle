@@ -1,3 +1,16 @@
+// Add dependency on the protobuf plugin
+buildscript {
+    repositories {
+        maven {
+            // The google mirror is less flaky than mavenCentral()
+            url "https://maven-central.storage-download.googleapis.com/repos/central/data/"
+        }
+    }
+    dependencies {
+        classpath libraries.protobuf_plugin
+    }
+}
+
 description = 'gRPC: Core'
 
 dependencies {
@@ -28,7 +41,9 @@ dependencies {
     }
 
     testCompile project(':grpc-context').sourceSets.test.output,
-                project(':grpc-testing')
+                project(':grpc-testing'),
+                libraries.google_api_protos,
+                libraries.protobuf
 
     signature "org.codehaus.mojo.signature:java16:1.1@signature"
 }
@@ -43,3 +58,9 @@ animalsniffer {
     // Don't check sourceSets.jmh
     sourceSets = [sourceSets.main, sourceSets.test]
 }
+
+compileTestJava {
+    options.compilerArgs += "-Xlint:-deprecation" // for enums in proto
+}
+
+configureProtoCompilation()

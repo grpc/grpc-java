@@ -1,0 +1,227 @@
+// Copyright 2015, gRPC Authors
+// All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// A ServiceConfig is supplied when a service is deployed. It mostly contains
+// parameters for how clients that connect to the service should behave (for
+// example, the load balancing policy to use to pick between service replicas).
+//
+// The configuration options provided here act as overrides to automatically
+// chosen option values. Service owners should be conservative in specifying
+// options as the system is likely to choose better values for these options in
+// the vast majority of cases. In other words, please specify a configuration
+// option only if you really have to, and avoid copy-paste inclusion of configs.
+
+syntax = "proto3";
+
+package grpc;
+
+option java_package = "io.grpc.serviceconfig";
+option java_multiple_files = true;
+option java_outer_classname = "ServiceConfigProto";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/wrappers.proto";
+import "google/rpc/code.proto";
+
+// Configuration for a method.
+message MethodConfig {
+  // The names of the methods to which this configuration applies. There must
+  // be at least one name. Each name entry must be unique across the entire
+  // ClientConfig. If the 'method' field is empty, then this MethodConfig
+  // specifies the defaults for all methods for the specified service.
+  //
+  // For example, let's say that the service config contains the following
+  // MethodConfig entries:
+  //
+  // method_config { name { service: "MyService" } ... }
+  // method_config { name { service: "MyService" method: "Foo" } ... }
+  //
+  // For a request for MyService/Foo, we will use the second entry, because it
+  // exactly matches the service and method name.
+  // For a request for MyService/Bar, we will use the first entry, because it
+  // provides the default for all methods of MyService.
+  message Name {
+    string service = 1;  // Required. Includes proto package name.
+    string method = 2;
+  }
+  repeated Name name = 1;
+
+  // Whether RPCs sent to this method should wait until the connection is
+  // ready by default. If false, the RPC will abort immediately if there is
+  // a transient failure connecting to the server. Otherwise, gRPC will
+  // attempt to connect until the deadline is exceeded.
+  //
+  // The value specified via the gRPC client API will override the value
+  // set here. However, note that setting the value in the client API will
+  // also affect transient errors encountered during name resolution, which
+  // cannot be caught by the value here, since the service config is
+  // obtained by the gRPC client via name resolution.
+  google.protobuf.BoolValue wait_for_ready = 2;
+
+  // The default timeout in seconds for RPCs sent to this method. This can be
+  // overridden in code. If no reply is received in the specified amount of
+  // time, the request is aborted and a DEADLINE_EXCEEDED error status
+  // is returned to the caller.
+  //
+  // The actual deadline used will be the minimum of the value specified here
+  // and the value set by the application via the gRPC client API.  If either
+  // one is not set, then the other will be used.  If neither is set, then the
+  // request has no deadline.
+  google.protobuf.Duration timeout = 3;
+
+  // The maximum allowed payload size for an individual request or object in a
+  // stream (client->server) in bytes. The size which is measured is the
+  // serialized payload after per-message compression (but before stream
+  // compression) in bytes. This applies both to streaming and non-streaming
+  // requests.
+  //
+  // The actual value used is the minumum of the value specified here and the
+  // value set by the application via the gRPC client API.  If either one is
+  // not set, then the other will be used.  If neither is set, then the
+  // built-in default is used.
+  //
+  // If a client attempts to send an object larger than this value, it will not
+  // be sent and the client will see a ClientError.
+  // Note that 0 is a valid value, meaning that the request message
+  // must be empty.
+  google.protobuf.UInt32Value max_request_message_bytes = 4;
+
+  // The maximum allowed payload size for an individual response or object in a
+  // stream (server->client) in bytes. The size which is measured is the
+  // serialized payload after per-message compression (but before stream
+  // compression) in bytes. This applies both to streaming and non-streaming
+  // requests.
+  //
+  // The actual value used is the minumum of the value specified here and the
+  // value set by the application via the gRPC client API.  If either one is
+  // not set, then the other will be used.  If neither is set, then the
+  // built-in default is used.
+  //
+  // If a server attempts to send an object larger than this value, it will not
+  // be sent, and a ServerError will be sent to the client instead.
+  // Note that 0 is a valid value, meaning that the response message
+  // must be empty.
+  google.protobuf.UInt32Value max_response_message_bytes = 5;
+
+  // The retry policy for outgoing RPCs.
+  message RetryPolicy {
+    // The maximum number of retry attempts, exclusive of the original RPC.
+    //
+    // This field is required and must be greater than zero.
+    uint32 max_attempts = 1;
+
+    // Exponential backoff parameters. The initial retry attempt will occur at
+    // random(0, initial_backoff). In general, the nth attempt will occur at
+    // random(0,
+    //   min(initial_backoff*backoff_multiplier**(n-1), max_backoff)).
+    // Required. Must be greater than zero.
+    google.protobuf.Duration initial_backoff = 2;
+    // Required. Must be greater than zero.
+    google.protobuf.Duration max_backoff = 3;
+    float backoff_multiplier = 4;  // Required. Must be greater than zero.
+
+    // The set of status codes which may be retried.
+    //
+    // This field is required and must be non-empty.
+    repeated google.rpc.Code retryable_status_codes = 5;
+  }
+
+  // The hedging policy for outgoing RPCs. Hedged RPCs may execute more than
+  // once on the server, so only idempotent methods should specify a hedging
+  // policy.
+  message HedgingPolicy {
+    // The hedging policy will send up to max_requests copies of the hedged
+    // RPC. This number is inclusive of all requests, including the original
+    // RPC.
+    //
+    // This field is required and must be greater than 1.
+    uint32 max_attempts = 1;
+
+    // The first RPC will be sent immediately, but the max_requests-1 subsequent
+    // hedged RPCs will be sent at intervals of every hedging_delay. Set this
+    // to 0 to immediately send all max_requests RPCs.
+    google.protobuf.Duration hedging_delay = 2;
+
+    // The set of status codes which indicate other hedged RPCs may still
+    // succeed. If a non-fatal status code is returned by the server, hedged
+    // RPCs will continue. Otherwise, outstanding requests will be canceled and
+    // the error returned to the client application layer.
+    //
+    // This field is required and must be non-empty.
+    repeated google.rpc.Code non_fatal_status_codes = 3;
+  }
+
+  // Only one of retry_policy or hedging_policy may be set. If neither is set,
+  // RPCs will not be retried or hedged.
+  oneof retry_or_hedging_policy {
+    RetryPolicy retry_policy = 6;
+    HedgingPolicy hedging_policy = 7;
+  }
+}
+
+// A ServiceConfig represents information about a service but is not specific to
+// any name resolver.
+message ServiceConfig {
+  // Load balancing policy.
+  // This field is optional; if unset, the default behavior is to pick
+  // the first available backend.
+  // If the policy name is set via the client API, that value overrides
+  // the value specified here.
+  //
+  // Note that if the resolver returns at least one balancer address (as
+  // opposed to backend addresses), gRPC will use grpclb (see
+  // https://github.com/grpc/grpc/blob/master/doc/load-balancing.md),
+  // regardless of what this field is set to.  However, if the resolver
+  // returns at least one backend address in addition to the balancer
+  // address(es), the client may fall back to the requested policy if it
+  // is unable to reach any of the grpclb load balancers.
+  enum LoadBalancingPolicy {
+    UNSPECIFIED = 0;
+    ROUND_ROBIN = 1;
+  }
+  LoadBalancingPolicy load_balancing_policy = 1;
+
+  // Per-method configuration.
+  repeated MethodConfig method_config = 2;
+
+  // If a RetryThrottlingPolicy is provided, gRPC will automatically throttle
+  // retry attempts and hedged RPCs when the client's ratio of failures to
+  // successes exceeds a threshold.
+  //
+  // For each server name, the gRPC client will maintain a token_count which is
+  // initially set to max_tokens. Every outgoing RPC (regardless of service or
+  // method invoked) will change token_count as follows:
+  //
+  //   - Every failed RPC will decrement the token_count by 1.
+  //   - Every successful RPC will increment the token_count by token_ratio.
+  //
+  // If token_count is less than or equal to max_tokens / 2, then RPCs will not
+  // be retried and hedged RPCs will not be sent.
+  message RetryThrottlingPolicy {
+    // The number of tokens starts at max_tokens. The token_count will always be
+    // between 0 and max_tokens.
+    //
+    // This field is required and must be greater than zero.
+    uint32 max_tokens = 1;
+
+    // The amount of tokens to add on each successful RPC. Typically this will
+    // be some number between 0 and 1, e.g., 0.1.
+    //
+    // This field is required and must be greater than zero. Up to 3 decimal
+    // places are supported.
+    float token_ratio = 2;
+  }
+  RetryThrottlingPolicy retry_throttling = 3;
+}
