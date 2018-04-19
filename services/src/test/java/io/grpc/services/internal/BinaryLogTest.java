@@ -14,14 +14,16 @@
  * limitations under the License.
  */
 
-package io.grpc.services;
+package io.grpc.services.internal;
 
-import static io.grpc.internal.BinaryLogProvider.BYTEARRAY_MARSHALLER;
-import static io.grpc.services.BinaryLog.DUMMY_SOCKET;
-import static io.grpc.services.BinaryLog.emptyCallId;
-import static io.grpc.services.BinaryLog.getCallIdForClient;
-import static io.grpc.services.BinaryLog.getCallIdForServer;
-import static io.grpc.services.BinaryLog.getPeerSocket;
+import static io.grpc.services.internal.BinaryLog.DUMMY_SOCKET;
+import static io.grpc.services.internal.BinaryLog.emptyCallId;
+import static io.grpc.services.internal.BinaryLog.getCallIdForClient;
+import static io.grpc.services.internal.BinaryLog.getCallIdForServer;
+import static io.grpc.services.internal.BinaryLog.getPeerSocket;
+import static io.grpc.services.internal.BinaryLogProviderImpl.BYTEARRAY_MARSHALLER;
+import static io.grpc.services.internal.BinaryLogProviderImpl.CLIENT_CALL_ID_CALLOPTION_KEY;
+import static io.grpc.services.internal.BinaryLogProviderImpl.SERVER_CALL_ID_CONTEXT_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -51,13 +53,11 @@ import io.grpc.binarylog.MetadataEntry;
 import io.grpc.binarylog.Peer;
 import io.grpc.binarylog.Peer.PeerType;
 import io.grpc.binarylog.Uint128;
-import io.grpc.internal.BinaryLogProvider;
-import io.grpc.internal.BinaryLogProvider.CallId;
 import io.grpc.internal.NoopClientCall;
 import io.grpc.internal.NoopServerCall;
-import io.grpc.services.BinaryLog.FactoryImpl;
-import io.grpc.services.BinaryLog.SinkWriter;
-import io.grpc.services.BinaryLog.SinkWriterImpl;
+import io.grpc.services.internal.BinaryLog.SinkWriter;
+import io.grpc.services.internal.BinaryLog.SinkWriterImpl;
+import io.grpc.services.internal.BinaryLogProviderImpl.CallId;
 import io.netty.channel.unix.DomainSocketAddress;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -689,7 +689,7 @@ public final class BinaryLogTest {
         CALL_ID,
         getCallIdForServer(
             Context.ROOT.withValue(
-                BinaryLogProvider.SERVER_CALL_ID_CONTEXT_KEY,
+                SERVER_CALL_ID_CONTEXT_KEY,
                 CALL_ID)));
   }
 
@@ -700,7 +700,7 @@ public final class BinaryLogTest {
         CALL_ID,
         getCallIdForClient(
             CallOptions.DEFAULT.withOption(
-                BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY,
+                CLIENT_CALL_ID_CALLOPTION_KEY,
                 CALL_ID)));
   }
 
@@ -764,7 +764,7 @@ public final class BinaryLogTest {
             .interceptCall(
                 method,
                 CallOptions.DEFAULT.withOption(
-                    BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY, CALL_ID),
+                    CLIENT_CALL_ID_CALLOPTION_KEY, CALL_ID),
                 channel);
 
     // send initial metadata
@@ -837,7 +837,7 @@ public final class BinaryLogTest {
   @Test
   public void serverInterceptor() throws Exception {
     Context.current()
-        .withValue(BinaryLogProvider.SERVER_CALL_ID_CONTEXT_KEY, CALL_ID)
+        .withValue(SERVER_CALL_ID_CONTEXT_KEY, CALL_ID)
         .call(new Callable<Void>() {
           @Override
           public Void call() throws Exception {
@@ -1006,6 +1006,6 @@ public final class BinaryLogTest {
   }
 
   private BinaryLog makeLog(String logConfigStr) {
-    return FactoryImpl.createBinaryLog(sink, logConfigStr);
+    return BinaryLog.FactoryImpl.createBinaryLog(sink, logConfigStr);
   }
 }
