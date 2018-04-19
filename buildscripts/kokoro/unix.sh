@@ -61,13 +61,14 @@ fi
 
 # Run tests
 ./gradlew build $GRADLE_FLAGS
+./gradlew install
+
 pushd examples
 ./gradlew build $GRADLE_FLAGS
 # --batch-mode reduces log spam
 mvn verify --batch-mode
 popd
 
-./gradlew install
 pushd examples/example-kotlin/
 ./gradlew build $GRADLE_FLAGS
 popd

@@ -30,7 +30,7 @@ class HelloWorldClient
 /** Construct client for accessing RouteGuide server using the existing channel.  */
 internal constructor(private val channel: ManagedChannel) {
     private val blockingStub: GreeterGrpc.GreeterBlockingStub
-            = GreeterGrpc.newBlockingStub(channel);
+            = GreeterGrpc.newBlockingStub(channel)
 
     /** Construct client connecting to HelloWorld server at `host:port`.  */
     constructor(host: String, port: Int) : this(ManagedChannelBuilder.forAddress(host, port)
@@ -54,7 +54,7 @@ internal constructor(private val channel: ManagedChannel) {
             blockingStub.sayHello(request)
         } catch (e: StatusRuntimeException) {
             logger.log(Level.WARNING, "RPC failed: {0}", e.status)
-            return;
+            return
         }
 
         logger.info("Greeting: ${response.message}")
@@ -73,7 +73,7 @@ internal constructor(private val channel: ManagedChannel) {
             val client = HelloWorldClient("localhost", 50051)
             try {
                 /* Access a service running on the local machine on port 50051 */
-                val user = if (args.size > 0) "world" else "world";
+                val user = if (args.size > 0) "world" else "world"
                 client.greet(user)
             } finally {
                 client.shutdown()
