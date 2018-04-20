@@ -74,9 +74,6 @@ LOCAL_MVN_TEMP=$(mktemp -d)
 ./gradlew clean grpc-compiler:build grpc-compiler:uploadArchives $GRADLE_FLAGS -PtargetArch=x86_64 \
   -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP
 
-if [[ -z "${MVN_ARTIFACTS:-}" ]]; then
-  exit 0
-fi
 MVN_ARTIFACT_DIR="$PWD/mvn-artifacts"
 mkdir $MVN_ARTIFACT_DIR
 mv $LOCAL_MVN_TEMP/* $MVN_ARTIFACT_DIR
