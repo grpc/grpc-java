@@ -390,7 +390,7 @@ public abstract class AbstractManagedChannelImplBuilder
         buildTransportFactory(),
         // TODO(carl-mastrangelo): Allow clients to pass this in
         new ExponentialBackoffPolicy.Provider(),
-        SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
+        executorPool,
         GrpcUtil.STOPWATCH_SUPPLIER,
         getEffectiveInterceptors(),
         CallTracer.getDefaultFactory()));
