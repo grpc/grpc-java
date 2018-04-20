@@ -16,9 +16,11 @@
 
 package io.grpc.services;
 
+import io.grpc.CallOptions;
 import io.grpc.ClientInterceptor;
 import io.grpc.ServerInterceptor;
 import io.grpc.internal.BinaryLogProvider;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -29,6 +31,7 @@ import javax.annotation.Nullable;
 public class BinaryLogProviderImpl extends BinaryLogProvider {
   private static final Logger logger = Logger.getLogger(BinaryLogProviderImpl.class.getName());
   private final BinaryLog.Factory factory;
+  private final AtomicLong counter = new AtomicLong();
 
   public BinaryLogProviderImpl() {
     this(BinaryLogSinkProvider.provider(), System.getenv("GRPC_BINARY_LOG_CONFIG"));
@@ -66,5 +69,15 @@ public class BinaryLogProviderImpl extends BinaryLogProvider {
   @Override
   protected boolean isAvailable() {
     return factory != null;
+  }
+
+  @Override
+  public CallId getServerCallId() {
+    return new CallId(0, counter.getAndIncrement());
+  }
+
+  @Override
+  public CallId getClientCallId(CallOptions options) {
+    return new CallId(0, counter.getAndIncrement());
   }
 }
