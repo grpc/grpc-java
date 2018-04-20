@@ -41,7 +41,7 @@ public final class JsonParser {
 
   /**
    * Parses a json string, returning either a {@code Map<String, Object>}, {@code List<Object>},
-   * {@code String}, {@code Double}, {@code Boolean}, or {@code Void}.
+   * {@code String}, {@code Double}, {@code Boolean}, or {@code null}.
    */
   @SuppressWarnings("unchecked")
   public static Object parse(String raw) throws IOException {
