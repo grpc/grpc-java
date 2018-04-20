@@ -40,7 +40,7 @@ public final class JsonParser {
   private JsonParser() {}
 
   @SuppressWarnings("unchecked")
-  static Object parse(String raw) throws IOException {
+  public static Object parse(String raw) throws IOException {
     JsonReader jr = new JsonReader(new StringReader(raw));
     try {
       return parseRecursive(jr);
