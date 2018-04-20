@@ -225,6 +225,9 @@ public final class ServiceConfigUtil {
     return checkObjectList(getList(serviceConfig, SERVICE_CONFIG_METHOD_CONFIG_KEY));
   }
 
+  /**
+   * Extracts the load balancing policy from a service config, or {@code null}.
+   */
   @Nullable
   @VisibleForTesting
   public static String getLoadBalancingPolicyFromServiceConfig(Map<String, Object> serviceConfig) {
