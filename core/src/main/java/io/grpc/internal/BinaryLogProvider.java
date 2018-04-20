@@ -88,7 +88,7 @@ public abstract class BinaryLogProvider implements Closeable {
   /**
    * Wraps a channel to provide binary logging on {@link ClientCall}s as needed.
    */
-  public Channel wrapChannel(Channel channel) {
+  public final Channel wrapChannel(Channel channel) {
     return ClientInterceptors.intercept(channel, binaryLogShim);
   }
 
@@ -100,7 +100,7 @@ public abstract class BinaryLogProvider implements Closeable {
   /**
    * Wraps a {@link ServerMethodDefinition} such that it performs binary logging if needed.
    */
-  public <ReqT, RespT> ServerMethodDefinition<?, ?> wrapMethodDefinition(
+  public final <ReqT, RespT> ServerMethodDefinition<?, ?> wrapMethodDefinition(
       ServerMethodDefinition<ReqT, RespT> oMethodDef) {
     ServerInterceptor binlogInterceptor =
         getServerInterceptor(oMethodDef.getMethodDescriptor().getFullMethodName());
