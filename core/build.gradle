@@ -2,13 +2,14 @@ description = 'gRPC: Core'
 
 dependencies {
     compile project(':grpc-context'),
+            libraries.flogger,
+            libraries.flogger_backend,
+            libraries.flogger_google,
             libraries.gson,
             libraries.guava,
             libraries.errorprone,
             libraries.jsr305
     compile (libraries.opencensus_api) {
-        // prefer 3.0.0 from libraries instead of 3.0.1
-        exclude group: 'com.google.code.findbugs', module: 'jsr305'
         // prefer 2.1.2 from libraries instead of 2.2.0
         exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
         // prefer 20.0 from libraries instead of 19.0
