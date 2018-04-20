@@ -3,7 +3,6 @@
 # This file is used for both Linux and MacOS builds.
 # To run locally:
 #  ./buildscripts/kokoro/unix.sh
-# Optionally set MVN_ARTIFACTS=true to retain artifacts
 
 # This script assumes `set -e`. Removing it may lead to undefined behavior.
 set -exu -o pipefail
