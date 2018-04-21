@@ -35,14 +35,11 @@ android {
 repositories {
     mavenCentral()
     mavenLocal()
-    maven {
-        url "https://oss.sonatype.org/content/repositories/snapshots"
-    }
 }
 
 dependencies {
     implementation 'io.grpc:grpc-core:1.12.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    implementation 'io.grpc:grpc-okhttp:1.12.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    testImplementation 'io.grpc:grpc-okhttp:1.12.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 
     testImplementation 'junit:junit:4.12'
     testImplementation 'org.robolectric:robolectric:3.7.1'

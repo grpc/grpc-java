@@ -35,16 +35,12 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.okhttp.OkHttpChannelBuilder;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 
 /**
- * Builds a {@link ManagedChannel} that automatically monitors the Android device's network state.
- * Network changes are propagated to the underlying OkHttp-backed {@ManagedChannel} to smoothly
- * handle intermittent network failures.
- *
- * <p>gRPC Cronet users should use {@code CronetChannelBuilder} directly, as Cronet itself monitors
- * the device network state.
+ * Builds a {@link ManagedChannel} that can automatically monitor the Android device's network state
+ * to smoothly handle intermittent network failures.
  *
  * <p>Requires the Android ACCESS_NETWORK_STATE permission.
  *
@@ -53,8 +49,21 @@ import java.util.concurrent.TimeUnit;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4056")
 public final class AndroidChannelBuilder extends ForwardingChannelBuilder<AndroidChannelBuilder> {
 
+  @Nullable
+  private static final Class<?> OKHTTP_CHANNEL_BUILDER_CLASS =
+      findClass("io.grpc.okhttp.OkHttpChannelBuilder");
+
+  private static final Class<?> findClass(String className) {
+    try {
+      return Class.forName(className);
+    } catch (ClassNotFoundException e) {
+      return null;
+    }
+  }
+
   private final ManagedChannelBuilder delegateBuilder;
-  private final Context context;
+
+  @Nullable private final Context context;
 
   /** Always fails. Call {@link #forAddress(String, int, Context)} instead. */
   public static AndroidChannelBuilder forTarget(String target) {
@@ -77,7 +86,18 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
   }
 
   private AndroidChannelBuilder(String target, Context context) {
-    delegateBuilder = OkHttpChannelBuilder.forTarget(target);
+    if (OKHTTP_CHANNEL_BUILDER_CLASS == null) {
+      throw new UnsupportedOperationException("No ManagedChannelBuilder found on the classpath");
+    }
+    try {
+      delegateBuilder =
+          (ManagedChannelBuilder)
+              OKHTTP_CHANNEL_BUILDER_CLASS
+                  .getMethod("forTarget", String.class)
+                  .invoke(null, target);
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to create ManagedChannelBuilder", e);
+    }
     this.context = context;
   }
 

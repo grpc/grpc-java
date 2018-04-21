@@ -81,6 +81,12 @@ public final class AndroidChannelBuilderTest {
   }
 
   @Test
+  public void channelBuilderClassFoundReflectively() {
+    // This should not throw with OkHttpChannelBuilder on the classpath
+    AndroidChannelBuilder.forTarget("target");
+  }
+
+  @Test
   @Config(sdk = 23)
   public void resetConnectBackoff_api23() {
     TestChannel delegateChannel = new TestChannel();
