@@ -88,6 +88,36 @@ public final class AndroidChannelBuilderTest {
 
   @Test
   @Config(sdk = 23)
+  public void nullContextDoesNotThrow_api23() {
+    TestChannel delegateChannel = new TestChannel();
+    ManagedChannel androidChannel = new AndroidChannelBuilder.AndroidChannel(delegateChannel, null);
+
+    // Network change and shutdown should be no-op for the channel without an Android Context
+    shadowConnectivityManager.setActiveNetworkInfo(WIFI_CONNECTED);
+    RuntimeEnvironment.application.sendBroadcast(
+        new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
+    androidChannel.shutdown();
+
+    assertThat(delegateChannel.resetCount).isEqualTo(0);
+  }
+
+  @Test
+  @Config(sdk = 24)
+  public void nullContextDoesNotThrow_api24() {
+    shadowConnectivityManager.setActiveNetworkInfo(MOBILE_DISCONNECTED);
+    TestChannel delegateChannel = new TestChannel();
+    ManagedChannel androidChannel = new AndroidChannelBuilder.AndroidChannel(delegateChannel, null);
+
+    // Network change and shutdown should be no-op for the channel without an Android Context
+    shadowConnectivityManager.setActiveNetworkInfo(MOBILE_CONNECTED);
+    androidChannel.shutdown();
+
+    assertThat(delegateChannel.resetCount).isEqualTo(0);
+    assertThat(delegateChannel.enterIdleCount).isEqualTo(0);
+  }
+
+  @Test
+  @Config(sdk = 23)
   public void resetConnectBackoff_api23() {
     TestChannel delegateChannel = new TestChannel();
     ManagedChannel androidChannel =

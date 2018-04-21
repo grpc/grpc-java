@@ -39,8 +39,8 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
- * Builds a {@link ManagedChannel} that can automatically monitor the Android device's network state
- * to smoothly handle intermittent network failures.
+ * Builds a {@link ManagedChannel} that, when provided with a {@link Context}, will automatically
+ * monitor the Android device's network state to smoothly handle intermittent network failures.
  *
  * <p>Requires the Android ACCESS_NETWORK_STATE permission.
  *
@@ -63,29 +63,17 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
 
   private final ManagedChannelBuilder delegateBuilder;
 
-  @Nullable private final Context context;
+  @Nullable private Context context;
 
-  /** Always fails. Call {@link #forAddress(String, int, Context)} instead. */
-  public static AndroidChannelBuilder forTarget(String target) {
-    throw new UnsupportedOperationException("call forTarget(String, Context) instead");
+  public static final AndroidChannelBuilder forTarget(String target) {
+    return new AndroidChannelBuilder(target);
   }
 
-  /** Always fails. Call {@link #forAddress(String, int, Context)} instead. */
   public static AndroidChannelBuilder forAddress(String name, int port) {
-    throw new UnsupportedOperationException("call forAddress(String, int, Context) instead");
+    return forTarget(GrpcUtil.authorityFromHostAndPort(name, port));
   }
 
-  /** Creates a new builder for the given target and Android context. */
-  public static final AndroidChannelBuilder forTarget(String target, Context context) {
-    return new AndroidChannelBuilder(target, context);
-  }
-
-  /** Creates a new builder for the given host, port, and Android context. */
-  public static AndroidChannelBuilder forAddress(String name, int port, Context context) {
-    return forTarget(GrpcUtil.authorityFromHostAndPort(name, port), context);
-  }
-
-  private AndroidChannelBuilder(String target, Context context) {
+  private AndroidChannelBuilder(String target) {
     if (OKHTTP_CHANNEL_BUILDER_CLASS == null) {
       throw new UnsupportedOperationException("No ManagedChannelBuilder found on the classpath");
     }
@@ -98,7 +86,12 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
     } catch (Exception e) {
       throw new RuntimeException("Failed to create ManagedChannelBuilder", e);
     }
+  }
+
+  /** Enables automatic monitoring of the device's network state. */
+  public AndroidChannelBuilder context(Context context) {
     this.context = context;
+    return this;
   }
 
   @Override
@@ -119,24 +112,34 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
   static final class AndroidChannel extends ManagedChannel {
 
     private final ManagedChannel delegate;
-    private final Context context;
-    private final ConnectivityManager connectivityManager;
 
-    private DefaultNetworkCallback defaultNetworkCallback;
-    private NetworkReceiver networkReceiver;
+    @Nullable private final Context context;
+    @Nullable private final ConnectivityManager connectivityManager;
+
+    @Nullable private DefaultNetworkCallback defaultNetworkCallback;
+    @Nullable private NetworkReceiver networkReceiver;
 
     private final Object lock = new Object();
 
     // May only go from true to false, and lock must be held when assigning this
-    private volatile boolean needToUnregisterListener = true;
+    private volatile boolean needToUnregisterListener;
 
     @VisibleForTesting
-    AndroidChannel(final ManagedChannel delegate, Context context) {
+    AndroidChannel(final ManagedChannel delegate, @Nullable Context context) {
       this.delegate = delegate;
       this.context = context;
-      connectivityManager =
-          (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
 
+      if (context != null) {
+        connectivityManager =
+            (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        configureNetworkMonitoring();
+        needToUnregisterListener = true;
+      } else {
+        connectivityManager = null;
+      }
+    }
+
+    private void configureNetworkMonitoring() {
       // Android N added the registerDefaultNetworkCallback API to listen to changes in the device's
       // default network. For earlier Android API levels, use the BroadcastReceiver API.
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && connectivityManager != null) {
