@@ -37,6 +37,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.internal.GrpcUtil;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Builds a {@link ManagedChannel} that, when provided with a {@link Context}, will automatically
@@ -121,8 +122,8 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
 
     private final Object lock = new Object();
 
-    // May only go from true to false, and lock must be held when assigning this
-    private volatile boolean needToUnregisterListener;
+    @GuardedBy("lock")
+    private Runnable unregisterRunnable;
 
     @VisibleForTesting
     AndroidChannel(final ManagedChannel delegate, @Nullable Context context) {
@@ -133,12 +134,12 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
         connectivityManager =
             (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
         configureNetworkMonitoring();
-        needToUnregisterListener = true;
       } else {
         connectivityManager = null;
       }
     }
 
+    @GuardedBy("lock")
     private void configureNetworkMonitoring() {
       // Android N added the registerDefaultNetworkCallback API to listen to changes in the device's
       // default network. For earlier Android API levels, use the BroadcastReceiver API.
@@ -152,25 +153,37 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
 
         defaultNetworkCallback = new DefaultNetworkCallback(isConnected);
         connectivityManager.registerDefaultNetworkCallback(defaultNetworkCallback);
+        unregisterRunnable =
+            new Runnable() {
+              @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+              @Override
+              public void run() {
+                connectivityManager.unregisterNetworkCallback(defaultNetworkCallback);
+                defaultNetworkCallback = null;
+              }
+            };
       } else {
         networkReceiver = new NetworkReceiver();
         IntentFilter networkIntentFilter =
             new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
         context.registerReceiver(networkReceiver, networkIntentFilter);
+        unregisterRunnable =
+            new Runnable() {
+              @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+              @Override
+              public void run() {
+                context.unregisterReceiver(networkReceiver);
+                networkReceiver = null;
+              }
+            };
       }
     }
 
     private void unregisterNetworkListener() {
-      if (needToUnregisterListener) {
-        synchronized (lock) {
-          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && connectivityManager != null) {
-            connectivityManager.unregisterNetworkCallback(defaultNetworkCallback);
-            defaultNetworkCallback = null;
-          } else {
-            context.unregisterReceiver(networkReceiver);
-            networkReceiver = null;
-          }
-          needToUnregisterListener = false;
+      synchronized (lock) {
+        if (unregisterRunnable != null) {
+          unregisterRunnable.run();
+          unregisterRunnable = null;
         }
       }
     }
