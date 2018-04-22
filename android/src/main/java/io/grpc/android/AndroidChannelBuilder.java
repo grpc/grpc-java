@@ -50,13 +50,11 @@ import javax.annotation.concurrent.GuardedBy;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4056")
 public final class AndroidChannelBuilder extends ForwardingChannelBuilder<AndroidChannelBuilder> {
 
-  @Nullable
-  private static final Class<?> OKHTTP_CHANNEL_BUILDER_CLASS =
-      findClass("io.grpc.okhttp.OkHttpChannelBuilder");
+  @Nullable private static final Class<?> OKHTTP_CHANNEL_BUILDER_CLASS = findOkHttp();
 
-  private static final Class<?> findClass(String className) {
+  private static final Class<?> findOkHttp() {
     try {
-      return Class.forName(className);
+      return Class.forName("io.grpc.okhttp.OkHttpChannelBuilder");
     } catch (ClassNotFoundException e) {
       return null;
     }
@@ -117,9 +115,6 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
     @Nullable private final Context context;
     @Nullable private final ConnectivityManager connectivityManager;
 
-    @Nullable private DefaultNetworkCallback defaultNetworkCallback;
-    @Nullable private NetworkReceiver networkReceiver;
-
     private final Object lock = new Object();
 
     @GuardedBy("lock")
@@ -151,7 +146,8 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
         // vice versa) on the first network change.
         boolean isConnected = currentNetwork != null && currentNetwork.isConnected();
 
-        defaultNetworkCallback = new DefaultNetworkCallback(isConnected);
+        final DefaultNetworkCallback defaultNetworkCallback =
+            new DefaultNetworkCallback(isConnected);
         connectivityManager.registerDefaultNetworkCallback(defaultNetworkCallback);
         unregisterRunnable =
             new Runnable() {
@@ -159,11 +155,10 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
               @Override
               public void run() {
                 connectivityManager.unregisterNetworkCallback(defaultNetworkCallback);
-                defaultNetworkCallback = null;
               }
             };
       } else {
-        networkReceiver = new NetworkReceiver();
+        final NetworkReceiver networkReceiver = new NetworkReceiver();
         IntentFilter networkIntentFilter =
             new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
         context.registerReceiver(networkReceiver, networkIntentFilter);
@@ -173,7 +168,6 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
               @Override
               public void run() {
                 context.unregisterReceiver(networkReceiver);
-                networkReceiver = null;
               }
             };
       }
