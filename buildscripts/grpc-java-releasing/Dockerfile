@@ -8,9 +8,6 @@ ARG GID
 RUN groupadd -g $GID $USERNAME
 RUN useradd -m -u $UID -g $GID -s /bin/bash $USERNAME
 
-# need newest curl
-RUN yum -y update; yum clean all
-
 COPY scl-enable-devtoolset.sh /
 
 # Start in devtoolset environment that uses GCC 4.7
