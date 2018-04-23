@@ -33,16 +33,18 @@ public final class HealthProto {
       descriptor;
   static {
     java.lang.String[] descriptorData = {
-      "\n\014health.proto\022\016grpc.health.v1\"%\n\022Health" +
-      "CheckRequest\022\017\n\007service\030\001 \001(\t\"\224\001\n\023Health" +
-      "CheckResponse\022A\n\006status\030\001 \001(\01621.grpc.hea" +
-      "lth.v1.HealthCheckResponse.ServingStatus" +
-      "\":\n\rServingStatus\022\013\n\007UNKNOWN\020\000\022\013\n\007SERVIN" +
-      "G\020\001\022\017\n\013NOT_SERVING\020\0022Z\n\006Health\022P\n\005Check\022" +
-      "\".grpc.health.v1.HealthCheckRequest\032#.gr" +
-      "pc.health.v1.HealthCheckResponseB3\n\021io.g" +
-      "rpc.health.v1B\013HealthProtoP\001\252\002\016Grpc.Heal" +
-      "th.V1b\006proto3"
+      "\n\014health.proto\022\016grpc.health.v1\032\034google/a" +
+      "pi/annotations.proto\"%\n\022HealthCheckReque" +
+      "st\022\017\n\007service\030\001 \001(\t\"\224\001\n\023HealthCheckRespo" +
+      "nse\022A\n\006status\030\001 \001(\01621.grpc.health.v1.Hea" +
+      "lthCheckResponse.ServingStatus\":\n\rServin" +
+      "gStatus\022\013\n\007UNKNOWN\020\000\022\013\n\007SERVING\020\001\022\017\n\013NOT" +
+      "_SERVING\020\0022n\n\006Health\022d\n\005Check\022\".grpc.hea" +
+      "lth.v1.HealthCheckRequest\032#.grpc.health." +
+      "v1.HealthCheckResponse\"\022\202\323\344\223\002\014\022\n/v1/heal" +
+      "thBk\n\021io.grpc.health.v1B\013HealthProtoP\001Z6" +
+      "google.golang.org/genproto/googleapis/he" +
+      "alth/v1;health\252\002\016Grpc.Health.V1b\006proto3"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
         new com.google.protobuf.Descriptors.FileDescriptor.    InternalDescriptorAssigner() {
@@ -55,6 +57,7 @@ public final class HealthProto {
     com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
         new com.google.protobuf.Descriptors.FileDescriptor[] {
+          com.google.api.AnnotationsProto.getDescriptor(),
         }, assigner);
     internal_static_grpc_health_v1_HealthCheckRequest_descriptor =
       getDescriptor().getMessageTypes().get(0);
@@ -68,6 +71,12 @@ public final class HealthProto {
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_grpc_health_v1_HealthCheckResponse_descriptor,
         new java.lang.String[] { "Status", });
+    com.google.protobuf.ExtensionRegistry registry =
+        com.google.protobuf.ExtensionRegistry.newInstance();
+    registry.add(com.google.api.AnnotationsProto.http);
+    com.google.protobuf.Descriptors.FileDescriptor
+        .internalUpdateFileDescriptor(descriptor, registry);
+    com.google.api.AnnotationsProto.getDescriptor();
   }
 
   // @@protoc_insertion_point(outer_class_scope)
