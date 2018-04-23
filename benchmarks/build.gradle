@@ -37,6 +37,7 @@ dependencies {
             libraries.netty_tcnative,
             libraries.netty_epoll,
             libraries.math
+    compileOnly libraries.javax_annotation
 }
 
 compileJava {
@@ -72,7 +73,6 @@ task openloop_client(type: CreateStartScripts) {
 task qps_server(type: CreateStartScripts) {
     mainClassName = "io.grpc.benchmarks.qps.AsyncServer"
     applicationName = "qps_server"
-    defaultJvmOpts = ["-javaagent:" + configurations.alpnagent.asPath] + vmArgs
     outputDir = new File(project.buildDir, 'tmp')
     classpath = jar.outputs.files + project.configurations.runtime
 }
@@ -92,12 +92,3 @@ applicationDistribution.into("bin") {
     from(benchmark_worker)
     fileMode = 0755
 }
-
-// Let intellij projects refer to generated code
-idea {
-    module {
-        sourceDirs += file("${projectDir}/src/generated/main/java");
-        sourceDirs += file("${projectDir}/src/generated/main/grpc");
-    }
-}
-

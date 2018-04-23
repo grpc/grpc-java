@@ -21,9 +21,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import com.google.common.base.Throwables;
-import com.google.protobuf.EmptyProtos.Empty;
 import com.squareup.okhttp.ConnectionSpec;
-import com.squareup.okhttp.TlsVersion;
 import io.grpc.ManagedChannel;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.GrpcUtil;
@@ -34,6 +32,7 @@ import io.grpc.netty.NettyServerBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.okhttp.internal.Platform;
 import io.grpc.stub.StreamObserver;
+import io.grpc.testing.integration.EmptyProtos.Empty;
 import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -60,7 +59,7 @@ public class Http2OkHttpTest extends AbstractInteropTest {
   public static void loadConscrypt() throws Exception {
     // Load conscrypt if it is available. Either Conscrypt or Jetty ALPN needs to be available for
     // OkHttp to negotiate.
-    Util.installConscryptIfAvailable();
+    TestUtils.installConscryptIfAvailable();
   }
 
   @Override
@@ -94,9 +93,8 @@ public class Http2OkHttpTest extends AbstractInteropTest {
   private OkHttpChannelBuilder createChannelBuilder() {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("localhost", getPort())
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
-        .connectionSpec(new ConnectionSpec.Builder(OkHttpChannelBuilder.DEFAULT_CONNECTION_SPEC)
+        .connectionSpec(new ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
             .cipherSuites(TestUtils.preferredTestCiphers().toArray(new String[0]))
-            .tlsVersions(ConnectionSpec.MODERN_TLS.tlsVersions().toArray(new TlsVersion[0]))
             .build())
         .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
             TestUtils.TEST_SERVER_HOST, getPort()));

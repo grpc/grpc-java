@@ -25,6 +25,7 @@ import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
@@ -297,6 +298,7 @@ public final class ServerImpl extends io.grpc.Server implements Instrumented<Ser
       if (!transports.remove(transport)) {
         throw new AssertionError("Transport already removed");
       }
+      channelz.removeServerSocket(ServerImpl.this, transport);
       checkForTermination();
     }
   }
@@ -309,12 +311,12 @@ public final class ServerImpl extends io.grpc.Server implements Instrumented<Ser
           throw new AssertionError("Server already terminated");
         }
         terminated = true;
+        channelz.removeServer(this);
         if (executor != null) {
           executor = executorPool.returnObject(executor);
         }
         // TODO(carl-mastrangelo): move this outside the synchronized block.
         lock.notifyAll();
-        channelz.removeServer(this);
       }
     }
   }
@@ -380,7 +382,7 @@ public final class ServerImpl extends io.grpc.Server implements Instrumented<Ser
           @Override public void run() {}
         }, null);
       }
-      channelz.addSocket(transport);
+      channelz.addServerSocket(ServerImpl.this, transport);
     }
 
     @Override
@@ -398,18 +400,14 @@ public final class ServerImpl extends io.grpc.Server implements Instrumented<Ser
 
     @Override
     public void transportTerminated() {
-      try {
-        if (handshakeTimeoutFuture != null) {
-          handshakeTimeoutFuture.cancel(false);
-          handshakeTimeoutFuture = null;
-        }
-        for (ServerTransportFilter filter : transportFilters) {
-          filter.transportTerminated(attributes);
-        }
-        transportClosed(transport);
-      } finally {
-        channelz.removeSocket(transport);
+      if (handshakeTimeoutFuture != null) {
+        handshakeTimeoutFuture.cancel(false);
+        handshakeTimeoutFuture = null;
       }
+      for (ServerTransportFilter filter : transportFilters) {
+        filter.transportTerminated(attributes);
+      }
+      transportClosed(transport);
     }
 
     @Override
@@ -574,11 +572,21 @@ public final class ServerImpl extends io.grpc.Server implements Instrumented<Ser
 
   @Override
   public ListenableFuture<ServerStats> getStats() {
-    ServerStats.Builder builder = new ServerStats.Builder();
+    ServerStats.Builder builder
+        = new ServerStats.Builder()
+        .setListenSockets(transportServer.getListenSockets());
     serverCallTracer.updateBuilder(builder);
     SettableFuture<ServerStats> ret = SettableFuture.create();
     ret.set(builder.build());
     return ret;
+  }
+
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(this)
+        .add("logId", logId)
+        .add("transportServer", transportServer)
+        .toString();
   }
 
   private static final class NoopListener implements ServerStreamListener {

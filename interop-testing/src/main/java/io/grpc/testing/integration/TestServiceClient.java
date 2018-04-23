@@ -46,8 +46,8 @@ public class TestServiceClient {
    * The main application allowing this client to be launched from the command line.
    */
   public static void main(String[] args) throws Exception {
-    // Let OkHttp use Conscrypt if it is available.
-    Util.installConscryptIfAvailable();
+    // Let Netty or OkHttp use Conscrypt if it is available.
+    TestUtils.installConscryptIfAvailable();
     final TestServiceClient client = new TestServiceClient();
     client.parseArgs(args);
     client.setUp();
@@ -221,7 +221,11 @@ public class TestServiceClient {
         break;
 
       case CLIENT_COMPRESSED_UNARY:
-        tester.clientCompressedUnary();
+        tester.clientCompressedUnary(true);
+        break;
+
+      case CLIENT_COMPRESSED_UNARY_NOPROBE:
+        tester.clientCompressedUnary(false);
         break;
 
       case SERVER_COMPRESSED_UNARY:
@@ -233,7 +237,11 @@ public class TestServiceClient {
         break;
 
       case CLIENT_COMPRESSED_STREAMING:
-        tester.clientCompressedStreaming();
+        tester.clientCompressedStreaming(true);
+        break;
+
+      case CLIENT_COMPRESSED_STREAMING_NOPROBE:
+        tester.clientCompressedStreaming(false);
         break;
 
       case SERVER_STREAMING:

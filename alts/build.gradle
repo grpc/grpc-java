@@ -22,7 +22,8 @@ dependencies {
             project(':grpc-stub'),
             libraries.lang,
             libraries.protobuf
-    testCompile libraries.guava_testlib,
+    testCompile libraries.guava,
+                libraries.guava_testlib,
                 libraries.junit,
                 libraries.mockito,
                 libraries.truth
@@ -39,11 +40,4 @@ configureProtoCompilation()
 
 javadoc {
     exclude 'io/grpc/alts/internal/**'
-}
-
-idea {
-    module {
-        sourceDirs += file("${projectDir}/src/generated/main/grpc");
-        sourceDirs += file("${projectDir}/src/generated/main/java");
-    }
 }

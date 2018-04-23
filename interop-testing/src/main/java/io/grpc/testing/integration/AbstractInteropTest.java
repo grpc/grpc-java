@@ -44,7 +44,6 @@ import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.ByteString;
-import com.google.protobuf.EmptyProtos.Empty;
 import com.google.protobuf.MessageLite;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -85,6 +84,7 @@ import io.grpc.stub.ClientCalls;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.TestUtils;
+import io.grpc.testing.integration.EmptyProtos.Empty;
 import io.grpc.testing.integration.Messages.EchoStatus;
 import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.PayloadType;
@@ -294,7 +294,7 @@ public abstract class AbstractInteropTest {
   @After
   public void tearDown() throws Exception {
     if (channel != null) {
-      channel.shutdown();
+      channel.shutdownNow().awaitTermination(1, TimeUnit.SECONDS);
     }
     stopServer();
   }
@@ -390,7 +390,7 @@ public abstract class AbstractInteropTest {
    * Tests client per-message compression for unary calls. The Java API does not support inspecting
    * a message's compression level, so this is primarily intended to run against a gRPC C++ server.
    */
-  public void clientCompressedUnary() throws Exception {
+  public void clientCompressedUnary(boolean probe) throws Exception {
     assumeEnoughMemory();
     final SimpleRequest expectCompressedRequest =
         SimpleRequest.newBuilder()
@@ -409,15 +409,17 @@ public abstract class AbstractInteropTest {
             .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[314159])))
             .build();
 
-    // Send a non-compressed message with expectCompress=true. Servers supporting this test case
-    // should return INVALID_ARGUMENT.
-    try {
-      blockingStub.unaryCall(expectCompressedRequest);
-      fail("expected INVALID_ARGUMENT");
-    } catch (StatusRuntimeException e) {
-      assertEquals(Status.INVALID_ARGUMENT.getCode(), e.getStatus().getCode());
+    if (probe) {
+      // Send a non-compressed message with expectCompress=true. Servers supporting this test case
+      // should return INVALID_ARGUMENT.
+      try {
+        blockingStub.unaryCall(expectCompressedRequest);
+        fail("expected INVALID_ARGUMENT");
+      } catch (StatusRuntimeException e) {
+        assertEquals(Status.INVALID_ARGUMENT.getCode(), e.getStatus().getCode());
+      }
+      assertStatsTrace("grpc.testing.TestService/UnaryCall", Status.Code.INVALID_ARGUMENT);
     }
-    assertStatsTrace("grpc.testing.TestService/UnaryCall", Status.Code.INVALID_ARGUMENT);
 
     assertEquals(
         goldenResponse, blockingStub.withCompression("gzip").unaryCall(expectCompressedRequest));
@@ -557,7 +559,7 @@ public abstract class AbstractInteropTest {
    * inspecting a message's compression level, so this is primarily intended to run against a gRPC
    * C++ server.
    */
-  public void clientCompressedStreaming() throws Exception {
+  public void clientCompressedStreaming(boolean probe) throws Exception {
     final StreamingInputCallRequest expectCompressedRequest =
         StreamingInputCallRequest.newBuilder()
             .setExpectCompressed(BoolValue.newBuilder().setValue(true))
@@ -575,13 +577,15 @@ public abstract class AbstractInteropTest {
     StreamObserver<StreamingInputCallRequest> requestObserver =
         asyncStub.streamingInputCall(responseObserver);
 
-    // Send a non-compressed message with expectCompress=true. Servers supporting this test case
-    // should return INVALID_ARGUMENT.
-    requestObserver.onNext(expectCompressedRequest);
-    responseObserver.awaitCompletion(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
-    Throwable e = responseObserver.getError();
-    assertNotNull("expected INVALID_ARGUMENT", e);
-    assertEquals(Status.INVALID_ARGUMENT.getCode(), Status.fromThrowable(e).getCode());
+    if (probe) {
+      // Send a non-compressed message with expectCompress=true. Servers supporting this test case
+      // should return INVALID_ARGUMENT.
+      requestObserver.onNext(expectCompressedRequest);
+      responseObserver.awaitCompletion(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
+      Throwable e = responseObserver.getError();
+      assertNotNull("expected INVALID_ARGUMENT", e);
+      assertEquals(Status.INVALID_ARGUMENT.getCode(), Status.fromThrowable(e).getCode());
+    }
 
     // Start a new stream
     responseObserver = StreamRecorder.create();

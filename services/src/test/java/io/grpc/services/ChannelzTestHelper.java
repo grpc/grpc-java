@@ -19,9 +19,11 @@ package io.grpc.services;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.ConnectivityState;
+import io.grpc.internal.Channelz;
 import io.grpc.internal.Channelz.ChannelStats;
 import io.grpc.internal.Channelz.Security;
 import io.grpc.internal.Channelz.ServerStats;
+import io.grpc.internal.Channelz.SocketOptions;
 import io.grpc.internal.Channelz.SocketStats;
 import io.grpc.internal.Channelz.TransportStats;
 import io.grpc.internal.Instrumented;
@@ -54,12 +56,41 @@ final class ChannelzTestHelper {
         /*remoteFlowControlWindow=*/ 12);
     SocketAddress local = new InetSocketAddress("10.0.0.1", 1000);
     SocketAddress remote = new InetSocketAddress("10.0.0.2", 1000);
-
+    Channelz.SocketOptions socketOptions = new Channelz.SocketOptions.Builder().build();
 
     @Override
     public ListenableFuture<SocketStats> getStats() {
       SettableFuture<SocketStats> ret = SettableFuture.create();
-      ret.set(new SocketStats(transportStats, local, remote, new Security()));
+      ret.set(
+          new SocketStats(
+              transportStats,
+              local,
+              remote,
+              socketOptions,
+              new Security()));
+      return ret;
+    }
+
+    @Override
+    public LogId getLogId() {
+      return id;
+    }
+  }
+
+  static final class TestListenSocket implements Instrumented<SocketStats> {
+    private final LogId id = LogId.allocate("listensocket");
+    SocketAddress listenAddress = new InetSocketAddress("10.0.0.1", 1234);
+
+    @Override
+    public ListenableFuture<SocketStats> getStats() {
+      SettableFuture<SocketStats> ret = SettableFuture.create();
+      ret.set(
+          new SocketStats(
+              /*data=*/ null,
+              listenAddress,
+              /*remote=*/ null,
+              new SocketOptions.Builder().addOption("listen_option", "listen_option_value").build(),
+              /*security=*/ null));
       return ret;
     }
 
@@ -72,10 +103,11 @@ final class ChannelzTestHelper {
   static final class TestServer implements Instrumented<ServerStats> {
     private final LogId id = LogId.allocate("server");
     ServerStats serverStats = new ServerStats(
-      /*callsStarted=*/ 1,
-      /*callsSucceeded=*/ 2,
-      /*callsFailed=*/ 3,
-      /*lastCallStartedMillis=*/ 4);
+        /*callsStarted=*/ 1,
+        /*callsSucceeded=*/ 2,
+        /*callsFailed=*/ 3,
+        /*lastCallStartedMillis=*/ 4,
+        Collections.<Instrumented<SocketStats>>emptyList());
 
     @Override
     public ListenableFuture<ServerStats> getStats() {

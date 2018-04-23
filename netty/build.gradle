@@ -6,8 +6,10 @@ dependencies {
 
     // Tests depend on base class defined by core module.
     testCompile project(':grpc-core').sourceSets.test.output,
-                project(':grpc-testing')
-    testRuntime libraries.netty_tcnative
+                project(':grpc-testing'),
+                project(':grpc-testing-proto')
+    testRuntime libraries.netty_tcnative,
+                libraries.conscrypt
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
 }
 
@@ -29,6 +31,10 @@ project.sourceSets {
     }
 }
 
+test {
+    // Allow testing Jetty ALPN in TlsTest
+    jvmArgs "-javaagent:" + configurations.alpnagent.asPath
+}
 
 jmh {
     // Workaround

@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.internal.ClientStreamListener.RpcProgress.DROPPED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.REFUSED;
 import static io.grpc.internal.RetriableStream.GRPC_PREVIOUS_RPC_ATTEMPTS;
@@ -28,6 +29,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyInt;
+import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -37,6 +39,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
@@ -50,12 +53,10 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
-import io.grpc.internal.RetriableStream.RetryPolicy;
 import io.grpc.internal.RetriableStream.Throttle;
 import io.grpc.internal.StreamListener.MessageProducer;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.Executor;
@@ -84,8 +85,8 @@ public class RetriableStreamTest {
   private static final long PER_RPC_BUFFER_LIMIT = 1000;
   private static final long CHANNEL_BUFFER_LIMIT = 2000;
   private static final int MAX_ATTEMPTS = 6;
-  private static final double INITIAL_BACKOFF_IN_SECONDS = 100D;
-  private static final double MAX_BACKOFF_IN_SECONDS = 700D;
+  private static final long INITIAL_BACKOFF_IN_SECONDS = 100;
+  private static final long MAX_BACKOFF_IN_SECONDS = 700;
   private static final double BACKOFF_MULTIPLIER = 2D;
   private static final double FAKE_RANDOM = .5D;
 
@@ -105,8 +106,11 @@ public class RetriableStreamTest {
   private static final Code NON_RETRIABLE_STATUS_CODE = Code.INTERNAL;
   private static final RetryPolicy RETRY_POLICY =
       new RetryPolicy(
-          MAX_ATTEMPTS, INITIAL_BACKOFF_IN_SECONDS, MAX_BACKOFF_IN_SECONDS, BACKOFF_MULTIPLIER,
-          Arrays.asList(RETRIABLE_STATUS_CODE_1, RETRIABLE_STATUS_CODE_2));
+          MAX_ATTEMPTS,
+          TimeUnit.SECONDS.toNanos(INITIAL_BACKOFF_IN_SECONDS),
+          TimeUnit.SECONDS.toNanos(MAX_BACKOFF_IN_SECONDS),
+          BACKOFF_MULTIPLIER,
+          ImmutableSet.of(RETRIABLE_STATUS_CODE_1, RETRIABLE_STATUS_CODE_2));
 
   private final RetriableStreamRecorder retriableStreamRecorder =
       mock(RetriableStreamRecorder.class);
@@ -126,10 +130,18 @@ public class RetriableStreamTest {
         ChannelBufferMeter channelBufferUsed, long perRpcBufferLimit, long channelBufferLimit,
         Executor callExecutor,
         ScheduledExecutorService scheduledExecutorService,
-        RetryPolicy retryPolicy,
+        final RetryPolicy retryPolicy,
         @Nullable Throttle throttle) {
-      super(method, headers, channelBufferUsed, perRpcBufferLimit, channelBufferLimit, callExecutor,
-          scheduledExecutorService, retryPolicy, throttle);
+      super(
+          method, headers, channelBufferUsed, perRpcBufferLimit, channelBufferLimit, callExecutor,
+          scheduledExecutorService,
+          new RetryPolicy.Provider() {
+            @Override
+            public RetryPolicy get() {
+              return retryPolicy;
+            }
+          },
+          throttle);
     }
 
     @Override
@@ -1504,6 +1516,30 @@ public class RetriableStreamTest {
         .closed(Status.fromCode(NON_RETRIABLE_STATUS_CODE), REFUSED, new Metadata());
 
     verify(retriableStreamRecorder).postCommit();
+  }
+
+  @Test
+  public void droppedShouldNeverRetry() {
+    ClientStream mockStream1 = mock(ClientStream.class);
+    ClientStream mockStream2 = mock(ClientStream.class);
+    doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
+    doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
+
+    // start
+    retriableStream.start(masterListener);
+
+    verify(retriableStreamRecorder).newSubstream(0);
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor1 =
+        ArgumentCaptor.forClass(ClientStreamListener.class);
+    verify(mockStream1).start(sublistenerCaptor1.capture());
+
+    // drop and verify no retry
+    Status status = Status.fromCode(RETRIABLE_STATUS_CODE_1);
+    sublistenerCaptor1.getValue().closed(status, DROPPED, new Metadata());
+
+    verifyNoMoreInteractions(mockStream1, mockStream2);
+    verify(retriableStreamRecorder).postCommit();
+    verify(masterListener).closed(same(status), any(Metadata.class));
   }
 
   /**

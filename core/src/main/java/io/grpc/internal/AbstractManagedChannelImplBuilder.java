@@ -31,7 +31,6 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
-import io.grpc.PickFirstBalancerFactory;
 import io.opencensus.trace.Tracing;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -85,9 +84,6 @@ public abstract class AbstractManagedChannelImplBuilder
   private static final NameResolver.Factory DEFAULT_NAME_RESOLVER_FACTORY =
       NameResolverProvider.asFactory();
 
-  private static final LoadBalancer.Factory DEFAULT_LOAD_BALANCER_FACTORY =
-      PickFirstBalancerFactory.getInstance();
-
   private static final DecompressorRegistry DEFAULT_DECOMPRESSOR_REGISTRY =
       DecompressorRegistry.getDefaultInstance();
 
@@ -117,7 +113,7 @@ public abstract class AbstractManagedChannelImplBuilder
   String authorityOverride;
 
 
-  LoadBalancer.Factory loadBalancerFactory = DEFAULT_LOAD_BALANCER_FACTORY;
+  @Nullable LoadBalancer.Factory loadBalancerFactory;
 
   boolean fullStreamDecompression;
 
@@ -131,7 +127,11 @@ public abstract class AbstractManagedChannelImplBuilder
   int maxHedgedAttempts = 5;
   long retryBufferSize = DEFAULT_RETRY_BUFFER_SIZE_IN_BYTES;
   long perRpcBufferLimit = DEFAULT_PER_RPC_BUFFER_LIMIT_IN_BYTES;
-  boolean retryDisabled = true; // TODO(zdapeng): default to false
+  boolean retryEnabled = false; // TODO(zdapeng): default to true
+  // Temporarily disable retry when stats or tracing is enabled to avoid breakage, until we know
+  // what should be the desired behavior for retry + stats/tracing.
+  // TODO(zdapeng): delete me
+  boolean temporarilyDisableRetry;
 
   Channelz channelz = Channelz.instance();
 
@@ -139,6 +139,7 @@ public abstract class AbstractManagedChannelImplBuilder
 
   private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 
+  @Nullable
   BinaryLogProvider binlogProvider = BinaryLogProvider.provider();
 
   /**
@@ -236,11 +237,7 @@ public abstract class AbstractManagedChannelImplBuilder
     Preconditions.checkState(directServerAddress == null,
         "directServerAddress is set (%s), which forbids the use of LoadBalancer.Factory",
         directServerAddress);
-    if (loadBalancerFactory != null) {
-      this.loadBalancerFactory = loadBalancerFactory;
-    } else {
-      this.loadBalancerFactory = DEFAULT_LOAD_BALANCER_FACTORY;
-    }
+    this.loadBalancerFactory = loadBalancerFactory;
     return thisT();
   }
 
@@ -323,13 +320,13 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Override
   public final T disableRetry() {
-    retryDisabled = true;
+    retryEnabled = false;
     return thisT();
   }
 
   @Override
   public final T enableRetry() {
-    retryDisabled = false;
+    retryEnabled = true;
     return thisT();
   }
 
@@ -388,7 +385,7 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Override
   public ManagedChannel build() {
-    return new ManagedChannelImpl(
+    return new ManagedChannelOrphanWrapper(new ManagedChannelImpl(
         this,
         buildTransportFactory(),
         // TODO(carl-mastrangelo): Allow clients to pass this in
@@ -396,7 +393,7 @@ public abstract class AbstractManagedChannelImplBuilder
         SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
         GrpcUtil.STOPWATCH_SUPPLIER,
         getEffectiveInterceptors(),
-        CallTracer.getDefaultFactory());
+        CallTracer.getDefaultFactory()));
   }
 
   // Temporarily disable retry when stats or tracing is enabled to avoid breakage, until we know
@@ -406,8 +403,9 @@ public abstract class AbstractManagedChannelImplBuilder
   final List<ClientInterceptor> getEffectiveInterceptors() {
     List<ClientInterceptor> effectiveInterceptors =
         new ArrayList<ClientInterceptor>(this.interceptors);
+    temporarilyDisableRetry = false;
     if (statsEnabled) {
-      retryDisabled = true;
+      temporarilyDisableRetry = true;
       CensusStatsModule censusStats = this.censusStatsOverride;
       if (censusStats == null) {
         censusStats = new CensusStatsModule(GrpcUtil.STOPWATCH_SUPPLIER, true);
@@ -418,11 +416,14 @@ public abstract class AbstractManagedChannelImplBuilder
           0, censusStats.getClientInterceptor(recordStartedRpcs, recordFinishedRpcs));
     }
     if (tracingEnabled) {
-      retryDisabled = true;
+      temporarilyDisableRetry = true;
       CensusTracingModule censusTracing =
           new CensusTracingModule(Tracing.getTracer(),
               Tracing.getPropagationComponent().getBinaryFormat());
       effectiveInterceptors.add(0, censusTracing.getClientInterceptor());
+    }
+    if (binlogProvider != null) {
+      effectiveInterceptors.add(0, binlogProvider.getClientCallIdSetter());
     }
     return effectiveInterceptors;
   }

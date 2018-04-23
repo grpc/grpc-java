@@ -22,7 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.internal.RetriableStream.RetryPolicy.DEFAULT;
+import static io.grpc.internal.ServiceConfigInterceptor.RETRY_POLICY_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -55,7 +55,6 @@ import io.grpc.Status;
 import io.grpc.internal.Channelz.ChannelStats;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
-import io.grpc.internal.RetriableStream.RetryPolicy;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -63,6 +62,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
@@ -72,7 +72,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
@@ -119,11 +118,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       @Override
       void handleUncaughtThrowable(Throwable t) {
         super.handleUncaughtThrowable(t);
-        // Disabled because it breaks some tests, as it detects pre-existing issues.
-        // See #3293
-        if (false) {
-          panic(t);
-        }
+        panic(t);
       }
     };
 
@@ -137,6 +132,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
   private final long idleTimeoutMillis;
 
   private final ConnectivityStateManager channelStateManager = new ConnectivityStateManager();
+
+  private final ServiceConfigInterceptor serviceConfigInterceptor;
 
   private final BackoffPolicy.Provider backoffPolicyProvider;
 
@@ -211,14 +208,12 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
   // One instance per channel.
   private final ChannelBufferMeter channelBufferUsed = new ChannelBufferMeter();
 
+  @Nullable
   private Throttle throttle;
 
-  private final int maxRetryAttempts;
-  private final int maxHedgedAttempts;
   private final long perRpcBufferLimit;
   private final long channelBufferLimit;
 
-  private RetryPolicies retryPolicies;
   // Temporary false flag that can skip the retry code path.
   private final boolean retryEnabled;
 
@@ -310,26 +305,12 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
 
   // Run from channelExecutor
   private class IdleModeTimer implements Runnable {
-    // Only mutated from channelExecutor
-    boolean cancelled;
 
     @Override
     public void run() {
-      if (cancelled) {
-        // Race detected: this task was scheduled on channelExecutor before cancelIdleTimer()
-        // could cancel the timer.
-        return;
-      }
       enterIdleMode();
     }
   }
-
-  // Must be used from channelExecutor
-  @Nullable
-  private ScheduledFuture<?> idleModeTimerFuture;
-  // Must be used from channelExecutor
-  @Nullable
-  private IdleModeTimer idleModeTimer;
 
   // Must be called from channelExecutor
   private void shutdownNameResolverAndLoadBalancer(boolean verifyActive) {
@@ -363,7 +344,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     if (inUseStateAggregator.isInUse()) {
       // Cancel the timer now, so that a racing due timer will not put Channel on idleness
       // when the caller of exitIdleMode() is about to use the returned loadBalancer.
-      cancelIdleTimer();
+      cancelIdleTimer(false);
     } else {
       // exitIdleMode() may be called outside of inUseStateAggregator.handleNotInUse() while
       // isInUse() == false, in which case we still need to schedule the timer.
@@ -399,13 +380,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
   }
 
   // Must be run from channelExecutor
-  private void cancelIdleTimer() {
-    if (idleModeTimerFuture != null) {
-      idleModeTimerFuture.cancel(false);
-      idleModeTimer.cancelled = true;
-      idleModeTimerFuture = null;
-      idleModeTimer = null;
-    }
+  private void cancelIdleTimer(boolean permanent) {
+    idleTimer.cancel(permanent);
   }
 
   // Always run from channelExecutor
@@ -413,16 +389,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     if (idleTimeoutMillis == IDLE_TIMEOUT_MILLIS_DISABLE) {
       return;
     }
-    cancelIdleTimer();
-    idleModeTimer = new IdleModeTimer();
-    idleModeTimerFuture = transportFactory.getScheduledExecutorService().schedule(
-        new LogExceptionRunnable(new Runnable() {
-            @Override
-            public void run() {
-              channelExecutor.executeLater(idleModeTimer).drain();
-            }
-          }),
-        idleTimeoutMillis, TimeUnit.MILLISECONDS);
+    idleTimer.reschedule(idleTimeoutMillis, TimeUnit.MILLISECONDS);
   }
 
   // Run from channelExecutor
@@ -509,11 +476,10 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
         final Metadata headers,
         final Context context) {
       checkState(retryEnabled, "retry should be enabled");
-      RetryPolicy retryPolicy = retryPolicies == null ? DEFAULT : retryPolicies.get(method);
       return new RetriableStream<ReqT>(
           method, headers, channelBufferUsed, perRpcBufferLimit, channelBufferLimit,
           getCallExecutor(callOptions), transportFactory.getScheduledExecutorService(),
-          retryPolicy, throttle) {
+          callOptions.getOption(RETRY_POLICY_KEY), throttle) {
         @Override
         Status prestart() {
           return uncommittedRetriableStreamsRegistry.add(this);
@@ -540,6 +506,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     }
   };
 
+  private final Rescheduler idleTimer;
+
   ManagedChannelImpl(
       AbstractManagedChannelImplBuilder<?> builder,
       ClientTransportFactory clientTransportFactory,
@@ -552,8 +520,11 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     this.nameResolverFactory = builder.getNameResolverFactory();
     this.nameResolverParams = checkNotNull(builder.getNameResolverParams(), "nameResolverParams");
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
-    this.loadBalancerFactory =
-        checkNotNull(builder.loadBalancerFactory, "loadBalancerFactory");
+    if (builder.loadBalancerFactory == null) {
+      this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory();
+    } else {
+      this.loadBalancerFactory = builder.loadBalancerFactory;
+    }
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.oobExecutorPool = checkNotNull(oobExecutorPool, "oobExecutorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
@@ -562,7 +533,10 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     this.backoffPolicyProvider = backoffPolicyProvider;
     this.transportFactory =
         new CallCredentialsApplyingTransportFactory(clientTransportFactory, this.executor);
+    this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
+    serviceConfigInterceptor = new ServiceConfigInterceptor(retryEnabled, builder.maxRetryAttempts);
     Channel channel = new RealChannel();
+    channel = ClientInterceptors.intercept(channel, serviceConfigInterceptor);
     if (builder.binlogProvider != null) {
       channel = builder.binlogProvider.wrapChannel(channel);
     }
@@ -570,6 +544,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     if (builder.idleTimeoutMillis == IDLE_TIMEOUT_MILLIS_DISABLE) {
       this.idleTimeoutMillis = builder.idleTimeoutMillis;
+
     } else {
       checkArgument(
           builder.idleTimeoutMillis
@@ -577,16 +552,28 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
           "invalid idleTimeoutMillis %s", builder.idleTimeoutMillis);
       this.idleTimeoutMillis = builder.idleTimeoutMillis;
     }
+
+    final class AutoDrainChannelExecutor implements Executor {
+
+      @Override
+      public void execute(Runnable command) {
+        channelExecutor.executeLater(command);
+        channelExecutor.drain();
+      }
+    }
+
+    idleTimer = new Rescheduler(
+        new IdleModeTimer(),
+        new AutoDrainChannelExecutor(),
+        transportFactory.getScheduledExecutorService(),
+        stopwatchSupplier.get());
     this.fullStreamDecompression = builder.fullStreamDecompression;
     this.decompressorRegistry = checkNotNull(builder.decompressorRegistry, "decompressorRegistry");
     this.compressorRegistry = checkNotNull(builder.compressorRegistry, "compressorRegistry");
     this.userAgent = builder.userAgent;
 
-    this.maxRetryAttempts = builder.maxRetryAttempts;
-    this.maxHedgedAttempts = builder.maxHedgedAttempts;
     this.channelBufferLimit = builder.retryBufferSize;
     this.perRpcBufferLimit = builder.perRpcBufferLimit;
-    this.retryEnabled = !builder.retryDisabled;
 
     this.callTracerFactory = callTracerFactory;
     channelCallTracer = callTracerFactory.create();
@@ -666,7 +653,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     channelExecutor.executeLater(new Runnable() {
         @Override
         public void run() {
-          cancelIdleTimer();
+          cancelIdleTimer(/* permanent= */ true);
         }
       }).drain();
     logger.log(Level.FINE, "[{0}] Shutting down", getLogId());
@@ -704,7 +691,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       return;
     }
     panicMode = true;
-    cancelIdleTimer();
+    cancelIdleTimer(/* permanent= */ true);
     shutdownNameResolverAndLoadBalancer(false);
     SubchannelPicker newPicker = new SubchannelPicker() {
       final PickResult panicPickResult =
@@ -796,12 +783,12 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     }
     if (shutdown.get() && subchannels.isEmpty() && oobChannels.isEmpty()) {
       logger.log(Level.FINE, "[{0}] Terminated", getLogId());
+      channelz.removeRootChannel(this);
       terminated = true;
       terminatedLatch.countDown();
       executorPool.returnObject(executor);
       // Release the transport factory so that it can deallocate any resources.
       transportFactory.close();
-      channelz.removeRootChannel(this);
     }
   }
 
@@ -868,7 +855,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
         if (shutdown.get() || lbHelper == null) {
           return;
         }
-        cancelIdleTimer();
+        cancelIdleTimer(/* permanent= */ false);
         enterIdleMode();
       }
     }
@@ -1144,11 +1131,9 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
   }
 
   private class NameResolverListenerImpl implements NameResolver.Listener {
-    final LoadBalancer balancer;
-    final LoadBalancer.Helper helper;
+    final LbHelperImpl helper;
 
     NameResolverListenerImpl(LbHelperImpl helperImpl) {
-      this.balancer = helperImpl.lb;
       this.helper = helperImpl;
     }
 
@@ -1173,19 +1158,23 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
 
           nameResolverBackoffPolicy = null;
 
-          try {
-            if (retryEnabled) {
-              retryPolicies = getRetryPolicies(config);
-              throttle = getThrottle(config);
+          Map<String, Object> serviceConfig =
+              config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+          if (serviceConfig != null) {
+            try {
+              serviceConfigInterceptor.handleUpdate(serviceConfig);
+              if (retryEnabled) {
+                throttle = getThrottle(config);
+              }
+            } catch (RuntimeException re) {
+              logger.log(
+                  Level.WARNING,
+                  "[" + getLogId() + "] Unexpected exception from parsing service config",
+                  re);
             }
-          } catch (RuntimeException re) {
-            logger.log(
-                Level.WARNING,
-                "[" + getLogId() + "] Unexpected exception from parsing service config",
-                re);
           }
 
-          balancer.handleResolvedAddressGroups(servers, config);
+          helper.lb.handleResolvedAddressGroups(servers, config);
         }
       }
 
@@ -1206,7 +1195,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
                   if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
                     return;
                   }
-                  balancer.handleNameResolutionError(error);
+                  helper.lb.handleNameResolutionError(error);
                   if (nameResolverRefreshFuture != null) {
                     // The name resolver may invoke onError multiple times, but we only want to
                     // schedule one backoff attempt
@@ -1235,22 +1224,10 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     }
   }
 
-  // TODO(zdapeng): take client provided maxAttempts into account.
-  // TODO(zdapeng): implement it once the Gson dependency issue is resolved.
-  // TODO(zdapeng): test retryEnabled = true/flase really works as expected.
-  private static RetryPolicies getRetryPolicies(Attributes config) {
-    return new RetryPolicies() {
-      @Override
-      public RetryPolicy get(MethodDescriptor<?, ?> method) {
-        return RetryPolicy.DEFAULT;
-      }
-    };
-  }
-
-  // TODO(zdapeng): implement it once the Gson dependency issue is resolved.
   @Nullable
   private static Throttle getThrottle(Attributes config) {
-    return null;
+    return ServiceConfigUtil.getThrottlePolicy(
+        config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG));
   }
 
   private final class SubchannelImpl extends AbstractSubchannel {
@@ -1338,12 +1315,6 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     public String toString() {
       return subchannel.getLogId().toString();
     }
-  }
-
-  @VisibleForTesting
-  interface RetryPolicies {
-    @Nonnull
-    RetryPolicy get(MethodDescriptor<?, ?> method);
   }
 
   @Override

@@ -5,19 +5,6 @@ cat /VERSION
 
 BASE_DIR="$(pwd)"
 
-# Build grpc-cronet
-
-cd "$BASE_DIR/github/grpc-java/cronet"
-./cronet_deps.sh
-../gradlew --include-build .. build
-
-
-# Build grpc-android
-
-cd "$BASE_DIR/github/grpc-java/android"
-../gradlew --include-build .. build
-
-
 # Install gRPC and codegen for the Android examples
 # (a composite gradle build can't find protoc-gen-grpc-java)
 
@@ -35,6 +22,21 @@ buildscripts/make_dependencies.sh
 ln -s "/tmp/protobuf-${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)" /tmp/protobuf
 
 ./gradlew install
+
+# Build grpc-cronet
+
+pushd cronet
+./cronet_deps.sh
+../gradlew build
+popd
+
+# Build grpc-android
+
+pushd android
+../gradlew build
+popd
+
+# Build examples
 
 cd ./examples/android/clientcache
 ./gradlew build

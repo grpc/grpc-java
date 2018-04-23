@@ -42,7 +42,7 @@ subprojects {
       allprojects {
         afterEvaluate { project ->
           project.tasks.withType(JavaCompile) {
-            options.compilerArgs.removeAll { it.startsWith("-Xep:") }
+            options.compilerArgs.removeAll { it.startsWith("-Xep") }
           }
         }
       }
@@ -100,7 +100,7 @@ subprojects {
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
         nettyVersion = '4.1.22.Final'
-        guavaVersion = '19.0'
+        guavaVersion = '20.0'
         protobufVersion = '3.5.1'
         protocVersion = '3.5.1-1'
         protobufNanoVersion = '3.0.0-alpha-5'
@@ -192,6 +192,7 @@ subprojects {
                 gson: "com.google.code.gson:gson:2.7",
                 guava: "com.google.guava:guava:${guavaVersion}",
                 hpack: 'com.twitter:hpack:0.10.1',
+                javax_annotation: 'javax.annotation:javax.annotation-api:1.2',
                 jsr305: 'com.google.code.findbugs:jsr305:3.0.0',
                 oauth_client: 'com.google.auth:google-auth-library-oauth2-http:0.9.0',
                 google_api_protos: 'com.google.api.grpc:proto-google-common-protos:1.0.0',
@@ -207,7 +208,7 @@ subprojects {
                 protobuf_lite: "com.google.protobuf:protobuf-lite:3.0.1",
                 protoc_lite: "com.google.protobuf:protoc-gen-javalite:3.0.0",
                 protobuf_nano: "com.google.protobuf.nano:protobuf-javanano:${protobufNanoVersion}",
-                protobuf_plugin: 'com.google.protobuf:protobuf-gradle-plugin:0.8.3',
+                protobuf_plugin: 'com.google.protobuf:protobuf-gradle-plugin:0.8.5',
                 protobuf_util: "com.google.protobuf:protobuf-java-util:${protobufVersion}",
                 lang: "org.apache.commons:commons-lang3:3.5",
 
@@ -216,11 +217,13 @@ subprojects {
                 netty_proxy_handler: "io.netty:netty-handler-proxy:${nettyVersion}",
                 netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.7.Final',
 
+                conscrypt: 'org.conscrypt:conscrypt-openjdk-uber:1.0.1',
+
                 // Test dependencies.
                 junit: 'junit:junit:4.12',
                 mockito: 'org.mockito:mockito-core:1.9.5',
                 truth: 'com.google.truth:truth:0.36',
-                guava_testlib: 'com.google.guava:guava-testlib:19.0',
+                guava_testlib: 'com.google.guava:guava-testlib:20.0',
 
                 // Benchmark dependencies
                 hdrhistogram: 'org.hdrhistogram:HdrHistogram:2.1.10',

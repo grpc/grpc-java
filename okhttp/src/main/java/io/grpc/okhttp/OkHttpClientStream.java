@@ -58,6 +58,7 @@ class OkHttpClientStream extends AbstractClientStream {
   private volatile int id = ABSENT_ID;
   private final TransportState state;
   private final Sink sink = new Sink();
+  private final Attributes attributes;
 
   private boolean useGet = false;
 
@@ -83,6 +84,10 @@ class OkHttpClientStream extends AbstractClientStream {
     this.method = method;
     this.authority = authority;
     this.userAgent = userAgent;
+    // OkHttpClientStream is only created after the transport has finished connecting,
+    // so it is safe to read the transport attributes.
+    // We make a copy here for convenience, even though we can ask the transport.
+    this.attributes = transport.getAttributes();
     this.state = new TransportState(maxMessageSize, statsTraceCtx, lock, frameWriter, outboundFlow,
         transport);
   }
@@ -123,7 +128,7 @@ class OkHttpClientStream extends AbstractClientStream {
 
   @Override
   public Attributes getAttributes() {
-    return Attributes.EMPTY;
+    return attributes;
   }
 
   class Sink implements AbstractClientStream.Sink {
@@ -320,7 +325,7 @@ class OkHttpClientStream extends AbstractClientStream {
 
     @GuardedBy("lock")
     private void onEndOfStream() {
-      if (!framer().isClosed()) {
+      if (!isOutboundClosed()) {
         // If server's end-of-stream is received before client sends end-of-stream, we just send a
         // reset to server to fully close the server side stream.
         transport.finishStream(id(),null, PROCESSED, false, ErrorCode.CANCEL, null);
