@@ -1,5 +1,13 @@
 FROM protoc-artifacts:latest
 
+# Update curl so git cloning and dep fetching works
+#   https://github.com/google/protobuf/issues/4419
+# Context for `yum clean all` workaround:
+#   https://github.com/CentOS/sig-cloud-instance-images/issues/15
+RUN yum -y update; yum clean all
+
+RUN git clone https://github.com/google/protobuf.git
+
 RUN scl enable devtoolset-1.1 'bash -c "cd /protobuf && \
     git fetch && \
     git checkout v3.5.1 && \
