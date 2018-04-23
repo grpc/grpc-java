@@ -25,6 +25,7 @@ import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkInfo;
 import android.os.Build;
+import android.util.Log;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
@@ -49,6 +50,8 @@ import javax.annotation.concurrent.GuardedBy;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4056")
 public final class AndroidChannelBuilder extends ForwardingChannelBuilder<AndroidChannelBuilder> {
+
+  private static final String LOG_TAG = "AndroidChannelBuilder";
 
   @Nullable private static final Class<?> OKHTTP_CHANNEL_BUILDER_CLASS = findOkHttp();
 
@@ -136,11 +139,22 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
 
     @GuardedBy("lock")
     private void configureNetworkMonitoring() {
+      // Eagerly check current network state to verify app has required permissions
+      NetworkInfo currentNetwork;
+      try {
+        currentNetwork = connectivityManager.getActiveNetworkInfo();
+      } catch (SecurityException e) {
+        Log.w(
+            LOG_TAG,
+            "Failed to configure network monitoring. Does app have ACCESS_NETWORK_STATE"
+                + " permission?",
+            e);
+        return;
+      }
+
       // Android N added the registerDefaultNetworkCallback API to listen to changes in the device's
       // default network. For earlier Android API levels, use the BroadcastReceiver API.
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && connectivityManager != null) {
-        NetworkInfo currentNetwork = connectivityManager.getActiveNetworkInfo();
-
         // The connection status may change before registration of the listener is complete, but
         // this will at worst result in invoking resetConnectBackoff() instead of enterIdle() (or
         // vice versa) on the first network change.
