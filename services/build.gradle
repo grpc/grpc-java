@@ -24,6 +24,9 @@ dependencies {
         // we'll always be more up-to-date
         exclude group: 'io.grpc', module: 'grpc-context'
     }
+
+    compile "com.google.api.grpc:googleapis-common-protos:0.0.3"
+
     compileOnly libraries.javax_annotation
     testCompile project(':grpc-testing'),
             libraries.netty_epoll // for DomainSocketAddress
