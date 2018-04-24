@@ -270,8 +270,8 @@ public class RoundRobinLoadBalancerTest {
     Subchannel subchannel1 = mock(Subchannel.class);
     Subchannel subchannel2 = mock(Subchannel.class);
 
-    Picker picker = new Picker(Collections.unmodifiableList(
-        Lists.<Subchannel>newArrayList(subchannel, subchannel1, subchannel2)), null);
+    Picker picker = new Picker(Collections.unmodifiableList(Lists.<Subchannel>newArrayList(
+        subchannel, subchannel1, subchannel2)), null /* status */, null /* stickinessState */);
 
     assertThat(picker.getList()).containsExactly(subchannel, subchannel1, subchannel2);
 
@@ -283,7 +283,8 @@ public class RoundRobinLoadBalancerTest {
 
   @Test
   public void pickerEmptyList() throws Exception {
-    Picker picker = new Picker(Lists.<Subchannel>newArrayList(), Status.UNKNOWN);
+    Picker picker =
+        new Picker(Lists.<Subchannel>newArrayList(), Status.UNKNOWN, null /* stickinessState */);
 
     assertEquals(null, picker.pickSubchannel(mockArgs).getSubchannel());
     assertEquals(Status.UNKNOWN,
