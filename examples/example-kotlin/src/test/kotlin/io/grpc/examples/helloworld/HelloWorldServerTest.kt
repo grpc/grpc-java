@@ -58,6 +58,6 @@ class HelloWorldServerTest {
 
         val reply = blockingStub.sayHello(HelloRequest.newBuilder().setName(testName).build())
 
-        assertEquals("Hello " + testName, reply.message)
+        assertEquals("Hello $testName", reply.message)
     }
 }

@@ -79,6 +79,7 @@ dependencies {
     compile 'com.android.support:appcompat-v7:27.0.2'
     compile 'javax.annotation:javax.annotation-api:1.2'
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+    compile 'javax.annotation:javax.annotation-api:1.2'
 
     // You need to build grpc-java to obtain these libraries below.
     compile 'io.grpc:grpc-okhttp:1.12.0-SNAPSHOT' // CURRENT_GRPC_VERSION

@@ -3,7 +3,7 @@ grpc Kotlin example
 
 The examples require grpc-java to already be built. You are strongly encouraged
 to check out a git release tag, since there will already be a build of grpc
-available. Otherwise you must follow [COMPILING](../COMPILING.md).
+available. Otherwise you must follow COMPILING.md.
 
 You may want to read through the
 [Quick Start Guide](https://grpc.io/docs/quickstart/java.html)
@@ -49,15 +49,11 @@ write unit tests. `InProcessTransport` is light-weight and runs the server
 and client in the same process without any socket/TCP connection.
 
 For testing a gRPC client, create the client with a real stub
-using an
-[InProcessChannel](../core/src/main/java/io/grpc/inprocess/InProcessChannelBuilder.java),
-and test it against an
-[InProcessServer](../core/src/main/java/io/grpc/inprocess/InProcessServerBuilder.java)
+using an InProcessChannelBuilder.java and test it against an InProcessServer.java
 with a mock/fake service implementation.
 
 For testing a gRPC server, create the server as an InProcessServer,
 and test it against a real client stub with an InProcessChannel.
 
-The gRPC-java library also provides a JUnit rule,
-[GrpcServerRule](../testing/src/main/java/io/grpc/testing/GrpcServerRule.java), to do the starting
+The gRPC-java library also provides a JUnit rule, GrpcServerRule.java, to do the starting
 up and shutting down boilerplate for you.
