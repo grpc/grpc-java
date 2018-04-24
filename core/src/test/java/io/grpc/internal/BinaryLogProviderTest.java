@@ -115,16 +115,6 @@ public class BinaryLogProviderTest {
     protected boolean isAvailable() {
       return true;
     }
-
-    @Override
-    public CallId getServerCallId() {
-      return null;
-    }
-
-    @Override
-    public CallId getClientCallId(CallOptions options) {
-      return null;
-    }
   };
 
   @Test

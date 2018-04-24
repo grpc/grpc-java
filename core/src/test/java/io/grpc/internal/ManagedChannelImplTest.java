@@ -2311,16 +2311,6 @@ public class ManagedChannelImplTest {
       protected boolean isAvailable() {
         return true;
       }
-
-      @Override
-      public CallId getServerCallId() {
-        return null;
-      }
-
-      @Override
-      public CallId getClientCallId(CallOptions options) {
-        return null;
-      }
     };
 
     createChannel();

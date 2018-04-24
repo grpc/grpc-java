@@ -48,7 +48,6 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
-import io.grpc.CallOptions;
 import io.grpc.ClientInterceptor;
 import io.grpc.Compressor;
 import io.grpc.Context;
@@ -1265,16 +1264,6 @@ public class ServerImplTest {
       @Override
       protected boolean isAvailable() {
         return true;
-      }
-
-      @Override
-      public CallId getServerCallId() {
-        return null;
-      }
-
-      @Override
-      public CallId getClientCallId(CallOptions options) {
-        return null;
       }
     };
     createAndStartServer();
