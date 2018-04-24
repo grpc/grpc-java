@@ -33,13 +33,6 @@ buildscripts/make_dependencies.sh
 # the install dir is hardcoded in make_dependencies.sh
 PROTO_INSTALL_DIR="/tmp/protobuf-${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)-x86_$ARCH"
 
-# If /tmp/protobuf exists then we just assume it's a symlink created by us.
-# It may be that it points to the wrong arch, so we idempotently set it now.
-if [[ -L /tmp/protobuf ]]; then
-  rm /tmp/protobuf
-fi
-ln -s $PROTO_INSTALL_DIR /tmp/protobuf;
-
 # Set properties via flags, do not pollute gradle.properties
 GRADLE_FLAGS="${GRADLE_FLAGS:-}"
 GRADLE_FLAGS+=" -PtargetArch=x86_$ARCH $GRADLE_FLAGS"

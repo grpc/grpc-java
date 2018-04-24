@@ -37,3 +37,9 @@ else
   popd
 fi
 
+# If /tmp/protobuf exists then we just assume it's a symlink created by us.
+# It may be that it points to the wrong arch, so we idempotently set it now.
+if [[ -L /tmp/protobuf ]]; then
+  rm /tmp/protobuf
+fi
+ln -s $PROTO_INSTALL_DIR /tmp/protobuf;
