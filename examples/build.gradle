@@ -32,7 +32,7 @@ def grpcVersion = '1.13.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def nettyTcNativeVersion = '2.0.7.Final'
 
 dependencies {
-  compile "com.google.api.grpc:proto-google-common-protos:1.0.0"
+  compile "com.google.api.grpc:proto-google-common-protos:1.9.0"
   compile "io.grpc:grpc-alts:${grpcVersion}"
   compile "io.grpc:grpc-netty:${grpcVersion}"
   compile "io.grpc:grpc-protobuf:${grpcVersion}"
