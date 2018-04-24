@@ -42,4 +42,4 @@ fi
 if [[ -L /tmp/protobuf ]]; then
   rm /tmp/protobuf
 fi
-ln -s $PROTO_INSTALL_DIR /tmp/protobuf;
+ln -s $INSTALL_DIR /tmp/protobuf;

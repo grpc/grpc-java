@@ -30,9 +30,6 @@ export ARCH="${ARCH:-64}"
 
 buildscripts/make_dependencies.sh
 
-# the install dir is hardcoded in make_dependencies.sh
-PROTO_INSTALL_DIR="/tmp/protobuf-${PROTOBUF_VERSION}/$(uname -s)-$(uname -p)-x86_$ARCH"
-
 # Set properties via flags, do not pollute gradle.properties
 GRADLE_FLAGS="${GRADLE_FLAGS:-}"
 GRADLE_FLAGS+=" -PtargetArch=x86_$ARCH $GRADLE_FLAGS"
