@@ -43,8 +43,7 @@ dependencies {
     testCompile project(':grpc-context').sourceSets.test.output,
                 project(':grpc-testing'),
                 libraries.google_api_protos,
-                libraries.protobuf,
-                libraries.protobuf_util
+                libraries.protobuf
 
     signature "org.codehaus.mojo.signature:java16:1.1@signature"
 }
