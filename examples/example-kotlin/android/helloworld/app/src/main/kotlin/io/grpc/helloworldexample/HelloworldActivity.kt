@@ -84,7 +84,7 @@ class HelloworldActivity : AppCompatActivity(), View.OnClickListener {
 
     override fun onPostExecute(result: String) {
       try {
-        channel?.shutdown().awaitTermination(1, TimeUnit.SECONDS)
+        channel?.shutdown()?.awaitTermination(1, TimeUnit.SECONDS)
       } catch (e: InterruptedException) {
         Thread.currentThread().interrupt()
       }
