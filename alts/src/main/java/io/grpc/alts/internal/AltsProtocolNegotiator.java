@@ -22,10 +22,8 @@ import com.google.protobuf.Any;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.Status;
-import io.grpc.alts.internal.Altscontext.AltsContext;
 import io.grpc.alts.internal.RpcProtocolVersionsUtil.RpcVersionsCheckResult;
 import io.grpc.alts.internal.TsiHandshakeHandler.TsiHandshakeCompletionEvent;
-import io.grpc.internal.Channelz;
 import io.grpc.internal.Channelz.OtherSecurity;
 import io.grpc.internal.Channelz.Security;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
@@ -125,7 +123,7 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
                     .set(ALTS_CONTEXT_KEY, altsContext)
                     .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
                     .build(),
-                new AltsSecurityInfoProvider(altsContext.context));
+                new Security(new OtherSecurity("alts", Any.pack(altsContext.context))));
           }
 
           // Now write any buffered data and remove this handler.
@@ -139,19 +137,6 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
 
     private static RuntimeException unavailableException(String msg, Throwable cause) {
       return Status.UNAVAILABLE.withCause(cause).withDescription(msg).asRuntimeException();
-    }
-  }
-
-  static final class AltsSecurityInfoProvider implements Channelz.SecurityInfoProvider {
-    private final AltsContext context;
-
-    AltsSecurityInfoProvider(AltsContext context) {
-      this.context = context;
-    }
-
-    @Override
-    public Security get() {
-      return new Security(new OtherSecurity("alts", Any.pack(context)));
     }
   }
 }

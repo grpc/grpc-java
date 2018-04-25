@@ -141,12 +141,12 @@ final class ChannelzProtoUtil {
           = Tls.newBuilder().setStandardName(security.tls.cipherSuiteStandardName);
       if (security.tls.localCert != null) {
         tlsBuilder.setLocalCertificate(ByteString.copyFrom(
-            security.tls.localCert,
+            security.tls.localCert.toString(),
             Charsets.UTF_8));
       }
       if (security.tls.remoteCert != null) {
         tlsBuilder.setRemoteCertificate(ByteString.copyFrom(
-            security.tls.remoteCert,
+            security.tls.remoteCert.toString(),
             Charsets.UTF_8));
       }
       return Security.newBuilder().setTls(tlsBuilder).build();

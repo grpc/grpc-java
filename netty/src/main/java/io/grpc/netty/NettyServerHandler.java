@@ -113,7 +113,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   private final KeepAliveEnforcer keepAliveEnforcer;
   /** Incomplete attributes produced by negotiator. */
   private Attributes negotiationAttributes;
-  private Channelz.SecurityInfoProvider securityInfoProvider = Channelz.NO_SECURITY_INFO;
+  private Channelz.Security securityInfo;
   /** Completed attributes produced by transportReady. */
   private Attributes attributes;
   private Throwable connectionError;
@@ -507,14 +507,13 @@ class NettyServerHandler extends AbstractNettyHandler {
 
   @Override
   public void handleProtocolNegotiationCompleted(
-      Attributes attrs, Channelz.SecurityInfoProvider securityInfoProvider) {
+      Attributes attrs, Channelz.Security securityInfo) {
     negotiationAttributes = attrs;
-    this.securityInfoProvider
-        = Preconditions.checkNotNull(securityInfoProvider, "securityInfoProvider");
+    this.securityInfo = securityInfo;
   }
 
-  Channelz.SecurityInfoProvider getSecurityInfoProvider() {
-    return securityInfoProvider;
+  Channelz.Security getSecurityInfo() {
+    return securityInfo;
   }
 
   @VisibleForTesting

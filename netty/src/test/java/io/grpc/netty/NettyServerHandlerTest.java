@@ -58,7 +58,6 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StreamTracer;
-import io.grpc.internal.Channelz;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.ServerStream;
@@ -194,7 +193,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     handler().setKeepAliveManagerForTest(spyKeepAliveManager);
 
     // Simulate receipt of the connection preface
-    handler().handleProtocolNegotiationCompleted(Attributes.EMPTY, Channelz.NO_SECURITY_INFO);
+    handler().handleProtocolNegotiationCompleted(Attributes.EMPTY, /*securityInfo=*/ null);
     channelRead(Http2CodecUtil.connectionPrefaceBuf());
     // Simulate receipt of initial remote settings.
     ByteBuf serializedSettings = serializeSettings(new Http2Settings());
@@ -205,7 +204,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   public void transportReadyDelayedUntilConnectionPreface() throws Exception {
     initChannel(new GrpcHttp2ServerHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
 
-    handler().handleProtocolNegotiationCompleted(Attributes.EMPTY, Channelz.NO_SECURITY_INFO);
+    handler().handleProtocolNegotiationCompleted(Attributes.EMPTY, /*securityInfo=*/ null);
     verify(transportListener, never()).transportReady(any(Attributes.class));
 
     // Simulate receipt of the connection preface

@@ -19,6 +19,8 @@ package io.grpc.services;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.Channelz.id;
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableList;
@@ -73,6 +75,7 @@ import io.netty.channel.unix.DomainSocketAddress;
 import java.net.Inet4Address;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.security.cert.Certificate;
 import java.util.Collections;
 import java.util.Map.Entry;
 import org.junit.Test;
@@ -320,8 +323,13 @@ public final class ChannelzProtoUtilTest {
 
   @Test
   public void socketSecurityTls() throws Exception {
+    Certificate local = mock(Certificate.class);
+    Certificate remote = mock(Certificate.class);
+    when(local.toString()).thenReturn("localcert");
+    when(remote.toString()).thenReturn("remotecert");
+
     socket.security = new Channelz.Security(
-        new Channelz.Tls("TLS_NULL_WITH_NULL_NULL", "localcert", "remotecert"));
+        new Channelz.Tls("TLS_NULL_WITH_NULL_NULL", local, remote));
     assertEquals(
         Security.newBuilder().setTls(
             Tls.newBuilder()
@@ -332,7 +340,7 @@ public final class ChannelzProtoUtilTest {
         ChannelzProtoUtil.toSocket(socket).getSecurity());
 
     socket.security = new Channelz.Security(
-        new Channelz.Tls("TLS_NULL_WITH_NULL_NULL", /*localcert=*/ null, "remotecert"));
+        new Channelz.Tls("TLS_NULL_WITH_NULL_NULL", /*localcert=*/ null, remote));
     assertEquals(
         Security.newBuilder().setTls(
             Tls.newBuilder()
@@ -342,7 +350,7 @@ public final class ChannelzProtoUtilTest {
         ChannelzProtoUtil.toSocket(socket).getSecurity());
 
     socket.security = new Channelz.Security(
-        new Channelz.Tls("TLS_NULL_WITH_NULL_NULL", "localcert", /*remotecert=*/ null));
+        new Channelz.Tls("TLS_NULL_WITH_NULL_NULL", local, /*remotecert=*/ null));
     assertEquals(
         Security.newBuilder().setTls(
             Tls.newBuilder()

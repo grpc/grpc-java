@@ -288,8 +288,8 @@ public final class ChannelzTest {
     when(session.getPeerCertificates()).thenReturn(new Certificate[]{remote});
 
     Tls tls = new Tls(session);
-    assertEquals(local.toString(), tls.localCert);
-    assertEquals(remote.toString(), tls.remoteCert);
+    assertEquals(local, tls.localCert);
+    assertEquals(remote, tls.remoteCert);
     assertEquals("TLS_NULL_WITH_NULL_NULL", tls.cipherSuiteStandardName);
   }
 

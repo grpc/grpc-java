@@ -105,7 +105,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   private WriteQueue clientWriteQueue;
   private Http2Ping ping;
   private Attributes attributes = Attributes.EMPTY;
-  private Channelz.SecurityInfoProvider securityInfoProvider = Channelz.NO_SECURITY_INFO;
+  private Channelz.Security securityInfo;
 
   static NettyClientHandler newHandler(
       ClientTransportLifecycleManager lifecycleManager,
@@ -410,15 +410,14 @@ class NettyClientHandler extends AbstractNettyHandler {
 
   @Override
   public void handleProtocolNegotiationCompleted(
-      Attributes attributes, Channelz.SecurityInfoProvider securityInfoProvider) {
+      Attributes attributes, Channelz.Security securityInfo) {
     this.attributes = attributes;
-    this.securityInfoProvider
-        = Preconditions.checkNotNull(securityInfoProvider, "securityInfoProvider");
-    super.handleProtocolNegotiationCompleted(attributes, securityInfoProvider);
+    this.securityInfo = securityInfo;
+    super.handleProtocolNegotiationCompleted(attributes, securityInfo);
   }
 
-  Channelz.SecurityInfoProvider getSecurityInfoProvider() {
-    return securityInfoProvider;
+  Channelz.Security getSecurityInfo() {
+    return securityInfo;
   }
 
 

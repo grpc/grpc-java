@@ -348,7 +348,7 @@ class NettyClientTransport implements ConnectionClientTransport {
         channel.localAddress(),
         channel.remoteAddress(),
         Utils.getSocketOptions(ch),
-        handler == null ? null : handler.getSecurityInfoProvider().get());
+        handler == null ? null : handler.getSecurityInfo());
   }
 
   @VisibleForTesting

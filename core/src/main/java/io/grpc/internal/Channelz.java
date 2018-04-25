@@ -455,33 +455,6 @@ public final class Channelz {
     }
   }
 
-  /**
-   * An interface that allows lazy creating a {@link Security} if needed.
-   */
-  public interface SecurityInfoProvider {
-    Security get();
-  }
-
-  public static final SecurityInfoProvider NO_SECURITY_INFO = new SecurityInfoProvider() {
-    @Override
-    public Security get() {
-      return null;
-    }
-  };
-
-  public static final class TlsSecurityInfoProvider implements SecurityInfoProvider {
-    private final SSLSession session;
-
-    public TlsSecurityInfoProvider(SSLSession session) {
-      this.session = Preconditions.checkNotNull(session, "session");
-    }
-
-    @Override
-    public Security get() {
-      return new Security(new Tls(session));
-    }
-  }
-
   public static final class Security {
     @Nullable
     public final Tls tls;
@@ -521,13 +494,13 @@ public final class Channelz {
   @Immutable
   public static final class Tls {
     public final String cipherSuiteStandardName;
-    @Nullable public final String localCert;
-    @Nullable public final String remoteCert;
+    @Nullable public final Certificate localCert;
+    @Nullable public final Certificate remoteCert;
 
     /**
      * A constructor only for testing.
      */
-    public Tls(String cipherSuiteName, String localCert, String remoteCert) {
+    public Tls(String cipherSuiteName, Certificate localCert, Certificate remoteCert) {
       this.cipherSuiteStandardName = cipherSuiteName;
       this.localCert = localCert;
       this.remoteCert = remoteCert;
@@ -538,18 +511,18 @@ public final class Channelz {
      */
     public Tls(SSLSession session) {
       String cipherSuiteStandardName = session.getCipherSuite();
-      String localCert = null;
-      String remoteCert = null;
+      Certificate localCert = null;
+      Certificate remoteCert = null;
       Certificate[] localCerts = session.getLocalCertificates();
       if (localCerts != null) {
-        localCert = localCerts[0].toString();
+        localCert = localCerts[0];
       }
       try {
         Certificate[] peerCerts = session.getPeerCertificates();
         if (peerCerts != null) {
           // The javadoc of getPeerCertificate states that the peer's own certificate is the first
           // element of the list.
-          remoteCert = peerCerts[0].toString();
+          remoteCert = peerCerts[0];
         }
       } catch (SSLPeerUnverifiedException e) {
         // peer cert is not available

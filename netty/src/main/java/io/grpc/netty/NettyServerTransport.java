@@ -233,7 +233,7 @@ class NettyServerTransport implements ServerTransport {
         channel.localAddress(),
         channel.remoteAddress(),
         Utils.getSocketOptions(ch),
-        grpcHandler == null ? null : grpcHandler.getSecurityInfoProvider().get());
+        grpcHandler == null ? null : grpcHandler.getSecurityInfo());
   }
 
   /**

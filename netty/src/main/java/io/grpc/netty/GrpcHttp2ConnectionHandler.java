@@ -45,14 +45,14 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
   }
 
   /**
-   * Same as {@link #handleProtocolNegotiationCompleted(Attributes, Channelz.SecurityInfoProvider)}
-   * but with no Channelz.SecurityInfoProvider
+   * Same as {@link #handleProtocolNegotiationCompleted(Attributes, Channelz.Security)}
+   * but with no {@link Channelz.Security}.
    *
    * @deprecated Use the two argument method instead.
    */
   @Deprecated
   public void handleProtocolNegotiationCompleted(Attributes attrs) {
-    handleProtocolNegotiationCompleted(attrs, Channelz.NO_SECURITY_INFO);
+    handleProtocolNegotiationCompleted(attrs, /*securityInfo=*/ null);
   }
 
   /**
@@ -62,10 +62,9 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
    * channel.
    *
    * @param attrs arbitrary attributes passed after protocol negotiation (eg. SSLSession).
-   * @param securityInfoProvider informs channelz about the security protocol.
+   * @param securityInfo informs channelz about the security protocol.
    */
-  public void handleProtocolNegotiationCompleted(
-      Attributes attrs, Channelz.SecurityInfoProvider securityInfoProvider) {
+  public void handleProtocolNegotiationCompleted(Attributes attrs, Channelz.Security securityInfo) {
   }
 
   /**

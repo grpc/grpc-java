@@ -23,16 +23,12 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-import com.google.protobuf.Any;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
-import io.grpc.alts.internal.AltsProtocolNegotiator.AltsSecurityInfoProvider;
-import io.grpc.alts.internal.Altscontext.AltsContext;
 import io.grpc.alts.internal.Handshaker.HandshakerResult;
 import io.grpc.alts.internal.TsiFrameProtector.Consumer;
 import io.grpc.alts.internal.TsiPeer.Property;
 import io.grpc.internal.Channelz;
-import io.grpc.internal.Channelz.Security;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -349,15 +345,6 @@ public class AltsProtocolNegotiatorTest {
         .isEqualTo("embedded");
   }
 
-  @Test
-  public void channelzSecurity() throws Exception {
-    AltsSecurityInfoProvider provider = new AltsSecurityInfoProvider(
-        AltsContext.getDefaultInstance());
-    Security security = provider.get();
-    assertEquals("alts", security.other.name);
-    assertEquals(Any.pack(AltsContext.getDefaultInstance()), security.other.any);
-  }
-
   private void doHandshake() throws Exception {
     // Capture the client frame and add to the server.
     assertEquals(1, channel.outboundMessages().size());
@@ -414,7 +401,7 @@ public class AltsProtocolNegotiatorTest {
 
     @Override
     public void handleProtocolNegotiationCompleted(
-        Attributes attrs, Channelz.SecurityInfoProvider securityInfoProvider) {
+        Attributes attrs, Channelz.Security securityInfo) {
       // If we are added to the pipeline, we need to remove ourselves.  The HTTP2 handler
       channel.pipeline().remove(this);
       this.attrs = attrs;

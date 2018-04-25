@@ -89,7 +89,7 @@ public final class ProtocolNegotiators {
             handler.handleProtocolNegotiationCompleted(Attributes.newBuilder()
                 .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
                 .build(),
-                Channelz.NO_SECURITY_INFO);
+                /*securityInfo=*/ null);
             // Just replace this handler with the gRPC handler.
             ctx.pipeline().replace(this, null, handler);
           }
@@ -156,7 +156,7 @@ public final class ProtocolNegotiators {
                     .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, session)
                     .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
                     .build(),
-                new Channelz.TlsSecurityInfoProvider(session));
+                new Channelz.Security(new Channelz.Tls(session)));
             // Replace this handler with the GRPC handler.
             ctx.pipeline().replace(this, null, grpcHandler);
           } else {
@@ -646,7 +646,7 @@ public final class ProtocolNegotiators {
                     .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, session)
                     .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
                     .build(),
-                new Channelz.TlsSecurityInfoProvider(session));
+                new Channelz.Security(new Channelz.Tls(session)));
             writeBufferedAndRemove(ctx);
           } else {
             Exception ex = new Exception(
@@ -693,7 +693,7 @@ public final class ProtocolNegotiators {
               .newBuilder()
               .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
               .build(),
-          Channelz.NO_SECURITY_INFO);
+          /*securityInfo=*/ null);
       super.channelActive(ctx);
     }
   }
@@ -735,7 +735,7 @@ public final class ProtocolNegotiators {
                 .newBuilder()
                 .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
                 .build(),
-            Channelz.NO_SECURITY_INFO);
+            /*securityInfo=*/ null);
       } else if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_REJECTED) {
         fail(ctx, unavailableException("HTTP/2 upgrade rejected"));
       }

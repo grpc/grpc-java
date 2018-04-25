@@ -188,7 +188,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
   @GuardedBy("lock")
-  private Channelz.SecurityInfoProvider securityInfoProvider = Channelz.NO_SECURITY_INFO;
+  private Channelz.Security securityInfo;
 
   @VisibleForTesting
   @Nullable
@@ -501,7 +501,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
           maxConcurrentStreams = Integer.MAX_VALUE;
           startPendingStreams();
           if (sslSession != null) {
-            securityInfoProvider = new Channelz.TlsSecurityInfoProvider(sslSession);
+            securityInfo = new Channelz.Security(new Channelz.Tls(sslSession));
           }
         }
 
@@ -930,7 +930,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
             socket.getLocalSocketAddress(),
             socket.getRemoteSocketAddress(),
             Utils.getSocketOptions(socket),
-            securityInfoProvider.get()));
+            securityInfo));
       }
       return ret;
     }
