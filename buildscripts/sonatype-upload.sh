@@ -49,6 +49,9 @@ fi
 CONF="$HOME/.config/sonatype-upload"
 [ -f "$CONF" ] && . "$CONF"
 
+USERNAME="${USERNAME:-}"
+PASSWORD="${PASSWORD:-}"
+
 if [ -z "$USERNAME" -o -z "$PASSWORD" ]; then
   # TODO(ejona86): if people would use it, could prompt for values to avoid
   # having passwords in plain-text.
