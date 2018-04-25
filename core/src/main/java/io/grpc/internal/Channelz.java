@@ -455,6 +455,9 @@ public final class Channelz {
     }
   }
 
+  /**
+   * An interface that allows lazy creating a {@link Security} if needed.
+   */
   public interface SecurityInfoProvider {
     Security get();
   }
@@ -486,13 +489,13 @@ public final class Channelz {
     public final OtherSecurity other;
 
     public Security(Tls tls) {
-      this.tls = tls;
+      this.tls = Preconditions.checkNotNull(tls);
       this.other = null;
     }
 
     public Security(OtherSecurity other) {
       this.tls = null;
-      this.other = other;
+      this.other = Preconditions.checkNotNull(other);
     }
   }
 

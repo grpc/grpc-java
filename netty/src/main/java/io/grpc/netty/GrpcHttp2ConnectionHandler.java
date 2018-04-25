@@ -52,7 +52,7 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
    */
   @Deprecated
   public void handleProtocolNegotiationCompleted(Attributes attrs) {
-    handleProtocolNegotiationCompleted(attrs, null);
+    handleProtocolNegotiationCompleted(attrs, Channelz.NO_SECURITY_INFO);
   }
 
   /**

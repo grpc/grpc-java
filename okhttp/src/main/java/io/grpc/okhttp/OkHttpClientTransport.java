@@ -40,7 +40,6 @@ import io.grpc.Status.Code;
 import io.grpc.StatusException;
 import io.grpc.internal.Channelz;
 import io.grpc.internal.Channelz.SocketStats;
-import io.grpc.internal.Channelz.TransportStats;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
@@ -66,7 +65,6 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.net.SocketAddress;
 import java.net.URI;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -919,15 +917,21 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   public ListenableFuture<SocketStats> getStats() {
     SettableFuture<SocketStats> ret = SettableFuture.create();
     synchronized (lock) {
-      SocketAddress local = socket == null ? null : socket.getLocalSocketAddress();
-      SocketAddress remote = socket == null ? null :  socket.getRemoteSocketAddress();
-      TransportStats stats = transportTracer.getStats();
-      ret.set(new SocketStats(
-          stats,
-          local,
-          remote,
-          Utils.getSocketOptions(socket),
-          securityInfoProvider.get()));
+      if (socket == null) {
+        ret.set(new SocketStats(
+            transportTracer.getStats(),
+            /*local=*/ null,
+            /*remote=*/ null,
+            new Channelz.SocketOptions.Builder().build(),
+            /*security=*/ null));
+      } else {
+        ret.set(new SocketStats(
+            transportTracer.getStats(),
+            socket.getLocalSocketAddress(),
+            socket.getRemoteSocketAddress(),
+            Utils.getSocketOptions(socket),
+            securityInfoProvider.get()));
+      }
       return ret;
     }
   }
