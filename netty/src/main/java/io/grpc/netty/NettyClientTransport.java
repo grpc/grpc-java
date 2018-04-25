@@ -81,7 +81,6 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final Runnable tooManyPingsRunnable;
   private ProtocolNegotiator.Handler negotiationHandler;
   private NettyClientHandler handler;
-
   // We should not send on the channel until negotiation completes. This is a hard requirement
   // by SslHandler but is appropriate for HTTP/1.1 Upgrade as well.
   private Channel channel;
