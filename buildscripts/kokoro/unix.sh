@@ -69,8 +69,7 @@ LOCAL_MVN_TEMP=$(mktemp -d)
 
 readonly MVN_ARTIFACT_DIR="${MVN_ARTIFACT_DIR:-$GRPC_JAVA_DIR/mvn-artifacts}"
 
-if [[ ! -d $MVN_ARTIFACT_DIR/x86_$ARCH ]]; then
-  mkdir -p $MVN_ARTIFACT_DIR/x86_$ARCH
+if [[ ! -d $MVN_ARTIFACT_DIR ]]; then
+  mkdir -p $MVN_ARTIFACT_DIR
 fi
-mv $LOCAL_MVN_TEMP/* $MVN_ARTIFACT_DIR/x86_$ARCH/
-rmdir $LOCAL_MVN_TEMP
+cp -r $LOCAL_MVN_TEMP/* $MVN_ARTIFACT_DIR/
