@@ -87,7 +87,6 @@ REPOID="$(
   grep stagedRepositoryId |
   sed 's/.*<stagedRepositoryId>\(.*\)<\/stagedRepositoryId>.*/\1/'
   )"
-echo "Repository id: $REPOID"
 
 for X in $(cd "$DIR" && find -type f | cut -b 3-); do
   echo "Uploading $X"
