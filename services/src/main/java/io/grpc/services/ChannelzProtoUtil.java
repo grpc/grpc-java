@@ -16,7 +16,6 @@
 
 package io.grpc.services;
 
-import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.Any;
@@ -64,15 +63,20 @@ import io.grpc.internal.Instrumented;
 import io.grpc.internal.WithLogId;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.security.cert.CertificateEncodingException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.concurrent.ExecutionException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * A static utility class for turning internal data structures into protos.
  */
 final class ChannelzProtoUtil {
+  private static final Logger logger = Logger.getLogger(ChannelzProtoUtil.class.getName());
+
   private ChannelzProtoUtil() {
     // do not instantiate.
   }
@@ -139,15 +143,17 @@ final class ChannelzProtoUtil {
     if (security.tls != null) {
       Tls.Builder tlsBuilder
           = Tls.newBuilder().setStandardName(security.tls.cipherSuiteStandardName);
-      if (security.tls.localCert != null) {
-        tlsBuilder.setLocalCertificate(ByteString.copyFrom(
-            security.tls.localCert.toString(),
-            Charsets.UTF_8));
-      }
-      if (security.tls.remoteCert != null) {
-        tlsBuilder.setRemoteCertificate(ByteString.copyFrom(
-            security.tls.remoteCert.toString(),
-            Charsets.UTF_8));
+      try {
+        if (security.tls.localCert != null) {
+          tlsBuilder.setLocalCertificate(ByteString.copyFrom(
+              security.tls.localCert.getEncoded()));
+        }
+        if (security.tls.remoteCert != null) {
+          tlsBuilder.setRemoteCertificate(ByteString.copyFrom(
+              security.tls.remoteCert.getEncoded()));
+        }
+      } catch (CertificateEncodingException e) {
+        logger.log(Level.FINE, "Caught exception", e);
       }
       return Security.newBuilder().setTls(tlsBuilder).build();
     } else {

@@ -325,8 +325,8 @@ public final class ChannelzProtoUtilTest {
   public void socketSecurityTls() throws Exception {
     Certificate local = mock(Certificate.class);
     Certificate remote = mock(Certificate.class);
-    when(local.toString()).thenReturn("localcert");
-    when(remote.toString()).thenReturn("remotecert");
+    when(local.getEncoded()).thenReturn("localcert".getBytes(Charsets.UTF_8));
+    when(remote.getEncoded()).thenReturn("remotecert".getBytes(Charsets.UTF_8));
 
     socket.security = new Channelz.Security(
         new Channelz.Tls("TLS_NULL_WITH_NULL_NULL", local, remote));
