@@ -17,4 +17,5 @@ gsutil cp gs://grpc-testing-secrets/sonatype_credentials/sonatype-upload ~/.conf
 
 STAGING_REPO=a93898609ef848
 find $KOKORO_GFILE_DIR -name 'mvn-artifacts' -type d -exec \
-  $GRPC_JAVA_DIR/buildcripts/sonatype_upload.sh $STAGING_REPO {} \;
+  $GRPC_JAVA_DIR/buildcripts/sonatype-upload.sh \ # note that sonatype-upload.sh is *not* this file
+  $STAGING_REPO {} \;
