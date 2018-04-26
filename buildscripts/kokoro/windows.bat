@@ -21,4 +21,4 @@ cmd.exe /C "%WORKSPACE%\buildscripts\kokoro\windows32.bat" || exit /b 1
 cmd.exe /C "%WORKSPACE%\buildscripts\kokoro\windows64.bat" || exit /b 1
 
 mkdir mvn-artifacts
-move artifacts mvn-artifacts
+move artifacts/io mvn-artifacts
