@@ -293,12 +293,12 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>This method is advisory, and implementations may decide to not enforce this.  Currently,
    * the only known transport to not enforce this is {@code InProcessTransport}.
    *
-   * @param max the maximum number of bytes a single message can be.
+   * @param bytes the maximum number of bytes a single message can be.
    * @return this
    * @throws IllegalArgumentException if max is negative.
    * @since 1.1.0
    */
-  public T maxInboundMessageSize(int max) {
+  public T maxInboundMessageSize(int bytes) {
     // intentional nop
     return thisT();
   }
