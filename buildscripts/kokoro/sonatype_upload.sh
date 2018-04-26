@@ -16,5 +16,5 @@ mkdir ~/.config/
 gsutil cp gs://grpc-testing-secrets/sonatype_credentials/sonatype-upload ~/.config/sonatype-upload
 
 STAGING_REPO=a93898609ef848
-find $KOKORO_GFILE_DIR -name 'mvn-artifacts' -exec \
+find $KOKORO_GFILE_DIR -name 'mvn-artifacts' -type d -exec \
   $GRPC_JAVA_DIR/buildcripts/sonatype_upload.sh $STAGING_REPO {} \;
