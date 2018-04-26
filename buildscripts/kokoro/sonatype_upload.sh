@@ -26,5 +26,5 @@ set -x
 
 STAGING_REPO=a93898609ef848
 find $KOKORO_GFILE_DIR -name 'mvn-artifacts' -type d -exec \
-  $GRPC_JAVA_DIR/buildcripts/sonatype-upload-util.sh \
+  $GRPC_JAVA_DIR/buildscripts/sonatype-upload-util.sh \
   $STAGING_REPO {} \;
