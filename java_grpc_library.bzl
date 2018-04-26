@@ -108,8 +108,8 @@ def java_grpc_library(name, srcs, deps, flavor=None,
 
   added_deps = [
       "@io_grpc_grpc_java//core",
-      "@io_grpc_grpc_java//core:javax_annotation",
       "@io_grpc_grpc_java//stub",
+      "@io_grpc_grpc_java//stub:javax_annotation",
       "@com_google_guava_guava//jar",
   ]
   if flavor == "normal":
