@@ -12,7 +12,7 @@ readonly GRPC_JAVA_DIR=$(cd $(dirname $0)/../.. && pwd)
 echo "all the artifacts should be here..."
 find $KOKORO_GFILE_DIR
 
-mkdir ~/.config/
+mkdir -p ~/.config/
 gsutil cp gs://grpc-testing-secrets/sonatype_credentials/sonatype-upload ~/.config/sonatype-upload
 
 STAGING_REPO=a93898609ef848
