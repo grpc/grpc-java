@@ -440,7 +440,7 @@ public final class ChannelzProtoUtilTest {
         ChannelzProtoUtil.toSocket(socket).getSecurity());
 
     socket.security = new Channelz.Security(
-        new Channelz.Tls("TLS_NULL_WITH_NULL_NULL", /*localcert=*/ null, remote));
+        new Channelz.Tls("TLS_NULL_WITH_NULL_NULL", /*localCert=*/ null, remote));
     assertEquals(
         Security.newBuilder().setTls(
             Tls.newBuilder()
@@ -450,7 +450,7 @@ public final class ChannelzProtoUtilTest {
         ChannelzProtoUtil.toSocket(socket).getSecurity());
 
     socket.security = new Channelz.Security(
-        new Channelz.Tls("TLS_NULL_WITH_NULL_NULL", local, /*remotecert=*/ null));
+        new Channelz.Tls("TLS_NULL_WITH_NULL_NULL", local, /*remoteCert=*/ null));
     assertEquals(
         Security.newBuilder().setTls(
             Tls.newBuilder()
