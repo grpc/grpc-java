@@ -30,7 +30,7 @@ SET VC_PROTOBUF_LIBS=%ESCWORKSPACE%\\grpc-java-helper32\\protobuf-%PROTOBUF_VER%
 SET VC_PROTOBUF_INCLUDE=%ESCWORKSPACE%\\grpc-java-helper32\\protobuf-%PROTOBUF_VER%\\cmake\\build\\include
 SET GRADLE_FLAGS=-PtargetArch=%TARGET_ARCH% -PfailOnWarnings=%FAIL_ON_WARNINGS% -PvcProtobufLibs=%VC_PROTOBUF_LIBS% -PvcProtobufInclude=%VC_PROTOBUF_INCLUDE%
 
-cmd.exe /C "%WORKSPACE%\gradlew.bat %GRADLE_FLAGS% build"
+@rem cmd.exe /C "%WORKSPACE%\gradlew.bat %GRADLE_FLAGS% build"
 set GRADLEEXIT=%ERRORLEVEL%
 
 @rem Rename test results .xml files to format parsable by Kokoro
@@ -48,4 +48,4 @@ IF NOT %GRADLEEXIT% == 0 (
 @rem make sure no daemons have any files open
 cmd.exe /C "%WORKSPACE%\gradlew.bat --stop"
 
-cmd.exe /C "%WORKSPACE%\gradlew.bat  %GRADLE_FLAGS% -Dorg.gradle.parallel=false -PrepositoryDir=%WORKSPACE%\artifacts\x86_32\ clean grpc-compiler:build grpc-compiler:uploadArchives" || exit /b 1
+cmd.exe /C "%WORKSPACE%\gradlew.bat  %GRADLE_FLAGS% -Dorg.gradle.parallel=false -PrepositoryDir=%WORKSPACE%\artifacts clean grpc-compiler:build grpc-compiler:uploadArchives" || exit /b 1
