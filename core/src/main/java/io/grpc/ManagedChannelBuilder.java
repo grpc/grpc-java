@@ -298,7 +298,6 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @return this
    * @since 1.1.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2307")
   public T maxInboundMessageSize(int max) {
     // intentional nop
     return thisT();
