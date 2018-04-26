@@ -285,8 +285,8 @@ def javax_annotation():
   # To circumvent use http_file following by java_import.
   native.http_file(
       name = "javax_annotation_api",
-      sha256 = "e04ba5195bcd555dc95650f7cc614d151e4bcd52d29a10b8aa2197f3ab89ab9b",
-      urls = ["http://central.maven.org/maven2/javax/annotation/javax.annotation-api/1.3.2/javax.annotation-api-1.3.2.jar"],
+      sha256 = "5909b396ca3a2be10d0eea32c74ef78d816e1b4ead21de1d78de1f890d033e04",
+      urls = ["http://central.maven.org/maven2/javax/annotation/javax.annotation-api/1.2/javax.annotation-api-1.2.jar"],
   )
 
 def junit_junit():
