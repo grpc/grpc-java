@@ -24,11 +24,13 @@ if [ -f ${INSTALL_DIR}/bin/protoc ]; then
   echo "Not building protobuf. Already built"
 # TODO(ejona): swap to `brew install --devel protobuf` once it is up-to-date
 else
-  wget -O - https://github.com/google/protobuf/archive/v${PROTOBUF_VERSION}.tar.gz | tar xz -C $DOWNLOAD_DIR
+  if [[ ! -d "$DOWNLOAD_DIR"/protobuf-"${PROTOBUF_VERSION}" ]]; then
+    wget -O - https://github.com/google/protobuf/archive/v${PROTOBUF_VERSION}.tar.gz | tar xz -C $DOWNLOAD_DIR
+  fi
   pushd $DOWNLOAD_DIR/protobuf-${PROTOBUF_VERSION}
   ./autogen.sh
   # install here so we don't need sudo
-  ./configure CFLAGS=-m$ARCH CXXFLAGS=-m$ARCH LDFLAGS=-m$ARCH --disable-shared \
+  ./configure CFLAGS=-m"$ARCH" CXXFLAGS=-m"$ARCH" --disable-shared \
     --prefix="$INSTALL_DIR"
   # the same source dir is used for 32 and 64 bit builds, so we need to clean stale data first
   make clean
@@ -42,4 +44,4 @@ fi
 if [[ -L /tmp/protobuf ]]; then
   rm /tmp/protobuf
 fi
-ln -s $INSTALL_DIR /tmp/protobuf;
+ln -s "$INSTALL_DIR" /tmp/protobuf

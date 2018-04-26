@@ -11,7 +11,8 @@
 # This script assumes `set -e`. Removing it may lead to undefined behavior.
 set -exu -o pipefail
 
-readonly GRPC_JAVA_DIR="$(cd $(dirname $(readlink -f "$0"))/../...; pwd)"
+# It would be nicer to use 'readlink -f' here but osx does not support it.
+readonly GRPC_JAVA_DIR="$(cd $(dirname "$0")/../.. && pwd)"
 
 if [[ -f /VERSION ]]; then
   cat /VERSION
@@ -26,9 +27,9 @@ cd $(dirname $0)/../..
 export PROTOBUF_VERSION=3.5.1
 
 # ARCH is 64 bit unless otherwise specified.
-export ARCH="${ARCH:-64}"
+ARCH="${ARCH:-64}"
 
-buildscripts/make_dependencies.sh
+ARCH="$ARCH" buildscripts/make_dependencies.sh
 
 # Set properties via flags, do not pollute gradle.properties
 GRADLE_FLAGS="${GRADLE_FLAGS:-}"
@@ -65,11 +66,9 @@ popd
 LOCAL_MVN_TEMP=$(mktemp -d)
 # Note that this disables parallel=true from GRADLE_FLAGS
 ./gradlew clean grpc-compiler:build grpc-compiler:uploadArchives $GRADLE_FLAGS \
-  -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP
+  -Dorg.gradle.parallel=false -PrepositoryDir="$LOCAL_MVN_TEMP"
 
 readonly MVN_ARTIFACT_DIR="${MVN_ARTIFACT_DIR:-$GRPC_JAVA_DIR/mvn-artifacts}"
 
-if [[ ! -d $MVN_ARTIFACT_DIR ]]; then
-  mkdir -p $MVN_ARTIFACT_DIR
-fi
-cp -r $LOCAL_MVN_TEMP/* $MVN_ARTIFACT_DIR/
+mkdir -p "$MVN_ARTIFACT_DIR"
+cp -r "$LOCAL_MVN_TEMP"/* "$MVN_ARTIFACT_DIR"/
