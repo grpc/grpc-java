@@ -125,7 +125,8 @@ public abstract class BinaryLogProvider implements Closeable {
    */
   // TODO(zpencer): ensure the interceptor properly handles retries and hedging
   @Nullable
-  protected abstract ClientInterceptor getClientInterceptor(String fullMethodName);
+  protected abstract ClientInterceptor getClientInterceptor(
+      String fullMethodName, CallOptions callOptions);
 
   @Override
   public void close() throws IOException {
@@ -184,7 +185,8 @@ public abstract class BinaryLogProvider implements Closeable {
         MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions,
         Channel next) {
-      ClientInterceptor binlogInterceptor = getClientInterceptor(method.getFullMethodName());
+      ClientInterceptor binlogInterceptor = getClientInterceptor(
+          method.getFullMethodName(), callOptions);
       if (binlogInterceptor == null) {
         return next.newCall(method, callOptions);
       } else {
@@ -219,11 +221,11 @@ public abstract class BinaryLogProvider implements Closeable {
     }
   }
 
-  public CallId getServerCallId() {
+  protected CallId getServerCallId() {
     return new CallId(0, counter.getAndIncrement());
   }
 
-  public CallId getClientCallId(CallOptions options) {
+  protected CallId getClientCallId(CallOptions options) {
     return new CallId(0, counter.getAndIncrement());
   }
 }

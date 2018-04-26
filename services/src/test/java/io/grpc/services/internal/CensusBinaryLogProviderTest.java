@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.services;
+package io.grpc.services.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.opencensus.trace.unsafe.ContextUtils.CONTEXT_SPAN_KEY;

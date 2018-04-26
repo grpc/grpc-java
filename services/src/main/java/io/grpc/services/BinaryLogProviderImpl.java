@@ -16,6 +16,7 @@
 
 package io.grpc.services;
 
+import io.grpc.CallOptions;
 import io.grpc.ClientInterceptor;
 import io.grpc.ServerInterceptor;
 import io.grpc.internal.BinaryLogProvider;
@@ -49,13 +50,14 @@ public class BinaryLogProviderImpl extends BinaryLogProvider {
   @Nullable
   @Override
   public ServerInterceptor getServerInterceptor(String fullMethodName) {
-    return null;
+    return factory.getLog(fullMethodName).getServerInterceptor(getServerCallId());
   }
 
   @Nullable
   @Override
-  public ClientInterceptor getClientInterceptor(String fullMethodName) {
-    return null;
+  public ClientInterceptor getClientInterceptor(
+      String fullMethodName, CallOptions callOptions) {
+    return factory.getLog(fullMethodName).getClientInterceptor(getClientCallId(callOptions));
   }
 
   @Override
