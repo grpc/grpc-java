@@ -8,3 +8,5 @@ fi
 readonly GRPC_JAVA_DIR=$(cd $(dirname $0)/../.. && pwd)
 
 # A place holder at the moment
+
+echo "in release_artifacts.sh"
