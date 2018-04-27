@@ -18,8 +18,9 @@ public interface SocketDataOrBuilder extends
 
   /**
    * <pre>
-   * The number of streams that have ended successfully with the EoS bit set for
-   *  both end points
+   * The number of streams that have ended successfully:
+   * On client side, received frame with eos bit set;
+   * On server side, sent frame with eos bit set.
    * </pre>
    *
    * <code>int64 streams_succeeded = 2;</code>
@@ -28,7 +29,9 @@ public interface SocketDataOrBuilder extends
 
   /**
    * <pre>
-   * The number of incoming streams that have a completed with a non-OK status
+   * The number of streams that have ended unsuccessfully:
+   * On client side, ended without receiving frame with eos bit set;
+   * On server side, ended without sending frame with eos bit set.
    * </pre>
    *
    * <code>int64 streams_failed = 3;</code>
