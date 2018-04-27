@@ -123,9 +123,9 @@ public final class GrpcCleanupRule implements TestRule {
           base.evaluate();
         } catch (Throwable t) {
           firstException = t;
-        } finally {
-          teardown();
         }
+
+        teardown();
 
         if (firstException != null) {
           throw firstException;
@@ -177,10 +177,10 @@ public final class GrpcCleanupRule implements TestRule {
         if (firstException == null) {
           firstException = t;
         }
-      } finally {
-        if (firstException != null) {
-          resources.get(i).forceCleanUp();
-        }
+      }
+
+      if (firstException != null) {
+        resources.get(i).forceCleanUp();
       }
     }
 
