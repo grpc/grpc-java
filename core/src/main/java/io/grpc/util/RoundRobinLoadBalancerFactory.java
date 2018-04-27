@@ -293,7 +293,7 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
      * the associated Subchannel Ref, and a map from Subchannel to Subchannel Ref.
      */
     private static final class StickinessState {
-      static final int MAX_ENTRIES = 100000;
+      static final int MAX_ENTRIES = 1000;
 
       final Key<String> key;
       final Map<String, Ref<Subchannel>> stickinessMap =
