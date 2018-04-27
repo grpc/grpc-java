@@ -16,7 +16,6 @@
 
 package io.grpc.util;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
@@ -286,6 +285,13 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     @Override
     public LogId getLogId() {
       return logId;
+    }
+
+    Map<String, Ref<Subchannel>> getStickinessMapForTest() {
+      if (stickinessState == null) {
+        return null;
+      }
+      return stickinessState.stickinessMap;
     }
 
     /**
