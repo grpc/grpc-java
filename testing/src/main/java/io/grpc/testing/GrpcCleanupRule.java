@@ -61,7 +61,7 @@ public final class GrpcCleanupRule implements TestRule {
    *
    * @return this
    */
-  public GrpcCleanupRule withTimeout(long timeout, TimeUnit timeUnit) {
+  public GrpcCleanupRule setTimeout(long timeout, TimeUnit timeUnit) {
     checkArgument(timeout > 0, "timeout should be positive");
     timeoutNanos = timeUnit.toNanos(timeout);
     return this;
@@ -74,7 +74,7 @@ public final class GrpcCleanupRule implements TestRule {
    */
   @SuppressWarnings("BetaApi") // Stopwatch.createUnstarted(Ticker ticker) is not Beta. Test only.
   @VisibleForTesting
-  GrpcCleanupRule withTicker(Ticker ticker) {
+  GrpcCleanupRule setTicker(Ticker ticker) {
     this.stopwatch = Stopwatch.createUnstarted(ticker);
     return this;
   }

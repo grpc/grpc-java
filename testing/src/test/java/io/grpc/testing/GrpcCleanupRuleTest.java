@@ -406,7 +406,7 @@ public class GrpcCleanupRuleTest {
 
     Statement statement = mock(Statement.class);
     InOrder inOrder = inOrder(statement, resource1, resource2);
-    GrpcCleanupRule grpcCleanup = new GrpcCleanupRule().withTicker(fakeClock.getTicker());
+    GrpcCleanupRule grpcCleanup = new GrpcCleanupRule().setTicker(fakeClock.getTicker());
 
     // run
     grpcCleanup.register(resource1);
@@ -444,7 +444,7 @@ public class GrpcCleanupRuleTest {
     Statement statement = mock(Statement.class);
     InOrder inOrder = inOrder(statement, resource1, resource2);
     GrpcCleanupRule grpcCleanup = new GrpcCleanupRule()
-        .withTicker(fakeClock.getTicker()).withTimeout(3000, TimeUnit.NANOSECONDS);
+        .setTicker(fakeClock.getTicker()).setTimeout(3000, TimeUnit.NANOSECONDS);
 
     // run
     grpcCleanup.register(resource1);
