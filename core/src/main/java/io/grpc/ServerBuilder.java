@@ -16,6 +16,7 @@
 
 package io.grpc;
 
+import com.google.common.base.Preconditions;
 import java.io.File;
 import java.io.InputStream;
 import java.util.concurrent.Executor;
@@ -214,12 +215,14 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    *
    * @param bytes the maximum number of bytes a single message can be.
    * @return this
-   * @throws IllegalArgumentException if max is negative.
+   * @throws IllegalArgumentException if bytes is negative.
    * @throws UnsupportedOperationException if unsupported.
    * @since 1.13.0
    */
   public T maxInboundMessageSize(int bytes) {
-    throw new UnsupportedOperationException();
+    // intentional noop rather than throw, this method is only advisory.
+    Preconditions.checkArgument(bytes >= 0, "bytes must be >= 0");
+    return thisT();
   }
 
   /**
@@ -232,4 +235,13 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * @since 1.0.0
    */
   public abstract Server build();
+
+  /**
+   * Returns the correctly typed version of the builder.
+   */
+  private T thisT() {
+    @SuppressWarnings("unchecked")
+    T thisT = (T) this;
+    return thisT;
+  }
 }
