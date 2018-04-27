@@ -12,7 +12,7 @@
 set -exu -o pipefail
 
 # It would be nicer to use 'readlink -f' here but osx does not support it.
-readonly GRPC_JAVA_DIR="$(cd $(dirname "$0")/../.. && pwd)"
+readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
 
 if [[ -f /VERSION ]]; then
   cat /VERSION
