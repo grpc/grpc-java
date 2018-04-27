@@ -16,6 +16,7 @@
 
 package io.grpc.util;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
@@ -39,7 +40,9 @@ import io.grpc.Metadata.Key;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
+import io.grpc.internal.LogId;
 import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.internal.WithLogId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -51,6 +54,8 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
@@ -93,10 +98,14 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
   }
 
   @VisibleForTesting
-  static final class RoundRobinLoadBalancer extends LoadBalancer {
+  static final class RoundRobinLoadBalancer extends LoadBalancer implements WithLogId {
     @VisibleForTesting
     static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
         Attributes.Key.of("state-info");
+
+    private static final Logger logger = Logger.getLogger(RoundRobinLoadBalancer.class.getName());
+
+    private final LogId logId = LogId.allocate(getClass().getName());
 
     private final Helper helper;
     private final Map<EquivalentAddressGroup, Subchannel> subchannels =
@@ -123,7 +132,9 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
         String stickinessMetadataKey =
             ServiceConfigUtil.getStickinessMetadataKeyFromServiceConfig(serviceConfig);
         if (stickinessMetadataKey != null) {
-          if (stickinessState == null
+          if (stickinessMetadataKey.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+            logger.log(Level.FINE, "[{0}] Binary stickiness header not supported yet", logId);
+          } else if (stickinessState == null
               || !stickinessState.key.name().equals(stickinessMetadataKey)) {
             stickinessState = new StickinessState(stickinessMetadataKey);
           }
@@ -270,6 +281,11 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
       Set<T> aCopy = new HashSet<T>(a);
       aCopy.removeAll(b);
       return aCopy;
+    }
+
+    @Override
+    public LogId getLogId() {
+      return logId;
     }
 
     /**
