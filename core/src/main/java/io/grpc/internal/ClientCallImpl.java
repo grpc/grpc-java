@@ -471,6 +471,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     observer.onClose(status, trailers);
   }
 
+  @Override
+  public String toString() {
+    return super.toString() + "method=[" + method + "]";
+  }
+
   private class ClientStreamListenerImpl implements ClientStreamListener {
     private final Listener<RespT> observer;
     private boolean closed;

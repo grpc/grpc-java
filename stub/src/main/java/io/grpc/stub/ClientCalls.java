@@ -491,6 +491,11 @@ public final class ClientCalls {
     protected boolean setException(Throwable throwable) {
       return super.setException(throwable);
     }
+
+    @Override
+    protected String pendingToString() {
+      return "clientCall=[" + call + "]";
+    }
   }
 
   /**
