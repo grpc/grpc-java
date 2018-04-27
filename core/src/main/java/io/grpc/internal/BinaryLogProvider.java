@@ -38,7 +38,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Collections;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
@@ -66,7 +65,6 @@ public abstract class BinaryLogProvider implements Closeable {
       });
 
   private final ClientInterceptor binaryLogShim = new BinaryLogShim();
-  private final AtomicLong counter = new AtomicLong();
 
   /**
    * Returns a {@code BinaryLogProvider}, or {@code null} if there is no provider.
@@ -219,13 +217,5 @@ public abstract class BinaryLogProvider implements Closeable {
     public static CallId fromCensusSpan(Span span) {
       return new CallId(0, ByteBuffer.wrap(span.getContext().getSpanId().getBytes()).getLong());
     }
-  }
-
-  protected CallId getServerCallId() {
-    return new CallId(0, counter.getAndIncrement());
-  }
-
-  protected CallId getClientCallId(CallOptions options) {
-    return new CallId(0, counter.getAndIncrement());
   }
 }
