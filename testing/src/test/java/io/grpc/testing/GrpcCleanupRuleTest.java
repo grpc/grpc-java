@@ -209,50 +209,6 @@ public class GrpcCleanupRuleTest {
   }
 
   @Test
-  public void multiResource_cleanupFails() throws Throwable {
-    // setup
-    Resource resource1 = mock(Resource.class);
-    Resource resource2 = mock(Resource.class);
-    Resource resource3 = mock(Resource.class);
-    doThrow(new RuntimeException()).when(resource2).cleanUp();
-
-    Statement statement = mock(Statement.class);
-    InOrder inOrder = inOrder(statement, resource1, resource2, resource3);
-    GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
-
-    // run
-    grpcCleanup.register(resource1);
-    grpcCleanup.register(resource2);
-    grpcCleanup.register(resource3);
-
-    boolean cleanupFailed = false;
-    try {
-      grpcCleanup.apply(statement, null /* description*/).evaluate();
-    } catch (RuntimeException e) {
-      cleanupFailed = true;
-    }
-
-    // verify
-    assertTrue(cleanupFailed);
-
-    inOrder.verify(statement).evaluate();
-
-    inOrder.verify(resource3).cleanUp();
-    inOrder.verify(resource2).cleanUp();
-
-    inOrder.verify(resource3).forceCleanUp();
-    inOrder.verify(resource2).forceCleanUp();
-    inOrder.verify(resource1).forceCleanUp();
-
-    inOrder.verifyNoMoreInteractions();
-
-    verify(resource1, never()).cleanUp();
-    verify(resource1, never()).awaitReleased(anyLong(), any(TimeUnit.class));
-    verify(resource2, never()).awaitReleased(anyLong(), any(TimeUnit.class));
-    verify(resource3, never()).awaitReleased(anyLong(), any(TimeUnit.class));
-  }
-
-  @Test
   public void multiResource_awaitReleasedFails() throws Throwable {
     // setup
     Resource resource1 = mock(Resource.class);
@@ -328,53 +284,6 @@ public class GrpcCleanupRuleTest {
     // verify
     assertTrue(cleanupFailed);
     assertTrue(Thread.interrupted());
-
-    inOrder.verify(statement).evaluate();
-
-    inOrder.verify(resource3).cleanUp();
-    inOrder.verify(resource2).cleanUp();
-    inOrder.verify(resource1).cleanUp();
-
-    inOrder.verify(resource3).awaitReleased(anyLong(), any(TimeUnit.class));
-    inOrder.verify(resource2).awaitReleased(anyLong(), any(TimeUnit.class));
-    inOrder.verify(resource2).forceCleanUp();
-    inOrder.verify(resource1).forceCleanUp();
-
-    inOrder.verifyNoMoreInteractions();
-
-    verify(resource3, never()).forceCleanUp();
-    verify(resource1, never()).awaitReleased(anyLong(), any(TimeUnit.class));
-  }
-
-  @Test
-  public void multiResource_awaitReleasedThrows() throws Throwable {
-    // setup
-    Resource resource1 = mock(Resource.class);
-    Resource resource2 = mock(Resource.class);
-    Resource resource3 = mock(Resource.class);
-    doReturn(true).when(resource1).awaitReleased(anyLong(), any(TimeUnit.class));
-    doThrow(new RuntimeException())
-        .when(resource2).awaitReleased(anyLong(), any(TimeUnit.class));
-    doReturn(true).when(resource3).awaitReleased(anyLong(), any(TimeUnit.class));
-
-    Statement statement = mock(Statement.class);
-    InOrder inOrder = inOrder(statement, resource1, resource2, resource3);
-    GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
-
-    // run
-    grpcCleanup.register(resource1);
-    grpcCleanup.register(resource2);
-    grpcCleanup.register(resource3);
-
-    boolean cleanupFailed = false;
-    try {
-      grpcCleanup.apply(statement, null /* description*/).evaluate();
-    } catch (RuntimeException e) {
-      cleanupFailed = true;
-    }
-
-    // verify
-    assertTrue(cleanupFailed);
 
     inOrder.verify(statement).evaluate();
 

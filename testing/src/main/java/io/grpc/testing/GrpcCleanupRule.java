@@ -140,18 +140,9 @@ public final class GrpcCleanupRule implements TestRule {
   private void teardown() {
     stopwatch.start();
 
-    for (int i = resources.size() - 1; i >= 0; i--) {
-      if (firstException != null) {
-        break;
-      }
-
-      try {
+    if (firstException == null) {
+      for (int i = resources.size() - 1; i >= 0; i--) {
         resources.get(i).cleanUp();
-      } catch (Throwable t) {
-        if (firstException == null) {
-          firstException = t;
-        }
-        break;
       }
     }
 
@@ -170,13 +161,7 @@ public final class GrpcCleanupRule implements TestRule {
         }
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
-        if (firstException == null) {
-          firstException = e;
-        }
-      } catch (Throwable t) {
-        if (firstException == null) {
-          firstException = t;
-        }
+        firstException = e;
       }
 
       if (firstException != null) {
@@ -216,11 +201,7 @@ public final class GrpcCleanupRule implements TestRule {
 
     @Override
     public void forceCleanUp() {
-      try {
-        channel.shutdownNow();
-      } catch (Throwable ignorable) {
-        // Ignore because another error had already happened.
-      }
+      channel.shutdownNow();
     }
 
     @Override
@@ -248,11 +229,7 @@ public final class GrpcCleanupRule implements TestRule {
 
     @Override
     public void forceCleanUp() {
-      try {
-        server.shutdownNow();
-      } catch (Throwable ignorable) {
-        // Ignore because another error had already happened.
-      }
+      server.shutdownNow();
     }
 
     @Override
