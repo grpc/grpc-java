@@ -16,6 +16,7 @@
 
 package io.grpc.testing;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
@@ -39,6 +40,7 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.junit.runners.model.MultipleFailureException;
 import org.junit.runners.model.Statement;
 import org.mockito.InOrder;
 
@@ -372,6 +374,49 @@ public class GrpcCleanupRuleTest {
     inOrder.verifyNoMoreInteractions();
 
     verify(resource2, never()).forceCleanUp();
+    verify(resource1, never()).forceCleanUp();
+  }
+
+  @Test
+  public void baseTestFailsThenCleanupFails() throws Throwable {
+    // setup
+    Exception baseTestFailure = new Exception();
+
+    Statement statement = mock(Statement.class);
+    doThrow(baseTestFailure).when(statement).evaluate();
+
+    Resource resource1 = mock(Resource.class);
+    Resource resource2 = mock(Resource.class);
+    Resource resource3 = mock(Resource.class);
+    doThrow(new RuntimeException()).when(resource2).forceCleanUp();
+
+    InOrder inOrder = inOrder(statement, resource1, resource2, resource3);
+    GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
+
+    // run
+    grpcCleanup.register(resource1);
+    grpcCleanup.register(resource2);
+    grpcCleanup.register(resource3);
+
+    Throwable failure = null;
+    try {
+      grpcCleanup.apply(statement, null /* description*/).evaluate();
+    } catch (Throwable e) {
+      failure = e;
+    }
+
+    // verify
+    assertThat(failure).isInstanceOf(MultipleFailureException.class);
+    assertSame(baseTestFailure, ((MultipleFailureException) failure).getFailures().get(0));
+
+    inOrder.verify(statement).evaluate();
+    inOrder.verify(resource3).forceCleanUp();
+    inOrder.verify(resource2).forceCleanUp();
+    inOrder.verifyNoMoreInteractions();
+
+    verify(resource1, never()).cleanUp();
+    verify(resource2, never()).cleanUp();
+    verify(resource3, never()).cleanUp();
     verify(resource1, never()).forceCleanUp();
   }
 
