@@ -39,9 +39,7 @@ import io.grpc.Metadata.Key;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
-import io.grpc.internal.LogId;
 import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.WithLogId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -97,14 +95,12 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
   }
 
   @VisibleForTesting
-  static final class RoundRobinLoadBalancer extends LoadBalancer implements WithLogId {
+  static final class RoundRobinLoadBalancer extends LoadBalancer {
     @VisibleForTesting
     static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
         Attributes.Key.of("state-info");
 
     private static final Logger logger = Logger.getLogger(RoundRobinLoadBalancer.class.getName());
-
-    private final LogId logId = LogId.allocate(getClass().getName());
 
     private final Helper helper;
     private final Map<EquivalentAddressGroup, Subchannel> subchannels =
@@ -132,7 +128,10 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
             ServiceConfigUtil.getStickinessMetadataKeyFromServiceConfig(serviceConfig);
         if (stickinessMetadataKey != null) {
           if (stickinessMetadataKey.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-            logger.log(Level.FINE, "[{0}] Binary stickiness header not supported yet", logId);
+            logger.log(
+                Level.FINE,
+                "Binary stickiness header is not supported. The header '{0}' will be ignored",
+                stickinessMetadataKey);
           } else if (stickinessState == null
               || !stickinessState.key.name().equals(stickinessMetadataKey)) {
             stickinessState = new StickinessState(stickinessMetadataKey);
@@ -280,11 +279,6 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
       Set<T> aCopy = new HashSet<T>(a);
       aCopy.removeAll(b);
       return aCopy;
-    }
-
-    @Override
-    public LogId getLogId() {
-      return logId;
     }
 
     Map<String, Ref<Subchannel>> getStickinessMapForTest() {
