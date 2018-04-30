@@ -26,12 +26,14 @@ import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.NotThreadSafe;
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
+import org.junit.runners.model.MultipleFailureException;
 import org.junit.runners.model.Statement;
 
 /**
@@ -123,10 +125,17 @@ public final class GrpcCleanupRule implements TestRule {
           base.evaluate();
         } catch (Throwable t) {
           firstException = t;
+
+          try {
+            teardown();
+          } catch (Throwable t2) {
+            throw new MultipleFailureException(Arrays.asList(t, t2));
+          }
+
+          throw t;
         }
 
         teardown();
-
         if (firstException != null) {
           throw firstException;
         }
