@@ -108,7 +108,8 @@ public abstract class ClientCall<ReqT, RespT> {
   public abstract static class Listener<T> {
 
     /**
-     * The response headers have been received. Headers always precede messages.
+     * The response headers have been received. Headers always precede messages. Since {@link
+     * Metadata} is not thread-safe, the caller must not access {@code headers} after this point.
      *
      * @param headers containing metadata sent by the server at the start of the response.
      */
@@ -125,7 +126,8 @@ public abstract class ClientCall<ReqT, RespT> {
     /**
      * The ClientCall has been closed. Any additional calls to the {@code ClientCall} will not be
      * processed by the server. No further receiving will occur and no further notifications will be
-     * made.
+     * made. Since {@link Metadata} is not thread-safe, the caller must not access {@code trailers}
+     * after this point.
      *
      * <p>If {@code status} returns false for {@link Status#isOk()}, then the call failed.
      * An additional block of trailer metadata may be received at the end of the call from the
