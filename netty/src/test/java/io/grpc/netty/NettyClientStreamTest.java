@@ -44,6 +44,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.io.BaseEncoding;
+import io.grpc.CallOptions;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -415,6 +416,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     stream = new NettyClientStream(new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE),
         methodDescriptor,
         new Metadata(),
+        CallOptions.DEFAULT,
         channel,
         AsciiString.of("localhost"),
         AsciiString.of("http"),
@@ -442,6 +444,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE),
         methodDescriptor,
         new Metadata(),
+        CallOptions.DEFAULT,
         channel,
         AsciiString.of("localhost"),
         AsciiString.of("http"),
@@ -471,6 +474,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE),
         descriptor,
         new Metadata(),
+        CallOptions.DEFAULT,
         channel,
         AsciiString.of("localhost"),
         AsciiString.of("http"),
@@ -515,6 +519,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE),
         methodDescriptor,
         new Metadata(),
+        CallOptions.DEFAULT,
         channel,
         AsciiString.of("localhost"),
         AsciiString.of("http"),

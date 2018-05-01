@@ -21,7 +21,6 @@ import static io.grpc.internal.GrpcUtil.ACCEPT_ENCODING_SPLITTER;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -671,93 +670,6 @@ public class ClientCallImplTest {
   }
 
   @Test
-  public void contextDeadlineShouldBePropagatedInMetadata() {
-    long deadlineNanos = TimeUnit.SECONDS.toNanos(1);
-    Context context = Context.current().withDeadlineAfter(deadlineNanos, TimeUnit.NANOSECONDS,
-        deadlineCancellationExecutor);
-    context.attach();
-
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
-        MoreExecutors.directExecutor(),
-        baseCallOptions,
-        provider,
-        deadlineCancellationExecutor,
-        channelCallTracer,
-        false /* retryEnabled */);
-
-    Metadata headers = new Metadata();
-
-    call.start(callListener, headers);
-
-    assertTrue(headers.containsKey(GrpcUtil.TIMEOUT_KEY));
-    Long timeout = headers.get(GrpcUtil.TIMEOUT_KEY);
-    assertNotNull(timeout);
-
-    long deltaNanos = TimeUnit.MILLISECONDS.toNanos(400);
-    assertTimeoutBetween(timeout, deadlineNanos - deltaNanos, deadlineNanos);
-  }
-
-  @Test
-  public void contextDeadlineShouldOverrideLargerMetadataTimeout() {
-    long deadlineNanos = TimeUnit.SECONDS.toNanos(1);
-    Context context = Context.current().withDeadlineAfter(deadlineNanos, TimeUnit.NANOSECONDS,
-        deadlineCancellationExecutor);
-    context.attach();
-
-    CallOptions callOpts = baseCallOptions.withDeadlineAfter(2, TimeUnit.SECONDS);
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
-        MoreExecutors.directExecutor(),
-        callOpts,
-        provider,
-        deadlineCancellationExecutor,
-        channelCallTracer,
-        false /* retryEnabled */);
-
-    Metadata headers = new Metadata();
-
-    call.start(callListener, headers);
-
-    assertTrue(headers.containsKey(GrpcUtil.TIMEOUT_KEY));
-    Long timeout = headers.get(GrpcUtil.TIMEOUT_KEY);
-    assertNotNull(timeout);
-
-    long deltaNanos = TimeUnit.MILLISECONDS.toNanos(400);
-    assertTimeoutBetween(timeout, deadlineNanos - deltaNanos, deadlineNanos);
-  }
-
-  @Test
-  public void contextDeadlineShouldNotOverrideSmallerMetadataTimeout() {
-    long deadlineNanos = TimeUnit.SECONDS.toNanos(2);
-    Context context = Context.current().withDeadlineAfter(deadlineNanos, TimeUnit.NANOSECONDS,
-        deadlineCancellationExecutor);
-    context.attach();
-
-    CallOptions callOpts = baseCallOptions.withDeadlineAfter(1, TimeUnit.SECONDS);
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
-        MoreExecutors.directExecutor(),
-        callOpts,
-        provider,
-        deadlineCancellationExecutor,
-        channelCallTracer,
-        false /* retryEnabled */);
-
-    Metadata headers = new Metadata();
-
-    call.start(callListener, headers);
-
-    assertTrue(headers.containsKey(GrpcUtil.TIMEOUT_KEY));
-    Long timeout = headers.get(GrpcUtil.TIMEOUT_KEY);
-    assertNotNull(timeout);
-
-    long callOptsNanos = TimeUnit.SECONDS.toNanos(1);
-    long deltaNanos = TimeUnit.MILLISECONDS.toNanos(400);
-    assertTimeoutBetween(timeout, callOptsNanos - deltaNanos, callOptsNanos);
-  }
-
-  @Test
   public void expiredDeadlineCancelsStream_CallOptions() {
     fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
     // The deadline needs to be a number large enough to get encompass the call to start, otherwise
@@ -919,11 +831,6 @@ public class ClientCallImplTest {
     call.start(callListener, new Metadata());
 
     assertEquals(attrs, call.getAttributes());
-  }
-
-  private static void assertTimeoutBetween(long timeout, long from, long to) {
-    assertTrue("timeout: " + timeout + " ns", timeout <= to);
-    assertTrue("timeout: " + timeout + " ns", timeout >= from);
   }
 
   private static final class DelayedExecutor implements Executor {

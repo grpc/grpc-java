@@ -26,7 +26,6 @@ import static io.grpc.internal.GrpcUtil.CONTENT_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.CONTENT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
-import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -230,11 +229,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
     prepareHeaders(headers, decompressorRegistry, compressor, fullStreamDecompression);
 
-    Deadline effectiveDeadline = effectiveDeadline();
+    Deadline effectiveDeadline = effectiveDeadline(callOptions, context);
     boolean deadlineExceeded = effectiveDeadline != null && effectiveDeadline.isExpired();
     if (!deadlineExceeded) {
-      updateTimeoutHeaders(effectiveDeadline, callOptions.getDeadline(),
-          context.getDeadline(), headers);
+      logIfContextNarrowedTimeout(
+          effectiveDeadline, callOptions.getDeadline(), context.getDeadline());
       if (retryEnabled) {
         stream = clientTransportProvider.newRetriableStream(method, callOptions, headers, context);
       } else {
@@ -288,30 +287,16 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
   }
 
-  /**
-   * Based on the deadline, calculate and set the timeout to the given headers.
-   */
-  private static void updateTimeoutHeaders(@Nullable Deadline effectiveDeadline,
-      @Nullable Deadline callDeadline, @Nullable Deadline outerCallDeadline, Metadata headers) {
-    headers.discardAll(TIMEOUT_KEY);
+  private static void logIfContextNarrowedTimeout(
+      @Nullable Deadline effectiveDeadline, @Nullable Deadline callDeadline,
+      @Nullable Deadline outerCallDeadline) {
 
-    if (effectiveDeadline == null) {
+    if (!log.isLoggable(Level.FINE)
+        || effectiveDeadline == null || outerCallDeadline != effectiveDeadline) {
       return;
     }
 
     long effectiveTimeout = max(0, effectiveDeadline.timeRemaining(TimeUnit.NANOSECONDS));
-    headers.put(TIMEOUT_KEY, effectiveTimeout);
-
-    logIfContextNarrowedTimeout(effectiveTimeout, effectiveDeadline, outerCallDeadline,
-        callDeadline);
-  }
-
-  private static void logIfContextNarrowedTimeout(long effectiveTimeout,
-      Deadline effectiveDeadline, @Nullable Deadline outerCallDeadline,
-      @Nullable Deadline callDeadline) {
-    if (!log.isLoggable(Level.FINE) || outerCallDeadline != effectiveDeadline) {
-      return;
-    }
 
     StringBuilder builder = new StringBuilder();
     builder.append(String.format("Call timeout set to '%d' ns, due to context deadline.",
@@ -358,7 +343,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   }
 
   @Nullable
-  private Deadline effectiveDeadline() {
+  static Deadline effectiveDeadline(CallOptions callOptions, Context context) {
     // Call options and context are immutable, so we don't need to cache the deadline.
     return min(callOptions.getDeadline(), context.getDeadline());
   }
@@ -564,7 +549,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
     @Override
     public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
-      Deadline deadline = effectiveDeadline();
+      Deadline deadline = effectiveDeadline(callOptions, context);
       if (status.getCode() == Status.Code.CANCELLED && deadline != null) {
         // When the server's deadline expires, it can only reset the stream with CANCEL and no
         // description. Since our timer may be delayed in firing, we double-check the deadline and

@@ -95,7 +95,7 @@ class CronetClientStream extends AbstractClientStream {
       TransportTracer transportTracer) {
     super(
         new CronetWritableBufferAllocator(), statsTraceCtx, transportTracer, headers,
-        method.isSafe());
+        callOptions, method.isSafe());
     this.url = Preconditions.checkNotNull(url, "url");
     this.userAgent = Preconditions.checkNotNull(userAgent, "userAgent");
     this.executor = Preconditions.checkNotNull(executor, "executor");

@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -33,7 +34,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import io.grpc.Attributes;
+import io.grpc.CallOptions;
 import io.grpc.Codec;
+import io.grpc.Context;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -44,6 +47,7 @@ import io.grpc.internal.testing.TestClientStreamTracer;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -68,6 +72,7 @@ public class AbstractClientStreamTest {
 
   private final StatsTraceContext statsTraceCtx = StatsTraceContext.NOOP;
   private final TransportTracer transportTracer = new TransportTracer();
+  private final StreamBuilder streamBuilder = new StreamBuilder();
   @Mock private ClientStreamListener mockListener;
 
   @Before
@@ -380,10 +385,123 @@ public class AbstractClientStreamTest {
     verify(input).close();
   }
 
+  @Test
+  public void contextDeadlineShouldOverrideLargerMetadataTimeout() {
+    streamBuilder.callOptions = CallOptions.DEFAULT.withDeadlineAfter(2, TimeUnit.SECONDS);
+    Metadata headers = new Metadata();
+    streamBuilder.headers = headers;
+
+    Context context = Context.current().withDeadlineAfter(
+        1, TimeUnit.SECONDS,
+        new FakeClock().getScheduledExecutorService());
+    Context origContext = context.attach();
+    BaseAbstractClientStream stream =
+        new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
+    context.detach(origContext);
+
+    stream.start(mockListener);
+
+    assertTrue(headers.containsKey(GrpcUtil.TIMEOUT_KEY));
+    Long timeout = headers.get(GrpcUtil.TIMEOUT_KEY);
+
+
+    assertTimeoutBetween(
+        timeout,
+        TimeUnit.SECONDS.toNanos(1) - TimeUnit.MILLISECONDS.toNanos(500),
+        TimeUnit.SECONDS.toNanos(1));
+  }
+
+  @Test
+  public void contextDeadlineShouldNotOverrideSmallerMetadataTimeout() {
+    streamBuilder.callOptions = CallOptions.DEFAULT.withDeadlineAfter(1, TimeUnit.SECONDS);
+    Metadata headers = new Metadata();
+    streamBuilder.headers = headers;
+
+    Context context = Context.current().withDeadlineAfter(
+        2, TimeUnit.SECONDS,
+        new FakeClock().getScheduledExecutorService());
+    Context origContext = context.attach();
+    BaseAbstractClientStream stream =
+        new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
+    context.detach(origContext);
+
+    stream.start(mockListener);
+
+    assertTrue(headers.containsKey(GrpcUtil.TIMEOUT_KEY));
+    Long timeout = headers.get(GrpcUtil.TIMEOUT_KEY);
+
+    assertTimeoutBetween(
+        timeout,
+        TimeUnit.SECONDS.toNanos(1) - TimeUnit.MILLISECONDS.toNanos(500),
+        TimeUnit.SECONDS.toNanos(1));
+  }
+
+  @Test
+  public void callOptionsDeadlineShouldBePropagatedInMetadata() {
+    streamBuilder.callOptions = CallOptions.DEFAULT.withDeadlineAfter(1, TimeUnit.SECONDS);
+    Metadata headers = new Metadata();
+    streamBuilder.headers = headers;
+
+    BaseAbstractClientStream stream =
+        new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
+
+    stream.start(mockListener);
+
+    assertTrue(headers.containsKey(GrpcUtil.TIMEOUT_KEY));
+    Long timeout = headers.get(GrpcUtil.TIMEOUT_KEY);
+
+    assertTimeoutBetween(
+        timeout,
+        TimeUnit.SECONDS.toNanos(1) - TimeUnit.MILLISECONDS.toNanos(500),
+        TimeUnit.SECONDS.toNanos(1));
+  }
+
+  @Test
+  public void contextDeadlineShouldBePropagatedInMetadata() {
+    Metadata headers = new Metadata();
+    streamBuilder.headers = headers;
+
+    Context context = Context.current().withDeadlineAfter(
+        1, TimeUnit.SECONDS,
+        new FakeClock().getScheduledExecutorService());
+    Context origContext = context.attach();
+    BaseAbstractClientStream stream =
+        new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
+    context.detach(origContext);
+
+    stream.start(mockListener);
+
+    assertTrue(headers.containsKey(GrpcUtil.TIMEOUT_KEY));
+    Long timeout = headers.get(GrpcUtil.TIMEOUT_KEY);
+
+    assertTimeoutBetween(
+        timeout,
+        TimeUnit.SECONDS.toNanos(1) - TimeUnit.MILLISECONDS.toNanos(500),
+        TimeUnit.SECONDS.toNanos(1));
+  }
+
+  @Test
+  public void noDeadlineShouldBeFoundInMetadata() {
+    Metadata headers = new Metadata();
+    streamBuilder.headers = headers;
+
+    BaseAbstractClientStream stream =
+        new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
+
+    stream.start(mockListener);
+
+    assertFalse(headers.containsKey(GrpcUtil.TIMEOUT_KEY));
+  }
+
+  private static void assertTimeoutBetween(long timeout, long from, long to) {
+    assertTrue("timeout: " + timeout + " ns", timeout <= to);
+    assertTrue("timeout: " + timeout + " ns", timeout >= from);
+  }
+
   /**
    * No-op base class for testing.
    */
-  private static class BaseAbstractClientStream extends AbstractClientStream {
+  private class BaseAbstractClientStream extends AbstractClientStream {
     private final TransportState state;
     private final Sink sink;
 
@@ -405,9 +523,10 @@ public class AbstractClientStreamTest {
         Sink sink,
         StatsTraceContext statsTraceCtx,
         TransportTracer transportTracer) {
-      this(allocator, state, sink, statsTraceCtx, transportTracer, false);
+      this(allocator, state, sink, statsTraceCtx, transportTracer,false);
     }
 
+    // TODO(zdapeng): populate all arguments in StreamBuilder.
     public BaseAbstractClientStream(
         WritableBufferAllocator allocator,
         TransportState state,
@@ -415,7 +534,9 @@ public class AbstractClientStreamTest {
         StatsTraceContext statsTraceCtx,
         TransportTracer transportTracer,
         boolean useGet) {
-      super(allocator, statsTraceCtx, transportTracer, new Metadata(), useGet);
+      super(
+          allocator, statsTraceCtx, transportTracer, streamBuilder.headers,
+          streamBuilder.callOptions, useGet);
       this.state = state;
       this.sink = sink;
     }
@@ -443,6 +564,11 @@ public class AbstractClientStreamTest {
     public Attributes getAttributes() {
       return Attributes.EMPTY;
     }
+  }
+
+  private static final class StreamBuilder {
+    Metadata headers = new Metadata();
+    CallOptions callOptions = CallOptions.DEFAULT;
   }
 
   private static class BaseSink implements AbstractClientStream.Sink {

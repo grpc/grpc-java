@@ -166,6 +166,7 @@ class NettyClientTransport implements ConnectionClientTransport {
         },
         method,
         headers,
+        callOptions,
         channel,
         authority,
         negotiationHandler.scheme(),
