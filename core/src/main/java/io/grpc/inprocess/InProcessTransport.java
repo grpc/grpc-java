@@ -17,12 +17,16 @@
 package io.grpc.inprocess;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
+import static java.lang.Math.max;
 
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Compressor;
+import io.grpc.Context;
+import io.grpc.Deadline;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
 import io.grpc.Grpc;
@@ -53,6 +57,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.CheckReturnValue;
@@ -266,6 +271,24 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       this.method = checkNotNull(method, "method");
       this.headers = checkNotNull(headers, "headers");
       this.authority = authority;
+
+      // update timeout in headers
+      headers.discardAll(TIMEOUT_KEY);
+      Deadline callOptionDeadline = callOptions.getDeadline();
+      Deadline contextDeadline = Context.current().getDeadline();
+      Deadline effectiveDeadline;
+      if (callOptionDeadline == null) {
+        effectiveDeadline = contextDeadline;
+      } else if (contextDeadline == null) {
+        effectiveDeadline = callOptionDeadline;
+      } else {
+        effectiveDeadline = callOptionDeadline.minimum(contextDeadline);
+      }
+      if (effectiveDeadline != null) {
+        long effectiveTimeout = max(0, effectiveDeadline.timeRemaining(TimeUnit.NANOSECONDS));
+        headers.put(TIMEOUT_KEY, effectiveTimeout);
+      }
+
       this.clientStream = new InProcessClientStream(callOptions, headers);
       this.serverStream = new InProcessServerStream(method, headers);
     }

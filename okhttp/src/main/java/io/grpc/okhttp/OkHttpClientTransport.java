@@ -335,6 +335,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     return new OkHttpClientStream(
         method,
         headers,
+        callOptions,
         frameWriter,
         OkHttpClientTransport.this,
         outboundFlow,

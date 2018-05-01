@@ -24,6 +24,7 @@ import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
 import com.google.common.base.Preconditions;
 import com.google.common.io.BaseEncoding;
 import io.grpc.Attributes;
+import io.grpc.CallOptions;
 import io.grpc.InternalKnownTransport;
 import io.grpc.InternalMethodDescriptor;
 import io.grpc.Metadata;
@@ -65,6 +66,7 @@ class NettyClientStream extends AbstractClientStream {
       TransportState state,
       MethodDescriptor<?, ?> method,
       Metadata headers,
+      CallOptions callOptions,
       Channel channel,
       AsciiString authority,
       AsciiString scheme,
@@ -76,6 +78,7 @@ class NettyClientStream extends AbstractClientStream {
         statsTraceCtx,
         transportTracer,
         headers,
+        callOptions,
         useGet(method));
     this.state = checkNotNull(state, "transportState");
     this.writeQueue = state.handler.getWriteQueue();

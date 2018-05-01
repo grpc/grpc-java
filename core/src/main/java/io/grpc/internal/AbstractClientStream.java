@@ -19,17 +19,23 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.CONTENT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
+import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
+import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import io.grpc.CallOptions;
 import io.grpc.Codec;
 import io.grpc.Compressor;
+import io.grpc.Context;
+import io.grpc.Deadline;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import java.io.InputStream;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -104,6 +110,7 @@ public abstract class AbstractClientStream extends AbstractStream
       StatsTraceContext statsTraceCtx,
       TransportTracer transportTracer,
       Metadata headers,
+      CallOptions callOptions,
       boolean useGet) {
     checkNotNull(headers, "headers");
     this.transportTracer = checkNotNull(transportTracer, "transportTracer");
@@ -113,6 +120,14 @@ public abstract class AbstractClientStream extends AbstractStream
       this.headers = headers;
     } else {
       framer = new GetFramer(headers, statsTraceCtx);
+    }
+
+    // update timeout in headers
+    headers.discardAll(TIMEOUT_KEY);
+    Deadline effectiveDeadline = ClientCallImpl.effectiveDeadline(callOptions, Context.current());
+    if (effectiveDeadline != null) {
+      long effectiveTimeout = max(0, effectiveDeadline.timeRemaining(TimeUnit.NANOSECONDS));
+      headers.put(TIMEOUT_KEY, effectiveTimeout);
     }
   }
 

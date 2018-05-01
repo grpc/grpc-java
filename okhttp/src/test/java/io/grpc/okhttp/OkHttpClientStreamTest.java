@@ -27,6 +27,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.io.BaseEncoding;
+import io.grpc.CallOptions;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -82,6 +83,7 @@ public class OkHttpClientStreamTest {
     stream = new OkHttpClientStream(
         methodDescriptor,
         new Metadata(),
+        CallOptions.DEFAULT,
         frameWriter,
         transport,
         flowController,
@@ -147,8 +149,9 @@ public class OkHttpClientStreamTest {
   public void start_userAgentRemoved() {
     Metadata metaData = new Metadata();
     metaData.put(GrpcUtil.USER_AGENT_KEY, "misbehaving-application");
-    stream = new OkHttpClientStream(methodDescriptor, metaData, frameWriter, transport,
-        flowController, lock, MAX_MESSAGE_SIZE, "localhost", "good-application",
+    stream = new OkHttpClientStream(
+        methodDescriptor, metaData, CallOptions.DEFAULT, frameWriter, transport, flowController,
+        lock, MAX_MESSAGE_SIZE, "localhost", "good-application",
         StatsTraceContext.NOOP, transportTracer);
     stream.start(new BaseClientStreamListener());
     stream.transportState().start(3);
@@ -162,8 +165,9 @@ public class OkHttpClientStreamTest {
   public void start_headerFieldOrder() {
     Metadata metaData = new Metadata();
     metaData.put(GrpcUtil.USER_AGENT_KEY, "misbehaving-application");
-    stream = new OkHttpClientStream(methodDescriptor, metaData, frameWriter, transport,
-        flowController, lock, MAX_MESSAGE_SIZE, "localhost", "good-application",
+    stream = new OkHttpClientStream(
+        methodDescriptor, metaData, CallOptions.DEFAULT, frameWriter, transport, flowController,
+        lock, MAX_MESSAGE_SIZE, "localhost", "good-application",
         StatsTraceContext.NOOP, transportTracer);
     stream.start(new BaseClientStreamListener());
     stream.transportState().start(3);
@@ -190,8 +194,9 @@ public class OkHttpClientStreamTest {
         .setRequestMarshaller(marshaller)
         .setResponseMarshaller(marshaller)
         .build();
-    stream = new OkHttpClientStream(getMethod, new Metadata(), frameWriter, transport,
-        flowController, lock, MAX_MESSAGE_SIZE, "localhost", "good-application",
+    stream = new OkHttpClientStream(
+        getMethod, new Metadata(), CallOptions.DEFAULT, frameWriter, transport, flowController,
+        lock, MAX_MESSAGE_SIZE, "localhost", "good-application",
         StatsTraceContext.NOOP, transportTracer);
     stream.start(new BaseClientStreamListener());
 
