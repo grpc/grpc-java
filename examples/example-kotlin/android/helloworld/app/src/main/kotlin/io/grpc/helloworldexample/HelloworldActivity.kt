@@ -67,7 +67,7 @@ class HelloworldActivity : AppCompatActivity(), View.OnClickListener {
       val portStr = params[2]
       val port = if (TextUtils.isEmpty(portStr)) 0 else Integer.valueOf(portStr)
       return try {
-        channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext(true).build()
+        channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build()
         val stub = GreeterGrpc.newBlockingStub(channel)
         val request = HelloRequest.newBuilder().setName(message).build()
         val reply = stub.sayHello(request)
