@@ -28,6 +28,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.common.flogger.GoogleLogger;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
@@ -69,8 +70,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
@@ -79,7 +78,8 @@ import javax.annotation.concurrent.ThreadSafe;
 /** A communication channel for making outgoing RPCs. */
 @ThreadSafe
 final class ManagedChannelImpl extends ManagedChannel implements Instrumented<ChannelStats> {
-  static final Logger logger = Logger.getLogger(ManagedChannelImpl.class.getName());
+
+  static final GoogleLogger logger = GoogleLogger.forEnclosingClass();
 
   // Matching this pattern means the target string is a URI target or at least intended to be one.
   // A URI target must be an absolute hierarchical URI.
@@ -353,7 +353,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     if (lbHelper != null) {
       return;
     }
-    logger.log(Level.FINE, "[{0}] Exiting idle mode", getLogId());
+    logger.atFine().log("[%s] Exiting idle mode", getLogId());
     lbHelper = new LbHelperImpl(nameResolver);
     lbHelper.lb = loadBalancerFactory.newLoadBalancer(lbHelper);
 
@@ -368,7 +368,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
 
   // Must be run from channelExecutor
   private void enterIdleMode() {
-    logger.log(Level.FINE, "[{0}] Entering idle mode", getLogId());
+    logger.atFine().log("[%s] Entering idle mode", getLogId());
     // nameResolver and loadBalancer are guaranteed to be non-null.  If any of them were null,
     // either the idleModeTimer ran twice without exiting the idle mode, or the task in shutdown()
     // did not cancel idleModeTimer, or enterIdle() ran while shutdown or in idle, all of
@@ -579,7 +579,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     channelCallTracer = callTracerFactory.create();
     this.channelz = checkNotNull(builder.channelz);
     channelz.addRootChannel(this);
-    logger.log(Level.FINE, "[{0}] Created with target {1}", new Object[] {getLogId(), target});
+    logger.atFine().log("[%s] Created with target %s", getLogId(), target);
   }
 
   @VisibleForTesting
@@ -633,7 +633,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
    */
   @Override
   public ManagedChannelImpl shutdown() {
-    logger.log(Level.FINE, "[{0}] shutdown() called", getLogId());
+    logger.atFine().log("[%s] shutdown() called", getLogId());
     if (!shutdown.compareAndSet(false, true)) {
       return this;
     }
@@ -656,7 +656,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
           cancelIdleTimer(/* permanent= */ true);
         }
       }).drain();
-    logger.log(Level.FINE, "[{0}] Shutting down", getLogId());
+    logger.atFine().log("[%s] Shutting down", getLogId());
     return this;
   }
 
@@ -667,7 +667,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
    */
   @Override
   public ManagedChannelImpl shutdownNow() {
-    logger.log(Level.FINE, "[{0}] shutdownNow() called", getLogId());
+    logger.atFine().log("[%s] shutdownNow() called", getLogId());
     shutdown();
     uncommittedRetriableStreamsRegistry.onShutdownNow(SHUTDOWN_NOW_STATUS);
     channelExecutor.executeLater(new Runnable() {
@@ -782,7 +782,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       return;
     }
     if (shutdown.get() && subchannels.isEmpty() && oobChannels.isEmpty()) {
-      logger.log(Level.FINE, "[{0}] Terminated", getLogId());
+      logger.atFine().log("[%s] Terminated", getLogId());
       channelz.removeRootChannel(this);
       terminated = true;
       terminatedLatch.countDown();
@@ -1006,8 +1006,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
             callTracerFactory.create());
       channelz.addSubchannel(internalSubchannel);
       subchannel.subchannel = internalSubchannel;
-      logger.log(Level.FINE, "[{0}] {1} created for {2}",
-          new Object[] {getLogId(), internalSubchannel.getLogId(), addressGroup});
+      logger.atFine().log(
+          "[%s] %s created for %s", getLogId(), internalSubchannel.getLogId(), addressGroup);
       runSerialized(new Runnable() {
           @Override
           public void run() {
@@ -1143,11 +1143,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
         onError(Status.UNAVAILABLE.withDescription("NameResolver returned an empty list"));
         return;
       }
-      if (logger.isLoggable(Level.FINE)) {
-        logger.log(Level.FINE, "[{0}] resolved address: {1}, config={2}",
-            new Object[]{getLogId(), servers, config});
-      }
-
+      logger.atFine().log("[%s] resolved address: %s, config=%s", getLogId(), servers, config);
       final class NamesResolved implements Runnable {
         @Override
         public void run() {
@@ -1167,10 +1163,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
                 throttle = getThrottle(config);
               }
             } catch (RuntimeException re) {
-              logger.log(
-                  Level.WARNING,
-                  "[" + getLogId() + "] Unexpected exception from parsing service config",
-                  re);
+              logger.atWarning().withCause(re).log(
+                  "[%s] Unexpected exception from parsing service config", getLogId());
             }
           }
 
@@ -1184,8 +1178,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     @Override
     public void onError(final Status error) {
       checkArgument(!error.isOk(), "the error status must not be OK");
-      logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
-          new Object[] {getLogId(), error});
+      logger.atWarning().log("[%s] Failed to resolve name. status=%s", getLogId(), error);
       channelExecutor
           .executeLater(
               new Runnable() {
@@ -1207,12 +1200,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
                     nameResolverBackoffPolicy = backoffPolicyProvider.get();
                   }
                   long delayNanos = nameResolverBackoffPolicy.nextBackoffNanos();
-                  if (logger.isLoggable(Level.FINE)) {
-                    logger.log(
-                        Level.FINE,
-                        "[{0}] Scheduling DNS resolution backoff for {1} ns",
-                        new Object[] {logId, delayNanos});
-                  }
+                  logger.atFine().log(
+                      "[%s] Scheduling DNS resolution backoff for %d ns", logId, delayNanos);
                   nameResolverRefresh = new NameResolverRefresh();
                   nameResolverRefreshFuture =
                       transportFactory
