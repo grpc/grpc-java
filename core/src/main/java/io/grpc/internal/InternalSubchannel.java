@@ -23,6 +23,7 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
@@ -387,6 +388,16 @@ final class InternalSubchannel implements Instrumented<ChannelStats> {
     }
     if (savedPendingTransport != null) {
       savedPendingTransport.shutdown(reason);
+    }
+  }
+
+  @Override
+  public String toString() {
+    synchronized (lock) {
+      return MoreObjects.toStringHelper(this)
+          .add("logId", logId.getId())
+          .add("addressGroup", addressGroup.toString())
+          .toString();
     }
   }
 
