@@ -16,6 +16,7 @@
 
 package io.grpc.services;
 
+import com.google.common.base.Preconditions;
 import io.grpc.CallOptions;
 import io.grpc.ClientInterceptor;
 import io.grpc.ServerInterceptor;
@@ -52,6 +53,7 @@ public class BinaryLogProviderImpl extends BinaryLogProvider {
   @Nullable
   @Override
   public ServerInterceptor getServerInterceptor(String fullMethodName) {
+    Preconditions.checkNotNull(fullMethodName, "fullMethodName");
     BinaryLog log = factory.getLog(fullMethodName);
     if (log == null) {
       return null;
@@ -63,6 +65,7 @@ public class BinaryLogProviderImpl extends BinaryLogProvider {
   @Override
   public ClientInterceptor getClientInterceptor(
       String fullMethodName, CallOptions callOptions) {
+    Preconditions.checkNotNull(fullMethodName, "fullMethodName");
     BinaryLog log = factory.getLog(fullMethodName);
     if (log == null) {
       return null;
