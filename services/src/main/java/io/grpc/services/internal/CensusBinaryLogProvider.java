@@ -16,8 +16,8 @@
 
 package io.grpc.services.internal;
 
+import io.grpc.BinaryLogProvider;
 import io.grpc.CallOptions;
-import io.grpc.internal.BinaryLogProvider;
 import io.grpc.services.BinaryLogProviderImpl;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.Tracing;

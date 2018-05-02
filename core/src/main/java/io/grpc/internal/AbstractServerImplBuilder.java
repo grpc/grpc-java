@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.BinaryLogProvider;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;

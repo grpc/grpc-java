@@ -44,6 +44,8 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
+import io.grpc.BinaryLogProvider;
+import io.grpc.BinaryLogProvider.CallId;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -58,7 +60,6 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
-import io.grpc.internal.BinaryLogProvider.CallId;
 import io.grpc.internal.testing.StatsTestUtils;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
 import io.grpc.internal.testing.StatsTestUtils.FakeTagContextBinarySerializer;

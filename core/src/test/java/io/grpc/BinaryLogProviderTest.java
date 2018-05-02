@@ -14,49 +14,27 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
+package io.grpc;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
-import com.google.common.util.concurrent.SettableFuture;
-import io.grpc.CallOptions;
-import io.grpc.Channel;
-import io.grpc.ClientCall;
-import io.grpc.ClientInterceptor;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener;
-import io.grpc.IntegerMarshaller;
-import io.grpc.Metadata;
-import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
-import io.grpc.ServerCall;
-import io.grpc.ServerCallHandler;
-import io.grpc.ServerInterceptor;
-import io.grpc.ServerMethodDefinition;
-import io.grpc.StringMarshaller;
-import io.grpc.internal.BinaryLogProvider.CallId;
-import io.grpc.internal.testing.StatsTestUtils.MockableSpan;
-import io.grpc.testing.TestMethodDescriptors;
-import io.opencensus.trace.Span;
-import io.opencensus.trace.SpanBuilder;
-import io.opencensus.trace.Tracer;
-import io.opencensus.trace.propagation.BinaryFormat;
+import io.grpc.internal.IoUtils;
+import io.grpc.internal.NoopClientCall;
+import io.grpc.internal.NoopServerCall;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Test;
 import org.junit.runner.RunWith;

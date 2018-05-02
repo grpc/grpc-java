@@ -30,6 +30,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
+import io.grpc.BinaryLogProvider;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.Decompressor;

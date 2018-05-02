@@ -52,6 +52,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
+import io.grpc.BinaryLogProvider;
 import io.grpc.CallCredentials;
 import io.grpc.CallCredentials.MetadataApplier;
 import io.grpc.CallOptions;

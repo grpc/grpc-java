@@ -16,11 +16,11 @@
 
 package io.grpc.services;
 
+import io.grpc.BinaryLogProvider;
 import io.grpc.CallOptions;
 import io.grpc.ClientInterceptor;
 import io.grpc.ExperimentalApi;
 import io.grpc.ServerInterceptor;
-import io.grpc.internal.BinaryLogProvider;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;

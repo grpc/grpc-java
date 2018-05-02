@@ -14,21 +14,11 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
+package io.grpc;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.CallOptions;
-import io.grpc.Channel;
-import io.grpc.ClientCall;
-import io.grpc.ClientInterceptor;
-import io.grpc.ClientInterceptors;
-import io.grpc.InternalClientInterceptors;
-import io.grpc.InternalServerInterceptors;
-import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
-import io.grpc.ServerCallHandler;
-import io.grpc.ServerInterceptor;
-import io.grpc.ServerMethodDefinition;
+import io.grpc.internal.IoUtils;
 import io.opencensus.trace.Span;
 import java.io.ByteArrayInputStream;
 import java.io.Closeable;
@@ -132,7 +122,7 @@ public abstract class BinaryLogProvider implements Closeable {
   }
 
   /**
-   * The pipeline of interceptors is hard coded when the {@link ManagedChannelImpl} is created.
+   * The pipeline of interceptors is hard coded when the {@link ManagedChannel} is created.
    * This shim interceptor should always be installed as a placeholder. When a call starts,
    * this interceptor checks with the {@link BinaryLogProvider} to see if logging should happen
    * for this particular {@link ClientCall}'s method.
