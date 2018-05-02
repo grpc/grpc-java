@@ -1257,16 +1257,6 @@ public class ServerImplTest {
           String fullMethodName, CallOptions callOptions) {
         return null;
       }
-
-      @Override
-      protected int priority() {
-        return 0;
-      }
-
-      @Override
-      protected boolean isAvailable() {
-        return true;
-      }
     };
     createAndStartServer();
     basicExchangeHelper(METHOD, "Lots of pizza, please", 314, 50);

@@ -102,20 +102,6 @@ public class BinaryLogProviderTest {
         String fullMethodName, CallOptions callOptions) {
       return new TestBinaryLogClientInterceptor();
     }
-
-    @Override
-    public void close() { }
-
-
-    @Override
-    protected int priority() {
-      return 0;
-    }
-
-    @Override
-    protected boolean isAvailable() {
-      return true;
-    }
   };
 
   @Test

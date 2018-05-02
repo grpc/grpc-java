@@ -64,16 +64,6 @@ public class BinaryLogProviderImpl extends BinaryLogProvider {
     return factory.getLog(fullMethodName).getClientInterceptor(getClientCallId(callOptions));
   }
 
-  @Override
-  protected int priority() {
-    return 5;
-  }
-
-  @Override
-  protected boolean isAvailable() {
-    return factory != null;
-  }
-
   protected CallId getServerCallId() {
     return new CallId(0, counter.getAndIncrement());
   }

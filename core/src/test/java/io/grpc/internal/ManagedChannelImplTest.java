@@ -2302,16 +2302,6 @@ public class ManagedChannelImplTest {
           }
         };
       }
-
-      @Override
-      protected int priority() {
-        return 0;
-      }
-
-      @Override
-      protected boolean isAvailable() {
-        return true;
-      }
     };
 
     createChannel();

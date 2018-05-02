@@ -24,8 +24,6 @@ import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.InternalClientInterceptors;
 import io.grpc.InternalServerInterceptors;
-import io.grpc.InternalServiceProviders;
-import io.grpc.InternalServiceProviders.PriorityAccessor;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.ServerCallHandler;
@@ -37,7 +35,6 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.util.Collections;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
@@ -48,31 +45,8 @@ public abstract class BinaryLogProvider implements Closeable {
   public static final Marshaller<byte[]> BYTEARRAY_MARSHALLER = new ByteArrayMarshaller();
 
   private static final Logger logger = Logger.getLogger(BinaryLogProvider.class.getName());
-  private static final BinaryLogProvider PROVIDER = InternalServiceProviders.load(
-      BinaryLogProvider.class,
-      Collections.<Class<?>>emptyList(),
-      BinaryLogProvider.class.getClassLoader(),
-      new PriorityAccessor<BinaryLogProvider>() {
-        @Override
-        public boolean isAvailable(BinaryLogProvider provider) {
-          return provider.isAvailable();
-        }
-
-        @Override
-        public int getPriority(BinaryLogProvider provider) {
-          return provider.priority();
-        }
-      });
 
   private final ClientInterceptor binaryLogShim = new BinaryLogShim();
-
-  /**
-   * Returns a {@code BinaryLogProvider}, or {@code null} if there is no provider.
-   */
-  @Nullable
-  public static BinaryLogProvider provider() {
-    return PROVIDER;
-  }
 
   /**
    * Wraps a channel to provide binary logging on {@link ClientCall}s as needed.
@@ -131,20 +105,6 @@ public abstract class BinaryLogProvider implements Closeable {
     // default impl: noop
     // TODO(zpencer): make BinaryLogProvider provide a BinaryLog, and this method belongs there
   }
-
-  /**
-   * A priority, from 0 to 10 that this provider should be used, taking the current environment into
-   * consideration. 5 should be considered the default, and then tweaked based on environment
-   * detection. A priority of 0 does not imply that the provider wouldn't work; just that it should
-   * be last in line.
-   */
-  protected abstract int priority();
-
-  /**
-   * Whether this provider is available for use, taking the current environment into consideration.
-   * If {@code false}, no other methods are safe to be called.
-   */
-  protected abstract boolean isAvailable();
 
   // Creating a named class makes debugging easier
   private static final class ByteArrayMarshaller implements Marshaller<byte[]> {

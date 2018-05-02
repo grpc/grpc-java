@@ -107,7 +107,8 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   private boolean recordFinishedRpcs = true;
   private boolean tracingEnabled = true;
 
-  protected BinaryLogProvider binlogProvider = BinaryLogProvider.provider();
+  @Nullable
+  protected BinaryLogProvider binlogProvider;
   protected TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
 
   protected Channelz channelz = Channelz.instance();

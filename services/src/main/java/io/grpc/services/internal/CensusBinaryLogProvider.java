@@ -24,11 +24,6 @@ import io.opencensus.trace.Tracing;
 
 public final class CensusBinaryLogProvider extends BinaryLogProviderImpl {
   @Override
-  protected int priority() {
-    return 6;
-  }
-
-  @Override
   protected CallId getServerCallId() {
     Span currentSpan = Tracing.getTracer().getCurrentSpan();
     return CallId.fromCensusSpan(currentSpan);
