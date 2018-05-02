@@ -108,8 +108,10 @@ public abstract class ClientCall<ReqT, RespT> {
   public abstract static class Listener<T> {
 
     /**
-     * The response headers have been received. Headers always precede messages. Since {@link
-     * Metadata} is not thread-safe, the caller must not access {@code headers} after this point.
+     * The response headers have been received. Headers always precede messages.
+     *
+     * <p>Since {@link Metadata} is not thread-safe, the caller must not access (read or write)
+     * {@code headers} after this point.
      *
      * @param headers containing metadata sent by the server at the start of the response.
      */
@@ -126,8 +128,10 @@ public abstract class ClientCall<ReqT, RespT> {
     /**
      * The ClientCall has been closed. Any additional calls to the {@code ClientCall} will not be
      * processed by the server. No further receiving will occur and no further notifications will be
-     * made. Since {@link Metadata} is not thread-safe, the caller must not access {@code trailers}
-     * after this point.
+     * made.
+     *
+     * <p>Since {@link Metadata} is not thread-safe, the caller must not access (read or write)
+     * {@code trailers} after this point.
      *
      * <p>If {@code status} returns false for {@link Status#isOk()}, then the call failed.
      * An additional block of trailer metadata may be received at the end of the call from the
@@ -155,8 +159,10 @@ public abstract class ClientCall<ReqT, RespT> {
    * Start a call, using {@code responseListener} for processing response messages.
    *
    * <p>It must be called prior to any other method on this class, except for {@link #cancel} which
-   * may be called at any time. Since {@link Metadata} is not thread-safe, the caller must not
-   * access {@code headers} after this point.
+   * may be called at any time.
+   *
+   * <p>Since {@link Metadata} is not thread-safe, the caller must not access (read or write) {@code
+   * headers} after this point.
    *
    * @param responseListener receives response messages
    * @param headers which can contain extra call metadata, e.g. authentication credentials.
