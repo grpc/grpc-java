@@ -768,6 +768,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
 
     @Override
     public String authority() {
+      checkNotNull(nameResolver, "Cannot access authority of terminated channel");
       String authority = nameResolver.getServiceAuthority();
       return checkNotNull(authority, "authority");
     }
