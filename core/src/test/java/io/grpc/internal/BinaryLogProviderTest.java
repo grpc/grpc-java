@@ -288,48 +288,6 @@ public class BinaryLogProviderTest {
         (int) method.parseResponse(new ByteArrayInputStream((byte[]) serializedResp.get(0))));
   }
 
-  @Test
-  public void callIdFromSpan() {
-    MockableSpan mockableSpan = MockableSpan.generateRandomSpan(new Random(0));
-    CallId callId = CallId.fromCensusSpan(mockableSpan);
-    assertThat(callId.hi).isEqualTo(0);
-    assertThat(callId.lo)
-        .isEqualTo(ByteBuffer.wrap(mockableSpan.getContext().getSpanId().getBytes()).getLong());
-  }
-
-  @Test
-  public void censusTracerSetsCallId() throws Exception {
-    Tracer tracer = mock(Tracer.class);
-    SpanBuilder builder = mock(SpanBuilder.class);
-    when(tracer.spanBuilderWithExplicitParent(any(String.class), any(Span.class)))
-        .thenReturn(builder);
-    when(builder.setRecordEvents(any(Boolean.class))).thenReturn(builder);
-    MockableSpan mockableSpan = MockableSpan.generateRandomSpan(new Random(0));
-    when(builder.startSpan()).thenReturn(mockableSpan);
-
-    final SettableFuture<CallOptions> options = SettableFuture.create();
-    Channel c = new Channel() {
-      @Override
-      public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
-          MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
-        options.set(callOptions);
-        return null;
-      }
-
-      @Override
-      public String authority() {
-        return null;
-      }
-    };
-    new CensusTracingModule(tracer, mock(BinaryFormat.class))
-        .getClientInterceptor()
-        .interceptCall(TestMethodDescriptors.voidMethod(), CallOptions.DEFAULT, c);
-    CallId callId = options.get().getOption(BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY);
-    assertThat(callId.hi).isEqualTo(0);
-    assertThat(callId.lo)
-        .isEqualTo(ByteBuffer.wrap(mockableSpan.getContext().getSpanId().getBytes()).getLong());
-  }
-
   @SuppressWarnings({"rawtypes", "unchecked"})
   private static void onServerMessageHelper(ServerCall.Listener listener, Object request) {
     listener.onMessage(request);
