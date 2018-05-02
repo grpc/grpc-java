@@ -28,6 +28,7 @@ import java.nio.ByteBuffer;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
+@Internal
 public abstract class BinaryLogProvider implements Closeable {
   public static final CallOptions.Key<CallId> CLIENT_CALL_ID_CALLOPTION_KEY
       = CallOptions.Key.of("binarylog-calloptions-key", null);

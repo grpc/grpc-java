@@ -56,6 +56,7 @@ import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.HandlerRegistry;
 import io.grpc.IntegerMarshaller;
+import io.grpc.InternalBinaryLogs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
@@ -1237,7 +1238,7 @@ public class ServerImplTest {
   @Test
   public void binaryLogInstalled() throws Exception {
     final SettableFuture<Boolean> intercepted = SettableFuture.create();
-    builder.binlogProvider = new BinaryLogProvider() {
+    builder.binlog = InternalBinaryLogs.createBinaryLog(new BinaryLogProvider() {
       @Nullable
       @Override
       public ServerInterceptor getServerInterceptor(String fullMethodName) {
@@ -1258,7 +1259,7 @@ public class ServerImplTest {
           String fullMethodName, CallOptions callOptions) {
         return null;
       }
-    };
+    });
     createAndStartServer();
     basicExchangeHelper(METHOD, "Lots of pizza, please", 314, 50);
     assertTrue(intercepted.get());

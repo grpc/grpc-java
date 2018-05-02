@@ -65,6 +65,7 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.IntegerMarshaller;
+import io.grpc.InternalBinaryLogs;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -245,7 +246,7 @@ public class ManagedChannelImplTest {
         .userAgent(USER_AGENT)
         .idleTimeout(AbstractManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS);
     channelBuilder.executorPool = executorPool;
-    channelBuilder.binlogProvider = null;
+    channelBuilder.binlog = null;
     channelBuilder.channelz = channelz;
   }
 
@@ -2282,7 +2283,7 @@ public class ManagedChannelImplTest {
   @Test
   public void binaryLogInstalled() throws Exception {
     final SettableFuture<Boolean> intercepted = SettableFuture.create();
-    channelBuilder.binlogProvider = new BinaryLogProvider() {
+    channelBuilder.binlog = InternalBinaryLogs.createBinaryLog(new BinaryLogProvider() {
       @Nullable
       @Override
       public ServerInterceptor getServerInterceptor(String fullMethodName) {
@@ -2303,7 +2304,7 @@ public class ManagedChannelImplTest {
           }
         };
       }
-    };
+    });
 
     createChannel();
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
