@@ -393,12 +393,14 @@ final class InternalSubchannel implements Instrumented<ChannelStats> {
 
   @Override
   public String toString() {
+    Object addressGroupCopy;
     synchronized (lock) {
-      return MoreObjects.toStringHelper(this)
-          .add("logId", logId.getId())
-          .add("addressGroup", addressGroup.toString())
-          .toString();
+      addressGroupCopy = addressGroup.toString();
     }
+    return MoreObjects.toStringHelper(this)
+          .add("logId", logId.getId())
+          .add("addressGroup", addressGroupCopy.toString())
+          .toString();
   }
 
   @GuardedBy("lock")

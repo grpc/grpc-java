@@ -308,7 +308,7 @@ class NettyServer implements InternalServer, WithLogId {
   @Override
   public String toString() {
     return MoreObjects.toStringHelper(this)
-        .add("logId", logId.toString())
+        .add("logId", logId.getId())
         .add("address", address)
         .toString();
   }
