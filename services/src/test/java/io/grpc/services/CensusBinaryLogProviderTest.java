@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.services.internal;
+package io.grpc.services;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.opencensus.trace.unsafe.ContextUtils.CONTEXT_SPAN_KEY;
@@ -24,6 +24,7 @@ import io.grpc.BinaryLogProvider.CallId;
 import io.grpc.CallOptions;
 import io.grpc.Context;
 import io.grpc.internal.testing.StatsTestUtils.MockableSpan;
+import io.grpc.services.CensusBinaryLogProvider;
 import java.nio.ByteBuffer;
 import java.util.Random;
 import org.junit.Test;

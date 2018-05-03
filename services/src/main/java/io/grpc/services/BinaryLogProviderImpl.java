@@ -19,7 +19,6 @@ package io.grpc.services;
 import io.grpc.BinaryLogProvider;
 import io.grpc.CallOptions;
 import io.grpc.ClientInterceptor;
-import io.grpc.ExperimentalApi;
 import io.grpc.ServerInterceptor;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
@@ -29,8 +28,7 @@ import javax.annotation.Nullable;
 /**
  * The default implementation of a {@link BinaryLogProvider}.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/4017")
-public class BinaryLogProviderImpl extends BinaryLogProvider {
+class BinaryLogProviderImpl extends BinaryLogProvider {
   private static final Logger logger = Logger.getLogger(BinaryLogProviderImpl.class.getName());
   private final BinlogHelper.Factory factory;
   private final AtomicLong counter = new AtomicLong();
