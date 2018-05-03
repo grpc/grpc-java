@@ -17,13 +17,15 @@
 package io.grpc;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import io.grpc.MethodDescriptor.Marshaller;
-import io.grpc.internal.IoUtils;
 import io.opencensus.trace.Span;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -168,6 +170,37 @@ public abstract class BinaryLogProvider implements Closeable {
 
     public static CallId fromCensusSpan(Span span) {
       return new CallId(0, ByteBuffer.wrap(span.getContext().getSpanId().getBytes()).getLong());
+    }
+  }
+
+  // Copied from internal
+  private static final class IoUtils {
+    /** maximum buffer to be read is 16 KB. */
+    private static final int MAX_BUFFER_LENGTH = 16384;
+
+    /** Returns the byte array. */
+    public static byte[] toByteArray(InputStream in) throws IOException {
+      ByteArrayOutputStream out = new ByteArrayOutputStream();
+      copy(in, out);
+      return out.toByteArray();
+    }
+
+    /** Copies the data from input stream to output stream. */
+    public static long copy(InputStream from, OutputStream to) throws IOException {
+      // Copied from guava com.google.common.io.ByteStreams because its API is unstable (beta)
+      Preconditions.checkNotNull(from);
+      Preconditions.checkNotNull(to);
+      byte[] buf = new byte[MAX_BUFFER_LENGTH];
+      long total = 0;
+      while (true) {
+        int r = from.read(buf);
+        if (r == -1) {
+          break;
+        }
+        to.write(buf, 0, r);
+        total += r;
+      }
+      return total;
     }
   }
 }
