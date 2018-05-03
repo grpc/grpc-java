@@ -45,8 +45,9 @@ export LD_LIBRARY_PATH=/tmp/protobuf/lib
 export LDFLAGS=-L/tmp/protobuf/lib
 export CXXFLAGS="-I/tmp/protobuf/include"
 
+./gradlew clean $GRADLE_FLAGS
+
 if [[ -z "${SKIP_TESTS:-}" ]]; then
-  ./gradlew clean $GRADLE_FLAGS
   # Ensure all *.proto changes include *.java generated code
   ./gradlew assemble generateTestProto install $GRADLE_FLAGS
 
@@ -69,10 +70,10 @@ fi
 LOCAL_MVN_TEMP=$(mktemp -d)
 # Note that this disables parallel=true from GRADLE_FLAGS
 if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
-  ./gradlew clean grpc-compiler:build grpc-compiler:uploadArchives $GRADLE_FLAGS \
+  ./gradlew grpc-compiler:build grpc-compiler:uploadArchives $GRADLE_FLAGS \
     -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP
 else
-  ./gradlew clean uploadArchives $GRADLE_FLAGS \
+  ./gradlew uploadArchives $GRADLE_FLAGS \
     -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP
 fi
 
