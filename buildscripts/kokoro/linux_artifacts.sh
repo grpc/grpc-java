@@ -7,8 +7,6 @@ fi
 
 readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
 
-PROTOBUF_VERSION=3.5.1
-
 rm -rf /tmp/source_head/protobuf
 mkdir -p /tmp/source_head/protobuf
 # Clone from latest until protobuf makes a release with this fix:
