@@ -28,6 +28,7 @@ import java.nio.ByteBuffer;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
+// TODO(zpencer): rename class to AbstractBinaryLog
 @Internal
 public abstract class BinaryLogProvider implements Closeable {
   public static final CallOptions.Key<CallId> CLIENT_CALL_ID_CALLOPTION_KEY
