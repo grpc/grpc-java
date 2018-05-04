@@ -1,5 +1,5 @@
 #!/bin/bash
-set -eu -o pipefail
+set -eux -o pipefail
 
 quote() {
   local arg
@@ -15,7 +15,7 @@ if [[ -t 0 ]]; then
   DOCKER_ARGS="-it"
 else
   # The input device on kokoro is not a TTY, so -it does not work.
-  DOCKER_ARGS=
+  DOCKER_ARGS=""
 fi
 # Use a trap function to fix file permissions upon exit, without affecting
 # the original exit code.
