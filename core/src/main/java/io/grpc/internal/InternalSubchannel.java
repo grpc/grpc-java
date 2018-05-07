@@ -393,9 +393,11 @@ final class InternalSubchannel implements Instrumented<ChannelStats> {
 
   @Override
   public String toString() {
+    // addressGroupCopy being a little stale is fine, just avoid calling toString with the lock
+    // since there may be many addresses.
     Object addressGroupCopy;
     synchronized (lock) {
-      addressGroupCopy = addressGroup.toString();
+      addressGroupCopy = addressGroup;
     }
     return MoreObjects.toStringHelper(this)
           .add("logId", logId.getId())
