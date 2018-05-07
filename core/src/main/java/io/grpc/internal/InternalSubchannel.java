@@ -399,7 +399,7 @@ final class InternalSubchannel implements Instrumented<ChannelStats> {
     }
     return MoreObjects.toStringHelper(this)
           .add("logId", logId.getId())
-          .add("addressGroup", addressGroupCopy.toString())
+          .add("addressGroup", addressGroupCopy)
           .toString();
   }
 
