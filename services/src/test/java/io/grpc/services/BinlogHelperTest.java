@@ -28,6 +28,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import com.google.common.base.Charsets;
 import com.google.common.primitives.Bytes;
 import com.google.protobuf.ByteString;
 import io.grpc.Attributes;
@@ -116,6 +117,7 @@ public final class BinlogHelperTest {
   private static final int HEADER_LIMIT = 10;
   private static final int MESSAGE_LIMIT = Integer.MAX_VALUE;
 
+  private final Status internalStatus = Status.INTERNAL.withDescription("my description");
   private final Metadata nonEmptyMetadata = new Metadata();
   private final BinaryLogSink sink = mock(BinaryLogSink.class);
   private final SinkWriter sinkWriterImpl =
@@ -376,6 +378,18 @@ public final class BinlogHelperTest {
     assertEquals(
         io.grpc.binarylog.Metadata.getDefaultInstance(),
         BinlogHelper.metadataToProto(new Metadata(), Integer.MAX_VALUE));
+    assertEquals(
+        io.grpc.binarylog.Metadata.newBuilder()
+            .addEntry(
+                MetadataEntry.newBuilder()
+                    .setKey(ByteString.copyFrom("grpc-status", Charsets.UTF_8))
+                    .setValue(ByteString.copyFrom("13", Charsets.UTF_8)))
+            .addEntry(
+                MetadataEntry.newBuilder()
+                    .setKey(ByteString.copyFrom("grpc-message", Charsets.UTF_8))
+                    .setValue(ByteString.copyFrom("my description", Charsets.UTF_8)))
+            .build(),
+        BinlogHelper.metadataAndStatusToProto(internalStatus, new Metadata(), Integer.MAX_VALUE));
   }
 
   @Test
@@ -388,6 +402,21 @@ public final class BinlogHelperTest {
             .addEntry(ENTRY_C)
             .build(),
         BinlogHelper.metadataToProto(nonEmptyMetadata, Integer.MAX_VALUE));
+    assertEquals(
+        io.grpc.binarylog.Metadata.newBuilder()
+            .addEntry(
+                MetadataEntry.newBuilder()
+                    .setKey(ByteString.copyFrom("grpc-status", Charsets.UTF_8))
+                    .setValue(ByteString.copyFrom("13", Charsets.UTF_8)))
+            .addEntry(
+                MetadataEntry.newBuilder()
+                    .setKey(ByteString.copyFrom("grpc-message", Charsets.UTF_8))
+                    .setValue(ByteString.copyFrom("my description", Charsets.UTF_8)))
+            .addEntry(ENTRY_A)
+            .addEntry(ENTRY_B)
+            .addEntry(ENTRY_C)
+            .build(),
+        BinlogHelper.metadataAndStatusToProto(internalStatus, nonEmptyMetadata, Integer.MAX_VALUE));
   }
 
   @Test
@@ -545,27 +574,29 @@ public final class BinlogHelperTest {
 
   @Test
   public void logTrailingMetadata_server() throws Exception {
-    sinkWriterImpl.logTrailingMetadata(nonEmptyMetadata, IS_SERVER, CALL_ID);
+    sinkWriterImpl.logTrailingMetadata(internalStatus, nonEmptyMetadata, IS_SERVER, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.SEND_TRAILING_METADATA)
             .setLogger(GrpcLogEntry.Logger.SERVER)
             .setCallId(BinlogHelper.callIdToProto(CALL_ID))
-            .setMetadata(BinlogHelper.metadataToProto(nonEmptyMetadata, 10))
+            .setMetadata(BinlogHelper.metadataAndStatusToProto(
+                internalStatus, nonEmptyMetadata, 10))
             .build());
   }
 
   @Test
   public void logTrailingMetadata_client() throws Exception {
-    sinkWriterImpl.logTrailingMetadata(nonEmptyMetadata, IS_CLIENT, CALL_ID);
+    sinkWriterImpl.logTrailingMetadata(internalStatus, nonEmptyMetadata, IS_CLIENT, CALL_ID);
     verify(sink).write(
         GrpcLogEntry
             .newBuilder()
             .setType(GrpcLogEntry.Type.RECV_TRAILING_METADATA)
             .setLogger(GrpcLogEntry.Logger.CLIENT)
             .setCallId(BinlogHelper.callIdToProto(CALL_ID))
-            .setMetadata(BinlogHelper.metadataToProto(nonEmptyMetadata, 10))
+            .setMetadata(BinlogHelper.metadataAndStatusToProto(
+                internalStatus, nonEmptyMetadata, 10))
             .build());
   }
 
@@ -800,6 +831,7 @@ public final class BinlogHelperTest {
 
       interceptedListener.get().onClose(status, trailers);
       verify(mockSinkWriter).logTrailingMetadata(
+          same(status),
           same(trailers),
           eq(IS_CLIENT),
           same(CALL_ID));
@@ -929,6 +961,7 @@ public final class BinlogHelperTest {
       Metadata trailers = new Metadata();
       interceptedCall.get().close(status, trailers);
       verify(mockSinkWriter).logTrailingMetadata(
+          same(status),
           same(trailers),
           eq(IS_SERVER),
           same(CALL_ID));
