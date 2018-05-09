@@ -143,7 +143,7 @@ public abstract class BinaryLogProvider implements Closeable {
       if (binlogInterceptor == null) {
         return next.newCall(method, callOptions);
       } else {
-        return InternalClientInterceptors
+        return ClientInterceptors
             .wrapClientInterceptor(
                 binlogInterceptor,
                 BYTEARRAY_MARSHALLER,
