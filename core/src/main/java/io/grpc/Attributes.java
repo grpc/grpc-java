@@ -29,8 +29,8 @@ import javax.annotation.concurrent.Immutable;
 
 /**
  * An immutable type-safe container of attributes.
+ * @since 1.13.0
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/1764")
 @Immutable
 public final class Attributes {
 
@@ -56,14 +56,24 @@ public final class Attributes {
    * Returns set of keys stored in container.
    *
    * @return Set of Key objects.
+   * @deprecated This method is being considered for deprecation, if you feel this method is needed
+   *     please reach out on this Github issue:
+   *     <a href="https://github.com/grpc/grpc-java/issues/1764">grpc-java/issues/1764</a>.
    */
+  @Deprecated
   public Set<Key<?>> keys() {
+    return Collections.unmodifiableSet(data.keySet());
+  }
+
+  Set<Key<?>> keysForTest() {
     return Collections.unmodifiableSet(data.keySet());
   }
 
   /**
    * Create a new builder that is pre-populated with the content from a given container.
+   * @deprecated Use {@link Attributes#toBuilder()} on the {@link Attributes} instance instead.
    */
+  @Deprecated
   public static Builder newBuilder(Attributes base) {
     checkNotNull(base, "base");
     return new Builder(base);
@@ -77,31 +87,52 @@ public final class Attributes {
   }
 
   /**
+   * Creates a new builder that is pre-populated with the content of this container.
+   * @return a new builder.
+   */
+  public Builder toBuilder() {
+    return new Builder(this);
+  }
+
+  /**
    * Key for an key-value pair.
    * @param <T> type of the value in the key-value pair
    */
   @Immutable
   public static final class Key<T> {
-    private final String name;
+    private final String debugString;
 
-    private Key(String name) {
-      this.name = name;
+    private Key(String debugString) {
+      this.debugString = debugString;
     }
 
     @Override
     public String toString() {
-      return name;
+      return debugString;
     }
 
     /**
      * Factory method for creating instances of {@link Key}.
      *
-     * @param name the name of Key. Name collision, won't cause key collision.
+     * @param debugString a string used to describe the key, used for debugging.
+     * @param <T> Key type
+     * @return Key object
+     * @deprecated use {@link #create} instead.
+     */
+    @Deprecated
+    public static <T> Key<T> of(String debugString) {
+      return new Key<T>(debugString);
+    }
+
+    /**
+     * Factory method for creating instances of {@link Key}.
+     *
+     * @param debugString a string used to describe the key, used for debugging.
      * @param <T> Key type
      * @return Key object
      */
-    public static <T> Key<T> of(String name) {
-      return new Key<T>(name);
+    public static <T> Key<T> create(String debugString) {
+      return new Key<T>(debugString);
     }
   }
 
