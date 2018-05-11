@@ -32,6 +32,7 @@ import javax.annotation.concurrent.Immutable;
  * @since 1.13.0
  */
 @Immutable
+@ExperimentalApi("https://github.com/grpc/grpc-java/1764")
 public final class Attributes {
 
   private final Map<Key<?>, Object> data;
@@ -61,7 +62,6 @@ public final class Attributes {
    *     <a href="https://github.com/grpc/grpc-java/issues/1764">grpc-java/issues/1764</a>.
    */
   @Deprecated
-  @ExperimentalApi("https://github.com/grpc/grpc-java/1764")
   public Set<Key<?>> keys() {
     return Collections.unmodifiableSet(data.keySet());
   }
@@ -73,6 +73,7 @@ public final class Attributes {
   /**
    * Create a new builder that is pre-populated with the content from a given container.
    * @deprecated Use {@link Attributes#toBuilder()} on the {@link Attributes} instance instead.
+   *     This method will be removed in the future.
    */
   @Deprecated
   public static Builder newBuilder(Attributes base) {
@@ -118,7 +119,7 @@ public final class Attributes {
      * @param debugString a string used to describe the key, used for debugging.
      * @param <T> Key type
      * @return Key object
-     * @deprecated use {@link #create} instead.
+     * @deprecated use {@link #create} instead. This method will be removed in the future.
      */
     @Deprecated
     public static <T> Key<T> of(String debugString) {
