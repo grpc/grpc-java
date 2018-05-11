@@ -56,11 +56,12 @@ public final class Attributes {
    * Returns set of keys stored in container.
    *
    * @return Set of Key objects.
-   * @deprecated This method is being considered for deprecation, if you feel this method is needed
+   * @deprecated This method is being considered for removal, if you feel this method is needed
    *     please reach out on this Github issue:
    *     <a href="https://github.com/grpc/grpc-java/issues/1764">grpc-java/issues/1764</a>.
    */
   @Deprecated
+  @ExperimentalApi("https://github.com/grpc/grpc-java/1764")
   public Set<Key<?>> keys() {
     return Collections.unmodifiableSet(data.keySet());
   }
