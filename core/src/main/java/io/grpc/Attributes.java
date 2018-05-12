@@ -150,6 +150,8 @@ public final class Attributes {
    * equal at one point in time and not equal at another (due to concurrent mutation of attribute
    * values).
    *
+   * <p>This method is not implemented efficiently and is meant for testing.
+   *
    * @param o an object.
    * @return true if the given object is a {@link Attributes} equal attributes.
    */
