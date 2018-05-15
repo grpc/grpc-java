@@ -370,7 +370,7 @@ final class ChannelzProtoUtil {
     return ChannelConnectivityState.newBuilder().setState(toState(s)).build();
   }
 
-  private static ChannelTrace toChannelTrace(io.grpc.internal.Channelz.ChannelTrace channelTrace) {
+  private static ChannelTrace toChannelTrace(Channelz.ChannelTrace channelTrace) {
     return ChannelTrace.newBuilder()
         .setNumEventsLogged(channelTrace.numEventsLogged)
         .setCreationTimestamp(Timestamps.fromNanos(channelTrace.creationTimeNanos))
