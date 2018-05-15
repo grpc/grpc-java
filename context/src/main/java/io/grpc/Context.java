@@ -1065,6 +1065,8 @@ public class Context {
     }
   }
 
+  // Not using the standard com.google.errorprone.annotations.CheckReturnValue because that will
+  // introduce dependencies that some io.grpc.Context API consumers may not want.
   @interface CheckReturnValue {}
 
   @interface CanIgnoreReturnValue {}
