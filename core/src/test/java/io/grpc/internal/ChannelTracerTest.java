@@ -46,7 +46,7 @@ public class ChannelTracerTest {
   @Test
   public void reportEvents() {
     ChannelTracer channelTracer =
-        new ChannelTracer(2 /* maxEvents*/, 3L /* channelCreationTimeNanos */);
+        new ChannelTracer(/* maxEvents= */ 2, /* channelCreationTimeNanos= */ 3L);
     ChannelStats.Builder builder = new ChannelStats.Builder();
     Event e1 = new Event.Builder().setDescription("e1").setSeverity(Severity.CT_ERROR).build();
     Event e2 = new Event.Builder().setDescription("e2").setSeverity(Severity.CT_INFO).build();
