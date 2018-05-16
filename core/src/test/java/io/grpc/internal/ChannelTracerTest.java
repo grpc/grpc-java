@@ -40,7 +40,7 @@ public class ChannelTracerTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("maxEvents must be greater than zero");
 
-    new ChannelTracer(0 /* maxEvents*/, 3L /* channelCreationTimeNanos */);
+    new ChannelTracer(/* maxEvents= */ 0, /* channelCreationTimeNanos= */ 3L);
   }
 
   @Test
