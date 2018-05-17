@@ -19,6 +19,7 @@ package io.grpc.protobuf;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.Message.Builder;
+import com.google.protobuf.MessageLite;
 import com.google.protobuf.util.JsonFormat;
 import com.google.protobuf.util.JsonFormat.Parser;
 import com.google.protobuf.util.JsonFormat.Printer;
@@ -109,7 +110,15 @@ public class ProtoUtils {
   public static <T extends Message> Metadata.Key<T> keyForProto(T instance) {
     return Metadata.Key.of(
         instance.getDescriptorForType().getFullName() + Metadata.BINARY_HEADER_SUFFIX,
-        ProtoLiteUtils.metadataMarshaller(instance));
+        metadataMarshaller(instance));
+  }
+
+  /**
+   * Produce a metadata marshaller for a protobuf type.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4477")
+  public static <T extends Message> Metadata.BinaryMarshaller<T> metadataMarshaller(T instance) {
+    return ProtoLiteUtils.metadataMarshaller(instance);
   }
 
   private ProtoUtils() {
