@@ -26,8 +26,16 @@ public final class BinaryLogs {
     return new BinaryLogImpl();
   }
 
+  public static BinaryLog createBinaryLog(BinaryLogSink sink) throws IOException {
+    return new BinaryLogImpl(sink);
+  }
+
   public static BinaryLog createCensusBinaryLog() throws IOException {
     return new CensusBinaryLog();
+  }
+
+  public static BinaryLog createCensusBinaryLog(BinaryLogSink sink) throws IOException {
+    return new CensusBinaryLog(sink);
   }
 
   private BinaryLogs() {}

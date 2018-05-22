@@ -39,6 +39,10 @@ class BinaryLogImpl extends BinaryLog {
     this(new TempFileSink(), System.getenv("GRPC_BINARY_LOG_CONFIG"));
   }
 
+  public BinaryLogImpl(BinaryLogSink sink) throws IOException {
+    this(sink, System.getenv("GRPC_BINARY_LOG_CONFIG"));
+  }
+
   /**
    * Creates an instance.
    * @param sink ownership is transferred to this class.

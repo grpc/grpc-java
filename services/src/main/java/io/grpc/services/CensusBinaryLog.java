@@ -29,6 +29,10 @@ final class CensusBinaryLog extends BinaryLogImpl {
     super();
   }
 
+  CensusBinaryLog(BinaryLogSink sink) throws IOException {
+    super(sink);
+  }
+
   CensusBinaryLog(BinaryLogSink sink, String configStr) throws IOException {
     super(sink, configStr);
   }
