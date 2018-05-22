@@ -27,6 +27,16 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import javax.annotation.Nullable;
 
+/**
+ * A binary logging class that works by returning a {@link ClientInterceptor} or
+ * {@link ServerInterceptor} given a method name. If Census is used, then a CallId
+ * can be found in the current span on server side, or as a {@link CallOptions} stored
+ * under the key {@link #CLIENT_CALL_ID_CALLOPTION_KEY} on client side.
+ *
+ * <p>Users are responsible for calling {@link #close} to clean up resources associated with
+ * this logger.
+ */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/4017")
 public abstract class BinaryLog implements Closeable {
   public static final CallOptions.Key<CallId> CLIENT_CALL_ID_CALLOPTION_KEY
       = CallOptions.Key.create("binarylog-calloptions-key");
@@ -91,7 +101,6 @@ public abstract class BinaryLog implements Closeable {
   @Override
   public void close() throws IOException {
     // default impl: noop
-    // TODO(zpencer): make BinaryLogProvider provide a BinaryLog, and this method belongs there
   }
 
   // Creating a named class makes debugging easier
