@@ -19,8 +19,8 @@ package io.grpc.services;
 import static com.google.common.truth.Truth.assertThat;
 import static io.opencensus.trace.unsafe.ContextUtils.CONTEXT_SPAN_KEY;
 
-import io.grpc.BinaryLogProvider;
-import io.grpc.BinaryLogProvider.CallId;
+import io.grpc.BinaryLog;
+import io.grpc.BinaryLog.CallId;
 import io.grpc.CallOptions;
 import io.grpc.Context;
 import io.grpc.internal.testing.StatsTestUtils.MockableSpan;
@@ -67,7 +67,7 @@ public class CensusBinaryLogProviderTest {
     CallId actual = new CensusBinaryLogProvider(sink, "*")
         .getClientCallId(
             CallOptions.DEFAULT.withOption(
-                BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY,
+                BinaryLog.CLIENT_CALL_ID_CALLOPTION_KEY,
                 expected));
     assertThat(actual).isEqualTo(expected);
   }

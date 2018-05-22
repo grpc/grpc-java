@@ -48,7 +48,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
-import io.grpc.BinaryLogProvider;
+import io.grpc.BinaryLog;
 import io.grpc.CallOptions;
 import io.grpc.ClientInterceptor;
 import io.grpc.Compressor;
@@ -1238,7 +1238,7 @@ public class ServerImplTest {
   @Test
   public void binaryLogInstalled() throws Exception {
     final SettableFuture<Boolean> intercepted = SettableFuture.create();
-    builder.binlog = InternalBinaryLogs.createBinaryLog(new BinaryLogProvider() {
+    builder.binlog = InternalBinaryLogs.createBinaryLog(new BinaryLog() {
       @Nullable
       @Override
       public ServerInterceptor getServerInterceptor(String fullMethodName) {

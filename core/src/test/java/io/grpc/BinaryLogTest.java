@@ -40,9 +40,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link BinaryLogProvider}. */
+/** Unit tests for {@link BinaryLog}. */
 @RunWith(JUnit4.class)
-public class BinaryLogProviderTest {
+public class BinaryLogTest {
   private final InvocationCountMarshaller<String> reqMarshaller =
       new InvocationCountMarshaller<String>() {
         @Override
@@ -69,7 +69,7 @@ public class BinaryLogProviderTest {
           .build();
   private final List<byte[]> binlogReq = new ArrayList<byte[]>();
   private final List<byte[]> binlogResp = new ArrayList<byte[]>();
-  private final BinaryLogProvider binlogProvider = new BinaryLogProvider() {
+  private final BinaryLog binlogProvider = new BinaryLog() {
     @Override
     public ServerInterceptor getServerInterceptor(String fullMethodName) {
       return new TestBinaryLogServerInterceptor();
@@ -182,8 +182,8 @@ public class BinaryLogProviderTest {
   }
 
   private void validateWrappedMethod(MethodDescriptor<?, ?> wMethod) {
-    assertSame(BinaryLogProvider.BYTEARRAY_MARSHALLER, wMethod.getRequestMarshaller());
-    assertSame(BinaryLogProvider.BYTEARRAY_MARSHALLER, wMethod.getResponseMarshaller());
+    assertSame(BinaryLog.BYTEARRAY_MARSHALLER, wMethod.getRequestMarshaller());
+    assertSame(BinaryLog.BYTEARRAY_MARSHALLER, wMethod.getResponseMarshaller());
     assertEquals(method.getType(), wMethod.getType());
     assertEquals(method.getFullMethodName(), wMethod.getFullMethodName());
     assertEquals(method.getSchemaDescriptor(), wMethod.getSchemaDescriptor());
@@ -294,8 +294,8 @@ public class BinaryLogProviderTest {
         final MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions,
         Channel next) {
-      assertSame(BinaryLogProvider.BYTEARRAY_MARSHALLER, method.getRequestMarshaller());
-      assertSame(BinaryLogProvider.BYTEARRAY_MARSHALLER, method.getResponseMarshaller());
+      assertSame(BinaryLog.BYTEARRAY_MARSHALLER, method.getRequestMarshaller());
+      assertSame(BinaryLog.BYTEARRAY_MARSHALLER, method.getResponseMarshaller());
       return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
         @Override
         public void start(Listener<RespT> responseListener, Metadata headers) {
@@ -337,10 +337,10 @@ public class BinaryLogProviderTest {
         Metadata headers,
         ServerCallHandler<ReqT, RespT> next) {
       assertSame(
-          BinaryLogProvider.BYTEARRAY_MARSHALLER,
+          BinaryLog.BYTEARRAY_MARSHALLER,
           call.getMethodDescriptor().getRequestMarshaller());
       assertSame(
-          BinaryLogProvider.BYTEARRAY_MARSHALLER,
+          BinaryLog.BYTEARRAY_MARSHALLER,
           call.getMethodDescriptor().getResponseMarshaller());
       ServerCall<ReqT, RespT> wCall = new SimpleForwardingServerCall<ReqT, RespT>(call) {
         @Override

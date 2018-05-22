@@ -17,7 +17,7 @@
 package io.grpc.services;
 
 import com.google.common.base.Preconditions;
-import io.grpc.BinaryLogProvider;
+import io.grpc.BinaryLog;
 import io.grpc.CallOptions;
 import io.grpc.ClientInterceptor;
 import io.grpc.ServerInterceptor;
@@ -27,9 +27,9 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * The default implementation of a {@link BinaryLogProvider}.
+ * The default implementation of a {@link BinaryLog}.
  */
-class BinaryLogProviderImpl extends BinaryLogProvider {
+class BinaryLogProviderImpl extends BinaryLog {
   private static final Logger logger = Logger.getLogger(BinaryLogProviderImpl.class.getName());
   private final BinlogHelper.Factory factory;
   private final BinaryLogSink sink;

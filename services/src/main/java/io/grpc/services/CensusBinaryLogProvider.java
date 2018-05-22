@@ -16,7 +16,7 @@
 
 package io.grpc.services;
 
-import io.grpc.BinaryLogProvider;
+import io.grpc.BinaryLog;
 import io.grpc.CallOptions;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.Tracing;
@@ -44,6 +44,6 @@ final class CensusBinaryLogProvider extends BinaryLogProviderImpl {
 
   @Override
   protected CallId getClientCallId(CallOptions options) {
-    return options.getOption(BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY);
+    return options.getOption(BinaryLog.CLIENT_CALL_ID_CALLOPTION_KEY);
   }
 }

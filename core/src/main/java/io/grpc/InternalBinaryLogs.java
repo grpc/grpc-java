@@ -27,7 +27,7 @@ public final class InternalBinaryLogs {
     return binaryLog.surrogate.wrapChannel(channel);
   }
 
-  public static BinaryLog createBinaryLog(BinaryLogProvider surrogate) {
+  public static BinaryLog createBinaryLog(BinaryLog surrogate) {
     return new BinaryLog(surrogate);
   }
 
