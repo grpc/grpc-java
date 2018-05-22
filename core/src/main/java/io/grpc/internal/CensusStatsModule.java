@@ -327,7 +327,9 @@ public final class CensusStatsModule {
       this.parentCtx = checkNotNull(parentCtx);
       this.startCtx =
           module.tagger.toBuilder(parentCtx)
-          .put(RpcMeasureConstants.RPC_METHOD, TagValue.create(fullMethodName)).build();
+          .put(RpcMeasureConstants.RPC_METHOD, TagValue.create(fullMethodName))
+          .put(RpcMeasureConstants.GRPC_CLIENT_METHOD, TagValue.create(fullMethodName))
+          .build();
       this.stopwatch = module.stopwatchSupplier.get().start();
       this.recordFinishedRpcs = recordFinishedRpcs;
       if (recordStartedRpcs) {
@@ -387,6 +389,7 @@ public final class CensusStatsModule {
         tracer = BLANK_CLIENT_TRACER;
       }
       MeasureMap measureMap = module.statsRecorder.newMeasureMap()
+          // TODO(songya): remove the deprecated measure constants once they are completed removed.
           .put(RpcMeasureConstants.RPC_CLIENT_FINISHED_COUNT, 1)
           // The latency is double value
           .put(RpcMeasureConstants.RPC_CLIENT_ROUNDTRIP_LATENCY, roundtripNanos / NANOS_PER_MILLI)
@@ -399,7 +402,17 @@ public final class CensusStatsModule {
               tracer.outboundUncompressedSize)
           .put(
               RpcMeasureConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES,
-              tracer.inboundUncompressedSize);
+              tracer.inboundUncompressedSize)
+
+          // New RPC measure constants.
+          // The latency is double value
+          .put(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY, roundtripNanos / NANOS_PER_MILLI)
+          .put(RpcMeasureConstants.GRPC_CLIENT_SENT_MESSAGES_PER_RPC, tracer.outboundMessageCount)
+          .put(
+              RpcMeasureConstants.GRPC_CLIENT_RECEIVED_MESSAGES_PER_RPC,
+              tracer.inboundMessageCount)
+          .put(RpcMeasureConstants.GRPC_CLIENT_SENT_BYTES_PER_RPC, tracer.outboundWireSize)
+          .put(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_BYTES_PER_RPC, tracer.inboundWireSize);
       if (!status.isOk()) {
         measureMap.put(RpcMeasureConstants.RPC_CLIENT_ERROR_COUNT, 1);
       }
@@ -408,6 +421,9 @@ public final class CensusStatsModule {
               .tagger
               .toBuilder(startCtx)
               .put(RpcMeasureConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
+              .put(
+                  RpcMeasureConstants.GRPC_CLIENT_STATUS,
+                  TagValue.create(status.getCode().toString()))
               .build());
     }
   }
@@ -587,6 +603,7 @@ public final class CensusStatsModule {
       stopwatch.stop();
       long elapsedTimeNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       MeasureMap measureMap = module.statsRecorder.newMeasureMap()
+          // TODO(songya): remove the deprecated measure constants once they are completed removed.
           .put(RpcMeasureConstants.RPC_SERVER_FINISHED_COUNT, 1)
           // The latency is double value
           .put(RpcMeasureConstants.RPC_SERVER_SERVER_LATENCY, elapsedTimeNanos / NANOS_PER_MILLI)
@@ -595,7 +612,14 @@ public final class CensusStatsModule {
           .put(RpcMeasureConstants.RPC_SERVER_RESPONSE_BYTES, outboundWireSize)
           .put(RpcMeasureConstants.RPC_SERVER_REQUEST_BYTES, inboundWireSize)
           .put(RpcMeasureConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES, outboundUncompressedSize)
-          .put(RpcMeasureConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES, inboundUncompressedSize);
+          .put(RpcMeasureConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES, inboundUncompressedSize)
+
+          // New RPC measure constants.
+          .put(RpcMeasureConstants.GRPC_SERVER_SERVER_LATENCY, elapsedTimeNanos / NANOS_PER_MILLI)
+          .put(RpcMeasureConstants.GRPC_SERVER_SENT_MESSAGES_PER_RPC, outboundMessageCount)
+          .put(RpcMeasureConstants.GRPC_SERVER_RECEIVED_MESSAGES_PER_RPC, inboundMessageCount)
+          .put(RpcMeasureConstants.GRPC_SERVER_SENT_BYTES_PER_RPC, outboundWireSize)
+          .put(RpcMeasureConstants.GRPC_SERVER_RECEIVED_BYTES_PER_RPC, inboundWireSize);
       if (!status.isOk()) {
         measureMap.put(RpcMeasureConstants.RPC_SERVER_ERROR_COUNT, 1);
       }
@@ -604,6 +628,9 @@ public final class CensusStatsModule {
               .tagger
               .toBuilder(parentCtx)
               .put(RpcMeasureConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
+              .put(
+                  RpcMeasureConstants.GRPC_SERVER_STATUS,
+                  TagValue.create(status.getCode().toString()))
               .build());
     }
 
@@ -636,6 +663,7 @@ public final class CensusStatsModule {
           tagger
               .toBuilder(parentCtx)
               .put(RpcMeasureConstants.RPC_METHOD, TagValue.create(fullMethodName))
+              .put(RpcMeasureConstants.GRPC_SERVER_METHOD, TagValue.create(fullMethodName))
               .build();
       return new ServerTracer(
           CensusStatsModule.this,
