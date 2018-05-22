@@ -23,13 +23,13 @@ import io.opencensus.trace.Tracing;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-final class CensusBinaryLogProvider extends BinaryLogProviderImpl {
+final class CensusBinaryLog extends BinaryLogImpl {
 
-  public CensusBinaryLogProvider() throws IOException {
+  public CensusBinaryLog() throws IOException {
     super();
   }
 
-  CensusBinaryLogProvider(BinaryLogSink sink, String configStr) throws IOException {
+  CensusBinaryLog(BinaryLogSink sink, String configStr) throws IOException {
     super(sink, configStr);
   }
 

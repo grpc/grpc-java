@@ -26,13 +26,13 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Tests for {@link BinaryLogProviderImpl}. */
+/** Tests for {@link BinaryLogImpl}. */
 @RunWith(JUnit4.class)
-public class BinaryLogProviderImplTest {
+public class BinaryLogImplTest {
   @Test
   public void configStrNullTest() throws Exception {
     BinaryLogSink sink = mock(BinaryLogSink.class);
-    BinaryLogProviderImpl binlog = new BinaryLogProviderImpl(sink, /*configStr=*/ null);
+    BinaryLogImpl binlog = new BinaryLogImpl(sink, /*configStr=*/ null);
     assertNull(binlog.getServerInterceptor("package.service/method"));
     assertNull(binlog.getClientInterceptor("package.service/method", CallOptions.DEFAULT));
   }
@@ -40,7 +40,7 @@ public class BinaryLogProviderImplTest {
   @Test
   public void configStrEmptyTest() throws Exception {
     BinaryLogSink sink = mock(BinaryLogSink.class);
-    BinaryLogProviderImpl binlog = new BinaryLogProviderImpl(sink, "");
+    BinaryLogImpl binlog = new BinaryLogImpl(sink, "");
     assertNull(binlog.getServerInterceptor("package.service/method"));
     assertNull(binlog.getClientInterceptor("package.service/method", CallOptions.DEFAULT));
   }
@@ -48,7 +48,7 @@ public class BinaryLogProviderImplTest {
   @Test
   public void closeTest() throws Exception {
     BinaryLogSink sink = mock(BinaryLogSink.class);
-    BinaryLogProviderImpl log = new BinaryLogProviderImpl(sink, "*");
+    BinaryLogImpl log = new BinaryLogImpl(sink, "*");
     verify(sink, never()).close();
     log.close();
     verify(sink).close();

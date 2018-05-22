@@ -23,11 +23,11 @@ import java.io.IOException;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4017")
 public final class BinaryLogs {
   public static BinaryLog createBinaryLog() throws IOException {
-    return new BinaryLogProviderImpl();
+    return new BinaryLogImpl();
   }
 
   public static BinaryLog createCensusBinaryLog() throws IOException {
-    return new CensusBinaryLogProvider();
+    return new CensusBinaryLog();
   }
 
   private BinaryLogs() {}
