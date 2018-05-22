@@ -20,6 +20,8 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import io.grpc.ConnectivityState;
 import java.net.SocketAddress;
@@ -481,8 +483,8 @@ public final class Channelz {
     }
 
     public static final class Builder {
-      private long numEventsLogged;
-      private long creationTimeNanos;
+      private Long numEventsLogged;
+      private Long creationTimeNanos;
       private List<Event> events = Collections.emptyList();
 
       public Builder setNumEventsLogged(long numEventsLogged) {
@@ -500,7 +502,10 @@ public final class Channelz {
         return this;
       }
 
+      /** Builds a new ChannelTrace instance. */
       public ChannelTrace build() {
+        checkNotNull(numEventsLogged, "numEventsLogged");
+        checkNotNull(creationTimeNanos, "creationTimeNanos");
         return new ChannelTrace(numEventsLogged, creationTimeNanos, events);
       }
     }
@@ -525,17 +530,46 @@ public final class Channelz {
         checkArgument(
             channelRef == null || subchannelRef == null,
             "at least one of channelRef and subchannelRef must be null");
-        this.description = checkNotNull(description, "description");
+        this.description = description;
         this.severity = checkNotNull(severity, "severity");
         this.timestampNanos = timestampNanos;
         this.channelRef = channelRef;
         this.subchannelRef = subchannelRef;
       }
 
+      @Override
+      public int hashCode() {
+        return Objects.hashCode(description, severity, timestampNanos, channelRef, subchannelRef);
+      }
+
+      @Override
+      public boolean equals(Object o) {
+        if (o instanceof Event) {
+          Event that = (Event) o;
+          return Objects.equal(description, that.description)
+              && Objects.equal(severity, that.severity)
+              && Objects.equal(timestampNanos, that.timestampNanos)
+              && Objects.equal(channelRef, that.channelRef)
+              && Objects.equal(subchannelRef, that.subchannelRef);
+        }
+        return false;
+      }
+
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper(this)
+            .add("description", description)
+            .add("severity", severity)
+            .add("timestampNanos", timestampNanos)
+            .add("channelRef", channelRef)
+            .add("subchannelRef", subchannelRef)
+            .toString();
+      }
+
       public static final class Builder {
         private String description;
         private Severity severity;
-        private long timestampNanos;
+        private Long timestampNanos;
         private WithLogId channelRef;
         private WithLogId subchannelRef;
 
@@ -564,7 +598,11 @@ public final class Channelz {
           return this;
         }
 
+        /** Builds a new Event instance. */
         public Event build() {
+          checkNotNull(description, "description");
+          checkNotNull(severity, "severity");
+          checkNotNull(timestampNanos, "timestampNanos");
           return new Event(description, severity, timestampNanos, channelRef, subchannelRef);
         }
       }
