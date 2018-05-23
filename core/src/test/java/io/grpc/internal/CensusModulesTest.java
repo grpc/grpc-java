@@ -99,6 +99,7 @@ import org.mockito.MockitoAnnotations;
  * Test for {@link CensusStatsModule} and {@link CensusTracingModule}.
  */
 @RunWith(JUnit4.class)
+@SuppressWarnings("deprecation")
 public class CensusModulesTest {
   private static final CallOptions.Key<String> CUSTOM_OPTION =
       CallOptions.Key.createWithDefault("option1", "default");

@@ -140,6 +140,7 @@ import org.mockito.verification.VerificationMode;
  *
  * <p> New tests should avoid using Mockito to support running on AppEngine.</p>
  */
+@SuppressWarnings("deprecation")
 public abstract class AbstractInteropTest {
   private static Logger logger = Logger.getLogger(AbstractInteropTest.class.getName());
 

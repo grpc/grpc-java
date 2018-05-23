@@ -58,6 +58,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
+@SuppressWarnings("deprecation")
 public class StatsTestUtils {
   private StatsTestUtils() {
   }
