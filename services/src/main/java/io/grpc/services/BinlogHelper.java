@@ -35,6 +35,7 @@ import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener;
 import io.grpc.Grpc;
 import io.grpc.InternalMetadata;
+import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
@@ -133,13 +134,13 @@ final class BinlogHelper {
     }
 
     @Override
-    void logTrailingMetadata(Metadata metadata, boolean isServer, CallId callId) {
+    void logTrailingMetadata(Status status, Metadata metadata, boolean isServer, CallId callId) {
       GrpcLogEntry entry = GrpcLogEntry
           .newBuilder()
           .setType(isServer ? Type.SEND_TRAILING_METADATA : Type.RECV_TRAILING_METADATA)
           .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
           .setCallId(callIdToProto(callId))
-          .setMetadata(metadataToProto(metadata, maxHeaderBytes))
+          .setMetadata(metadataAndStatusToProto(status, metadata, maxHeaderBytes))
           .build();
       sink.write(entry);
     }
@@ -215,7 +216,8 @@ final class BinlogHelper {
      * Logs the trailing metadata. This method logs the appropriate number of bytes
      * as determined by the binary logging configuration.
      */
-    abstract void logTrailingMetadata(Metadata metadata, boolean isServer, CallId callId);
+    abstract void logTrailingMetadata(
+        Status status, Metadata metadata, boolean isServer, CallId callId);
 
     /**
      * Logs the outbound message. This method logs the appropriate number of bytes from
@@ -285,7 +287,7 @@ final class BinlogHelper {
 
                   @Override
                   public void onClose(Status status, Metadata trailers) {
-                    writer.logTrailingMetadata(trailers, CLIENT, callId);
+                    writer.logTrailingMetadata(status, trailers, CLIENT, callId);
                     super.onClose(status, trailers);
                   }
                 };
@@ -336,7 +338,7 @@ final class BinlogHelper {
 
           @Override
           public void close(Status status, Metadata trailers) {
-            writer.logTrailingMetadata(trailers, SERVER, callId);
+            writer.logTrailingMetadata(status, trailers, SERVER, callId);
             super.close(status, trailers);
           }
         };
@@ -559,13 +561,31 @@ final class BinlogHelper {
   }
 
   @VisibleForTesting
-  static io.grpc.binarylog.Metadata metadataToProto(Metadata metadata, int maxHeaderBytes) {
+  static io.grpc.binarylog.Metadata metadataToProto(
+      Metadata metadata, int maxHeaderBytes) {
+    return metadataAndStatusToProto(/*status=*/ null, metadata, maxHeaderBytes);
+  }
+
+  @VisibleForTesting
+  static io.grpc.binarylog.Metadata metadataAndStatusToProto(
+      @Nullable Status status, Metadata metadata, int maxHeaderBytes) {
     Preconditions.checkNotNull(metadata);
     Preconditions.checkState(maxHeaderBytes >= 0);
+    // The status is expressed in the binlog as key/value pair in the metadata,
+    // even though the Java API does not express it in this way.
+    Metadata metadataCopy;
+    if (status == null) {
+      metadataCopy = metadata;
+    } else {
+      metadataCopy = new Metadata();
+      metadataCopy.put(InternalStatus.CODE_KEY, status);
+      metadataCopy.put(InternalStatus.MESSAGE_KEY, status.getDescription());
+      metadataCopy.merge(metadata);
+    }
     Builder builder = io.grpc.binarylog.Metadata.newBuilder();
     // This code is tightly coupled with Metadata's implementation
     byte[][] serialized;
-    if (maxHeaderBytes > 0 && (serialized = InternalMetadata.serialize(metadata)) != null) {
+    if (maxHeaderBytes > 0 && (serialized = InternalMetadata.serialize(metadataCopy)) != null) {
       int written = 0;
       for (int i = 0; i < serialized.length && written < maxHeaderBytes; i += 2) {
         byte[] key = serialized[i];
