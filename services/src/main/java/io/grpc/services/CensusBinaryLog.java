@@ -16,20 +16,24 @@
 
 package io.grpc.services;
 
-import io.grpc.BinaryLogProvider;
+import io.grpc.BinaryLog;
 import io.grpc.CallOptions;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.Tracing;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-final class CensusBinaryLogProvider extends BinaryLogProviderImpl {
+final class CensusBinaryLog extends BinaryLogImpl {
 
-  public CensusBinaryLogProvider() throws IOException {
+  public CensusBinaryLog() throws IOException {
     super();
   }
 
-  CensusBinaryLogProvider(BinaryLogSink sink, String configStr) throws IOException {
+  CensusBinaryLog(BinaryLogSink sink) throws IOException {
+    super(sink);
+  }
+
+  CensusBinaryLog(BinaryLogSink sink, String configStr) throws IOException {
     super(sink, configStr);
   }
 
@@ -44,6 +48,6 @@ final class CensusBinaryLogProvider extends BinaryLogProviderImpl {
 
   @Override
   protected CallId getClientCallId(CallOptions options) {
-    return options.getOption(BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY);
+    return options.getOption(BinaryLog.CLIENT_CALL_ID_CALLOPTION_KEY);
   }
 }

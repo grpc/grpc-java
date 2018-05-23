@@ -52,7 +52,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
-import io.grpc.BinaryLogProvider;
+import io.grpc.BinaryLog;
 import io.grpc.CallCredentials;
 import io.grpc.CallCredentials.MetadataApplier;
 import io.grpc.CallOptions;
@@ -65,7 +65,6 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.IntegerMarshaller;
-import io.grpc.InternalBinaryLogs;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -2283,7 +2282,7 @@ public class ManagedChannelImplTest {
   @Test
   public void binaryLogInstalled() throws Exception {
     final SettableFuture<Boolean> intercepted = SettableFuture.create();
-    channelBuilder.binlog = InternalBinaryLogs.createBinaryLog(new BinaryLogProvider() {
+    channelBuilder.binlog = new BinaryLog() {
       @Nullable
       @Override
       public ServerInterceptor getServerInterceptor(String fullMethodName) {
@@ -2304,7 +2303,7 @@ public class ManagedChannelImplTest {
           }
         };
       }
-    });
+    };
 
     createChannel();
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);

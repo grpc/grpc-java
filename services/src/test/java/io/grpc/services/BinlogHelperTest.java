@@ -16,7 +16,7 @@
 
 package io.grpc.services;
 
-import static io.grpc.BinaryLogProvider.BYTEARRAY_MARSHALLER;
+import static io.grpc.BinaryLog.BYTEARRAY_MARSHALLER;
 import static io.grpc.services.BinlogHelper.DUMMY_SOCKET;
 import static io.grpc.services.BinlogHelper.getPeerSocket;
 import static org.junit.Assert.assertEquals;
@@ -31,8 +31,8 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import com.google.common.primitives.Bytes;
 import com.google.protobuf.ByteString;
 import io.grpc.Attributes;
-import io.grpc.BinaryLogProvider;
-import io.grpc.BinaryLogProvider.CallId;
+import io.grpc.BinaryLog;
+import io.grpc.BinaryLog.CallId;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -738,7 +738,7 @@ public final class BinlogHelperTest {
             .interceptCall(
                 method,
                 CallOptions.DEFAULT.withOption(
-                    BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY, CALL_ID),
+                    BinaryLog.CLIENT_CALL_ID_CALLOPTION_KEY, CALL_ID),
                 channel);
 
     // send initial metadata

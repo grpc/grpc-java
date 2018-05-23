@@ -31,7 +31,7 @@ import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
-import io.grpc.BinaryLogProvider;
+import io.grpc.BinaryLog;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -44,7 +44,6 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.InternalBinaryLogs;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -141,7 +140,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
 
   /**
    * We delegate to this channel, so that we can have interceptors as necessary. If there aren't
-   * any interceptors and the {@link BinaryLogProvider} is {@code null} then this will just be a
+   * any interceptors and the {@link BinaryLog} is {@code null} then this will just be a
    * {@link RealChannel}.
    */
   private final Channel interceptorChannel;
@@ -540,7 +539,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     Channel channel = new RealChannel();
     channel = ClientInterceptors.intercept(channel, serviceConfigInterceptor);
     if (builder.binlog != null) {
-      channel = InternalBinaryLogs.wrapChannel(builder.binlog, channel);
+      channel = builder.binlog.wrapChannel(channel);
     }
     this.interceptorChannel = ClientInterceptors.intercept(channel, interceptors);
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");

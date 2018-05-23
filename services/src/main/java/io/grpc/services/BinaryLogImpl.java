@@ -17,7 +17,7 @@
 package io.grpc.services;
 
 import com.google.common.base.Preconditions;
-import io.grpc.BinaryLogProvider;
+import io.grpc.BinaryLog;
 import io.grpc.CallOptions;
 import io.grpc.ClientInterceptor;
 import io.grpc.ServerInterceptor;
@@ -27,16 +27,20 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * The default implementation of a {@link BinaryLogProvider}.
+ * The default implementation of a {@link BinaryLog}.
  */
-class BinaryLogProviderImpl extends BinaryLogProvider {
-  private static final Logger logger = Logger.getLogger(BinaryLogProviderImpl.class.getName());
+class BinaryLogImpl extends BinaryLog {
+  private static final Logger logger = Logger.getLogger(BinaryLogImpl.class.getName());
   private final BinlogHelper.Factory factory;
   private final BinaryLogSink sink;
   private final AtomicLong counter = new AtomicLong();
 
-  public BinaryLogProviderImpl() throws IOException {
+  public BinaryLogImpl() throws IOException {
     this(new TempFileSink(), System.getenv("GRPC_BINARY_LOG_CONFIG"));
+  }
+
+  public BinaryLogImpl(BinaryLogSink sink) throws IOException {
+    this(sink, System.getenv("GRPC_BINARY_LOG_CONFIG"));
   }
 
   /**
@@ -45,7 +49,7 @@ class BinaryLogProviderImpl extends BinaryLogProvider {
    * @param configStr config string to parse to determine logged methods and msg size limits.
    * @throws IOException if initialization failed.
    */
-  BinaryLogProviderImpl(BinaryLogSink sink, String configStr) throws IOException {
+  BinaryLogImpl(BinaryLogSink sink, String configStr) throws IOException {
     this.sink = Preconditions.checkNotNull(sink);
     try {
       factory = new BinlogHelper.FactoryImpl(sink, configStr);

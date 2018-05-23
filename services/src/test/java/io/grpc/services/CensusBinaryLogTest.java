@@ -19,8 +19,8 @@ package io.grpc.services;
 import static com.google.common.truth.Truth.assertThat;
 import static io.opencensus.trace.unsafe.ContextUtils.CONTEXT_SPAN_KEY;
 
-import io.grpc.BinaryLogProvider;
-import io.grpc.BinaryLogProvider.CallId;
+import io.grpc.BinaryLog;
+import io.grpc.BinaryLog.CallId;
 import io.grpc.CallOptions;
 import io.grpc.Context;
 import io.grpc.internal.testing.StatsTestUtils.MockableSpan;
@@ -34,14 +34,14 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 /**
- * Tests for {@link CensusBinaryLogProvider}.
+ * Tests for {@link CensusBinaryLog}.
  */
 @RunWith(JUnit4.class)
-public class CensusBinaryLogProviderTest {
+public class CensusBinaryLogTest {
   @Mock
   private BinaryLogSink sink;
 
-  public CensusBinaryLogProviderTest() {
+  public CensusBinaryLogTest() {
     MockitoAnnotations.initMocks(this);
   }
 
@@ -52,7 +52,7 @@ public class CensusBinaryLogProviderTest {
     context.call(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
-        CallId callId = new CensusBinaryLogProvider(sink, "*").getServerCallId();
+        CallId callId = new CensusBinaryLog(sink, "*").getServerCallId();
         assertThat(callId.hi).isEqualTo(0);
         assertThat(ByteBuffer.wrap(mockableSpan.getContext().getSpanId().getBytes()).getLong())
             .isEqualTo(callId.lo);
@@ -64,10 +64,10 @@ public class CensusBinaryLogProviderTest {
   @Test
   public void clientCallId() throws Exception {
     CallId expected = new CallId(1234, 5677);
-    CallId actual = new CensusBinaryLogProvider(sink, "*")
+    CallId actual = new CensusBinaryLog(sink, "*")
         .getClientCallId(
             CallOptions.DEFAULT.withOption(
-                BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY,
+                BinaryLog.CLIENT_CALL_ID_CALLOPTION_KEY,
                 expected));
     assertThat(actual).isEqualTo(expected);
   }
